@@ -324,6 +324,48 @@
         </div>
     </div>
 
+    <!-- AI Chat -->
+    <div class="col-12" id="ai-chat">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong><i class="bi bi-chat-dots"></i> AI Chat</strong>
+                <span class="text-muted small">Ask for tasks like keyword lists or campaign plans</span>
+            </div>
+            <div class="card-body">
+                {% if not openai_enabled %}
+                <div class="alert alert-warning mb-3">
+                    OpenAI is not configured. Add your OpenAI API key in Settings to enable chat.
+                </div>
+                {% endif %}
+
+                <div class="border rounded p-3 mb-3" style="max-height: 320px; overflow:auto; background: #fff;">
+                    {% if ai_chat_messages and ai_chat_messages|length > 0 %}
+                        {% for m in ai_chat_messages %}
+                            <div class="mb-2">
+                                <div class="small text-muted">
+                                    {% if m.role == 'user' %}<strong>You</strong>{% else %}<strong>AI</strong>{% endif %}
+                                    {% if m.created_at %} - {{ m.created_at[:16] }}{% endif %}
+                                </div>
+                                <div style="white-space: pre-wrap;">{{ m.content }}</div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-muted">No chat yet. Ask a task to get started.</div>
+                    {% endif %}
+                </div>
+
+                <form method="POST" action="{{ url_for('brand_ai_chat', brand_id=brand.id) }}" class="d-flex gap-2 align-items-start">
+                    <input type="hidden" name="month" value="{{ active_month }}">
+                    <textarea name="message" class="form-control" rows="2" placeholder="Example: Generate 25 local SEO keywords for {{ brand.service_area or 'our service area' }}. Group by intent and include suggested ad groups."></textarea>
+                    <button type="submit" class="btn btn-primary" {% if not openai_enabled %}disabled{% endif %}>
+                        Send
+                    </button>
+                </form>
+                <small class="text-muted d-block mt-2">Note: This chat does not browse the web. For competitor research, it will propose a strategy and a verification checklist.</small>
+            </div>
+        </div>
+    </div>
+
     <!-- Reports -->
     <div class="col-12">
         <div class="card">

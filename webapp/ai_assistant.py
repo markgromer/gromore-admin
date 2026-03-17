@@ -14,6 +14,10 @@ import requests
 DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 
 
+def summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
+    return _summarize_analysis_for_ai(analysis)
+
+
 def _safe_float(v: Any) -> Optional[float]:
     try:
         if v is None or v == "":
@@ -222,3 +226,59 @@ def generate_jarvis_brief(
     brief.setdefault("questions", [])
 
     return brief
+
+
+def chat_with_jarvis(
+    *,
+    api_key: str,
+    messages: list[dict[str, str]],
+    context: Optional[Dict[str, Any]] = None,
+    model: Optional[str] = None,
+    timeout: int = 60,
+) -> str:
+    if not api_key:
+        raise ValueError("OpenAI API key not configured")
+
+    model = model or DEFAULT_OPENAI_MODEL
+    context = context or {}
+
+    system = (
+        "You are an elite ads and analytics operator inside an ad agency. "
+        "Be concrete, tactical, and prioritized. "
+        "When asked for a plan, produce steps, checks, and success criteria. "
+        "If the user asks for competitor research or anything that requires browsing, "
+        "say you cannot browse in this tool and provide a strong strategy with assumptions plus a checklist of what to verify. "
+        "Use the provided context if available. If key details are missing, ask 1-3 clarifying questions."
+    )
+
+    ctx_user = {
+        "role": "user",
+        "content": "Context JSON:\n" + json.dumps(context, ensure_ascii=False),
+    }
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    resp = requests.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers=headers,
+        json={
+            "model": model,
+            "temperature": 0.4,
+            "messages": [
+                {"role": "system", "content": system},
+                ctx_user,
+                *messages,
+            ],
+        },
+        timeout=timeout,
+    )
+
+    if resp.status_code != 200:
+        raise ValueError(f"OpenAI request failed ({resp.status_code}): {resp.text}")
+
+    data = resp.json()
+    content = ((data.get("choices") or [{}])[0].get("message", {}) or {}).get("content", "")
+    return (content or "").strip()

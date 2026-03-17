@@ -273,6 +273,8 @@ def create_app():
 
         openai_key = db.get_setting("openai_api_key", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip()
 
+        ai_chat_messages = db.get_ai_chat_messages(brand_id, active_month, limit=30)
+
         return render_template(
             "brands/detail.html",
             brand=brand,
@@ -282,8 +284,82 @@ def create_app():
             active_month=active_month,
             csv_status=csv_status,
             ai_brief=ai_brief,
+            ai_chat_messages=ai_chat_messages,
             openai_enabled=bool(openai_key),
         )
+
+    @app.route("/brands/<int:brand_id>/ai-chat", methods=["POST"])
+    @login_required
+    def brand_ai_chat(brand_id):
+        brand = db.get_brand(brand_id)
+        if not brand:
+            abort(404)
+
+        month = request.form.get("month") or datetime.now().strftime("%Y-%m")
+        user_message = (request.form.get("message") or "").strip()
+        if not user_message:
+            return redirect(url_for("brand_detail", brand_id=brand_id, month=month) + "#ai-chat")
+
+        api_key = db.get_setting("openai_api_key", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip()
+        if not api_key:
+            flash("OpenAI is not configured. Add your OpenAI API key in Settings.", "error")
+            return redirect(url_for("brand_detail", brand_id=brand_id, month=month) + "#ai-chat")
+
+        model = (
+            db.get_setting("openai_model", "").strip()
+            or os.environ.get("OPENAI_MODEL", "").strip()
+            or app.config.get("OPENAI_MODEL")
+            or "gpt-4o-mini"
+        )
+
+        db.add_ai_chat_message(brand_id, month, "user", user_message)
+
+        try:
+            from webapp.report_runner import build_analysis_and_suggestions_for_brand
+            from webapp.ai_assistant import chat_with_jarvis, summarize_analysis_for_ai
+
+            analysis = None
+            suggestions = None
+            analysis_error = ""
+            try:
+                analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
+            except Exception as e:
+                analysis_error = str(e)
+
+            history = db.get_ai_chat_messages(brand_id, month, limit=30)
+            trimmed = history[-12:] if len(history) > 12 else history
+            messages = [{"role": m["role"], "content": m["content"]} for m in trimmed if m.get("content")]
+
+            context = {
+                "brand": {
+                    "name": brand.get("display_name"),
+                    "slug": brand.get("slug"),
+                    "industry": brand.get("industry"),
+                    "service_area": brand.get("service_area"),
+                    "primary_services": brand.get("primary_services"),
+                    "monthly_budget": brand.get("monthly_budget"),
+                    "website": brand.get("website"),
+                    "goals": brand.get("goals"),
+                },
+                "month": month,
+                "analysis": summarize_analysis_for_ai(analysis) if isinstance(analysis, dict) else None,
+                "suggestions": suggestions,
+                "analysis_error": analysis_error,
+            }
+
+            assistant_reply = chat_with_jarvis(
+                api_key=api_key,
+                model=model,
+                context=context,
+                messages=messages,
+            )
+
+            if assistant_reply:
+                db.add_ai_chat_message(brand_id, month, "assistant", assistant_reply)
+        except Exception as e:
+            flash(f"AI chat failed: {str(e)}", "error")
+
+        return redirect(url_for("brand_detail", brand_id=brand_id, month=month) + "#ai-chat")
 
     @app.route("/brands/<int:brand_id>/ai-brief/generate", methods=["POST"])
     @login_required

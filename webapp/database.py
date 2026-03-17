@@ -103,6 +103,19 @@ class WebDB:
                 FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS ai_chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                month TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_ai_chat_brand_month_created
+            ON ai_chat_messages(brand_id, month, created_at);
+
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value TEXT DEFAULT ''
@@ -431,6 +444,32 @@ class WebDB:
                FROM ai_briefs a JOIN brands b ON a.brand_id = b.id
                ORDER BY a.updated_at DESC LIMIT ?""",
             (limit,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    # ── AI Chat ──
+
+    def add_ai_chat_message(self, brand_id, month, role, content):
+        role = (role or "").strip().lower()
+        if role not in {"user", "assistant"}:
+            raise ValueError("role must be 'user' or 'assistant'")
+        conn = self._conn()
+        conn.execute(
+            "INSERT INTO ai_chat_messages (brand_id, month, role, content) VALUES (?, ?, ?, ?)",
+            (brand_id, month, role, content or ""),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_ai_chat_messages(self, brand_id, month, limit=30):
+        conn = self._conn()
+        rows = conn.execute(
+            """SELECT * FROM ai_chat_messages
+               WHERE brand_id = ? AND month = ?
+               ORDER BY created_at ASC, id ASC
+               LIMIT ?""",
+            (brand_id, month, int(limit or 30)),
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
