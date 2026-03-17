@@ -35,6 +35,68 @@
     </div>
 </div>
 
+{% if not health.all_configured or health.expiring_tokens %}
+<!-- Health / Setup Checklist -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-shield-check"></i> Setup Status</strong>
+        {% if health.all_configured %}
+        <span class="badge bg-success">All Configured</span>
+        {% else %}
+        <span class="badge bg-warning text-dark">Action Needed</span>
+        {% endif %}
+    </div>
+    <div class="card-body py-2">
+        {% if not health.all_configured %}
+        <div class="row g-2">
+            <div class="col-auto">
+                <span class="badge {{ 'bg-success' if health.openai else 'bg-danger' }} me-1">
+                    <i class="bi {{ 'bi-check' if health.openai else 'bi-x' }}"></i> OpenAI
+                </span>
+            </div>
+            <div class="col-auto">
+                <span class="badge {{ 'bg-success' if health.google_oauth else 'bg-danger' }} me-1">
+                    <i class="bi {{ 'bi-check' if health.google_oauth else 'bi-x' }}"></i> Google OAuth
+                </span>
+            </div>
+            <div class="col-auto">
+                <span class="badge {{ 'bg-success' if health.meta_oauth else 'bg-danger' }} me-1">
+                    <i class="bi {{ 'bi-check' if health.meta_oauth else 'bi-x' }}"></i> Meta OAuth
+                </span>
+            </div>
+            <div class="col-auto">
+                <span class="badge {{ 'bg-success' if health.smtp else 'bg-danger' }} me-1">
+                    <i class="bi {{ 'bi-check' if health.smtp else 'bi-x' }}"></i> Email (SMTP)
+                </span>
+            </div>
+            <div class="col-auto">
+                <span class="badge {{ 'bg-success' if health.app_url else 'bg-warning text-dark' }} me-1">
+                    <i class="bi {{ 'bi-check' if health.app_url else 'bi-x' }}"></i> App URL
+                </span>
+            </div>
+            <div class="col-auto">
+                <a href="{{ url_for('settings') }}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-gear"></i> Fix in Settings
+                </a>
+            </div>
+        </div>
+        {% endif %}
+        {% if health.expiring_tokens %}
+        <div class="{% if not health.all_configured %}mt-2 pt-2 border-top{% endif %}">
+            <div class="small text-danger fw-medium mb-1"><i class="bi bi-exclamation-triangle"></i> Expiring Tokens</div>
+            {% for tok in health.expiring_tokens %}
+            <div class="small">
+                <a href="{{ url_for('brand_detail', brand_id=tok.brand_id) }}">{{ tok.brand_name }}</a>
+                - {{ tok.platform|title }} token expires {{ tok.token_expiry[:10] }}
+                <a href="{{ url_for('brand_detail', brand_id=tok.brand_id) }}" class="text-primary">Reconnect</a>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 <div class="row g-4">
     <!-- Brands Quick View -->
     <div class="col-lg-7">

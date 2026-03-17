@@ -318,6 +318,25 @@ class WebDB:
         conn.commit()
         conn.close()
 
+    def get_expiring_connections(self, days=14):
+        """Return connected tokens that expire within `days` days."""
+        conn = self._conn()
+        rows = conn.execute(
+            """SELECT c.*, b.display_name as brand_name, b.id as brand_id
+               FROM connections c JOIN brands b ON c.brand_id = b.id
+               WHERE c.status = 'connected' AND c.token_expiry != ''
+               ORDER BY c.token_expiry ASC""",
+        ).fetchall()
+        conn.close()
+        results = []
+        from datetime import datetime as _dt, timedelta as _td
+        cutoff = (_dt.now() + _td(days=days)).isoformat()
+        for r in rows:
+            expiry = r["token_expiry"] or ""
+            if expiry and expiry <= cutoff:
+                results.append(dict(r))
+        return results
+
     # ── Contacts ──
 
     def get_brand_contacts(self, brand_id):

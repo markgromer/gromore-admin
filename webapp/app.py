@@ -145,6 +145,17 @@ def create_app():
     # Make it available to blueprints
     app.login_required = login_required
 
+    # ── Auto-detect APP_URL on first real request if not configured ──
+    @app.before_request
+    def _auto_detect_app_url():
+        current_url = app.config.get("APP_URL", "")
+        if current_url and "localhost" not in current_url:
+            return  # already configured
+        if request.host and "localhost" not in request.host:
+            detected = request.scheme + "://" + request.host
+            app.config["APP_URL"] = detected
+            db.save_setting("app_url", detected)
+
     # ── Context processor ──
     @app.context_processor
     def inject_globals():
@@ -189,6 +200,30 @@ def create_app():
         }
         recent_reports = db.get_recent_reports(limit=10)
         recent_ai_briefs = []
+
+        # Health / setup checklist
+        openai_ok = bool(db.get_setting("openai_api_key", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip())
+        google_ok = bool(db.get_setting("google_client_id", "").strip() or app.config.get("GOOGLE_CLIENT_ID", "").strip())
+        meta_ok = bool(db.get_setting("meta_app_id", "").strip() or app.config.get("META_APP_ID", "").strip())
+        smtp_ok = bool(db.get_setting("smtp_user", "").strip() or app.config.get("SMTP_USER", "").strip())
+        app_url = app.config.get("APP_URL", "")
+        app_url_ok = bool(app_url and "localhost" not in app_url)
+
+        expiring_tokens = []
+        try:
+            expiring_tokens = db.get_expiring_connections(days=14)
+        except Exception:
+            pass
+
+        health = {
+            "openai": openai_ok,
+            "google_oauth": google_ok,
+            "meta_oauth": meta_ok,
+            "smtp": smtp_ok,
+            "app_url": app_url_ok,
+            "all_configured": all([openai_ok, google_ok, meta_ok, smtp_ok, app_url_ok]),
+            "expiring_tokens": expiring_tokens,
+        }
         try:
             import json as _json
 
@@ -216,6 +251,7 @@ def create_app():
             stats=stats,
             recent_reports=recent_reports,
             recent_ai_briefs=recent_ai_briefs,
+            health=health,
         )
 
     # ── Brand Management ──
@@ -293,16 +329,31 @@ def create_app():
     def brand_ai_chat(brand_id):
         brand = db.get_brand(brand_id)
         if not brand:
+            if request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                return jsonify({"error": "Brand not found"}), 404
             abort(404)
 
-        month = request.form.get("month") or datetime.now().strftime("%Y-%m")
-        user_message = (request.form.get("message") or "").strip()
+        is_ajax = request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+        if request.is_json:
+            payload = request.get_json(silent=True) or {}
+            month = payload.get("month") or datetime.now().strftime("%Y-%m")
+            user_message = (payload.get("message") or "").strip()
+        else:
+            month = request.form.get("month") or datetime.now().strftime("%Y-%m")
+            user_message = (request.form.get("message") or "").strip()
+
         if not user_message:
+            if is_ajax:
+                return jsonify({"error": "Empty message"}), 400
             return redirect(url_for("brand_detail", brand_id=brand_id, month=month) + "#ai-chat")
 
         api_key = db.get_setting("openai_api_key", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip()
         if not api_key:
-            flash("OpenAI is not configured. Add your OpenAI API key in Settings.", "error")
+            msg = "OpenAI is not configured. Add your OpenAI API key in Settings."
+            if is_ajax:
+                return jsonify({"error": msg}), 400
+            flash(msg, "error")
             return redirect(url_for("brand_detail", brand_id=brand_id, month=month) + "#ai-chat")
 
         model = (
@@ -356,7 +407,12 @@ def create_app():
 
             if assistant_reply:
                 db.add_ai_chat_message(brand_id, month, "assistant", assistant_reply)
+
+            if is_ajax:
+                return jsonify({"reply": assistant_reply or ""})
         except Exception as e:
+            if is_ajax:
+                return jsonify({"error": str(e)}), 500
             flash(f"AI chat failed: {str(e)}", "error")
 
         return redirect(url_for("brand_detail", brand_id=brand_id, month=month) + "#ai-chat")

@@ -329,39 +329,79 @@
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <strong><i class="bi bi-chat-dots"></i> AI Chat</strong>
-                <span class="text-muted small">Ask for tasks like keyword lists or campaign plans</span>
+                <span class="text-muted small">Your strategic AI operator for {{ brand.display_name }}</span>
             </div>
             <div class="card-body">
                 {% if not openai_enabled %}
                 <div class="alert alert-warning mb-3">
-                    OpenAI is not configured. Add your OpenAI API key in Settings to enable chat.
+                    OpenAI is not configured. Add your OpenAI API key in <a href="{{ url_for('settings') }}">Settings</a> to enable chat.
                 </div>
                 {% endif %}
 
-                <div class="border rounded p-3 mb-3" style="max-height: 320px; overflow:auto; background: #fff;">
+                <!-- Quick Action Buttons -->
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <button class="btn btn-sm btn-outline-secondary chat-quick-btn" data-prompt="Generate a list of 25-30 high-intent local SEO keywords for {{ brand.display_name }} in {{ brand.service_area or 'our service area' }}. Group them by intent (commercial, informational, navigational). Include search volume estimates and suggested ad groups.">
+                        <i class="bi bi-search"></i> Keyword Research
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary chat-quick-btn" data-prompt="Build a complete Facebook/Instagram ad campaign strategy for {{ brand.display_name }}. Include: campaign objective, audience targeting (demographics, interests, lookalikes), ad set structure, budget allocation from our ${{ brand.monthly_budget or '___' }}/mo budget, ad creative angles (3-5 hooks), and a testing plan for the first 2 weeks.">
+                        <i class="bi bi-meta"></i> FB Campaign Plan
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary chat-quick-btn" data-prompt="Create a Google Ads strategy for {{ brand.display_name }}. Include: recommended campaign types (Search, Performance Max, Display), keyword themes and match types, negative keyword list, ad copy variations (3 responsive search ads), budget split, and bidding strategy recommendations.">
+                        <i class="bi bi-google"></i> Google Ads Strategy
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary chat-quick-btn" data-prompt="Do a competitive analysis framework for {{ brand.display_name }} ({{ brand.industry|replace('_',' ')|title }}) in {{ brand.service_area or 'our market' }}. List the likely top 5 competitors, their probable ad strategies, positioning gaps we can exploit, and 3 differentiation angles. Then give me a step-by-step checklist to verify this using SpyFu, SEMrush, and Facebook Ad Library.">
+                        <i class="bi bi-trophy"></i> Competitor Analysis
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary chat-quick-btn" data-prompt="Write 5 high-converting ad copy variations for {{ brand.display_name }}. For each, include: headline (30 chars), long headline (90 chars), description (90 chars), and a CTA. Target {{ brand.service_area or 'local' }} customers. Mix urgency, social proof, and benefit-driven angles.">
+                        <i class="bi bi-pencil-square"></i> Ad Copy
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary chat-quick-btn" data-prompt="Create a landing page strategy for {{ brand.display_name }}. Include: recommended page structure (hero, social proof, services, CTA), headline and subheadline copy, 3 trust signals to include, form fields to use, and A/B test ideas. Optimize for conversion from paid traffic.">
+                        <i class="bi bi-layout-text-window"></i> Landing Page
+                    </button>
+                </div>
+
+                <!-- Chat Messages -->
+                <div id="chatMessages" class="border rounded p-3 mb-3" style="max-height: 420px; overflow-y: auto; background: #fafbfc;">
                     {% if ai_chat_messages and ai_chat_messages|length > 0 %}
                         {% for m in ai_chat_messages %}
-                            <div class="mb-2">
-                                <div class="small text-muted">
-                                    {% if m.role == 'user' %}<strong>You</strong>{% else %}<strong>AI</strong>{% endif %}
-                                    {% if m.created_at %} - {{ m.created_at[:16] }}{% endif %}
+                        <div class="chat-msg mb-3 {% if m.role == 'user' %}chat-user{% else %}chat-ai{% endif %}">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="small fw-semibold {% if m.role == 'user' %}text-primary{% else %}text-success{% endif %}">
+                                    {% if m.role == 'user' %}<i class="bi bi-person"></i> You{% else %}<i class="bi bi-cpu"></i> AI{% endif %}
+                                </span>
+                                <div>
+                                    {% if m.role == 'assistant' %}
+                                    <button class="btn btn-sm btn-link text-muted p-0 me-2 copy-btn" title="Copy" onclick="copyMsg(this)">
+                                        <i class="bi bi-clipboard"></i>
+                                    </button>
+                                    {% endif %}
+                                    <span class="small text-muted">{{ m.created_at[:16] if m.created_at else '' }}</span>
                                 </div>
-                                <div style="white-space: pre-wrap;">{{ m.content }}</div>
                             </div>
+                            <div class="chat-content {% if m.role == 'assistant' %}ai-markdown{% endif %}">{{ m.content }}</div>
+                        </div>
                         {% endfor %}
                     {% else %}
-                        <div class="text-muted">No chat yet. Ask a task to get started.</div>
+                        <div class="text-muted text-center py-3" id="chatEmpty">
+                            <i class="bi bi-chat-dots" style="font-size: 1.5rem;"></i>
+                            <div class="mt-1">No chat yet. Use a quick action above or type a task below.</div>
+                        </div>
                     {% endif %}
                 </div>
 
-                <form method="POST" action="{{ url_for('brand_ai_chat', brand_id=brand.id) }}" class="d-flex gap-2 align-items-start">
-                    <input type="hidden" name="month" value="{{ active_month }}">
-                    <textarea name="message" class="form-control" rows="2" placeholder="Example: Generate 25 local SEO keywords for {{ brand.service_area or 'our service area' }}. Group by intent and include suggested ad groups."></textarea>
-                    <button type="submit" class="btn btn-primary" {% if not openai_enabled %}disabled{% endif %}>
-                        Send
+                <!-- Chat Input -->
+                <div class="d-flex gap-2 align-items-start" id="chatForm">
+                    <textarea id="chatInput" class="form-control" rows="2"
+                              placeholder="Ask anything: keywords, campaign plans, ad copy, budget allocation..."
+                              {% if not openai_enabled %}disabled{% endif %}></textarea>
+                    <button id="chatSendBtn" class="btn btn-primary" {% if not openai_enabled %}disabled{% endif %} onclick="sendChat()">
+                        <i class="bi bi-send"></i> Send
                     </button>
-                </form>
-                <small class="text-muted d-block mt-2">Note: This chat does not browse the web. For competitor research, it will propose a strategy and a verification checklist.</small>
+                </div>
+                <div id="chatSpinner" class="text-center py-2 d-none">
+                    <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                    <span class="small text-muted ms-2">AI is thinking...</span>
+                </div>
             </div>
         </div>
     </div>
@@ -472,11 +512,139 @@
     </div>
 </div>
 
+{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+    .chat-user .chat-content { white-space: pre-wrap; background: #e8f0fe; border-radius: 8px; padding: 10px 14px; }
+    .chat-ai .chat-content { background: #f0fdf4; border-radius: 8px; padding: 10px 14px; }
+    .chat-ai .chat-content h1,.chat-ai .chat-content h2,.chat-ai .chat-content h3 { font-size: 1rem; font-weight: 700; margin-top: .75rem; }
+    .chat-ai .chat-content ul,.chat-ai .chat-content ol { padding-left: 1.2rem; margin-bottom: .5rem; }
+    .chat-ai .chat-content p { margin-bottom: .4rem; }
+    .chat-ai .chat-content table { width: 100%; font-size: .85rem; }
+    .chat-ai .chat-content table th,.chat-ai .chat-content table td { border: 1px solid #dee2e6; padding: 4px 8px; }
+    .chat-quick-btn { font-size: .78rem; }
+    .copy-btn:hover { color: #0d6efd !important; }
+</style>
+{% endblock %}
+
 {% block scripts %}
 <script>
+const BRAND_ID = {{ brand.id }};
+const MONTH = '{{ active_month }}';
+const CHAT_URL = '/brands/' + BRAND_ID + '/ai-chat';
+
+function scrollChat() {
+    const el = document.getElementById('chatMessages');
+    if (el) el.scrollTop = el.scrollHeight;
+}
+
+function renderMarkdown() {
+    document.querySelectorAll('.ai-markdown:not([data-rendered])').forEach(el => {
+        if (typeof marked !== 'undefined') {
+            el.innerHTML = marked.parse(el.textContent);
+        }
+        el.setAttribute('data-rendered', '1');
+    });
+}
+
+function appendMsg(role, content) {
+    const box = document.getElementById('chatMessages');
+    const empty = document.getElementById('chatEmpty');
+    if (empty) empty.remove();
+
+    const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const isAI = role === 'assistant';
+    const div = document.createElement('div');
+    div.className = 'chat-msg mb-3 ' + (isAI ? 'chat-ai' : 'chat-user');
+
+    let copyBtn = '';
+    if (isAI) {
+        copyBtn = '<button class="btn btn-sm btn-link text-muted p-0 me-2 copy-btn" title="Copy" onclick="copyMsg(this)"><i class="bi bi-clipboard"></i></button>';
+    }
+
+    div.innerHTML =
+        '<div class="d-flex justify-content-between align-items-center mb-1">' +
+            '<span class="small fw-semibold ' + (isAI ? 'text-success' : 'text-primary') + '">' +
+                (isAI ? '<i class="bi bi-cpu"></i> AI' : '<i class="bi bi-person"></i> You') +
+            '</span>' +
+            '<div>' + copyBtn + '<span class="small text-muted">' + now + '</span></div>' +
+        '</div>' +
+        '<div class="chat-content ' + (isAI ? 'ai-markdown' : '') + '">' + content + '</div>';
+
+    box.appendChild(div);
+    renderMarkdown();
+    scrollChat();
+}
+
+function sendChat(promptOverride) {
+    const input = document.getElementById('chatInput');
+    const msg = promptOverride || input.value.trim();
+    if (!msg) return;
+
+    input.value = '';
+    input.disabled = true;
+    document.getElementById('chatSendBtn').disabled = true;
+    document.getElementById('chatSpinner').classList.remove('d-none');
+
+    appendMsg('user', msg);
+
+    fetch(CHAT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        body: JSON.stringify({ message: msg, month: MONTH })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            appendMsg('assistant', 'Error: ' + data.error);
+        } else {
+            appendMsg('assistant', data.reply || '(empty response)');
+        }
+    })
+    .catch(err => {
+        appendMsg('assistant', 'Request failed: ' + err.message);
+    })
+    .finally(() => {
+        input.disabled = false;
+        document.getElementById('chatSendBtn').disabled = false;
+        document.getElementById('chatSpinner').classList.add('d-none');
+        input.focus();
+    });
+}
+
+function copyMsg(btn) {
+    const content = btn.closest('.chat-msg').querySelector('.chat-content');
+    const text = content.innerText || content.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        btn.innerHTML = '<i class="bi bi-check2"></i>';
+        setTimeout(() => { btn.innerHTML = '<i class="bi bi-clipboard"></i>'; }, 1500);
+    });
+}
+
+// Quick-action buttons
+document.querySelectorAll('.chat-quick-btn').forEach(btn => {
+    btn.addEventListener('click', () => sendChat(btn.dataset.prompt));
+});
+
+// Enter to send (Shift+Enter for newline)
+document.getElementById('chatInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChat();
+    }
+});
+
+// Auto-scroll and render on load
+document.addEventListener('DOMContentLoaded', () => {
+    renderMarkdown();
+    scrollChat();
+});
+
 function saveApiField(brandId, field) {
     const value = document.getElementById(field).value;
-    fetch(`/brands/${brandId}/api-field`, {
+    fetch('/brands/' + brandId + '/api-field', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({field: field, value: value})
@@ -489,5 +657,4 @@ function saveApiField(brandId, field) {
     });
 }
 </script>
-{% endblock %}
 {% endblock %}
