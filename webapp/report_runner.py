@@ -67,7 +67,7 @@ def run_report_for_brand(db, brand, month):
         try:
             data = load_client_data(slug, month, import_dir=str(BASE_DIR / "data" / "imports"))
         except Exception as e:
-            pass
+            return {"success": False, "error": f"CSV parse error: {str(e)}"}
 
     # Try API pull if we have connections
     connections = db.get_brand_connections(brand["id"])
@@ -80,7 +80,7 @@ def run_report_for_brand(db, brand, month):
                 if key in api_data and api_data[key] and key not in data:
                     data[key] = api_data[key]
         except Exception:
-            pass  # fall back to CSV data
+            pass  # best-effort; CSV-first proof of concept
 
     if not data:
         return {"success": False, "error": "No data available (no CSV imports and no API connections)"}

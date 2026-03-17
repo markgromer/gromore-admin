@@ -163,6 +163,15 @@ def create_app():
         brand = db.get_brand(brand_id)
         if not brand:
             abort(404)
+        active_month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+        import_dir = Path(BASE_DIR / "data" / "imports" / brand["slug"] / active_month)
+        csv_status = {
+            "month": active_month,
+            "import_dir": str(import_dir),
+            "ga": (import_dir / "google_analytics.csv").exists(),
+            "meta": (import_dir / "meta_business.csv").exists(),
+            "gsc": (import_dir / "search_console.csv").exists(),
+        }
         connections = db.get_brand_connections(brand_id)
         reports = db.get_brand_reports(brand_id, limit=12)
         contacts = db.get_brand_contacts(brand_id)
@@ -172,6 +181,8 @@ def create_app():
             connections=connections,
             reports=reports,
             contacts=contacts,
+            active_month=active_month,
+            csv_status=csv_status,
         )
 
     @app.route("/brands/<int:brand_id>/edit", methods=["GET", "POST"])
@@ -274,7 +285,7 @@ def create_app():
             flash(f"Uploaded {uploaded} CSV file(s) for {month}", "success")
         else:
             flash("No files selected", "warning")
-        return redirect(url_for("brand_detail", brand_id=brand_id))
+        return redirect(url_for("brand_detail", brand_id=brand_id, month=month))
 
     # ── Reports ──
     @app.route("/brands/<int:brand_id>/generate", methods=["POST"])
@@ -293,7 +304,7 @@ def create_app():
                 flash(f"Report generation issue: {result['error']}", "error")
         except Exception as e:
             flash(f"Error: {str(e)}", "error")
-        return redirect(url_for("brand_detail", brand_id=brand_id))
+        return redirect(url_for("brand_detail", brand_id=brand_id, month=month))
 
     @app.route("/reports/<int:report_id>/view/<report_type>")
     @login_required

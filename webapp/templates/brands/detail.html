@@ -10,6 +10,11 @@
         </small>
     </div>
     <div>
+        <form method="GET" action="{{ url_for('brand_detail', brand_id=brand.id) }}" class="d-inline-flex align-items-center gap-2 me-2">
+            <input type="month" name="month" class="form-control form-control-sm" style="width: auto;"
+                   value="{{ active_month }}">
+            <button type="submit" class="btn btn-outline-secondary btn-sm">Go</button>
+        </form>
         <a href="{{ url_for('brand_edit', brand_id=brand.id) }}" class="btn btn-outline-primary btn-sm">
             <i class="bi bi-pencil"></i> Edit
         </a>
@@ -61,8 +66,8 @@
                     <div class="input-group input-group-sm">
                         <input type="text" class="form-control" value="{{ brand.ga4_property_id or '' }}"
                                id="ga4_property_id" placeholder="e.g. 123456789">
-                        <button class="btn btn-outline-secondary" type="button"
-                                onclick="saveApiField({{ brand.id }}, 'ga4_property_id')">Save</button>
+                        <button class="btn btn-outline-secondary" type="button" data-brand-id="{{ brand.id }}"
+                                onclick="saveApiField(this.dataset.brandId, 'ga4_property_id')">Save</button>
                     </div>
                 </div>
 
@@ -72,8 +77,8 @@
                     <div class="input-group input-group-sm">
                         <input type="text" class="form-control" value="{{ brand.gsc_site_url or '' }}"
                                id="gsc_site_url" placeholder="e.g. https://example.com">
-                        <button class="btn btn-outline-secondary" type="button"
-                                onclick="saveApiField({{ brand.id }}, 'gsc_site_url')">Save</button>
+                        <button class="btn btn-outline-secondary" type="button" data-brand-id="{{ brand.id }}"
+                                onclick="saveApiField(this.dataset.brandId, 'gsc_site_url')">Save</button>
                     </div>
                 </div>
 
@@ -188,12 +193,18 @@
         <div class="card">
             <div class="card-header"><strong><i class="bi bi-upload"></i> Upload CSV Data</strong></div>
             <div class="card-body">
+                <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+                    <span class="text-muted small">Data status for <strong>{{ csv_status.month }}</strong>:</span>
+                    <span class="badge {{ 'bg-success' if csv_status.ga else 'bg-secondary' }}">GA {{ 'OK' if csv_status.ga else 'Missing' }}</span>
+                    <span class="badge {{ 'bg-success' if csv_status.meta else 'bg-secondary' }}">Meta {{ 'OK' if csv_status.meta else 'Missing' }}</span>
+                    <span class="badge {{ 'bg-success' if csv_status.gsc else 'bg-secondary' }}">GSC {{ 'OK' if csv_status.gsc else 'Missing' }}</span>
+                </div>
                 <form method="POST" action="{{ url_for('brand_upload_csv', brand_id=brand.id) }}" enctype="multipart/form-data">
                     <div class="row g-3 align-items-end">
                         <div class="col-md-2">
                             <label class="form-label small text-muted mb-1">Month</label>
                             <input type="month" name="month" class="form-control form-control-sm"
-                                   value="{{ now.strftime('%Y-%m') }}">
+                                   value="{{ active_month }}">
                         </div>
                         <div class="col-md-3">
                             <label class="form-label small text-muted mb-1">Google Analytics CSV</label>
@@ -226,7 +237,7 @@
                 <strong><i class="bi bi-file-earmark-bar-graph"></i> Reports</strong>
                 <form method="POST" action="{{ url_for('brand_generate_report', brand_id=brand.id) }}" class="d-flex gap-2">
                     <input type="month" name="month" class="form-control form-control-sm" style="width: auto;"
-                           value="{{ now.strftime('%Y-%m') }}">
+                           value="{{ active_month }}">
                     <button type="submit" class="btn btn-sm btn-primary">
                         <i class="bi bi-play-fill"></i> Generate
                     </button>
