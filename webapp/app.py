@@ -36,9 +36,11 @@ def create_app():
     env_secret_key = os.environ.get("SECRET_KEY")
     # Use a temporary key until DB-backed config is loaded.
     app.secret_key = env_secret_key or "dev-temp"
-    app.config["DATABASE_PATH"] = os.environ.get(
-        "DATABASE_PATH", str(BASE_DIR / "data" / "database" / "webapp.db")
-    )
+
+    # Detect Render: if RENDER env var is set OR /data mount exists, use persistent paths
+    on_render = os.environ.get("RENDER") or os.path.isdir("/data")
+    default_db = "/data/database/webapp.db" if on_render else str(BASE_DIR / "data" / "database" / "webapp.db")
+    app.config["DATABASE_PATH"] = os.environ.get("DATABASE_PATH", default_db)
 
     # Initialize DB first so we can load settings from it
     db = WebDB(app.config["DATABASE_PATH"])
@@ -47,8 +49,7 @@ def create_app():
 
     # Storage paths for uploads + generated reports
     # Local/dev uses repo folders. Render uses persisted disk under /data.
-    db_path_norm = str(app.config["DATABASE_PATH"]).replace("\\", "/")
-    if "/data/" in db_path_norm:
+    if on_render:
         app.config["IMPORTS_DIR"] = os.environ.get("IMPORTS_DIR", "/data/imports")
         app.config["REPORTS_DIR"] = os.environ.get("REPORTS_DIR", "/data/reports")
     else:
@@ -58,6 +59,12 @@ def create_app():
     # Make available to helper modules (report_runner reads these env vars)
     os.environ.setdefault("IMPORTS_DIR", app.config["IMPORTS_DIR"])
     os.environ.setdefault("REPORTS_DIR", app.config["REPORTS_DIR"])
+
+    # Log paths at startup for debugging persistence issues
+    print(f"[startup] DATABASE_PATH = {app.config['DATABASE_PATH']}")
+    print(f"[startup] IMPORTS_DIR   = {app.config['IMPORTS_DIR']}")
+    print(f"[startup] REPORTS_DIR   = {app.config['REPORTS_DIR']}")
+    print(f"[startup] on_render     = {on_render}")
 
     # Stabilize SECRET_KEY across restarts in local/dev (unless provided via env)
     if not env_secret_key:
