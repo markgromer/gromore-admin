@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="top-bar">
+    <h4 class="mb-0">Dashboard</h4>
+    <span class="text-muted">{{ now.strftime('%B %Y') }}</span>
+</div>
+
+<!-- Stats Row -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-lg-3">
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.total_brands }}</div>
+            <div class="stat-label">Total Brands</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.connected_ga4 }}</div>
+            <div class="stat-label">GA4 Connected</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.connected_meta }}</div>
+            <div class="stat-label">Meta Connected</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.reports_this_month }}</div>
+            <div class="stat-label">Reports This Month</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Brands Quick View -->
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>Brands</strong>
+                <a href="{{ url_for('brand_new') }}" class="btn btn-sm btn-primary">
+                    <i class="bi bi-plus-lg"></i> Add Brand
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if brands %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Brand</th>
+                                <th>Industry</th>
+                                <th>Connections</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for brand in brands %}
+                            <tr>
+                                <td>
+                                    <a href="{{ url_for('brand_detail', brand_id=brand.id) }}" class="text-decoration-none fw-medium">
+                                        {{ brand.display_name }}
+                                    </a>
+                                </td>
+                                <td><span class="text-muted">{{ brand.industry|replace('_',' ')|title }}</span></td>
+                                <td>
+                                    {% if brand.ga4_property_id %}
+                                    <span class="badge badge-connected me-1">GA4</span>
+                                    {% endif %}
+                                    {% if brand.meta_ad_account_id %}
+                                    <span class="badge badge-connected me-1">Meta</span>
+                                    {% endif %}
+                                    {% if brand.gsc_site_url %}
+                                    <span class="badge badge-connected">GSC</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <a href="{{ url_for('brand_detail', brand_id=brand.id) }}" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-chevron-right"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-building" style="font-size: 2rem;"></i>
+                    <p class="mt-2">No brands yet. <a href="{{ url_for('brand_new') }}">Add your first brand</a>.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Reports -->
+    <div class="col-lg-5">
+        <div class="card">
+            <div class="card-header"><strong>Recent Reports</strong></div>
+            <div class="card-body p-0">
+                {% if recent_reports %}
+                <div class="list-group list-group-flush">
+                    {% for report in recent_reports %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="fw-medium">{{ report.brand_name }}</div>
+                            <small class="text-muted">{{ report.month }}</small>
+                        </div>
+                        <div>
+                            {% if report.sent_at %}
+                            <span class="badge badge-sent me-1">Sent</span>
+                            {% endif %}
+                            {% if report.published_url %}
+                            <span class="badge badge-published me-1">Published</span>
+                            {% endif %}
+                            <a href="{{ url_for('report_view', report_id=report.id, report_type='client') }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <p>No reports generated yet.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

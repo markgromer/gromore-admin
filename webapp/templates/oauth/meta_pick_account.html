@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Select Meta Ad Account{% endblock %}
+
+{% block content %}
+<div class="top-bar">
+    <h4 class="mb-0">Select Ad Account for {{ brand.display_name }}</h4>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        {% if ad_accounts %}
+        <p>Multiple ad accounts found. Select which one to connect:</p>
+        <div class="list-group">
+            {% for acct in ad_accounts %}
+            <form method="POST" action="{{ url_for('meta_oauth.select_account') }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                <input type="hidden" name="account_id" value="{{ acct.account_id }}">
+                <input type="hidden" name="account_name" value="{{ acct.name }}">
+                <div>
+                    <div class="fw-medium">{{ acct.name or acct.account_id }}</div>
+                    <small class="text-muted">
+                        Account ID: {{ acct.account_id }}
+                        {% if acct.account_status == 1 %}
+                        <span class="badge bg-success">Active</span>
+                        {% elif acct.account_status == 2 %}
+                        <span class="badge bg-warning">Disabled</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Status: {{ acct.account_status }}</span>
+                        {% endif %}
+                    </small>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">Select</button>
+            </form>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-4">
+            <i class="bi bi-exclamation-circle" style="font-size: 2rem; color: #dc3545;"></i>
+            <p class="mt-2">No ad accounts found. Make sure the Facebook user has access to at least one ad account.</p>
+            <a href="{{ url_for('brand_detail', brand_id=brand.id) }}" class="btn btn-secondary">Go Back</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

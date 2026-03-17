@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Brands{% endblock %}
+
+{% block content %}
+<div class="top-bar">
+    <h4 class="mb-0">Brands</h4>
+    <a href="{{ url_for('brand_new') }}" class="btn btn-primary">
+        <i class="bi bi-plus-lg"></i> Add Brand
+    </a>
+</div>
+
+{% if brands %}
+<div class="row g-3">
+    {% for brand in brands %}
+    <div class="col-md-6 col-lg-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title mb-1">{{ brand.display_name }}</h5>
+                <p class="text-muted mb-2" style="font-size: .85rem;">
+                    {{ brand.industry|replace('_',' ')|title }}
+                    {% if brand.service_area %} &middot; {{ brand.service_area }}{% endif %}
+                </p>
+
+                <div class="mb-3">
+                    {% if brand.ga4_property_id %}
+                    <span class="badge badge-connected me-1">GA4</span>
+                    {% else %}
+                    <span class="badge badge-disconnected me-1">GA4</span>
+                    {% endif %}
+
+                    {% if brand.meta_ad_account_id %}
+                    <span class="badge badge-connected me-1">Meta</span>
+                    {% else %}
+                    <span class="badge badge-disconnected me-1">Meta</span>
+                    {% endif %}
+
+                    {% if brand.gsc_site_url %}
+                    <span class="badge badge-connected">GSC</span>
+                    {% else %}
+                    <span class="badge badge-disconnected">GSC</span>
+                    {% endif %}
+                </div>
+
+                {% if brand.monthly_budget %}
+                <p class="mb-2" style="font-size: .85rem;">
+                    <strong>${{ "%.0f"|format(brand.monthly_budget) }}</strong>/mo budget
+                </p>
+                {% endif %}
+            </div>
+            <div class="card-footer bg-transparent">
+                <a href="{{ url_for('brand_detail', brand_id=brand.id) }}" class="btn btn-sm btn-outline-primary">
+                    Manage <i class="bi bi-chevron-right"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-building" style="font-size: 3rem; color: #6c757d;"></i>
+        <h5 class="mt-3">No brands yet</h5>
+        <p class="text-muted">Add your first client brand to get started.</p>
+        <a href="{{ url_for('brand_new') }}" class="btn btn-primary">
+            <i class="bi bi-plus-lg"></i> Add Brand
+        </a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

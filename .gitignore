@@ -1,0 +1,28 @@
+# Credential files - never commit these
+config/google_credentials.json
+config/meta_credentials.json
+
+# Databases
+data/database/*.db
+webapp/*.db
+*.db
+
+# Uploaded CSV data and generated reports
+data/imports/
+reports/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

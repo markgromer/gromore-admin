@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}Setup Guide{% endblock %}
+
+{% block content %}
+<div class="top-bar">
+    <h4 class="mb-0">Setup Guide</h4>
+    <small class="text-muted">One-time setup to connect all your brands</small>
+</div>
+
+<!-- Quick overview -->
+<div class="alert alert-info mb-4">
+    <strong>How this works:</strong> You create one Google app + one Meta app (both free). Enter those credentials
+    in <a href="{{ url_for('settings') }}">Settings</a>. Then for each brand, click "Connect Google" or "Connect Meta"
+    on the brand detail page. Reports pull data automatically after that.
+</div>
+
+<div class="row g-4">
+
+<!-- Step 1 -->
+<div class="col-12">
+    <div class="card">
+        <div class="card-header">
+            <strong><span class="badge bg-primary me-2">1</span> Create a Google OAuth App</strong>
+            <small class="text-muted ms-2">(covers GA4 + Search Console for all brands)</small>
+        </div>
+        <div class="card-body">
+            <ol class="mb-0">
+                <li class="mb-3">
+                    Go to <strong>Google Cloud Console</strong>:
+                    <code>https://console.cloud.google.com</code><br>
+                    Create a new project (or use an existing one). Name it something like "Agency Reports".
+                </li>
+                <li class="mb-3">
+                    <strong>Enable these APIs</strong> (search for each in the API Library):
+                    <ul>
+                        <li>Google Analytics Data API</li>
+                        <li>Google Analytics Admin API</li>
+                        <li>Google Search Console API</li>
+                    </ul>
+                </li>
+                <li class="mb-3">
+                    <strong>Configure the OAuth consent screen</strong>:
+                    <ul>
+                        <li>User Type: <strong>External</strong> (unless you have a Google Workspace org)</li>
+                        <li>App name: anything (e.g. "My Agency Reports")</li>
+                        <li>Support email: your email</li>
+                        <li>Scopes: add <code>analytics.readonly</code> and <code>webmasters.readonly</code></li>
+                        <li>Test users: add the Google accounts that own the GA4/GSC properties you want to access</li>
+                    </ul>
+                    <div class="alert alert-warning mt-2 mb-0 py-2">
+                        <small><strong>Important:</strong> While the app is in "Testing" mode, only the test users you
+                        add can authorize. This is fine for an agency - just add each client's Google account email
+                        (or your own if you manage their GA). You do NOT need to publish/verify the app.</small>
+                    </div>
+                </li>
+                <li class="mb-3">
+                    <strong>Create OAuth credentials</strong>:
+                    <ul>
+                        <li>Go to Credentials > Create Credentials > OAuth client ID</li>
+                        <li>Application type: <strong>Web application</strong></li>
+                        <li>Authorized redirect URI: <code>{{ app_url }}/oauth/google/callback</code></li>
+                    </ul>
+                </li>
+                <li>
+                    Copy the <strong>Client ID</strong> and <strong>Client Secret</strong>, then paste them into
+                    <a href="{{ url_for('settings') }}">Settings > Google OAuth</a>.
+                </li>
+            </ol>
+        </div>
+    </div>
+</div>
+
+<!-- Step 2 -->
+<div class="col-12">
+    <div class="card">
+        <div class="card-header">
+            <strong><span class="badge bg-primary me-2">2</span> Create a Meta (Facebook) App</strong>
+            <small class="text-muted ms-2">(covers Facebook/Instagram Ads for all brands)</small>
+        </div>
+        <div class="card-body">
+            <ol class="mb-0">
+                <li class="mb-3">
+                    Go to <strong>Meta for Developers</strong>:
+                    <code>https://developers.facebook.com</code><br>
+                    Click "My Apps" > "Create App".
+                </li>
+                <li class="mb-3">
+                    <strong>App type:</strong> select "Business".<br>
+                    App name: anything (e.g. "Agency Ad Reports").
+                </li>
+                <li class="mb-3">
+                    Under your app, go to <strong>App Settings > Basic</strong>:
+                    <ul>
+                        <li>Copy the <strong>App ID</strong> and <strong>App Secret</strong></li>
+                        <li>Add your domain to "App Domains" (e.g. <code>{{ app_url.split('//')[1].split('/')[0] if '//' in app_url else app_url }}</code>)</li>
+                    </ul>
+                </li>
+                <li class="mb-3">
+                    Go to <strong>Use Cases > Customize</strong> and add <strong>Marketing API</strong>.<br>
+                    Under Marketing API permissions, enable:
+                    <ul>
+                        <li><code>ads_read</code></li>
+                        <li><code>read_insights</code></li>
+                    </ul>
+                </li>
+                <li class="mb-3">
+                    Under <strong>Facebook Login > Settings</strong>:
+                    <ul>
+                        <li>Valid OAuth Redirect URI: <code>{{ app_url }}/oauth/meta/callback</code></li>
+                    </ul>
+                </li>
+                <li>
+                    Paste the <strong>App ID</strong> and <strong>App Secret</strong> into
+                    <a href="{{ url_for('settings') }}">Settings > Meta OAuth</a>.
+                </li>
+            </ol>
+            <div class="alert alert-warning mt-3 mb-0 py-2">
+                <small><strong>Note:</strong> Meta apps in "Development" mode only work for users with a role
+                on the app (Admin/Developer/Tester). Go to App Roles and add yourself. This is fine for
+                agency use - you only need your own account to have access to the ad accounts.</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Step 3 -->
+<div class="col-12">
+    <div class="card">
+        <div class="card-header">
+            <strong><span class="badge bg-primary me-2">3</span> Connect Each Brand</strong>
+        </div>
+        <div class="card-body">
+            <p>Once the OAuth credentials are saved in Settings, connecting brands is simple:</p>
+            <ol class="mb-0">
+                <li class="mb-2">Go to a brand's detail page</li>
+                <li class="mb-2">Click <strong>"Connect"</strong> next to Google or Meta</li>
+                <li class="mb-2">Authorize with the Google/Facebook account that owns the data</li>
+                <li class="mb-2">For Google: pick the GA4 property and Search Console site from the list</li>
+                <li class="mb-2">For Meta: pick the ad account</li>
+                <li>Done. The system will use those connections to pull data when generating reports.</li>
+            </ol>
+        </div>
+    </div>
+</div>
+
+<!-- Step 4 -->
+<div class="col-12">
+    <div class="card">
+        <div class="card-header">
+            <strong><span class="badge bg-primary me-2">4</span> Monthly Workflow</strong>
+        </div>
+        <div class="card-body">
+            <p>After all brands are connected, your monthly process is two clicks:</p>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="border rounded p-3 text-center">
+                        <i class="bi bi-play-circle text-primary" style="font-size: 2rem;"></i>
+                        <div class="fw-medium mt-2">Generate All Reports</div>
+                        <small class="text-muted">Sidebar > "Generate All Reports"<br>
+                        Pulls data from APIs, runs analytics, scores against benchmarks, builds HTML reports for every brand.</small>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="border rounded p-3 text-center">
+                        <i class="bi bi-envelope text-primary" style="font-size: 2rem;"></i>
+                        <div class="fw-medium mt-2">Send All Reports</div>
+                        <small class="text-muted">Sidebar > "Send All Reports"<br>
+                        Emails client-facing reports to every contact marked with auto-send. Only sends unsent reports.</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Alternative: CSV -->
+<div class="col-12">
+    <div class="card border-secondary">
+        <div class="card-header bg-light">
+            <strong>Alternative: CSV Upload</strong>
+            <small class="text-muted ms-2">(no OAuth setup needed)</small>
+        </div>
+        <div class="card-body">
+            <p>If you'd rather not set up OAuth, or for one-off reports, use CSV uploads on each brand's detail page:</p>
+            <ul class="mb-0">
+                <li><strong>Google Analytics:</strong> GA4 > Reports > Export as CSV</li>
+                <li><strong>Meta Ads:</strong> Ads Manager > Export Table Data as CSV</li>
+                <li><strong>Search Console:</strong> Performance report > Export as CSV</li>
+            </ul>
+            <p class="text-muted mt-2 mb-0">The parser handles most column name variations from standard GA4, Meta Ads Manager, and GSC exports automatically.</p>
+        </div>
+    </div>
+</div>
+
+</div>
+{% endblock %}

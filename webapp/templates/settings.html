@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="top-bar">
+    <h4 class="mb-0">Settings</h4>
+</div>
+
+<div class="row g-4">
+    <!-- Google OAuth -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-google"></i> Google OAuth (GA4 + Search Console)</strong></div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="section" value="google_oauth">
+                    <div class="mb-3">
+                        <label class="form-label">Client ID</label>
+                        <input type="text" name="google_client_id" class="form-control"
+                               value="{{ config.GOOGLE_CLIENT_ID }}"
+                               placeholder="xxxx.apps.googleusercontent.com">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Client Secret</label>
+                        <input type="password" name="google_client_secret" class="form-control"
+                               placeholder="{{ '******  (saved)' if config.GOOGLE_CLIENT_SECRET else 'Enter secret' }}">
+                        <small class="text-muted">Leave blank to keep current. Get these from
+                            <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a>.</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Google Credentials</button>
+                    {% if config.GOOGLE_CLIENT_ID %}
+                    <span class="badge bg-success ms-2">Configured</span>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Meta OAuth -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-meta"></i> Meta OAuth (Facebook/Instagram Ads)</strong></div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="section" value="meta_oauth">
+                    <div class="mb-3">
+                        <label class="form-label">App ID</label>
+                        <input type="text" name="meta_app_id" class="form-control"
+                               value="{{ config.META_APP_ID }}"
+                               placeholder="123456789012345">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">App Secret</label>
+                        <input type="password" name="meta_app_secret" class="form-control"
+                               placeholder="{{ '******  (saved)' if config.META_APP_SECRET else 'Enter secret' }}">
+                        <small class="text-muted">Leave blank to keep current. Get these from
+                            <a href="https://developers.facebook.com/apps/" target="_blank">Meta Developer Portal</a>.</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Meta Credentials</button>
+                    {% if config.META_APP_ID %}
+                    <span class="badge bg-success ms-2">Configured</span>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- App URL -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-link-45deg"></i> App URL</strong></div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="section" value="app_url">
+                    <div class="mb-3">
+                        <label class="form-label">Public URL of this app</label>
+                        <input type="url" name="app_url" class="form-control"
+                               value="{{ config.APP_URL }}"
+                               placeholder="https://your-app.onrender.com">
+                        <small class="text-muted">Used for OAuth callback URLs. Set this to your Render URL in production.</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save App URL</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- SMTP / Email -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-envelope"></i> Email (SMTP)</strong></div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="section" value="smtp">
+                    <div class="row g-2 mb-3">
+                        <div class="col-8">
+                            <label class="form-label">SMTP Host</label>
+                            <input type="text" name="smtp_host" class="form-control"
+                                   value="{{ config.SMTP_HOST }}" placeholder="smtp.gmail.com">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">Port</label>
+                            <input type="number" name="smtp_port" class="form-control"
+                                   value="{{ config.SMTP_PORT }}">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">SMTP Username</label>
+                        <input type="text" name="smtp_user" class="form-control"
+                               value="{{ config.SMTP_USER }}" placeholder="you@gmail.com">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">SMTP Password</label>
+                        <input type="password" name="smtp_password" class="form-control"
+                               placeholder="{{ '******  (saved)' if config.SMTP_PASSWORD else 'App password or SMTP password' }}">
+                        <small class="text-muted">Leave blank to keep current.</small>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label">From Name</label>
+                            <input type="text" name="smtp_from_name" class="form-control"
+                                   value="{{ config.SMTP_FROM_NAME }}">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">From Email</label>
+                            <input type="email" name="smtp_from_email" class="form-control"
+                                   value="{{ config.SMTP_FROM_EMAIL }}" placeholder="reports@agency.com">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Email Settings</button>
+                    {% if config.SMTP_USER %}
+                    <span class="badge bg-success ms-2">Configured</span>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- WordPress Settings -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-wordpress"></i> WordPress Publishing</strong></div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="section" value="wordpress">
+                    <div class="mb-3">
+                        <label class="form-label">WordPress Site URL</label>
+                        <input type="url" name="wp_url" class="form-control"
+                               value="{{ wp_settings.wp_url }}"
+                               placeholder="https://your-site.com">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">WordPress Username</label>
+                        <input type="text" name="wp_user" class="form-control"
+                               value="{{ wp_settings.wp_user }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Application Password</label>
+                        <input type="password" name="wp_app_password" class="form-control"
+                               placeholder="Leave blank to keep current">
+                        <small class="text-muted">
+                            Generate one in WordPress under Users > Your Profile > Application Passwords
+                        </small>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save WordPress Settings</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Password -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-shield-lock"></i> Change Password</strong></div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="section" value="password">
+                    <div class="mb-3">
+                        <label class="form-label">Current Password</label>
+                        <input type="password" name="current_password" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">New Password</label>
+                        <input type="password" name="new_password" class="form-control" required
+                               minlength="8">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Update Password</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

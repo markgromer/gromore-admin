@@ -1,0 +1,346 @@
+{% extends "base.html" %}
+{% block title %}{{ brand.display_name }}{% endblock %}
+
+{% block content %}
+<div class="top-bar">
+    <div>
+        <h4 class="mb-0">{{ brand.display_name }}</h4>
+        <small class="text-muted">{{ brand.industry|replace('_',' ')|title }}
+            {% if brand.service_area %} &middot; {{ brand.service_area }}{% endif %}
+        </small>
+    </div>
+    <div>
+        <a href="{{ url_for('brand_edit', brand_id=brand.id) }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-pencil"></i> Edit
+        </a>
+        <a href="{{ url_for('brands_list') }}" class="btn btn-outline-secondary btn-sm ms-1">
+            <i class="bi bi-arrow-left"></i> All Brands
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- API Connections -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-plug"></i> API Connections</strong></div>
+            <div class="card-body">
+                <!-- Google (GA4 + GSC) -->
+                <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
+                    <div>
+                        <div class="fw-medium">
+                            <i class="bi bi-google"></i> Google (GA4 + Search Console)
+                        </div>
+                        {% if connections.get('google') and connections['google'].status == 'connected' %}
+                        <small class="text-success">
+                            <i class="bi bi-check-circle-fill"></i> Connected
+                            {% if connections['google'].connected_at %}
+                            &middot; {{ connections['google'].connected_at[:10] }}
+                            {% endif %}
+                        </small>
+                        {% else %}
+                        <small class="text-muted">Not connected</small>
+                        {% endif %}
+                    </div>
+                    <div>
+                        {% if connections.get('google') and connections['google'].status == 'connected' %}
+                        <form method="POST" action="{{ url_for('google_oauth.disconnect', brand_id=brand.id) }}" class="d-inline">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Disconnect</button>
+                        </form>
+                        {% else %}
+                        <a href="{{ url_for('google_oauth.connect', brand_id=brand.id) }}" class="btn btn-sm btn-primary">
+                            <i class="bi bi-link-45deg"></i> Connect
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- GA4 Property ID -->
+                <div class="mb-3">
+                    <label class="form-label small text-muted mb-1">GA4 Property ID</label>
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control" value="{{ brand.ga4_property_id or '' }}"
+                               id="ga4_property_id" placeholder="e.g. 123456789">
+                        <button class="btn btn-outline-secondary" type="button"
+                                onclick="saveApiField({{ brand.id }}, 'ga4_property_id')">Save</button>
+                    </div>
+                </div>
+
+                <!-- GSC Site URL -->
+                <div class="mb-3">
+                    <label class="form-label small text-muted mb-1">Search Console Site URL</label>
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control" value="{{ brand.gsc_site_url or '' }}"
+                               id="gsc_site_url" placeholder="e.g. https://example.com">
+                        <button class="btn btn-outline-secondary" type="button"
+                                onclick="saveApiField({{ brand.id }}, 'gsc_site_url')">Save</button>
+                    </div>
+                </div>
+
+                <hr>
+
+                <!-- Meta -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <div class="fw-medium">
+                            <i class="bi bi-meta"></i> Meta (Facebook/Instagram Ads)
+                        </div>
+                        {% if connections.get('meta') and connections['meta'].status == 'connected' %}
+                        <small class="text-success">
+                            <i class="bi bi-check-circle-fill"></i> Connected
+                            {% if connections['meta'].account_name %}
+                            &middot; {{ connections['meta'].account_name }}
+                            {% endif %}
+                        </small>
+                        {% else %}
+                        <small class="text-muted">Not connected</small>
+                        {% endif %}
+                    </div>
+                    <div>
+                        {% if connections.get('meta') and connections['meta'].status == 'connected' %}
+                        <form method="POST" action="{{ url_for('meta_oauth.disconnect', brand_id=brand.id) }}" class="d-inline">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Disconnect</button>
+                        </form>
+                        {% else %}
+                        <a href="{{ url_for('meta_oauth.connect', brand_id=brand.id) }}" class="btn btn-sm btn-primary">
+                            <i class="bi bi-link-45deg"></i> Connect
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contacts -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-people"></i> Contacts</strong></div>
+            <div class="card-body">
+                {% if contacts %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-3">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Auto-Send</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for contact in contacts %}
+                            <tr>
+                                <td>{{ contact.name }}<br><small class="text-muted">{{ contact.role }}</small></td>
+                                <td><small>{{ contact.email }}</small></td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('contact_toggle_autosend', contact_id=contact.id) }}" class="d-inline">
+                                        <button type="submit" class="btn btn-sm {{ 'btn-success' if contact.auto_send else 'btn-outline-secondary' }}">
+                                            {{ 'On' if contact.auto_send else 'Off' }}
+                                        </button>
+                                    </form>
+                                </td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('contact_delete', contact_id=contact.id) }}" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+
+                <form method="POST" action="{{ url_for('brand_add_contact', brand_id=brand.id) }}">
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <input type="text" name="contact_name" class="form-control form-control-sm" placeholder="Name" required>
+                        </div>
+                        <div class="col-md-4">
+                            <input type="email" name="contact_email" class="form-control form-control-sm" placeholder="Email" required>
+                        </div>
+                        <div class="col-md-2">
+                            <select name="contact_role" class="form-select form-select-sm">
+                                <option value="client">Client</option>
+                                <option value="internal">Internal</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-sm btn-primary w-100">
+                                <i class="bi bi-plus"></i> Add
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" name="auto_send" id="autoSendNew">
+                        <label class="form-check-label small" for="autoSendNew">Enable auto-send</label>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- CSV Upload -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-upload"></i> Upload CSV Data</strong></div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('brand_upload_csv', brand_id=brand.id) }}" enctype="multipart/form-data">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-2">
+                            <label class="form-label small text-muted mb-1">Month</label>
+                            <input type="month" name="month" class="form-control form-control-sm"
+                                   value="{{ now.strftime('%Y-%m') }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted mb-1">Google Analytics CSV</label>
+                            <input type="file" name="ga_file" class="form-control form-control-sm" accept=".csv">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted mb-1">Meta Ads CSV</label>
+                            <input type="file" name="meta_file" class="form-control form-control-sm" accept=".csv">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted mb-1">Search Console CSV</label>
+                            <input type="file" name="gsc_file" class="form-control form-control-sm" accept=".csv">
+                        </div>
+                        <div class="col-md-1">
+                            <button type="submit" class="btn btn-sm btn-primary w-100">
+                                <i class="bi bi-upload"></i> Upload
+                            </button>
+                        </div>
+                    </div>
+                    <small class="text-muted mt-2 d-block">Upload one or more CSV exports. Files are stored per month and used for report generation.</small>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reports -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong><i class="bi bi-file-earmark-bar-graph"></i> Reports</strong>
+                <form method="POST" action="{{ url_for('brand_generate_report', brand_id=brand.id) }}" class="d-flex gap-2">
+                    <input type="month" name="month" class="form-control form-control-sm" style="width: auto;"
+                           value="{{ now.strftime('%Y-%m') }}">
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="bi bi-play-fill"></i> Generate
+                    </button>
+                </form>
+            </div>
+            <div class="card-body p-0">
+                {% if reports %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Month</th>
+                                <th>Generated</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for report in reports %}
+                            <tr>
+                                <td class="fw-medium">{{ report.month }}</td>
+                                <td><small class="text-muted">{{ report.generated_at[:16] if report.generated_at else '-' }}</small></td>
+                                <td>
+                                    {% if report.sent_at %}
+                                    <span class="badge badge-sent">Sent {{ report.sent_at[:10] }}</span>
+                                    {% endif %}
+                                    {% if report.published_url %}
+                                    <span class="badge badge-published">Published</span>
+                                    {% endif %}
+                                    {% if not report.sent_at and not report.published_url %}
+                                    <span class="badge bg-secondary">Generated</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('report_view', report_id=report.id, report_type='internal') }}"
+                                           class="btn btn-outline-secondary" target="_blank" title="View Internal">
+                                            <i class="bi bi-eye"></i> Internal
+                                        </a>
+                                        <a href="{{ url_for('report_view', report_id=report.id, report_type='client') }}"
+                                           class="btn btn-outline-primary" target="_blank" title="View Client">
+                                            <i class="bi bi-eye"></i> Client
+                                        </a>
+                                        <form method="POST" action="{{ url_for('report_send', report_id=report.id) }}" class="d-inline">
+                                            <button type="submit" class="btn btn-outline-success btn-sm" title="Email Report">
+                                                <i class="bi bi-envelope"></i>
+                                            </button>
+                                        </form>
+                                        <form method="POST" action="{{ url_for('report_publish_wp', report_id=report.id) }}" class="d-inline">
+                                            <button type="submit" class="btn btn-outline-info btn-sm" title="Publish to WordPress">
+                                                <i class="bi bi-wordpress"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <p>No reports yet. Generate one above.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Brand -->
+<div class="mt-4 text-end">
+    <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteBrandModal">
+        <i class="bi bi-trash"></i> Delete Brand
+    </button>
+</div>
+
+<!-- Delete Modal -->
+<div class="modal fade" id="deleteBrandModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Delete {{ brand.display_name }}?</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>This will permanently remove this brand and all its connections, contacts, and report records. Report files on disk will not be deleted.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="{{ url_for('brand_delete', brand_id=brand.id) }}">
+                    <button type="submit" class="btn btn-danger">Delete Brand</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+function saveApiField(brandId, field) {
+    const value = document.getElementById(field).value;
+    fetch(`/brands/${brandId}/api-field`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({field: field, value: value})
+    }).then(r => r.json()).then(data => {
+        if (data.ok) {
+            const el = document.getElementById(field);
+            el.classList.add('is-valid');
+            setTimeout(() => el.classList.remove('is-valid'), 2000);
+        }
+    });
+}
+</script>
+{% endblock %}
+{% endblock %}

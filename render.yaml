@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: agency-analytics
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn webapp.app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FLASK_DEBUG
+        value: "false"
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1

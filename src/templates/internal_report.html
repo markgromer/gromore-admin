@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Internal Report - {{ client_name }} - {{ month }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a2e; line-height: 1.5; background: #f5f5f5; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+
+        /* Header */
+        .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; padding: 30px 40px; border-radius: 10px; margin-bottom: 24px; }
+        .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+        .header .subtitle { font-size: 14px; opacity: 0.8; }
+        .header .meta-row { display: flex; gap: 30px; margin-top: 12px; font-size: 13px; opacity: 0.7; }
+
+        /* Grade badge */
+        .grade-section { display: flex; align-items: center; gap: 20px; background: white; border-radius: 10px; padding: 20px 30px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .grade-badge { width: 70px; height: 70px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 800; color: white; }
+        .grade-A { background: #27ae60; }
+        .grade-B { background: #2ecc71; }
+        .grade-C { background: #f39c12; }
+        .grade-D { background: #e67e22; }
+        .grade-F { background: #e74c3c; }
+        .grade-info h3 { font-size: 16px; margin-bottom: 4px; }
+        .grade-info p { font-size: 13px; color: #666; }
+
+        /* Cards */
+        .card { background: white; border-radius: 10px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .card h2 { font-size: 18px; font-weight: 700; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 2px solid #eee; color: #1a1a2e; }
+        .card h3 { font-size: 15px; font-weight: 600; margin: 14px 0 8px; color: #333; }
+
+        /* Metrics grid */
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 16px; }
+        .metric-box { background: #f8f9fa; border-radius: 8px; padding: 14px; border-left: 4px solid #3498db; }
+        .metric-box .label { font-size: 11px; text-transform: uppercase; color: #888; font-weight: 600; letter-spacing: 0.5px; }
+        .metric-box .value { font-size: 22px; font-weight: 700; color: #1a1a2e; margin: 2px 0; }
+        .metric-box .change { font-size: 12px; }
+        .change-up { color: #27ae60; }
+        .change-down { color: #e74c3c; }
+        .change-neutral { color: #888; }
+
+        /* Score badges */
+        .score { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+        .score-excellent { background: #d4edda; color: #155724; }
+        .score-good { background: #d1ecf1; color: #0c5460; }
+        .score-average { background: #fff3cd; color: #856404; }
+        .score-below_average { background: #f8d7da; color: #721c24; }
+        .score-poor { background: #f5c6cb; color: #721c24; }
+
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { background: #f8f9fa; padding: 10px 12px; text-align: left; font-weight: 600; color: #555; border-bottom: 2px solid #dee2e6; }
+        td { padding: 8px 12px; border-bottom: 1px solid #eee; }
+        tr:hover { background: #f8f9fa; }
+
+        /* Highlights and concerns */
+        .alerts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+        .alert-section { }
+        .alert-section h3 { font-size: 14px; margin-bottom: 8px; }
+        .alert-item { padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-bottom: 6px; }
+        .alert-highlight { background: #d4edda; border-left: 3px solid #27ae60; }
+        .alert-concern { background: #f8d7da; border-left: 3px solid #e74c3c; }
+
+        /* Suggestions */
+        .suggestion { border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+        .suggestion-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .suggestion-title { font-weight: 700; font-size: 14px; }
+        .suggestion-detail { font-size: 13px; color: #444; line-height: 1.6; }
+        .suggestion-meta { display: flex; gap: 10px; margin-top: 8px; }
+        .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+        .priority-HIGH { background: #f8d7da; color: #721c24; }
+        .priority-MEDIUM { background: #fff3cd; color: #856404; }
+        .priority-LOW { background: #d1ecf1; color: #0c5460; }
+
+        /* Campaign table */
+        .status-ok { color: #27ae60; }
+        .status-underperforming { color: #e74c3c; font-weight: 600; }
+
+        /* Print styles */
+        @media print {
+            body { background: white; }
+            .container { max-width: none; padding: 0; }
+            .card { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>Internal Performance Report</h1>
+            <div class="subtitle">{{ client_name }} - {{ month_display }}</div>
+            <div class="meta-row">
+                <span>Industry: {{ industry | title }}</span>
+                <span>Budget: ${{ "{:,.0f}".format(monthly_budget) }}</span>
+                <span>Generated: {{ generated_date }}</span>
+            </div>
+        </div>
+
+        <!-- Overall Grade -->
+        <div class="grade-section">
+            <div class="grade-badge grade-{{ overall_grade }}">{{ overall_grade }}</div>
+            <div class="grade-info">
+                <h3>Overall Performance Grade</h3>
+                <p>Score: {{ overall_score or 'N/A' }}/5.0 based on benchmark comparison across all channels</p>
+            </div>
+        </div>
+
+        <!-- Highlights & Concerns -->
+        {% if highlights or concerns %}
+        <div class="card">
+            <h2>Key Findings</h2>
+            <div class="alerts">
+                <div class="alert-section">
+                    <h3 style="color: #27ae60;">Highlights</h3>
+                    {% for h in highlights %}
+                    <div class="alert-item alert-highlight">{{ h }}</div>
+                    {% endfor %}
+                    {% if not highlights %}
+                    <div class="alert-item" style="color: #888;">No significant highlights this period</div>
+                    {% endif %}
+                </div>
+                <div class="alert-section">
+                    <h3 style="color: #e74c3c;">Concerns</h3>
+                    {% for c in concerns %}
+                    <div class="alert-item alert-concern">{{ c }}</div>
+                    {% endfor %}
+                    {% if not concerns %}
+                    <div class="alert-item" style="color: #888;">No significant concerns this period</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- ROAS Summary -->
+        {% if roas %}
+        <div class="card">
+            <h2>Return on Investment</h2>
+            <div class="metrics-grid">
+                <div class="metric-box">
+                    <div class="label">Total Spend</div>
+                    <div class="value">${{ "{:,.2f}".format(roas.total_spend) }}</div>
+                </div>
+                <div class="metric-box">
+                    <div class="label">Total Conversions</div>
+                    <div class="value">{{ roas.total_conversions }}</div>
+                </div>
+                <div class="metric-box">
+                    <div class="label">Cost Per Conversion</div>
+                    <div class="value">${{ "{:,.2f}".format(roas.cost_per_conversion) }}</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Google Analytics -->
+        {% if ga %}
+        <div class="card">
+            <h2>Google Analytics</h2>
+            <div class="metrics-grid">
+                {% for metric_name, metric_val in ga.metrics.items() %}
+                <div class="metric-box">
+                    <div class="label">{{ metric_name | replace('_', ' ') | title }}</div>
+                    <div class="value">
+                        {% if metric_name in ('bounce_rate', 'conversion_rate', 'engagement_rate') %}
+                            {{ metric_val }}%
+                        {% elif metric_name == 'avg_session_duration' %}
+                            {{ metric_val }}s
+                        {% else %}
+                            {{ "{:,}".format(metric_val) if metric_val is number and metric_val == metric_val|int else metric_val }}
+                        {% endif %}
+                    </div>
+                    {% if metric_name in ga.month_over_month and ga.month_over_month[metric_name].change_pct is not none %}
+                    <div class="change {% if ga.month_over_month[metric_name].change_pct > 0 %}change-up{% elif ga.month_over_month[metric_name].change_pct < 0 %}change-down{% else %}change-neutral{% endif %}">
+                        {{ "+" if ga.month_over_month[metric_name].change_pct > 0 else "" }}{{ ga.month_over_month[metric_name].change_pct }}% vs last month
+                    </div>
+                    {% endif %}
+                    {% if metric_name in ga.scores %}
+                    <span class="score score-{{ ga.scores[metric_name] }}">{{ ga.scores[metric_name] | replace('_', ' ') }}</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+
+            {% if ga.top_sources %}
+            <h3>Top Traffic Sources</h3>
+            <table>
+                <tr><th>Source / Medium</th><th>Sessions</th></tr>
+                {% for src in ga.top_sources %}
+                <tr><td>{{ src.source }}</td><td>{{ "{:,}".format(src.sessions) }}</td></tr>
+                {% endfor %}
+            </table>
+            {% endif %}
+
+            {% if ga.top_converting_sources %}
+            <h3>Top Converting Sources</h3>
+            <table>
+                <tr><th>Source / Medium</th><th>Conversions</th></tr>
+                {% for src in ga.top_converting_sources %}
+                <tr><td>{{ src.source }}</td><td>{{ src.conversions }}</td></tr>
+                {% endfor %}
+            </table>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Meta Business -->
+        {% if meta %}
+        <div class="card">
+            <h2>Meta Ads Performance</h2>
+            <div class="metrics-grid">
+                {% for metric_name, metric_val in meta.metrics.items() %}
+                <div class="metric-box">
+                    <div class="label">{{ metric_name | replace('_', ' ') | title }}</div>
+                    <div class="value">
+                        {% if metric_name in ('ctr',) %}
+                            {{ metric_val }}%
+                        {% elif metric_name in ('cpc', 'cpm', 'spend', 'cost_per_result') %}
+                            ${{ "{:,.2f}".format(metric_val) }}
+                        {% elif metric_name == 'frequency' %}
+                            {{ metric_val }}x
+                        {% else %}
+                            {{ "{:,}".format(metric_val) if metric_val is number and metric_val == metric_val|int else metric_val }}
+                        {% endif %}
+                    </div>
+                    {% if metric_name in meta.month_over_month and meta.month_over_month[metric_name].change_pct is not none %}
+                    <div class="change {% if meta.month_over_month[metric_name].change_pct > 0 %}change-up{% elif meta.month_over_month[metric_name].change_pct < 0 %}change-down{% else %}change-neutral{% endif %}">
+                        {{ "+" if meta.month_over_month[metric_name].change_pct > 0 else "" }}{{ meta.month_over_month[metric_name].change_pct }}% vs last month
+                    </div>
+                    {% endif %}
+                    {% if metric_name in meta.scores %}
+                    <span class="score score-{{ meta.scores[metric_name] }}">{{ meta.scores[metric_name] | replace('_', ' ') }}</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+
+            {% if meta.campaign_analysis %}
+            <h3>Campaign Breakdown</h3>
+            <table>
+                <tr><th>Campaign</th><th>Spend</th><th>Clicks</th><th>Results</th><th>CPR</th><th>CTR</th><th>Status</th></tr>
+                {% for camp in meta.campaign_analysis %}
+                <tr>
+                    <td>{{ camp.name }}</td>
+                    <td>${{ "{:,.2f}".format(camp.metrics.get('spend', 0)) }}</td>
+                    <td>{{ "{:,}".format(camp.metrics.get('clicks', 0)) }}</td>
+                    <td>{{ camp.metrics.get('results', 0) }}</td>
+                    <td>{{ "$" + "{:,.2f}".format(camp.metrics.get('cost_per_result', 0)) if camp.metrics.get('cost_per_result') else 'N/A' }}</td>
+                    <td>{{ camp.metrics.get('ctr', 0) }}%</td>
+                    <td class="status-{{ camp.status }}">{{ camp.status | replace('_', ' ') | title }}{% if camp.get('issue') %} - {{ camp.issue }}{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Search Console -->
+        {% if gsc %}
+        <div class="card">
+            <h2>Organic Search (Google Search Console)</h2>
+            <div class="metrics-grid">
+                {% for metric_name, metric_val in gsc.metrics.items() %}
+                <div class="metric-box">
+                    <div class="label">{{ metric_name | replace('_', ' ') | title }}</div>
+                    <div class="value">
+                        {% if metric_name == 'ctr' %}
+                            {{ metric_val }}%
+                        {% elif metric_name == 'avg_position' %}
+                            {{ metric_val }}
+                        {% else %}
+                            {{ "{:,}".format(metric_val) if metric_val is number and metric_val == metric_val|int else metric_val }}
+                        {% endif %}
+                    </div>
+                    {% if metric_name in gsc.month_over_month and gsc.month_over_month[metric_name].change_pct is not none %}
+                    <div class="change {% if gsc.month_over_month[metric_name].change_pct > 0 %}change-up{% elif gsc.month_over_month[metric_name].change_pct < 0 %}change-down{% else %}change-neutral{% endif %}">
+                        {{ "+" if gsc.month_over_month[metric_name].change_pct > 0 else "" }}{{ gsc.month_over_month[metric_name].change_pct }}% vs last month
+                    </div>
+                    {% endif %}
+                    {% if metric_name in gsc.scores %}
+                    <span class="score score-{{ gsc.scores[metric_name] }}">{{ gsc.scores[metric_name] | replace('_', ' ') }}</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+
+            {% if gsc.top_queries %}
+            <h3>Top Search Queries</h3>
+            <table>
+                <tr><th>Query</th><th>Clicks</th><th>Impressions</th><th>CTR</th><th>Position</th></tr>
+                {% for q in gsc.top_queries[:15] %}
+                <tr>
+                    <td>{{ q.query }}</td>
+                    <td>{{ "{:,}".format(q.clicks) }}</td>
+                    <td>{{ "{:,}".format(q.impressions) }}</td>
+                    <td>{{ q.ctr }}%</td>
+                    <td>{{ q.position }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% endif %}
+
+            {% if gsc.keyword_opportunities %}
+            <h3>Keyword Opportunities (Quick Wins)</h3>
+            <table>
+                <tr><th>Query</th><th>Impressions</th><th>Current Position</th><th>CTR</th></tr>
+                {% for q in gsc.keyword_opportunities %}
+                <tr>
+                    <td>{{ q.query }}</td>
+                    <td>{{ "{:,}".format(q.impressions) }}</td>
+                    <td>{{ q.position }}</td>
+                    <td>{{ q.ctr }}%</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% endif %}
+
+            {% if gsc.top_pages %}
+            <h3>Top Landing Pages</h3>
+            <table>
+                <tr><th>Page</th><th>Clicks</th><th>Impressions</th><th>CTR</th><th>Avg Position</th></tr>
+                {% for p in gsc.top_pages[:10] %}
+                <tr>
+                    <td style="max-width: 350px; overflow: hidden; text-overflow: ellipsis;">{{ p.page }}</td>
+                    <td>{{ "{:,}".format(p.clicks) }}</td>
+                    <td>{{ "{:,}".format(p.impressions) }}</td>
+                    <td>{{ p.ctr }}%</td>
+                    <td>{{ p.position }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Suggestions -->
+        {% if suggestions %}
+        <div class="card">
+            <h2>Recommendations for Next Month</h2>
+            {% for s in suggestions %}
+            <div class="suggestion">
+                <div class="suggestion-header">
+                    <span class="suggestion-title">{{ s.number }}. {{ s.title }}</span>
+                    <span class="tag priority-{{ s.priority }}">{{ s.priority }}</span>
+                </div>
+                <div class="suggestion-detail">{{ s.detail }}</div>
+                <div class="suggestion-meta">
+                    <span class="tag" style="background: #e8e8e8; color: #555;">{{ s.category }}</span>
+                    <span class="tag" style="background: #e8e8e8; color: #555;">{{ s.impact_area }}</span>
+                    {% if s.data_point %}
+                    <span style="font-size: 11px; color: #888;">Data: {{ s.data_point }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+    </div>
+</body>
+</html>

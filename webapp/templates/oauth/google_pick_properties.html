@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Select Google Properties{% endblock %}
+
+{% block content %}
+<div class="top-bar">
+    <h4 class="mb-0">Connect Google - {{ brand.display_name }}</h4>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="alert alert-success">
+            <i class="bi bi-check-circle-fill"></i> Google account connected successfully. Now select which properties to use for this brand.
+        </div>
+
+        <form method="POST" action="{{ url_for('google_oauth.select_properties') }}">
+            <!-- GA4 Property -->
+            <div class="mb-4">
+                <h6><i class="bi bi-graph-up"></i> GA4 Property</h6>
+                {% if ga4_properties %}
+                <div class="list-group">
+                    {% for prop in ga4_properties %}
+                    <label class="list-group-item d-flex align-items-center">
+                        <input class="form-check-input me-3" type="radio" name="ga4_property_id"
+                               value="{{ prop.property_id }}"
+                               {% if loop.first %}checked{% endif %}>
+                        <div>
+                            <div class="fw-medium">{{ prop.display_name }}</div>
+                            <small class="text-muted">
+                                Property ID: {{ prop.property_id }}
+                                {% if prop.account_name %} &middot; Account: {{ prop.account_name }}{% endif %}
+                            </small>
+                        </div>
+                    </label>
+                    {% endfor %}
+                    <label class="list-group-item d-flex align-items-center">
+                        <input class="form-check-input me-3" type="radio" name="ga4_property_id" value="">
+                        <div class="text-muted">Skip - don't connect GA4 for this brand</div>
+                    </label>
+                </div>
+                {% else %}
+                <div class="alert alert-info mb-0">
+                    <i class="bi bi-info-circle"></i> No GA4 properties found. You can add a Property ID manually on the brand page later.
+                </div>
+                <input type="hidden" name="ga4_property_id" value="">
+                {% endif %}
+            </div>
+
+            <!-- Search Console Site -->
+            <div class="mb-4">
+                <h6><i class="bi bi-search"></i> Search Console Site</h6>
+                {% if gsc_sites %}
+                <div class="list-group">
+                    {% for site in gsc_sites %}
+                    <label class="list-group-item d-flex align-items-center">
+                        <input class="form-check-input me-3" type="radio" name="gsc_site_url"
+                               value="{{ site.site_url }}"
+                               {% if loop.first %}checked{% endif %}>
+                        <div>
+                            <div class="fw-medium">{{ site.site_url }}</div>
+                            <small class="text-muted">{{ site.permission_level }}</small>
+                        </div>
+                    </label>
+                    {% endfor %}
+                    <label class="list-group-item d-flex align-items-center">
+                        <input class="form-check-input me-3" type="radio" name="gsc_site_url" value="">
+                        <div class="text-muted">Skip - don't connect Search Console for this brand</div>
+                    </label>
+                </div>
+                {% else %}
+                <div class="alert alert-info mb-0">
+                    <i class="bi bi-info-circle"></i> No Search Console sites found. You can add a site URL manually on the brand page later.
+                </div>
+                <input type="hidden" name="gsc_site_url" value="">
+                {% endif %}
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-lg">
+                <i class="bi bi-check-lg"></i> Save and Continue
+            </button>
+            <a href="{{ url_for('brand_detail', brand_id=brand.id) }}" class="btn btn-outline-secondary btn-lg ms-2">
+                Skip for Now
+            </a>
+        </form>
+    </div>
+</div>
+{% endblock %}

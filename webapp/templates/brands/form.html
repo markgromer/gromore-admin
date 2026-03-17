@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}{{ brand.display_name if brand else 'New Brand' }}{% endblock %}
+
+{% block content %}
+<div class="top-bar">
+    <h4 class="mb-0">{{ 'Edit' if brand else 'New' }} Brand</h4>
+    <a href="{{ url_for('brands_list') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Brand Name</label>
+                    <input type="text" name="display_name" class="form-control" required
+                           value="{{ brand.display_name if brand else '' }}"
+                           placeholder="e.g. Ace Plumbing">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Slug (URL-safe ID)</label>
+                    <input type="text" name="slug" class="form-control" required
+                           value="{{ brand.slug if brand else '' }}"
+                           placeholder="e.g. ace_plumbing"
+                           pattern="[a-z0-9_]+"
+                           title="Lowercase letters, numbers, and underscores only">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Industry</label>
+                    <select name="industry" class="form-select">
+                        {% for value, label in industries %}
+                        <option value="{{ value }}" {% if brand and brand.industry == value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Monthly Budget ($)</label>
+                    <input type="number" name="monthly_budget" class="form-control" step="0.01" min="0"
+                           value="{{ brand.monthly_budget if brand else '0' }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Website</label>
+                    <input type="url" name="website" class="form-control"
+                           value="{{ brand.website if brand else '' }}"
+                           placeholder="https://example.com">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Service Area</label>
+                    <input type="text" name="service_area" class="form-control"
+                           value="{{ brand.service_area if brand else '' }}"
+                           placeholder="e.g. Dallas-Fort Worth Metro">
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Primary Services (comma-separated)</label>
+                    <input type="text" name="primary_services" class="form-control"
+                           value="{{ brand.primary_services if brand else '' }}"
+                           placeholder="e.g. drain cleaning, water heater repair, sewer line replacement">
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Goals</label>
+                    <div class="row g-2">
+                        {% set goal_options = ['increase_leads', 'reduce_cpl', 'improve_roas', 'brand_awareness', 'local_seo', 'increase_reviews'] %}
+                        {% set current_goals = (brand.goals|tojson if brand and brand.goals else '[]')|safe %}
+                        {% for goal in goal_options %}
+                        <div class="col-auto">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="goals" value="{{ goal }}"
+                                       id="goal_{{ goal }}"
+                                       {% if brand and goal in (brand.goals if brand.goals is iterable and brand.goals is not string else []) %}checked{% endif %}>
+                                <label class="form-check-label" for="goal_{{ goal }}">
+                                    {{ goal|replace('_', ' ')|title }}
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg"></i> {{ 'Update' if brand else 'Create' }} Brand
+                </button>
+                {% if brand %}
+                <a href="{{ url_for('brand_detail', brand_id=brand.id) }}" class="btn btn-outline-secondary ms-2">Cancel</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+    // Auto-generate slug from display name
+    const nameInput = document.querySelector('input[name="display_name"]');
+    const slugInput = document.querySelector('input[name="slug"]');
+    {% if not brand %}
+    nameInput.addEventListener('input', function() {
+        slugInput.value = this.value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
+    });
+    {% endif %}
+</script>
+{% endblock %}
+{% endblock %}

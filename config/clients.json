@@ -1,0 +1,32 @@
+{
+    "ace_plumbing": {
+        "display_name": "Ace Plumbing Co.",
+        "industry": "plumbing",
+        "monthly_budget": 5000,
+        "website": "https://aceplumbing.com",
+        "goals": ["increase_leads", "reduce_cpa"],
+        "primary_services": ["drain cleaning", "water heater repair", "leak detection"],
+        "service_area": "Metro Area",
+        "api": {
+            "ga4_property_id": "",
+            "gsc_site_url": "",
+            "gsc_enabled": true,
+            "meta_ad_account_id": ""
+        }
+    },
+    "_template": {
+        "display_name": "Client Display Name",
+        "industry": "plumbing|hvac|electrical|roofing|landscaping|pest_control|cleaning|general_contracting|painting|garage_door|foundation_repair|water_damage",
+        "monthly_budget": 0,
+        "website": "https://example.com",
+        "goals": ["increase_leads", "reduce_cpa", "increase_brand_awareness", "improve_roas"],
+        "primary_services": ["service 1", "service 2"],
+        "service_area": "City / Region",
+        "api": {
+            "ga4_property_id": "YOUR_GA4_PROPERTY_ID (e.g., 123456789)",
+            "gsc_site_url": "https://example.com/ (or sc-domain:example.com)",
+            "gsc_enabled": true,
+            "meta_ad_account_id": "act_YOUR_AD_ACCOUNT_ID"
+        }
+    }
+}
