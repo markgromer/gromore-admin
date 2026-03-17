@@ -149,6 +149,15 @@ class WebDB:
         conn.commit()
         conn.close()
 
+    def update_password_by_username(self, username, new_password):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE username = ?",
+            (generate_password_hash(new_password), username),
+        )
+        conn.commit()
+        conn.close()
+
     # ── Brands ──
 
     def get_all_brands(self):

@@ -88,6 +88,17 @@ def create_app():
         db.create_user("admin", default_pw, "Admin")
         print(f"Created default admin user (username: admin)")
 
+    # Optional break-glass: reset admin password via env vars
+    reset_admin = os.environ.get("RESET_ADMIN_PASSWORD", "").strip().lower() in ("1", "true", "yes")
+    admin_pw = os.environ.get("ADMIN_PASSWORD", "").strip()
+    if reset_admin:
+        if not admin_pw:
+            print("RESET_ADMIN_PASSWORD is set but ADMIN_PASSWORD is empty; skipping reset")
+        else:
+            db.create_user("admin", admin_pw, "Admin")
+            db.update_password_by_username("admin", admin_pw)
+            print("Admin password reset via RESET_ADMIN_PASSWORD")
+
     # Register blueprints
     app.register_blueprint(google_bp, url_prefix="/oauth/google")
     app.register_blueprint(meta_bp, url_prefix="/oauth/meta")
