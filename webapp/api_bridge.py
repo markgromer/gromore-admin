@@ -2,21 +2,89 @@
 Bridge between web app OAuth tokens and the existing API pull modules.
 
 Uses stored OAuth tokens from the web DB instead of credential files.
+Handles automatic token refresh when tokens expire.
 """
 import sys
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 BASE_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE_DIR))
+
+
+def _refresh_google_token(db, brand_id, connection):
+    """Refresh an expired Google access token using the refresh token."""
+    import requests as _req
+
+    refresh_token = connection.get("refresh_token", "")
+    if not refresh_token:
+        return None
+
+    from flask import current_app
+    client_id = (db.get_setting("google_client_id", "") or current_app.config.get("GOOGLE_CLIENT_ID", "")).strip()
+    client_secret = (db.get_setting("google_client_secret", "") or current_app.config.get("GOOGLE_CLIENT_SECRET", "")).strip()
+
+    if not client_id or not client_secret:
+        return None
+
+    resp = _req.post("https://oauth2.googleapis.com/token", data={
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token",
+    }, timeout=30)
+
+    if resp.status_code != 200:
+        return None
+
+    tokens = resp.json()
+    new_access = tokens.get("access_token", "")
+    if not new_access:
+        return None
+
+    expiry = ""
+    if "expires_in" in tokens:
+        expiry = (datetime.now() + timedelta(seconds=tokens["expires_in"])).isoformat()
+
+    # Update the stored token
+    db.upsert_connection(brand_id, "google", {
+        "access_token": new_access,
+        "refresh_token": refresh_token,
+        "token_expiry": expiry,
+        "scopes": connection.get("scopes", ""),
+        "account_id": connection.get("account_id", ""),
+        "account_name": connection.get("account_name", ""),
+    })
+    return new_access
+
+
+def _get_google_token(db, brand_id, connection):
+    """Get a valid Google access token, refreshing if needed."""
+    token = connection.get("access_token", "")
+    expiry_str = connection.get("token_expiry", "")
+
+    # Check if token is expired or about to expire (5 min buffer)
+    if expiry_str:
+        try:
+            expiry = datetime.fromisoformat(expiry_str)
+            if datetime.now() >= expiry - timedelta(minutes=5):
+                refreshed = _refresh_google_token(db, brand_id, connection)
+                if refreshed:
+                    return refreshed
+        except (ValueError, TypeError):
+            pass
+
+    return token
 
 
 def pull_api_data_for_brand(brand, connections, month):
     """
     Pull data from connected APIs for a brand.
     Uses OAuth tokens stored in the web database.
+    Returns (data_dict, errors_list).
     """
     data = {}
+    errors = []
 
     # Parse month into date range
     year, mon = month.split("-")
@@ -29,29 +97,35 @@ def pull_api_data_for_brand(brand, connections, month):
     google_conn = connections.get("google")
     meta_conn = connections.get("meta")
 
+    # Get DB for token refresh
+    from flask import current_app
+    db = current_app.db
+
     # Google Analytics
     if google_conn and google_conn.get("status") == "connected" and brand.get("ga4_property_id"):
         try:
+            token = _get_google_token(db, brand["id"], google_conn)
             data["google_analytics"] = _pull_ga4(
                 brand["ga4_property_id"],
-                google_conn["access_token"],
+                token,
                 start_date,
                 end_date,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            errors.append(f"GA4 pull failed: {str(e)}")
 
     # Google Search Console
     if google_conn and google_conn.get("status") == "connected" and brand.get("gsc_site_url"):
         try:
+            token = _get_google_token(db, brand["id"], google_conn)
             data["search_console"] = _pull_gsc(
                 brand["gsc_site_url"],
-                google_conn["access_token"],
+                token,
                 start_date,
                 end_date,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            errors.append(f"GSC pull failed: {str(e)}")
 
     # Meta Ads
     if meta_conn and meta_conn.get("status") == "connected" and brand.get("meta_ad_account_id"):
@@ -62,10 +136,10 @@ def pull_api_data_for_brand(brand, connections, month):
                 start_date,
                 end_date,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            errors.append(f"Meta pull failed: {str(e)}")
 
-    return data
+    return data, errors
 
 
 def _pull_ga4(property_id, access_token, start_date, end_date):

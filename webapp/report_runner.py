@@ -77,20 +77,26 @@ def build_analysis_and_suggestions_for_brand(db, brand, month):
 
     # Try API pull if we have connections
     connections = db.get_brand_connections(brand["id"])
+    api_errors = []
     if connections:
         try:
             from webapp.api_bridge import pull_api_data_for_brand
 
-            api_data = pull_api_data_for_brand(brand, connections, month)
+            api_data, api_errors = pull_api_data_for_brand(brand, connections, month)
             # Merge: API data fills in gaps from CSV
             for key in ("google_analytics", "meta_business", "search_console"):
                 if key in api_data and api_data[key] and key not in data:
                     data[key] = api_data[key]
-        except Exception:
-            pass  # best-effort; CSV-first proof of concept
+        except Exception as e:
+            api_errors.append(f"API bridge error: {str(e)}")
 
     if not data:
-        raise ValueError("No data available (no CSV imports and no API connections)")
+        error_detail = "No data available."
+        if api_errors:
+            error_detail += " API errors: " + "; ".join(api_errors)
+        else:
+            error_detail += " No CSV imports found and no API connections configured."
+        raise ValueError(error_detail)
 
     # Store in analytics DB
     try:
