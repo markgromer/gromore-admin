@@ -82,12 +82,21 @@ def callback():
         flash("Brand not found", "error")
         return redirect(url_for("brands_list"))
 
+    app_id = (db.get_setting("meta_app_id", "") or current_app.config.get("META_APP_ID", "")).strip()
+    app_secret = (db.get_setting("meta_app_secret", "") or current_app.config.get("META_APP_SECRET", "")).strip()
+    if not app_id or not app_secret:
+        flash(
+            "Meta OAuth not configured. Go to Settings to add your Meta App ID and App Secret (one-time agency setup).",
+            "error",
+        )
+        return redirect(url_for("brand_detail", brand_id=brand_id))
+
     callback_url = current_app.config["APP_URL"] + url_for("meta_oauth.callback")
 
     # Exchange code for short-lived token
     token_resp = requests.get(META_TOKEN_URL, params={
-        "client_id": current_app.config["META_APP_ID"],
-        "client_secret": current_app.config["META_APP_SECRET"],
+        "client_id": app_id,
+        "client_secret": app_secret,
         "redirect_uri": callback_url,
         "code": code,
     }, timeout=30)
@@ -101,8 +110,8 @@ def callback():
     # Exchange for long-lived token (60 days)
     ll_resp = requests.get(META_LONG_LIVED_URL, params={
         "grant_type": "fb_exchange_token",
-        "client_id": current_app.config["META_APP_ID"],
-        "client_secret": current_app.config["META_APP_SECRET"],
+        "client_id": app_id,
+        "client_secret": app_secret,
         "fb_exchange_token": short_token,
     }, timeout=30)
 
