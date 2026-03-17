@@ -81,6 +81,7 @@ def create_app():
 
     # Optional AI config
     app.config["OPENAI_API_KEY"] = _cfg("openai_api_key", "OPENAI_API_KEY")
+    app.config["OPENAI_MODEL"] = _cfg("openai_model", "OPENAI_MODEL", "gpt-4o-mini")
 
     # Create default admin if none exists
     if not db.get_users():
@@ -173,7 +174,35 @@ def create_app():
             "reports_this_month": db.count_reports_for_month(datetime.now().strftime("%Y-%m")),
         }
         recent_reports = db.get_recent_reports(limit=10)
-        return render_template("dashboard.html", brands=brands, stats=stats, recent_reports=recent_reports)
+        recent_ai_briefs = []
+        try:
+            import json as _json
+
+            for row in db.get_recent_ai_briefs(limit=6):
+                client = {}
+                try:
+                    client = _json.loads(row.get("client_json") or "{}")
+                except Exception:
+                    client = {}
+
+                recent_ai_briefs.append({
+                    "brand_id": row.get("brand_id"),
+                    "brand_name": row.get("brand_name"),
+                    "month": row.get("month"),
+                    "updated_at": row.get("updated_at") or row.get("generated_at") or "",
+                    "executive_summary": client.get("executive_summary") or "",
+                    "mission_critical": client.get("mission_critical") or [],
+                })
+        except Exception:
+            recent_ai_briefs = []
+
+        return render_template(
+            "dashboard.html",
+            brands=brands,
+            stats=stats,
+            recent_reports=recent_reports,
+            recent_ai_briefs=recent_ai_briefs,
+        )
 
     # ── Brand Management ──
     @app.route("/brands")
@@ -210,6 +239,23 @@ def create_app():
         connections = db.get_brand_connections(brand_id)
         reports = db.get_brand_reports(brand_id, limit=12)
         contacts = db.get_brand_contacts(brand_id)
+
+        ai_brief_row = db.get_ai_brief(brand_id, active_month)
+        ai_brief = None
+        if ai_brief_row:
+            try:
+                import json as _json
+
+                ai_brief = {
+                    "internal": _json.loads(ai_brief_row.get("internal_json") or "{}"),
+                    "client": _json.loads(ai_brief_row.get("client_json") or "{}"),
+                    "model": ai_brief_row.get("model") or "",
+                    "generated_at": ai_brief_row.get("generated_at") or "",
+                    "updated_at": ai_brief_row.get("updated_at") or "",
+                }
+            except Exception:
+                ai_brief = None
+
         return render_template(
             "brands/detail.html",
             brand=brand,
@@ -218,7 +264,59 @@ def create_app():
             contacts=contacts,
             active_month=active_month,
             csv_status=csv_status,
+            ai_brief=ai_brief,
+            openai_enabled=bool(app.config.get("OPENAI_API_KEY")),
         )
+
+    @app.route("/brands/<int:brand_id>/ai-brief/generate", methods=["POST"])
+    @login_required
+    def brand_generate_ai_brief(brand_id):
+        brand = db.get_brand(brand_id)
+        if not brand:
+            abort(404)
+
+        month = request.form.get("month") or datetime.now().strftime("%Y-%m")
+        api_key = app.config.get("OPENAI_API_KEY", "")
+        if not api_key:
+            flash("OpenAI is not configured. Add your OpenAI API key in Settings.", "error")
+            return redirect(url_for("brand_detail", brand_id=brand_id, month=month))
+
+        try:
+            from webapp.report_runner import build_analysis_and_suggestions_for_brand
+            from webapp.ai_assistant import generate_jarvis_brief
+
+            analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
+
+            model = app.config.get("OPENAI_MODEL") or ""
+            internal = generate_jarvis_brief(
+                api_key=api_key,
+                analysis=analysis,
+                suggestions=suggestions,
+                variant="internal",
+                model=model or None,
+            )
+            client = generate_jarvis_brief(
+                api_key=api_key,
+                analysis=analysis,
+                suggestions=suggestions,
+                variant="client",
+                model=model or None,
+            )
+
+            import json as _json
+
+            db.upsert_ai_brief(
+                brand_id,
+                month,
+                internal_json=_json.dumps(internal),
+                client_json=_json.dumps(client),
+                model=(model or "gpt-4o-mini"),
+            )
+            flash(f"AI brief generated for {month}", "success")
+        except Exception as e:
+            flash(f"AI brief failed: {str(e)}", "error")
+
+        return redirect(url_for("brand_detail", brand_id=brand_id, month=month))
 
     @app.route("/brands/<int:brand_id>/edit", methods=["GET", "POST"])
     @login_required

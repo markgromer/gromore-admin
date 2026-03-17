@@ -51,11 +51,8 @@ def _brand_to_client_config(brand):
     }
 
 
-def run_report_for_brand(db, brand, month):
-    """
-    Run the full pipeline for one brand/month.
-    Returns {"success": True/False, "error": str, "report_id": int}
-    """
+def build_analysis_and_suggestions_for_brand(db, brand, month):
+    """Build analysis + suggestions for a brand/month without generating HTML reports."""
     slug = brand["slug"]
     client_config = _brand_to_client_config(brand)
 
@@ -67,13 +64,14 @@ def run_report_for_brand(db, brand, month):
         try:
             data = load_client_data(slug, month, import_dir=str(BASE_DIR / "data" / "imports"))
         except Exception as e:
-            return {"success": False, "error": f"CSV parse error: {str(e)}"}
+            raise ValueError(f"CSV parse error: {str(e)}")
 
     # Try API pull if we have connections
     connections = db.get_brand_connections(brand["id"])
     if connections:
         try:
             from webapp.api_bridge import pull_api_data_for_brand
+
             api_data = pull_api_data_for_brand(brand, connections, month)
             # Merge: API data fills in gaps from CSV
             for key in ("google_analytics", "meta_business", "search_console"):
@@ -83,7 +81,7 @@ def run_report_for_brand(db, brand, month):
             pass  # best-effort; CSV-first proof of concept
 
     if not data:
-        return {"success": False, "error": "No data available (no CSV imports and no API connections)"}
+        raise ValueError("No data available (no CSV imports and no API connections)")
 
     # Store in analytics DB
     try:
@@ -93,22 +91,39 @@ def run_report_for_brand(db, brand, month):
     except Exception:
         pass
 
-    # Run analysis (build_full_analysis fetches prev data internally from the DB)
     analysis = build_full_analysis(slug, month, data, client_config)
-
-    # Generate suggestions
     suggestions = generate_suggestions(analysis)
+    return analysis, suggestions
+
+
+def run_report_for_brand(db, brand, month):
+    """Run the full pipeline for one brand/month."""
+    slug = brand["slug"]
+
+    try:
+        analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+    # Inject stored AI briefs (optional) so they appear in report HTML when available
+    try:
+        ai = db.get_ai_brief(brand["id"], month)
+        if ai:
+            if ai.get("internal_json"):
+                analysis["ai_brief_internal"] = json.loads(ai["internal_json"])
+            if ai.get("client_json"):
+                analysis["ai_brief_client"] = json.loads(ai["client_json"])
+    except Exception:
+        pass
+
     suggestions_internal = format_suggestions_for_internal(suggestions)
     suggestions_client = format_suggestions_for_client(suggestions)
 
-    # Generate reports
     reports_dir = BASE_DIR / "reports" / slug / month
     reports_dir.mkdir(parents=True, exist_ok=True)
 
     internal_path = generate_internal_report(analysis, suggestions_internal, output_dir=str(reports_dir))
     client_path = generate_client_report(analysis, suggestions_client, output_dir=str(reports_dir))
 
-    # Record in web DB
     report_id = db.create_report(brand["id"], month, internal_path, client_path)
-
     return {"success": True, "report_id": report_id, "error": ""}

@@ -72,6 +72,7 @@ def generate_internal_report(analysis, suggestions_internal, output_dir=None):
         "meta": _dict_to_obj(analysis.get("meta_business")) if analysis.get("meta_business") else None,
         "gsc": _dict_to_obj(analysis.get("search_console")) if analysis.get("search_console") else None,
         "suggestions": suggestions_internal,
+        "ai_brief": analysis.get("ai_brief_internal"),
     }
 
     html = template.render(**context)
@@ -158,6 +159,7 @@ def generate_client_report(analysis, suggestions_client, output_dir=None):
         "meta": _dict_to_obj(meta) if meta else None,
         "gsc": _dict_to_obj(gsc) if gsc else None,
         "client_suggestions": suggestions_client,
+        "ai_brief": analysis.get("ai_brief_client"),
     }
 
     html = template.render(**context)

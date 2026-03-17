@@ -90,6 +90,19 @@ class WebDB:
                 FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS ai_briefs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                month TEXT NOT NULL,
+                internal_json TEXT DEFAULT '',
+                client_json TEXT DEFAULT '',
+                model TEXT DEFAULT '',
+                generated_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(brand_id, month),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value TEXT DEFAULT ''
@@ -382,6 +395,45 @@ class WebDB:
         )
         conn.commit()
         conn.close()
+
+    # ── AI Briefs ──
+
+    def get_ai_brief(self, brand_id, month):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM ai_briefs WHERE brand_id = ? AND month = ?",
+            (brand_id, month),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def upsert_ai_brief(self, brand_id, month, internal_json, client_json, model=""):
+        conn = self._conn()
+        conn.execute(
+            """
+            INSERT INTO ai_briefs (brand_id, month, internal_json, client_json, model, generated_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            ON CONFLICT(brand_id, month) DO UPDATE SET
+                internal_json = excluded.internal_json,
+                client_json = excluded.client_json,
+                model = excluded.model,
+                updated_at = datetime('now')
+            """,
+            (brand_id, month, internal_json or "", client_json or "", model or ""),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_recent_ai_briefs(self, limit=10):
+        conn = self._conn()
+        rows = conn.execute(
+            """SELECT a.*, b.display_name as brand_name, b.slug as brand_slug
+               FROM ai_briefs a JOIN brands b ON a.brand_id = b.id
+               ORDER BY a.updated_at DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
 
     def mark_report_published(self, report_id, url):
         conn = self._conn()

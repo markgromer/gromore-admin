@@ -37,9 +37,13 @@ def connect(brand_id):
         flash("Brand not found", "error")
         return redirect(url_for("brands_list"))
 
-    app_id = current_app.config["META_APP_ID"]
-    if not app_id:
-        flash("Meta OAuth not configured. Set META_APP_ID and META_APP_SECRET environment variables.", "error")
+    app_id = current_app.config.get("META_APP_ID", "")
+    app_secret = current_app.config.get("META_APP_SECRET", "")
+    if not app_id or not app_secret:
+        flash(
+            "Meta OAuth not configured. Go to Settings to add your Meta App ID and App Secret (one-time agency setup).",
+            "error",
+        )
         return redirect(url_for("brand_detail", brand_id=brand_id))
 
     callback_url = current_app.config["APP_URL"] + url_for("meta_oauth.callback")

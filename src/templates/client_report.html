@@ -97,6 +97,54 @@
             </div>
         </div>
 
+        {% if ai_brief %}
+        <div class="section">
+            <h2>Strategic Brief</h2>
+            {% if ai_brief.executive_summary %}
+            <div class="summary-text">
+                <p>{{ ai_brief.executive_summary }}</p>
+            </div>
+            {% endif %}
+
+            {% if ai_brief.mission_critical %}
+            <div class="wins">
+                {% for item in ai_brief.mission_critical[:5] %}
+                <div class="win-item">
+                    <div class="win-icon">•</div>
+                    <div class="win-text">
+                        <strong>{{ item.title }}</strong><br>
+                        {% if item.impact %}<span>{{ item.impact }}</span><br>{% endif %}
+                        {% if item.next_step %}<span><em>Next:</em> {{ item.next_step }}</span>{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if ai_brief.quick_wins_14_days %}
+            <div class="summary-text">
+                <p><strong>Quick wins (next 14 days)</strong></p>
+                <ul style="margin-left: 18px;">
+                    {% for w in ai_brief.quick_wins_14_days[:6] %}
+                    <li>{{ w.title }}{% if w.next_step %} - {{ w.next_step }}{% endif %}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if ai_brief.strategy_30_60_days %}
+            <div class="summary-text">
+                <p><strong>Strategy (next 30-60 days)</strong></p>
+                <ul style="margin-left: 18px;">
+                    {% for s in ai_brief.strategy_30_60_days[:6] %}
+                    <li>{{ s.title }}{% if s.hypothesis %} - {{ s.hypothesis }}{% endif %}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
         <!-- Top-Level KPIs - what the client cares about most -->
         <div class="section">
             <h2>Your Numbers This Month</h2>
