@@ -7,6 +7,8 @@ services:
     envVars:
       - key: SECRET_KEY
         generateValue: true
+      - key: DATABASE_PATH
+        value: /data/database/webapp.db
       - key: FLASK_DEBUG
         value: "false"
     disk:

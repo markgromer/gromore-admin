@@ -15,7 +15,11 @@ sys.path.insert(0, str(BASE_DIR))
 from src.parsers import load_client_data
 from src.database import init_db, store_monthly_data, get_monthly_data, get_previous_month
 from src.analytics import build_full_analysis
-from src.suggestions import generate_suggestions
+from src.suggestions import (
+    generate_suggestions,
+    format_suggestions_for_internal,
+    format_suggestions_for_client,
+)
 from src.reports import generate_internal_report, generate_client_report
 
 
@@ -61,7 +65,7 @@ def run_report_for_brand(db, brand, month):
 
     if import_dir.exists():
         try:
-            data = load_client_data(str(import_dir))
+            data = load_client_data(slug, month, import_dir=str(BASE_DIR / "data" / "imports"))
         except Exception as e:
             pass
 
@@ -93,17 +97,16 @@ def run_report_for_brand(db, brand, month):
     analysis = build_full_analysis(slug, month, data, client_config)
 
     # Generate suggestions
-    suggestions = generate_suggestions(analysis, client_config, month)
+    suggestions = generate_suggestions(analysis)
+    suggestions_internal = format_suggestions_for_internal(suggestions)
+    suggestions_client = format_suggestions_for_client(suggestions)
 
     # Generate reports
     reports_dir = BASE_DIR / "reports" / slug / month
     reports_dir.mkdir(parents=True, exist_ok=True)
 
-    internal_path = str(reports_dir / "internal_report.html")
-    client_path = str(reports_dir / "client_report.html")
-
-    generate_internal_report(analysis, suggestions, client_config, month, internal_path)
-    generate_client_report(analysis, suggestions, client_config, month, client_path)
+    internal_path = generate_internal_report(analysis, suggestions_internal, output_dir=str(reports_dir))
+    client_path = generate_client_report(analysis, suggestions_client, output_dir=str(reports_dir))
 
     # Record in web DB
     report_id = db.create_report(brand["id"], month, internal_path, client_path)

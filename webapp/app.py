@@ -69,6 +69,9 @@ def create_app():
     # App URL (for OAuth callbacks)
     app.config["APP_URL"] = _cfg("app_url", "APP_URL", "http://localhost:5000")
 
+    # Optional AI config
+    app.config["OPENAI_API_KEY"] = _cfg("openai_api_key", "OPENAI_API_KEY")
+
     # Create default admin if none exists
     if not db.get_users():
         default_pw = os.environ.get("ADMIN_PASSWORD", "changeme123")
@@ -409,6 +412,14 @@ def create_app():
                 if wp_app_password:
                     db.save_setting("wp_app_password", wp_app_password)
                 flash("WordPress settings saved", "success")
+            elif section == "openai":
+                key = request.form.get("openai_api_key", "").strip()
+                if key:
+                    db.save_setting("openai_api_key", key)
+                    app.config["OPENAI_API_KEY"] = db.get_setting("openai_api_key", "")
+                    flash("OpenAI API key saved", "success")
+                else:
+                    flash("OpenAI API key unchanged (blank)", "warning")
         wp_settings = {
             "wp_url": db.get_setting("wp_url", ""),
             "wp_user": db.get_setting("wp_user", ""),

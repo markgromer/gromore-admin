@@ -114,12 +114,15 @@ class WebDB:
 
     def create_user(self, username, password, display_name):
         conn = self._conn()
+        password_hash = generate_password_hash(password)
         conn.execute(
-            "INSERT INTO users (username, password_hash, display_name) VALUES (?, ?, ?)",
-            (username, generate_password_hash(password), display_name),
+            "INSERT OR IGNORE INTO users (username, password_hash, display_name) VALUES (?, ?, ?)",
+            (username, password_hash, display_name),
         )
         conn.commit()
+        row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
         conn.close()
+        return int(row["id"]) if row else None
 
     def authenticate(self, username, password):
         conn = self._conn()
