@@ -33,7 +33,9 @@ def create_app():
     )
 
     # Config from environment (Render-friendly)
-    app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
+    env_secret_key = os.environ.get("SECRET_KEY")
+    # Use a temporary key until DB-backed config is loaded.
+    app.secret_key = env_secret_key or "dev-temp"
     app.config["DATABASE_PATH"] = os.environ.get(
         "DATABASE_PATH", str(BASE_DIR / "data" / "database" / "webapp.db")
     )
@@ -42,6 +44,14 @@ def create_app():
     db = WebDB(app.config["DATABASE_PATH"])
     db.init()
     app.db = db
+
+    # Stabilize SECRET_KEY across restarts in local/dev (unless provided via env)
+    if not env_secret_key:
+        persisted = db.get_setting("secret_key", "")
+        if not persisted:
+            persisted = secrets.token_hex(32)
+            db.save_setting("secret_key", persisted)
+        app.secret_key = persisted
 
     def _cfg(key, env_key, default=""):
         """Load config: DB setting wins, then env var, then default."""
