@@ -86,10 +86,12 @@ def callback():
 
     # Exchange code for tokens
     callback_url = current_app.config["APP_URL"] + url_for("google_oauth.callback")
+    client_id = (db.get_setting("google_client_id", "") or current_app.config.get("GOOGLE_CLIENT_ID", "")).strip()
+    client_secret = (db.get_setting("google_client_secret", "") or current_app.config.get("GOOGLE_CLIENT_SECRET", "")).strip()
     token_resp = requests.post(GOOGLE_TOKEN_URL, data={
         "code": code,
-        "client_id": current_app.config["GOOGLE_CLIENT_ID"],
-        "client_secret": current_app.config["GOOGLE_CLIENT_SECRET"],
+        "client_id": client_id,
+        "client_secret": client_secret,
         "redirect_uri": callback_url,
         "grant_type": "authorization_code",
     }, timeout=30)

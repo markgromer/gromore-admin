@@ -148,11 +148,19 @@ def create_app():
     # ── Auto-detect APP_URL on first real request if not configured ──
     @app.before_request
     def _auto_detect_app_url():
+        # Use X-Forwarded-Proto (set by Render/load balancers) for correct scheme
+        scheme = request.headers.get("X-Forwarded-Proto", request.scheme)
         current_url = app.config.get("APP_URL", "")
+        # Fix any previously saved http:// URL that should be https://
+        if current_url and current_url.startswith("http://") and scheme == "https":
+            fixed = current_url.replace("http://", "https://", 1)
+            app.config["APP_URL"] = fixed
+            db.save_setting("app_url", fixed)
+            return
         if current_url and "localhost" not in current_url:
             return  # already configured
         if request.host and "localhost" not in request.host:
-            detected = request.scheme + "://" + request.host
+            detected = scheme + "://" + request.host
             app.config["APP_URL"] = detected
             db.save_setting("app_url", detected)
 
