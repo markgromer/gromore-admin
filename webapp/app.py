@@ -99,6 +99,20 @@ def create_app():
             db.update_password_by_username("admin", admin_pw)
             print("Admin password reset via RESET_ADMIN_PASSWORD")
 
+    # Optional bootstrap user (useful for first-time access or recovery)
+    bootstrap_username = os.environ.get("BOOTSTRAP_USERNAME", "").strip()
+    bootstrap_password = os.environ.get("BOOTSTRAP_PASSWORD", "").strip()
+    bootstrap_display_name = os.environ.get("BOOTSTRAP_DISPLAY_NAME", "Bootstrap Admin").strip() or "Bootstrap Admin"
+    reset_bootstrap = os.environ.get("RESET_BOOTSTRAP_PASSWORD", "").strip().lower() in ("1", "true", "yes")
+
+    if bootstrap_username and bootstrap_password:
+        db.create_user(bootstrap_username, bootstrap_password, bootstrap_display_name)
+        if reset_bootstrap:
+            db.update_password_by_username(bootstrap_username, bootstrap_password)
+            print(f"Bootstrap user password reset via RESET_BOOTSTRAP_PASSWORD (username: {bootstrap_username})")
+        else:
+            print(f"Bootstrap user ensured (username: {bootstrap_username})")
+
     # Register blueprints
     app.register_blueprint(google_bp, url_prefix="/oauth/google")
     app.register_blueprint(meta_bp, url_prefix="/oauth/meta")
