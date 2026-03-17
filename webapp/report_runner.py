@@ -5,12 +5,17 @@ Takes a brand from the web DB, maps it to the config format the existing
 src/ pipeline expects, pulls data (API or CSV), runs analysis, generates reports.
 """
 import json
+import os
 import sys
 from pathlib import Path
 from datetime import datetime
 
 BASE_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE_DIR))
+
+IMPORTS_ROOT = Path(os.environ.get("IMPORTS_DIR", str(BASE_DIR / "data" / "imports")))
+LEGACY_IMPORTS_ROOT = BASE_DIR / "data" / "imports"
+REPORTS_ROOT = Path(os.environ.get("REPORTS_DIR", str(BASE_DIR / "reports")))
 
 from src.parsers import load_client_data
 from src.database import init_db, store_monthly_data, get_monthly_data, get_previous_month
@@ -57,12 +62,16 @@ def build_analysis_and_suggestions_for_brand(db, brand, month):
     client_config = _brand_to_client_config(brand)
 
     # Try loading data from CSV imports first
-    import_dir = BASE_DIR / "data" / "imports" / slug / month
+    imports_base = IMPORTS_ROOT
+    if not (IMPORTS_ROOT / slug / month).exists() and (LEGACY_IMPORTS_ROOT / slug / month).exists():
+        imports_base = LEGACY_IMPORTS_ROOT
+
+    import_dir = imports_base / slug / month
     data = {}
 
     if import_dir.exists():
         try:
-            data = load_client_data(slug, month, import_dir=str(BASE_DIR / "data" / "imports"))
+            data = load_client_data(slug, month, import_dir=str(imports_base))
         except Exception as e:
             raise ValueError(f"CSV parse error: {str(e)}")
 
@@ -119,7 +128,7 @@ def run_report_for_brand(db, brand, month):
     suggestions_internal = format_suggestions_for_internal(suggestions)
     suggestions_client = format_suggestions_for_client(suggestions)
 
-    reports_dir = BASE_DIR / "reports" / slug / month
+    reports_dir = REPORTS_ROOT / slug / month
     reports_dir.mkdir(parents=True, exist_ok=True)
 
     internal_path = generate_internal_report(analysis, suggestions_internal, output_dir=str(reports_dir))

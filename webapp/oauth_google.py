@@ -36,8 +36,8 @@ def connect(brand_id):
         flash("Brand not found", "error")
         return redirect(url_for("brands_list"))
 
-    client_id = current_app.config.get("GOOGLE_CLIENT_ID", "")
-    client_secret = current_app.config.get("GOOGLE_CLIENT_SECRET", "")
+    client_id = (db.get_setting("google_client_id", "") or current_app.config.get("GOOGLE_CLIENT_ID", "")).strip()
+    client_secret = (db.get_setting("google_client_secret", "") or current_app.config.get("GOOGLE_CLIENT_SECRET", "")).strip()
     if not client_id or not client_secret:
         flash(
             "Google OAuth not configured. Go to Settings to add your Google OAuth Client ID and Client Secret (one-time agency setup).",

@@ -45,6 +45,20 @@ def create_app():
     db.init()
     app.db = db
 
+    # Storage paths for uploads + generated reports
+    # Local/dev uses repo folders. Render uses persisted disk under /data.
+    db_path_norm = str(app.config["DATABASE_PATH"]).replace("\\", "/")
+    if "/data/" in db_path_norm:
+        app.config["IMPORTS_DIR"] = os.environ.get("IMPORTS_DIR", "/data/imports")
+        app.config["REPORTS_DIR"] = os.environ.get("REPORTS_DIR", "/data/reports")
+    else:
+        app.config["IMPORTS_DIR"] = os.environ.get("IMPORTS_DIR", str(BASE_DIR / "data" / "imports"))
+        app.config["REPORTS_DIR"] = os.environ.get("REPORTS_DIR", str(BASE_DIR / "reports"))
+
+    # Make available to helper modules (report_runner reads these env vars)
+    os.environ.setdefault("IMPORTS_DIR", app.config["IMPORTS_DIR"])
+    os.environ.setdefault("REPORTS_DIR", app.config["REPORTS_DIR"])
+
     # Stabilize SECRET_KEY across restarts in local/dev (unless provided via env)
     if not env_secret_key:
         persisted = db.get_setting("secret_key", "")
@@ -228,7 +242,8 @@ def create_app():
         if not brand:
             abort(404)
         active_month = request.args.get("month") or datetime.now().strftime("%Y-%m")
-        import_dir = Path(BASE_DIR / "data" / "imports" / brand["slug"] / active_month)
+        imports_root = Path(app.config.get("IMPORTS_DIR") or (BASE_DIR / "data" / "imports"))
+        import_dir = imports_root / brand["slug"] / active_month
         csv_status = {
             "month": active_month,
             "import_dir": str(import_dir),
@@ -256,6 +271,8 @@ def create_app():
             except Exception:
                 ai_brief = None
 
+        openai_key = db.get_setting("openai_api_key", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip()
+
         return render_template(
             "brands/detail.html",
             brand=brand,
@@ -265,7 +282,7 @@ def create_app():
             active_month=active_month,
             csv_status=csv_status,
             ai_brief=ai_brief,
-            openai_enabled=bool(app.config.get("OPENAI_API_KEY")),
+            openai_enabled=bool(openai_key),
         )
 
     @app.route("/brands/<int:brand_id>/ai-brief/generate", methods=["POST"])
@@ -276,7 +293,7 @@ def create_app():
             abort(404)
 
         month = request.form.get("month") or datetime.now().strftime("%Y-%m")
-        api_key = app.config.get("OPENAI_API_KEY", "")
+        api_key = db.get_setting("openai_api_key", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip()
         if not api_key:
             flash("OpenAI is not configured. Add your OpenAI API key in Settings.", "error")
             return redirect(url_for("brand_detail", brand_id=brand_id, month=month))
@@ -287,7 +304,12 @@ def create_app():
 
             analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
 
-            model = app.config.get("OPENAI_MODEL") or ""
+            model = (
+                db.get_setting("openai_model", "").strip()
+                or os.environ.get("OPENAI_MODEL", "").strip()
+                or app.config.get("OPENAI_MODEL")
+                or "gpt-4o-mini"
+            )
             internal = generate_jarvis_brief(
                 api_key=api_key,
                 analysis=analysis,
@@ -399,7 +421,8 @@ def create_app():
         month = request.form.get("month", datetime.now().strftime("%Y-%m"))
         slug = brand["slug"]
 
-        import_dir = Path(BASE_DIR / "data" / "imports" / slug / month)
+        imports_root = Path(app.config.get("IMPORTS_DIR") or (BASE_DIR / "data" / "imports"))
+        import_dir = imports_root / slug / month
         import_dir.mkdir(parents=True, exist_ok=True)
 
         uploaded = 0
@@ -568,7 +591,14 @@ def create_app():
             "wp_url": db.get_setting("wp_url", ""),
             "wp_user": db.get_setting("wp_user", ""),
         }
-        return render_template("settings.html", wp_settings=wp_settings)
+        openai_configured = bool(
+            db.get_setting("openai_api_key", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip()
+        )
+        return render_template(
+            "settings.html",
+            wp_settings=wp_settings,
+            openai_configured=openai_configured,
+        )
 
     # ── Setup Guide ──
     @app.route("/setup-guide")
