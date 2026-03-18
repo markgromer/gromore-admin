@@ -45,10 +45,10 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-medium">Competitors</label>
+                        <label class="form-label fw-medium">Competitors (comma-separated)</label>
                         <textarea name="competitors" class="form-control" rows="2"
-                                  placeholder="e.g. ABC Plumbing (heavy Google Ads), Quick Fix ($20 coupon mailers), RotoRooter (national brand)">{{ brand.competitors or '' }}</textarea>
-                        <small class="text-muted">Known competitors. AI will factor these into strategy recommendations.</small>
+                                  placeholder="e.g. ABC Plumbing, Quick Fix, RotoRooter">{{ brand.competitors or '' }}</textarea>
+                        <small class="text-muted">Used by Competitor Watch in reports to detect overlap in search traffic and recommend counter-moves.</small>
                     </div>
 
                     <div class="mb-3">
