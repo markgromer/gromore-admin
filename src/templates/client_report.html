@@ -201,6 +201,35 @@
             </div>
         </div>
 
+        {% if kpi_status and kpi_status.evaluation %}
+        <div class="section">
+            <h2>Progress Against Your Targets</h2>
+            <div class="kpi-row">
+                {% if kpi_status.evaluation.cpa %}
+                <div class="kpi-card">
+                    <div class="kpi-label">Target CPA</div>
+                    <div class="kpi-value">${{ "{:,.2f}".format(kpi_status.evaluation.cpa.target) }}</div>
+                    <div class="kpi-change {{ 'kpi-up' if kpi_status.evaluation.cpa.on_track else 'kpi-down' }}">
+                        Actual: ${{ "{:,.2f}".format(kpi_status.evaluation.cpa.actual) }}
+                        ({{ 'On Track' if kpi_status.evaluation.cpa.on_track else 'Off Track' }})
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if kpi_status.evaluation.leads %}
+                <div class="kpi-card">
+                    <div class="kpi-label">Target Leads</div>
+                    <div class="kpi-value">{{ kpi_status.evaluation.leads.target }}</div>
+                    <div class="kpi-change {{ 'kpi-up' if kpi_status.evaluation.leads.on_track else 'kpi-down' }}">
+                        Actual: {{ kpi_status.evaluation.leads.actual }}
+                        ({{ 'On Track' if kpi_status.evaluation.leads.on_track else 'Off Track' }})
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Wins This Month -->
         {% if highlights %}
         <div class="section">

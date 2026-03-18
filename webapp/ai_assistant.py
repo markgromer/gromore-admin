@@ -42,6 +42,7 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
     client_config = analysis.get("client_config") or {}
 
     meta = analysis.get("meta_business") or {}
+    google_ads = analysis.get("google_ads") or {}
     ga = analysis.get("google_analytics") or {}
     gsc = analysis.get("search_console") or {}
 
@@ -69,6 +70,8 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
             "overall_grade": analysis.get("overall_grade"),
             "overall_score": analysis.get("overall_score"),
         },
+        "paid_summary": analysis.get("paid_summary") or {},
+        "kpi_status": analysis.get("kpi_status") or {},
         "highlights": analysis.get("highlights") or [],
         "concerns": analysis.get("concerns") or [],
         "kpis": {
@@ -105,11 +108,25 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
                     "impressions_pct": _safe_float(_pick(gsc, "month_over_month.impressions.change_pct")),
                 },
             },
+            "google_ads": {
+                "spend": _safe_float(_pick(google_ads, "metrics.spend")),
+                "results": _safe_float(_pick(google_ads, "metrics.results")),
+                "cpr": _safe_float(_pick(google_ads, "metrics.cost_per_result")),
+                "cpc": _safe_float(_pick(google_ads, "metrics.cpc")),
+                "ctr": _safe_float(_pick(google_ads, "metrics.ctr")),
+                "impressions": _safe_float(_pick(google_ads, "metrics.impressions")),
+                "clicks": _safe_float(_pick(google_ads, "metrics.clicks")),
+                "mom": {
+                    "spend_pct": _safe_float(_pick(google_ads, "month_over_month.spend.change_pct")),
+                    "results_pct": _safe_float(_pick(google_ads, "month_over_month.results.change_pct")),
+                    "cpr_pct": _safe_float(_pick(google_ads, "month_over_month.cost_per_result.change_pct")),
+                },
+            },
         },
     }
 
     # Remove empty channel objects to reduce noise
-    for channel in ("meta", "ga", "gsc"):
+    for channel in ("meta", "ga", "gsc", "google_ads"):
         if not any(v is not None for v in (out["kpis"][channel] or {}).values() if not isinstance(v, dict)):
             # keep MoM dict if it has content
             mom = out["kpis"][channel].get("mom") if isinstance(out["kpis"][channel], dict) else None

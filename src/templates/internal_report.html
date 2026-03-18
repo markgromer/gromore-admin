@@ -211,6 +211,46 @@
         </div>
         {% endif %}
 
+        {% if kpi_status and kpi_status.evaluation %}
+        <div class="card">
+            <h2>KPI Target Scorecard</h2>
+            <table>
+                <tr><th>KPI</th><th>Target</th><th>Actual</th><th>Gap</th><th>Status</th></tr>
+                {% if kpi_status.evaluation.cpa %}
+                <tr>
+                    <td>Blended CPA</td>
+                    <td>${{ "{:,.2f}".format(kpi_status.evaluation.cpa.target) }}</td>
+                    <td>${{ "{:,.2f}".format(kpi_status.evaluation.cpa.actual) }}</td>
+                    <td>{{ kpi_status.evaluation.cpa.gap_pct }}%</td>
+                    <td class="status-{{ 'ok' if kpi_status.evaluation.cpa.on_track else 'underperforming' }}">
+                        {{ 'On Track' if kpi_status.evaluation.cpa.on_track else 'Off Track' }}
+                    </td>
+                </tr>
+                {% endif %}
+                {% if kpi_status.evaluation.leads %}
+                <tr>
+                    <td>Paid Leads</td>
+                    <td>{{ kpi_status.evaluation.leads.target }}</td>
+                    <td>{{ kpi_status.evaluation.leads.actual }}</td>
+                    <td>{{ kpi_status.evaluation.leads.gap_pct }}%</td>
+                    <td class="status-{{ 'ok' if kpi_status.evaluation.leads.on_track else 'underperforming' }}">
+                        {{ 'On Track' if kpi_status.evaluation.leads.on_track else 'Off Track' }}
+                    </td>
+                </tr>
+                {% endif %}
+                {% if kpi_status.evaluation.roas %}
+                <tr>
+                    <td>ROAS</td>
+                    <td>{{ kpi_status.evaluation.roas.target }}x</td>
+                    <td>N/A</td>
+                    <td>N/A</td>
+                    <td>{{ kpi_status.evaluation.roas.note or 'Not available' }}</td>
+                </tr>
+                {% endif %}
+            </table>
+        </div>
+        {% endif %}
+
         <!-- Google Analytics -->
         {% if ga %}
         <div class="card">

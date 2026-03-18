@@ -47,6 +47,15 @@ def score_metric(value, benchmark, higher_is_better=True):
         return "poor"
 
 
+def _to_float(value, default=0.0):
+    try:
+        if value is None or value == "":
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def analyze_google_analytics(ga_data, prev_ga_data, benchmarks_website):
     """Analyze Google Analytics data against benchmarks and prior month."""
     if not ga_data:
@@ -545,6 +554,90 @@ def build_full_analysis(client_id, month, current_data, client_config):
         roas_data["total_conversions"] = total_conversions
         roas_data["cost_per_conversion"] = round(total_spend / total_conversions, 2)
 
+    # KPI target intelligence (brand-specific, not generic)
+    target_cpa = _to_float(client_config.get("kpi_target_cpa"), 0.0)
+    target_leads = _to_float(client_config.get("kpi_target_leads"), 0.0)
+    target_roas = _to_float(client_config.get("kpi_target_roas"), 0.0)
+
+    paid_spend = round(total_spend, 2)
+    paid_leads = round(meta_results + google_ads_results, 2)
+    blended_cpa = round((paid_spend / paid_leads), 2) if paid_spend > 0 and paid_leads > 0 else None
+
+    kpi_status = {
+        "targets": {
+            "cpa": target_cpa if target_cpa > 0 else None,
+            "leads": target_leads if target_leads > 0 else None,
+            "roas": target_roas if target_roas > 0 else None,
+        },
+        "actual": {
+            "paid_spend": paid_spend,
+            "paid_leads": paid_leads,
+            "blended_cpa": blended_cpa,
+        },
+        "evaluation": {},
+    }
+
+    if target_cpa > 0 and blended_cpa is not None:
+        cpa_gap_pct = round(((blended_cpa - target_cpa) / target_cpa) * 100, 1)
+        cpa_on_track = blended_cpa <= target_cpa
+        kpi_status["evaluation"]["cpa"] = {
+            "target": target_cpa,
+            "actual": blended_cpa,
+            "gap_pct": cpa_gap_pct,
+            "on_track": cpa_on_track,
+        }
+        if cpa_on_track:
+            all_highlights.append(
+                f"Blended paid CPA is ${blended_cpa} vs target ${target_cpa} ({abs(cpa_gap_pct)}% better than target)"
+            )
+        else:
+            all_concerns.append(
+                f"Blended paid CPA is ${blended_cpa} vs target ${target_cpa} ({cpa_gap_pct}% above target)"
+            )
+
+    if target_leads > 0:
+        lead_gap_pct = round(((paid_leads - target_leads) / target_leads) * 100, 1)
+        leads_on_track = paid_leads >= target_leads
+        kpi_status["evaluation"]["leads"] = {
+            "target": target_leads,
+            "actual": paid_leads,
+            "gap_pct": lead_gap_pct,
+            "on_track": leads_on_track,
+        }
+        if leads_on_track:
+            all_highlights.append(
+                f"Paid leads are {paid_leads} vs target {target_leads} (+{lead_gap_pct}%)"
+            )
+        else:
+            all_concerns.append(
+                f"Paid leads are {paid_leads} vs target {target_leads} ({abs(lead_gap_pct)}% below target)"
+            )
+
+    if target_roas > 0:
+        kpi_status["evaluation"]["roas"] = {
+            "target": target_roas,
+            "actual": None,
+            "gap_pct": None,
+            "on_track": None,
+            "note": "ROAS target set; revenue feed not connected yet for true ROAS calculation.",
+        }
+
+    paid_summary = {
+        "channels": {
+            "meta": {
+                "spend": round(meta_spend, 2),
+                "results": round(meta_results, 2),
+            },
+            "google_ads": {
+                "spend": round(google_ads_spend, 2),
+                "results": round(google_ads_results, 2),
+            },
+        },
+        "total_paid_spend": paid_spend,
+        "total_paid_leads": paid_leads,
+        "blended_cpa": blended_cpa,
+    }
+
     return {
         "client_id": client_id,
         "month": month,
@@ -559,5 +652,7 @@ def build_full_analysis(client_id, month, current_data, client_config):
         "overall_score": overall_score,
         "overall_grade": overall_grade,
         "roas": roas_data,
+        "paid_summary": paid_summary,
+        "kpi_status": kpi_status,
         "has_previous_month": bool(prev_data),
     }

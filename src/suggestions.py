@@ -72,6 +72,9 @@ def generate_suggestions(analysis):
     # ── Cross-platform suggestions ──
     suggestions.extend(_cross_platform_suggestions(analysis))
 
+    # ── KPI target-driven suggestions ──
+    suggestions.extend(_target_kpi_suggestions(analysis))
+
     # Sort by priority
     priority_order = {PRIORITY_HIGH: 0, PRIORITY_MEDIUM: 1, PRIORITY_LOW: 2}
     suggestions.sort(key=lambda s: priority_order.get(s["priority"], 99))
@@ -558,6 +561,46 @@ def _seasonal_suggestions(analysis):
                 PRIORITY_MEDIUM, CATEGORY_STRATEGY, "seasonal",
             ))
             break
+
+    return suggestions
+
+
+def _target_kpi_suggestions(analysis):
+    """Suggestions tied to brand KPI targets (CPA/leads/ROAS)."""
+    suggestions = []
+    kpi_status = analysis.get("kpi_status", {})
+    evaluation = kpi_status.get("evaluation", {}) if isinstance(kpi_status, dict) else {}
+
+    cpa_eval = evaluation.get("cpa") if isinstance(evaluation, dict) else None
+    if isinstance(cpa_eval, dict) and cpa_eval.get("on_track") is False:
+        suggestions.append(make_suggestion(
+            "Close CPA Gap to Target",
+            f"Current blended CPA is ${cpa_eval.get('actual')} vs target ${cpa_eval.get('target')}. "
+            "Focus next sprint on search term pruning, budget shifts to top-converting campaigns, "
+            "and a landing page CRO pass on highest-spend traffic.",
+            PRIORITY_HIGH, CATEGORY_BUDGET, "cost_efficiency",
+            data_point=f"CPA gap: {cpa_eval.get('gap_pct')}%"
+        ))
+
+    leads_eval = evaluation.get("leads") if isinstance(evaluation, dict) else None
+    if isinstance(leads_eval, dict) and leads_eval.get("on_track") is False:
+        suggestions.append(make_suggestion(
+            "Recover Lead Volume to Target",
+            f"Paid leads are {leads_eval.get('actual')} vs target {leads_eval.get('target')}. "
+            "Increase impression share in high-intent campaigns and launch 1-2 new offer variants "
+            "to improve click-to-lead conversion.",
+            PRIORITY_HIGH, CATEGORY_STRATEGY, "growth",
+            data_point=f"Lead gap: {leads_eval.get('gap_pct')}%"
+        ))
+
+    roas_eval = evaluation.get("roas") if isinstance(evaluation, dict) else None
+    if isinstance(roas_eval, dict) and roas_eval.get("target"):
+        suggestions.append(make_suggestion(
+            "Enable Revenue Tracking for True ROAS",
+            "ROAS target is configured, but revenue events are not connected. "
+            "Connect CRM revenue or offline conversion values so bidding and reporting can optimize to actual return.",
+            PRIORITY_MEDIUM, CATEGORY_STRATEGY, "measurement"
+        ))
 
     return suggestions
 
