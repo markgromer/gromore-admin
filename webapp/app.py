@@ -425,6 +425,14 @@ def create_app():
                     "monthly_budget": brand.get("monthly_budget"),
                     "website": brand.get("website"),
                     "goals": brand.get("goals"),
+                    "brand_voice": brand.get("brand_voice"),
+                    "active_offers": brand.get("active_offers"),
+                    "target_audience": brand.get("target_audience"),
+                    "competitors": brand.get("competitors"),
+                    "reporting_notes": brand.get("reporting_notes"),
+                    "kpi_target_cpa": brand.get("kpi_target_cpa"),
+                    "kpi_target_leads": brand.get("kpi_target_leads"),
+                    "kpi_target_roas": brand.get("kpi_target_roas"),
                 },
                 "month": month,
                 "analysis": summarize_analysis_for_ai(analysis) if isinstance(analysis, dict) else None,
@@ -518,6 +526,40 @@ def create_app():
             flash("Brand updated", "success")
             return redirect(url_for("brand_detail", brand_id=brand_id))
         return render_template("brands/form.html", brand=brand, industries=_get_industries())
+
+    @app.route("/brands/<int:brand_id>/settings", methods=["GET", "POST"])
+    @login_required
+    def brand_settings(brand_id):
+        brand = db.get_brand(brand_id)
+        if not brand:
+            abort(404)
+        if request.method == "POST":
+            section = request.form.get("section", "")
+            if section == "voice":
+                db.update_brand_text_field(brand_id, "brand_voice", request.form.get("brand_voice", ""))
+                db.update_brand_text_field(brand_id, "active_offers", request.form.get("active_offers", ""))
+                db.update_brand_text_field(brand_id, "target_audience", request.form.get("target_audience", ""))
+                db.update_brand_text_field(brand_id, "competitors", request.form.get("competitors", ""))
+                db.update_brand_text_field(brand_id, "reporting_notes", request.form.get("reporting_notes", ""))
+                flash("Brand voice and context saved", "success")
+            elif section == "kpis":
+                db.update_brand_number_field(brand_id, "kpi_target_cpa", request.form.get("kpi_target_cpa", "0"))
+                db.update_brand_number_field(brand_id, "kpi_target_leads", request.form.get("kpi_target_leads", "0"))
+                db.update_brand_number_field(brand_id, "kpi_target_roas", request.form.get("kpi_target_roas", "0"))
+                db.update_brand_text_field(brand_id, "call_tracking_number", request.form.get("call_tracking_number", ""))
+                flash("KPI targets saved", "success")
+            elif section == "crm":
+                db.update_brand_text_field(brand_id, "crm_type", request.form.get("crm_type", ""))
+                crm_api_key = request.form.get("crm_api_key", "").strip()
+                if crm_api_key:
+                    db.update_brand_text_field(brand_id, "crm_api_key", crm_api_key)
+                db.update_brand_text_field(brand_id, "crm_webhook_url", request.form.get("crm_webhook_url", ""))
+                db.update_brand_text_field(brand_id, "crm_pipeline_id", request.form.get("crm_pipeline_id", ""))
+                flash("CRM settings saved", "success")
+            return redirect(url_for("brand_settings", brand_id=brand_id))
+        # Reload brand to get latest data
+        brand = db.get_brand(brand_id)
+        return render_template("brands/settings.html", brand=brand)
 
     @app.route("/brands/<int:brand_id>/delete", methods=["POST"])
     @login_required

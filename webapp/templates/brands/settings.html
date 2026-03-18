@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}{{ brand.display_name }} - Settings{% endblock %}
+
+{% block content %}
+<div class="top-bar">
+    <div>
+        <h4 class="mb-0">{{ brand.display_name }} - Brand Settings</h4>
+        <small class="text-muted">Voice, targets, CRM, and AI context</small>
+    </div>
+    <div>
+        <a href="{{ url_for('brand_detail', brand_id=brand.id) }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> Back to Brand
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Brand Voice & AI Context -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-megaphone"></i> Brand Voice & AI Context</strong></div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="section" value="voice">
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Brand Voice & Tone</label>
+                        <textarea name="brand_voice" class="form-control" rows="4"
+                                  placeholder="e.g. Friendly, professional, no hard sells. Use 'we' not 'I'. Always mention our satisfaction guarantee. Speak like a helpful neighbor, not a salesman.">{{ brand.brand_voice or '' }}</textarea>
+                        <small class="text-muted">How should AI write about this brand? This prompt is injected into every AI brief, chat, and report suggestion.</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Active Offers & Promotions</label>
+                        <textarea name="active_offers" class="form-control" rows="3"
+                                  placeholder="e.g. $50 off first service (code FIRST50), Free estimates on all jobs, 10% senior discount">{{ brand.active_offers or '' }}</textarea>
+                        <small class="text-muted">Current deals the AI should reference in ad copy and reports. Update whenever offers change.</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Target Audience</label>
+                        <textarea name="target_audience" class="form-control" rows="3"
+                                  placeholder="e.g. Homeowners 30-65, household income $75k+, within 25mi of Dallas. Pain points: emergency situations, tired of unreliable contractors.">{{ brand.target_audience or '' }}</textarea>
+                        <small class="text-muted">Customer personas, demographics, pain points. AI uses this for campaign targeting and ad copy.</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Competitors</label>
+                        <textarea name="competitors" class="form-control" rows="2"
+                                  placeholder="e.g. ABC Plumbing (heavy Google Ads), Quick Fix ($20 coupon mailers), RotoRooter (national brand)">{{ brand.competitors or '' }}</textarea>
+                        <small class="text-muted">Known competitors. AI will factor these into strategy recommendations.</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Reporting Notes</label>
+                        <textarea name="reporting_notes" class="form-control" rows="2"
+                                  placeholder="e.g. Client prefers simple language. Don't mention competitor names in client reports. Include spend breakdown.">{{ brand.reporting_notes or '' }}</textarea>
+                        <small class="text-muted">Standing instructions for reports and client communications.</small>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg"></i> Save Voice & Context
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI Targets -->
+    <div class="col-lg-4">
+        <div class="card mb-4">
+            <div class="card-header"><strong><i class="bi bi-bullseye"></i> KPI Targets</strong></div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="section" value="kpis">
+
+                    <div class="mb-3">
+                        <label class="form-label">Target CPA ($)</label>
+                        <input type="number" name="kpi_target_cpa" class="form-control" step="0.01" min="0"
+                               value="{{ brand.kpi_target_cpa or '0' }}"
+                               placeholder="e.g. 45.00">
+                        <small class="text-muted">Target cost per acquisition/lead</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Target Leads/Month</label>
+                        <input type="number" name="kpi_target_leads" class="form-control" min="0"
+                               value="{{ brand.kpi_target_leads or '0' }}"
+                               placeholder="e.g. 50">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Target ROAS</label>
+                        <input type="number" name="kpi_target_roas" class="form-control" step="0.1" min="0"
+                               value="{{ brand.kpi_target_roas or '0' }}"
+                               placeholder="e.g. 3.0">
+                        <small class="text-muted">Return on ad spend target (e.g. 3.0 = $3 revenue per $1 spent)</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Call Tracking Number</label>
+                        <input type="text" name="call_tracking_number" class="form-control"
+                               value="{{ brand.call_tracking_number or '' }}"
+                               placeholder="e.g. (214) 555-0199">
+                        <small class="text-muted">Used for attribution in reports</small>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-check-lg"></i> Save Targets
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- CRM Integration -->
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-diagram-3"></i> CRM Integration</strong></div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="section" value="crm">
+
+                    <div class="mb-3">
+                        <label class="form-label">CRM Platform</label>
+                        <select name="crm_type" class="form-select">
+                            <option value="" {% if not brand.crm_type %}selected{% endif %}>None</option>
+                            <option value="gohighlevel" {% if brand.crm_type == 'gohighlevel' %}selected{% endif %}>GoHighLevel</option>
+                            <option value="hubspot" {% if brand.crm_type == 'hubspot' %}selected{% endif %}>HubSpot</option>
+                            <option value="webhook" {% if brand.crm_type == 'webhook' %}selected{% endif %}>Custom Webhook</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">API Key</label>
+                        <input type="password" name="crm_api_key" class="form-control"
+                               placeholder="{{ '******  (saved)' if brand.crm_api_key else 'Enter API key' }}">
+                        <small class="text-muted">Leave blank to keep current key</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Webhook URL</label>
+                        <input type="url" name="crm_webhook_url" class="form-control"
+                               value="{{ brand.crm_webhook_url or '' }}"
+                               placeholder="https://...">
+                        <small class="text-muted">For GoHighLevel or custom webhooks</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Pipeline/List ID</label>
+                        <input type="text" name="crm_pipeline_id" class="form-control"
+                               value="{{ brand.crm_pipeline_id or '' }}"
+                               placeholder="Optional pipeline or list identifier">
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-check-lg"></i> Save CRM
+                    </button>
+                    {% if brand.crm_type %}
+                    <span class="badge bg-success mt-2">{{ brand.crm_type|title }} configured</span>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

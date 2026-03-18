@@ -53,6 +53,14 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
             "primary_services": client_config.get("primary_services") or [],
             "monthly_budget": _safe_float(client_config.get("monthly_budget")),
             "goals": client_config.get("goals") or [],
+            "brand_voice": client_config.get("brand_voice"),
+            "active_offers": client_config.get("active_offers"),
+            "target_audience": client_config.get("target_audience"),
+            "competitors": client_config.get("competitors"),
+            "reporting_notes": client_config.get("reporting_notes"),
+            "kpi_target_cpa": _safe_float(client_config.get("kpi_target_cpa")),
+            "kpi_target_leads": _safe_float(client_config.get("kpi_target_leads")),
+            "kpi_target_roas": _safe_float(client_config.get("kpi_target_roas")),
         },
         "period": {
             "month": analysis.get("month"),
@@ -186,6 +194,22 @@ def generate_jarvis_brief(
         "For variant=internal: be blunt and tactical, include account checks and next actions."
     )
 
+    # Inject brand voice and context if available
+    brand_context = analysis_summary.get("client", {})
+    voice_parts = []
+    if brand_context.get("brand_voice"):
+        voice_parts.append(f"Brand voice/tone instructions: {brand_context['brand_voice']}")
+    if brand_context.get("active_offers"):
+        voice_parts.append(f"Active offers/promotions: {brand_context['active_offers']}")
+    if brand_context.get("target_audience"):
+        voice_parts.append(f"Target audience: {brand_context['target_audience']}")
+    if brand_context.get("competitors"):
+        voice_parts.append(f"Known competitors: {brand_context['competitors']}")
+    if brand_context.get("reporting_notes"):
+        voice_parts.append(f"Reporting notes: {brand_context['reporting_notes']}")
+    if voice_parts:
+        system += " " + " ".join(voice_parts)
+
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -250,6 +274,31 @@ def chat_with_jarvis(
         "say you cannot browse in this tool and provide a strong strategy with assumptions plus a checklist of what to verify. "
         "Use the provided context if available. If key details are missing, ask 1-3 clarifying questions."
     )
+
+    # Inject brand voice and context if available
+    brand = context.get("brand") or {}
+    voice_parts = []
+    if brand.get("brand_voice"):
+        voice_parts.append(f"Brand voice/tone: {brand['brand_voice']}")
+    if brand.get("active_offers"):
+        voice_parts.append(f"Active offers: {brand['active_offers']}")
+    if brand.get("target_audience"):
+        voice_parts.append(f"Target audience: {brand['target_audience']}")
+    if brand.get("competitors"):
+        voice_parts.append(f"Competitors: {brand['competitors']}")
+    if brand.get("reporting_notes"):
+        voice_parts.append(f"Reporting notes: {brand['reporting_notes']}")
+    kpi_parts = []
+    if brand.get("kpi_target_cpa"):
+        kpi_parts.append(f"target CPA ${brand['kpi_target_cpa']}")
+    if brand.get("kpi_target_leads"):
+        kpi_parts.append(f"target {brand['kpi_target_leads']} leads/mo")
+    if brand.get("kpi_target_roas"):
+        kpi_parts.append(f"target ROAS {brand['kpi_target_roas']}x")
+    if kpi_parts:
+        voice_parts.append(f"KPI targets: {', '.join(kpi_parts)}")
+    if voice_parts:
+        system += " " + " ".join(voice_parts)
 
     ctx_user = {
         "role": "user",

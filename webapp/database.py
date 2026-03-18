@@ -122,6 +122,29 @@ class WebDB:
             );
         """)
         conn.commit()
+
+        # ── Migrations: add columns that may not exist on older DBs ──
+        brand_columns = {r[1] for r in conn.execute("PRAGMA table_info(brands)").fetchall()}
+        new_brand_cols = [
+            ("brand_voice", "TEXT DEFAULT ''"),
+            ("active_offers", "TEXT DEFAULT ''"),
+            ("target_audience", "TEXT DEFAULT ''"),
+            ("competitors", "TEXT DEFAULT ''"),
+            ("reporting_notes", "TEXT DEFAULT ''"),
+            ("kpi_target_cpa", "REAL DEFAULT 0"),
+            ("kpi_target_leads", "INTEGER DEFAULT 0"),
+            ("kpi_target_roas", "REAL DEFAULT 0"),
+            ("call_tracking_number", "TEXT DEFAULT ''"),
+            ("crm_type", "TEXT DEFAULT ''"),
+            ("crm_api_key", "TEXT DEFAULT ''"),
+            ("crm_webhook_url", "TEXT DEFAULT ''"),
+            ("crm_pipeline_id", "TEXT DEFAULT ''"),
+        ]
+        for col_name, col_def in new_brand_cols:
+            if col_name not in brand_columns:
+                conn.execute(f"ALTER TABLE brands ADD COLUMN {col_name} {col_def}")
+        conn.commit()
+
         conn.close()
 
     # ── Users ──
@@ -247,6 +270,32 @@ class WebDB:
             raise ValueError(f"Cannot update field: {field}")
         conn = self._conn()
         conn.execute(f"UPDATE brands SET {field}=?, updated_at=datetime('now') WHERE id=?", (value, brand_id))
+        conn.commit()
+        conn.close()
+
+    def update_brand_text_field(self, brand_id, field, value):
+        allowed = {
+            "brand_voice", "active_offers", "target_audience", "competitors",
+            "reporting_notes", "call_tracking_number",
+            "crm_type", "crm_api_key", "crm_webhook_url", "crm_pipeline_id",
+        }
+        if field not in allowed:
+            raise ValueError(f"Cannot update field: {field}")
+        conn = self._conn()
+        conn.execute(f"UPDATE brands SET {field}=?, updated_at=datetime('now') WHERE id=?", (value or "", brand_id))
+        conn.commit()
+        conn.close()
+
+    def update_brand_number_field(self, brand_id, field, value):
+        allowed = {"kpi_target_cpa", "kpi_target_leads", "kpi_target_roas"}
+        if field not in allowed:
+            raise ValueError(f"Cannot update field: {field}")
+        try:
+            num = float(value or 0)
+        except (ValueError, TypeError):
+            num = 0
+        conn = self._conn()
+        conn.execute(f"UPDATE brands SET {field}=?, updated_at=datetime('now') WHERE id=?", (num, brand_id))
         conn.commit()
         conn.close()
 
