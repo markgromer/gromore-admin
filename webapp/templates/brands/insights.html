@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}{{ brand.display_name }} - Insights{% endblock %}
+
+{% block content %}
+<div class="top-bar">
+    <div>
+        <h4 class="mb-0">{{ brand.display_name }} - Deep Insights</h4>
+        <small class="text-muted">SEO keyword research, Google Ads strategy, competitor watch, and AI operator plan for {{ month }}</small>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="#seo" class="btn btn-outline-secondary btn-sm">SEO</a>
+        <a href="#google-ads" class="btn btn-outline-secondary btn-sm">Google Ads</a>
+        <a href="#competitors" class="btn btn-outline-secondary btn-sm">Competitors</a>
+        <a href="#ai-plan" class="btn btn-outline-primary btn-sm">AI Plan</a>
+    </div>
+</div>
+
+{% if error %}
+<div class="alert alert-warning">
+    Could not load full analysis for {{ month }}: {{ error }}
+</div>
+{% endif %}
+
+<div class="row g-4">
+    <div class="col-12" id="seo">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong><i class="bi bi-search"></i> Search Console Keyword Intelligence</strong>
+                <span class="badge bg-light text-dark border">{{ month }}</span>
+            </div>
+            <div class="card-body">
+                {% if seo.metrics %}
+                <div class="row g-3 mb-3">
+                    <div class="col-md-3"><div class="border rounded p-2"><div class="small text-muted">Impressions</div><div class="fw-semibold">{{ "{:,}".format(seo.metrics.impressions or 0) }}</div></div></div>
+                    <div class="col-md-3"><div class="border rounded p-2"><div class="small text-muted">Clicks</div><div class="fw-semibold">{{ "{:,}".format(seo.metrics.clicks or 0) }}</div></div></div>
+                    <div class="col-md-3"><div class="border rounded p-2"><div class="small text-muted">CTR</div><div class="fw-semibold">{{ seo.metrics.ctr or 0 }}%</div></div></div>
+                    <div class="col-md-3"><div class="border rounded p-2"><div class="small text-muted">Avg Position</div><div class="fw-semibold">{{ seo.metrics.avg_position or 'N/A' }}</div></div></div>
+                </div>
+                {% endif %}
+
+                {% if seo_actions %}
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Keyword</th>
+                                <th>Position</th>
+                                <th>Impressions</th>
+                                <th>Signal</th>
+                                <th>Action to Add</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in seo_actions %}
+                            <tr>
+                                <td class="fw-medium">{{ row.keyword }}</td>
+                                <td>{{ row.position }}</td>
+                                <td>{{ "{:,}".format(row.impressions or 0) }}</td>
+                                <td>{{ row.reason }}</td>
+                                <td>{{ row.action }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-muted">No keyword recommendation data yet. Connect GSC and generate data for this month.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12" id="google-ads">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-google"></i> Google Ads Strategy Deep Dive</strong></div>
+            <div class="card-body">
+                {% if google_ads.metrics %}
+                <div class="row g-3 mb-3">
+                    <div class="col-md-2"><div class="border rounded p-2"><div class="small text-muted">Spend</div><div class="fw-semibold">${{ "{:,.2f}".format(google_ads.metrics.spend or 0) }}</div></div></div>
+                    <div class="col-md-2"><div class="border rounded p-2"><div class="small text-muted">Clicks</div><div class="fw-semibold">{{ "{:,}".format(google_ads.metrics.clicks or 0) }}</div></div></div>
+                    <div class="col-md-2"><div class="border rounded p-2"><div class="small text-muted">Conversions</div><div class="fw-semibold">{{ google_ads.metrics.results or 0 }}</div></div></div>
+                    <div class="col-md-2"><div class="border rounded p-2"><div class="small text-muted">CTR</div><div class="fw-semibold">{{ google_ads.metrics.ctr or 0 }}%</div></div></div>
+                    <div class="col-md-2"><div class="border rounded p-2"><div class="small text-muted">CPC</div><div class="fw-semibold">${{ "{:,.2f}".format(google_ads.metrics.cpc or 0) }}</div></div></div>
+                    <div class="col-md-2"><div class="border rounded p-2"><div class="small text-muted">CPA</div><div class="fw-semibold">${{ "{:,.2f}".format(google_ads.metrics.cost_per_result or 0) }}</div></div></div>
+                </div>
+                {% endif %}
+
+                {% if google_ads_actions %}
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Campaign</th>
+                                <th>Status</th>
+                                <th>Issue</th>
+                                <th>Counter Action</th>
+                                <th>Spend</th>
+                                <th>Results</th>
+                                <th>CPA</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in google_ads_actions %}
+                            <tr>
+                                <td class="fw-medium">{{ row.campaign }}</td>
+                                <td>
+                                    <span class="badge {{ 'bg-danger' if row.status == 'underperforming' else 'bg-success' }}">{{ row.status|replace('_',' ')|title }}</span>
+                                </td>
+                                <td>{{ row.issue }}</td>
+                                <td>{{ row.action }}</td>
+                                <td>${{ "{:,.2f}".format(row.spend or 0) }}</td>
+                                <td>{{ row.results or 0 }}</td>
+                                <td>{{ ("$" + "{:,.2f}".format(row.cpa)) if row.cpa is not none else 'N/A' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-muted">No Google Ads campaign analysis yet. Connect Google Ads and generate this month.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12" id="competitors">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-trophy"></i> Competitor Watch + Counter Moves</strong></div>
+            <div class="card-body">
+                {% if competitor_watch.competitors %}
+                <div class="mb-2"><span class="small text-muted">Tracked competitors:</span> {{ competitor_watch.competitors|join(', ') }}</div>
+                {% endif %}
+
+                {% if competitor_watch.signals %}
+                <div class="mb-3">
+                    {% for s in competitor_watch.signals %}
+                    <div class="alert {{ 'alert-warning' if s.severity in ('high','medium') else 'alert-light' }} py-2 mb-2">
+                        <strong>{{ s.title }}</strong> - {{ s.detail }}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if competitor_actions %}
+                <ul class="mb-0">
+                    {% for move in competitor_actions %}
+                    <li class="mb-2"><strong>{{ move.title }}</strong> ({{ move.priority|upper }}) - {{ move.detail }}</li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="text-muted">No competitor counter-moves yet. Add competitors in Brand Settings and regenerate.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12" id="ai-plan">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-cpu"></i> AI Operator Plan (Deep, Actionable)</strong></div>
+            <div class="card-body">
+                {% if ai_plan %}
+                {% if ai_plan.operator_summary %}
+                <p class="mb-3">{{ ai_plan.operator_summary }}</p>
+                {% endif %}
+
+                {% if ai_plan.seo_keyword_plan %}
+                <h6 class="mb-2">SEO Keyword Plan</h6>
+                <ul>
+                    {% for item in ai_plan.seo_keyword_plan[:10] %}
+                    <li><strong>{{ item.keyword }}</strong> ({{ item.priority|upper }}) - {{ item.why_now }} Next: {{ item.next_action }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+
+                {% if ai_plan.google_ads_plan %}
+                <h6 class="mb-2">Google Ads Plan</h6>
+                <ul>
+                    {% for item in ai_plan.google_ads_plan[:10] %}
+                    <li><strong>{{ item.campaign }}</strong> ({{ item.priority|upper }}) - {{ item.counter_move }} Success metric: {{ item.success_metric }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+
+                {% if ai_plan.competitor_counter_plan %}
+                <h6 class="mb-2">Competitor Counter Plan</h6>
+                <ul>
+                    {% for item in ai_plan.competitor_counter_plan[:8] %}
+                    <li><strong>{{ item.threat }}</strong> - {{ item.counter_strategy }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+
+                {% if ai_plan.weekly_execution_rhythm %}
+                <h6 class="mb-2">Weekly Execution Rhythm</h6>
+                <ul>
+                    {% for item in ai_plan.weekly_execution_rhythm[:6] %}
+                    <li><strong>{{ item.week }}:</strong> {{ item.focus }}{% if item.tasks %} - {{ item.tasks|join('; ') }}{% endif %}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+                {% else %}
+                <div class="text-muted">AI operator plan unavailable (likely missing OpenAI key or temporary API issue). Deterministic strategy sections above still use full account data.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -395,26 +395,24 @@
                 </div>
                 {% endif %}
 
-                <!-- Quick Action Buttons -->
+                <!-- Deep-Dive Actions (open in new tab) -->
                 <div class="d-flex flex-wrap gap-2 mb-3">
-                    <button class="btn btn-sm btn-outline-secondary chat-quick-btn" data-prompt="Generate a list of 25-30 high-intent local SEO keywords for {{ brand.display_name }} in {{ brand.service_area or 'our service area' }}. Group them by intent (commercial, informational, navigational). Include search volume estimates and suggested ad groups.">
+                    <a class="btn btn-sm btn-outline-secondary" target="_blank"
+                       href="{{ url_for('brand_insights', brand_id=brand.id, month=active_month) }}#seo">
                         <i class="bi bi-search"></i> Keyword Research
-                    </button>
-                    <button class="btn btn-sm btn-outline-secondary chat-quick-btn" data-prompt="Build a complete Facebook/Instagram ad campaign strategy for {{ brand.display_name }}. Include: campaign objective, audience targeting (demographics, interests, lookalikes), ad set structure, budget allocation from our ${{ brand.monthly_budget or '___' }}/mo budget, ad creative angles (3-5 hooks), and a testing plan for the first 2 weeks.">
-                        <i class="bi bi-meta"></i> FB Campaign Plan
-                    </button>
-                    <button class="btn btn-sm btn-outline-secondary chat-quick-btn" data-prompt="Create a Google Ads strategy for {{ brand.display_name }}. Include: recommended campaign types (Search, Performance Max, Display), keyword themes and match types, negative keyword list, ad copy variations (3 responsive search ads), budget split, and bidding strategy recommendations.">
+                    </a>
+                    <a class="btn btn-sm btn-outline-secondary" target="_blank"
+                       href="{{ url_for('brand_insights', brand_id=brand.id, month=active_month) }}#google-ads">
                         <i class="bi bi-google"></i> Google Ads Strategy
-                    </button>
-                    <button class="btn btn-sm btn-outline-secondary chat-quick-btn" data-prompt="Do a competitive analysis framework for {{ brand.display_name }} ({{ brand.industry|replace('_',' ')|title }}) in {{ brand.service_area or 'our market' }}. List the likely top 5 competitors, their probable ad strategies, positioning gaps we can exploit, and 3 differentiation angles. Then give me a step-by-step checklist to verify this using SpyFu, SEMrush, and Facebook Ad Library.">
+                    </a>
+                    <a class="btn btn-sm btn-outline-secondary" target="_blank"
+                       href="{{ url_for('brand_insights', brand_id=brand.id, month=active_month) }}#competitors">
                         <i class="bi bi-trophy"></i> Competitor Analysis
-                    </button>
-                    <button class="btn btn-sm btn-outline-secondary chat-quick-btn" data-prompt="Write 5 high-converting ad copy variations for {{ brand.display_name }}. For each, include: headline (30 chars), long headline (90 chars), description (90 chars), and a CTA. Target {{ brand.service_area or 'local' }} customers. Mix urgency, social proof, and benefit-driven angles.">
-                        <i class="bi bi-pencil-square"></i> Ad Copy
-                    </button>
-                    <button class="btn btn-sm btn-outline-secondary chat-quick-btn" data-prompt="Create a landing page strategy for {{ brand.display_name }}. Include: recommended page structure (hero, social proof, services, CTA), headline and subheadline copy, 3 trust signals to include, form fields to use, and A/B test ideas. Optimize for conversion from paid traffic.">
-                        <i class="bi bi-layout-text-window"></i> Landing Page
-                    </button>
+                    </a>
+                    <a class="btn btn-sm btn-outline-primary" target="_blank"
+                       href="{{ url_for('brand_insights', brand_id=brand.id, month=active_month) }}#ai-plan">
+                        <i class="bi bi-cpu"></i> AI Operator Plan
+                    </a>
                 </div>
 
                 <!-- Chat Messages -->

@@ -366,6 +366,111 @@ def create_app():
             month_finance=month_finance,
         )
 
+    @app.route("/brands/<int:brand_id>/insights")
+    @login_required
+    def brand_insights(brand_id):
+        brand = db.get_brand(brand_id)
+        if not brand:
+            abort(404)
+
+        month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+
+        analysis = {}
+        suggestions = []
+        error = ""
+        ai_plan = None
+
+        try:
+            from webapp.report_runner import build_analysis_and_suggestions_for_brand
+            analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
+        except Exception as e:
+            error = str(e)
+
+        if analysis:
+            seo = analysis.get("search_console") or {}
+            google_ads = analysis.get("google_ads") or {}
+            competitor_watch = analysis.get("competitor_watch") or {}
+
+            seo_actions = []
+            for item in (seo.get("keyword_recommendations") or [])[:10]:
+                seo_actions.append({
+                    "keyword": item.get("keyword", ""),
+                    "position": item.get("position"),
+                    "impressions": item.get("impressions"),
+                    "reason": item.get("reason", ""),
+                    "action": item.get("recommended_action", ""),
+                })
+
+            google_ads_actions = []
+            for campaign in (google_ads.get("campaign_analysis") or [])[:12]:
+                issue = campaign.get("issue") or ("Under target" if campaign.get("status") == "underperforming" else "Monitor")
+                action = (
+                    "Tighten targeting, rebuild search terms/keywords, and reallocate spend to highest-converting segments."
+                    if campaign.get("status") == "underperforming"
+                    else "Keep budget stable and test one new ad/message variant this cycle."
+                )
+                google_ads_actions.append({
+                    "campaign": campaign.get("name", "Campaign"),
+                    "status": campaign.get("status", "ok"),
+                    "issue": issue,
+                    "action": action,
+                    "spend": (campaign.get("metrics") or {}).get("spend", 0),
+                    "results": (campaign.get("metrics") or {}).get("results", 0),
+                    "cpa": (campaign.get("metrics") or {}).get("cost_per_result"),
+                })
+
+            competitor_actions = []
+            for move in (competitor_watch.get("counter_moves") or [])[:8]:
+                competitor_actions.append({
+                    "title": move.get("title", "Counter move"),
+                    "priority": move.get("priority", "medium"),
+                    "detail": move.get("detail", ""),
+                })
+
+            # Optional GPT-powered deep operator plan
+            openai_key = db.get_setting("openai_api_key", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip()
+            if openai_key:
+                try:
+                    from webapp.ai_assistant import generate_account_operator_plan
+
+                    model = (
+                        db.get_setting("openai_model", "").strip()
+                        or os.environ.get("OPENAI_MODEL", "").strip()
+                        or app.config.get("OPENAI_MODEL")
+                        or "gpt-4o-mini"
+                    )
+                    ai_plan = generate_account_operator_plan(
+                        api_key=openai_key,
+                        analysis=analysis,
+                        suggestions=suggestions,
+                        model=model,
+                    )
+                except Exception:
+                    ai_plan = None
+        else:
+            seo_actions = []
+            google_ads_actions = []
+            competitor_actions = []
+            competitor_watch = {}
+            seo = {}
+            google_ads = {}
+
+        return render_template(
+            "brands/insights.html",
+            brand=brand,
+            month=month,
+            error=error,
+            analysis=analysis,
+            suggestions=suggestions,
+            seo=seo,
+            google_ads=google_ads,
+            competitor_watch=competitor_watch,
+            seo_actions=seo_actions,
+            google_ads_actions=google_ads_actions,
+            competitor_actions=competitor_actions,
+            ai_plan=ai_plan,
+        )
+
     @app.route("/brands/<int:brand_id>/finance", methods=["POST"])
     @login_required
     def brand_save_month_finance(brand_id):

@@ -102,7 +102,7 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
                 "clicks": _safe_float(_pick(gsc, "metrics.clicks")),
                 "impressions": _safe_float(_pick(gsc, "metrics.impressions")),
                 "ctr": _safe_float(_pick(gsc, "metrics.ctr")),
-                "position": _safe_float(_pick(gsc, "metrics.position")),
+                "position": _safe_float(_pick(gsc, "metrics.avg_position")),
                 "mom": {
                     "clicks_pct": _safe_float(_pick(gsc, "month_over_month.clicks.change_pct")),
                     "impressions_pct": _safe_float(_pick(gsc, "month_over_month.impressions.change_pct")),
@@ -123,6 +123,22 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
                 },
             },
         },
+        "seo_detail": {
+            "top_queries": (gsc.get("top_queries") or [])[:20],
+            "keyword_opportunities": (gsc.get("keyword_opportunities") or [])[:20],
+            "keyword_recommendations": (gsc.get("keyword_recommendations") or [])[:20],
+            "top_pages": (gsc.get("top_pages") or [])[:15],
+        },
+        "google_ads_detail": {
+            "campaigns": (google_ads.get("campaign_analysis") or [])[:20],
+            "month_over_month": google_ads.get("month_over_month") or {},
+        },
+        "meta_detail": {
+            "campaigns": (meta.get("campaign_analysis") or [])[:20],
+            "top_ads": (meta.get("top_ads") or [])[:20],
+            "month_over_month": meta.get("month_over_month") or {},
+        },
+        "competitor_watch": analysis.get("competitor_watch") or {},
     }
 
     # Remove empty channel objects to reduce noise
@@ -348,3 +364,105 @@ def chat_with_jarvis(
     data = resp.json()
     content = ((data.get("choices") or [{}])[0].get("message", {}) or {}).get("content", "")
     return (content or "").strip()
+
+
+def generate_account_operator_plan(
+    *,
+    api_key: str,
+    analysis: Dict[str, Any],
+    suggestions: Any,
+    model: Optional[str] = None,
+    timeout: int = 75,
+) -> Dict[str, Any]:
+    """Generate a deep, non-generic operator plan using full channel context."""
+    if not api_key:
+        raise ValueError("OpenAI API key not configured")
+
+    model = model or DEFAULT_OPENAI_MODEL
+    analysis_summary = _summarize_analysis_for_ai(analysis)
+
+    payload = {
+        "analysis": analysis_summary,
+        "suggestions": suggestions,
+        "output_schema": {
+            "operator_summary": "string",
+            "seo_keyword_plan": [
+                {
+                    "keyword": "string",
+                    "current_position": "number or null",
+                    "impressions": "number or null",
+                    "priority": "high|medium|low",
+                    "why_now": "string",
+                    "next_action": "string",
+                }
+            ],
+            "google_ads_plan": [
+                {
+                    "campaign": "string",
+                    "issue": "string",
+                    "priority": "high|medium|low",
+                    "counter_move": "string",
+                    "owner": "string",
+                    "success_metric": "string",
+                }
+            ],
+            "competitor_counter_plan": [
+                {
+                    "threat": "string",
+                    "counter_strategy": "string",
+                    "execution_steps": ["string"],
+                }
+            ],
+            "weekly_execution_rhythm": [
+                {
+                    "week": "string",
+                    "focus": "string",
+                    "tasks": ["string"],
+                }
+            ],
+            "watchouts": ["string"],
+        },
+    }
+
+    system = (
+        "You are a principal growth strategist running ad accounts and SEO for an agency. "
+        "Use the supplied data deeply and do not produce generic advice. "
+        "Every recommendation must tie to explicit signals in the provided context. "
+        "Prioritize by expected impact and implementation speed. "
+        "Return ONLY valid JSON matching output_schema. No markdown or extra text."
+    )
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    resp = requests.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers=headers,
+        json={
+            "model": model,
+            "temperature": 0.2,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": json.dumps(payload)},
+            ],
+            "response_format": {"type": "json_object"},
+        },
+        timeout=timeout,
+    )
+
+    if resp.status_code != 200:
+        raise ValueError(f"OpenAI request failed ({resp.status_code}): {resp.text}")
+
+    data = resp.json()
+    content = ((data.get("choices") or [{}])[0].get("message", {}) or {}).get("content", "")
+    plan = _extract_json_from_text(content)
+
+    plan.setdefault("operator_summary", "")
+    plan.setdefault("seo_keyword_plan", [])
+    plan.setdefault("google_ads_plan", [])
+    plan.setdefault("competitor_counter_plan", [])
+    plan.setdefault("weekly_execution_rhythm", [])
+    plan.setdefault("watchouts", [])
+    return plan
