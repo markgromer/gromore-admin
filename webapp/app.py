@@ -583,7 +583,60 @@ def create_app():
             return redirect(url_for("brand_settings", brand_id=brand_id))
         # Reload brand to get latest data
         brand = db.get_brand(brand_id)
-        return render_template("brands/settings.html", brand=brand)
+        return render_template("brands/settings.html", brand=brand, app_url=(app.config.get("APP_URL", "") or "").rstrip("/"))
+
+    @app.route("/webhooks/crm/revenue/<int:brand_id>", methods=["POST"])
+    @app.route("/webhooks/crm/revenue/slug/<slug>", methods=["POST"])
+    @csrf.exempt
+    def crm_revenue_webhook(brand_id=None, slug=None):
+        brand = db.get_brand(brand_id) if brand_id is not None else db.get_brand_by_slug(slug or "")
+        if not brand:
+            return jsonify({"ok": False, "error": "Brand not found"}), 404
+
+        expected_key = (brand.get("crm_api_key") or "").strip()
+        if not expected_key:
+            return jsonify({"ok": False, "error": "CRM API key not configured for this brand"}), 400
+
+        payload = request.get_json(silent=True) or {}
+        auth_header = (request.headers.get("Authorization") or "").strip()
+        bearer_key = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
+        header_key = (request.headers.get("X-Webhook-Key") or "").strip()
+        body_key = str(payload.get("api_key") or payload.get("webhook_key") or "").strip()
+        provided_key = header_key or bearer_key or body_key
+
+        if not provided_key or not secrets.compare_digest(provided_key, expected_key):
+            return jsonify({"ok": False, "error": "Unauthorized"}), 401
+
+        month_raw = str(payload.get("month") or payload.get("period") or datetime.now().strftime("%Y-%m"))
+        month = month_raw[:7]
+        try:
+            datetime.strptime(month, "%Y-%m")
+        except ValueError:
+            return jsonify({"ok": False, "error": "Invalid month format. Use YYYY-MM"}), 400
+
+        revenue = payload.get("closed_revenue", payload.get("revenue", payload.get("amount", 0)))
+        closed_deals = payload.get("closed_deals", payload.get("deals", payload.get("won_deals", 0)))
+        notes = str(payload.get("notes") or payload.get("source") or payload.get("description") or "")
+
+        try:
+            revenue_num = float(revenue or 0)
+        except (TypeError, ValueError):
+            revenue_num = 0.0
+        try:
+            closed_deals_num = int(float(closed_deals or 0))
+        except (TypeError, ValueError):
+            closed_deals_num = 0
+
+        db.upsert_brand_month_finance(brand["id"], month, revenue_num, closed_deals_num, notes)
+
+        return jsonify({
+            "ok": True,
+            "brand_id": brand["id"],
+            "brand": brand.get("display_name", ""),
+            "month": month,
+            "closed_revenue": revenue_num,
+            "closed_deals": closed_deals_num,
+        })
 
     @app.route("/brands/<int:brand_id>/delete", methods=["POST"])
     @login_required

@@ -151,6 +151,15 @@
                                placeholder="Optional pipeline or list identifier">
                     </div>
 
+                    <div class="border rounded p-2 bg-light mb-3">
+                        <div class="small fw-semibold mb-1">Inbound Revenue Webhook (for true ROAS)</div>
+                        <div class="small text-muted mb-1">POST monthly close data from CRM to:</div>
+                        <code class="small d-block mb-1">{{ app_url }}{{ url_for('crm_revenue_webhook', brand_id=brand.id) }}</code>
+                        <div class="small text-muted mb-1">Auth: send this brand's CRM API key in <code>X-Webhook-Key</code> or <code>Authorization: Bearer ...</code>.</div>
+                        <div class="small text-muted mb-1">JSON fields supported:</div>
+                        <code class="small d-block">{"month":"2026-03","closed_revenue":12500,"closed_deals":9,"notes":"HubSpot closed-won"}</code>
+                    </div>
+
                     <button type="submit" class="btn btn-primary w-100">
                         <i class="bi bi-check-lg"></i> Save CRM
                     </button>
