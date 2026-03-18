@@ -56,6 +56,156 @@ def _to_float(value, default=0.0):
         return default
 
 
+def _parse_competitors(raw_competitors):
+    if not raw_competitors:
+        return []
+    if isinstance(raw_competitors, list):
+        return [str(item).strip() for item in raw_competitors if str(item).strip()]
+    return [item.strip() for item in str(raw_competitors).split(",") if item.strip()]
+
+
+def _competitor_tokens(name):
+    lowered = (name or "").lower().replace("https://", "").replace("http://", "")
+    lowered = lowered.replace("www.", "").replace(".com", " ").replace(".net", " ").replace(".org", " ")
+    return [token for token in lowered.replace("-", " ").split() if len(token) >= 3]
+
+
+def _build_keyword_recommendations(gsc_data, opportunities):
+    recommendations = []
+    top_queries = gsc_data.get("top_queries", []) if isinstance(gsc_data, dict) else []
+
+    for row in (opportunities or [])[:8]:
+        query = str(row.get("query", "")).strip()
+        if not query:
+            continue
+        recommendations.append({
+            "keyword": query,
+            "impressions": int(row.get("impressions", 0) or 0),
+            "clicks": int(row.get("clicks", 0) or 0),
+            "ctr": row.get("ctr", 0) or 0,
+            "position": row.get("position", 0) or 0,
+            "reason": "High-impression query ranking below top 3",
+            "recommended_action": "Create or improve a dedicated page and strengthen internal links for this term.",
+        })
+
+    if len(recommendations) < 8:
+        low_ctr_queries = sorted(
+            [
+                q for q in top_queries
+                if (q.get("impressions", 0) or 0) >= 50 and (q.get("ctr", 0) or 0) <= 2.0
+            ],
+            key=lambda item: item.get("impressions", 0),
+            reverse=True,
+        )
+        for row in low_ctr_queries:
+            if len(recommendations) >= 8:
+                break
+            query = str(row.get("query", "")).strip()
+            if not query or any(r.get("keyword") == query for r in recommendations):
+                continue
+            recommendations.append({
+                "keyword": query,
+                "impressions": int(row.get("impressions", 0) or 0),
+                "clicks": int(row.get("clicks", 0) or 0),
+                "ctr": row.get("ctr", 0) or 0,
+                "position": row.get("position", 0) or 0,
+                "reason": "High visibility but low click-through rate",
+                "recommended_action": "Rewrite title/meta description to better match search intent and increase clicks.",
+            })
+
+    return recommendations
+
+
+def _build_competitor_watch(client_config, gsc_analysis, meta_analysis, google_ads_analysis):
+    competitors = _parse_competitors((client_config or {}).get("competitors"))
+    if not competitors:
+        return None
+
+    signals = []
+    counter_moves = []
+    matched_queries = []
+
+    gsc_top_queries = (gsc_analysis or {}).get("top_queries", []) if isinstance(gsc_analysis, dict) else []
+    for competitor in competitors:
+        tokens = _competitor_tokens(competitor)
+        if not tokens:
+            continue
+        for query_row in gsc_top_queries:
+            query = str(query_row.get("query", "")).lower()
+            if query and any(token in query for token in tokens):
+                matched_queries.append({
+                    "competitor": competitor,
+                    "query": query_row.get("query", ""),
+                    "impressions": int(query_row.get("impressions", 0) or 0),
+                    "clicks": int(query_row.get("clicks", 0) or 0),
+                    "position": query_row.get("position", 0),
+                })
+
+    if matched_queries:
+        total_impressions = sum(item.get("impressions", 0) for item in matched_queries)
+        signals.append({
+            "severity": "high" if total_impressions >= 100 else "medium",
+            "title": "Competitor-branded demand detected in Google search",
+            "detail": f"Detected {len(matched_queries)} competitor-related queries with {total_impressions} impressions.",
+        })
+        counter_moves.append({
+            "priority": "high",
+            "title": "Build competitor comparison pages",
+            "detail": "Publish pages that position your offer against competitor alternatives and include clear proof points, reviews, and pricing clarity.",
+        })
+        counter_moves.append({
+            "priority": "high",
+            "title": "Defend branded and high-intent terms",
+            "detail": "Protect your most valuable branded/service keywords with exact-match coverage and message-match landing pages.",
+        })
+
+    ads_cpc_pressure = False
+    ads_pressure_details = []
+
+    if isinstance(google_ads_analysis, dict):
+        cpc_mom = (google_ads_analysis.get("month_over_month", {}).get("cpc", {}) or {}).get("change_pct")
+        if cpc_mom is not None and cpc_mom >= 15:
+            ads_cpc_pressure = True
+            ads_pressure_details.append(f"Google Ads CPC up {cpc_mom}%")
+
+    if isinstance(meta_analysis, dict):
+        meta_cpm_mom = (meta_analysis.get("month_over_month", {}).get("cpm", {}) or {}).get("change_pct")
+        if meta_cpm_mom is not None and meta_cpm_mom >= 20:
+            ads_cpc_pressure = True
+            ads_pressure_details.append(f"Meta CPM up {meta_cpm_mom}%")
+
+    if ads_cpc_pressure:
+        signals.append({
+            "severity": "medium",
+            "title": "Paid auction pressure is increasing",
+            "detail": ", ".join(ads_pressure_details),
+        })
+        counter_moves.append({
+            "priority": "medium",
+            "title": "Counter rising auction costs",
+            "detail": "Tighten match types, expand negative keywords weekly, and shift spend to campaigns with best conversion efficiency.",
+        })
+
+    if not signals:
+        signals.append({
+            "severity": "low",
+            "title": "No major competitor pressure signal this month",
+            "detail": "Continue monitoring branded search overlap and paid CPC/CPM trends monthly.",
+        })
+        counter_moves.append({
+            "priority": "low",
+            "title": "Keep a monthly competitor pulse",
+            "detail": "Track competitor query overlap, ad cost trends, and messaging changes each month to catch early shifts.",
+        })
+
+    return {
+        "competitors": competitors,
+        "signals": signals,
+        "matched_queries": sorted(matched_queries, key=lambda item: item.get("impressions", 0), reverse=True)[:12],
+        "counter_moves": counter_moves,
+    }
+
+
 def analyze_google_analytics(ga_data, prev_ga_data, benchmarks_website):
     """Analyze Google Analytics data against benchmarks and prior month."""
     if not ga_data:
@@ -427,6 +577,7 @@ def analyze_search_console(gsc_data, prev_gsc_data, benchmarks_seo, industry):
     # Opportunity analysis
     opportunities = gsc_data.get("opportunity_queries", [])
     analysis["keyword_opportunities"] = opportunities[:10]
+    analysis["keyword_recommendations"] = _build_keyword_recommendations(gsc_data, opportunities)
 
     if len(opportunities) > 5:
         analysis["highlights"].append(
@@ -666,6 +817,13 @@ def build_full_analysis(client_id, month, current_data, client_config):
         "blended_cpa": blended_cpa,
     }
 
+    competitor_watch = _build_competitor_watch(
+        client_config,
+        gsc_analysis,
+        meta_analysis,
+        google_ads_analysis,
+    )
+
     return {
         "client_id": client_id,
         "month": month,
@@ -682,5 +840,6 @@ def build_full_analysis(client_id, month, current_data, client_config):
         "roas": roas_data,
         "paid_summary": paid_summary,
         "kpi_status": kpi_status,
+        "competitor_watch": competitor_watch,
         "has_previous_month": bool(prev_data),
     }

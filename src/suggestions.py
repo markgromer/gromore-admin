@@ -72,6 +72,9 @@ def generate_suggestions(analysis):
     # ── Cross-platform suggestions ──
     suggestions.extend(_cross_platform_suggestions(analysis))
 
+    # ── Competitor watch suggestions ──
+    suggestions.extend(_competitor_watch_suggestions(analysis))
+
     # ── KPI target-driven suggestions ──
     suggestions.extend(_target_kpi_suggestions(analysis))
 
@@ -610,6 +613,42 @@ def _target_kpi_suggestions(analysis):
                 PRIORITY_HIGH, CATEGORY_BUDGET, "profitability",
                 data_point=f"ROAS gap: {roas_eval.get('gap_pct')}%"
             ))
+
+    return suggestions
+
+
+def _competitor_watch_suggestions(analysis):
+    suggestions = []
+    competitor_watch = analysis.get("competitor_watch")
+    if not isinstance(competitor_watch, dict):
+        return suggestions
+
+    competitors = competitor_watch.get("competitors", [])
+    signals = competitor_watch.get("signals", [])
+    counter_moves = competitor_watch.get("counter_moves", [])
+
+    for signal in signals[:2]:
+        severity = (signal.get("severity") or "low").lower()
+        priority = PRIORITY_HIGH if severity == "high" else PRIORITY_MEDIUM if severity == "medium" else PRIORITY_LOW
+        suggestions.append(make_suggestion(
+            f"Competitor Watch - {signal.get('title', 'Market signal')}",
+            signal.get("detail", ""),
+            priority,
+            CATEGORY_STRATEGY,
+            "competitive_positioning",
+            data_point=f"Competitors tracked: {', '.join(competitors[:4])}" if competitors else None,
+        ))
+
+    for move in counter_moves[:3]:
+        move_priority = (move.get("priority") or "medium").lower()
+        priority = PRIORITY_HIGH if move_priority == "high" else PRIORITY_LOW if move_priority == "low" else PRIORITY_MEDIUM
+        suggestions.append(make_suggestion(
+            move.get("title", "Competitor counter-move"),
+            move.get("detail", ""),
+            priority,
+            CATEGORY_STRATEGY,
+            "competitive_positioning",
+        ))
 
     return suggestions
 

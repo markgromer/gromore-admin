@@ -502,6 +502,58 @@
                 </p>
             </div>
             {% endif %}
+
+            {% if gsc.keyword_recommendations %}
+            <div class="channel-card">
+                <h3>Recommended Keywords to Grow Traffic</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <tr style="background: #f8f9fa;">
+                        <th style="padding: 8px; text-align: left;">Keyword</th>
+                        <th style="padding: 8px; text-align: right;">Impressions</th>
+                        <th style="padding: 8px; text-align: right;">Position</th>
+                        <th style="padding: 8px; text-align: left;">Why This Matters</th>
+                    </tr>
+                    {% for item in gsc.keyword_recommendations[:8] %}
+                    <tr>
+                        <td style="padding: 8px; border-top: 1px solid #eee;">{{ item.keyword }}</td>
+                        <td style="padding: 8px; border-top: 1px solid #eee; text-align: right;">{{ "{:,}".format(item.impressions or 0) }}</td>
+                        <td style="padding: 8px; border-top: 1px solid #eee; text-align: right;">{{ item.position }}</td>
+                        <td style="padding: 8px; border-top: 1px solid #eee;">{{ item.reason }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if competitor_watch %}
+        <div class="section">
+            <h2>Competitor Watch</h2>
+            <div class="summary-text">
+                {% if competitor_watch.competitors %}
+                <p><strong>Competitors tracked:</strong> {{ competitor_watch.competitors | join(', ') }}</p>
+                {% endif %}
+                {% if competitor_watch.signals %}
+                {% for signal in competitor_watch.signals[:2] %}
+                <p><strong>{{ signal.title }}</strong>: {{ signal.detail }}</p>
+                {% endfor %}
+                {% endif %}
+            </div>
+
+            {% if competitor_watch.counter_moves %}
+            <div class="channel-card">
+                <h3>How We Counter This</h3>
+                <div class="wins">
+                    {% for move in competitor_watch.counter_moves[:4] %}
+                    <div class="win-item">
+                        <span class="win-icon">•</span>
+                        <span class="win-text"><strong>{{ move.title }}</strong> - {{ move.detail }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
         </div>
         {% endif %}
 

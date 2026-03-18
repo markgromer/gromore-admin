@@ -514,6 +514,22 @@
             </table>
             {% endif %}
 
+            {% if gsc.keyword_recommendations %}
+            <h3>Recommended Keywords (Based on Search Traffic)</h3>
+            <table>
+                <tr><th>Keyword</th><th>Impressions</th><th>Position</th><th>Reason</th><th>Counter Action</th></tr>
+                {% for item in gsc.keyword_recommendations[:10] %}
+                <tr>
+                    <td>{{ item.keyword }}</td>
+                    <td>{{ "{:,}".format(item.impressions or 0) }}</td>
+                    <td>{{ item.position }}</td>
+                    <td>{{ item.reason }}</td>
+                    <td>{{ item.recommended_action }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% endif %}
+
             {% if gsc.top_pages %}
             <h3>Top Landing Pages</h3>
             <table>
@@ -528,6 +544,51 @@
                 </tr>
                 {% endfor %}
             </table>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if competitor_watch %}
+        <div class="card">
+            <h2>Competitor Watch</h2>
+            {% if competitor_watch.competitors %}
+            <p style="font-size: 13px; color: #444; margin-bottom: 8px;">
+                Tracking: {{ competitor_watch.competitors | join(', ') }}
+            </p>
+            {% endif %}
+
+            {% if competitor_watch.signals %}
+            <h3>Detected Signals</h3>
+            {% for signal in competitor_watch.signals %}
+            <div class="alert-item {{ 'alert-concern' if signal.severity in ('high', 'medium') else 'alert-highlight' }}" style="margin-bottom: 8px;">
+                <strong>{{ signal.title }}</strong> - {{ signal.detail }}
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            {% if competitor_watch.matched_queries %}
+            <h3>Competitor-Related Search Queries</h3>
+            <table>
+                <tr><th>Competitor</th><th>Query</th><th>Impressions</th><th>Clicks</th><th>Position</th></tr>
+                {% for item in competitor_watch.matched_queries[:10] %}
+                <tr>
+                    <td>{{ item.competitor }}</td>
+                    <td>{{ item.query }}</td>
+                    <td>{{ "{:,}".format(item.impressions or 0) }}</td>
+                    <td>{{ item.clicks or 0 }}</td>
+                    <td>{{ item.position }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% endif %}
+
+            {% if competitor_watch.counter_moves %}
+            <h3>Recommended Counter Moves</h3>
+            <ul style="margin-left: 18px; font-size: 13px; color: #444; line-height: 1.7;">
+                {% for move in competitor_watch.counter_moves %}
+                <li><strong>{{ move.title }}</strong> - {{ move.detail }}</li>
+                {% endfor %}
+            </ul>
             {% endif %}
         </div>
         {% endif %}
