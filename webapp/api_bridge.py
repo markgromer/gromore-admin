@@ -233,7 +233,7 @@ def _pull_ga4(property_id, access_token, start_date, end_date):
     row = result.get("rows", [{}])[0] if result.get("rows") else {}
     values = [v.get("value", "0") for v in row.get("metricValues", [])]
 
-    return {
+    totals = {
         "sessions": int(float(values[0])) if len(values) > 0 else 0,
         "users": int(float(values[1])) if len(values) > 1 else 0,
         "new_users": int(float(values[2])) if len(values) > 2 else 0,
@@ -242,6 +242,12 @@ def _pull_ga4(property_id, access_token, start_date, end_date):
         "pageviews": int(float(values[5])) if len(values) > 5 else 0,
         "conversions": int(float(values[6])) if len(values) > 6 else 0,
     }
+
+    # Calculate derived metrics
+    if totals["sessions"] > 0 and totals["conversions"] > 0:
+        totals["conversion_rate"] = round(totals["conversions"] / totals["sessions"] * 100, 2)
+
+    return {"totals": totals, "by_source": {}, "row_count": 1, "columns_found": list(totals.keys())}
 
 
 def _pull_gsc(site_url, access_token, start_date, end_date):
@@ -279,11 +285,16 @@ def _pull_gsc(site_url, access_token, start_date, end_date):
         })
 
     return {
-        "total_clicks": total_clicks,
-        "total_impressions": total_impressions,
-        "avg_ctr": avg_ctr,
-        "avg_position": avg_position,
+        "totals": {
+            "clicks": total_clicks,
+            "impressions": total_impressions,
+            "ctr": avg_ctr,
+            "avg_position": avg_position,
+        },
         "top_queries": top_queries,
+        "top_pages": [],
+        "opportunity_queries": [],
+        "row_count": len(rows),
     }
 
 
@@ -315,17 +326,20 @@ def _pull_meta(ad_account_id, access_token, start_date, end_date):
             cost_per_lead = float(cpa.get("value", 0))
 
     spend = float(data_row.get("spend", 0))
+    clicks = int(data_row.get("clicks", 0))
+    impressions = int(data_row.get("impressions", 0))
 
-    return {
+    totals = {
         "spend": spend,
-        "impressions": int(data_row.get("impressions", 0)),
-        "clicks": int(data_row.get("clicks", 0)),
+        "impressions": impressions,
+        "clicks": clicks,
         "ctr": float(data_row.get("ctr", 0)),
         "cpc": float(data_row.get("cpc", 0)),
         "cpm": float(data_row.get("cpm", 0)),
         "reach": int(data_row.get("reach", 0)),
         "frequency": float(data_row.get("frequency", 0)),
-        "leads": leads,
-        "cost_per_lead": cost_per_lead,
-        "roas": 0,
+        "results": leads,
+        "cost_per_result": cost_per_lead,
     }
+
+    return {"totals": totals, "by_campaign": {}, "by_ad_set": {}, "row_count": 1}

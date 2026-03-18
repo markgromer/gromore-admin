@@ -45,7 +45,8 @@ def connect(brand_id):
         )
         return redirect(url_for("brand_detail", brand_id=brand_id))
 
-    callback_url = current_app.config["APP_URL"] + url_for("google_oauth.callback")
+    callback_url = current_app.config["APP_URL"].rstrip("/") + url_for("google_oauth.callback")
+    current_app.logger.info("Google OAuth redirect_uri: %s", callback_url)
 
     # Store brand_id in session for the callback
     session["google_oauth_brand_id"] = brand_id
@@ -85,7 +86,7 @@ def callback():
         return redirect(url_for("brands_list"))
 
     # Exchange code for tokens
-    callback_url = current_app.config["APP_URL"] + url_for("google_oauth.callback")
+    callback_url = current_app.config["APP_URL"].rstrip("/") + url_for("google_oauth.callback")
     client_id = (db.get_setting("google_client_id", "") or current_app.config.get("GOOGLE_CLIENT_ID", "")).strip()
     client_secret = (db.get_setting("google_client_secret", "") or current_app.config.get("GOOGLE_CLIENT_SECRET", "")).strip()
     token_resp = requests.post(GOOGLE_TOKEN_URL, data={

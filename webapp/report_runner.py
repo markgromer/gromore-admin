@@ -91,9 +91,9 @@ def build_analysis_and_suggestions_for_brand(db, brand, month):
             from webapp.api_bridge import pull_api_data_for_brand
 
             api_data, api_errors = pull_api_data_for_brand(brand, connections, month)
-            # Merge: API data fills in gaps from CSV
+            # Merge: API data wins over CSV (more current from live connection)
             for key in ("google_analytics", "meta_business", "search_console"):
-                if key in api_data and api_data[key] and key not in data:
+                if key in api_data and api_data[key]:
                     data[key] = api_data[key]
         except Exception as e:
             api_errors.append(f"API bridge error: {str(e)}")

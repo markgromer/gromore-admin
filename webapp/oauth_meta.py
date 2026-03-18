@@ -46,7 +46,7 @@ def connect(brand_id):
         )
         return redirect(url_for("brand_detail", brand_id=brand_id))
 
-    callback_url = current_app.config["APP_URL"] + url_for("meta_oauth.callback")
+    callback_url = current_app.config["APP_URL"].rstrip("/") + url_for("meta_oauth.callback")
     session["meta_oauth_brand_id"] = brand_id
 
     params = {
@@ -91,7 +91,7 @@ def callback():
         )
         return redirect(url_for("brand_detail", brand_id=brand_id))
 
-    callback_url = current_app.config["APP_URL"] + url_for("meta_oauth.callback")
+    callback_url = current_app.config["APP_URL"].rstrip("/") + url_for("meta_oauth.callback")
 
     # Exchange code for short-lived token
     token_resp = requests.get(META_TOKEN_URL, params={

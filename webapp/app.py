@@ -166,7 +166,7 @@ def create_app():
     def _auto_detect_app_url():
         # Use X-Forwarded-Proto (set by Render/load balancers) for correct scheme
         scheme = request.headers.get("X-Forwarded-Proto", request.scheme)
-        current_url = app.config.get("APP_URL", "")
+        current_url = app.config.get("APP_URL", "").rstrip("/")
         # Fix any previously saved http:// URL that should be https://
         if current_url and current_url.startswith("http://") and scheme == "https":
             fixed = current_url.replace("http://", "https://", 1)
