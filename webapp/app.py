@@ -628,6 +628,7 @@ def create_app():
             closed_deals_num = 0
 
         db.upsert_brand_month_finance(brand["id"], month, revenue_num, closed_deals_num, notes)
+        db.mark_brand_webhook_received(brand["id"])
 
         return jsonify({
             "ok": True,

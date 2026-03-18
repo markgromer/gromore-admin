@@ -231,6 +231,14 @@
                     <button type="submit" class="btn btn-sm btn-primary">
                         <i class="bi bi-save"></i> Save Revenue Data
                     </button>
+                    <small class="text-muted d-block mt-2">
+                        Last webhook received:
+                        {% if brand.crm_last_webhook_at %}
+                            <strong>{{ brand.crm_last_webhook_at[:16] }}</strong>
+                        {% else %}
+                            Never
+                        {% endif %}
+                    </small>
                     <small class="text-muted d-block mt-2">Used to calculate true ROAS and target performance for this month.</small>
                 </form>
             </div>

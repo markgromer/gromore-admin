@@ -47,6 +47,7 @@ class WebDB:
                 gsc_site_url TEXT DEFAULT '',
                 meta_ad_account_id TEXT DEFAULT '',
                 google_ads_customer_id TEXT DEFAULT '',
+                crm_last_webhook_at TEXT DEFAULT '',
                 wp_category_id INTEGER DEFAULT 0,
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now'))
@@ -152,6 +153,7 @@ class WebDB:
             ("crm_api_key", "TEXT DEFAULT ''"),
             ("crm_webhook_url", "TEXT DEFAULT ''"),
             ("crm_pipeline_id", "TEXT DEFAULT ''"),
+            ("crm_last_webhook_at", "TEXT DEFAULT ''"),
             ("google_ads_customer_id", "TEXT DEFAULT ''"),
         ]
         for col_name, col_def in new_brand_cols:
@@ -524,6 +526,15 @@ class WebDB:
                 updated_at = datetime('now')
             """,
             (brand_id, month, rev, deals, notes or ""),
+        )
+        conn.commit()
+        conn.close()
+
+    def mark_brand_webhook_received(self, brand_id):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE brands SET crm_last_webhook_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+            (brand_id,),
         )
         conn.commit()
         conn.close()

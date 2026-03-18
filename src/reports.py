@@ -32,6 +32,17 @@ def _month_display(month_str):
         return month_str
 
 
+def _round_report_values(value, places=3):
+    """Recursively round floats for report rendering precision."""
+    if isinstance(value, float):
+        return round(value, places)
+    if isinstance(value, list):
+        return [_round_report_values(v, places) for v in value]
+    if isinstance(value, dict):
+        return {k: _round_report_values(v, places) for k, v in value.items()}
+    return value
+
+
 def generate_internal_report(analysis, suggestions_internal, output_dir=None, branding=None):
     """
     Generate the internal team report (HTML).
@@ -42,9 +53,11 @@ def generate_internal_report(analysis, suggestions_internal, output_dir=None, br
         output_dir: Optional custom output directory
         branding: Optional dict with agency_name, agency_logo_url, agency_website, agency_color
     """
-    client_id = analysis["client_id"]
-    month = analysis["month"]
-    client_config = analysis["client_config"]
+    rounded_analysis = _round_report_values(analysis, places=3)
+
+    client_id = rounded_analysis["client_id"]
+    month = rounded_analysis["month"]
+    client_config = rounded_analysis["client_config"]
 
     if output_dir is None:
         output_dir = REPORTS_DIR / client_id / month
@@ -61,22 +74,22 @@ def generate_internal_report(analysis, suggestions_internal, output_dir=None, br
         "client_name": client_config.get("display_name", client_id),
         "month": month,
         "month_display": _month_display(month),
-        "industry": analysis.get("industry", ""),
+        "industry": rounded_analysis.get("industry", ""),
         "monthly_budget": client_config.get("monthly_budget", 0),
         "generated_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "overall_grade": analysis.get("overall_grade", "N/A"),
-        "overall_score": analysis.get("overall_score"),
-        "highlights": analysis.get("highlights", []),
-        "concerns": analysis.get("concerns", []),
-        "roas": _dict_to_obj(analysis.get("roas", {})),
-        "paid_summary": _dict_to_obj(analysis.get("paid_summary", {})),
-        "kpi_status": _dict_to_obj(analysis.get("kpi_status", {})),
-        "ga": _dict_to_obj(analysis.get("google_analytics")) if analysis.get("google_analytics") else None,
-        "meta": _dict_to_obj(analysis.get("meta_business")) if analysis.get("meta_business") else None,
-        "google_ads": _dict_to_obj(analysis.get("google_ads")) if analysis.get("google_ads") else None,
-        "gsc": _dict_to_obj(analysis.get("search_console")) if analysis.get("search_console") else None,
+        "overall_grade": rounded_analysis.get("overall_grade", "N/A"),
+        "overall_score": rounded_analysis.get("overall_score"),
+        "highlights": rounded_analysis.get("highlights", []),
+        "concerns": rounded_analysis.get("concerns", []),
+        "roas": _dict_to_obj(rounded_analysis.get("roas", {})),
+        "paid_summary": _dict_to_obj(rounded_analysis.get("paid_summary", {})),
+        "kpi_status": _dict_to_obj(rounded_analysis.get("kpi_status", {})),
+        "ga": _dict_to_obj(rounded_analysis.get("google_analytics")) if rounded_analysis.get("google_analytics") else None,
+        "meta": _dict_to_obj(rounded_analysis.get("meta_business")) if rounded_analysis.get("meta_business") else None,
+        "google_ads": _dict_to_obj(rounded_analysis.get("google_ads")) if rounded_analysis.get("google_ads") else None,
+        "gsc": _dict_to_obj(rounded_analysis.get("search_console")) if rounded_analysis.get("search_console") else None,
         "suggestions": suggestions_internal,
-        "ai_brief": analysis.get("ai_brief_internal"),
+        "ai_brief": rounded_analysis.get("ai_brief_internal"),
         "branding": branding or {},
     }
 
@@ -99,9 +112,11 @@ def generate_client_report(analysis, suggestions_client, output_dir=None, brandi
         output_dir: Optional custom output directory
         branding: Optional dict with agency_name, agency_logo_url, agency_website, agency_color
     """
-    client_id = analysis["client_id"]
-    month = analysis["month"]
-    client_config = analysis["client_config"]
+    rounded_analysis = _round_report_values(analysis, places=3)
+
+    client_id = rounded_analysis["client_id"]
+    month = rounded_analysis["month"]
+    client_config = rounded_analysis["client_config"]
 
     if output_dir is None:
         output_dir = REPORTS_DIR / client_id / month
@@ -114,10 +129,10 @@ def generate_client_report(analysis, suggestions_client, output_dir=None, brandi
     template = env.get_template("client_report.html")
 
     # Calculate client-friendly KPIs
-    meta = analysis.get("meta_business")
-    google_ads = analysis.get("google_ads")
-    ga = analysis.get("google_analytics")
-    gsc = analysis.get("search_console")
+    meta = rounded_analysis.get("meta_business")
+    google_ads = rounded_analysis.get("google_ads")
+    ga = rounded_analysis.get("google_analytics")
+    gsc = rounded_analysis.get("search_console")
 
     total_leads = 0
     total_spend = 0
@@ -145,7 +160,7 @@ def generate_client_report(analysis, suggestions_client, output_dir=None, brandi
         total_leads += ga.get("metrics", {}).get("conversions", 0)
 
     if total_leads > 0 and total_spend > 0:
-        cost_per_lead = total_spend / total_leads
+        cost_per_lead = round(total_spend / total_leads, 3)
 
     website_sessions = None
     sessions_change = None
@@ -160,7 +175,7 @@ def generate_client_report(analysis, suggestions_client, output_dir=None, brandi
         "month": month,
         "month_display": _month_display(month),
         "generated_date": datetime.now().strftime("%Y-%m-%d"),
-        "overall_grade": analysis.get("overall_grade", "N/A"),
+        "overall_grade": rounded_analysis.get("overall_grade", "N/A"),
         "total_leads": total_leads if total_leads > 0 else None,
         "total_spend": total_spend if total_spend > 0 else None,
         "cost_per_lead": cost_per_lead,
@@ -168,16 +183,16 @@ def generate_client_report(analysis, suggestions_client, output_dir=None, brandi
         "cpl_change": cpl_change,
         "website_sessions": website_sessions,
         "sessions_change": sessions_change,
-        "highlights": analysis.get("highlights", []),
-        "concerns": analysis.get("concerns", []),
-        "paid_summary": _dict_to_obj(analysis.get("paid_summary", {})),
-        "kpi_status": _dict_to_obj(analysis.get("kpi_status", {})),
+        "highlights": rounded_analysis.get("highlights", []),
+        "concerns": rounded_analysis.get("concerns", []),
+        "paid_summary": _dict_to_obj(rounded_analysis.get("paid_summary", {})),
+        "kpi_status": _dict_to_obj(rounded_analysis.get("kpi_status", {})),
         "ga": _dict_to_obj(ga) if ga else None,
         "meta": _dict_to_obj(meta) if meta else None,
         "google_ads": _dict_to_obj(google_ads) if google_ads else None,
         "gsc": _dict_to_obj(gsc) if gsc else None,
         "client_suggestions": suggestions_client,
-        "ai_brief": analysis.get("ai_brief_client"),
+        "ai_brief": rounded_analysis.get("ai_brief_client"),
         "branding": branding or {},
     }
 

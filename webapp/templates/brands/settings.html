@@ -167,6 +167,14 @@
                         <i class="bi bi-plug"></i> Send Test Webhook
                     </button>
                     <span id="webhook-test-result" class="small d-block mt-2 text-muted"></span>
+                    <small class="text-muted d-block mt-2">
+                        Last webhook received:
+                        {% if brand.crm_last_webhook_at %}
+                            <strong>{{ brand.crm_last_webhook_at[:16] }}</strong>
+                        {% else %}
+                            Never
+                        {% endif %}
+                    </small>
                     {% if brand.crm_type %}
                     <span class="badge bg-success mt-2">{{ brand.crm_type|title }} configured</span>
                     {% endif %}
