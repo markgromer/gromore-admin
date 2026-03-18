@@ -134,6 +134,18 @@ class WebDB:
                 key TEXT PRIMARY KEY,
                 value TEXT DEFAULT ''
             );
+
+            CREATE TABLE IF NOT EXISTS client_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                is_active INTEGER DEFAULT 1,
+                last_login_at TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
         """)
         conn.commit()
 
@@ -610,6 +622,85 @@ class WebDB:
             "UPDATE reports SET published_at = datetime('now'), published_url = ? WHERE id = ?",
             (url, report_id),
         )
+        conn.commit()
+        conn.close()
+
+    # ── Client Users ──
+
+    def get_client_users_for_brand(self, brand_id):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM client_users WHERE brand_id = ? ORDER BY display_name",
+            (brand_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_client_user(self, client_user_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM client_users WHERE id = ?", (client_user_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def create_client_user(self, brand_id, email, password, display_name):
+        conn = self._conn()
+        password_hash = generate_password_hash(password)
+        try:
+            conn.execute(
+                "INSERT INTO client_users (brand_id, email, password_hash, display_name) VALUES (?, ?, ?, ?)",
+                (brand_id, email, password_hash, display_name),
+            )
+            conn.commit()
+            row = conn.execute("SELECT id FROM client_users WHERE email = ?", (email,)).fetchone()
+            conn.close()
+            return int(row["id"]) if row else None
+        except sqlite3.IntegrityError:
+            conn.close()
+            return None
+
+    def authenticate_client(self, email, password):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT cu.*, b.display_name AS brand_name, b.slug AS brand_slug "
+            "FROM client_users cu JOIN brands b ON cu.brand_id = b.id "
+            "WHERE cu.email = ? AND cu.is_active = 1",
+            (email,),
+        ).fetchone()
+        conn.close()
+        if row and check_password_hash(row["password_hash"], password):
+            return dict(row)
+        return None
+
+    def update_client_user_login(self, client_user_id):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE client_users SET last_login_at = datetime('now') WHERE id = ?",
+            (client_user_id,),
+        )
+        conn.commit()
+        conn.close()
+
+    def update_client_user_password(self, client_user_id, new_password):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE client_users SET password_hash = ? WHERE id = ?",
+            (generate_password_hash(new_password), client_user_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def toggle_client_user_active(self, client_user_id):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE client_users SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?",
+            (client_user_id,),
+        )
+        conn.commit()
+        conn.close()
+
+    def delete_client_user(self, client_user_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM client_users WHERE id = ?", (client_user_id,))
         conn.commit()
         conn.close()
 

@@ -203,6 +203,68 @@
         </div>
     </div>
 
+    <!-- Client Portal Logins -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-person-badge"></i> Client Portal Logins</strong></div>
+            <div class="card-body">
+                {% if client_users %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-3">
+                        <thead>
+                            <tr><th>Name</th><th>Email</th><th>Status</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                            {% for cu in client_users %}
+                            <tr>
+                                <td>{{ cu.display_name }}</td>
+                                <td><small>{{ cu.email }}</small></td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('client_user_toggle', client_user_id=cu.id) }}" class="d-inline">
+                                        <button type="submit" class="btn btn-sm {{ 'btn-success' if cu.is_active else 'btn-outline-secondary' }}">
+                                            {{ 'Active' if cu.is_active else 'Disabled' }}
+                                        </button>
+                                    </form>
+                                </td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('client_user_delete', client_user_id=cu.id) }}" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted small mb-3">No client logins yet. Create one so your client can view their own dashboard.</p>
+                {% endif %}
+
+                <form method="POST" action="{{ url_for('client_user_create', brand_id=brand.id) }}">
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <input type="text" name="display_name" class="form-control form-control-sm" placeholder="Name" required>
+                        </div>
+                        <div class="col-md-4">
+                            <input type="email" name="email" class="form-control form-control-sm" placeholder="Email" required>
+                        </div>
+                        <div class="col-md-4">
+                            <input type="password" name="password" class="form-control form-control-sm" placeholder="Password" required minlength="6">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-primary mt-2"><i class="bi bi-plus"></i> Create Login</button>
+                </form>
+
+                {% if client_users %}
+                <hr class="my-2">
+                <small class="text-muted">
+                    Client portal URL: <code>{{ app_url }}/client/login</code>
+                </small>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
     <!-- Revenue Tracking (CRM/Offline) -->
     <div class="col-lg-6">
         <div class="card">

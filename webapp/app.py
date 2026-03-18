@@ -22,6 +22,7 @@ from webapp.database import WebDB
 from webapp.oauth_google import google_bp
 from webapp.oauth_meta import meta_bp
 from webapp.jobs import jobs_bp
+from webapp.client_portal import client_bp
 
 BASE_DIR = Path(__file__).parent.parent
 
@@ -145,6 +146,7 @@ def create_app():
     app.register_blueprint(google_bp, url_prefix="/oauth/google")
     app.register_blueprint(meta_bp, url_prefix="/oauth/meta")
     app.register_blueprint(jobs_bp, url_prefix="/jobs")
+    app.register_blueprint(client_bp)
 
     # Exempt OAuth callback routes from CSRF (external redirects have no token)
     csrf.exempt(google_bp)
@@ -352,6 +354,9 @@ def create_app():
 
         ai_chat_messages = db.get_ai_chat_messages(brand_id, active_month, limit=30)
 
+        client_users = db.get_client_users_for_brand(brand_id)
+        portal_url = (app.config.get("APP_URL", "") or "").rstrip("/")
+
         return render_template(
             "brands/detail.html",
             brand=brand,
@@ -364,6 +369,8 @@ def create_app():
             ai_chat_messages=ai_chat_messages,
             openai_enabled=bool(openai_key),
             month_finance=month_finance,
+            client_users=client_users,
+            app_url=portal_url,
         )
 
     @app.route("/brands/<int:brand_id>/insights")
@@ -823,6 +830,46 @@ def create_app():
             abort(404)
         db.toggle_contact_autosend(contact_id)
         return redirect(url_for("brand_detail", brand_id=contact["brand_id"]))
+
+    # ── Client Portal User Management ──
+    @app.route("/brands/<int:brand_id>/client-users", methods=["POST"])
+    @login_required
+    def client_user_create(brand_id):
+        brand = db.get_brand(brand_id)
+        if not brand:
+            abort(404)
+        display_name = request.form.get("display_name", "").strip()
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "")
+        if display_name and email and password:
+            result = db.create_client_user(brand_id, email, password, display_name)
+            if result:
+                flash(f"Client login created for {display_name}", "success")
+            else:
+                flash("A client login with that email already exists", "error")
+        else:
+            flash("Name, email, and password are required", "error")
+        return redirect(url_for("brand_detail", brand_id=brand_id))
+
+    @app.route("/client-users/<int:client_user_id>/toggle", methods=["POST"])
+    @login_required
+    def client_user_toggle(client_user_id):
+        cu = db.get_client_user(client_user_id)
+        if not cu:
+            abort(404)
+        db.toggle_client_user_active(client_user_id)
+        flash("Client login status updated", "success")
+        return redirect(url_for("brand_detail", brand_id=cu["brand_id"]))
+
+    @app.route("/client-users/<int:client_user_id>/delete", methods=["POST"])
+    @login_required
+    def client_user_delete(client_user_id):
+        cu = db.get_client_user(client_user_id)
+        if not cu:
+            abort(404)
+        db.delete_client_user(client_user_id)
+        flash("Client login removed", "success")
+        return redirect(url_for("brand_detail", brand_id=cu["brand_id"]))
 
     # ── Brand API field save (AJAX) ──
     @app.route("/brands/<int:brand_id>/api-field", methods=["POST"])
