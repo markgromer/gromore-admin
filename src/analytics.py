@@ -615,10 +615,12 @@ def build_full_analysis(client_id, month, current_data, client_config):
             prev_data[source] = json.loads(prev_rows[0]["data_json"])
 
     # Run analyses
+    website_benchmarks = benchmarks.get("website", {})
+    industry_website = website_benchmarks.get(industry, website_benchmarks.get("_default", {}))
     ga_analysis = analyze_google_analytics(
         current_data.get("google_analytics"),
         prev_data.get("google_analytics"),
-        benchmarks.get("website", {})
+        industry_website
     )
 
     meta_analysis = analyze_meta_business(
