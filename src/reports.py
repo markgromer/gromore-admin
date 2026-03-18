@@ -9,6 +9,7 @@ Two report types:
 import os
 from pathlib import Path
 from datetime import datetime
+from decimal import Decimal
 from jinja2 import Environment, FileSystemLoader
 
 
@@ -17,9 +18,17 @@ REPORTS_DIR = Path(__file__).parent.parent / "reports"
 
 
 def _get_jinja_env():
+    def _finalize_display_value(value):
+        if isinstance(value, float):
+            return round(value, 3)
+        if isinstance(value, Decimal):
+            return round(float(value), 3)
+        return value
+
     return Environment(
         loader=FileSystemLoader(str(TEMPLATES_DIR)),
         autoescape=True,
+        finalize=_finalize_display_value,
     )
 
 
