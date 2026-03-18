@@ -2,16 +2,17 @@
 Client Portal Blueprint
 
 Separate login and dashboard for clients (brand owners) to see their
-ad performance, understand what the numbers mean, and get step-by-step
-action instructions for improving their ads.
+ad performance, understand what the numbers mean, get step-by-step
+action instructions, and manage their ad campaigns directly.
 """
 import os
+import json
 from functools import wraps
 from datetime import datetime
 
 from flask import (
     Blueprint, render_template, request, redirect,
-    url_for, flash, session, abort,
+    url_for, flash, session, abort, jsonify,
 )
 
 client_bp = Blueprint(
@@ -136,6 +137,269 @@ def client_actions():
         error=error,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
+
+
+# ── Campaigns ──
+
+@client_bp.route("/campaigns")
+@client_login_required
+def client_campaigns():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    from webapp.campaign_manager import list_all_campaigns, get_campaign_recommendations
+
+    campaigns = list_all_campaigns(db, brand)
+    recommendations = []
+
+    if any(campaigns.values()):
+        try:
+            recommendations = get_campaign_recommendations(brand, campaigns)
+        except Exception:
+            pass
+
+    changes = db.get_campaign_changes(brand_id, limit=20)
+
+    return render_template(
+        "client_campaigns.html",
+        brand=brand,
+        campaigns=campaigns,
+        recommendations=recommendations,
+        changes=changes,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/campaigns/<platform>/<campaign_id>")
+@client_login_required
+def client_campaign_detail(platform, campaign_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    if platform not in ("google", "meta"):
+        abort(404)
+
+    from webapp.campaign_manager import get_google_campaign_detail, get_meta_campaign_detail
+
+    if platform == "google":
+        campaign = get_google_campaign_detail(db, brand, campaign_id)
+    else:
+        campaign = get_meta_campaign_detail(db, brand, campaign_id)
+
+    if not campaign:
+        flash("Campaign not found or API error.", "error")
+        return redirect(url_for("client.client_campaigns"))
+
+    changes = db.get_campaign_changes(brand_id, limit=20)
+
+    return render_template(
+        "client_campaign_detail.html",
+        brand=brand,
+        campaign=campaign,
+        platform=platform,
+        changes=[c for c in changes if c.get("campaign_id") == campaign_id],
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/campaigns/<platform>/<campaign_id>/status", methods=["POST"])
+@client_login_required
+def client_campaign_status(platform, campaign_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    new_status = request.form.get("status", "").upper()
+    if platform == "google" and new_status not in ("PAUSED", "ENABLED"):
+        flash("Invalid status.", "error")
+        return redirect(url_for("client.client_campaigns"))
+    if platform == "meta" and new_status not in ("PAUSED", "ACTIVE"):
+        flash("Invalid status.", "error")
+        return redirect(url_for("client.client_campaigns"))
+
+    from webapp.campaign_manager import update_google_campaign_status, update_meta_campaign_status
+
+    changed_by = session.get("client_name", "client")
+
+    if platform == "google":
+        result = update_google_campaign_status(db, brand, campaign_id, new_status, changed_by)
+    else:
+        result = update_meta_campaign_status(db, brand, campaign_id, new_status, changed_by)
+
+    if result.get("success"):
+        label = "paused" if new_status in ("PAUSED",) else "enabled"
+        flash(f"Campaign {label} successfully.", "success")
+    else:
+        flash(f"Failed: {result.get('error', 'Unknown error')}", "error")
+
+    return redirect(url_for("client.client_campaign_detail", platform=platform, campaign_id=campaign_id))
+
+
+@client_bp.route("/campaigns/<platform>/<campaign_id>/budget", methods=["POST"])
+@client_login_required
+def client_campaign_budget(platform, campaign_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    try:
+        new_budget = float(request.form.get("daily_budget", 0))
+    except (ValueError, TypeError):
+        flash("Invalid budget amount.", "error")
+        return redirect(url_for("client.client_campaign_detail", platform=platform, campaign_id=campaign_id))
+
+    if new_budget < 1 or new_budget > 10000:
+        flash("Budget must be between $1 and $10,000 per day.", "error")
+        return redirect(url_for("client.client_campaign_detail", platform=platform, campaign_id=campaign_id))
+
+    from webapp.campaign_manager import update_google_budget, update_meta_budget
+
+    changed_by = session.get("client_name", "client")
+
+    if platform == "google":
+        budget_resource = request.form.get("budget_resource", "")
+        result = update_google_budget(db, brand, campaign_id, budget_resource, new_budget, changed_by)
+    else:
+        result = update_meta_budget(db, brand, campaign_id, new_budget, changed_by)
+
+    if result.get("success"):
+        flash(f"Daily budget updated to ${new_budget:.2f}.", "success")
+    else:
+        flash(f"Failed: {result.get('error', 'Unknown error')}", "error")
+
+    return redirect(url_for("client.client_campaign_detail", platform=platform, campaign_id=campaign_id))
+
+
+@client_bp.route("/campaigns/google/<campaign_id>/negative-keyword", methods=["POST"])
+@client_login_required
+def client_add_negative_keyword(campaign_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    keyword = request.form.get("keyword", "").strip()
+    match_type = request.form.get("match_type", "BROAD").upper()
+
+    if not keyword:
+        flash("Keyword cannot be empty.", "error")
+        return redirect(url_for("client.client_campaign_detail", platform="google", campaign_id=campaign_id))
+
+    if match_type not in ("BROAD", "PHRASE", "EXACT"):
+        match_type = "BROAD"
+
+    from webapp.campaign_manager import add_google_negative_keyword
+
+    changed_by = session.get("client_name", "client")
+    result = add_google_negative_keyword(db, brand, campaign_id, keyword, match_type, changed_by)
+
+    if result.get("success"):
+        flash(f'Negative keyword "{keyword}" added.', "success")
+    else:
+        flash(f"Failed: {result.get('error', 'Unknown error')}", "error")
+
+    return redirect(url_for("client.client_campaign_detail", platform="google", campaign_id=campaign_id))
+
+
+# ── Campaign Creator ──
+
+@client_bp.route("/campaigns/new")
+@client_login_required
+def client_campaign_create():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    connections = db.get_brand_connections(brand_id)
+    has_google = (connections.get("google", {}).get("status") == "connected"
+                  and brand.get("google_ads_customer_id"))
+    has_meta = (connections.get("meta", {}).get("status") == "connected"
+                and brand.get("meta_ad_account_id"))
+
+    return render_template(
+        "client_campaign_create.html",
+        brand=brand,
+        has_google=has_google,
+        has_meta=has_meta,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/campaigns/new/generate", methods=["POST"])
+@client_login_required
+def client_campaign_generate():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"success": False, "error": "Brand not found"})
+
+    service = request.form.get("service", "").strip()
+    location = request.form.get("location", "").strip()
+    monthly_budget = request.form.get("monthly_budget", "0").strip()
+    platform = request.form.get("platform", "").strip()
+    notes = request.form.get("notes", "").strip()
+
+    if not service or not location or not monthly_budget or not platform:
+        return jsonify({"success": False, "error": "All fields are required"})
+
+    try:
+        monthly_budget = float(monthly_budget)
+        if monthly_budget < 100:
+            return jsonify({"success": False, "error": "Minimum monthly budget is $100"})
+    except (ValueError, TypeError):
+        return jsonify({"success": False, "error": "Invalid budget"})
+
+    from webapp.campaign_manager import generate_campaign_plan
+
+    result = generate_campaign_plan(brand, service, location, monthly_budget, platform, notes)
+    return jsonify(result)
+
+
+@client_bp.route("/campaigns/new/launch", methods=["POST"])
+@client_login_required
+def client_campaign_launch():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"success": False, "error": "Brand not found"})
+
+    plan_json = request.form.get("plan", "")
+    if not plan_json:
+        return jsonify({"success": False, "error": "No campaign plan provided"})
+
+    try:
+        plan = json.loads(plan_json)
+    except json.JSONDecodeError:
+        return jsonify({"success": False, "error": "Invalid plan data"})
+
+    platform = plan.get("platform", "")
+    changed_by = session.get("client_name", "client")
+
+    from webapp.campaign_manager import launch_google_campaign, launch_meta_campaign
+
+    if platform == "google":
+        result = launch_google_campaign(db, brand, plan, changed_by)
+    elif platform == "meta":
+        result = launch_meta_campaign(db, brand, plan, changed_by)
+    else:
+        return jsonify({"success": False, "error": "Invalid platform"})
+
+    return jsonify(result)
 
 
 # ── Context processor ──

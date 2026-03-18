@@ -146,6 +146,22 @@ class WebDB:
                 created_at TEXT DEFAULT (datetime('now')),
                 FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
             );
+
+            CREATE TABLE IF NOT EXISTS campaign_changes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                platform TEXT NOT NULL,
+                campaign_id TEXT NOT NULL,
+                campaign_name TEXT DEFAULT '',
+                action TEXT NOT NULL,
+                details TEXT DEFAULT '',
+                changed_by TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_campaign_changes_brand
+            ON campaign_changes(brand_id, created_at DESC);
         """)
         conn.commit()
 
@@ -703,6 +719,28 @@ class WebDB:
         conn.execute("DELETE FROM client_users WHERE id = ?", (client_user_id,))
         conn.commit()
         conn.close()
+
+    # ── Campaign Changes Audit Log ──
+
+    def log_campaign_change(self, brand_id, platform, campaign_id, campaign_name,
+                            action, details, changed_by):
+        conn = self._conn()
+        conn.execute(
+            "INSERT INTO campaign_changes (brand_id, platform, campaign_id, campaign_name, "
+            "action, details, changed_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (brand_id, platform, campaign_id, campaign_name, action, details, changed_by),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_campaign_changes(self, brand_id, limit=50):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM campaign_changes WHERE brand_id = ? ORDER BY created_at DESC LIMIT ?",
+            (brand_id, limit),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
 
     # ── Settings ──
 

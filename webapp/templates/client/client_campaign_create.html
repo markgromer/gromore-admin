@@ -1,0 +1,432 @@
+{% extends "client/client_base.html" %}
+
+{% block title %}Create Campaign{% endblock %}
+
+{% block head %}
+<style>
+    .wizard-step { display: none; }
+    .wizard-step.active { display: block; }
+    .platform-card {
+        cursor: pointer;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1.5rem;
+        text-align: center;
+        transition: all .2s;
+    }
+    .platform-card:hover { border-color: #3b82f6; background: #f0f7ff; }
+    .platform-card.selected { border-color: #3b82f6; background: #eff6ff; }
+    .platform-card.disabled { opacity: .4; cursor: not-allowed; }
+    .platform-card i { font-size: 2rem; margin-bottom: .5rem; }
+    .plan-section {
+        background: #fff;
+        border-radius: 12px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,.05);
+    }
+    .plan-section h6 { color: #1a1d2e; margin-bottom: .75rem; }
+    .keyword-badge {
+        display: inline-block;
+        background: #f3f4f6;
+        border-radius: 6px;
+        padding: .25rem .6rem;
+        margin: .15rem;
+        font-size: .82rem;
+        color: #374151;
+    }
+    .keyword-badge.negative { background: #fef2f2; color: #dc2626; }
+    #loadingOverlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(255,255,255,.85);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+    }
+    #loadingOverlay.show { display: flex; }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb" style="font-size: .85rem;">
+        <li class="breadcrumb-item"><a href="{{ url_for('client.client_campaigns') }}">Campaigns</a></li>
+        <li class="breadcrumb-item active">Create Campaign</li>
+    </ol>
+</nav>
+
+<h4 class="mb-4">Create a New Campaign</h4>
+
+<!-- Step 1: Choose Platform -->
+<div class="wizard-step active" id="step1">
+    <div class="card border-0 shadow-sm" style="border-radius: 12px;">
+        <div class="card-body">
+            <h5 class="mb-1">Step 1: Choose Your Platform</h5>
+            <p class="text-muted mb-4">Where do you want to run your ads?</p>
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="platform-card {{ '' if has_google else 'disabled' }}" data-platform="google" onclick="selectPlatform(this, 'google')">
+                        <i class="bi bi-google text-primary"></i>
+                        <h6>Google Ads</h6>
+                        <p style="font-size: .85rem; color: #6b7280; margin: 0;">
+                            Show up when people search for your services on Google.
+                            Best for capturing people who are ready to buy right now.
+                        </p>
+                        {% if not has_google %}
+                        <div class="mt-2 text-muted" style="font-size: .8rem;">Not connected</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="platform-card {{ '' if has_meta else 'disabled' }}" data-platform="meta" onclick="selectPlatform(this, 'meta')">
+                        <i class="bi bi-meta text-primary"></i>
+                        <h6>Facebook & Instagram</h6>
+                        <p style="font-size: .85rem; color: #6b7280; margin: 0;">
+                            Reach potential customers in your area while they browse social media.
+                            Great for building awareness and generating leads.
+                        </p>
+                        {% if not has_meta %}
+                        <div class="mt-2 text-muted" style="font-size: .8rem;">Not connected</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4 text-end">
+                <button class="btn btn-primary" id="step1Next" disabled onclick="goToStep(2)">
+                    Next <i class="bi bi-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Step 2: Campaign Details -->
+<div class="wizard-step" id="step2">
+    <div class="card border-0 shadow-sm" style="border-radius: 12px;">
+        <div class="card-body">
+            <h5 class="mb-1">Step 2: Tell Us About Your Campaign</h5>
+            <p class="text-muted mb-4">Our AI will build a complete campaign plan based on your answers.</p>
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">What service do you want to promote?</label>
+                    <input type="text" id="serviceInput" class="form-control"
+                           placeholder="e.g., Emergency Plumbing, Kitchen Remodeling, Lawn Care">
+                    <div class="form-text">Be specific - the more detail, the better your campaign will be.</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Target location / service area?</label>
+                    <input type="text" id="locationInput" class="form-control"
+                           placeholder="e.g., Austin, TX within 25 miles"
+                           value="{{ brand.service_area or '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Monthly budget?</label>
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input type="number" id="budgetInput" class="form-control" min="100" step="50"
+                               value="{{ brand.monthly_budget or 500 }}" placeholder="500">
+                        <span class="input-group-text">/month</span>
+                    </div>
+                    <div class="form-text">Minimum $100/month. AI will optimize your daily spending.</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Anything else we should know?</label>
+                    <input type="text" id="notesInput" class="form-control"
+                           placeholder="e.g., Only weekdays, Spanish-speaking, specific offers...">
+                </div>
+            </div>
+
+            <div class="mt-4 d-flex justify-content-between">
+                <button class="btn btn-outline-secondary" onclick="goToStep(1)">
+                    <i class="bi bi-arrow-left"></i> Back
+                </button>
+                <button class="btn btn-primary" id="generateBtn" onclick="generatePlan()">
+                    <i class="bi bi-magic"></i> Generate Campaign Plan
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Step 3: Review Plan -->
+<div class="wizard-step" id="step3">
+    <div class="card border-0 shadow-sm mb-3" style="border-radius: 12px;">
+        <div class="card-body">
+            <h5 class="mb-1">Step 3: Review Your Campaign Plan</h5>
+            <p class="text-muted mb-3">Our AI built this plan for you. Review it, then launch when ready.</p>
+        </div>
+    </div>
+
+    <div id="planContent"></div>
+
+    <div class="d-flex justify-content-between mt-4">
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary" onclick="goToStep(2)">
+                <i class="bi bi-arrow-left"></i> Back & Edit
+            </button>
+            <button class="btn btn-outline-primary" onclick="generatePlan()">
+                <i class="bi bi-arrow-repeat"></i> Regenerate Plan
+            </button>
+        </div>
+        <button class="btn btn-success btn-lg" id="launchBtn" onclick="launchCampaign()">
+            <i class="bi bi-rocket-takeoff"></i> Launch Campaign (Paused)
+        </button>
+    </div>
+
+    <div class="alert alert-info mt-3" style="font-size: .85rem;">
+        <i class="bi bi-info-circle"></i>
+        Your campaign will be created in a <strong>paused</strong> state for safety.
+        You can review it in your campaign list and enable it when you're ready to start spending.
+    </div>
+</div>
+
+<!-- Step 4: Success -->
+<div class="wizard-step" id="step4">
+    <div class="text-center py-5">
+        <div style="font-size: 4rem; color: #10b981;"><i class="bi bi-check-circle-fill"></i></div>
+        <h4 class="mt-3">Campaign Created!</h4>
+        <p class="text-muted" id="successMessage">Your campaign has been created and is paused.</p>
+        <div class="d-flex justify-content-center gap-3 mt-4">
+            <a href="{{ url_for('client.client_campaigns') }}" class="btn btn-primary">
+                <i class="bi bi-list-ul"></i> View Campaigns
+            </a>
+            <button class="btn btn-outline-primary" onclick="resetWizard()">
+                <i class="bi bi-plus-lg"></i> Create Another
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay">
+    <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;"></div>
+    <h5 id="loadingText">Generating your campaign plan...</h5>
+    <p class="text-muted">Our AI is building a custom strategy for your business.</p>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedPlatform = '';
+let currentPlan = null;
+const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+function selectPlatform(el, platform) {
+    if (el.classList.contains('disabled')) return;
+    document.querySelectorAll('.platform-card').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedPlatform = platform;
+    document.getElementById('step1Next').disabled = false;
+}
+
+function goToStep(step) {
+    document.querySelectorAll('.wizard-step').forEach(s => s.classList.remove('active'));
+    document.getElementById('step' + step).classList.add('active');
+    window.scrollTo(0, 0);
+}
+
+function showLoading(text) {
+    document.getElementById('loadingText').textContent = text;
+    document.getElementById('loadingOverlay').classList.add('show');
+}
+
+function hideLoading() {
+    document.getElementById('loadingOverlay').classList.remove('show');
+}
+
+function generatePlan() {
+    const service = document.getElementById('serviceInput').value.trim();
+    const location = document.getElementById('locationInput').value.trim();
+    const budget = document.getElementById('budgetInput').value.trim();
+    const notes = document.getElementById('notesInput').value.trim();
+
+    if (!service) { alert('Please enter the service you want to promote.'); return; }
+    if (!location) { alert('Please enter your target location.'); return; }
+    if (!budget || parseFloat(budget) < 100) { alert('Minimum monthly budget is $100.'); return; }
+
+    showLoading('Generating your campaign plan...');
+
+    const formData = new FormData();
+    formData.append('csrf_token', csrfToken);
+    formData.append('service', service);
+    formData.append('location', location);
+    formData.append('monthly_budget', budget);
+    formData.append('platform', selectedPlatform);
+    formData.append('notes', notes);
+
+    fetch('{{ url_for("client.client_campaign_generate") }}', {
+        method: 'POST',
+        body: formData,
+    })
+    .then(r => r.json())
+    .then(data => {
+        hideLoading();
+        if (data.success) {
+            currentPlan = data.plan;
+            renderPlan(data.plan);
+            goToStep(3);
+        } else {
+            alert('Error: ' + (data.error || 'Failed to generate plan. Please try again.'));
+        }
+    })
+    .catch(err => {
+        hideLoading();
+        alert('Network error. Please try again.');
+    });
+}
+
+function renderPlan(plan) {
+    let html = '';
+
+    // Campaign overview
+    html += '<div class="plan-section">';
+    html += '<h6><i class="bi bi-megaphone"></i> ' + escHtml(plan.campaign_name) + '</h6>';
+    html += '<div class="row g-3">';
+    html += '<div class="col-md-4"><div class="metric-label">Platform</div><div class="fw-semibold">' + (plan.platform === 'google' ? 'Google Ads' : 'Facebook & Instagram') + '</div></div>';
+    html += '<div class="col-md-4"><div class="metric-label">Daily Budget</div><div class="fw-semibold">$' + parseFloat(plan.daily_budget).toFixed(2) + '/day</div></div>';
+    html += '<div class="col-md-4"><div class="metric-label">Location</div><div class="fw-semibold">' + escHtml(plan.location_targeting || '') + '</div></div>';
+    html += '</div>';
+    if (plan.rationale) {
+        html += '<div class="mt-3" style="font-size: .9rem; color: #4b5563;"><strong>Strategy:</strong> ' + escHtml(plan.rationale) + '</div>';
+    }
+    html += '</div>';
+
+    // Google: Ad groups
+    if (plan.ad_groups) {
+        plan.ad_groups.forEach(function(ag, i) {
+            html += '<div class="plan-section">';
+            html += '<h6><i class="bi bi-collection"></i> Ad Group: ' + escHtml(ag.name) + '</h6>';
+
+            // Keywords
+            html += '<div class="mb-3"><strong style="font-size: .85rem;">Keywords:</strong><div class="mt-1">';
+            (ag.keywords || []).forEach(function(kw) {
+                html += '<span class="keyword-badge">' + escHtml(kw) + '</span>';
+            });
+            html += '</div></div>';
+
+            // Negative keywords
+            if (ag.negative_keywords && ag.negative_keywords.length) {
+                html += '<div class="mb-3"><strong style="font-size: .85rem;">Negative Keywords:</strong><div class="mt-1">';
+                ag.negative_keywords.forEach(function(nk) {
+                    html += '<span class="keyword-badge negative">-' + escHtml(nk) + '</span>';
+                });
+                html += '</div></div>';
+            }
+
+            // Ad copy
+            if (ag.headlines) {
+                html += '<div class="mb-2"><strong style="font-size: .85rem;">Ad Headlines:</strong></div>';
+                html += '<ul style="font-size: .85rem; margin-bottom: .5rem;">';
+                ag.headlines.forEach(function(h) { html += '<li>' + escHtml(h) + '</li>'; });
+                html += '</ul>';
+            }
+            if (ag.descriptions) {
+                html += '<div class="mb-2"><strong style="font-size: .85rem;">Ad Descriptions:</strong></div>';
+                ag.descriptions.forEach(function(d) {
+                    html += '<div style="font-size: .85rem; color: #4b5563; padding: .25rem 0;">' + escHtml(d) + '</div>';
+                });
+            }
+
+            html += '</div>';
+        });
+
+        // Campaign-level negatives
+        if (plan.campaign_negative_keywords && plan.campaign_negative_keywords.length) {
+            html += '<div class="plan-section">';
+            html += '<h6><i class="bi bi-dash-circle"></i> Campaign Negative Keywords</h6>';
+            plan.campaign_negative_keywords.forEach(function(nk) {
+                html += '<span class="keyword-badge negative">-' + escHtml(nk) + '</span>';
+            });
+            html += '</div>';
+        }
+    }
+
+    // Meta: Ad sets
+    if (plan.ad_sets) {
+        plan.ad_sets.forEach(function(adset, i) {
+            html += '<div class="plan-section">';
+            html += '<h6><i class="bi bi-people"></i> Ad Set: ' + escHtml(adset.name) + '</h6>';
+
+            if (adset.targeting_description) {
+                html += '<div style="font-size: .85rem; color: #6b7280; margin-bottom: .75rem;">' + escHtml(adset.targeting_description) + '</div>';
+            }
+
+            html += '<div class="row g-2 mb-3">';
+            html += '<div class="col-auto"><span class="badge bg-light text-dark">Ages ' + (adset.age_min || 25) + '-' + (adset.age_max || 65) + '</span></div>';
+            html += '</div>';
+
+            // Ad copy variations
+            if (adset.ad_copy) {
+                adset.ad_copy.forEach(function(ad, j) {
+                    html += '<div class="border rounded p-3 mb-2" style="border-color: #e5e7eb !important;">';
+                    html += '<div class="fw-semibold" style="font-size: .9rem;">Ad ' + (j+1) + '</div>';
+                    if (ad.headline) html += '<div style="font-size: 1rem; font-weight: 600; color: #1a1d2e;">' + escHtml(ad.headline) + '</div>';
+                    if (ad.primary_text) html += '<div style="font-size: .85rem; color: #4b5563; margin: .25rem 0;">' + escHtml(ad.primary_text) + '</div>';
+                    if (ad.description) html += '<div style="font-size: .8rem; color: #6b7280;">' + escHtml(ad.description) + '</div>';
+                    if (ad.call_to_action) html += '<span class="badge bg-primary mt-1">' + escHtml(ad.call_to_action.replace(/_/g, ' ')) + '</span>';
+                    html += '</div>';
+                });
+            }
+
+            html += '</div>';
+        });
+    }
+
+    document.getElementById('planContent').innerHTML = html;
+}
+
+function launchCampaign() {
+    if (!currentPlan) { alert('No plan to launch.'); return; }
+    if (!confirm('Launch this campaign? It will be created in a PAUSED state. You can enable it when ready.')) return;
+
+    showLoading('Creating your campaign...');
+
+    const formData = new FormData();
+    formData.append('csrf_token', csrfToken);
+    formData.append('plan', JSON.stringify(currentPlan));
+
+    fetch('{{ url_for("client.client_campaign_launch") }}', {
+        method: 'POST',
+        body: formData,
+    })
+    .then(r => r.json())
+    .then(data => {
+        hideLoading();
+        if (data.success) {
+            document.getElementById('successMessage').textContent = data.message || 'Campaign created successfully!';
+            goToStep(4);
+        } else {
+            alert('Error: ' + (data.error || 'Failed to create campaign. Please try again.'));
+        }
+    })
+    .catch(err => {
+        hideLoading();
+        alert('Network error. Please try again.');
+    });
+}
+
+function resetWizard() {
+    selectedPlatform = '';
+    currentPlan = null;
+    document.querySelectorAll('.platform-card').forEach(c => c.classList.remove('selected'));
+    document.getElementById('step1Next').disabled = true;
+    document.getElementById('serviceInput').value = '';
+    document.getElementById('notesInput').value = '';
+    document.getElementById('planContent').innerHTML = '';
+    goToStep(1);
+}
+
+function escHtml(str) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(str || ''));
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

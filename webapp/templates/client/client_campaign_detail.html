@@ -1,0 +1,285 @@
+{% extends "client/client_base.html" %}
+
+{% block title %}{{ campaign.name }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb" style="font-size: .85rem;">
+        <li class="breadcrumb-item"><a href="{{ url_for('client.client_campaigns') }}">Campaigns</a></li>
+        <li class="breadcrumb-item active">{{ campaign.name }}</li>
+    </ol>
+</nav>
+
+<!-- Campaign Header -->
+<div class="card border-0 shadow-sm mb-4" style="border-radius: 12px;">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+            <div>
+                <h4 class="mb-1">{{ campaign.name }}</h4>
+                <div class="d-flex gap-2 align-items-center">
+                    <span class="badge bg-{{ 'success' if campaign.status in ('ENABLED', 'ACTIVE') else 'secondary' if campaign.status == 'PAUSED' else 'warning' }} fs-6">
+                        {{ campaign.status }}
+                    </span>
+                    <span class="text-muted" style="font-size: .85rem;">
+                        {{ platform | title }}
+                        {% if campaign.channel_type %} - {{ campaign.channel_type }}{% endif %}
+                        {% if campaign.objective %} - {{ campaign.objective }}{% endif %}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="d-flex gap-2 flex-wrap">
+                {% if campaign.status in ('ENABLED', 'ACTIVE') %}
+                <form method="POST" action="{{ url_for('client.client_campaign_status', platform=platform, campaign_id=campaign.id) }}"
+                      onsubmit="return confirm('Pause this campaign? Ads will stop running.')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="status" value="PAUSED">
+                    <button type="submit" class="btn btn-outline-warning btn-sm">
+                        <i class="bi bi-pause-circle"></i> Pause Campaign
+                    </button>
+                </form>
+                {% elif campaign.status == 'PAUSED' %}
+                <form method="POST" action="{{ url_for('client.client_campaign_status', platform=platform, campaign_id=campaign.id) }}"
+                      onsubmit="return confirm('Enable this campaign? Ads will start running and spending budget.')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="status" value="{{ 'ENABLED' if platform == 'google' else 'ACTIVE' }}">
+                    <button type="submit" class="btn btn-outline-success btn-sm">
+                        <i class="bi bi-play-circle"></i> Enable Campaign
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Budget & Controls Row -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="metric-card">
+            <div class="metric-label">Daily Budget</div>
+            <div class="metric-value">${{ "%.2f"|format(campaign.daily_budget) }}</div>
+            <form method="POST" action="{{ url_for('client.client_campaign_budget', platform=platform, campaign_id=campaign.id) }}" class="mt-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                {% if campaign.budget_resource %}
+                <input type="hidden" name="budget_resource" value="{{ campaign.budget_resource }}">
+                {% endif %}
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text">$</span>
+                    <input type="number" name="daily_budget" class="form-control" step="0.01" min="1" max="10000"
+                           value="{{ "%.2f"|format(campaign.daily_budget) }}" placeholder="New budget">
+                    <button type="submit" class="btn btn-outline-primary" onclick="return confirm('Update daily budget?')">
+                        Update
+                    </button>
+                </div>
+                <div class="form-text">Min $1, Max $10,000/day</div>
+            </form>
+        </div>
+    </div>
+
+    {% if platform == "meta" and campaign.lifetime_budget > 0 %}
+    <div class="col-md-4">
+        <div class="metric-card">
+            <div class="metric-label">Lifetime Budget</div>
+            <div class="metric-value">${{ "%.2f"|format(campaign.lifetime_budget) }}</div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Ad Groups / Ad Sets -->
+{% if platform == "google" and campaign.ad_groups %}
+<div class="channel-section">
+    <h5><i class="bi bi-collection"></i> Ad Groups</h5>
+    <div class="table-responsive">
+        <table class="table table-hover bg-white" style="border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.05);">
+            <thead style="background: #f9fafb;">
+                <tr>
+                    <th style="font-size: .8rem; font-weight: 600; color: #6b7280;">Ad Group</th>
+                    <th style="font-size: .8rem; font-weight: 600; color: #6b7280;">Status</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280;">Spend</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280;">Clicks</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280;">CTR</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280;">Conversions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ag in campaign.ad_groups %}
+                <tr>
+                    <td class="fw-semibold">{{ ag.name }}</td>
+                    <td><span class="badge bg-{{ 'success' if ag.status == 'ENABLED' else 'secondary' }}">{{ ag.status }}</span></td>
+                    <td class="text-end">${{ "%.2f"|format(ag.spend) }}</td>
+                    <td class="text-end">{{ ag.clicks }}</td>
+                    <td class="text-end">{{ "%.1f"|format(ag.ctr) }}%</td>
+                    <td class="text-end">{{ "%.0f"|format(ag.conversions) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% if platform == "meta" and campaign.ad_sets %}
+<div class="channel-section">
+    <h5><i class="bi bi-collection"></i> Ad Sets</h5>
+    <div class="table-responsive">
+        <table class="table table-hover bg-white" style="border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.05);">
+            <thead style="background: #f9fafb;">
+                <tr>
+                    <th style="font-size: .8rem; font-weight: 600; color: #6b7280;">Ad Set</th>
+                    <th style="font-size: .8rem; font-weight: 600; color: #6b7280;">Status</th>
+                    <th style="font-size: .8rem; font-weight: 600; color: #6b7280;">Location</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280;">Spend</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280;">Clicks</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280;">CTR</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280;">Leads</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for adset in campaign.ad_sets %}
+                <tr>
+                    <td class="fw-semibold">{{ adset.name }}</td>
+                    <td><span class="badge bg-{{ 'success' if adset.status == 'ACTIVE' else 'secondary' }}">{{ adset.status }}</span></td>
+                    <td style="font-size: .85rem;">{{ adset.location }}</td>
+                    <td class="text-end">{{ "$%.2f"|format(adset.spend) if adset.spend is defined else '-' }}</td>
+                    <td class="text-end">{{ adset.clicks if adset.clicks is defined else '-' }}</td>
+                    <td class="text-end">{{ "%.1f"|format(adset.ctr) + '%' if adset.ctr is defined else '-' }}</td>
+                    <td class="text-end">{{ adset.conversions if adset.conversions is defined else '-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Keywords (Google Search campaigns) -->
+{% if platform == "google" and campaign.keywords %}
+<div class="channel-section">
+    <h5><i class="bi bi-key"></i> Keywords (Last 30 Days)</h5>
+    <div class="table-responsive">
+        <table class="table table-hover bg-white" style="border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.05);">
+            <thead style="background: #f9fafb;">
+                <tr>
+                    <th style="font-size: .8rem; font-weight: 600; color: #6b7280;">Keyword</th>
+                    <th style="font-size: .8rem; font-weight: 600; color: #6b7280;">Match</th>
+                    <th style="font-size: .8rem; font-weight: 600; color: #6b7280;">Ad Group</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280;">Spend</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280;">Clicks</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280;">CTR</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280;">Conv.</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for kw in campaign.keywords[:30] %}
+                <tr class="{{ 'table-danger' if kw.spend > 50 and kw.conversions == 0 else '' }}">
+                    <td class="fw-semibold">
+                        {{ kw.keyword }}
+                        {% if kw.negative %}<span class="badge bg-danger ms-1">Negative</span>{% endif %}
+                    </td>
+                    <td><span class="badge bg-light text-dark">{{ kw.match_type }}</span></td>
+                    <td style="font-size: .85rem;">{{ kw.ad_group }}</td>
+                    <td class="text-end">${{ "%.2f"|format(kw.spend) }}</td>
+                    <td class="text-end">{{ kw.clicks }}</td>
+                    <td class="text-end">{{ "%.1f"|format(kw.ctr) }}%</td>
+                    <td class="text-end">{{ "%.0f"|format(kw.conversions) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Add Negative Keyword -->
+    <div class="card border-0 shadow-sm mt-3" style="border-radius: 12px;">
+        <div class="card-body">
+            <h6 class="mb-3"><i class="bi bi-dash-circle"></i> Add Negative Keyword</h6>
+            <p style="font-size: .85rem; color: #6b7280;">Block irrelevant searches from triggering your ads. This prevents wasted spend on clicks that won't convert.</p>
+            <form method="POST" action="{{ url_for('client.client_add_negative_keyword', campaign_id=campaign.id) }}" class="row g-2 align-items-end">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="col-md-5">
+                    <label class="form-label" style="font-size: .85rem;">Keyword</label>
+                    <input type="text" name="keyword" class="form-control form-control-sm" placeholder="e.g., free, diy, jobs" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" style="font-size: .85rem;">Match Type</label>
+                    <select name="match_type" class="form-select form-select-sm">
+                        <option value="BROAD">Broad</option>
+                        <option value="PHRASE">Phrase</option>
+                        <option value="EXACT">Exact</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Add this negative keyword?')">
+                        <i class="bi bi-plus-lg"></i> Add Negative Keyword
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Top Ads (Meta) -->
+{% if platform == "meta" and campaign.ads %}
+<div class="channel-section">
+    <h5><i class="bi bi-image"></i> Ads (Last 30 Days)</h5>
+    <div class="table-responsive">
+        <table class="table table-hover bg-white" style="border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.05);">
+            <thead style="background: #f9fafb;">
+                <tr>
+                    <th style="font-size: .8rem; font-weight: 600; color: #6b7280;">Ad</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280;">Spend</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280;">Impressions</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280;">Clicks</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280;">CTR</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280;">Leads</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ad in campaign.ads %}
+                <tr>
+                    <td class="fw-semibold">{{ ad.name }}</td>
+                    <td class="text-end">${{ "%.2f"|format(ad.spend) }}</td>
+                    <td class="text-end">{{ "{:,}".format(ad.impressions) }}</td>
+                    <td class="text-end">{{ ad.clicks }}</td>
+                    <td class="text-end">{{ "%.1f"|format(ad.ctr) }}%</td>
+                    <td class="text-end">{{ ad.conversions }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Change History -->
+{% if changes %}
+<div class="mt-4">
+    <h6><i class="bi bi-clock-history"></i> Change History for This Campaign</h6>
+    <div class="card border-0 shadow-sm" style="border-radius: 12px;">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        {% for ch in changes %}
+                        <tr>
+                            <td style="font-size: .85rem;">
+                                {{ ch.action | replace('_', ' ') | title }}
+                                {% if ch.details %}<span class="text-muted"> - {{ ch.details[:80] }}</span>{% endif %}
+                            </td>
+                            <td class="text-end text-muted" style="font-size: .8rem;">
+                                {{ ch.changed_by }} - {{ ch.created_at[:16] }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

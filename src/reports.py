@@ -20,16 +20,28 @@ REPORTS_DIR = Path(__file__).parent.parent / "reports"
 def _get_jinja_env():
     def _finalize_display_value(value):
         if isinstance(value, float):
-            return round(value, 3)
+            # Keep 2 decimal places max for all float display
+            rounded = round(value, 2)
+            # Drop trailing zeros: 3.10 -> 3.1, 4.00 -> 4
+            if rounded == int(rounded):
+                return int(rounded)
+            return rounded
         if isinstance(value, Decimal):
-            return round(float(value), 3)
+            rounded = round(float(value), 2)
+            if rounded == int(rounded):
+                return int(rounded)
+            return rounded
         return value
 
-    return Environment(
+    env = Environment(
         loader=FileSystemLoader(str(TEMPLATES_DIR)),
         autoescape=True,
         finalize=_finalize_display_value,
     )
+    env.filters["pct"] = lambda v: f"{round(float(v), 1)}" if v is not None else "0"
+    env.filters["money"] = lambda v: f"{round(float(v), 2):,.2f}" if v is not None else "0.00"
+    env.filters["pos"] = lambda v: f"{round(float(v), 1)}" if v is not None else "N/A"
+    return env
 
 
 def _month_display(month_str):
@@ -41,7 +53,7 @@ def _month_display(month_str):
         return month_str
 
 
-def _round_report_values(value, places=3):
+def _round_report_values(value, places=2):
     """Recursively round floats for report rendering precision."""
     if isinstance(value, float):
         return round(value, places)

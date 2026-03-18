@@ -215,6 +215,9 @@
             <a href="{{ url_for('client.client_dashboard') }}" class="{% if request.endpoint == 'client.client_dashboard' %}active{% endif %}">
                 <i class="bi bi-speedometer2"></i> Overview
             </a>
+            <a href="{{ url_for('client.client_campaigns') }}" class="{% if request.endpoint in ('client.client_campaigns', 'client.client_campaign_detail', 'client.client_campaign_create', 'client.client_campaign_generate', 'client.client_campaign_launch') %}active{% endif %}">
+                <i class="bi bi-megaphone"></i> Campaigns
+            </a>
             <a href="{{ url_for('client.client_actions') }}" class="{% if request.endpoint == 'client.client_actions' %}active{% endif %}">
                 <i class="bi bi-list-check"></i> Action Steps
             </a>

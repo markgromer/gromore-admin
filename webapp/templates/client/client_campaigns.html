@@ -1,0 +1,181 @@
+{% extends "client/client_base.html" %}
+
+{% block title %}Campaigns{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1">Your Ad Campaigns</h4>
+        <p class="text-muted mb-0">View, manage, and create campaigns across all platforms</p>
+    </div>
+    <a href="{{ url_for('client.client_campaign_create') }}" class="btn btn-primary">
+        <i class="bi bi-plus-lg"></i> Create Campaign
+    </a>
+</div>
+
+<!-- AI Recommendations -->
+{% if recommendations %}
+<div class="card border-0 shadow-sm mb-4" style="border-radius: 12px;">
+    <div class="card-body">
+        <h6 class="mb-3"><i class="bi bi-lightbulb text-warning"></i> AI Recommendations</h6>
+        {% for rec in recommendations %}
+        <div class="d-flex align-items-start mb-3 {% if not loop.last %}border-bottom pb-3{% endif %}">
+            <span class="badge bg-{{ 'danger' if rec.priority == 'high' else 'warning' if rec.priority == 'medium' else 'secondary' }} me-2 mt-1" style="font-size: .7rem;">{{ rec.priority }}</span>
+            <div>
+                <div class="fw-semibold" style="font-size: .9rem;">{{ rec.campaign }}</div>
+                <div style="font-size: .85rem; color: #4b5563;">{{ rec.issue }}</div>
+                <div style="font-size: .85rem; color: #1a1d2e; margin-top: .25rem;"><strong>Action:</strong> {{ rec.action }}</div>
+                <div style="font-size: .8rem; color: #6b7280;">Expected impact: {{ rec.impact }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Google Ads Campaigns -->
+{% if campaigns.google %}
+<div class="channel-section">
+    <h5><i class="bi bi-google"></i> Google Ads</h5>
+    <div class="table-responsive">
+        <table class="table table-hover bg-white" style="border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.05);">
+            <thead style="background: #f9fafb;">
+                <tr>
+                    <th style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Campaign</th>
+                    <th style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Status</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Budget/Day</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Spend (30d)</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Clicks</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">CTR</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Conversions</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">CPA</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in campaigns.google %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('client.client_campaign_detail', platform='google', campaign_id=c.id) }}" class="text-decoration-none fw-semibold">
+                            {{ c.name }}
+                        </a>
+                        <div style="font-size: .75rem; color: #9ca3af;">{{ c.channel_type }}</div>
+                    </td>
+                    <td>
+                        <span class="badge bg-{{ 'success' if c.status == 'ENABLED' else 'secondary' if c.status == 'PAUSED' else 'warning' }}">
+                            {{ c.status }}
+                        </span>
+                    </td>
+                    <td class="text-end">${{ "%.2f"|format(c.daily_budget) }}</td>
+                    <td class="text-end">${{ "%.2f"|format(c.spend) }}</td>
+                    <td class="text-end">{{ "{:,}".format(c.clicks) }}</td>
+                    <td class="text-end">{{ "%.1f"|format(c.ctr) }}%</td>
+                    <td class="text-end">{{ "%.0f"|format(c.conversions) }}</td>
+                    <td class="text-end">{{ "$%.2f"|format(c.cpa) if c.cpa > 0 else '-' }}</td>
+                    <td class="text-end">
+                        <a href="{{ url_for('client.client_campaign_detail', platform='google', campaign_id=c.id) }}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-gear"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Meta Campaigns -->
+{% if campaigns.meta %}
+<div class="channel-section">
+    <h5><i class="bi bi-meta"></i> Facebook & Instagram Ads</h5>
+    <div class="table-responsive">
+        <table class="table table-hover bg-white" style="border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.05);">
+            <thead style="background: #f9fafb;">
+                <tr>
+                    <th style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Campaign</th>
+                    <th style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Status</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Budget/Day</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Spend (30d)</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Clicks</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">CTR</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Leads</th>
+                    <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">CPL</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in campaigns.meta %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('client.client_campaign_detail', platform='meta', campaign_id=c.id) }}" class="text-decoration-none fw-semibold">
+                            {{ c.name }}
+                        </a>
+                        <div style="font-size: .75rem; color: #9ca3af;">{{ c.objective }}</div>
+                    </td>
+                    <td>
+                        <span class="badge bg-{{ 'success' if c.status == 'ACTIVE' else 'secondary' if c.status == 'PAUSED' else 'warning' }}">
+                            {{ c.status }}
+                        </span>
+                    </td>
+                    <td class="text-end">{{ "$%.2f"|format(c.daily_budget) if c.daily_budget > 0 else '-' }}</td>
+                    <td class="text-end">${{ "%.2f"|format(c.spend) }}</td>
+                    <td class="text-end">{{ "{:,}".format(c.clicks) }}</td>
+                    <td class="text-end">{{ "%.1f"|format(c.ctr) }}%</td>
+                    <td class="text-end">{{ c.conversions }}</td>
+                    <td class="text-end">{{ "$%.2f"|format(c.cpa) if c.cpa > 0 else '-' }}</td>
+                    <td class="text-end">
+                        <a href="{{ url_for('client.client_campaign_detail', platform='meta', campaign_id=c.id) }}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-gear"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- No Campaigns -->
+{% if not campaigns.google and not campaigns.meta %}
+<div class="text-center py-5">
+    <i class="bi bi-megaphone" style="font-size: 3rem; color: #d1d5db;"></i>
+    <h5 class="mt-3 text-muted">No campaigns found</h5>
+    <p class="text-muted">Your ad accounts may not be connected yet, or there are no active campaigns.</p>
+    <a href="{{ url_for('client.client_campaign_create') }}" class="btn btn-primary mt-2">
+        <i class="bi bi-plus-lg"></i> Create Your First Campaign
+    </a>
+</div>
+{% endif %}
+
+<!-- Recent Changes -->
+{% if changes %}
+<div class="mt-4">
+    <h6><i class="bi bi-clock-history"></i> Recent Changes</h6>
+    <div class="card border-0 shadow-sm" style="border-radius: 12px;">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        {% for ch in changes[:10] %}
+                        <tr>
+                            <td style="font-size: .85rem;">
+                                <span class="badge bg-light text-dark">{{ ch.platform }}</span>
+                                <strong>{{ ch.campaign_name or ch.campaign_id }}</strong>
+                                - {{ ch.action | replace('_', ' ') | title }}
+                            </td>
+                            <td class="text-end text-muted" style="font-size: .8rem;">
+                                {{ ch.changed_by }} - {{ ch.created_at[:16] }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
