@@ -190,6 +190,19 @@ def pull_api_data_for_brand(brand, connections, month):
         except Exception as e:
             errors.append(f"GSC pull failed: {str(e)}")
 
+    # Google Ads
+    if google_conn and google_conn.get("status") == "connected" and brand.get("google_ads_customer_id"):
+        try:
+            token = _get_google_token(db, brand["id"], google_conn)
+            data["google_ads"] = _pull_google_ads(
+                brand.get("google_ads_customer_id", ""),
+                token,
+                start_date,
+                end_date,
+            )
+        except Exception as e:
+            errors.append(f"Google Ads pull failed: {str(e)}")
+
     # Meta Ads
     if meta_conn and meta_conn.get("status") == "connected" and brand.get("meta_ad_account_id"):
         try:
@@ -358,6 +371,121 @@ def _pull_gsc(site_url, access_token, start_date, end_date):
         "top_pages": [],
         "opportunity_queries": [],
         "row_count": len(rows),
+    }
+
+
+def _pull_google_ads(customer_id, access_token, start_date, end_date):
+    """Pull Google Ads metrics using Google Ads API searchStream."""
+    import requests
+    import re
+    from flask import current_app
+
+    clean_customer_id = re.sub(r"\D", "", str(customer_id or ""))
+    if not clean_customer_id:
+        raise ValueError("Google Ads customer ID is missing or invalid")
+
+    developer_token = (current_app.config.get("GOOGLE_ADS_DEVELOPER_TOKEN", "") or "").strip()
+    if not developer_token:
+        raise ValueError("Google Ads developer token not configured in Settings")
+
+    login_customer_id = re.sub(r"\D", "", (current_app.config.get("GOOGLE_ADS_LOGIN_CUSTOMER_ID", "") or "").strip())
+    url = f"https://googleads.googleapis.com/v18/customers/{clean_customer_id}/googleAds:searchStream"
+
+    query = (
+        "SELECT "
+        "campaign.id, "
+        "campaign.name, "
+        "campaign.advertising_channel_type, "
+        "metrics.impressions, "
+        "metrics.clicks, "
+        "metrics.cost_micros, "
+        "metrics.conversions, "
+        "metrics.ctr, "
+        "metrics.average_cpc "
+        "FROM campaign "
+        f"WHERE segments.date BETWEEN '{start_date}' AND '{end_date}' "
+        "AND campaign.status != 'REMOVED'"
+    )
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "developer-token": developer_token,
+        "Content-Type": "application/json",
+    }
+    if login_customer_id:
+        headers["login-customer-id"] = login_customer_id
+
+    resp = requests.post(url, json={"query": query}, headers=headers, timeout=30)
+    if resp.status_code != 200:
+        detail = resp.text[:300]
+        if "ACCESS_TOKEN_SCOPE_INSUFFICIENT" in detail or "insufficient authentication scopes" in detail.lower():
+            raise ValueError("Google token missing Ads scope. Reconnect Google to grant Google Ads access.")
+        raise ValueError(f"Google Ads API error {resp.status_code}: {detail}")
+
+    payload = resp.json()
+    chunks = payload if isinstance(payload, list) else [payload]
+
+    by_campaign = {}
+    totals = {
+        "impressions": 0,
+        "clicks": 0,
+        "spend": 0.0,
+        "results": 0.0,
+        "ctr": 0.0,
+        "cpc": 0.0,
+        "cost_per_result": 0.0,
+    }
+
+    for chunk in chunks:
+        for row in chunk.get("results", []) or []:
+            campaign = row.get("campaign", {})
+            metrics = row.get("metrics", {})
+            campaign_name = campaign.get("name") or campaign.get("id") or "Unknown Campaign"
+            impressions = int(metrics.get("impressions", 0) or 0)
+            clicks = int(metrics.get("clicks", 0) or 0)
+            spend = float(metrics.get("costMicros", 0) or 0) / 1_000_000.0
+            conversions = float(metrics.get("conversions", 0) or 0)
+            ctr = float(metrics.get("ctr", 0) or 0) * 100.0
+            average_cpc = float(metrics.get("averageCpc", 0) or 0) / 1_000_000.0
+            cpr = (spend / conversions) if conversions > 0 else 0.0
+
+            by_campaign[campaign_name] = {
+                "campaign_id": campaign.get("id", ""),
+                "channel_type": campaign.get("advertisingChannelType", ""),
+                "impressions": impressions,
+                "clicks": clicks,
+                "spend": round(spend, 2),
+                "results": round(conversions, 2),
+                "ctr": round(ctr, 2),
+                "cpc": round(average_cpc, 2),
+                "cost_per_result": round(cpr, 2),
+            }
+
+            totals["impressions"] += impressions
+            totals["clicks"] += clicks
+            totals["spend"] += spend
+            totals["results"] += conversions
+
+    if totals["impressions"] > 0:
+        totals["ctr"] = round((totals["clicks"] / totals["impressions"]) * 100.0, 2)
+    if totals["clicks"] > 0:
+        totals["cpc"] = round(totals["spend"] / totals["clicks"], 2)
+    if totals["results"] > 0:
+        totals["cost_per_result"] = round(totals["spend"] / totals["results"], 2)
+
+    totals["spend"] = round(totals["spend"], 2)
+    totals["results"] = round(totals["results"], 2)
+
+    sorted_campaigns = sorted(
+        by_campaign.items(),
+        key=lambda item: (item[1].get("results", 0), item[1].get("spend", 0)),
+        reverse=True,
+    )
+
+    return {
+        "totals": totals,
+        "by_campaign": dict(sorted_campaigns[:30]),
+        "row_count": len(by_campaign),
     }
 
 

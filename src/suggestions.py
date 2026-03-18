@@ -5,7 +5,7 @@ Generates actionable, prioritized recommendations for next month based on:
 - Current performance vs benchmarks
 - Month-over-month trends
 - Industry-specific best practices for home services
-- Data from all three platforms (GA, Meta, GSC)
+- Data from all connected platforms (GA, Meta, Google Ads, GSC)
 """
 import json
 from pathlib import Path
@@ -58,6 +58,11 @@ def generate_suggestions(analysis):
     meta = analysis.get("meta_business")
     if meta:
         suggestions.extend(_meta_suggestions(meta, industry, goals, client_config))
+
+    # ── Google Ads suggestions ──
+    google_ads = analysis.get("google_ads")
+    if google_ads:
+        suggestions.extend(_google_ads_suggestions(google_ads, industry, goals))
 
     # ── Search Console suggestions ──
     gsc = analysis.get("search_console")
@@ -365,11 +370,75 @@ def _gsc_suggestions(gsc, industry, client_config):
     return suggestions
 
 
+def _google_ads_suggestions(google_ads, industry, goals):
+    suggestions = []
+    metrics = google_ads.get("metrics", {})
+    scores = google_ads.get("scores", {})
+    campaign_analysis = google_ads.get("campaign_analysis", [])
+
+    ctr_score = scores.get("ctr", "no_data")
+    ctr = metrics.get("ctr", 0)
+    if ctr_score in ("below_average", "poor"):
+        suggestions.append(make_suggestion(
+            "Improve Google Ads CTR",
+            f"Google Ads CTR is {ctr}%, below benchmark. Tighten keyword-to-ad relevance, "
+            "split ad groups by intent, and test 3-5 new RSA headline variants focused on local buyer intent.",
+            PRIORITY_HIGH, CATEGORY_PAID, "paid_traffic",
+            data_point=f"CTR: {ctr}%"
+        ))
+
+    cpc_score = scores.get("cpc", "no_data")
+    cpc = metrics.get("cpc", 0)
+    if cpc_score in ("below_average", "poor"):
+        suggestions.append(make_suggestion(
+            "Lower Google Ads CPC",
+            f"Average CPC is ${cpc}, above benchmark. Add negative keywords weekly, improve Quality Score, "
+            "and split high-cost broad groups into tighter exact and phrase match groups.",
+            PRIORITY_HIGH, CATEGORY_PAID, "cost_efficiency",
+            data_point=f"CPC: ${cpc}"
+        ))
+
+    cpa_score = scores.get("cost_per_result", "no_data")
+    cpa = metrics.get("cost_per_result", 0)
+    if cpa_score in ("below_average", "poor"):
+        suggestions.append(make_suggestion(
+            "Reduce Google Ads CPA",
+            f"Cost per conversion is ${cpa}. Audit search terms and move budget to campaigns with strongest conversion intent.",
+            PRIORITY_HIGH, CATEGORY_PAID, "cost_efficiency",
+            data_point=f"CPA: ${cpa}"
+        ))
+
+    underperforming = [campaign for campaign in campaign_analysis if campaign.get("status") == "underperforming"]
+    if underperforming:
+        names = [campaign.get("name", "Campaign") for campaign in underperforming[:3]]
+        suggestions.append(make_suggestion(
+            "Tune Underperforming Google Ads Campaigns",
+            f"These campaigns are under target: {', '.join(names)}. Reallocate spend toward top converters and tighten targeting.",
+            PRIORITY_HIGH, CATEGORY_PAID, "campaign_optimization",
+            data_point=f"{len(underperforming)} campaigns underperforming"
+        ))
+
+    results = metrics.get("results", 0)
+    spend = metrics.get("spend", 0)
+    if "increase_leads" in goals and results > 0 and spend > 0:
+        current_cpa = spend / results
+        if current_cpa < 60:
+            suggestions.append(make_suggestion(
+                "Scale Winning Google Ads Campaigns",
+                f"Current Google Ads CPA is ${current_cpa:.2f}. Increase budget gradually (10-20%) on top campaigns while watching CPA.",
+                PRIORITY_MEDIUM, CATEGORY_BUDGET, "growth",
+                data_point=f"CPA: ${current_cpa:.2f}"
+            ))
+
+    return suggestions
+
+
 def _cross_platform_suggestions(analysis):
     """Suggestions that span multiple data sources."""
     suggestions = []
     ga = analysis.get("google_analytics")
     meta = analysis.get("meta_business")
+    google_ads = analysis.get("google_ads")
     gsc = analysis.get("search_console")
     roas = analysis.get("roas", {})
     goals = analysis.get("client_config", {}).get("goals", [])
@@ -403,14 +472,17 @@ def _cross_platform_suggestions(analysis):
             ))
 
     # Channel mix
-    if ga and meta:
+    if ga and (meta or google_ads):
         ga_sessions = ga.get("metrics", {}).get("sessions", 0)
         ga_conversions = ga.get("metrics", {}).get("conversions", 0)
-        meta_spend = meta.get("metrics", {}).get("spend", 0)
-        meta_results = meta.get("metrics", {}).get("results", 0)
+        paid_results = 0
+        if meta:
+            paid_results += meta.get("metrics", {}).get("results", 0)
+        if google_ads:
+            paid_results += google_ads.get("metrics", {}).get("results", 0)
 
-        if ga_conversions > 0 and meta_results > 0:
-            organic_conv_pct = ga_conversions / (ga_conversions + meta_results) * 100
+        if ga_conversions > 0 and paid_results > 0:
+            organic_conv_pct = ga_conversions / (ga_conversions + paid_results) * 100
             if organic_conv_pct > 60:
                 suggestions.append(make_suggestion(
                     "Strong Organic - Reduce Paid Dependency",

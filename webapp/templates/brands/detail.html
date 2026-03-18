@@ -85,6 +85,18 @@
                     </div>
                 </div>
 
+                <!-- Google Ads Customer ID -->
+                <div class="mb-3">
+                    <label class="form-label small text-muted mb-1">Google Ads Customer ID</label>
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control" value="{{ brand.google_ads_customer_id or '' }}"
+                               id="google_ads_customer_id" placeholder="e.g. 1234567890">
+                        <button class="btn btn-outline-secondary" type="button" data-brand-id="{{ brand.id }}"
+                                onclick="saveApiField(this.dataset.brandId, 'google_ads_customer_id')">Save</button>
+                    </div>
+                    <small class="text-muted">Use customer ID without dashes.</small>
+                </div>
+
                 <hr>
 
                 <!-- Meta -->

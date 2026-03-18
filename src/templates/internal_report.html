@@ -347,6 +347,55 @@
         </div>
         {% endif %}
 
+        <!-- Google Ads -->
+        {% if google_ads %}
+        <div class="card">
+            <h2>Google Ads Performance</h2>
+            <div class="metrics-grid">
+                {% for metric_name, metric_val in google_ads.metrics.items() %}
+                <div class="metric-box">
+                    <div class="label">{{ metric_name | replace('_', ' ') | title }}</div>
+                    <div class="value">
+                        {% if metric_name in ('ctr',) %}
+                            {{ metric_val }}%
+                        {% elif metric_name in ('cpc', 'spend', 'cost_per_result') %}
+                            ${{ "{:,.2f}".format(metric_val) }}
+                        {% else %}
+                            {{ "{:,}".format(metric_val) if metric_val is number and metric_val == metric_val|int else metric_val }}
+                        {% endif %}
+                    </div>
+                    {% if metric_name in google_ads.month_over_month and google_ads.month_over_month[metric_name].change_pct is not none %}
+                    <div class="change {% if google_ads.month_over_month[metric_name].change_pct > 0 %}change-up{% elif google_ads.month_over_month[metric_name].change_pct < 0 %}change-down{% else %}change-neutral{% endif %}">
+                        {{ "+" if google_ads.month_over_month[metric_name].change_pct > 0 else "" }}{{ google_ads.month_over_month[metric_name].change_pct }}% vs last month
+                    </div>
+                    {% endif %}
+                    {% if metric_name in google_ads.scores %}
+                    <span class="score score-{{ google_ads.scores[metric_name] }}">{{ google_ads.scores[metric_name] | replace('_', ' ') }}</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+
+            {% if google_ads.campaign_analysis %}
+            <h3>Campaign Breakdown</h3>
+            <table>
+                <tr><th>Campaign</th><th>Spend</th><th>Clicks</th><th>Results</th><th>CPA</th><th>CTR</th><th>Status</th></tr>
+                {% for camp in google_ads.campaign_analysis %}
+                <tr>
+                    <td>{{ camp.name }}</td>
+                    <td>${{ "{:,.2f}".format(camp.metrics.get('spend', 0)) }}</td>
+                    <td>{{ "{:,}".format(camp.metrics.get('clicks', 0)) }}</td>
+                    <td>{{ camp.metrics.get('results', 0) }}</td>
+                    <td>{{ "$" + "{:,.2f}".format(camp.metrics.get('cost_per_result', 0)) if camp.metrics.get('cost_per_result') else 'N/A' }}</td>
+                    <td>{{ camp.metrics.get('ctr', 0) }}%</td>
+                    <td class="status-{{ camp.status }}">{{ camp.status | replace('_', ' ') | title }}{% if camp.get('issue') %} - {{ camp.issue }}{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% endif %}
+        </div>
+        {% endif %}
+
         <!-- Search Console -->
         {% if gsc %}
         <div class="card">

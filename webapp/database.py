@@ -46,6 +46,7 @@ class WebDB:
                 ga4_property_id TEXT DEFAULT '',
                 gsc_site_url TEXT DEFAULT '',
                 meta_ad_account_id TEXT DEFAULT '',
+                google_ads_customer_id TEXT DEFAULT '',
                 wp_category_id INTEGER DEFAULT 0,
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now'))
@@ -139,6 +140,7 @@ class WebDB:
             ("crm_api_key", "TEXT DEFAULT ''"),
             ("crm_webhook_url", "TEXT DEFAULT ''"),
             ("crm_pipeline_id", "TEXT DEFAULT ''"),
+            ("google_ads_customer_id", "TEXT DEFAULT ''"),
         ]
         for col_name, col_def in new_brand_cols:
             if col_name not in brand_columns:
@@ -265,7 +267,7 @@ class WebDB:
         conn.close()
 
     def update_brand_api_field(self, brand_id, field, value):
-        allowed = {"ga4_property_id", "gsc_site_url", "meta_ad_account_id", "wp_category_id"}
+        allowed = {"ga4_property_id", "gsc_site_url", "meta_ad_account_id", "google_ads_customer_id", "wp_category_id"}
         if field not in allowed:
             raise ValueError(f"Cannot update field: {field}")
         conn = self._conn()

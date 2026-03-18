@@ -363,6 +363,59 @@
         </div>
         {% endif %}
 
+        {% if google_ads %}
+        <div class="section">
+            <h2>Google Ads Performance</h2>
+            <div class="channel-card">
+                <h3>Campaign Results</h3>
+                <div class="channel-stats">
+                    <div class="channel-stat">
+                        <div class="cs-label">Impressions</div>
+                        <div class="cs-value">{{ "{:,}".format(google_ads.metrics.get('impressions', 0)) }}</div>
+                    </div>
+                    <div class="channel-stat">
+                        <div class="cs-label">Ad Clicks</div>
+                        <div class="cs-value">{{ "{:,}".format(google_ads.metrics.get('clicks', 0)) }}</div>
+                    </div>
+                    <div class="channel-stat">
+                        <div class="cs-label">Conversions</div>
+                        <div class="cs-value">{{ google_ads.metrics.get('results', 0) }}</div>
+                    </div>
+                    <div class="channel-stat">
+                        <div class="cs-label">Cost Per Conversion</div>
+                        <div class="cs-value">${{ "{:,.2f}".format(google_ads.metrics.get('cost_per_result', 0)) }}</div>
+                    </div>
+                    <div class="channel-stat">
+                        <div class="cs-label">Total Spent</div>
+                        <div class="cs-value">${{ "{:,.2f}".format(google_ads.metrics.get('spend', 0)) }}</div>
+                    </div>
+                </div>
+            </div>
+
+            {% if google_ads.campaign_analysis %}
+            <div class="channel-card">
+                <h3>Top Google Ads Campaigns</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <tr style="background: #f8f9fa;">
+                        <th style="padding: 8px; text-align: left;">Campaign</th>
+                        <th style="padding: 8px; text-align: right;">Spend</th>
+                        <th style="padding: 8px; text-align: right;">Conversions</th>
+                        <th style="padding: 8px; text-align: right;">CPA</th>
+                    </tr>
+                    {% for camp in google_ads.campaign_analysis[:5] %}
+                    <tr>
+                        <td style="padding: 8px; border-top: 1px solid #eee;">{{ camp.name }}</td>
+                        <td style="padding: 8px; border-top: 1px solid #eee; text-align: right;">${{ "{:,.2f}".format(camp.metrics.get('spend', 0)) }}</td>
+                        <td style="padding: 8px; border-top: 1px solid #eee; text-align: right;">{{ camp.metrics.get('results', 0) }}</td>
+                        <td style="padding: 8px; border-top: 1px solid #eee; text-align: right;">{{ "$" + "{:,.2f}".format(camp.metrics.get('cost_per_result', 0)) if camp.metrics.get('cost_per_result') else 'N/A' }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
         <!-- Google Search / SEO -->
         {% if gsc %}
         <div class="section">

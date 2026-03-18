@@ -85,6 +85,8 @@ def create_app():
     # Google OAuth
     app.config["GOOGLE_CLIENT_ID"] = _cfg("google_client_id", "GOOGLE_CLIENT_ID")
     app.config["GOOGLE_CLIENT_SECRET"] = _cfg("google_client_secret", "GOOGLE_CLIENT_SECRET")
+    app.config["GOOGLE_ADS_DEVELOPER_TOKEN"] = _cfg("google_ads_developer_token", "GOOGLE_ADS_DEVELOPER_TOKEN")
+    app.config["GOOGLE_ADS_LOGIN_CUSTOMER_ID"] = _cfg("google_ads_login_customer_id", "GOOGLE_ADS_LOGIN_CUSTOMER_ID")
 
     # Meta OAuth
     app.config["META_APP_ID"] = _cfg("meta_app_id", "META_APP_ID")
@@ -749,6 +751,12 @@ def create_app():
                 app.config["GOOGLE_CLIENT_ID"] = db.get_setting("google_client_id", "")
                 app.config["GOOGLE_CLIENT_SECRET"] = db.get_setting("google_client_secret", app.config["GOOGLE_CLIENT_SECRET"])
                 flash("Google OAuth credentials saved", "success")
+            elif section == "google_ads_api":
+                db.save_setting("google_ads_developer_token", request.form.get("google_ads_developer_token", "").strip())
+                db.save_setting("google_ads_login_customer_id", request.form.get("google_ads_login_customer_id", "").strip())
+                app.config["GOOGLE_ADS_DEVELOPER_TOKEN"] = db.get_setting("google_ads_developer_token", "")
+                app.config["GOOGLE_ADS_LOGIN_CUSTOMER_ID"] = db.get_setting("google_ads_login_customer_id", "")
+                flash("Google Ads API settings saved", "success")
             elif section == "meta_oauth":
                 db.save_setting("meta_app_id", request.form.get("meta_app_id", "").strip())
                 secret = request.form.get("meta_app_secret", "").strip()

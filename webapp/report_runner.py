@@ -60,6 +60,7 @@ def _brand_to_client_config(brand):
             "gsc_site_url": brand.get("gsc_site_url", ""),
             "gsc_enabled": bool(brand.get("gsc_site_url")),
             "meta_ad_account_id": brand.get("meta_ad_account_id", ""),
+            "google_ads_customer_id": brand.get("google_ads_customer_id", ""),
         },
     }
 
@@ -92,7 +93,7 @@ def build_analysis_and_suggestions_for_brand(db, brand, month):
 
             api_data, api_errors = pull_api_data_for_brand(brand, connections, month)
             # Merge: API data wins over CSV (more current from live connection)
-            for key in ("google_analytics", "meta_business", "search_console"):
+            for key in ("google_analytics", "meta_business", "search_console", "google_ads"):
                 if key in api_data and api_data[key]:
                     data[key] = api_data[key]
         except Exception as e:

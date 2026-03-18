@@ -71,6 +71,7 @@ def generate_internal_report(analysis, suggestions_internal, output_dir=None, br
         "roas": _dict_to_obj(analysis.get("roas", {})),
         "ga": _dict_to_obj(analysis.get("google_analytics")) if analysis.get("google_analytics") else None,
         "meta": _dict_to_obj(analysis.get("meta_business")) if analysis.get("meta_business") else None,
+        "google_ads": _dict_to_obj(analysis.get("google_ads")) if analysis.get("google_ads") else None,
         "gsc": _dict_to_obj(analysis.get("search_console")) if analysis.get("search_console") else None,
         "suggestions": suggestions_internal,
         "ai_brief": analysis.get("ai_brief_internal"),
@@ -112,6 +113,7 @@ def generate_client_report(analysis, suggestions_client, output_dir=None, brandi
 
     # Calculate client-friendly KPIs
     meta = analysis.get("meta_business")
+    google_ads = analysis.get("google_ads")
     ga = analysis.get("google_analytics")
     gsc = analysis.get("search_console")
 
@@ -128,6 +130,14 @@ def generate_client_report(analysis, suggestions_client, output_dir=None, brandi
         results_mom = meta.get("month_over_month", {}).get("results", {})
         if results_mom.get("change_pct") is not None:
             leads_change = results_mom["change_pct"]
+
+    if google_ads:
+        total_leads += google_ads.get("metrics", {}).get("results", 0)
+        total_spend += google_ads.get("metrics", {}).get("spend", 0)
+        if leads_change is None:
+            ads_results_mom = google_ads.get("month_over_month", {}).get("results", {})
+            if ads_results_mom.get("change_pct") is not None:
+                leads_change = ads_results_mom["change_pct"]
 
     if ga:
         total_leads += ga.get("metrics", {}).get("conversions", 0)
@@ -160,6 +170,7 @@ def generate_client_report(analysis, suggestions_client, output_dir=None, brandi
         "concerns": analysis.get("concerns", []),
         "ga": _dict_to_obj(ga) if ga else None,
         "meta": _dict_to_obj(meta) if meta else None,
+        "google_ads": _dict_to_obj(google_ads) if google_ads else None,
         "gsc": _dict_to_obj(gsc) if gsc else None,
         "client_suggestions": suggestions_client,
         "ai_brief": analysis.get("ai_brief_client"),

@@ -269,6 +269,84 @@ def analyze_meta_business(meta_data, prev_meta_data, benchmarks_meta, industry):
     return analysis
 
 
+def analyze_google_ads(google_ads_data, prev_google_ads_data, benchmarks_ads, industry):
+    """Analyze Google Ads data against benchmarks and prior month."""
+    if not google_ads_data:
+        return None
+
+    totals = google_ads_data.get("totals", {})
+    prev_totals = prev_google_ads_data.get("totals", {}) if prev_google_ads_data else {}
+    industry_benchmarks = benchmarks_ads.get(industry, {})
+
+    analysis = {
+        "metrics": {},
+        "month_over_month": {},
+        "scores": {},
+        "highlights": [],
+        "concerns": [],
+        "campaign_analysis": [],
+    }
+
+    metrics_config = {
+        "impressions": {"higher_is_better": True, "benchmark_key": None},
+        "clicks": {"higher_is_better": True, "benchmark_key": None},
+        "ctr": {"higher_is_better": True, "benchmark_key": "ctr"},
+        "cpc": {"higher_is_better": False, "benchmark_key": "cpc"},
+        "results": {"higher_is_better": True, "benchmark_key": None},
+        "cost_per_result": {"higher_is_better": False, "benchmark_key": "cpa"},
+    }
+
+    for metric, config in metrics_config.items():
+        current_val = totals.get(metric)
+        prev_val = prev_totals.get(metric)
+
+        if current_val is not None:
+            analysis["metrics"][metric] = current_val
+
+            if prev_val is not None and config["higher_is_better"] is not None:
+                change = pct_change(current_val, prev_val)
+                analysis["month_over_month"][metric] = {
+                    "previous": prev_val,
+                    "current": current_val,
+                    "change_pct": change,
+                }
+
+            if config["benchmark_key"] and industry_benchmarks:
+                benchmark_val = industry_benchmarks.get(config["benchmark_key"])
+                if benchmark_val is not None:
+                    analysis["scores"][metric] = score_metric(
+                        current_val, benchmark_val, config["higher_is_better"]
+                    )
+
+    by_campaign = google_ads_data.get("by_campaign", {})
+    for campaign_name, campaign_data in by_campaign.items():
+        campaign_analysis = {"name": campaign_name, "metrics": campaign_data, "status": "ok"}
+        ctr = campaign_data.get("ctr", 0)
+        cpc = campaign_data.get("cpc", 0)
+        cpr = campaign_data.get("cost_per_result", 0)
+
+        if industry_benchmarks:
+            if ctr and ctr < industry_benchmarks.get("ctr", 0) * 0.7:
+                campaign_analysis["status"] = "underperforming"
+                campaign_analysis["issue"] = (
+                    f"CTR ({ctr}%) below benchmark ({industry_benchmarks.get('ctr')}%)"
+                )
+            if cpc and cpc > industry_benchmarks.get("cpc", 999) * 1.3:
+                campaign_analysis["status"] = "underperforming"
+                campaign_analysis["issue"] = (
+                    f"CPC (${cpc}) above benchmark (${industry_benchmarks.get('cpc')})"
+                )
+            if cpr and cpr > industry_benchmarks.get("cpa", 999) * 1.3:
+                campaign_analysis["status"] = "underperforming"
+                campaign_analysis["issue"] = (
+                    f"CPA (${cpr}) above benchmark (${industry_benchmarks.get('cpa')})"
+                )
+
+        analysis["campaign_analysis"].append(campaign_analysis)
+
+    return analysis
+
+
 def analyze_search_console(gsc_data, prev_gsc_data, benchmarks_seo, industry):
     """Analyze Search Console data against benchmarks and prior month."""
     if not gsc_data:
@@ -371,7 +449,7 @@ def build_full_analysis(client_id, month, current_data, client_config):
 
     # Load previous month data from database
     prev_data = {}
-    for source in ["google_analytics", "meta_business", "search_console"]:
+    for source in ["google_analytics", "meta_business", "search_console", "google_ads"]:
         prev_rows = db.get_monthly_data(client_id, prev_month, source)
         if prev_rows:
             prev_data[source] = json.loads(prev_rows[0]["data_json"])
@@ -397,10 +475,17 @@ def build_full_analysis(client_id, month, current_data, client_config):
         industry
     )
 
+    google_ads_analysis = analyze_google_ads(
+        current_data.get("google_ads"),
+        prev_data.get("google_ads"),
+        benchmarks.get("google_ads", {}),
+        industry,
+    )
+
     # Aggregate highlights and concerns
     all_highlights = []
     all_concerns = []
-    for analysis in [ga_analysis, meta_analysis, gsc_analysis]:
+    for analysis in [ga_analysis, meta_analysis, gsc_analysis, google_ads_analysis]:
         if analysis:
             all_highlights.extend(analysis.get("highlights", []))
             all_concerns.extend(analysis.get("concerns", []))
@@ -409,7 +494,7 @@ def build_full_analysis(client_id, month, current_data, client_config):
     total_score = 0
     score_count = 0
     score_values = {"excellent": 5, "good": 4, "average": 3, "below_average": 2, "poor": 1}
-    for analysis in [ga_analysis, meta_analysis, gsc_analysis]:
+    for analysis in [ga_analysis, meta_analysis, gsc_analysis, google_ads_analysis]:
         if analysis:
             for metric, score in analysis.get("scores", {}).items():
                 if score in score_values:
@@ -435,17 +520,26 @@ def build_full_analysis(client_id, month, current_data, client_config):
     meta_spend = 0
     if meta_analysis:
         meta_spend = meta_analysis.get("metrics", {}).get("spend", 0)
-    total_spend = meta_spend + client_config.get("monthly_budget", 0)
+
+    google_ads_spend = 0
+    if google_ads_analysis:
+        google_ads_spend = google_ads_analysis.get("metrics", {}).get("spend", 0)
+
+    total_spend = meta_spend + google_ads_spend
 
     meta_results = 0
     if meta_analysis:
         meta_results = meta_analysis.get("metrics", {}).get("results", 0)
 
+    google_ads_results = 0
+    if google_ads_analysis:
+        google_ads_results = google_ads_analysis.get("metrics", {}).get("results", 0)
+
     ga_conversions = 0
     if ga_analysis:
         ga_conversions = ga_analysis.get("metrics", {}).get("conversions", 0)
 
-    total_conversions = meta_results + ga_conversions
+    total_conversions = meta_results + google_ads_results + ga_conversions
     if total_spend > 0 and total_conversions > 0:
         roas_data["total_spend"] = total_spend
         roas_data["total_conversions"] = total_conversions
@@ -458,6 +552,7 @@ def build_full_analysis(client_id, month, current_data, client_config):
         "industry": industry,
         "google_analytics": ga_analysis,
         "meta_business": meta_analysis,
+        "google_ads": google_ads_analysis,
         "search_console": gsc_analysis,
         "highlights": all_highlights,
         "concerns": all_concerns,
