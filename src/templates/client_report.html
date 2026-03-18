@@ -226,6 +226,28 @@
                     </div>
                 </div>
                 {% endif %}
+
+                {% if paid_summary and paid_summary.total_paid_spend and kpi_status and kpi_status.actual and kpi_status.actual.attributed_revenue %}
+                <div class="kpi-card">
+                    <div class="kpi-label">Attributed Revenue</div>
+                    <div class="kpi-value">${{ "{:,.0f}".format(kpi_status.actual.attributed_revenue) }}</div>
+                </div>
+                {% endif %}
+
+                {% if kpi_status.evaluation.roas %}
+                <div class="kpi-card">
+                    <div class="kpi-label">Target ROAS</div>
+                    <div class="kpi-value">{{ kpi_status.evaluation.roas.target }}x</div>
+                    <div class="kpi-change {{ 'kpi-up' if kpi_status.evaluation.roas.on_track else 'kpi-down' if kpi_status.evaluation.roas.on_track is not none else '' }}">
+                        {% if kpi_status.evaluation.roas.actual is not none %}
+                            Actual: {{ kpi_status.evaluation.roas.actual }}x
+                            ({{ 'On Track' if kpi_status.evaluation.roas.on_track else 'Off Track' }})
+                        {% else %}
+                            {{ kpi_status.evaluation.roas.note or 'Add revenue data to score ROAS' }}
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
         {% endif %}

@@ -203,6 +203,40 @@
         </div>
     </div>
 
+    <!-- Revenue Tracking (CRM/Offline) -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-cash-stack"></i> Revenue Tracking ({{ active_month }})</strong></div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('brand_save_month_finance', brand_id=brand.id) }}">
+                    <input type="hidden" name="month" value="{{ active_month }}">
+                    <div class="mb-3">
+                        <label class="form-label small text-muted mb-1">Closed Revenue (from CRM/offline closes)</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">$</span>
+                            <input type="number" step="0.01" min="0" name="closed_revenue" class="form-control"
+                                   value="{{ month_finance.closed_revenue or 0 }}" placeholder="0.00">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted mb-1">Closed Deals</label>
+                        <input type="number" min="0" name="closed_deals" class="form-control form-control-sm"
+                               value="{{ month_finance.closed_deals or 0 }}" placeholder="0">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted mb-1">Notes</label>
+                        <textarea name="finance_notes" class="form-control form-control-sm" rows="2"
+                                  placeholder="Optional: source, assumptions, attribution window...">{{ month_finance.notes or '' }}</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="bi bi-save"></i> Save Revenue Data
+                    </button>
+                    <small class="text-muted d-block mt-2">Used to calculate true ROAS and target performance for this month.</small>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- CSV Upload -->
     <div class="col-12">
         <div class="card">

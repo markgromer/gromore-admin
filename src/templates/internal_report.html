@@ -207,6 +207,18 @@
                     <div class="label">Cost Per Conversion</div>
                     <div class="value">${{ "{:,.2f}".format(roas.cost_per_conversion) }}</div>
                 </div>
+                {% if roas.attributed_revenue is defined %}
+                <div class="metric-box">
+                    <div class="label">Attributed Revenue</div>
+                    <div class="value">${{ "{:,.2f}".format(roas.attributed_revenue) }}</div>
+                </div>
+                {% endif %}
+                {% if roas.blended_roas is defined %}
+                <div class="metric-box">
+                    <div class="label">Blended ROAS</div>
+                    <div class="value">{{ roas.blended_roas }}x</div>
+                </div>
+                {% endif %}
             </div>
         </div>
         {% endif %}
@@ -242,9 +254,15 @@
                 <tr>
                     <td>ROAS</td>
                     <td>{{ kpi_status.evaluation.roas.target }}x</td>
-                    <td>N/A</td>
-                    <td>N/A</td>
-                    <td>{{ kpi_status.evaluation.roas.note or 'Not available' }}</td>
+                    <td>{{ (kpi_status.evaluation.roas.actual ~ 'x') if kpi_status.evaluation.roas.actual is not none else 'N/A' }}</td>
+                    <td>{{ (kpi_status.evaluation.roas.gap_pct ~ '%') if kpi_status.evaluation.roas.gap_pct is not none else 'N/A' }}</td>
+                    <td class="status-{{ 'ok' if kpi_status.evaluation.roas.on_track else 'underperforming' if kpi_status.evaluation.roas.on_track is not none else '' }}">
+                        {% if kpi_status.evaluation.roas.on_track is none %}
+                            {{ kpi_status.evaluation.roas.note or 'Not available' }}
+                        {% else %}
+                            {{ 'On Track' if kpi_status.evaluation.roas.on_track else 'Off Track' }}
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endif %}
             </table>

@@ -458,7 +458,7 @@ def build_full_analysis(client_id, month, current_data, client_config):
 
     # Load previous month data from database
     prev_data = {}
-    for source in ["google_analytics", "meta_business", "search_console", "google_ads"]:
+    for source in ["google_analytics", "meta_business", "search_console", "google_ads", "crm_revenue"]:
         prev_rows = db.get_monthly_data(client_id, prev_month, source)
         if prev_rows:
             prev_data[source] = json.loads(prev_rows[0]["data_json"])
@@ -554,6 +554,14 @@ def build_full_analysis(client_id, month, current_data, client_config):
         roas_data["total_conversions"] = total_conversions
         roas_data["cost_per_conversion"] = round(total_spend / total_conversions, 2)
 
+    crm_revenue = current_data.get("crm_revenue") or {}
+    attributed_revenue = _to_float((crm_revenue.get("totals") or {}).get("revenue"), 0.0)
+    blended_roas = round(attributed_revenue / total_spend, 2) if total_spend > 0 and attributed_revenue > 0 else None
+    if attributed_revenue > 0:
+        roas_data["attributed_revenue"] = round(attributed_revenue, 2)
+    if blended_roas is not None:
+        roas_data["blended_roas"] = blended_roas
+
     # KPI target intelligence (brand-specific, not generic)
     target_cpa = _to_float(client_config.get("kpi_target_cpa"), 0.0)
     target_leads = _to_float(client_config.get("kpi_target_leads"), 0.0)
@@ -573,6 +581,8 @@ def build_full_analysis(client_id, month, current_data, client_config):
             "paid_spend": paid_spend,
             "paid_leads": paid_leads,
             "blended_cpa": blended_cpa,
+            "attributed_revenue": round(attributed_revenue, 2),
+            "blended_roas": blended_roas,
         },
         "evaluation": {},
     }
@@ -614,13 +624,31 @@ def build_full_analysis(client_id, month, current_data, client_config):
             )
 
     if target_roas > 0:
-        kpi_status["evaluation"]["roas"] = {
-            "target": target_roas,
-            "actual": None,
-            "gap_pct": None,
-            "on_track": None,
-            "note": "ROAS target set; revenue feed not connected yet for true ROAS calculation.",
-        }
+        if blended_roas is not None:
+            roas_gap_pct = round(((blended_roas - target_roas) / target_roas) * 100, 1)
+            roas_on_track = blended_roas >= target_roas
+            kpi_status["evaluation"]["roas"] = {
+                "target": target_roas,
+                "actual": blended_roas,
+                "gap_pct": roas_gap_pct,
+                "on_track": roas_on_track,
+            }
+            if roas_on_track:
+                all_highlights.append(
+                    f"Blended ROAS is {blended_roas}x vs target {target_roas}x (+{roas_gap_pct}%)"
+                )
+            else:
+                all_concerns.append(
+                    f"Blended ROAS is {blended_roas}x vs target {target_roas}x ({abs(roas_gap_pct)}% below target)"
+                )
+        else:
+            kpi_status["evaluation"]["roas"] = {
+                "target": target_roas,
+                "actual": None,
+                "gap_pct": None,
+                "on_track": None,
+                "note": "ROAS target set; add monthly revenue in Revenue Tracking to score ROAS.",
+            }
 
     paid_summary = {
         "channels": {

@@ -99,6 +99,18 @@ def build_analysis_and_suggestions_for_brand(db, brand, month):
         except Exception as e:
             api_errors.append(f"API bridge error: {str(e)}")
 
+    # Add monthly CRM/offline revenue input (for true ROAS)
+    finance = db.get_brand_month_finance(brand["id"], month)
+    if finance and (finance.get("closed_revenue") or finance.get("closed_deals")):
+        data["crm_revenue"] = {
+            "totals": {
+                "revenue": float(finance.get("closed_revenue") or 0),
+                "closed_deals": int(finance.get("closed_deals") or 0),
+            },
+            "notes": finance.get("notes", ""),
+            "updated_at": finance.get("updated_at", ""),
+        }
+
     if not data:
         error_detail = "No data available."
         if api_errors:

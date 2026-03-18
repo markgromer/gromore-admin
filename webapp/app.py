@@ -314,6 +314,11 @@ def create_app():
         if not brand:
             abort(404)
         active_month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+        month_finance = db.get_brand_month_finance(brand_id, active_month) or {
+            "closed_revenue": 0,
+            "closed_deals": 0,
+            "notes": "",
+        }
         imports_root = Path(app.config.get("IMPORTS_DIR") or (BASE_DIR / "data" / "imports"))
         import_dir = imports_root / brand["slug"] / active_month
         csv_status = {
@@ -358,7 +363,24 @@ def create_app():
             ai_brief=ai_brief,
             ai_chat_messages=ai_chat_messages,
             openai_enabled=bool(openai_key),
+            month_finance=month_finance,
         )
+
+    @app.route("/brands/<int:brand_id>/finance", methods=["POST"])
+    @login_required
+    def brand_save_month_finance(brand_id):
+        brand = db.get_brand(brand_id)
+        if not brand:
+            abort(404)
+
+        month = request.form.get("month") or datetime.now().strftime("%Y-%m")
+        revenue = request.form.get("closed_revenue", "0")
+        closed_deals = request.form.get("closed_deals", "0")
+        notes = request.form.get("finance_notes", "")
+
+        db.upsert_brand_month_finance(brand_id, month, revenue, closed_deals, notes)
+        flash(f"Revenue data saved for {month}", "success")
+        return redirect(url_for("brand_detail", brand_id=brand_id, month=month))
 
     @app.route("/brands/<int:brand_id>/ai-chat", methods=["POST"])
     @login_required

@@ -595,12 +595,21 @@ def _target_kpi_suggestions(analysis):
 
     roas_eval = evaluation.get("roas") if isinstance(evaluation, dict) else None
     if isinstance(roas_eval, dict) and roas_eval.get("target"):
-        suggestions.append(make_suggestion(
-            "Enable Revenue Tracking for True ROAS",
-            "ROAS target is configured, but revenue events are not connected. "
-            "Connect CRM revenue or offline conversion values so bidding and reporting can optimize to actual return.",
-            PRIORITY_MEDIUM, CATEGORY_STRATEGY, "measurement"
-        ))
+        if roas_eval.get("actual") is None:
+            suggestions.append(make_suggestion(
+                "Enable Revenue Tracking for True ROAS",
+                "ROAS target is configured, but revenue events are not connected. "
+                "Connect CRM revenue or offline conversion values so bidding and reporting can optimize to actual return.",
+                PRIORITY_MEDIUM, CATEGORY_STRATEGY, "measurement"
+            ))
+        elif roas_eval.get("on_track") is False:
+            suggestions.append(make_suggestion(
+                "Recover ROAS to Target",
+                f"Blended ROAS is {roas_eval.get('actual')}x vs target {roas_eval.get('target')}x. "
+                "Shift spend toward the highest-margin campaigns and tighten low-intent traffic segments.",
+                PRIORITY_HIGH, CATEGORY_BUDGET, "profitability",
+                data_point=f"ROAS gap: {roas_eval.get('gap_pct')}%"
+            ))
 
     return suggestions
 

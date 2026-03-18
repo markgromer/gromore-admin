@@ -91,6 +91,18 @@ class WebDB:
                 FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS brand_month_finance (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                month TEXT NOT NULL,
+                closed_revenue REAL DEFAULT 0,
+                closed_deals INTEGER DEFAULT 0,
+                notes TEXT DEFAULT '',
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(brand_id, month),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS ai_briefs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand_id INTEGER NOT NULL,
@@ -475,6 +487,43 @@ class WebDB:
         conn = self._conn()
         conn.execute(
             "UPDATE reports SET sent_at = datetime('now') WHERE id = ?", (report_id,)
+        )
+        conn.commit()
+        conn.close()
+
+    # ── Monthly Finance (CRM/offline revenue) ──
+
+    def get_brand_month_finance(self, brand_id, month):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM brand_month_finance WHERE brand_id = ? AND month = ?",
+            (brand_id, month),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def upsert_brand_month_finance(self, brand_id, month, closed_revenue=0, closed_deals=0, notes=""):
+        try:
+            rev = float(closed_revenue or 0)
+        except (TypeError, ValueError):
+            rev = 0.0
+        try:
+            deals = int(float(closed_deals or 0))
+        except (TypeError, ValueError):
+            deals = 0
+
+        conn = self._conn()
+        conn.execute(
+            """
+            INSERT INTO brand_month_finance (brand_id, month, closed_revenue, closed_deals, notes, updated_at)
+            VALUES (?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(brand_id, month) DO UPDATE SET
+                closed_revenue = excluded.closed_revenue,
+                closed_deals = excluded.closed_deals,
+                notes = excluded.notes,
+                updated_at = datetime('now')
+            """,
+            (brand_id, month, rev, deals, notes or ""),
         )
         conn.commit()
         conn.close()
