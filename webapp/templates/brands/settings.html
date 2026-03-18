@@ -163,6 +163,10 @@
                     <button type="submit" class="btn btn-primary w-100">
                         <i class="bi bi-check-lg"></i> Save CRM
                     </button>
+                    <button type="button" class="btn btn-outline-secondary w-100 mt-2" onclick="testRevenueWebhook({{ brand.id }})">
+                        <i class="bi bi-plug"></i> Send Test Webhook
+                    </button>
+                    <span id="webhook-test-result" class="small d-block mt-2 text-muted"></span>
                     {% if brand.crm_type %}
                     <span class="badge bg-success mt-2">{{ brand.crm_type|title }} configured</span>
                     {% endif %}
@@ -171,4 +175,35 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function testRevenueWebhook(brandId) {
+    var resultEl = document.getElementById('webhook-test-result');
+    resultEl.textContent = 'Testing webhook...';
+    resultEl.className = 'small d-block mt-2 text-muted';
+
+    fetch('/brands/' + brandId + '/crm-webhook/test', {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok) {
+            resultEl.textContent = data.message || 'Webhook test passed';
+            resultEl.className = 'small d-block mt-2 text-success fw-medium';
+        } else {
+            resultEl.textContent = data.error || 'Webhook test failed';
+            resultEl.className = 'small d-block mt-2 text-danger fw-medium';
+        }
+    })
+    .catch(function(err) {
+        resultEl.textContent = 'Webhook test failed: ' + err.message;
+        resultEl.className = 'small d-block mt-2 text-danger fw-medium';
+    });
+}
+</script>
 {% endblock %}

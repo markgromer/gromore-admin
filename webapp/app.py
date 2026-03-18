@@ -638,6 +638,44 @@ def create_app():
             "closed_deals": closed_deals_num,
         })
 
+    @app.route("/brands/<int:brand_id>/crm-webhook/test", methods=["POST"])
+    @login_required
+    def crm_revenue_webhook_test(brand_id):
+        brand = db.get_brand(brand_id)
+        if not brand:
+            return jsonify({"ok": False, "error": "Brand not found"}), 404
+
+        webhook_key = (brand.get("crm_api_key") or "").strip()
+        if not webhook_key:
+            return jsonify({"ok": False, "error": "Set CRM API key first in Brand Settings"}), 400
+
+        month = datetime.now().strftime("%Y-%m")
+        payload = {
+            "month": month,
+            "closed_revenue": 1234.56,
+            "closed_deals": 2,
+            "notes": "Webhook test payload",
+        }
+
+        try:
+            with app.test_client() as client:
+                resp = client.post(
+                    url_for("crm_revenue_webhook", brand_id=brand_id),
+                    json=payload,
+                    headers={"X-Webhook-Key": webhook_key},
+                )
+                data = resp.get_json(silent=True) or {}
+
+            if resp.status_code == 200 and data.get("ok"):
+                return jsonify({
+                    "ok": True,
+                    "message": f"Webhook OK. Saved test revenue for {month}.",
+                    "month": month,
+                })
+            return jsonify({"ok": False, "error": data.get("error") or f"Status {resp.status_code}"}), 400
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+
     @app.route("/brands/<int:brand_id>/delete", methods=["POST"])
     @login_required
     def brand_delete(brand_id):
