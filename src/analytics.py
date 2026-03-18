@@ -159,6 +159,7 @@ def analyze_meta_business(meta_data, prev_meta_data, benchmarks_meta, industry):
         "highlights": [],
         "concerns": [],
         "campaign_analysis": [],
+        "top_ads": [],
     }
 
     # Key metrics
@@ -247,6 +248,10 @@ def analyze_meta_business(meta_data, prev_meta_data, benchmarks_meta, industry):
                 camp_analysis["issue"] = f"CPC (${camp_cpc}) well above benchmark (${industry_benchmarks.get('cpc')})"
 
         analysis["campaign_analysis"].append(camp_analysis)
+
+    top_ads = meta_data.get("top_ads", [])
+    if top_ads:
+        analysis["top_ads"] = top_ads[:10]
 
     return analysis
 

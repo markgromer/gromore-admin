@@ -310,6 +310,24 @@
                 {% endfor %}
             </table>
             {% endif %}
+
+            {% if meta.top_ads %}
+            <h3>Top Ads (by Results)</h3>
+            <table>
+                <tr><th>Ad</th><th>Campaign</th><th>Spend</th><th>Results</th><th>CPR</th><th>CTR</th><th>Clicks</th></tr>
+                {% for ad in meta.top_ads[:10] %}
+                <tr>
+                    <td>{{ ad.ad_name }}</td>
+                    <td>{{ ad.campaign_name or '-' }}</td>
+                    <td>${{ "{:,.2f}".format(ad.spend or 0) }}</td>
+                    <td>{{ ad.results or 0 }}</td>
+                    <td>{{ "$" + "{:,.2f}".format(ad.cost_per_result) if ad.cost_per_result else 'N/A' }}</td>
+                    <td>{{ ad.ctr or 0 }}%</td>
+                    <td>{{ "{:,}".format(ad.clicks or 0) }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% endif %}
         </div>
         {% endif %}
 

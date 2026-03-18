@@ -302,6 +302,25 @@ def _pull_meta(ad_account_id, access_token, start_date, end_date):
     """Pull Meta Ads data using Graph API with OAuth token."""
     import requests
 
+    def _extract_results_and_cpr(row):
+        results = 0
+        cpr = 0
+        for action in row.get("actions", []) or []:
+            if action.get("action_type") in (
+                "lead",
+                "onsite_conversion.lead_grouped",
+                "offsite_conversion.fb_pixel_lead",
+            ):
+                results += int(float(action.get("value", 0) or 0))
+        for cpa in row.get("cost_per_action_type", []) or []:
+            if cpa.get("action_type") in (
+                "lead",
+                "onsite_conversion.lead_grouped",
+                "offsite_conversion.fb_pixel_lead",
+            ):
+                cpr = float(cpa.get("value", 0) or 0)
+        return results, cpr
+
     url = f"https://graph.facebook.com/v21.0/act_{ad_account_id}/insights"
     params = {
         "access_token": access_token,
@@ -315,15 +334,7 @@ def _pull_meta(ad_account_id, access_token, start_date, end_date):
     result = resp.json()
 
     data_row = result.get("data", [{}])[0] if result.get("data") else {}
-
-    leads = 0
-    cost_per_lead = 0
-    for action in data_row.get("actions", []):
-        if action.get("action_type") in ("lead", "onsite_conversion.lead_grouped", "offsite_conversion.fb_pixel_lead"):
-            leads += int(action.get("value", 0))
-    for cpa in data_row.get("cost_per_action_type", []):
-        if cpa.get("action_type") in ("lead", "onsite_conversion.lead_grouped", "offsite_conversion.fb_pixel_lead"):
-            cost_per_lead = float(cpa.get("value", 0))
+    leads, cost_per_lead = _extract_results_and_cpr(data_row)
 
     spend = float(data_row.get("spend", 0))
     clicks = int(data_row.get("clicks", 0))
@@ -342,4 +353,73 @@ def _pull_meta(ad_account_id, access_token, start_date, end_date):
         "cost_per_result": cost_per_lead,
     }
 
-    return {"totals": totals, "by_campaign": {}, "by_ad_set": {}, "row_count": 1}
+    by_campaign = {}
+    campaign_resp = requests.get(
+        url,
+        params={
+            "access_token": access_token,
+            "time_range": f'{{"since":"{start_date}","until":"{end_date}"}}',
+            "fields": "campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type",
+            "level": "campaign",
+            "limit": 200,
+        },
+        timeout=30,
+    )
+    if campaign_resp.status_code == 200:
+        for row in campaign_resp.json().get("data", []):
+            campaign_results, campaign_cpr = _extract_results_and_cpr(row)
+            campaign_name = row.get("campaign_name") or row.get("campaign_id") or "Unknown Campaign"
+            by_campaign[campaign_name] = {
+                "campaign_id": row.get("campaign_id", ""),
+                "spend": float(row.get("spend", 0) or 0),
+                "impressions": int(float(row.get("impressions", 0) or 0)),
+                "clicks": int(float(row.get("clicks", 0) or 0)),
+                "ctr": float(row.get("ctr", 0) or 0),
+                "cpc": float(row.get("cpc", 0) or 0),
+                "cpm": float(row.get("cpm", 0) or 0),
+                "reach": int(float(row.get("reach", 0) or 0)),
+                "frequency": float(row.get("frequency", 0) or 0),
+                "results": campaign_results,
+                "cost_per_result": campaign_cpr,
+            }
+
+    top_ads = []
+    ad_resp = requests.get(
+        url,
+        params={
+            "access_token": access_token,
+            "time_range": f'{{"since":"{start_date}","until":"{end_date}"}}',
+            "fields": "ad_id,ad_name,campaign_name,spend,impressions,clicks,ctr,cpc,cpm,actions,cost_per_action_type",
+            "level": "ad",
+            "limit": 200,
+        },
+        timeout=30,
+    )
+    if ad_resp.status_code == 200:
+        for row in ad_resp.json().get("data", []):
+            ad_results, ad_cpr = _extract_results_and_cpr(row)
+            top_ads.append(
+                {
+                    "ad_id": row.get("ad_id", ""),
+                    "ad_name": row.get("ad_name") or row.get("ad_id") or "Unknown Ad",
+                    "campaign_name": row.get("campaign_name", ""),
+                    "spend": float(row.get("spend", 0) or 0),
+                    "impressions": int(float(row.get("impressions", 0) or 0)),
+                    "clicks": int(float(row.get("clicks", 0) or 0)),
+                    "ctr": float(row.get("ctr", 0) or 0),
+                    "cpc": float(row.get("cpc", 0) or 0),
+                    "cpm": float(row.get("cpm", 0) or 0),
+                    "results": ad_results,
+                    "cost_per_result": ad_cpr,
+                }
+            )
+
+    top_ads.sort(key=lambda x: (x.get("results", 0), x.get("spend", 0)), reverse=True)
+
+    return {
+        "totals": totals,
+        "by_campaign": by_campaign,
+        "by_ad_set": {},
+        "top_ads": top_ads[:20],
+        "row_count": len(top_ads) if top_ads else 1,
+    }
