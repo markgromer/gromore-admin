@@ -259,6 +259,22 @@
                 {% endfor %}
             </table>
             {% endif %}
+
+            {% if ga.top_landing_pages %}
+            <h3>Top Landing Pages</h3>
+            <table>
+                <tr><th>Landing Page</th><th>Sessions</th><th>Conversions</th><th>CVR</th><th>Bounce Rate</th></tr>
+                {% for page in ga.top_landing_pages[:10] %}
+                <tr>
+                    <td style="max-width: 380px; overflow: hidden; text-overflow: ellipsis;">{{ page.page }}</td>
+                    <td>{{ "{:,}".format(page.sessions or 0) }}</td>
+                    <td>{{ page.conversions or 0 }}</td>
+                    <td>{{ page.conversion_rate or 0 }}%</td>
+                    <td>{{ page.bounce_rate or 0 }}%</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% endif %}
         </div>
         {% endif %}
 

@@ -213,25 +213,33 @@ def _pull_ga4(property_id, access_token, start_date, end_date):
     url = f"https://analyticsdata.googleapis.com/v1beta/properties/{property_id}:runReport"
     headers = {"Authorization": f"Bearer {access_token}"}
 
-    body = {
-        "dateRanges": [{"startDate": start_date, "endDate": end_date}],
-        "metrics": [
-            {"name": "sessions"},
-            {"name": "totalUsers"},
-            {"name": "newUsers"},
-            {"name": "bounceRate"},
-            {"name": "averageSessionDuration"},
-            {"name": "screenPageViews"},
-            {"name": "conversions"},
+    def _run_report(metric_names, dimension_names=None, limit=100):
+        body = {
+            "dateRanges": [{"startDate": start_date, "endDate": end_date}],
+            "metrics": [{"name": metric_name} for metric_name in metric_names],
+            "limit": limit,
+        }
+        if dimension_names:
+            body["dimensions"] = [{"name": dimension_name} for dimension_name in dimension_names]
+
+        response = requests.post(url, json=body, headers=headers, timeout=30)
+        response.raise_for_status()
+        return response.json().get("rows", [])
+
+    totals_rows = _run_report(
+        [
+            "sessions",
+            "totalUsers",
+            "newUsers",
+            "bounceRate",
+            "averageSessionDuration",
+            "screenPageViews",
+            "conversions",
         ],
-    }
-
-    resp = requests.post(url, json=body, headers=headers, timeout=30)
-    resp.raise_for_status()
-    result = resp.json()
-
-    row = result.get("rows", [{}])[0] if result.get("rows") else {}
-    values = [v.get("value", "0") for v in row.get("metricValues", [])]
+        limit=1,
+    )
+    totals_row = totals_rows[0] if totals_rows else {}
+    values = [v.get("value", "0") for v in totals_row.get("metricValues", [])]
 
     totals = {
         "sessions": int(float(values[0])) if len(values) > 0 else 0,
@@ -247,7 +255,62 @@ def _pull_ga4(property_id, access_token, start_date, end_date):
     if totals["sessions"] > 0 and totals["conversions"] > 0:
         totals["conversion_rate"] = round(totals["conversions"] / totals["sessions"] * 100, 2)
 
-    return {"totals": totals, "by_source": {}, "row_count": 1, "columns_found": list(totals.keys())}
+    by_source = {}
+    source_rows = _run_report(
+        ["sessions", "conversions", "totalUsers"],
+        dimension_names=["sessionSourceMedium"],
+        limit=100,
+    )
+    for source_row in source_rows:
+        dimensions = source_row.get("dimensionValues", [])
+        metrics = source_row.get("metricValues", [])
+        source_name = dimensions[0].get("value", "(not set)") if dimensions else "(not set)"
+        source_sessions = int(float(metrics[0].get("value", "0"))) if len(metrics) > 0 else 0
+        source_conversions = int(float(metrics[1].get("value", "0"))) if len(metrics) > 1 else 0
+        source_users = int(float(metrics[2].get("value", "0"))) if len(metrics) > 2 else 0
+        by_source[source_name] = {
+            "sessions": source_sessions,
+            "conversions": source_conversions,
+            "users": source_users,
+        }
+
+    by_page = []
+    landing_rows = _run_report(
+        ["sessions", "conversions", "totalUsers", "bounceRate", "averageSessionDuration"],
+        dimension_names=["landingPagePlusQueryString"],
+        limit=100,
+    )
+    for landing_row in landing_rows:
+        dimensions = landing_row.get("dimensionValues", [])
+        metrics = landing_row.get("metricValues", [])
+        page_path = dimensions[0].get("value", "(not set)") if dimensions else "(not set)"
+        page_sessions = int(float(metrics[0].get("value", "0"))) if len(metrics) > 0 else 0
+        page_conversions = int(float(metrics[1].get("value", "0"))) if len(metrics) > 1 else 0
+        page_users = int(float(metrics[2].get("value", "0"))) if len(metrics) > 2 else 0
+        page_bounce_rate = float(metrics[3].get("value", "0")) if len(metrics) > 3 else 0.0
+        page_avg_session_duration = float(metrics[4].get("value", "0")) if len(metrics) > 4 else 0.0
+        page_conversion_rate = round((page_conversions / page_sessions) * 100, 2) if page_sessions > 0 else 0.0
+        by_page.append(
+            {
+                "page": page_path,
+                "sessions": page_sessions,
+                "conversions": page_conversions,
+                "users": page_users,
+                "bounce_rate": page_bounce_rate,
+                "avg_session_duration": page_avg_session_duration,
+                "conversion_rate": page_conversion_rate,
+            }
+        )
+
+    by_page.sort(key=lambda item: item.get("sessions", 0), reverse=True)
+
+    return {
+        "totals": totals,
+        "by_source": by_source,
+        "by_page": by_page,
+        "row_count": max(1, len(source_rows), len(landing_rows)),
+        "columns_found": list(totals.keys()),
+    }
 
 
 def _pull_gsc(site_url, access_token, start_date, end_date):

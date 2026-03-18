@@ -128,7 +128,12 @@ def analyze_google_analytics(ga_data, prev_ga_data, benchmarks_website):
         source_sessions = {k: v.get("sessions", 0) for k, v in by_source.items()}
         sorted_sources = sorted(source_sessions.items(), key=lambda x: x[1], reverse=True)
         analysis["top_sources"] = [
-            {"source": s, "sessions": c} for s, c in sorted_sources[:10]
+            {
+                "source": source_name,
+                "sessions": sessions_count,
+                "conversions": (by_source.get(source_name) or {}).get("conversions", 0),
+            }
+            for source_name, sessions_count in sorted_sources[:10]
         ]
 
         # Find best converting sources
@@ -139,6 +144,14 @@ def analyze_google_analytics(ga_data, prev_ga_data, benchmarks_website):
         analysis["top_converting_sources"] = [
             {"source": s, "conversions": c} for s, c in sorted_conversions[:5]
         ]
+
+    by_page = ga_data.get("by_page", [])
+    if by_page:
+        analysis["top_landing_pages"] = sorted(
+            by_page,
+            key=lambda row: (row.get("sessions", 0), row.get("conversions", 0)),
+            reverse=True,
+        )[:10]
 
     return analysis
 

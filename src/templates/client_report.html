@@ -318,6 +318,48 @@
                     {% endif %}
                 </div>
             </div>
+
+            {% if ga.top_sources %}
+            <div class="channel-card">
+                <h3>Top Traffic Sources</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <tr style="background: #f8f9fa;">
+                        <th style="padding: 8px; text-align: left;">Source</th>
+                        <th style="padding: 8px; text-align: right;">Visits</th>
+                        <th style="padding: 8px; text-align: right;">Conversions</th>
+                    </tr>
+                    {% for source in ga.top_sources[:5] %}
+                    <tr>
+                        <td style="padding: 8px; border-top: 1px solid #eee;">{{ source.source }}</td>
+                        <td style="padding: 8px; border-top: 1px solid #eee; text-align: right;">{{ "{:,}".format(source.sessions or 0) }}</td>
+                        <td style="padding: 8px; border-top: 1px solid #eee; text-align: right;">{{ source.conversions or 0 }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+            {% endif %}
+
+            {% if ga.top_landing_pages %}
+            <div class="channel-card">
+                <h3>Top Landing Pages</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <tr style="background: #f8f9fa;">
+                        <th style="padding: 8px; text-align: left;">Page</th>
+                        <th style="padding: 8px; text-align: right;">Visits</th>
+                        <th style="padding: 8px; text-align: right;">Leads</th>
+                        <th style="padding: 8px; text-align: right;">CVR</th>
+                    </tr>
+                    {% for page in ga.top_landing_pages[:5] %}
+                    <tr>
+                        <td style="padding: 8px; border-top: 1px solid #eee; max-width: 380px; overflow: hidden; text-overflow: ellipsis;">{{ page.page }}</td>
+                        <td style="padding: 8px; border-top: 1px solid #eee; text-align: right;">{{ "{:,}".format(page.sessions or 0) }}</td>
+                        <td style="padding: 8px; border-top: 1px solid #eee; text-align: right;">{{ page.conversions or 0 }}</td>
+                        <td style="padding: 8px; border-top: 1px solid #eee; text-align: right;">{{ page.conversion_rate or 0 }}%</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+            {% endif %}
         </div>
         {% endif %}
 
