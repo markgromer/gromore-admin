@@ -518,3 +518,39 @@ class WebDB:
         )
         conn.commit()
         conn.close()
+
+    # ── Aggregate Queries ──
+
+    def get_report_for_brand_month(self, brand_id, month):
+        """Get the most recent report for a brand/month combo."""
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM reports WHERE brand_id = ? AND month = ? ORDER BY generated_at DESC LIMIT 1",
+            (brand_id, month),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def upsert_report(self, brand_id, month, internal_path, client_path):
+        """Create or update report for a brand/month (avoids duplicates)."""
+        conn = self._conn()
+        existing = conn.execute(
+            "SELECT id FROM reports WHERE brand_id = ? AND month = ? ORDER BY generated_at DESC LIMIT 1",
+            (brand_id, month),
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE reports SET internal_path=?, client_path=?, generated_at=datetime('now'), sent_at='', published_at='', published_url='' WHERE id=?",
+                (internal_path, client_path, existing["id"]),
+            )
+            conn.commit()
+            report_id = existing["id"]
+        else:
+            cur = conn.execute(
+                "INSERT INTO reports (brand_id, month, internal_path, client_path) VALUES (?, ?, ?, ?)",
+                (brand_id, month, internal_path, client_path),
+            )
+            conn.commit()
+            report_id = cur.lastrowid
+        conn.close()
+        return report_id

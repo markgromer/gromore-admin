@@ -134,11 +134,19 @@ def run_report_for_brand(db, brand, month):
     suggestions_internal = format_suggestions_for_internal(suggestions)
     suggestions_client = format_suggestions_for_client(suggestions)
 
+    # Load agency branding from settings
+    branding = {
+        "agency_name": db.get_setting("agency_name", ""),
+        "agency_logo_url": db.get_setting("agency_logo_url", ""),
+        "agency_website": db.get_setting("agency_website", ""),
+        "agency_color": db.get_setting("agency_color", "#2c3e50"),
+    }
+
     reports_dir = REPORTS_ROOT / slug / month
     reports_dir.mkdir(parents=True, exist_ok=True)
 
-    internal_path = generate_internal_report(analysis, suggestions_internal, output_dir=str(reports_dir))
-    client_path = generate_client_report(analysis, suggestions_client, output_dir=str(reports_dir))
+    internal_path = generate_internal_report(analysis, suggestions_internal, output_dir=str(reports_dir), branding=branding)
+    client_path = generate_client_report(analysis, suggestions_client, output_dir=str(reports_dir), branding=branding)
 
-    report_id = db.create_report(brand["id"], month, internal_path, client_path)
+    report_id = db.upsert_report(brand["id"], month, internal_path, client_path)
     return {"success": True, "report_id": report_id, "error": ""}

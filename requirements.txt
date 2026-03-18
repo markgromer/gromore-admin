@@ -13,6 +13,7 @@ facebook-business>=19.0.0
 
 # Web App
 flask>=3.0.0
+flask-wtf>=1.2.0
 gunicorn>=22.0.0
 requests>=2.31.0
 beautifulsoup4>=4.12.0

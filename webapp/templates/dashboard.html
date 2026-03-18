@@ -98,8 +98,8 @@
 {% endif %}
 
 <div class="row g-4">
-    <!-- Brands Quick View -->
-    <div class="col-lg-7">
+    <!-- Brands with Quick Actions -->
+    <div class="col-lg-8">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <strong>Brands</strong>
@@ -110,13 +110,13 @@
             <div class="card-body p-0">
                 {% if brands %}
                 <div class="table-responsive">
-                    <table class="table table-hover mb-0">
+                    <table class="table table-hover mb-0 align-middle">
                         <thead class="table-light">
                             <tr>
                                 <th>Brand</th>
-                                <th>Industry</th>
                                 <th>Connections</th>
-                                <th></th>
+                                <th>Report</th>
+                                <th class="text-end">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -126,21 +126,41 @@
                                     <a href="{{ url_for('brand_detail', brand_id=brand.id) }}" class="text-decoration-none fw-medium">
                                         {{ brand.display_name }}
                                     </a>
+                                    <br><small class="text-muted">{{ brand.industry|replace('_',' ')|title }}</small>
                                 </td>
-                                <td><span class="text-muted">{{ brand.industry|replace('_',' ')|title }}</span></td>
                                 <td>
                                     {% if brand.ga4_property_id %}
-                                    <span class="badge badge-connected me-1">GA4</span>
+                                    <span class="badge badge-connected me-1" title="Google Analytics">GA4</span>
                                     {% endif %}
                                     {% if brand.meta_ad_account_id %}
-                                    <span class="badge badge-connected me-1">Meta</span>
+                                    <span class="badge badge-connected me-1" title="Meta Ads">Meta</span>
                                     {% endif %}
                                     {% if brand.gsc_site_url %}
-                                    <span class="badge badge-connected">GSC</span>
+                                    <span class="badge badge-connected" title="Search Console">GSC</span>
+                                    {% endif %}
+                                    {% if not brand.ga4_property_id and not brand.meta_ad_account_id and not brand.gsc_site_url %}
+                                    <span class="text-muted small">None</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% set rpt = brand_reports.get(brand.id) %}
+                                    {% if rpt %}
+                                    <a href="{{ url_for('report_view', report_id=rpt.id, report_type='client') }}" class="text-decoration-none small" target="_blank">
+                                        {{ rpt.month }}
+                                    </a>
+                                    {% if rpt.sent_at %}<span class="badge badge-sent ms-1" style="font-size:.65rem">Sent</span>{% endif %}
+                                    {% else %}
+                                    <span class="text-muted small">None</span>
                                     {% endif %}
                                 </td>
                                 <td class="text-end">
-                                    <a href="{{ url_for('brand_detail', brand_id=brand.id) }}" class="btn btn-sm btn-outline-secondary">
+                                    <form method="POST" action="{{ url_for('brand_generate_report', brand_id=brand.id) }}" class="d-inline">
+                                        <input type="hidden" name="month" value="{{ now.strftime('%Y-%m') }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-primary" title="Generate Report">
+                                            <i class="bi bi-play-fill"></i>
+                                        </button>
+                                    </form>
+                                    <a href="{{ url_for('brand_detail', brand_id=brand.id) }}" class="btn btn-sm btn-outline-secondary" title="Details">
                                         <i class="bi bi-chevron-right"></i>
                                     </a>
                                 </td>
@@ -159,79 +179,66 @@
         </div>
     </div>
 
-    <!-- Recent Reports -->
-    <div class="col-lg-5">
+    <!-- Right Column: Recent Reports + AI Briefs -->
+    <div class="col-lg-4">
         <div class="card">
             <div class="card-header"><strong>Recent Reports</strong></div>
             <div class="card-body p-0">
                 {% if recent_reports %}
                 <div class="list-group list-group-flush">
                     {% for report in recent_reports %}
-                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                    <div class="list-group-item d-flex justify-content-between align-items-center py-2">
                         <div>
-                            <div class="fw-medium">{{ report.brand_name }}</div>
+                            <div class="fw-medium small">{{ report.brand_name }}</div>
                             <small class="text-muted">{{ report.month }}</small>
                         </div>
                         <div>
                             {% if report.sent_at %}
-                            <span class="badge badge-sent me-1">Sent</span>
+                            <span class="badge badge-sent me-1" style="font-size:.6rem">Sent</span>
                             {% endif %}
                             {% if report.published_url %}
-                            <span class="badge badge-published me-1">Published</span>
+                            <span class="badge badge-published me-1" style="font-size:.6rem">Published</span>
                             {% endif %}
-                            <a href="{{ url_for('report_view', report_id=report.id, report_type='client') }}" class="btn btn-sm btn-outline-primary" target="_blank">
-                                <i class="bi bi-eye"></i>
+                            <a href="{{ url_for('report_view', report_id=report.id, report_type='client') }}" class="btn btn-sm btn-outline-primary py-0 px-1" target="_blank">
+                                <i class="bi bi-eye" style="font-size:.75rem"></i>
                             </a>
                         </div>
                     </div>
                     {% endfor %}
                 </div>
                 {% else %}
-                <div class="text-center py-4 text-muted">
+                <div class="text-center py-4 text-muted small">
                     <p>No reports generated yet.</p>
                 </div>
                 {% endif %}
             </div>
         </div>
 
-        <div class="card mt-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <strong>AI Briefs</strong>
-                <span class="text-muted small">On-demand</span>
-            </div>
+        <div class="card mt-3">
+            <div class="card-header"><strong>AI Briefs</strong></div>
             <div class="card-body p-0">
                 {% if recent_ai_briefs %}
                 <div class="list-group list-group-flush">
                     {% for b in recent_ai_briefs %}
-                    <div class="list-group-item">
+                    <div class="list-group-item py-2">
                         <div class="d-flex justify-content-between align-items-start">
                             <div>
-                                <div class="fw-medium">
+                                <div class="fw-medium small">
                                     <a href="{{ url_for('brand_detail', brand_id=b.brand_id, month=b.month) }}" class="text-decoration-none">
                                         {{ b.brand_name }}
                                     </a>
                                 </div>
                                 <small class="text-muted">{{ b.month }}</small>
                             </div>
-                            <small class="text-muted">{{ b.updated_at[:16] if b.updated_at else '' }}</small>
                         </div>
-
                         {% if b.executive_summary %}
-                        <div class="small text-muted mt-2">{{ b.executive_summary }}</div>
-                        {% endif %}
-
-                        {% if b.mission_critical %}
-                        <ul class="small mt-2 mb-0">
-                            {% for item in b.mission_critical[:3] %}
-                            <li>{{ item.title }}</li>
-                            {% endfor %}
-                        </ul>
+                        <div class="small text-muted mt-1" style="line-height:1.3">{{ b.executive_summary[:150] }}{% if b.executive_summary|length > 150 %}...{% endif %}</div>
                         {% endif %}
                     </div>
                     {% endfor %}
                 </div>
                 {% else %}
-                <div class="text-center py-4 text-muted">
+                <div class="text-center py-4 text-muted small">
                     <p>No AI briefs generated yet.</p>
                 </div>
                 {% endif %}

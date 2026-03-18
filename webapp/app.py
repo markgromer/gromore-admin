@@ -15,6 +15,7 @@ from flask import (
     Flask, render_template, request, redirect, url_for,
     flash, session, jsonify, send_file, abort
 )
+from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from webapp.database import WebDB
@@ -135,6 +136,9 @@ def create_app():
         else:
             print(f"Bootstrap user ensured (username: {bootstrap_username})")
 
+    # CSRF protection
+    csrf = CSRFProtect(app)
+
     # Register blueprints
     app.register_blueprint(google_bp, url_prefix="/oauth/google")
     app.register_blueprint(meta_bp, url_prefix="/oauth/meta")
@@ -151,6 +155,7 @@ def create_app():
 
     # Make it available to blueprints
     app.login_required = login_required
+    app.csrf = csrf
 
     # ── Auto-detect APP_URL on first real request if not configured ──
     @app.before_request
@@ -207,12 +212,21 @@ def create_app():
     @login_required
     def dashboard():
         brands = db.get_all_brands()
+        current_month = datetime.now().strftime("%Y-%m")
         stats = {
             "total_brands": len(brands),
             "connected_ga4": sum(1 for b in brands if b.get("ga4_property_id")),
             "connected_meta": sum(1 for b in brands if b.get("meta_ad_account_id")),
-            "reports_this_month": db.count_reports_for_month(datetime.now().strftime("%Y-%m")),
+            "reports_this_month": db.count_reports_for_month(current_month),
         }
+
+        # Latest report per brand (for quick-action column)
+        brand_reports = {}
+        for brand in brands:
+            rpt = db.get_report_for_brand_month(brand["id"], current_month)
+            if rpt:
+                brand_reports[brand["id"]] = rpt
+
         recent_reports = db.get_recent_reports(limit=10)
         recent_ai_briefs = []
 
@@ -267,6 +281,7 @@ def create_app():
             recent_reports=recent_reports,
             recent_ai_briefs=recent_ai_briefs,
             health=health,
+            brand_reports=brand_reports,
         )
 
     # ── Brand Management ──
@@ -734,6 +749,12 @@ def create_app():
                     flash("OpenAI API key saved", "success")
                 else:
                     flash("OpenAI API key unchanged (blank)", "warning")
+            elif section == "branding":
+                db.save_setting("agency_name", request.form.get("agency_name", "").strip())
+                db.save_setting("agency_logo_url", request.form.get("agency_logo_url", "").strip())
+                db.save_setting("agency_website", request.form.get("agency_website", "").strip())
+                db.save_setting("agency_color", request.form.get("agency_color", "#2c3e50").strip())
+                flash("Agency branding saved", "success")
         wp_settings = {
             "wp_url": db.get_setting("wp_url", ""),
             "wp_user": db.get_setting("wp_user", ""),
@@ -741,11 +762,77 @@ def create_app():
         openai_configured = bool(
             db.get_setting("openai_api_key", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip()
         )
+        branding = {
+            "agency_name": db.get_setting("agency_name", ""),
+            "agency_logo_url": db.get_setting("agency_logo_url", ""),
+            "agency_website": db.get_setting("agency_website", ""),
+            "agency_color": db.get_setting("agency_color", "#2c3e50"),
+        }
         return render_template(
             "settings.html",
             wp_settings=wp_settings,
             openai_configured=openai_configured,
+            branding=branding,
         )
+
+    # ── Settings Test Endpoints ──
+    @app.route("/settings/test-smtp", methods=["POST"])
+    @login_required
+    def test_smtp():
+        try:
+            import smtplib
+            host = db.get_setting("smtp_host", "smtp.gmail.com")
+            port = int(db.get_setting("smtp_port", "587"))
+            user = db.get_setting("smtp_user", "")
+            pw = db.get_setting("smtp_password", "")
+            if not user or not pw:
+                return jsonify({"ok": False, "error": "SMTP username or password not configured"})
+            with smtplib.SMTP(host, port, timeout=10) as server:
+                server.starttls()
+                server.login(user, pw)
+            return jsonify({"ok": True, "message": f"Connected to {host}:{port} successfully"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)})
+
+    @app.route("/settings/test-openai", methods=["POST"])
+    @login_required
+    def test_openai():
+        try:
+            import requests as _req
+            key = db.get_setting("openai_api_key", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip()
+            if not key:
+                return jsonify({"ok": False, "error": "OpenAI API key not configured"})
+            resp = _req.get("https://api.openai.com/v1/models", headers={
+                "Authorization": f"Bearer {key}",
+            }, timeout=10)
+            if resp.status_code == 200:
+                return jsonify({"ok": True, "message": "OpenAI API key is valid"})
+            else:
+                return jsonify({"ok": False, "error": f"API returned status {resp.status_code}"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)})
+
+    @app.route("/settings/test-wordpress", methods=["POST"])
+    @login_required
+    def test_wordpress():
+        try:
+            import requests as _req
+            wp_url = db.get_setting("wp_url", "").strip().rstrip("/")
+            wp_user = db.get_setting("wp_user", "").strip()
+            wp_pw = db.get_setting("wp_app_password", "").strip()
+            if not wp_url or not wp_user or not wp_pw:
+                return jsonify({"ok": False, "error": "WordPress URL, username, or app password not configured"})
+            resp = _req.get(
+                f"{wp_url}/wp-json/wp/v2/posts?per_page=1",
+                auth=(wp_user, wp_pw),
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                return jsonify({"ok": True, "message": f"Connected to {wp_url} successfully"})
+            else:
+                return jsonify({"ok": False, "error": f"WordPress returned status {resp.status_code}: {resp.text[:200]}"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)})
 
     # ── Setup Guide ──
     @app.route("/setup-guide")

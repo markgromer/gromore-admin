@@ -10,10 +10,12 @@
         .container { max-width: 900px; margin: 0 auto; padding: 30px 40px; }
 
         /* Header - clean and professional */
-        .header { text-align: center; padding: 40px 0 30px; border-bottom: 3px solid #2c3e50; margin-bottom: 30px; }
-        .header h1 { font-size: 28px; font-weight: 300; color: #2c3e50; letter-spacing: 1px; }
-        .header .client-name { font-size: 36px; font-weight: 700; color: #2c3e50; margin: 8px 0; }
+        .header { text-align: center; padding: 40px 0 30px; border-bottom: 3px solid {{ branding.agency_color or '#2c3e50' }}; margin-bottom: 30px; }
+        .header h1 { font-size: 28px; font-weight: 300; color: {{ branding.agency_color or '#2c3e50' }}; letter-spacing: 1px; }
+        .header .client-name { font-size: 36px; font-weight: 700; color: {{ branding.agency_color or '#2c3e50' }}; margin: 8px 0; }
         .header .period { font-size: 16px; color: #7f8c8d; margin-top: 4px; }
+        .header .agency-logo { max-height: 50px; margin-bottom: 12px; }
+        .header .agency-name { font-size: 14px; color: #95a5a6; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
 
         /* Grade display */
         .performance-overview { text-align: center; margin: 30px 0 40px; padding: 30px; background: #f8f9fa; border-radius: 12px; }
@@ -78,6 +80,11 @@
     <div class="container">
         <!-- Header -->
         <div class="header">
+            {% if branding.agency_logo_url %}
+            <img src="{{ branding.agency_logo_url }}" alt="{{ branding.agency_name }}" class="agency-logo">
+            {% elif branding.agency_name %}
+            <div class="agency-name">{{ branding.agency_name }}</div>
+            {% endif %}
             <h1>Monthly Performance Report</h1>
             <div class="client-name">{{ client_name }}</div>
             <div class="period">{{ month_display }}</div>
@@ -345,6 +352,9 @@
         <!-- Footer -->
         <div class="footer">
             <p>Report generated {{ generated_date }} | Confidential - prepared for {{ client_name }}</p>
+            {% if branding.agency_name %}
+            <p>Prepared by {{ branding.agency_name }}{% if branding.agency_website %} | <a href="{{ branding.agency_website }}" style="color: #aaa;">{{ branding.agency_website }}</a>{% endif %}</p>
+            {% endif %}
         </div>
     </div>
 </body>

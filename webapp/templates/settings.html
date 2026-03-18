@@ -128,6 +128,8 @@
                         </div>
                     </div>
                     <button type="submit" class="btn btn-primary">Save Email Settings</button>
+                    <button type="button" class="btn btn-outline-secondary ms-2" onclick="testConnection('smtp')">Test Connection</button>
+                    <span id="smtp-test-result" class="ms-2 small"></span>
                     {% if config.SMTP_USER %}
                     <span class="badge bg-success ms-2">Configured</span>
                     {% endif %}
@@ -163,6 +165,8 @@
                         </small>
                     </div>
                     <button type="submit" class="btn btn-primary">Save WordPress Settings</button>
+                    <button type="button" class="btn btn-outline-secondary ms-2" onclick="testConnection('wordpress')">Test Connection</button>
+                    <span id="wordpress-test-result" class="ms-2 small"></span>
                 </form>
             </div>
         </div>
@@ -182,7 +186,54 @@
                         <small class="text-muted">Leave blank to keep current.</small>
                     </div>
                     <button type="submit" class="btn btn-primary">Save OpenAI Key</button>
+                    <button type="button" class="btn btn-outline-secondary ms-2" onclick="testConnection('openai')">Test Key</button>
+                    <span id="openai-test-result" class="ms-2 small"></span>
                     {% if openai_configured %}
+                    <span class="badge bg-success ms-2">Configured</span>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Agency Branding -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-building"></i> Agency Branding</strong></div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="section" value="branding">
+                    <div class="mb-3">
+                        <label class="form-label">Agency Name</label>
+                        <input type="text" name="agency_name" class="form-control"
+                               value="{{ branding.agency_name }}"
+                               placeholder="Your Agency Name">
+                        <small class="text-muted">Appears in report headers and footers.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Agency Logo URL</label>
+                        <input type="url" name="agency_logo_url" class="form-control"
+                               value="{{ branding.agency_logo_url }}"
+                               placeholder="https://example.com/logo.png">
+                        <small class="text-muted">Direct link to your logo image (PNG/SVG, ~200px wide recommended).</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Agency Website</label>
+                        <input type="url" name="agency_website" class="form-control"
+                               value="{{ branding.agency_website }}"
+                               placeholder="https://youragency.com">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Primary Brand Color</label>
+                        <div class="input-group" style="max-width: 200px;">
+                            <input type="color" name="agency_color" class="form-control form-control-color"
+                                   value="{{ branding.agency_color or '#2c3e50' }}">
+                            <input type="text" class="form-control" value="{{ branding.agency_color or '#2c3e50' }}" disabled style="max-width:100px;">
+                        </div>
+                        <small class="text-muted">Used for report headers and accents.</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Branding</button>
+                    {% if branding.agency_name %}
                     <span class="badge bg-success ms-2">Configured</span>
                     {% endif %}
                 </form>
@@ -212,4 +263,29 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function testConnection(type) {
+    var resultEl = document.getElementById(type + '-test-result');
+    resultEl.textContent = 'Testing...';
+    resultEl.className = 'ms-2 small text-muted';
+    fetch('/settings/test-' + type, {method: 'POST'})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.ok) {
+                resultEl.textContent = data.message;
+                resultEl.className = 'ms-2 small text-success fw-medium';
+            } else {
+                resultEl.textContent = data.error;
+                resultEl.className = 'ms-2 small text-danger fw-medium';
+            }
+        })
+        .catch(function(e) {
+            resultEl.textContent = 'Test failed: ' + e.message;
+            resultEl.className = 'ms-2 small text-danger';
+        });
+}
+</script>
 {% endblock %}

@@ -10,10 +10,12 @@
         .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
 
         /* Header */
-        .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; padding: 30px 40px; border-radius: 10px; margin-bottom: 24px; }
+        .header { background: linear-gradient(135deg, {{ branding.agency_color or '#1a1a2e' }} 0%, #16213e 100%); color: white; padding: 30px 40px; border-radius: 10px; margin-bottom: 24px; }
         .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
         .header .subtitle { font-size: 14px; opacity: 0.8; }
         .header .meta-row { display: flex; gap: 30px; margin-top: 12px; font-size: 13px; opacity: 0.7; }
+        .header .agency-logo { max-height: 36px; margin-bottom: 10px; opacity: 0.9; }
+        .header .agency-label { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; opacity: 0.6; margin-bottom: 6px; }
 
         /* Grade badge */
         .grade-section { display: flex; align-items: center; gap: 20px; background: white; border-radius: 10px; padding: 20px 30px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
@@ -90,6 +92,11 @@
     <div class="container">
         <!-- Header -->
         <div class="header">
+            {% if branding.agency_logo_url %}
+            <img src="{{ branding.agency_logo_url }}" alt="{{ branding.agency_name }}" class="agency-logo">
+            {% elif branding.agency_name %}
+            <div class="agency-label">{{ branding.agency_name }}</div>
+            {% endif %}
             <h1>Internal Performance Report</h1>
             <div class="subtitle">{{ client_name }} - {{ month_display }}</div>
             <div class="meta-row">
@@ -404,6 +411,12 @@
                 </div>
             </div>
             {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if branding.agency_name %}
+        <div style="text-align: center; margin-top: 30px; padding-top: 16px; border-top: 1px solid #ddd; color: #999; font-size: 11px;">
+            {{ branding.agency_name }}{% if branding.agency_website %} | {{ branding.agency_website }}{% endif %}
         </div>
         {% endif %}
 

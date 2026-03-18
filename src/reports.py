@@ -32,7 +32,7 @@ def _month_display(month_str):
         return month_str
 
 
-def generate_internal_report(analysis, suggestions_internal, output_dir=None):
+def generate_internal_report(analysis, suggestions_internal, output_dir=None, branding=None):
     """
     Generate the internal team report (HTML).
 
@@ -40,6 +40,7 @@ def generate_internal_report(analysis, suggestions_internal, output_dir=None):
         analysis: Output from analytics.build_full_analysis()
         suggestions_internal: Output from suggestions.format_suggestions_for_internal()
         output_dir: Optional custom output directory
+        branding: Optional dict with agency_name, agency_logo_url, agency_website, agency_color
     """
     client_id = analysis["client_id"]
     month = analysis["month"]
@@ -73,6 +74,7 @@ def generate_internal_report(analysis, suggestions_internal, output_dir=None):
         "gsc": _dict_to_obj(analysis.get("search_console")) if analysis.get("search_console") else None,
         "suggestions": suggestions_internal,
         "ai_brief": analysis.get("ai_brief_internal"),
+        "branding": branding or {},
     }
 
     html = template.render(**context)
@@ -84,7 +86,7 @@ def generate_internal_report(analysis, suggestions_internal, output_dir=None):
     return str(output_path)
 
 
-def generate_client_report(analysis, suggestions_client, output_dir=None):
+def generate_client_report(analysis, suggestions_client, output_dir=None, branding=None):
     """
     Generate the client-facing report (HTML).
 
@@ -92,6 +94,7 @@ def generate_client_report(analysis, suggestions_client, output_dir=None):
         analysis: Output from analytics.build_full_analysis()
         suggestions_client: Output from suggestions.format_suggestions_for_client()
         output_dir: Optional custom output directory
+        branding: Optional dict with agency_name, agency_logo_url, agency_website, agency_color
     """
     client_id = analysis["client_id"]
     month = analysis["month"]
@@ -160,6 +163,7 @@ def generate_client_report(analysis, suggestions_client, output_dir=None):
         "gsc": _dict_to_obj(gsc) if gsc else None,
         "client_suggestions": suggestions_client,
         "ai_brief": analysis.get("ai_brief_client"),
+        "branding": branding or {},
     }
 
     html = template.render(**context)

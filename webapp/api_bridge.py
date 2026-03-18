@@ -77,6 +77,69 @@ def _get_google_token(db, brand_id, connection):
     return token
 
 
+def _refresh_meta_token(db, brand_id, connection):
+    """Refresh an expiring Meta long-lived token by exchanging it for a new one."""
+    import requests as _req
+
+    current_token = connection.get("access_token", "")
+    if not current_token:
+        return None
+
+    from flask import current_app
+    app_id = (db.get_setting("meta_app_id", "") or current_app.config.get("META_APP_ID", "")).strip()
+    app_secret = (db.get_setting("meta_app_secret", "") or current_app.config.get("META_APP_SECRET", "")).strip()
+
+    if not app_id or not app_secret:
+        return None
+
+    resp = _req.get("https://graph.facebook.com/v21.0/oauth/access_token", params={
+        "grant_type": "fb_exchange_token",
+        "client_id": app_id,
+        "client_secret": app_secret,
+        "fb_exchange_token": current_token,
+    }, timeout=30)
+
+    if resp.status_code != 200:
+        return None
+
+    data = resp.json()
+    new_token = data.get("access_token", "")
+    if not new_token:
+        return None
+
+    expires_in = data.get("expires_in", 5184000)  # default 60 days
+    expiry = (datetime.now() + timedelta(seconds=expires_in)).isoformat()
+
+    db.upsert_connection(brand_id, "meta", {
+        "access_token": new_token,
+        "refresh_token": "",
+        "token_expiry": expiry,
+        "scopes": connection.get("scopes", ""),
+        "account_id": connection.get("account_id", ""),
+        "account_name": connection.get("account_name", ""),
+    })
+    return new_token
+
+
+def _get_meta_token(db, brand_id, connection):
+    """Get a valid Meta access token, refreshing if within 7 days of expiry."""
+    token = connection.get("access_token", "")
+    expiry_str = connection.get("token_expiry", "")
+
+    if expiry_str:
+        try:
+            expiry = datetime.fromisoformat(expiry_str)
+            # Refresh if within 7 days of expiry (Meta tokens last ~60 days)
+            if datetime.now() >= expiry - timedelta(days=7):
+                refreshed = _refresh_meta_token(db, brand_id, connection)
+                if refreshed:
+                    return refreshed
+        except (ValueError, TypeError):
+            pass
+
+    return token
+
+
 def pull_api_data_for_brand(brand, connections, month):
     """
     Pull data from connected APIs for a brand.
@@ -130,9 +193,10 @@ def pull_api_data_for_brand(brand, connections, month):
     # Meta Ads
     if meta_conn and meta_conn.get("status") == "connected" and brand.get("meta_ad_account_id"):
         try:
+            token = _get_meta_token(db, brand["id"], meta_conn)
             data["meta_business"] = _pull_meta(
                 brand["meta_ad_account_id"],
-                meta_conn["access_token"],
+                token,
                 start_date,
                 end_date,
             )
