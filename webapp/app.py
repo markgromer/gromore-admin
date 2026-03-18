@@ -144,6 +144,10 @@ def create_app():
     app.register_blueprint(meta_bp, url_prefix="/oauth/meta")
     app.register_blueprint(jobs_bp, url_prefix="/jobs")
 
+    # Exempt OAuth callback routes from CSRF (external redirects have no token)
+    csrf.exempt(google_bp)
+    csrf.exempt(meta_bp)
+
     # ── Auth decorator ──
     def login_required(f):
         @wraps(f)
