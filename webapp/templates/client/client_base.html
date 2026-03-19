@@ -289,6 +289,9 @@
             <a href="{{ url_for('client.client_settings') }}" class="{% if request.endpoint == 'client.client_settings' %}active{% endif %}">
                 <i class="bi bi-plug"></i> Connections
             </a>
+            <a href="{{ url_for('client.client_help') }}" class="{% if request.endpoint == 'client.client_help' %}active{% endif %}">
+                <i class="bi bi-question-circle"></i> Help
+            </a>
         </div>
         <div class="nav-right">
             <span class="user-name">{{ client_user or '' }}</span>

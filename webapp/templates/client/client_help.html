@@ -1,0 +1,650 @@
+{% extends "client_base.html" %}
+{% block title %}Help Center{% endblock %}
+
+{% block head %}
+<style>
+    .help-header {
+        background: linear-gradient(135deg, #1a1d2e 0%, #2d1b4e 100%);
+        border-radius: 16px;
+        padding: 2.5rem 2rem;
+        color: #fff;
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+    .help-header::before {
+        content: '';
+        position: absolute;
+        top: -40%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(99,102,241,.25), transparent 70%);
+        pointer-events: none;
+    }
+    .help-header h3 { font-weight: 700; margin-bottom: .5rem; }
+    .help-header p { color: rgba(255,255,255,.7); margin: 0; }
+
+    .help-nav {
+        position: sticky;
+        top: 80px;
+    }
+    .help-nav a {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: .65rem 1rem;
+        border-radius: 10px;
+        color: #4b5563;
+        text-decoration: none;
+        font-size: .9rem;
+        font-weight: 500;
+        transition: all .15s;
+        margin-bottom: 2px;
+    }
+    .help-nav a:hover { background: #f3f4f6; color: #1a1d2e; }
+    .help-nav a.active {
+        background: #6366f1;
+        color: #fff;
+    }
+    .help-nav a .nav-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: .85rem;
+        background: #f3f4f6;
+        flex-shrink: 0;
+    }
+    .help-nav a.active .nav-icon {
+        background: rgba(255,255,255,.2);
+        color: #fff;
+    }
+
+    .help-topic {
+        background: #fff;
+        border-radius: 14px;
+        padding: 2rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,.05);
+    }
+    .help-topic h4 {
+        font-weight: 700;
+        color: #1a1d2e;
+        margin-bottom: .25rem;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+    }
+    .help-topic .topic-desc {
+        color: #6b7280;
+        font-size: .92rem;
+        margin-bottom: 1.25rem;
+    }
+    .help-topic h5 {
+        font-weight: 600;
+        color: #1a1d2e;
+        font-size: 1rem;
+        margin-top: 1.5rem;
+        margin-bottom: .75rem;
+    }
+    .help-topic ol, .help-topic ul {
+        padding-left: 1.25rem;
+    }
+    .help-topic li {
+        font-size: .9rem;
+        color: #374151;
+        line-height: 1.7;
+        margin-bottom: .35rem;
+    }
+    .help-topic p {
+        font-size: .9rem;
+        color: #374151;
+        line-height: 1.7;
+    }
+    .help-topic .step-callout {
+        background: #f8f9fa;
+        border-left: 3px solid #6366f1;
+        border-radius: 0 8px 8px 0;
+        padding: .75rem 1rem;
+        margin: .75rem 0;
+        font-size: .88rem;
+    }
+    .help-topic .ext-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: #6366f1;
+        text-decoration: none;
+        font-weight: 500;
+        font-size: .88rem;
+    }
+    .help-topic .ext-link:hover { text-decoration: underline; }
+    .help-topic .warning-box {
+        background: #fef3c7;
+        border-radius: 8px;
+        padding: .75rem 1rem;
+        font-size: .88rem;
+        color: #92400e;
+        margin: .75rem 0;
+    }
+    .help-topic .tip-box {
+        background: #ecfdf5;
+        border-radius: 8px;
+        padding: .75rem 1rem;
+        font-size: .88rem;
+        color: #065f46;
+        margin: .75rem 0;
+    }
+
+    @media (max-width: 768px) {
+        .help-sidebar { display: none; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="help-header">
+    <h3><i class="bi bi-book"></i> Help Center</h3>
+    <p>Step-by-step guides for setting up your ad accounts, connecting platforms, and getting the most out of your dashboard.</p>
+</div>
+
+<div class="row">
+    <!-- Sidebar Nav -->
+    <div class="col-md-3 help-sidebar">
+        <div class="help-nav">
+            <a href="#google-ads" class="{{ 'active' if active_topic == 'google-ads' }}">
+                <span class="nav-icon"><i class="bi bi-google"></i></span>
+                Google Ads Setup
+            </a>
+            <a href="#facebook-ads" class="{{ 'active' if active_topic == 'facebook-ads' }}">
+                <span class="nav-icon"><i class="bi bi-meta"></i></span>
+                Facebook Ads Setup
+            </a>
+            <a href="#ga4" class="{{ 'active' if active_topic == 'ga4' }}">
+                <span class="nav-icon"><i class="bi bi-graph-up"></i></span>
+                Google Analytics (GA4)
+            </a>
+            <a href="#search-console" class="{{ 'active' if active_topic == 'search-console' }}">
+                <span class="nav-icon"><i class="bi bi-search"></i></span>
+                Search Console
+            </a>
+            <a href="#conversion-tracking" class="{{ 'active' if active_topic == 'conversion-tracking' }}">
+                <span class="nav-icon"><i class="bi bi-bullseye"></i></span>
+                Conversion Tracking
+            </a>
+            <a href="#call-tracking" class="{{ 'active' if active_topic == 'call-tracking' }}">
+                <span class="nav-icon"><i class="bi bi-telephone"></i></span>
+                Call Tracking
+            </a>
+            <a href="#openai" class="{{ 'active' if active_topic == 'openai' }}">
+                <span class="nav-icon"><i class="bi bi-cpu"></i></span>
+                OpenAI API Key
+            </a>
+            <a href="#reading-reports" class="{{ 'active' if active_topic == 'reading-reports' }}">
+                <span class="nav-icon"><i class="bi bi-file-earmark-bar-graph"></i></span>
+                Reading Your Reports
+            </a>
+            <a href="#ad-builder" class="{{ 'active' if active_topic == 'ad-builder' }}">
+                <span class="nav-icon"><i class="bi bi-brush"></i></span>
+                Using Ad Builder
+            </a>
+            <a href="#budgets" class="{{ 'active' if active_topic == 'budgets' }}">
+                <span class="nav-icon"><i class="bi bi-cash-stack"></i></span>
+                Budget Management
+            </a>
+            <a href="#glossary" class="{{ 'active' if active_topic == 'glossary' }}">
+                <span class="nav-icon"><i class="bi bi-journal-text"></i></span>
+                Glossary
+            </a>
+        </div>
+    </div>
+
+    <!-- Content -->
+    <div class="col-md-9">
+
+        <!-- Google Ads Setup -->
+        <div class="help-topic" id="google-ads">
+            <h4><i class="bi bi-google text-primary"></i> Setting Up Google Ads</h4>
+            <p class="topic-desc">Create and configure your Google Ads account so we can pull performance data and help manage your campaigns.</p>
+
+            <h5>Creating a Google Ads Account</h5>
+            <ol>
+                <li>Go to <a href="https://ads.google.com" target="_blank" rel="noopener" class="ext-link">ads.google.com <i class="bi bi-box-arrow-up-right"></i></a> and click "Start Now"</li>
+                <li>Sign in with your Google account (use the same one you use for Gmail or Google Analytics)</li>
+                <li>Google will try to walk you through a "Smart Campaign" - you can click "Switch to Expert Mode" at the bottom to skip this</li>
+                <li>Select "Create an account without a campaign" (bottom of the page)</li>
+                <li>Confirm your billing country, time zone, and currency, then click "Submit"</li>
+            </ol>
+            <div class="tip-box">
+                <i class="bi bi-lightbulb me-1"></i> <strong>Tip:</strong> Choose your time zone and currency carefully. These cannot be changed after account creation.
+            </div>
+
+            <h5>Finding Your Customer ID</h5>
+            <ol>
+                <li>Once logged into Google Ads, look at the top-right corner of the page</li>
+                <li>Your Customer ID is the 10-digit number in the format <strong>XXX-XXX-XXXX</strong></li>
+                <li>Copy this number and paste it into your <a href="{{ url_for('client.client_settings') }}">Connections</a> page</li>
+            </ol>
+            <div class="step-callout">
+                Your Customer ID is how we connect to your specific Google Ads account. Without it, we cannot pull your ad performance data.
+            </div>
+
+            <h5>Setting Up Billing</h5>
+            <ol>
+                <li>Click the tools icon (wrench) in the top menu, then "Billing" > "Settings"</li>
+                <li>Add a payment method (credit card, debit card, or bank account)</li>
+                <li>Google Ads charges you based on actual ad spend, not a flat fee</li>
+            </ol>
+            <div class="warning-box">
+                <i class="bi bi-exclamation-triangle me-1"></i> <strong>Important:</strong> Your ads will not run until billing is set up, even if campaigns are created and enabled.
+            </div>
+
+            <h5>Connecting Google Ads to This Platform</h5>
+            <ol>
+                <li>Go to your <a href="{{ url_for('client.client_settings') }}">Connections</a> page</li>
+                <li>Click "Connect Google Account" and sign in with the Google account that owns your Ads account</li>
+                <li>Grant the requested permissions (read your ad data, manage campaigns)</li>
+                <li>Enter your Customer ID in the "Google Ads Customer ID" field and save</li>
+            </ol>
+        </div>
+
+        <!-- Facebook Ads Setup -->
+        <div class="help-topic" id="facebook-ads">
+            <h4><i class="bi bi-meta text-primary"></i> Setting Up Facebook Ads</h4>
+            <p class="topic-desc">Create a Meta Business Suite and ad account to run Facebook and Instagram ads.</p>
+
+            <h5>Creating a Meta Business Account</h5>
+            <ol>
+                <li>Go to <a href="https://business.facebook.com" target="_blank" rel="noopener" class="ext-link">business.facebook.com <i class="bi bi-box-arrow-up-right"></i></a></li>
+                <li>Click "Create Account" and log in with your personal Facebook account</li>
+                <li>Enter your business name, your name, and your business email</li>
+                <li>Fill in your business details (address, phone, website) and click Submit</li>
+            </ol>
+            <div class="tip-box">
+                <i class="bi bi-lightbulb me-1"></i> <strong>Tip:</strong> Your personal Facebook profile is used for login only.  Your personal posts and friends are not visible to your business account.
+            </div>
+
+            <h5>Creating an Ad Account</h5>
+            <ol>
+                <li>In Meta Business Suite, click the gear icon (Settings)</li>
+                <li>Under "Accounts", click "Ad Accounts" then "Add" > "Create a new ad account"</li>
+                <li>Name your ad account (e.g., "Main Ad Account"), set time zone and currency</li>
+                <li>Add a payment method under "Payment Settings"</li>
+            </ol>
+
+            <h5>Finding Your Ad Account ID</h5>
+            <ol>
+                <li>In Business Settings, go to "Ad Accounts" in the sidebar</li>
+                <li>Click on your ad account name</li>
+                <li>Your Ad Account ID is shown at the top - it is a number like <strong>act_123456789</strong></li>
+            </ol>
+
+            <h5>Installing the Facebook Pixel</h5>
+            <ol>
+                <li>In Meta Business Suite, go to "Events Manager"</li>
+                <li>Click "Connect Data Sources" > "Web" > "Facebook Pixel"</li>
+                <li>Name your pixel and enter your website URL</li>
+                <li>Choose your installation method:
+                    <ul>
+                        <li><strong>Partner Integration</strong> (easiest) - works with WordPress, Shopify, Wix, Squarespace</li>
+                        <li><strong>Manual Install</strong> - copy the pixel code snippet and paste it into your website's &lt;head&gt; tag</li>
+                    </ul>
+                </li>
+                <li>Use the <a href="https://chrome.google.com/webstore/detail/facebook-pixel-helper/fdgfkebogiimcoedlicjlajpkdmockpc" target="_blank" rel="noopener" class="ext-link">Meta Pixel Helper Chrome extension <i class="bi bi-box-arrow-up-right"></i></a> to verify it is firing correctly</li>
+            </ol>
+            <div class="warning-box">
+                <i class="bi bi-exclamation-triangle me-1"></i> <strong>Important:</strong> Without the pixel installed, Facebook cannot track conversions on your website, and your campaigns will not optimize properly.
+            </div>
+
+            <h5>Connecting Facebook to This Platform</h5>
+            <ol>
+                <li>Go to your <a href="{{ url_for('client.client_settings') }}">Connections</a> page</li>
+                <li>Click "Connect Meta Account" and sign in with Facebook</li>
+                <li>Select the ad account you want to connect and confirm permissions</li>
+            </ol>
+        </div>
+
+        <!-- GA4 -->
+        <div class="help-topic" id="ga4">
+            <h4><i class="bi bi-graph-up text-success"></i> Google Analytics (GA4)</h4>
+            <p class="topic-desc">Track who visits your website, where they come from, and what they do once they land.</p>
+
+            <h5>Creating a GA4 Property</h5>
+            <ol>
+                <li>Go to <a href="https://analytics.google.com" target="_blank" rel="noopener" class="ext-link">analytics.google.com <i class="bi bi-box-arrow-up-right"></i></a></li>
+                <li>Click "Admin" (gear icon) in the bottom-left</li>
+                <li>Click "Create" > "Property"</li>
+                <li>Enter your website name, select your reporting time zone and currency</li>
+                <li>Choose your industry and business size, then click "Create"</li>
+            </ol>
+
+            <h5>Adding the Tracking Code</h5>
+            <ol>
+                <li>After creating your property, you will see "Data Streams" - click "Web"</li>
+                <li>Enter your website URL and stream name, then click "Create Stream"</li>
+                <li>You will see a "Measurement ID" (format: G-XXXXXXXXXX) - copy this</li>
+                <li>Install the tracking code:
+                    <ul>
+                        <li><strong>Google Tag Manager</strong> (recommended) - create a new "Google Analytics: GA4 Configuration" tag</li>
+                        <li><strong>Direct install</strong> - copy the gtag.js snippet and paste it into every page's &lt;head&gt; tag</li>
+                        <li><strong>WordPress</strong> - use a plugin like "Site Kit by Google" or paste the code in your theme's header</li>
+                    </ul>
+                </li>
+            </ol>
+
+            <h5>Finding Your GA4 Property ID</h5>
+            <ol>
+                <li>In Google Analytics, click "Admin" (gear icon)</li>
+                <li>Under "Property", look at the top - your Property ID is a number like <strong>123456789</strong></li>
+                <li>This is different from the Measurement ID (G-XXXXXXXX). We need the numeric Property ID.</li>
+            </ol>
+            <div class="step-callout">
+                When you connect your Google account on the <a href="{{ url_for('client.client_settings') }}">Connections</a> page, we automatically detect your GA4 properties. You just need to make sure the tracking code is installed on your website.
+            </div>
+        </div>
+
+        <!-- Search Console -->
+        <div class="help-topic" id="search-console">
+            <h4><i class="bi bi-search text-success"></i> Google Search Console</h4>
+            <p class="topic-desc">See how your website appears in Google search results: what keywords you rank for, how many clicks you get, and where you can improve.</p>
+
+            <h5>Adding Your Website</h5>
+            <ol>
+                <li>Go to <a href="https://search.google.com/search-console" target="_blank" rel="noopener" class="ext-link">search.google.com/search-console <i class="bi bi-box-arrow-up-right"></i></a></li>
+                <li>Click "Add property"</li>
+                <li>Choose "URL prefix" and enter your full website URL (e.g., https://yourdomain.com)</li>
+                <li>Verify ownership using one of these methods:
+                    <ul>
+                        <li><strong>HTML tag</strong> - add a meta tag to your homepage's &lt;head&gt;</li>
+                        <li><strong>Google Analytics</strong> - automatic if GA4 is installed (easiest)</li>
+                        <li><strong>DNS record</strong> - add a TXT record at your domain registrar</li>
+                    </ul>
+                </li>
+            </ol>
+            <div class="tip-box">
+                <i class="bi bi-lightbulb me-1"></i> <strong>Tip:</strong> If you already have GA4 installed, Search Console verification is usually automatic. Just use the same Google account.
+            </div>
+
+            <h5>What Data Shows Up</h5>
+            <p>Search Console data takes a few days to start appearing after verification. It shows:</p>
+            <ul>
+                <li><strong>Search queries</strong> - the actual words people type to find you</li>
+                <li><strong>Click-through rate</strong> - how often people click your result vs. just seeing it</li>
+                <li><strong>Average position</strong> - where you rank on average for each keyword</li>
+                <li><strong>Indexed pages</strong> - which of your pages Google knows about</li>
+            </ul>
+        </div>
+
+        <!-- Conversion Tracking -->
+        <div class="help-topic" id="conversion-tracking">
+            <h4><i class="bi bi-bullseye text-danger"></i> Conversion Tracking</h4>
+            <p class="topic-desc">Track the actions that matter: form submissions, phone calls, purchases, bookings. Without conversion tracking, you're flying blind.</p>
+
+            <h5>Google Ads Conversions</h5>
+            <ol>
+                <li>In Google Ads, click "Goals" > "Conversions" > "Summary"</li>
+                <li>Click the blue "+" to create a new conversion action</li>
+                <li>Choose "Website" for tracking form fills or purchases</li>
+                <li>Set up the conversion:
+                    <ul>
+                        <li><strong>Category</strong> - "Submit lead form", "Purchase", "Book appointment", etc.</li>
+                        <li><strong>Value</strong> - assign a dollar value if you know what a lead is worth (helps with ROAS reporting)</li>
+                        <li><strong>Count</strong> - "One" for leads (one per person), "Every" for purchases</li>
+                    </ul>
+                </li>
+                <li>Install using Google Tag Manager or the global site tag</li>
+            </ol>
+
+            <h5>Facebook/Meta Conversions</h5>
+            <ol>
+                <li>In Events Manager, click your pixel</li>
+                <li>Click "Add Events" > "From the Pixel" (or use the Event Setup Tool)</li>
+                <li>Add standard events:
+                    <ul>
+                        <li><strong>Lead</strong> - fires when someone submits a form</li>
+                        <li><strong>Purchase</strong> - fires on your order confirmation page</li>
+                        <li><strong>Contact</strong> - fires when someone clicks to call or email</li>
+                    </ul>
+                </li>
+            </ol>
+
+            <h5>GA4 Conversions</h5>
+            <ol>
+                <li>In GA4, go to "Admin" > "Events"</li>
+                <li>Find the event you want (e.g., form_submit, purchase) or create a custom event</li>
+                <li>Toggle "Mark as conversion" next to the event name</li>
+            </ol>
+            <div class="warning-box">
+                <i class="bi bi-exclamation-triangle me-1"></i> <strong>Why this matters:</strong> If conversions are not tracked, our reports will show clicks and spend but cannot calculate cost-per-lead, ROAS, or whether your campaigns are actually working.
+            </div>
+        </div>
+
+        <!-- Call Tracking -->
+        <div class="help-topic" id="call-tracking">
+            <h4><i class="bi bi-telephone text-info"></i> Call Tracking</h4>
+            <p class="topic-desc">If you get leads by phone, call tracking lets you measure which ads and keywords drive calls.</p>
+
+            <h5>Why Use Call Tracking</h5>
+            <ul>
+                <li>Know exactly which ad or keyword drove each phone call</li>
+                <li>Get accurate lead counts in your reports instead of guessing</li>
+                <li>Record calls for quality assurance and training</li>
+                <li>Track missed calls so you can follow up</li>
+            </ul>
+
+            <h5>Popular Call Tracking Services</h5>
+            <ul>
+                <li><a href="https://www.callrail.com" target="_blank" rel="noopener" class="ext-link">CallRail <i class="bi bi-box-arrow-up-right"></i></a> - popular for service businesses, integrates with Google Ads and GA4</li>
+                <li><a href="https://www.calltrackingmetrics.com" target="_blank" rel="noopener" class="ext-link">CallTrackingMetrics <i class="bi bi-box-arrow-up-right"></i></a> - enterprise-level features, multi-channel attribution</li>
+                <li><strong>Google Ads call extensions</strong> - free built-in option, tracks calls from ads directly</li>
+            </ul>
+
+            <h5>Setting Up Google Ads Call Extensions</h5>
+            <ol>
+                <li>In Google Ads, go to "Ads & assets" > "Assets"</li>
+                <li>Click the blue "+" > "Call"</li>
+                <li>Enter your business phone number</li>
+                <li>Enable "Call reporting" to track calls as conversions</li>
+                <li>Set a minimum call duration for a conversion (e.g., 60 seconds) so short wrong-number calls don't count</li>
+            </ol>
+            <div class="step-callout">
+                Enter your call tracking number on the <a href="{{ url_for('client.client_my_business') }}">My Business</a> page so our AI includes it in generated ad copy.
+            </div>
+        </div>
+
+        <!-- OpenAI API Key -->
+        <div class="help-topic" id="openai">
+            <h4><i class="bi bi-cpu" style="color:#6366f1;"></i> OpenAI API Key</h4>
+            <p class="topic-desc">Use your own OpenAI API key to power the AI features: Ad Builder, Action Plans, report generation, and more. This gives you control over which model to use and lets costs go directly to your OpenAI billing.</p>
+
+            <h5>Getting Your API Key</h5>
+            <ol>
+                <li>Go to <a href="https://platform.openai.com/signup" target="_blank" rel="noopener" class="ext-link">platform.openai.com <i class="bi bi-box-arrow-up-right"></i></a> and create an account (or log in)</li>
+                <li>Click your profile icon (top-right) > "API Keys" or go directly to <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" class="ext-link">platform.openai.com/api-keys <i class="bi bi-box-arrow-up-right"></i></a></li>
+                <li>Click "Create new secret key", give it a name (e.g., "GroMore Dashboard"), and click "Create"</li>
+                <li>Copy the key immediately - it starts with <strong>sk-</strong> and is only shown once</li>
+                <li>Paste it into the AI Configuration section on your <a href="{{ url_for('client.client_settings') }}">Connections</a> page</li>
+            </ol>
+            <div class="warning-box">
+                <i class="bi bi-exclamation-triangle me-1"></i> <strong>Copy it now:</strong> OpenAI only shows the full key once. If you lose it, you will need to create a new one.
+            </div>
+
+            <h5>Adding Billing to OpenAI</h5>
+            <ol>
+                <li>Go to <a href="https://platform.openai.com/account/billing" target="_blank" rel="noopener" class="ext-link">platform.openai.com/account/billing <i class="bi bi-box-arrow-up-right"></i></a></li>
+                <li>Click "Add payment method" and enter a credit card</li>
+                <li>Set a monthly usage limit to control costs (e.g., $20/month is plenty for most users)</li>
+            </ol>
+            <div class="tip-box">
+                <i class="bi bi-lightbulb me-1"></i> <strong>Cost guidance:</strong> GPT-4o Mini costs roughly $0.15 per 1M input tokens. A typical Ad Builder generation or report analysis costs under $0.01. Most users spend less than $5/month.
+            </div>
+
+            <h5>Choosing a Model</h5>
+            <p>When you configure your key on the <a href="{{ url_for('client.client_settings') }}">Connections</a> page, you can also pick your AI model:</p>
+            <ul>
+                <li><strong>GPT-4o Mini</strong> - fast and affordable, great for most tasks. This is the default.</li>
+                <li><strong>GPT-4o</strong> - more capable, slightly higher cost. Good if you want more nuanced ad copy.</li>
+                <li><strong>GPT-4 Turbo</strong> - powerful model, handles long reports well.</li>
+                <li><strong>GPT-4.1 / GPT-4.1 Mini</strong> - latest generation models. Best quality and speed.</li>
+                <li><strong>o3-mini / o4-mini</strong> - reasoning models that "think" before answering. Best for complex analysis.</li>
+            </ul>
+        </div>
+
+        <!-- Reading Reports -->
+        <div class="help-topic" id="reading-reports">
+            <h4><i class="bi bi-file-earmark-bar-graph text-warning"></i> Reading Your Reports</h4>
+            <p class="topic-desc">Understand what every section of your monthly report means and what to do about it.</p>
+
+            <h5>The Health Grade</h5>
+            <p>Your overall grade (A through F) is based on how your actual results compare to your targets. An "A" means you are hitting or exceeding all KPIs. A "C" means things are running but there is room for improvement.</p>
+
+            <h5>KPI Cards</h5>
+            <p>These show your key numbers with color coding:</p>
+            <ul>
+                <li><strong style="color:#10b981;">Green</strong> - on track or ahead of target</li>
+                <li><strong style="color:#ef4444;">Red</strong> - behind target, needs attention</li>
+            </ul>
+            <p>Set your targets (CPA, leads, ROAS) on the <a href="{{ url_for('client.client_my_business') }}">My Business</a> page so these comparisons are meaningful.</p>
+
+            <h5>What's Going Well / Needs Attention</h5>
+            <p>AI-generated highlights that call out the most important wins and concerns for the month. These are based on actual data changes, not generic advice.</p>
+
+            <h5>Channel Metrics</h5>
+            <p>Each ad platform (Google Ads, Meta Ads) gets its own section showing spend, impressions, clicks, CTR, conversions, and cost per conversion. Compare these side-by-side to see which platform performs better for your business.</p>
+
+            <h5>Action Plan</h5>
+            <p>Prioritized recommendations based on your data. Each action includes why it matters and step-by-step instructions. Actions labeled "High" priority should be done first.</p>
+        </div>
+
+        <!-- Ad Builder -->
+        <div class="help-topic" id="ad-builder">
+            <h4><i class="bi bi-brush" style="color:#8b5cf6;"></i> Using the Ad Builder</h4>
+            <p class="topic-desc">Generate ad copy and campaign ideas powered by your actual performance data.</p>
+
+            <h5>How It Works</h5>
+            <ol>
+                <li>Go to <a href="{{ url_for('client.client_ad_builder') }}">Ad Builder</a></li>
+                <li>Select the platform (Google Search, Facebook/Instagram) and your objective (leads, traffic, awareness)</li>
+                <li>Add any specific notes or context (seasonal offers, new services, etc.)</li>
+                <li>Click "Generate" and the AI will create ad copy based on your brand profile, current offers, and performance data</li>
+            </ol>
+
+            <h5>Getting Better Results</h5>
+            <ul>
+                <li>Fill out your <a href="{{ url_for('client.client_my_business') }}">My Business</a> profile completely - the AI uses this for tone, offers, and audience targeting</li>
+                <li>Be specific in the notes field: "promote 20% off AC tune-ups for spring" works better than "need more leads"</li>
+                <li>Generate multiple versions and pick the best elements from each</li>
+                <li>The AI pulls from your search terms and top-performing keywords automatically</li>
+            </ul>
+            <div class="tip-box">
+                <i class="bi bi-lightbulb me-1"></i> <strong>Tip:</strong> The more complete your brand profile is, the better the AI output. Fill in brand voice, target audience, and active offers for best results.
+            </div>
+        </div>
+
+        <!-- Budget Management -->
+        <div class="help-topic" id="budgets">
+            <h4><i class="bi bi-cash-stack text-success"></i> Budget Management</h4>
+            <p class="topic-desc">How to set, adjust, and think about your advertising budget.</p>
+
+            <h5>Setting Daily Budgets</h5>
+            <p>Both Google Ads and Facebook use daily budgets. Your monthly spend will be approximately: daily budget x 30.4 days.</p>
+            <ul>
+                <li><strong>Google Ads</strong> - set at the campaign level. Google may spend up to 2x your daily budget on high-traffic days, but will not exceed your monthly cap (daily x 30.4)</li>
+                <li><strong>Facebook Ads</strong> - can set daily or lifetime budgets. Daily budgets are easier to manage for ongoing campaigns</li>
+            </ul>
+
+            <h5>Budget Changes from the Dashboard</h5>
+            <ol>
+                <li>Go to <a href="{{ url_for('client.client_campaigns') }}">Campaigns</a></li>
+                <li>Click on any campaign to see its details</li>
+                <li>Use the budget adjustment section to increase or decrease spend</li>
+            </ol>
+            <div class="warning-box">
+                <i class="bi bi-exclamation-triangle me-1"></i> <strong>Heads up:</strong> Budget changes take effect within a few hours. Avoid making big changes frequently - give campaigns at least 3-5 days to adjust after a budget change before evaluating results.
+            </div>
+
+            <h5>How Much Should You Spend?</h5>
+            <p>There is no universal answer, but here are some guidelines:</p>
+            <ul>
+                <li>Start with what you are comfortable losing during the learning phase (usually 2-4 weeks)</li>
+                <li>If your target CPA is $50 and you want 10 leads/month, you need at least $500/month budget</li>
+                <li>Split between platforms based on where your audience is: B2B companies often do better on Google, while B2C/local services can thrive on Facebook</li>
+                <li>Watch your cost-per-lead in your reports - if it is below your target, consider increasing budget to scale up</li>
+            </ul>
+        </div>
+
+        <!-- Glossary -->
+        <div class="help-topic" id="glossary">
+            <h4><i class="bi bi-journal-text text-secondary"></i> Glossary</h4>
+            <p class="topic-desc">Common advertising and analytics terms you will see in your reports and dashboard.</p>
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><strong>Impressions</strong> - how many times your ad was shown</li>
+                        <li class="mb-2"><strong>Clicks</strong> - how many times someone clicked your ad</li>
+                        <li class="mb-2"><strong>CTR (Click-Through Rate)</strong> - clicks divided by impressions, expressed as a percentage. Higher is better.</li>
+                        <li class="mb-2"><strong>CPC (Cost Per Click)</strong> - how much you paid on average for each click</li>
+                        <li class="mb-2"><strong>CPA (Cost Per Acquisition)</strong> - how much you paid on average for each lead or conversion</li>
+                        <li class="mb-2"><strong>CPL (Cost Per Lead)</strong> - same as CPA but specifically for lead generation</li>
+                        <li class="mb-2"><strong>Conversions</strong> - completed actions: form fills, phone calls, purchases, bookings</li>
+                        <li class="mb-2"><strong>Conversion Rate</strong> - percentage of clicks that result in a conversion</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><strong>ROAS (Return on Ad Spend)</strong> - revenue divided by ad spend. A ROAS of 5x means $5 revenue for every $1 spent.</li>
+                        <li class="mb-2"><strong>Quality Score</strong> - Google's 1-10 rating of your ad and landing page relevance. Higher scores mean lower costs.</li>
+                        <li class="mb-2"><strong>Search Terms</strong> - the actual words someone typed before clicking your ad (can differ from your keywords)</li>
+                        <li class="mb-2"><strong>Negative Keywords</strong> - words you add to prevent your ads from showing for irrelevant searches</li>
+                        <li class="mb-2"><strong>Pixel</strong> - a small piece of code on your website that tracks visitor behavior for Facebook/Meta</li>
+                        <li class="mb-2"><strong>Audience</strong> - the group of people your ads are targeted to, based on demographics, interests, or behavior</li>
+                        <li class="mb-2"><strong>Retargeting</strong> - showing ads to people who previously visited your website</li>
+                        <li class="mb-2"><strong>Landing Page</strong> - the page someone arrives at after clicking your ad</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+// Highlight nav on scroll
+(function() {
+    var sections = document.querySelectorAll('.help-topic');
+    var navLinks = document.querySelectorAll('.help-nav a');
+
+    function updateNav() {
+        var scrollPos = window.scrollY + 120;
+        sections.forEach(function(sec) {
+            var top = sec.offsetTop;
+            var bottom = top + sec.offsetHeight;
+            var id = sec.getAttribute('id');
+            var link = document.querySelector('.help-nav a[href="#' + id + '"]');
+            if (link) {
+                if (scrollPos >= top && scrollPos < bottom) {
+                    navLinks.forEach(function(l) { l.classList.remove('active'); });
+                    link.classList.add('active');
+                }
+            }
+        });
+    }
+
+    window.addEventListener('scroll', updateNav);
+    // Smooth scroll
+    navLinks.forEach(function(link) {
+        link.addEventListener('click', function(e) {
+            var target = document.querySelector(link.getAttribute('href'));
+            if (target) {
+                e.preventDefault();
+                window.scrollTo({ top: target.offsetTop - 90, behavior: 'smooth' });
+            }
+        });
+    });
+})();
+</script>
+{% endblock %}

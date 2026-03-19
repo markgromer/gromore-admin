@@ -215,4 +215,68 @@
         </div>
     </div>
 </div>
+
+<!-- OpenAI / AI Settings -->
+<div class="card mb-4" style="border-radius:12px; border:none; box-shadow:0 1px 3px rgba(0,0,0,.05);">
+    <div class="card-body p-4">
+        <div class="d-flex align-items-center gap-3 mb-1">
+            <div style="width:48px; height:48px; border-radius:12px; background:linear-gradient(135deg,#6366f1,#818cf8); display:flex; align-items:center; justify-content:center;">
+                <i class="bi bi-cpu" style="font-size:1.4rem; color:#fff;"></i>
+            </div>
+            <div>
+                <h5 class="mb-1 fw-semibold">AI Configuration</h5>
+                <p class="text-muted mb-0" style="font-size:.88rem;">Use your own OpenAI key to power the AI features (Ad Builder, Action Plans, Reports).</p>
+            </div>
+        </div>
+
+        <form method="POST" action="{{ url_for('client.client_save_openai') }}" class="mt-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row g-3">
+                <div class="col-md-7">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">OpenAI API Key</label>
+                    <div class="input-group">
+                        <input type="password" class="form-control" name="openai_api_key"
+                               placeholder="{{ 'sk-••••••' ~ brand.openai_api_key[-4:] if brand.openai_api_key else 'sk-...' }}"
+                               autocomplete="off">
+                        <button class="btn btn-outline-secondary" type="button" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=\'bi bi-eye\'></i>':'<i class=\'bi bi-eye-slash\'></i>'">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
+                    <small class="text-muted">Get your key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a>. Leave blank to keep existing key.</small>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">AI Model</label>
+                    <select name="openai_model" class="form-select">
+                        <option value="gpt-4o-mini" {{ 'selected' if brand.openai_model == 'gpt-4o-mini' or not brand.openai_model }}>GPT-4o Mini (fast, affordable)</option>
+                        <option value="gpt-4o" {{ 'selected' if brand.openai_model == 'gpt-4o' }}>GPT-4o (balanced)</option>
+                        <option value="gpt-4-turbo" {{ 'selected' if brand.openai_model == 'gpt-4-turbo' }}>GPT-4 Turbo (powerful)</option>
+                        <option value="gpt-4.1-mini" {{ 'selected' if brand.openai_model == 'gpt-4.1-mini' }}>GPT-4.1 Mini (newest, fast)</option>
+                        <option value="gpt-4.1" {{ 'selected' if brand.openai_model == 'gpt-4.1' }}>GPT-4.1 (newest, powerful)</option>
+                        <option value="o3-mini" {{ 'selected' if brand.openai_model == 'o3-mini' }}>o3-mini (reasoning)</option>
+                        <option value="o4-mini" {{ 'selected' if brand.openai_model == 'o4-mini' }}>o4-mini (reasoning, newest)</option>
+                    </select>
+                    <small class="text-muted">Controls quality vs. cost. GPT-4o Mini works great for most tasks.</small>
+                </div>
+            </div>
+            <div class="mt-3 d-flex align-items-center gap-3">
+                <button class="btn btn-primary" type="submit">Save AI Settings</button>
+                {% if brand.openai_api_key %}
+                <span class="badge bg-success rounded-pill px-3 py-2">
+                    <i class="bi bi-check-circle me-1"></i> Key Configured
+                </span>
+                {% endif %}
+            </div>
+        </form>
+
+        <div class="mt-3 p-3" style="background:#f8f9fa; border-radius:8px;">
+            <div class="d-flex align-items-start gap-2">
+                <i class="bi bi-shield-check text-success mt-1"></i>
+                <div>
+                    <div class="fw-medium" style="font-size:.88rem;">Your key is stored securely</div>
+                    <small class="text-muted">Your API key is stored in your brand's private database record. It is never shared with other accounts or exposed in the UI. Using your own key means AI costs go directly to your OpenAI account instead of ours.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}

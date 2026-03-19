@@ -183,6 +183,8 @@ class WebDB:
             ("crm_pipeline_id", "TEXT DEFAULT ''"),
             ("crm_last_webhook_at", "TEXT DEFAULT ''"),
             ("google_ads_customer_id", "TEXT DEFAULT ''"),
+            ("openai_api_key", "TEXT DEFAULT ''"),
+            ("openai_model", "TEXT DEFAULT ''"),
         ]
         for col_name, col_def in new_brand_cols:
             if col_name not in brand_columns:
@@ -322,6 +324,7 @@ class WebDB:
             "brand_voice", "active_offers", "target_audience", "competitors",
             "reporting_notes", "call_tracking_number",
             "crm_type", "crm_api_key", "crm_webhook_url", "crm_pipeline_id",
+            "openai_api_key", "openai_model",
         }
         if field not in allowed:
             raise ValueError(f"Cannot update field: {field}")

@@ -621,6 +621,34 @@ def client_save_ads_id():
     return redirect(url_for("client.client_settings"))
 
 
+@client_bp.route("/settings/openai", methods=["POST"])
+@client_login_required
+def client_save_openai():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    api_key = request.form.get("openai_api_key", "").strip()
+    model = request.form.get("openai_model", "").strip()
+
+    ALLOWED_MODELS = {
+        "", "gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-4.1-mini", "gpt-4.1",
+        "o3-mini", "o4-mini",
+    }
+    if model not in ALLOWED_MODELS:
+        model = "gpt-4o-mini"
+
+    # Only update key if user actually entered something (don't blank it on empty submit)
+    if api_key:
+        if not api_key.startswith("sk-"):
+            flash("Invalid API key format. OpenAI keys start with sk-", "error")
+            return redirect(url_for("client.client_settings"))
+        db.update_brand_text_field(brand_id, "openai_api_key", api_key)
+
+    db.update_brand_text_field(brand_id, "openai_model", model)
+    flash("AI settings saved.", "success")
+    return redirect(url_for("client.client_settings"))
+
+
 # ── Context processor ──
 
 @client_bp.context_processor
@@ -630,6 +658,19 @@ def inject_client_globals():
         "client_brand": session.get("client_brand_name"),
         "now": datetime.now(),
     }
+
+
+# ── Help Center ──
+
+@client_bp.route("/help")
+@client_login_required
+def client_help():
+    topic = request.args.get("topic", "")
+    return render_template(
+        "client_help.html",
+        active_topic=topic,
+        brand_name=session.get("client_brand_name", ""),
+    )
 
 
 # ── Helper ──
