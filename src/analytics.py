@@ -444,7 +444,12 @@ def analyze_google_ads(google_ads_data, prev_google_ads_data, benchmarks_ads, in
         "highlights": [],
         "concerns": [],
         "campaign_analysis": [],
+        "search_terms": [],
     }
+
+    search_terms = google_ads_data.get("search_terms") or []
+    if isinstance(search_terms, list):
+        analysis["search_terms"] = search_terms[:50]
 
     metrics_config = {
         "impressions": {"higher_is_better": True, "benchmark_key": None},

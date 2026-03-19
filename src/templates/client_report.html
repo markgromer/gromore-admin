@@ -38,6 +38,7 @@
         .kpi-change { font-size: 13px; margin-top: 4px; }
         .kpi-up { color: #27ae60; }
         .kpi-down { color: #e74c3c; }
+        .kpi-neutral { color: #7f8c8d; }
 
         /* Summary text */
         .summary-text { font-size: 15px; line-height: 1.8; color: #444; margin-bottom: 20px; }
@@ -48,6 +49,47 @@
         .win-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
         .win-icon { color: #27ae60; font-size: 18px; flex-shrink: 0; margin-top: 1px; }
         .win-text { font-size: 14px; color: #444; }
+
+        /* Concerns list */
+        .concern-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+        .concern-icon { color: #e67e22; font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+        .concern-text { font-size: 14px; color: #444; }
+
+        /* Watchout callout */
+        .watchout-box { background: #fff8e1; border-left: 4px solid #f39c12; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; }
+        .watchout-box .watchout-label { font-weight: 700; font-size: 13px; color: #e67e22; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .watchout-box ul { margin: 0; padding-left: 18px; }
+        .watchout-box li { font-size: 14px; color: #555; margin-bottom: 4px; }
+
+        /* Driver bars */
+        .driver-item { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid #f0f0f0; }
+        .driver-metric { font-size: 14px; font-weight: 600; color: #2c3e50; min-width: 200px; }
+        .driver-bar-wrap { flex: 1; height: 20px; background: #f0f0f0; border-radius: 10px; overflow: hidden; position: relative; }
+        .driver-bar { height: 100%; border-radius: 10px; min-width: 2px; }
+        .driver-bar.up { background: #27ae60; }
+        .driver-bar.down { background: #e74c3c; }
+        .driver-pct { font-size: 13px; font-weight: 700; min-width: 60px; text-align: right; }
+
+        /* Tracking confidence */
+        .confidence-bar { height: 10px; background: #eee; border-radius: 5px; overflow: hidden; margin-bottom: 8px; }
+        .confidence-fill { height: 100%; border-radius: 5px; }
+        .confidence-100 { background: #27ae60; }
+        .confidence-75 { background: #2ecc71; }
+        .confidence-50 { background: #f39c12; }
+        .confidence-25 { background: #e74c3c; }
+
+        /* Channel comparison table */
+        .compare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .compare-table th { padding: 10px 8px; text-align: left; background: #f8f9fa; font-weight: 700; color: #2c3e50; border-bottom: 2px solid #e0e0e0; }
+        .compare-table td { padding: 10px 8px; border-bottom: 1px solid #eee; }
+        .compare-table .num { text-align: right; }
+        .compare-table .best { background: #e8f5e9; font-weight: 700; }
+
+        /* Revenue callout */
+        .revenue-card { background: linear-gradient(135deg, #1a1a2e, #16213e); color: #fff; border-radius: 12px; padding: 24px; margin-bottom: 24px; display: flex; justify-content: space-around; text-align: center; }
+        .revenue-card .rv-label { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; margin-bottom: 4px; }
+        .revenue-card .rv-value { font-size: 28px; font-weight: 700; }
+        .revenue-card .rv-sub { font-size: 13px; opacity: 0.6; margin-top: 2px; }
 
         /* Recommendations */
         .recommendation { padding: 16px 20px; border-radius: 8px; margin-bottom: 12px; border-left: 4px solid #3498db; background: #f8f9fc; }
@@ -73,6 +115,7 @@
         @media print {
             .container { padding: 20px; }
             .section { break-inside: avoid; }
+            .revenue-card { background: #1a1a2e !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
     </style>
 </head>
@@ -152,19 +195,26 @@
         </div>
         {% endif %}
 
-        <!-- Top-Level KPIs - what the client cares about most -->
+        <!-- Top-Level KPIs - split scorecard: paid leads, website conversions, total -->
         <div class="section">
             <h2>Your Numbers This Month</h2>
             <div class="kpi-row">
-                {% if total_leads is not none %}
+                {% if paid_leads is not none %}
                 <div class="kpi-card">
-                    <div class="kpi-label">Total Leads</div>
-                    <div class="kpi-value">{{ total_leads }}</div>
+                    <div class="kpi-label">Paid Ad Leads</div>
+                    <div class="kpi-value">{{ paid_leads }}</div>
                     {% if leads_change is not none %}
                     <div class="kpi-change {{ 'kpi-up' if leads_change > 0 else 'kpi-down' }}">
                         {{ "+" if leads_change > 0 else "" }}{{ leads_change }}% vs last month
                     </div>
                     {% endif %}
+                </div>
+                {% endif %}
+
+                {% if ga_conversions is not none %}
+                <div class="kpi-card">
+                    <div class="kpi-label">Website Conversions</div>
+                    <div class="kpi-value">{{ ga_conversions }}</div>
                 </div>
                 {% endif %}
 
@@ -199,6 +249,29 @@
                 </div>
                 {% endif %}
             </div>
+
+            {% if has_revenue %}
+            <div class="revenue-card">
+                <div>
+                    <div class="rv-label">Attributed Revenue</div>
+                    <div class="rv-value">${{ "{:,.0f}".format(attributed_revenue) }}</div>
+                </div>
+                {% if blended_roas is not none %}
+                <div>
+                    <div class="rv-label">Return on Ad Spend</div>
+                    <div class="rv-value">{{ blended_roas }}x</div>
+                    <div class="rv-sub">For every $1 spent on ads</div>
+                </div>
+                {% endif %}
+                {% if total_spend and attributed_revenue %}
+                <div>
+                    <div class="rv-label">Profit on Ad Spend</div>
+                    <div class="rv-value">${{ "{:,.0f}".format(attributed_revenue - total_spend) }}</div>
+                    <div class="rv-sub">Revenue minus ad spend</div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
         </div>
 
         {% if kpi_status and kpi_status.evaluation %}
@@ -263,6 +336,96 @@
                     <span class="win-text">{{ h }}</span>
                 </div>
                 {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Concerns & Watchouts -->
+        {% if concerns or watchouts %}
+        <div class="section">
+            <h2>Areas to Watch</h2>
+            {% if concerns %}
+            <div style="margin-bottom: 16px;">
+                {% for c in concerns %}
+                <div class="concern-item">
+                    <span class="concern-icon">&#9888;</span>
+                    <span class="concern-text">{{ c }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if watchouts %}
+            <div class="watchout-box">
+                <div class="watchout-label">Heads Up - Next 7 Days</div>
+                <ul>
+                    {% for w in watchouts[:5] %}
+                    <li>{{ w }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Why It Moved - Biggest Drivers -->
+        {% if drivers %}
+        <div class="section">
+            <h2>Why Your Numbers Moved</h2>
+            <div class="summary-text">
+                <p>These are the biggest changes from last month, sorted by impact.</p>
+            </div>
+            {% for d in drivers %}
+            <div class="driver-item">
+                <div class="driver-metric">{{ d.metric }}</div>
+                <div class="driver-bar-wrap">
+                    <div class="driver-bar {{ d.direction }}" style="width: {{ [d.change_pct|abs, 100]|min }}%;"></div>
+                </div>
+                <div class="driver-pct {{ 'kpi-up' if d.direction == 'up' else 'kpi-down' }}">
+                    {{ "+" if d.change_pct > 0 else "" }}{{ d.change_pct|pct }}%
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Channel Efficiency Comparison -->
+        {% if channel_efficiency and channel_efficiency|length > 1 %}
+        <div class="section">
+            <h2>Channel-by-Channel Comparison</h2>
+            <div class="summary-text">
+                <p>How each advertising channel performed side by side.</p>
+            </div>
+            <div class="channel-card">
+                <table class="compare-table">
+                    <tr>
+                        <th>Channel</th>
+                        <th class="num">Spend</th>
+                        <th class="num">Leads</th>
+                        <th class="num">Cost/Lead</th>
+                        <th class="num">Clicks</th>
+                        <th class="num">Cost/Click</th>
+                    </tr>
+                    {% set best_cpl = namespace(val=999999, idx=-1) %}
+                    {% for ch in channel_efficiency %}
+                        {% if ch.cpl > 0 and ch.cpl < best_cpl.val %}
+                            {% set best_cpl.val = ch.cpl %}
+                            {% set best_cpl.idx = loop.index0 %}
+                        {% endif %}
+                    {% endfor %}
+                    {% for ch in channel_efficiency %}
+                    <tr>
+                        <td>{{ ch.name }}</td>
+                        <td class="num">{{ "$" + "{:,.0f}".format(ch.spend) if ch.spend else "Free" }}</td>
+                        <td class="num">{{ ch.leads }}</td>
+                        <td class="num {{ 'best' if loop.index0 == best_cpl.idx and ch.cpl > 0 else '' }}">
+                            {{ "$" + "{:,.2f}".format(ch.cpl) if ch.cpl > 0 else "N/A" }}
+                        </td>
+                        <td class="num">{{ "{:,}".format(ch.clicks) }}</td>
+                        <td class="num">{{ "$" + "{:,.2f}".format(ch.cpc) if ch.cpc > 0 else "Free" }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
             </div>
         </div>
         {% endif %}
@@ -570,6 +733,59 @@
             {% endfor %}
         </div>
         {% endif %}
+
+        <!-- Next 14 Days Action Plan (from AI brief) -->
+        {% if ai_brief and ai_brief.quick_wins_14_days %}
+        <div class="section">
+            <h2>What We're Doing Next (14-Day Plan)</h2>
+            <div class="summary-text">
+                <p>Specific actions we're executing in the next two weeks.</p>
+            </div>
+            {% for w in ai_brief.quick_wins_14_days[:6] %}
+            <div class="recommendation" style="border-left-color: #27ae60;">
+                <div class="rec-title">{{ w.title }}</div>
+                {% if w.next_step %}
+                <div class="rec-detail">{{ w.next_step }}</div>
+                {% endif %}
+                {% if w.owner %}
+                <div class="rec-detail" style="margin-top: 4px; color: #888;">Owner: {{ w.owner }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Tracking Confidence -->
+        <div class="section">
+            <h2>Data Confidence</h2>
+            <div class="channel-card">
+                <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 12px;">
+                    <div style="flex: 1;">
+                        <div class="confidence-bar">
+                            <div class="confidence-fill confidence-{{ '100' if tracking_confidence == 100 else '75' if tracking_confidence >= 75 else '50' if tracking_confidence >= 50 else '25' }}"
+                                 style="width: {{ tracking_confidence }}%;"></div>
+                        </div>
+                    </div>
+                    <div style="font-size: 24px; font-weight: 700; color: #2c3e50;">{{ tracking_confidence }}%</div>
+                </div>
+                {% if connected_sources %}
+                <div style="font-size: 13px; color: #555; margin-bottom: 6px;">
+                    <strong>Connected:</strong> {{ connected_sources | join(', ') }}
+                </div>
+                {% endif %}
+                {% if missing_sources %}
+                <div style="font-size: 13px; color: #e74c3c;">
+                    <strong>Not connected:</strong> {{ missing_sources | join(', ') }}
+                    <span style="color: #888;"> - connecting these would give us a more complete picture.</span>
+                </div>
+                {% endif %}
+                {% if not has_revenue %}
+                <div style="font-size: 13px; color: #888; margin-top: 8px;">
+                    Revenue tracking is not connected. Once we add revenue data, this report will show true ROI, profit margins, and return on ad spend.
+                </div>
+                {% endif %}
+            </div>
+        </div>
 
         <!-- Footer -->
         <div class="footer">

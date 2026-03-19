@@ -391,6 +391,17 @@ def _pull_google_ads(customer_id, access_token, start_date, end_date):
     login_customer_id = re.sub(r"\D", "", (current_app.config.get("GOOGLE_ADS_LOGIN_CUSTOMER_ID", "") or "").strip())
     url = f"https://googleads.googleapis.com/v18/customers/{clean_customer_id}/googleAds:searchStream"
 
+    def _search_stream(gaql_query: str):
+        resp = requests.post(url, json={"query": gaql_query}, headers=headers, timeout=30)
+        if resp.status_code != 200:
+            detail = resp.text[:300]
+            if "ACCESS_TOKEN_SCOPE_INSUFFICIENT" in detail or "insufficient authentication scopes" in detail.lower():
+                raise ValueError("Google token missing Ads scope. Reconnect Google to grant Google Ads access.")
+            raise ValueError(f"Google Ads API error {resp.status_code}: {detail}")
+
+        payload = resp.json()
+        return payload if isinstance(payload, list) else [payload]
+
     query = (
         "SELECT "
         "campaign.id, "
@@ -415,15 +426,7 @@ def _pull_google_ads(customer_id, access_token, start_date, end_date):
     if login_customer_id:
         headers["login-customer-id"] = login_customer_id
 
-    resp = requests.post(url, json={"query": query}, headers=headers, timeout=30)
-    if resp.status_code != 200:
-        detail = resp.text[:300]
-        if "ACCESS_TOKEN_SCOPE_INSUFFICIENT" in detail or "insufficient authentication scopes" in detail.lower():
-            raise ValueError("Google token missing Ads scope. Reconnect Google to grant Google Ads access.")
-        raise ValueError(f"Google Ads API error {resp.status_code}: {detail}")
-
-    payload = resp.json()
-    chunks = payload if isinstance(payload, list) else [payload]
+    chunks = _search_stream(query)
 
     by_campaign = {}
     totals = {
@@ -466,6 +469,69 @@ def _pull_google_ads(customer_id, access_token, start_date, end_date):
             totals["spend"] += spend
             totals["results"] += conversions
 
+    # Search terms (in-account query data) for keyword grounding
+    search_terms = []
+    try:
+        st_query = (
+            "SELECT "
+            "search_term_view.search_term, "
+            "campaign.id, "
+            "campaign.name, "
+            "ad_group.id, "
+            "ad_group.name, "
+            "metrics.impressions, "
+            "metrics.clicks, "
+            "metrics.cost_micros, "
+            "metrics.conversions, "
+            "metrics.ctr, "
+            "metrics.average_cpc "
+            "FROM search_term_view "
+            f"WHERE segments.date BETWEEN '{start_date}' AND '{end_date}' "
+            "AND campaign.status != 'REMOVED' "
+            "AND metrics.clicks > 0 "
+            "ORDER BY metrics.clicks DESC "
+            "LIMIT 50"
+        )
+        st_chunks = _search_stream(st_query)
+        for chunk in st_chunks:
+            for row in chunk.get("results", []) or []:
+                st = (row.get("searchTermView") or {})
+                campaign = row.get("campaign", {})
+                ad_group = row.get("adGroup", {})
+                metrics = row.get("metrics", {})
+
+                term = (st.get("searchTerm") or "").strip()
+                if not term:
+                    continue
+
+                impressions = int(metrics.get("impressions", 0) or 0)
+                clicks = int(metrics.get("clicks", 0) or 0)
+                spend = float(metrics.get("costMicros", 0) or 0) / 1_000_000.0
+                conversions = float(metrics.get("conversions", 0) or 0)
+                ctr = float(metrics.get("ctr", 0) or 0) * 100.0
+                average_cpc = float(metrics.get("averageCpc", 0) or 0) / 1_000_000.0
+                cpr = (spend / conversions) if conversions > 0 else 0.0
+
+                search_terms.append(
+                    {
+                        "term": term,
+                        "campaign_id": campaign.get("id", ""),
+                        "campaign_name": campaign.get("name", ""),
+                        "ad_group_id": ad_group.get("id", ""),
+                        "ad_group_name": ad_group.get("name", ""),
+                        "impressions": impressions,
+                        "clicks": clicks,
+                        "spend": round(spend, 2),
+                        "results": round(conversions, 2),
+                        "ctr": round(ctr, 2),
+                        "cpc": round(average_cpc, 2),
+                        "cost_per_result": round(cpr, 2),
+                    }
+                )
+    except Exception:
+        # Best-effort: do not fail the whole pull if search terms are unavailable.
+        search_terms = []
+
     if totals["impressions"] > 0:
         totals["ctr"] = round((totals["clicks"] / totals["impressions"]) * 100.0, 2)
     if totals["clicks"] > 0:
@@ -485,6 +551,7 @@ def _pull_google_ads(customer_id, access_token, start_date, end_date):
     return {
         "totals": totals,
         "by_campaign": dict(sorted_campaigns[:30]),
+        "search_terms": search_terms[:50],
         "row_count": len(by_campaign),
     }
 

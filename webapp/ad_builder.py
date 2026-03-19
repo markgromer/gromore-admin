@@ -40,6 +40,7 @@ def _data_availability(context):
         "has_gsc_keyword_opportunities": _has_list("keyword_opportunities"),
         "has_gsc_top_pages": _has_list("top_pages"),
         "has_google_ads_campaigns": bool((google_ads.get("campaigns") or [])[:1]),
+        "has_google_ads_search_terms": bool((google_ads.get("search_terms") or [])[:1]),
         "has_meta_campaigns": bool((meta_ads.get("campaigns") or [])[:1]),
         "has_meta_top_ads": bool((meta_ads.get("top_ads") or [])[:1]),
         "has_competitor_watch": bool(competitor),
@@ -78,7 +79,7 @@ def _evidence_rules(prefix=""):
     return (
         f"{p}Evidence rules:\n"
         f"{p}- You MUST include a 'data_used' array listing which context fields you used, chosen ONLY from this allowed set:\n"
-        f"{p}  ['seo.top_queries','seo.keyword_opportunities','seo.top_pages','google_ads.campaigns','meta_ads.campaigns','meta_ads.top_ads','competitor_watch','performance.kpis']\n"
+        f"{p}  ['seo.top_queries','seo.keyword_opportunities','seo.top_pages','google_ads.campaigns','google_ads.search_terms','meta_ads.campaigns','meta_ads.top_ads','competitor_watch','performance.kpis']\n"
         f"{p}- If a field is not present or is empty in the context, you MUST NOT include it in data_used.\n"
         f"{p}- Do not invent competitor names, metrics, or claims. If unknown, keep copy generic but still specific to services + service area.\n"
     )
@@ -107,7 +108,10 @@ def _generate_google_search_rsa(api_key, context):
         "- Headlines MUST be under 30 characters. Count carefully. This is a hard limit.\n"
         "- Descriptions MUST be under 90 characters.\n"
         "- Use the business service area and services from context.\n"
-        "- If seo.top_queries or seo.keyword_opportunities exists, keywords_to_target MUST be aligned to those.\n"
+        "- If seo.top_queries or seo.keyword_opportunities exists AND you use them, keywords_to_target MUST be aligned to those.\n"
+        "- If you do NOT use seo.top_queries or seo.keyword_opportunities (Search Console not used), then keywords_to_target MUST be derived ONLY from google_ads.search_terms (in-account query/search-term data) if present.\n"
+        "- In that no-SEO fallback case, your rationale MUST explicitly say: Search Console was not used, and keywords were chosen from in-account Google Ads search terms for the selected month.\n"
+        "- If both SEO query data and google_ads.search_terms are missing/empty, set keywords_to_target to [] and state clearly in rationale that query data is unavailable.\n"
         "- negative_keywords should block low-intent and irrelevant traffic implied by context (jobs, free, DIY, wholesale, etc.).\n"
         "- Include at least 2 headlines with primary service + city/service area.\n"
         "- Include at least 1 headline with a number if present in context; otherwise omit numeric claim.\n"

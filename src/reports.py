@@ -155,34 +155,42 @@ def generate_client_report(analysis, suggestions_client, output_dir=None, brandi
     google_ads = rounded_analysis.get("google_ads")
     ga = rounded_analysis.get("google_analytics")
     gsc = rounded_analysis.get("search_console")
+    paid_summary = rounded_analysis.get("paid_summary", {})
+    kpi_status = rounded_analysis.get("kpi_status", {})
+    roas_data = rounded_analysis.get("roas", {})
 
-    total_leads = 0
-    total_spend = 0
-    cost_per_lead = None
+    # --- Leads: use paid_summary to avoid double-counting GA4 conversions ---
+    paid_leads = paid_summary.get("total_paid_leads", 0)
+    ga_conversions = ga.get("metrics", {}).get("conversions", 0) if ga else 0
+
+    # If paid_summary is empty, fall back to summing channel results
+    if not paid_leads:
+        if meta:
+            paid_leads += meta.get("metrics", {}).get("results", 0)
+        if google_ads:
+            paid_leads += google_ads.get("metrics", {}).get("results", 0)
+
+    total_spend = paid_summary.get("total_paid_spend", 0)
+    if not total_spend:
+        if meta:
+            total_spend += meta.get("metrics", {}).get("spend", 0)
+        if google_ads:
+            total_spend += google_ads.get("metrics", {}).get("spend", 0)
+
+    cost_per_lead = round(total_spend / paid_leads, 3) if paid_leads > 0 and total_spend > 0 else None
+
+    # MoM for paid leads - weighted average across channels
     leads_change = None
-    cpl_change = None
-
     if meta:
-        total_leads += meta.get("metrics", {}).get("results", 0)
-        total_spend += meta.get("metrics", {}).get("spend", 0)
-        # MoM for leads
         results_mom = meta.get("month_over_month", {}).get("results", {})
         if results_mom.get("change_pct") is not None:
             leads_change = results_mom["change_pct"]
+    if leads_change is None and google_ads:
+        ads_results_mom = google_ads.get("month_over_month", {}).get("results", {})
+        if ads_results_mom.get("change_pct") is not None:
+            leads_change = ads_results_mom["change_pct"]
 
-    if google_ads:
-        total_leads += google_ads.get("metrics", {}).get("results", 0)
-        total_spend += google_ads.get("metrics", {}).get("spend", 0)
-        if leads_change is None:
-            ads_results_mom = google_ads.get("month_over_month", {}).get("results", {})
-            if ads_results_mom.get("change_pct") is not None:
-                leads_change = ads_results_mom["change_pct"]
-
-    if ga:
-        total_leads += ga.get("metrics", {}).get("conversions", 0)
-
-    if total_leads > 0 and total_spend > 0:
-        cost_per_lead = round(total_spend / total_leads, 3)
+    cpl_change = None
 
     website_sessions = None
     sessions_change = None
@@ -192,30 +200,154 @@ def generate_client_report(analysis, suggestions_client, output_dir=None, brandi
         if sessions_mom.get("change_pct") is not None:
             sessions_change = sessions_mom["change_pct"]
 
+    # --- Revenue / ROAS ---
+    attributed_revenue = roas_data.get("attributed_revenue")
+    blended_roas = roas_data.get("blended_roas")
+
+    # --- Channel efficiency comparison ---
+    channel_efficiency = []
+    if meta and meta.get("metrics", {}).get("spend"):
+        m = meta["metrics"]
+        channel_efficiency.append({
+            "name": "Facebook / Instagram",
+            "spend": m.get("spend", 0),
+            "leads": m.get("results", 0),
+            "cpl": m.get("cost_per_result", 0),
+            "clicks": m.get("clicks", 0),
+            "cpc": m.get("cpc", 0),
+        })
+    if google_ads and google_ads.get("metrics", {}).get("spend"):
+        g = google_ads["metrics"]
+        channel_efficiency.append({
+            "name": "Google Ads",
+            "spend": g.get("spend", 0),
+            "leads": g.get("results", 0),
+            "cpl": g.get("cost_per_result", 0),
+            "clicks": g.get("clicks", 0),
+            "cpc": g.get("cpc", 0),
+        })
+    if gsc and gsc.get("metrics", {}).get("clicks"):
+        channel_efficiency.append({
+            "name": "Organic Search (SEO)",
+            "spend": 0,
+            "leads": 0,
+            "cpl": 0,
+            "clicks": gsc["metrics"].get("clicks", 0),
+            "cpc": 0,
+        })
+
+    # --- "Why it moved" drivers ---
+    drivers = []
+    if meta:
+        mom = meta.get("month_over_month", {})
+        for metric, label in [("results", "Meta leads"), ("spend", "Meta spend"),
+                              ("cpc", "Meta cost-per-click"), ("ctr", "Meta click rate")]:
+            entry = mom.get(metric, {})
+            pct = entry.get("change_pct")
+            if pct is not None and abs(pct) >= 10:
+                drivers.append({
+                    "metric": label,
+                    "change_pct": pct,
+                    "direction": "up" if pct > 0 else "down",
+                    "previous": entry.get("previous"),
+                    "current": entry.get("current"),
+                })
+    if google_ads:
+        mom = google_ads.get("month_over_month", {})
+        for metric, label in [("results", "Google Ads conversions"), ("spend", "Google Ads spend"),
+                              ("cpc", "Google Ads CPC"), ("ctr", "Google Ads click rate")]:
+            entry = mom.get(metric, {})
+            pct = entry.get("change_pct")
+            if pct is not None and abs(pct) >= 10:
+                drivers.append({
+                    "metric": label,
+                    "change_pct": pct,
+                    "direction": "up" if pct > 0 else "down",
+                    "previous": entry.get("previous"),
+                    "current": entry.get("current"),
+                })
+    if ga:
+        mom = ga.get("month_over_month", {})
+        for metric, label in [("sessions", "Website sessions"), ("conversions", "Website conversions"),
+                              ("bounce_rate", "Bounce rate")]:
+            entry = mom.get(metric, {})
+            pct = entry.get("change_pct")
+            if pct is not None and abs(pct) >= 10:
+                drivers.append({
+                    "metric": label,
+                    "change_pct": pct,
+                    "direction": "up" if pct > 0 else "down",
+                    "previous": entry.get("previous"),
+                    "current": entry.get("current"),
+                })
+    # Sort by magnitude of change
+    drivers.sort(key=lambda d: abs(d["change_pct"]), reverse=True)
+
+    # --- Tracking confidence ---
+    connected_sources = []
+    missing_sources = []
+    for src, data, label in [
+        ("meta", meta, "Facebook/Instagram Ads"),
+        ("google_ads", google_ads, "Google Ads"),
+        ("ga", ga, "Google Analytics"),
+        ("gsc", gsc, "Google Search Console"),
+    ]:
+        if data and data.get("metrics"):
+            connected_sources.append(label)
+        else:
+            missing_sources.append(label)
+    tracking_confidence = round(len(connected_sources) / 4 * 100)
+
+    has_revenue = attributed_revenue is not None and attributed_revenue > 0
+
+    # --- AI brief watchouts ---
+    ai_brief = rounded_analysis.get("ai_brief_client")
+    watchouts = []
+    if ai_brief and ai_brief.get("watchouts_next_7_days"):
+        watchouts = ai_brief["watchouts_next_7_days"]
+
     context = {
         "client_name": client_config.get("display_name", client_id),
         "month": month,
         "month_display": _month_display(month),
         "generated_date": datetime.now().strftime("%Y-%m-%d"),
         "overall_grade": rounded_analysis.get("overall_grade", "N/A"),
-        "total_leads": total_leads if total_leads > 0 else None,
+        # Scorecard: split into paid leads, website conversions, total
+        "paid_leads": paid_leads if paid_leads > 0 else None,
+        "ga_conversions": ga_conversions if ga_conversions > 0 else None,
+        "total_leads": (paid_leads + ga_conversions) if (paid_leads + ga_conversions) > 0 else None,
         "total_spend": total_spend if total_spend > 0 else None,
         "cost_per_lead": cost_per_lead,
         "leads_change": leads_change,
         "cpl_change": cpl_change,
         "website_sessions": website_sessions,
         "sessions_change": sessions_change,
+        # Revenue
+        "attributed_revenue": attributed_revenue,
+        "blended_roas": blended_roas,
+        "has_revenue": has_revenue,
+        # Channel efficiency
+        "channel_efficiency": [_dict_to_obj(c) for c in channel_efficiency],
+        # Drivers
+        "drivers": [_dict_to_obj(d) for d in drivers[:8]],
+        # Concerns and watchouts
         "highlights": rounded_analysis.get("highlights", []),
         "concerns": rounded_analysis.get("concerns", []),
-        "paid_summary": _dict_to_obj(rounded_analysis.get("paid_summary", {})),
-        "kpi_status": _dict_to_obj(rounded_analysis.get("kpi_status", {})),
+        "watchouts": watchouts,
+        # Tracking confidence
+        "tracking_confidence": tracking_confidence,
+        "connected_sources": connected_sources,
+        "missing_sources": missing_sources,
+        # Existing
+        "paid_summary": _dict_to_obj(paid_summary),
+        "kpi_status": _dict_to_obj(kpi_status),
         "competitor_watch": _dict_to_obj(rounded_analysis.get("competitor_watch")) if rounded_analysis.get("competitor_watch") else None,
         "ga": _dict_to_obj(ga) if ga else None,
         "meta": _dict_to_obj(meta) if meta else None,
         "google_ads": _dict_to_obj(google_ads) if google_ads else None,
         "gsc": _dict_to_obj(gsc) if gsc else None,
         "client_suggestions": suggestions_client,
-        "ai_brief": rounded_analysis.get("ai_brief_client"),
+        "ai_brief": ai_brief,
         "branding": branding or {},
     }
 

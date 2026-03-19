@@ -132,6 +132,7 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
         "google_ads_detail": {
             "campaigns": (google_ads.get("campaign_analysis") or [])[:20],
             "month_over_month": google_ads.get("month_over_month") or {},
+            "search_terms": (google_ads.get("search_terms") or [])[:50],
         },
         "meta_detail": {
             "campaigns": (meta.get("campaign_analysis") or [])[:20],
