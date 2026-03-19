@@ -1,0 +1,384 @@
+{% extends "client_base.html" %}
+{% block title %}My Business{% endblock %}
+
+{% block content %}
+<style>
+    .biz-header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        border-radius: 16px;
+        padding: 2rem 2.25rem;
+        margin-bottom: 1.5rem;
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+    }
+    .biz-header::after {
+        content: '';
+        position: absolute;
+        top: -40%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(99,102,241,.15) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    .biz-header h3 {
+        font-weight: 800;
+        font-size: 1.4rem;
+        margin-bottom: .25rem;
+    }
+    .biz-header p {
+        opacity: .7;
+        font-size: .9rem;
+        margin: 0;
+    }
+
+    .profile-meter {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 1rem;
+    }
+    .profile-meter .meter-bar {
+        flex: 1;
+        height: 8px;
+        background: rgba(255,255,255,.15);
+        border-radius: 4px;
+        overflow: hidden;
+        max-width: 200px;
+    }
+    .profile-meter .meter-fill {
+        height: 100%;
+        border-radius: 4px;
+        transition: width .4s ease;
+    }
+    .meter-fill.complete { background: #10b981; }
+    .meter-fill.partial { background: #fbbf24; }
+    .meter-fill.low { background: #ef4444; }
+    .profile-meter .meter-label {
+        font-size: .85rem;
+        font-weight: 600;
+    }
+
+    .biz-section {
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 1px 4px rgba(0,0,0,.06);
+        margin-bottom: 1.25rem;
+        overflow: hidden;
+    }
+    .biz-section-header {
+        padding: 1.25rem 1.5rem .75rem;
+        border-bottom: 1px solid #f1f3f5;
+    }
+    .biz-section-header h5 {
+        font-weight: 700;
+        font-size: 1.05rem;
+        color: #1a1d2e;
+        margin: 0;
+    }
+    .biz-section-header .section-hint {
+        font-size: .82rem;
+        color: #6b7280;
+        margin-top: 2px;
+    }
+    .biz-section-body {
+        padding: 1.25rem 1.5rem 1.5rem;
+    }
+
+    .biz-field {
+        margin-bottom: 1.25rem;
+    }
+    .biz-field:last-child {
+        margin-bottom: 0;
+    }
+    .biz-field label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 600;
+        font-size: .88rem;
+        color: #1a1d2e;
+        margin-bottom: .35rem;
+    }
+    .biz-field label .field-icon {
+        font-size: 1rem;
+        opacity: .5;
+    }
+    .biz-field .field-help {
+        font-size: .8rem;
+        color: #9ca3af;
+        margin-top: 3px;
+    }
+    .biz-field textarea,
+    .biz-field input[type="text"],
+    .biz-field input[type="number"] {
+        width: 100%;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 10px;
+        padding: .65rem .9rem;
+        font-size: .9rem;
+        color: #1a1d2e;
+        transition: border-color .15s, box-shadow .15s;
+        background: #fafbfc;
+    }
+    .biz-field textarea:focus,
+    .biz-field input:focus {
+        outline: none;
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99,102,241,.1);
+        background: #fff;
+    }
+    .biz-field textarea {
+        resize: vertical;
+        min-height: 80px;
+    }
+
+    .biz-save-btn {
+        background: linear-gradient(135deg, #6366f1, #4f46e5);
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        padding: .6rem 1.5rem;
+        font-weight: 600;
+        font-size: .9rem;
+        cursor: pointer;
+        transition: transform .1s, box-shadow .15s;
+    }
+    .biz-save-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(99,102,241,.3);
+    }
+    .biz-save-btn:active {
+        transform: translateY(0);
+    }
+
+    .ai-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: linear-gradient(135deg, #ede9fe, #e0e7ff);
+        color: #4f46e5;
+        font-size: .7rem;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 6px;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+
+    .target-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+    }
+    .target-card {
+        background: #f9fafb;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1rem 1.15rem;
+        text-align: center;
+        transition: border-color .15s;
+    }
+    .target-card:focus-within {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99,102,241,.08);
+    }
+    .target-card .tc-label {
+        font-size: .75rem;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: #6b7280;
+        font-weight: 600;
+        margin-bottom: .5rem;
+    }
+    .target-card input {
+        width: 100%;
+        border: none;
+        background: transparent;
+        text-align: center;
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: #1a1d2e;
+        padding: .25rem 0;
+    }
+    .target-card input:focus {
+        outline: none;
+    }
+    .target-card .tc-unit {
+        font-size: .78rem;
+        color: #9ca3af;
+    }
+</style>
+
+<!-- Header -->
+<div class="biz-header">
+    <h3><i class="bi bi-building me-2"></i> My Business Profile</h3>
+    <p>Tell us about your business so our AI can write better ads, build sharper reports, and find the right customers.</p>
+    <div class="profile-meter">
+        <div class="meter-bar">
+            <div class="meter-fill {{ 'complete' if profile_score >= 80 else 'partial' if profile_score >= 40 else 'low' }}"
+                 style="width: {{ profile_score }}%;"></div>
+        </div>
+        <span class="meter-label">{{ profile_score }}% complete</span>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Left column: Brand profile -->
+    <div class="col-lg-7">
+        <form method="POST" action="{{ url_for('client.client_my_business') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="section" value="voice">
+
+            <div class="biz-section">
+                <div class="biz-section-header">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <h5><i class="bi bi-chat-dots me-2" style="color:#6366f1;"></i> Brand Voice & Identity</h5>
+                        <span class="ai-badge"><i class="bi bi-stars"></i> Powers AI</span>
+                    </div>
+                    <div class="section-hint">This shapes every ad, report, and recommendation our AI generates for you.</div>
+                </div>
+                <div class="biz-section-body">
+                    <div class="biz-field">
+                        <label>
+                            <span class="field-icon"><i class="bi bi-mic"></i></span>
+                            Brand Voice & Tone
+                        </label>
+                        <textarea name="brand_voice" maxlength="2000" rows="3"
+                                  placeholder="e.g. Friendly, professional, no hard sells. Use 'we' not 'I'. Always mention our satisfaction guarantee. Speak like a helpful neighbor, not a salesman.">{{ brand.brand_voice or '' }}</textarea>
+                        <div class="field-help">How should we talk about your business? This gets injected into every AI prompt.</div>
+                    </div>
+
+                    <div class="biz-field">
+                        <label>
+                            <span class="field-icon"><i class="bi bi-tag"></i></span>
+                            Active Offers & Promotions
+                        </label>
+                        <textarea name="active_offers" maxlength="1000" rows="2"
+                                  placeholder="e.g. $50 off first service (code FIRST50), Free estimates on all jobs, 10% senior discount">{{ brand.active_offers or '' }}</textarea>
+                        <div class="field-help">Current deals referenced in ad copy and reports. Update whenever offers change.</div>
+                    </div>
+
+                    <div class="biz-field">
+                        <label>
+                            <span class="field-icon"><i class="bi bi-people"></i></span>
+                            Target Audience
+                        </label>
+                        <textarea name="target_audience" maxlength="2000" rows="3"
+                                  placeholder="e.g. Homeowners 30-65, household income $75k+, within 25mi of Dallas. Pain points: emergency situations, tired of unreliable contractors.">{{ brand.target_audience or '' }}</textarea>
+                        <div class="field-help">Who are your ideal customers? Demographics, pain points, motivations. AI uses this for ad targeting and copy.</div>
+                    </div>
+
+                    <div class="biz-field">
+                        <label>
+                            <span class="field-icon"><i class="bi bi-shield-exclamation"></i></span>
+                            Competitors
+                        </label>
+                        <textarea name="competitors" maxlength="1000" rows="2"
+                                  placeholder="e.g. ABC Plumbing, Quick Fix Services, Premier Home Pros">{{ brand.competitors or '' }}</textarea>
+                        <div class="field-help">Comma-separated. Used in Competitor Watch to detect overlap in search traffic and plan counter-moves.</div>
+                    </div>
+
+                    <div class="biz-field">
+                        <label>
+                            <span class="field-icon"><i class="bi bi-journal-text"></i></span>
+                            Reporting Notes
+                        </label>
+                        <textarea name="reporting_notes" maxlength="1000" rows="2"
+                                  placeholder="e.g. Client prefers simple language. Don't mention competitor names in client reports. Include spend breakdown.">{{ brand.reporting_notes or '' }}</textarea>
+                        <div class="field-help">Standing instructions for reports and communications.</div>
+                    </div>
+                </div>
+
+                <div class="px-3 pb-3 pt-0">
+                    <button type="submit" class="biz-save-btn">
+                        <i class="bi bi-check2 me-1"></i> Save Profile
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Right column: Performance targets -->
+    <div class="col-lg-5">
+        <form method="POST" action="{{ url_for('client.client_my_business') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="section" value="targets">
+
+            <div class="biz-section">
+                <div class="biz-section-header">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <h5><i class="bi bi-bullseye me-2" style="color:#10b981;"></i> Performance Targets</h5>
+                        <span class="ai-badge"><i class="bi bi-stars"></i> Tracked</span>
+                    </div>
+                    <div class="section-hint">Set goals and we'll track them in every report. Your grade is based on these.</div>
+                </div>
+                <div class="biz-section-body">
+                    <div class="target-grid">
+                        <div class="target-card">
+                            <div class="tc-label">Target CPA</div>
+                            <input type="number" name="kpi_target_cpa" min="0" max="10000" step="0.01"
+                                   value="{{ brand.kpi_target_cpa or 0 }}"
+                                   placeholder="0">
+                            <div class="tc-unit">$ per lead</div>
+                        </div>
+                        <div class="target-card">
+                            <div class="tc-label">Target Leads</div>
+                            <input type="number" name="kpi_target_leads" min="0" max="100000" step="1"
+                                   value="{{ brand.kpi_target_leads|int or 0 }}"
+                                   placeholder="0">
+                            <div class="tc-unit">per month</div>
+                        </div>
+                        <div class="target-card">
+                            <div class="tc-label">Target ROAS</div>
+                            <input type="number" name="kpi_target_roas" min="0" max="100" step="0.1"
+                                   value="{{ brand.kpi_target_roas or 0 }}"
+                                   placeholder="0">
+                            <div class="tc-unit">x return on spend</div>
+                        </div>
+                    </div>
+
+                    <div class="biz-field mt-4">
+                        <label>
+                            <span class="field-icon"><i class="bi bi-telephone"></i></span>
+                            Call Tracking Number
+                        </label>
+                        <input type="text" name="call_tracking_number" maxlength="30"
+                               value="{{ brand.call_tracking_number or '' }}"
+                               placeholder="e.g. (214) 555-0199">
+                        <div class="field-help">Used for phone lead attribution in reports.</div>
+                    </div>
+                </div>
+
+                <div class="px-3 pb-3 pt-0">
+                    <button type="submit" class="biz-save-btn" style="background: linear-gradient(135deg, #10b981, #059669);">
+                        <i class="bi bi-check2 me-1"></i> Save Targets
+                    </button>
+                </div>
+            </div>
+        </form>
+
+        <!-- How AI Uses This -->
+        <div class="biz-section">
+            <div class="biz-section-body" style="background: linear-gradient(135deg, #faf5ff, #eef2ff); border-radius: 14px;">
+                <div class="d-flex align-items-start gap-3">
+                    <div style="width:40px; height:40px; border-radius:10px; background:linear-gradient(135deg,#6366f1,#4f46e5); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i class="bi bi-stars" style="color:#fff; font-size:1.1rem;"></i>
+                    </div>
+                    <div>
+                        <div style="font-weight:700; font-size:.95rem; color:#1a1d2e; margin-bottom:.35rem;">How Your Profile Powers the AI</div>
+                        <ul style="margin:0; padding-left:1.1rem; font-size:.84rem; color:#4b5563; line-height:1.7;">
+                            <li><strong>Brand Voice</strong> shapes every ad headline, description, and report narrative</li>
+                            <li><strong>Active Offers</strong> get woven into ad copy and call-to-actions automatically</li>
+                            <li><strong>Target Audience</strong> refines keyword selection and audience targeting</li>
+                            <li><strong>Competitors</strong> feed the Competitor Watch engine that tracks their search presence</li>
+                            <li><strong>Targets</strong> calibrate your performance grade and flag when metrics drift off-track</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

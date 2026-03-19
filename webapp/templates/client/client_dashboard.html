@@ -3,6 +3,75 @@
 {% block title %}Overview{% endblock %}
 
 {% block content %}
+<style>
+    /* Loading overlay */
+    .dash-loader {
+        text-align: center;
+        padding: 4rem 1rem;
+    }
+    .loader-orb {
+        width: 80px; height: 80px;
+        margin: 0 auto 1.5rem;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6366f1, #4f46e5);
+        position: relative;
+        animation: orbPulse 1.8s ease-in-out infinite;
+    }
+    .loader-orb::after {
+        content: '';
+        position: absolute;
+        inset: 6px;
+        border-radius: 50%;
+        border: 3px solid transparent;
+        border-top-color: #fff;
+        animation: orbSpin 1s linear infinite;
+    }
+    @keyframes orbPulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,.4); }
+        50% { box-shadow: 0 0 0 20px rgba(99,102,241,0); }
+    }
+    @keyframes orbSpin {
+        to { transform: rotate(360deg); }
+    }
+    .loader-title {
+        font-weight: 700; font-size: 1.15rem; color: #1a1d2e; margin-bottom: .75rem;
+    }
+    .loader-steps {
+        list-style: none; padding: 0; margin: 0 auto; max-width: 320px; text-align: left;
+    }
+    .loader-steps li {
+        display: flex; align-items: center; gap: 10px;
+        padding: .45rem 0; font-size: .88rem; color: #9ca3af;
+        transition: color .3s;
+    }
+    .loader-steps li.active {
+        color: #1a1d2e; font-weight: 600;
+    }
+    .loader-steps li.done {
+        color: #10b981;
+    }
+    .loader-steps li .step-icon {
+        width: 22px; height: 22px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: .7rem; flex-shrink: 0;
+        background: #f3f4f6; color: #9ca3af;
+        transition: all .3s;
+    }
+    .loader-steps li.active .step-icon {
+        background: #6366f1; color: #fff;
+        animation: stepPulse 1s ease-in-out infinite;
+    }
+    .loader-steps li.done .step-icon {
+        background: #10b981; color: #fff;
+    }
+    @keyframes stepPulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.15); }
+    }
+    .dash-content { display: none; }
+    .dash-content.visible { display: block; }
+</style>
+
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h4 class="mb-1">Welcome back{% if client_name %}, {{ client_name }}{% endif %}</h4>
@@ -14,6 +83,220 @@
         </form>
     </div>
 </div>
+
+<!-- Loading Animation -->
+<div id="dashLoader" class="dash-loader">
+    <div class="loader-orb"></div>
+    <div class="loader-title">Preparing your dashboard</div>
+    <ul class="loader-steps">
+        <li id="step-connect" class="active">
+            <span class="step-icon"><i class="bi bi-plug"></i></span>
+            Connecting to your ad platforms...
+        </li>
+        <li id="step-google">
+            <span class="step-icon"><i class="bi bi-google"></i></span>
+            Pulling Google Analytics & Ads data...
+        </li>
+        <li id="step-meta">
+            <span class="step-icon"><i class="bi bi-meta"></i></span>
+            Pulling Facebook & Instagram data...
+        </li>
+        <li id="step-analyze">
+            <span class="step-icon"><i class="bi bi-cpu"></i></span>
+            AI analyzing your performance...
+        </li>
+        <li id="step-build">
+            <span class="step-icon"><i class="bi bi-layout-text-sidebar-reverse"></i></span>
+            Building your dashboard...
+        </li>
+    </ul>
+</div>
+
+<!-- Dashboard Content (hidden until loaded) -->
+<div id="dashContent" class="dash-content">
+    <!-- Populated by JS -->
+</div>
+
+<!-- Error state -->
+<div id="dashError" style="display:none;">
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i>
+        <span id="dashErrorMsg"></span>
+    </div>
+</div>
+
+{% if async_load %}
+<script>
+(function() {
+    const steps = ['step-connect', 'step-google', 'step-meta', 'step-analyze', 'step-build'];
+    let currentStep = 0;
+
+    function advanceStep() {
+        if (currentStep >= steps.length) return;
+        // Mark previous as done
+        if (currentStep > 0) {
+            const prev = document.getElementById(steps[currentStep - 1]);
+            prev.classList.remove('active');
+            prev.classList.add('done');
+            prev.querySelector('.step-icon').innerHTML = '<i class="bi bi-check2"></i>';
+        }
+        // Mark current as active
+        const cur = document.getElementById(steps[currentStep]);
+        cur.classList.add('active');
+        currentStep++;
+    }
+
+    // Advance steps on a realistic cadence
+    advanceStep(); // step 0 starts immediately
+    const timers = [1200, 2800, 4500, 6500];
+    timers.forEach(function(ms, i) {
+        setTimeout(function() { advanceStep(); }, ms);
+    });
+
+    // Fetch data
+    const month = '{{ month }}';
+    fetch('{{ url_for("client.client_dashboard_data") }}?month=' + encodeURIComponent(month), {
+        credentials: 'same-origin'
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        // Mark all steps done
+        steps.forEach(function(id) {
+            const el = document.getElementById(id);
+            el.classList.remove('active');
+            el.classList.add('done');
+            el.querySelector('.step-icon').innerHTML = '<i class="bi bi-check2"></i>';
+        });
+
+        setTimeout(function() {
+            document.getElementById('dashLoader').style.display = 'none';
+
+            if (data.error && !data.dashboard) {
+                document.getElementById('dashError').style.display = 'block';
+                document.getElementById('dashErrorMsg').textContent =
+                    'No data available for ' + month + ' yet. Data appears after your reports are generated.';
+                return;
+            }
+
+            if (data.dashboard) {
+                renderDashboard(data.dashboard);
+            }
+        }, 600);
+    })
+    .catch(function(err) {
+        document.getElementById('dashLoader').style.display = 'none';
+        document.getElementById('dashError').style.display = 'block';
+        document.getElementById('dashErrorMsg').textContent = 'Something went wrong loading your data. Please refresh.';
+    });
+
+    function renderDashboard(d) {
+        var container = document.getElementById('dashContent');
+        var html = '';
+
+        // Health Grade + KPIs
+        html += '<div class="row g-3 mb-4">';
+        html += '<div class="col-md-3"><div class="metric-card text-center">';
+        html += '<div class="metric-label">Overall Grade</div>';
+        var gradeClass = (d.health.grade || 'NA').replace('/', '');
+        html += '<div class="grade-badge grade-' + gradeClass + ' mx-auto my-2">' + d.health.grade + '</div>';
+        html += '<div class="metric-explain">' + (d.health.label || '') + '</div>';
+        html += '</div></div>';
+
+        if (d.kpi_status) {
+            d.kpi_status.forEach(function(kpi) {
+                html += '<div class="col-md-3"><div class="metric-card h-100">';
+                html += '<div class="metric-label">' + kpi.label + '</div>';
+                html += '<div class="metric-value">';
+                html += '<span class="' + (kpi.on_track ? 'kpi-on-track' : 'kpi-off-track') + '">' + kpi.actual + '</span>';
+                html += '</div>';
+                html += '<div><span class="target">Target: ' + kpi.target + '</span></div>';
+                html += '<div class="metric-explain mt-1">' + (kpi.explanation || '') + '</div>';
+                html += '</div></div>';
+            });
+        }
+        html += '</div>';
+
+        // Highlights & Concerns
+        if ((d.highlights && d.highlights.length) || (d.concerns && d.concerns.length)) {
+            html += '<div class="row g-3 mb-4">';
+            if (d.highlights && d.highlights.length) {
+                html += '<div class="col-md-6"><div class="metric-card">';
+                html += '<h6 class="mb-3"><i class="bi bi-check-circle text-success"></i> What\'s Going Well</h6>';
+                d.highlights.slice(0, 5).forEach(function(h) {
+                    html += '<div class="d-flex align-items-start mb-2">';
+                    html += '<i class="bi bi-check2 text-success me-2 mt-1" style="font-size:.8rem;"></i>';
+                    html += '<span class="metric-explain mb-0">' + esc(h) + '</span></div>';
+                });
+                html += '</div></div>';
+            }
+            if (d.concerns && d.concerns.length) {
+                html += '<div class="col-md-6"><div class="metric-card">';
+                html += '<h6 class="mb-3"><i class="bi bi-exclamation-circle text-warning"></i> Needs Attention</h6>';
+                d.concerns.slice(0, 5).forEach(function(c) {
+                    html += '<div class="d-flex align-items-start mb-2">';
+                    html += '<i class="bi bi-exclamation-triangle text-warning me-2 mt-1" style="font-size:.8rem;"></i>';
+                    html += '<span class="metric-explain mb-0">' + esc(c) + '</span></div>';
+                });
+                html += '</div></div>';
+            }
+            html += '</div>';
+        }
+
+        // Channel Metrics
+        if (d.channels) {
+            Object.keys(d.channels).forEach(function(key) {
+                var ch = d.channels[key];
+                html += '<div class="channel-section"><h5><i class="' + (ch.icon || '') + '"></i> ' + esc(ch.title) + '</h5>';
+                html += '<div class="row g-3">';
+                if (ch.cards) {
+                    ch.cards.forEach(function(card) {
+                        html += '<div class="col-md-6 col-lg-3"><div class="metric-card">';
+                        html += '<div class="metric-label"><span class="status-dot status-' + (card.status || 'neutral') + '"></span> ' + esc(card.metric) + '</div>';
+                        html += '<div class="metric-value">' + esc(card.value) + '</div>';
+                        html += '<div class="metric-explain">' + esc(card.explanation) + '</div>';
+                        html += '</div></div>';
+                    });
+                }
+                html += '</div></div>';
+            });
+        }
+
+        // Top Actions Preview
+        if (d.actions && d.actions.length) {
+            html += '<div class="d-flex justify-content-between align-items-center mb-3 mt-4">';
+            html += '<h5 class="mb-0"><i class="bi bi-lightning-charge"></i> This Month\'s Action Plan</h5>';
+            html += '<a href="/client/actions?month=' + encodeURIComponent('{{ month }}') + '" class="btn btn-sm btn-outline-primary">View All <i class="bi bi-arrow-right"></i></a>';
+            html += '</div>';
+            d.actions.slice(0, 3).forEach(function(a) {
+                html += '<div class="action-card priority-' + (a.priority_class || '') + '">';
+                html += '<div class="d-flex justify-content-between align-items-start">';
+                html += '<div class="action-title">' + esc(a.title) + '</div>';
+                html += '<span class="badge bg-' + (a.priority_class || 'secondary') + '">' + esc(a.priority) + '</span>';
+                html += '</div>';
+                html += '<div class="d-flex gap-2 mt-1 mb-2">';
+                html += '<span class="badge bg-light text-dark" style="font-size:.75rem;">' + esc(a.category || '') + '</span>';
+                if (a.data_point) {
+                    html += '<span class="badge bg-light text-dark" style="font-size:.75rem;">' + esc(a.data_point) + '</span>';
+                }
+                html += '</div>';
+                html += '<div class="action-what">' + esc(a.what) + '</div>';
+                html += '</div>';
+            });
+        }
+
+        container.innerHTML = html;
+        container.classList.add('visible');
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        var d = document.createElement('div');
+        d.appendChild(document.createTextNode(String(s)));
+        return d.innerHTML;
+    }
+})();
+</script>
+{% else %}
 
 {% if error %}
 <div class="alert alert-warning">
@@ -141,6 +424,8 @@
     <p class="text-muted">Your performance data will appear here once reports are generated.</p>
 </div>
 {% endif %}
+{% endif %}
+
 {% endif %}
 
 {% endblock %}

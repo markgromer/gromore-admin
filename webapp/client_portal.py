@@ -76,10 +76,30 @@ def client_dashboard():
 
     month = request.args.get("month") or datetime.now().strftime("%Y-%m")
 
-    analysis = {}
-    suggestions = []
-    dashboard_data = None
-    error = ""
+    # Dashboard renders instantly; data is fetched async via /dashboard/data
+    return render_template(
+        "client_dashboard.html",
+        brand=brand,
+        month=month,
+        dashboard=None,
+        error="",
+        async_load=True,
+        client_name=session.get("client_name", ""),
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/dashboard/data")
+@client_login_required
+def client_dashboard_data():
+    """JSON endpoint for async dashboard loading."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"error": "Brand not found"}), 404
+
+    month = request.args.get("month") or datetime.now().strftime("%Y-%m")
 
     try:
         from webapp.report_runner import build_analysis_and_suggestions_for_brand
@@ -88,18 +108,11 @@ def client_dashboard():
         analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
         if analysis:
             dashboard_data = build_client_dashboard(analysis, suggestions, brand)
+            return jsonify({"dashboard": dashboard_data, "error": ""})
+        else:
+            return jsonify({"dashboard": None, "error": "No data available for this month."})
     except Exception as e:
-        error = str(e)
-
-    return render_template(
-        "client_dashboard.html",
-        brand=brand,
-        month=month,
-        dashboard=dashboard_data,
-        error=error,
-        client_name=session.get("client_name", ""),
-        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
-    )
+        return jsonify({"dashboard": None, "error": str(e)})
 
 
 # ── Actions Detail ──
@@ -502,6 +515,73 @@ def client_campaign_launch():
 
 
 # ── Settings / Connections ──
+
+@client_bp.route("/my-business", methods=["GET", "POST"])
+@client_login_required
+def client_my_business():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    if request.method == "POST":
+        section = request.form.get("section", "")
+
+        if section == "voice":
+            # Guardrails: cap text fields to reasonable lengths
+            brand_voice = request.form.get("brand_voice", "")[:2000].strip()
+            active_offers = request.form.get("active_offers", "")[:1000].strip()
+            target_audience = request.form.get("target_audience", "")[:2000].strip()
+            competitors = request.form.get("competitors", "")[:1000].strip()
+            reporting_notes = request.form.get("reporting_notes", "")[:1000].strip()
+
+            db.update_brand_text_field(brand_id, "brand_voice", brand_voice)
+            db.update_brand_text_field(brand_id, "active_offers", active_offers)
+            db.update_brand_text_field(brand_id, "target_audience", target_audience)
+            db.update_brand_text_field(brand_id, "competitors", competitors)
+            db.update_brand_text_field(brand_id, "reporting_notes", reporting_notes)
+            flash("Brand profile updated.", "success")
+
+        elif section == "targets":
+            # Guardrails: clamp KPI targets to sane ranges
+            cpa_raw = request.form.get("kpi_target_cpa", "0")
+            leads_raw = request.form.get("kpi_target_leads", "0")
+            roas_raw = request.form.get("kpi_target_roas", "0")
+            call_num = request.form.get("call_tracking_number", "")[:30].strip()
+
+            db.update_brand_number_field(brand_id, "kpi_target_cpa", cpa_raw)
+            db.update_brand_number_field(brand_id, "kpi_target_leads", leads_raw)
+            db.update_brand_number_field(brand_id, "kpi_target_roas", roas_raw)
+            db.update_brand_text_field(brand_id, "call_tracking_number", call_num)
+            flash("Performance targets saved.", "success")
+
+        return redirect(url_for("client.client_my_business"))
+
+    # Reload latest
+    brand = db.get_brand(brand_id)
+
+    # Calculate completion score for the profile
+    profile_fields = [
+        brand.get("brand_voice"),
+        brand.get("active_offers"),
+        brand.get("target_audience"),
+        brand.get("competitors"),
+    ]
+    target_fields = [
+        brand.get("kpi_target_cpa") and float(brand.get("kpi_target_cpa", 0)) > 0,
+        brand.get("kpi_target_leads") and int(float(brand.get("kpi_target_leads", 0))) > 0,
+    ]
+    filled = sum(1 for f in profile_fields if f and str(f).strip()) + sum(1 for f in target_fields if f)
+    profile_score = round(filled / (len(profile_fields) + len(target_fields)) * 100)
+
+    return render_template(
+        "client_my_business.html",
+        brand=brand,
+        profile_score=profile_score,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
 
 @client_bp.route("/settings")
 @client_login_required

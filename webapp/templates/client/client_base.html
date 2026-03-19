@@ -224,6 +224,9 @@
             <a href="{{ url_for('client.client_ad_builder') }}" class="{% if request.endpoint in ('client.client_ad_builder', 'client.client_ad_builder_generate') %}active{% endif %}">
                 <i class="bi bi-brush"></i> Ad Builder
             </a>
+            <a href="{{ url_for('client.client_my_business') }}" class="{% if request.endpoint == 'client.client_my_business' %}active{% endif %}">
+                <i class="bi bi-building"></i> My Business
+            </a>
             <a href="{{ url_for('client.client_settings') }}" class="{% if request.endpoint == 'client.client_settings' %}active{% endif %}">
                 <i class="bi bi-plug"></i> Connections
             </a>
