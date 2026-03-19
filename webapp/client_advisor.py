@@ -3,11 +3,20 @@ Client Action Advisor
 
 Takes analysis + suggestions from the analytics pipeline and produces:
 1. Plain-English metric explanations ("Your click-through rate is 3.2% - this means...")
-2. Step-by-step change instructions ("In Google Ads, go to Campaigns > ...")
-3. Priority-ranked action cards with clear next steps
+2. AI-generated action deliverables based on real account data
+3. Priority-ranked action cards (max 2 per priority level)
 
-Designed for business owners who run their own ads but need guided help.
+Action cards are powered by AI that reads the actual campaign data, keyword
+performance, competitor signals, and account metrics to produce specific,
+ready-to-implement deliverables rather than generic how-to instructions.
 """
+import json
+import logging
+import os
+
+import requests as _requests
+
+log = logging.getLogger(__name__)
 
 
 def build_client_dashboard(analysis, suggestions, brand):
@@ -355,192 +364,187 @@ def _explain_seo(gsc):
     return {"title": "SEO (Free Google Traffic)", "icon": "bi-search", "cards": cards}
 
 
-# ── Action Cards with Step-by-Step Instructions ──
+# ── Action Cards with AI-Generated Deliverables ──
 
 def _build_action_cards(analysis, suggestions, brand):
-    """Convert suggestions into step-by-step action cards for clients."""
-    actions = []
+    """Convert top suggestions into action cards with AI-generated deliverables.
+
+    Max 2 per priority level (2 high + 2 medium = 4 max).
+    The AI reads actual account data and produces specific work product,
+    not generic how-to instructions.
+    """
+    high_cards = []
+    medium_cards = []
 
     for s in suggestions:
-        if s["priority"] not in ("high", "medium"):
-            continue
+        if s["priority"] == "high" and len(high_cards) < 2:
+            high_cards.append(s)
+        elif s["priority"] == "medium" and len(medium_cards) < 2:
+            medium_cards.append(s)
+        if len(high_cards) >= 2 and len(medium_cards) >= 2:
+            break
 
+    selected = high_cards + medium_cards
+    if not selected:
+        return []
+
+    # Build basic card structure first
+    actions = []
+    for s in selected:
         card = {
             "title": _client_friendly_title(s["title"]),
             "priority": "Do This Now" if s["priority"] == "high" else "Worth Doing Soon",
             "priority_class": "danger" if s["priority"] == "high" else "warning",
             "category": _client_friendly_category(s["category"]),
             "what": _plain_english_what(s),
-            "steps": _get_steps(s, brand),
+            "steps": [],
             "data_point": s.get("data_point", ""),
         }
         actions.append(card)
 
-        if len(actions) >= 10:
-            break
+    # Generate AI deliverables using actual account data
+    ai_actions = _generate_ai_actions(selected, analysis, brand)
+    if ai_actions:
+        for i, card in enumerate(actions):
+            if i < len(ai_actions):
+                card["steps"] = ai_actions[i]
 
     return actions
 
 
-def _get_steps(suggestion, brand):
-    """Generate specific step-by-step instructions based on the suggestion category and title."""
-    title = suggestion["title"].lower()
-    category = suggestion["category"]
+def _generate_ai_actions(suggestions, analysis, brand):
+    """Call AI to generate specific deliverables for each action card.
 
-    # Google Ads steps
-    if "google ads" in title and "ctr" in title:
-        return [
-            "Log into Google Ads at ads.google.com",
-            "Click 'Campaigns' in the left menu, then click into your main campaign",
-            "Click 'Ad groups' - look for any with CTR below 3%",
-            "Click into that ad group, then click 'Ads & assets'",
-            "Click the blue + button to create a new responsive search ad",
-            "Write 5 new headlines that include your service + city (e.g., 'Fast Plumber in Austin')",
-            "Add 2-3 descriptions mentioning what makes you different (24/7 service, free estimates, etc.)",
-            "Save the new ad and let it run for 2 weeks before comparing results",
-        ]
+    Instead of 'go to Google Ads and click...', this produces the actual work:
+    real ad headlines to test, real keywords to pause, real negative keywords,
+    specific audience changes, actual content recommendations tied to data.
 
-    if "google ads" in title and ("cpc" in title or "cost per click" in title.lower()):
-        return [
-            "Log into Google Ads at ads.google.com",
-            "Click 'Keywords' then 'Search keywords' in the left menu",
-            "Sort by 'Cost' (highest first) to find your most expensive keywords",
-            "For any keyword spending a lot with zero conversions, click the green dot to pause it",
-            "Click 'Search terms' to see what people actually typed - add irrelevant ones as negative keywords",
-            "Check your bid strategy - if using 'Maximize clicks', consider switching to 'Maximize conversions'",
-        ]
+    Returns a list of step-lists (one per suggestion), or empty list on failure.
+    """
+    try:
+        from flask import current_app
+        api_key = (current_app.config.get("OPENAI_API_KEY", "") or "").strip()
+    except RuntimeError:
+        # Outside app context (e.g. testing)
+        api_key = os.environ.get("OPENAI_API_KEY", "").strip()
 
-    if "google ads" in title and ("cpa" in title or "cost per lead" in title.lower()):
-        return [
-            "Log into Google Ads at ads.google.com",
-            "Go to 'Campaigns' and sort by 'Cost/conv.' (cost per lead)",
-            "For campaigns with cost per lead above your target, click in to investigate",
-            "Check 'Search terms' - are people searching for things you don't offer? Add those as negative keywords",
-            "Check 'Locations' - are you getting clicks from areas you don't serve? Exclude those",
-            "Consider adding a target CPA bid strategy set to your desired cost per lead",
-        ]
+    if not api_key:
+        return []
 
-    # Meta / Facebook Ads steps
-    if ("meta" in title or "facebook" in title or category == "creative") and "ctr" in title.lower():
-        return [
-            "Go to Facebook Ads Manager (business.facebook.com)",
-            "Click on your active campaign, then the ad set, then the individual ads",
-            "Look at which ads have the lowest click rate (CTR column)",
-            "Create a new ad: click '+ Create' at the ad level",
-            "Use a real photo from a recent job (before/after works great) instead of stock photos",
-            "Write a headline focused on the customer's problem, not your company name",
-            "Add a clear call-to-action like 'Get Your Free Quote Today'",
-            "Set budget to match your lowest-performing ad, then pause that old ad after 5 days",
-        ]
+    from webapp.ai_assistant import _summarize_analysis_for_ai
+    analysis_summary = _summarize_analysis_for_ai(analysis)
 
-    if ("meta" in title or "facebook" in title) and ("cpc" in title.lower() or "cost per click" in title.lower()):
-        return [
-            "Go to Facebook Ads Manager (business.facebook.com)",
-            "Click your campaign, then the ad set level",
-            "Check 'Audience' - narrow to homeowners in your service area, ages 30-65",
-            "Under 'Placements', try 'Advantage+ placements' to let Facebook find cheaper spots",
-            "Create a lookalike audience: go to Audiences > Create > Lookalike > based on your customer list",
-            "Test this new audience in a separate ad set with the same ads to compare costs",
-        ]
+    # Build the request
+    action_items = []
+    for s in suggestions:
+        action_items.append({
+            "title": s["title"],
+            "detail": s["detail"],
+            "category": s["category"],
+            "data_point": s.get("data_point", ""),
+        })
 
-    if "frequency" in title.lower() or "fatigue" in title.lower():
-        return [
-            "Go to Facebook Ads Manager (business.facebook.com)",
-            "Check your ad frequency in the columns (add 'Frequency' if not showing)",
-            "For any ad set with frequency above 4, create new ad creative (images + text)",
-            "Use different photos, different angles, different customer testimonials",
-            "Consider expanding your audience size: increase the radius or broaden age range",
-            "Set a frequency cap: in Campaign settings, under 'Reach and frequency', set max 3x per week",
-        ]
+    client_info = analysis_summary.get("client", {})
 
-    # Website / bounce rate steps
-    if "bounce" in title.lower():
-        return [
-            "Open your website on your phone - does it load in under 3 seconds?",
-            "Check that your phone number is large and clickable at the top of every page",
-            "Make sure your main service and city are visible without scrolling",
-            "Add customer reviews or star ratings near the top of your homepage",
-            "Check that your 'Get a Quote' or 'Call Now' button is above the fold (visible without scrolling)",
-            "Test your site speed at PageSpeed Insights (pagespeed.web.dev) and fix any red issues",
-        ]
+    prompt_data = {
+        "client": {
+            "name": client_info.get("name"),
+            "industry": client_info.get("industry"),
+            "service_area": client_info.get("service_area"),
+            "services": client_info.get("primary_services"),
+            "budget": client_info.get("monthly_budget"),
+            "goals": client_info.get("goals"),
+            "competitors": client_info.get("competitors"),
+            "target_audience": client_info.get("target_audience"),
+            "active_offers": client_info.get("active_offers"),
+        },
+        "kpis": analysis_summary.get("kpis", {}),
+        "seo_detail": analysis_summary.get("seo_detail", {}),
+        "google_ads_detail": analysis_summary.get("google_ads_detail", {}),
+        "meta_detail": analysis_summary.get("meta_detail", {}),
+        "competitor_watch": analysis_summary.get("competitor_watch", {}),
+        "highlights": analysis_summary.get("highlights", []),
+        "concerns": analysis_summary.get("concerns", []),
+        "action_items": action_items,
+    }
 
-    if "conversion" in title.lower() and ("website" in category or "funnel" in title.lower()):
-        return [
-            "Open your website and try to fill out your own contact form - is it easy?",
-            "Simplify your form: only ask for name, phone, and service needed (3 fields max)",
-            "Add a click-to-call button on every page (especially on mobile)",
-            "Add trust signals: Google reviews badge, 'Licensed & Insured', years in business",
-            "Make sure every service page has its own contact form or call button",
-            "Consider adding live chat (many free options like Tawk.to)",
-        ]
+    system = (
+        "You are a senior paid media strategist inside an ad agency. "
+        "The client pays us to DO the work, not to tell them how to navigate a UI. "
+        "For each action item, produce 3-5 SPECIFIC deliverables based on the real data provided. "
+        "These are things WE are doing or recommending with precision, not generic advice anyone could Google.\n\n"
+        "Rules:\n"
+        "- Reference actual campaign names, keywords, metrics, and competitors from the data\n"
+        "- For ad copy: write the actual headlines/descriptions to test\n"
+        "- For keywords: name the specific keywords to pause, add, or bid on\n"
+        "- For SEO: reference the actual pages and queries from the data\n"
+        "- For budget: give exact dollar amounts and percentages based on the numbers\n"
+        "- For competitors: name the competitor and the specific counter-move\n"
+        "- Never say 'log into' or 'click on' or 'navigate to' - we do the work, not the client\n"
+        "- Keep each deliverable to 1-2 sentences, direct and concrete\n"
+        "- If you don't have enough data for a specific item, still be concrete about the approach using what's available\n\n"
+        "Return ONLY valid JSON: an array of arrays. Outer array = one entry per action item. "
+        "Inner array = 3-5 deliverable strings for that action item. No markdown, no extra keys."
+    )
 
-    if "engagement" in title.lower() or "session duration" in title.lower():
-        return [
-            "Add before-and-after photos of your recent work to your service pages",
-            "Create a short FAQ section on each service page (5-8 common questions)",
-            "Add a video testimonial from a happy customer (even a phone recording works)",
-            "Link between related services ('Need a drain cleaned? We also do water heater installs')",
-            "Add pricing ranges or 'starting at' prices - visitors want to know cost before calling",
-        ]
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
 
-    # SEO steps
-    if "seo" in title.lower() and ("opportunity" in title.lower() or "quick win" in title.lower()):
-        return [
-            "These are keywords you almost rank for on page 1 - small improvements can make a big difference",
-            "For each opportunity keyword, find the page on your site that ranks for it",
-            "Update that page's title tag to include the keyword naturally",
-            "Add 200-300 more words of helpful content about that topic to the page",
-            "Link to that page from 2-3 other pages on your site",
-            "If you have a blog, write a related post and link to the service page",
-        ]
+    try:
+        resp = _requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json={
+                "model": "gpt-4o-mini",
+                "temperature": 0.3,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": json.dumps(prompt_data)},
+                ],
+                "response_format": {"type": "json_object"},
+            },
+            timeout=45,
+        )
 
-    if "position" in title.lower() or "visibility" in title.lower():
-        return [
-            "Claim and fully optimize your Google Business Profile (business.google.com)",
-            "Add your business to local directories: Yelp, Angi, HomeAdvisor, BBB",
-            "Ask your last 5 happy customers to leave Google reviews (send them a direct link)",
-            "Make sure every page on your site has your city/service area in the title tag",
-            "Create a dedicated page for each service you offer (not just one big services page)",
-        ]
+        if resp.status_code != 200:
+            log.warning("AI action generation failed (%s): %s", resp.status_code, resp.text[:200])
+            return []
 
-    if "click-through" in title.lower() and "organic" in title.lower():
-        return [
-            "Go to Google Search Console (search.google.com/search-console)",
-            "Click 'Search results' in the left menu",
-            "Sort by 'Impressions' (highest first) to find your most-seen pages",
-            "For pages with high impressions but low clicks, rewrite the title tag to be more compelling",
-            "Add action words like 'Free Estimates', 'Same-Day Service', or 'Rated #1' to your meta descriptions",
-            "Add review schema markup to show star ratings in search results",
-        ]
+        data = resp.json()
+        content = (
+            (data.get("choices") or [{}])[0]
+            .get("message", {})
+            .get("content", "")
+        )
 
-    # Competitor watch
-    if "competitor" in title.lower():
-        return [
-            "Review what your competitors are offering that you're not highlighting",
-            "Check their Google Ads by searching your main keywords - what do their ads say?",
-            "Look at their website - what trust signals or offers are they showing?",
-            "Consider matching or beating their offer (free estimate, discount, warranty)",
-            "Update your ad copy and website to address what makes you different from them",
-        ]
+        parsed = json.loads(content)
 
-    # Budget / scaling
-    if "budget" in title.lower() or "scale" in title.lower():
-        return [
-            "Only increase budget on campaigns that are already getting leads at a good cost",
-            "Increase by 15-20% at a time, not more (big jumps confuse the algorithms)",
-            "Wait 5-7 days after each increase before raising again",
-            "Monitor your cost per lead daily during scaling - if it jumps up, pause the increase",
-            "Set a maximum cost-per-lead limit so you don't overspend during scaling",
-        ]
+        # Handle both {"actions": [[...]]} and [[...]] formats
+        if isinstance(parsed, dict):
+            # Find the first key that contains a list of lists
+            for v in parsed.values():
+                if isinstance(v, list):
+                    parsed = v
+                    break
 
-    # Generic fallback
-    return [
-        "Review the data point mentioned above to understand the current situation",
-        "Check your ad accounts or website for the specific issue described",
-        "Make the recommended changes one at a time so you can measure impact",
-        "Wait at least 1-2 weeks before judging whether a change is working",
-        "If you're unsure about any step, reach out to your account manager",
-    ]
+        if not isinstance(parsed, list):
+            return []
+
+        # Validate structure: list of lists of strings
+        result = []
+        for item in parsed:
+            if isinstance(item, list):
+                result.append([str(s) for s in item if s])
+            else:
+                result.append([])
+
+        return result
+
+    except Exception as e:
+        log.warning("AI action generation error: %s", e)
+        return []
 
 
 def _explain_kpis(analysis):
