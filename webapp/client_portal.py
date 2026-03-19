@@ -402,6 +402,46 @@ def client_campaign_launch():
     return jsonify(result)
 
 
+# ── Settings / Connections ──
+
+@client_bp.route("/settings")
+@client_login_required
+def client_settings():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    connections = db.get_brand_connections(brand_id)
+    google_conn = connections.get("google", {})
+    meta_conn = connections.get("meta", {})
+
+    return render_template(
+        "client_settings.html",
+        brand=brand,
+        google_connected=(google_conn.get("status") == "connected"),
+        meta_connected=(meta_conn.get("status") == "connected"),
+        google_conn=google_conn,
+        meta_conn=meta_conn,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/settings/ads-id", methods=["POST"])
+@client_login_required
+def client_save_ads_id():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    raw = request.form.get("google_ads_customer_id", "").strip()
+    # Keep only digits and dashes
+    cleaned = "".join(c for c in raw if c.isdigit() or c == "-")
+    db.update_brand_api_field(brand_id, "google_ads_customer_id", cleaned)
+    flash("Google Ads Customer ID saved.", "success")
+    return redirect(url_for("client.client_settings"))
+
+
 # ── Context processor ──
 
 @client_bp.context_processor

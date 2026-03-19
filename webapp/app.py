@@ -21,6 +21,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from webapp.database import WebDB
 from webapp.oauth_google import google_bp
 from webapp.oauth_meta import meta_bp
+from webapp.client_oauth_google import client_google_bp
+from webapp.client_oauth_meta import client_meta_bp
 from webapp.jobs import jobs_bp
 from webapp.client_portal import client_bp
 
@@ -145,12 +147,16 @@ def create_app():
     # Register blueprints
     app.register_blueprint(google_bp, url_prefix="/oauth/google")
     app.register_blueprint(meta_bp, url_prefix="/oauth/meta")
+    app.register_blueprint(client_google_bp, url_prefix="/client/oauth/google")
+    app.register_blueprint(client_meta_bp, url_prefix="/client/oauth/meta")
     app.register_blueprint(jobs_bp, url_prefix="/jobs")
     app.register_blueprint(client_bp)
 
     # Exempt OAuth callback routes from CSRF (external redirects have no token)
     csrf.exempt(google_bp)
     csrf.exempt(meta_bp)
+    csrf.exempt(client_google_bp)
+    csrf.exempt(client_meta_bp)
 
     # ── Auth decorator ──
     def login_required(f):
