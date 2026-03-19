@@ -5,10 +5,16 @@
 {% block content %}
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb" style="font-size: .85rem;">
-        <li class="breadcrumb-item"><a href="{{ url_for('client.client_campaigns') }}">Campaigns</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('client.client_campaigns', month=month) }}">Campaigns</a></li>
         <li class="breadcrumb-item active">{{ campaign.name }}</li>
     </ol>
 </nav>
+
+<div class="d-flex justify-content-end mb-3">
+    <form method="GET" class="d-flex align-items-center gap-2">
+        <input type="month" name="month" value="{{ month }}" class="form-control form-control-sm" style="width: 160px;" onchange="this.form.submit()">
+    </form>
+</div>
 
 <!-- Campaign Header -->
 <div class="card border-0 shadow-sm mb-4" style="border-radius: 12px;">
@@ -158,7 +164,7 @@
 <!-- Keywords (Google Search campaigns) -->
 {% if platform == "google" and campaign.keywords %}
 <div class="channel-section">
-    <h5><i class="bi bi-key"></i> Keywords (Last 30 Days)</h5>
+    <h5><i class="bi bi-key"></i> Keywords ({{ month }})</h5>
     <div class="table-responsive">
         <table class="table table-hover bg-white" style="border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.05);">
             <thead style="background: #f9fafb;">
@@ -224,7 +230,7 @@
 <!-- Top Ads (Meta) -->
 {% if platform == "meta" and campaign.ads %}
 <div class="channel-section">
-    <h5><i class="bi bi-image"></i> Ads (Last 30 Days)</h5>
+    <h5><i class="bi bi-image"></i> Ads ({{ month }})</h5>
     <div class="table-responsive">
         <table class="table table-hover bg-white" style="border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.05);">
             <thead style="background: #f9fafb;">

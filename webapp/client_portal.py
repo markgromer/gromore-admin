@@ -243,9 +243,11 @@ def client_campaigns():
     if not brand:
         abort(404)
 
+    month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+
     from webapp.campaign_manager import list_all_campaigns, get_campaign_recommendations
 
-    campaigns = list_all_campaigns(db, brand)
+    campaigns = list_all_campaigns(db, brand, month)
     recommendations = []
 
     if any(campaigns.values()):
@@ -259,6 +261,7 @@ def client_campaigns():
     return render_template(
         "client_campaigns.html",
         brand=brand,
+        month=month,
         campaigns=campaigns,
         recommendations=recommendations,
         changes=changes,
@@ -275,15 +278,17 @@ def client_campaign_detail(platform, campaign_id):
     if not brand:
         abort(404)
 
+    month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+
     if platform not in ("google", "meta"):
         abort(404)
 
     from webapp.campaign_manager import get_google_campaign_detail, get_meta_campaign_detail
 
     if platform == "google":
-        campaign = get_google_campaign_detail(db, brand, campaign_id)
+        campaign = get_google_campaign_detail(db, brand, campaign_id, month)
     else:
-        campaign = get_meta_campaign_detail(db, brand, campaign_id)
+        campaign = get_meta_campaign_detail(db, brand, campaign_id, month)
 
     if not campaign:
         flash("Campaign not found or API error.", "error")
@@ -296,6 +301,7 @@ def client_campaign_detail(platform, campaign_id):
         brand=brand,
         campaign=campaign,
         platform=platform,
+        month=month,
         changes=[c for c in changes if c.get("campaign_id") == campaign_id],
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )

@@ -11,6 +11,7 @@ import re
 import json
 import logging
 from datetime import datetime, timedelta
+import calendar
 
 import requests
 
@@ -32,6 +33,26 @@ def _google_headers(access_token, developer_token, login_customer_id=None):
 
 def _clean_customer_id(raw):
     return re.sub(r"\D", "", str(raw or ""))
+
+
+def _month_range(month: str):
+    """Return (start, end) as YYYY-MM-DD for a YYYY-MM month string."""
+    try:
+        if not month or not isinstance(month, str):
+            raise ValueError("missing")
+        year_s, mon_s = month.split("-", 1)
+        year = int(year_s)
+        mon = int(mon_s)
+        if mon < 1 or mon > 12:
+            raise ValueError("bad month")
+        last_day = calendar.monthrange(year, mon)[1]
+        start = f"{year:04d}-{mon:02d}-01"
+        end = f"{year:04d}-{mon:02d}-{last_day:02d}"
+        return start, end
+    except Exception:
+        end = datetime.now().strftime("%Y-%m-%d")
+        start = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        return start, end
 
 
 def _google_config():
@@ -78,8 +99,11 @@ def _log_change(db, brand_id, platform, campaign_id, campaign_name,
 #  GOOGLE ADS
 # ═══════════════════════════════════════════════════════════════════
 
-def list_google_campaigns(db, brand):
-    """List all non-removed Google Ads campaigns with live metrics (last 30 days)."""
+def list_google_campaigns(db, brand, month: str = ""):
+    """List all non-removed Google Ads campaigns and merge in metrics for the selected month.
+
+    Key behavior: campaigns are returned even if they had zero activity in the time window.
+    """
     customer_id = _clean_customer_id(brand.get("google_ads_customer_id"))
     if not customer_id:
         return []
@@ -92,16 +116,24 @@ def list_google_campaigns(db, brand):
     if not dev_token:
         return []
 
-    end = datetime.now().strftime("%Y-%m-%d")
-    start = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    start, end = _month_range(month)
 
-    query = (
+    # Always list campaigns, regardless of whether they had activity in the selected window.
+    list_query = (
         "SELECT "
         "campaign.id, campaign.name, campaign.status, "
         "campaign.advertising_channel_type, "
-        "campaign_budget.amount_micros, campaign_budget.resource_name, "
+        "campaign_budget.amount_micros, campaign_budget.resource_name "
+        "FROM campaign "
+        "WHERE campaign.status != 'REMOVED'"
+    )
+
+    # Pull metrics for the selected window. If a campaign had no activity, it may not appear.
+    metrics_query = (
+        "SELECT "
+        "campaign.id, "
         "metrics.impressions, metrics.clicks, metrics.cost_micros, "
-        "metrics.conversions, metrics.ctr, metrics.average_cpc "
+        "metrics.conversions "
         "FROM campaign "
         f"WHERE segments.date BETWEEN '{start}' AND '{end}' "
         "AND campaign.status != 'REMOVED'"
@@ -110,7 +142,8 @@ def list_google_campaigns(db, brand):
     url = f"https://googleads.googleapis.com/v18/customers/{customer_id}/googleAds:searchStream"
     headers = _google_headers(token, dev_token, login_cid)
 
-    resp = requests.post(url, json={"query": query}, headers=headers, timeout=30)
+    # Query 1: campaign list
+    resp = requests.post(url, json={"query": list_query}, headers=headers, timeout=30)
     if resp.status_code != 200:
         logger.error("Google Ads list error: %s", resp.text[:300])
         return []
@@ -122,21 +155,11 @@ def list_google_campaigns(db, brand):
     for chunk in chunks:
         for row in chunk.get("results", []) or []:
             camp = row.get("campaign", {})
-            metrics = row.get("metrics", {})
             budget = row.get("campaignBudget", {})
             cid = str(camp.get("id", ""))
-
-            if cid in campaigns:
-                # Aggregate metrics across date segments
-                existing = campaigns[cid]
-                existing["impressions"] += int(metrics.get("impressions", 0) or 0)
-                existing["clicks"] += int(metrics.get("clicks", 0) or 0)
-                existing["spend"] += float(metrics.get("costMicros", 0) or 0) / 1_000_000
-                existing["conversions"] += float(metrics.get("conversions", 0) or 0)
+            if not cid:
                 continue
-
             daily_budget = float(budget.get("amountMicros", 0) or 0) / 1_000_000
-
             campaigns[cid] = {
                 "id": cid,
                 "name": camp.get("name", "Unknown"),
@@ -144,12 +167,30 @@ def list_google_campaigns(db, brand):
                 "channel_type": camp.get("advertisingChannelType", ""),
                 "daily_budget": round(daily_budget, 2),
                 "budget_resource": budget.get("resourceName", ""),
-                "impressions": int(metrics.get("impressions", 0) or 0),
-                "clicks": int(metrics.get("clicks", 0) or 0),
-                "spend": float(metrics.get("costMicros", 0) or 0) / 1_000_000,
-                "conversions": float(metrics.get("conversions", 0) or 0),
+                "impressions": 0,
+                "clicks": 0,
+                "spend": 0.0,
+                "conversions": 0.0,
                 "platform": "google",
             }
+
+    # Query 2: metrics for the selected window
+    resp_m = requests.post(url, json={"query": metrics_query}, headers=headers, timeout=30)
+    if resp_m.status_code == 200:
+        payload_m = resp_m.json()
+        chunks_m = payload_m if isinstance(payload_m, list) else [payload_m]
+        for chunk in chunks_m:
+            for row in chunk.get("results", []) or []:
+                camp = row.get("campaign", {})
+                metrics = row.get("metrics", {})
+                cid = str(camp.get("id", ""))
+                if not cid or cid not in campaigns:
+                    continue
+                existing = campaigns[cid]
+                existing["impressions"] += int(metrics.get("impressions", 0) or 0)
+                existing["clicks"] += int(metrics.get("clicks", 0) or 0)
+                existing["spend"] += float(metrics.get("costMicros", 0) or 0) / 1_000_000
+                existing["conversions"] += float(metrics.get("conversions", 0) or 0)
 
     result = []
     for c in campaigns.values():
@@ -266,7 +307,7 @@ def add_google_negative_keyword(db, brand, campaign_id, keyword_text, match_type
     return {"success": True}
 
 
-def get_google_campaign_detail(db, brand, campaign_id):
+def get_google_campaign_detail(db, brand, campaign_id, month: str = ""):
     """Get detailed info for a single Google Ads campaign including ad groups and keywords."""
     customer_id = _clean_customer_id(brand.get("google_ads_customer_id"))
     token, conn = _get_tokens(db, brand["id"], "google")
@@ -276,8 +317,7 @@ def get_google_campaign_detail(db, brand, campaign_id):
         return None
 
     headers = _google_headers(token, dev_token, login_cid)
-    end = datetime.now().strftime("%Y-%m-%d")
-    start = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    start, end = _month_range(month)
 
     # Campaign + budget info
     camp_query = (
@@ -415,8 +455,8 @@ def get_google_campaign_detail(db, brand, campaign_id):
 #  META ADS
 # ═══════════════════════════════════════════════════════════════════
 
-def list_meta_campaigns(db, brand):
-    """List all Meta ad campaigns with live metrics (last 30 days)."""
+def list_meta_campaigns(db, brand, month: str = ""):
+    """List all Meta ad campaigns with metrics for the selected month."""
     account_id = brand.get("meta_ad_account_id", "")
     if not account_id:
         return []
@@ -425,8 +465,7 @@ def list_meta_campaigns(db, brand):
     if not token:
         return []
 
-    end = datetime.now().strftime("%Y-%m-%d")
-    start = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    start, end = _month_range(month)
 
     # Get campaign list with status
     campaigns_url = f"https://graph.facebook.com/v21.0/act_{account_id}/campaigns"
@@ -555,14 +594,13 @@ def update_meta_budget(db, brand, campaign_id, new_daily_budget, changed_by):
     return {"success": True}
 
 
-def get_meta_campaign_detail(db, brand, campaign_id):
+def get_meta_campaign_detail(db, brand, campaign_id, month: str = ""):
     """Get detailed info for a single Meta campaign including ad sets and ads."""
     token, conn = _get_tokens(db, brand["id"], "meta")
     if not token:
         return None
 
-    end = datetime.now().strftime("%Y-%m-%d")
-    start = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    start, end = _month_range(month)
     time_range = json.dumps({"since": start, "until": end})
 
     # Campaign info
@@ -685,19 +723,19 @@ def get_meta_campaign_detail(db, brand, campaign_id):
 #  UNIFIED INTERFACE
 # ═══════════════════════════════════════════════════════════════════
 
-def list_all_campaigns(db, brand):
+def list_all_campaigns(db, brand, month: str = ""):
     """List campaigns from all connected platforms."""
     campaigns = {"google": [], "meta": []}
 
     if brand.get("google_ads_customer_id"):
         try:
-            campaigns["google"] = list_google_campaigns(db, brand)
+            campaigns["google"] = list_google_campaigns(db, brand, month)
         except Exception as e:
             logger.error("Error listing Google campaigns: %s", e)
 
     if brand.get("meta_ad_account_id"):
         try:
-            campaigns["meta"] = list_meta_campaigns(db, brand)
+            campaigns["meta"] = list_meta_campaigns(db, brand, month)
         except Exception as e:
             logger.error("Error listing Meta campaigns: %s", e)
 
