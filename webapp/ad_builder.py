@@ -16,31 +16,85 @@ import requests as _requests
 log = logging.getLogger(__name__)
 
 
+def _normalize_strategy(value):
+    return (value or "").strip().lower()
+
+
+def _data_availability(context):
+    seo = (context or {}).get("seo") or {}
+    google_ads = (context or {}).get("google_ads") or {}
+    meta_ads = (context or {}).get("meta_ads") or {}
+    competitor = (context or {}).get("competitor_watch") or {}
+    performance = (context or {}).get("performance") or {}
+
+    def _has_list(path):
+        cur = seo
+        for part in path.split("."):
+            if not isinstance(cur, dict):
+                return False
+            cur = cur.get(part)
+        return isinstance(cur, list) and len(cur) > 0
+
+    return {
+        "has_gsc_top_queries": _has_list("top_queries"),
+        "has_gsc_keyword_opportunities": _has_list("keyword_opportunities"),
+        "has_gsc_top_pages": _has_list("top_pages"),
+        "has_google_ads_campaigns": bool((google_ads.get("campaigns") or [])[:1]),
+        "has_meta_campaigns": bool((meta_ads.get("campaigns") or [])[:1]),
+        "has_meta_top_ads": bool((meta_ads.get("top_ads") or [])[:1]),
+        "has_competitor_watch": bool(competitor),
+        "has_kpis": bool((performance.get("kpis") or {}) if isinstance(performance, dict) else performance),
+    }
+
+
 
 def generate_google_ads(analysis, brand, strategy=None):
-    """Generate a complete Google Ads package: responsive search ad copy, tailored to the selected strategy/objective."""
+    """Generate a Google ad package based on selected strategy.
+
+    Strategy values: search | display | performance_max | video
+    """
     api_key = _get_api_key()
     if not api_key:
         return None
 
     context = _build_ad_context(analysis, brand)
+    context["data_available"] = _data_availability(context)
 
-    # Strategy-specific prompt guidance
-    strategy_map = {
-        "search": "Focus on high-intent search ads that drive direct leads or sales. Use best practices for Google Search campaigns.",
-        "display": "Focus on visual, awareness-driven ads for the Google Display Network. Use best practices for reach, retargeting, and brand recall.",
-        "performance_max": "Use Performance Max best practices: maximize conversions across all Google channels with automation. Include copy and creative guidance for multi-channel.",
-        "video": "Focus on YouTube video ads. Use best practices for storytelling, education, and brand lift. Include video script guidance if possible.",
-    }
-    strategy_text = strategy_map.get((strategy or '').lower(), "If the strategy is unclear, default to Search best practices.")
+    strategy_n = _normalize_strategy(strategy)
+    if not strategy_n:
+        strategy_n = "search"
 
+    if strategy_n == "display":
+        return _generate_google_display_ads(api_key, context)
+    if strategy_n in ("performance_max", "pmax", "performance max"):
+        return _generate_google_pmax(api_key, context)
+    if strategy_n == "video":
+        return _generate_google_video_ads(api_key, context)
+    return _generate_google_search_rsa(api_key, context)
+
+
+def _evidence_rules(prefix=""):
+    p = prefix
+    return (
+        f"{p}Evidence rules:\n"
+        f"{p}- You MUST include a 'data_used' array listing which context fields you used, chosen ONLY from this allowed set:\n"
+        f"{p}  ['seo.top_queries','seo.keyword_opportunities','seo.top_pages','google_ads.campaigns','meta_ads.campaigns','meta_ads.top_ads','competitor_watch','performance.kpis']\n"
+        f"{p}- If a field is not present or is empty in the context, you MUST NOT include it in data_used.\n"
+        f"{p}- Do not invent competitor names, metrics, or claims. If unknown, keep copy generic but still specific to services + service area.\n"
+    )
+
+
+def _generate_google_search_rsa(api_key, context):
     system = (
-        f"You are the AI ad copy engine inside GroMore, a platform for local service businesses. "
-        f"Generate a complete Google Ads package ready to copy and paste, tailored for the following objective: {strategy or 'Search'}\n\n"
-        f"Objective intent: {strategy_text}\n\n"
+        "You are the AI ad copy engine inside GroMore, a platform for local service businesses. "
+        "Generate a complete Google Search Responsive Search Ad (RSA) package ready to copy and paste.\n\n"
         "The business owner will paste these directly into Google Ads. Make every character count.\n\n"
         "Return ONLY valid JSON with this exact structure:\n"
         "{\n"
+        '  "format": "google_search_rsa",\n'
+        '  "strategy": "search",\n'
+        '  "rationale": "2-4 sentences: why Search is the right play right now based on context (or state what is missing).",\n'
+        '  "data_used": ["list of strings from the allowed set"],\n'
         '  "campaign_target": "Which campaign or ad group this ad should go in (based on the data, or General if unclear)",\n'
         '  "headlines": ["15 headlines, each UNDER 30 characters. Mix: service+city, benefits, offers, urgency, trust signals"],\n'
         '  "descriptions": ["4 descriptions, each UNDER 90 characters. Include CTA, differentiators, and social proof"],\n'
@@ -52,19 +106,110 @@ def generate_google_ads(analysis, brand, strategy=None):
         "Rules:\n"
         "- Headlines MUST be under 30 characters. Count carefully. This is a hard limit.\n"
         "- Descriptions MUST be under 90 characters.\n"
-        "- Use the client's actual city/service area, services, and competitive advantages\n"
-        "- Reference real competitor weaknesses or gaps from the data if available\n"
-        "- Include at least 2 headlines with the primary service + city\n"
-        "- Include at least 1 headline with a number (years in business, reviews, etc.)\n"
-        "- Include at least 1 headline with urgency (Same-Day, 24/7, Today, etc.)\n"
-        "- Sitelinks should point to logical pages (services, reviews, contact, areas served)\n"
-        "- Implementation steps should tell them exactly: Campaign > Ad Group > Ads > New RSA > paste headline 1 here, etc.\n"
-        "- Use sentence case for headlines, not ALL CAPS\n"
-        "- No generic filler. Every headline and description should earn its spot.\n"
-        "- Explain briefly why this strategy/objective is recommended for the current data and what results to expect.\n"
+        "- Use the business service area and services from context.\n"
+        "- If seo.top_queries or seo.keyword_opportunities exists, keywords_to_target MUST be aligned to those.\n"
+        "- negative_keywords should block low-intent and irrelevant traffic implied by context (jobs, free, DIY, wholesale, etc.).\n"
+        "- Include at least 2 headlines with primary service + city/service area.\n"
+        "- Include at least 1 headline with a number if present in context; otherwise omit numeric claim.\n"
+        "- Include at least 1 headline with urgency if it is true for the business; otherwise avoid false urgency.\n"
+        "- Sitelinks should point to logical pages (services, reviews, contact, areas served).\n"
+        "- Implementation steps must be literal click-path instructions.\n"
+        "- Use sentence case for headlines, not ALL CAPS.\n"
+        "- No generic filler. Every headline and description should earn its spot.\n\n"
+        + _evidence_rules()
     )
 
-    return _call_ai(api_key, system, context, "google_ads")
+    return _call_ai(api_key, system, context, "google_ads_search")
+
+
+def _generate_google_display_ads(api_key, context):
+    system = (
+        "You are the AI ad copy engine inside GroMore, a platform for local service businesses. "
+        "Generate a complete Google Display ad package (Responsive Display Ad style) ready to copy and paste.\n\n"
+        "Return ONLY valid JSON with this exact structure:\n"
+        "{\n"
+        '  "format": "google_display_rda",\n'
+        '  "strategy": "display",\n'
+        '  "rationale": "2-4 sentences: why Display makes sense (awareness or retargeting) based on context.",\n'
+        '  "data_used": ["list of strings from the allowed set"],\n'
+        '  "campaign_target": "Which campaign/ad group or new campaign recommendation",\n'
+        '  "short_headlines": ["5 short headlines, under 30 chars"],\n'
+        '  "long_headline": "1 long headline, under 90 chars",\n'
+        '  "descriptions": ["5 descriptions, under 90 chars"],\n'
+        '  "image_guidance": {"primary": "what image to use", "backup": "backup image", "sizes": ["1200x628","1080x1080"], "tips": ["2-4 tips"]},\n'
+        '  "audience": {"type": "retargeting or prospecting", "signals": ["3-6 signals to use"], "exclude": ["what to exclude"]},\n'
+        '  "implementation": ["Step-by-step: where to create a Display campaign/ad and what to paste where"]\n'
+        "}\n\n"
+        "Rules:\n"
+        "- Copy must be consistent with the brand voice from context.\n"
+        "- If seo.top_pages exists, recommend retargeting those page visitors for services with purchase intent.\n"
+        "- If competitor_watch exists, position against gaps without naming competitors unless provided.\n"
+        "- No invented guarantees or claims.\n\n"
+        + _evidence_rules()
+    )
+    return _call_ai(api_key, system, context, "google_ads_display")
+
+
+def _generate_google_pmax(api_key, context):
+    system = (
+        "You are the AI ad copy engine inside GroMore, a platform for local service businesses. "
+        "Generate a Performance Max asset group package ready to paste into Google Ads.\n\n"
+        "Return ONLY valid JSON with this exact structure:\n"
+        "{\n"
+        '  "format": "google_performance_max",\n'
+        '  "strategy": "performance_max",\n'
+        '  "rationale": "2-4 sentences: when PMax is appropriate and what you will optimize for.",\n'
+        '  "data_used": ["list of strings from the allowed set"],\n'
+        '  "campaign_target": "Existing PMax campaign to use or new campaign recommendation",\n'
+        '  "asset_groups": [\n'
+        '    {\n'
+        '      "name": "Asset Group Name",\n'
+        '      "final_url_hint": "/best-landing-page",\n'
+        '      "headlines": ["5 headlines under 30 chars"],\n'
+        '      "long_headlines": ["2 long headlines under 90 chars"],\n'
+        '      "descriptions": ["4 descriptions under 90 chars"],\n'
+        '      "callouts": ["6 callouts under 25 chars"],\n'
+        '      "sitelinks": [{"title": "under 25 chars", "description": "under 35 chars", "url_hint": "/page"}],\n'
+        '      "image_guidance": {"must_have": ["2-4 images to create"], "avoid": ["2-3 things"], "sizes": ["1200x628","1080x1080","1200x1200"], "tips": ["2-4 tips"]},\n'
+        '      "audience_signals": ["3-6 audience signals to seed PMax"]\n'
+        '    }\n'
+        '  ],\n'
+        '  "implementation": ["Step-by-step: where to create PMax, how to add asset group, what to paste where"]\n'
+        "}\n\n"
+        "Rules:\n"
+        "- Do not promise exact performance.\n"
+        "- If seo.keyword_opportunities exists, use them as audience_signals themes.\n"
+        "- If google_ads.campaigns exists, align the asset group to what has worked (high CTR, low CPA) but do not invent numbers.\n\n"
+        + _evidence_rules()
+    )
+    return _call_ai(api_key, system, context, "google_ads_pmax")
+
+
+def _generate_google_video_ads(api_key, context):
+    system = (
+        "You are the AI ad copy engine inside GroMore, a platform for local service businesses. "
+        "Generate a YouTube video ad package (scripts + copy + targeting guidance) ready to implement.\n\n"
+        "Return ONLY valid JSON with this exact structure:\n"
+        "{\n"
+        '  "format": "google_video",\n'
+        '  "strategy": "video",\n'
+        '  "rationale": "2-4 sentences: why video is appropriate (awareness, education, remarketing).",\n'
+        '  "data_used": ["list of strings from the allowed set"],\n'
+        '  "campaign_target": "Existing video campaign to use or new campaign recommendation",\n'
+        '  "scripts": {"bumper_6s": "6s script", "in_stream_15s": "15s script", "in_stream_30s": "30s script"},\n'
+        '  "headlines": ["5 headlines under 30 chars"],\n'
+        '  "descriptions": ["2 descriptions under 90 chars"],\n'
+        '  "creative_guidance": {"shots": ["6-10 shot list"], "on_screen_text": ["3-6 lines"], "cta": "single CTA"},\n'
+        '  "targeting": {"audiences": ["3-6"], "placements": ["optional"], "geo": "service area"},\n'
+        '  "implementation": ["Step-by-step: YouTube/Google Ads video campaign creation + where to paste"]\n'
+        "}\n\n"
+        "Rules:\n"
+        "- Scripts must be realistic for a local business: simple, direct, no hype.\n"
+        "- If seo.top_queries exists, mirror the language people use in the hook.\n"
+        "- No invented awards or review counts.\n\n"
+        + _evidence_rules()
+    )
+    return _call_ai(api_key, system, context, "google_ads_video")
 
 
 
@@ -75,6 +220,7 @@ def generate_facebook_ads(analysis, brand, strategy=None):
         return None
 
     context = _build_ad_context(analysis, brand)
+    context["data_available"] = _data_availability(context)
 
     # Strategy-specific prompt guidance
     strategy_map = {
@@ -83,7 +229,7 @@ def generate_facebook_ads(analysis, brand, strategy=None):
         "leads": "Drive signups, form fills, or inquiries. Use best practices for Lead Generation campaigns.",
         "sales": "Drive purchases, bookings, or direct sales. Use best practices for Sales/Conversion campaigns.",
     }
-    strategy_text = strategy_map.get((strategy or '').lower(), "If the strategy is unclear, default to Awareness best practices.")
+    strategy_text = strategy_map.get(_normalize_strategy(strategy), "If the strategy is unclear, default to Awareness best practices.")
 
     system = (
         f"You are the AI ad copy engine inside GroMore, a platform for local service businesses. "
@@ -91,6 +237,10 @@ def generate_facebook_ads(analysis, brand, strategy=None):
         f"Objective intent: {strategy_text}\n\n"
         "Return ONLY valid JSON with this exact structure:\n"
         "{\n"
+        '  "format": "meta_ads",\n'
+        '  "strategy": "awareness|engagement|leads|sales",\n'
+        '  "rationale": "2-4 sentences: why this objective fits the current context. If data is missing, say what you would check.",\n'
+        '  "data_used": ["list of strings from the allowed set"],\n'
         '  "campaign_target": "Which campaign this ad should go in (based on the data, or new campaign recommendation)",\n'
         '  "ad_variations": [\n'
         "    {\n"
@@ -126,8 +276,8 @@ def generate_facebook_ads(analysis, brand, strategy=None):
         "- Implementation steps should be literal: 'Go to Ads Manager > Campaign Name > Ad Set > Create Ad > paste this in Primary Text'\n"
         "- No hashtags unless they're industry-standard\n"
         "- No emojis in headlines. Emojis OK in primary text if natural.\n"
-        "- Never use 'we' - the business owner is running this, use 'I/my' or their business name\n"
-        "- Explain briefly why this strategy/objective is recommended for the current data and what results to expect.\n"
+        "- Never use 'we' - the business owner is running this, use 'I/my' or their business name\n\n"
+        + _evidence_rules()
     )
 
     return _call_ai(api_key, system, context, "facebook_ads")

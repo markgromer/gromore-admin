@@ -202,17 +202,37 @@
 <!-- ═══════ GOOGLE ADS RESULTS ═══════ -->
 {% if google_ads %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h5 class="mb-0"><i class="bi bi-google" style="color: #4285f4;"></i> Google Search Ad Package</h5>
+    <h5 class="mb-0"><i class="bi bi-google" style="color: #4285f4;"></i> Google Ad Package</h5>
     <a href="{{ url_for('client.client_ad_builder', month=month) }}" class="btn btn-sm btn-outline-secondary">
         <i class="bi bi-arrow-left"></i> Build Another
     </a>
 </div>
+
+{% if google_ads.strategy or google_ads.rationale or google_ads.data_used %}
+<div class="alert alert-light border mb-3" style="font-size: .9rem;">
+    {% if google_ads.strategy %}
+    <div><strong>Objective:</strong> {{ google_ads.strategy | replace('_', ' ') | title }}</div>
+    {% endif %}
+    {% if google_ads.rationale %}
+    <div class="mt-1" style="color: #4b5563;"><strong>Why this fits:</strong> {{ google_ads.rationale }}</div>
+    {% endif %}
+    {% if google_ads.data_used %}
+    <div class="mt-1" style="color: #6b7280;">
+        <strong>Data used:</strong> {{ google_ads.data_used | join(', ') }}
+    </div>
+    {% endif %}
+</div>
+{% endif %}
 
 {% if google_ads.campaign_target %}
 <div class="alert alert-info py-2 mb-3" style="font-size: .9rem;">
     <i class="bi bi-crosshair"></i> <strong>Target:</strong> {{ google_ads.campaign_target }}
 </div>
 {% endif %}
+
+{% set gformat = google_ads.format if google_ads.format is defined else 'google_search_rsa' %}
+
+{% if gformat == 'google_search_rsa' %}
 
 <!-- Headlines -->
 <div class="builder-card">
@@ -315,6 +335,206 @@
     {% endfor %}
 </div>
 {% endif %}
+{% elif gformat == 'google_display_rda' %}
+
+<div class="builder-card">
+    <h6 class="mb-3"><i class="bi bi-badge-ad"></i> Display Ad Copy <small class="text-muted">(Responsive Display style)</small></h6>
+
+    <div class="mb-3">
+        <div class="text-muted" style="font-size: .85rem;"><strong>Short headlines</strong> (max 30 chars)</div>
+        <div class="row g-2 mt-1">
+            {% for h in google_ads.short_headlines or [] %}
+            <div class="col-md-6">
+                <div class="copy-block">
+                    <span class="copy-text">{{ h }}</span>
+                    <button class="btn btn-outline-secondary copy-btn" onclick="copyText(this)"><i class="bi bi-clipboard"></i></button>
+                    <div class="char-count">{{ h|length }}/30 characters</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if google_ads.long_headline %}
+    <div class="mb-3">
+        <div class="text-muted" style="font-size: .85rem;"><strong>Long headline</strong> (max 90 chars)</div>
+        <div class="copy-block">
+            <span class="copy-text">{{ google_ads.long_headline }}</span>
+            <button class="btn btn-outline-secondary copy-btn" onclick="copyText(this)"><i class="bi bi-clipboard"></i></button>
+            <div class="char-count">{{ google_ads.long_headline|length }}/90 characters</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div>
+        <div class="text-muted" style="font-size: .85rem;"><strong>Descriptions</strong> (max 90 chars)</div>
+        {% for d in google_ads.descriptions or [] %}
+        <div class="copy-block">
+            <span class="copy-text">{{ d }}</span>
+            <button class="btn btn-outline-secondary copy-btn" onclick="copyText(this)"><i class="bi bi-clipboard"></i></button>
+            <div class="char-count">{{ d|length }}/90 characters</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+{% if google_ads.image_guidance %}
+<div class="builder-card">
+    <h6 class="mb-2"><i class="bi bi-image"></i> Image Guidance</h6>
+    <div class="image-guidance">
+        <div><strong>Primary:</strong> {{ google_ads.image_guidance.primary }}</div>
+        {% if google_ads.image_guidance.backup %}<div class="mt-1"><strong>Backup:</strong> {{ google_ads.image_guidance.backup }}</div>{% endif %}
+        {% if google_ads.image_guidance.sizes %}<div class="mt-1"><strong>Sizes:</strong> {{ google_ads.image_guidance.sizes | join(', ') }}</div>{% endif %}
+        {% if google_ads.image_guidance.tips %}
+        <div class="mt-2"><strong>Tips:</strong> {{ google_ads.image_guidance.tips | join(' | ') }}</div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% if google_ads.implementation %}
+<div class="builder-card mt-3">
+    <h6 class="mb-3"><i class="bi bi-signpost-2"></i> How to Implement</h6>
+    {% for step in google_ads.implementation %}
+    <div class="d-flex align-items-start gap-2 mb-2">
+        <span class="step-number">{{ loop.index }}</span>
+        <span style="font-size: .9rem; color: #374151; line-height: 1.6;">{{ step }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% elif gformat == 'google_performance_max' %}
+
+<div class="builder-card">
+    <h6 class="mb-3"><i class="bi bi-lightning"></i> Performance Max Assets</h6>
+    {% for ag in google_ads.asset_groups or [] %}
+    <div class="variation-tab {% if loop.first %}active-variation{% endif %}">
+        <div class="fw-semibold mb-2">Asset Group: {{ ag.name }}</div>
+        {% if ag.final_url_hint %}<div class="text-muted" style="font-size: .85rem;">Final URL hint: {{ ag.final_url_hint }}</div>{% endif %}
+
+        <div class="mt-3">
+            <div class="text-muted" style="font-size: .85rem;"><strong>Headlines</strong> (max 30 chars)</div>
+            <div class="row g-2 mt-1">
+                {% for h in ag.headlines or [] %}
+                <div class="col-md-6">
+                    <div class="copy-block">
+                        <span class="copy-text">{{ h }}</span>
+                        <button class="btn btn-outline-secondary copy-btn" onclick="copyText(this)"><i class="bi bi-clipboard"></i></button>
+                        <div class="char-count">{{ h|length }}/30 characters</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        {% if ag.long_headlines %}
+        <div class="mt-3">
+            <div class="text-muted" style="font-size: .85rem;"><strong>Long headlines</strong> (max 90 chars)</div>
+            {% for lh in ag.long_headlines or [] %}
+            <div class="copy-block">
+                <span class="copy-text">{{ lh }}</span>
+                <button class="btn btn-outline-secondary copy-btn" onclick="copyText(this)"><i class="bi bi-clipboard"></i></button>
+                <div class="char-count">{{ lh|length }}/90 characters</div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="mt-3">
+            <div class="text-muted" style="font-size: .85rem;"><strong>Descriptions</strong> (max 90 chars)</div>
+            {% for d in ag.descriptions or [] %}
+            <div class="copy-block">
+                <span class="copy-text">{{ d }}</span>
+                <button class="btn btn-outline-secondary copy-btn" onclick="copyText(this)"><i class="bi bi-clipboard"></i></button>
+                <div class="char-count">{{ d|length }}/90 characters</div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if ag.callouts %}
+        <div class="mt-3">
+            <div class="text-muted" style="font-size: .85rem;"><strong>Callouts</strong> (max 25 chars)</div>
+            <div class="row g-2 mt-1">
+                {% for c in ag.callouts or [] %}
+                <div class="col-md-6">
+                    <div class="copy-block">
+                        <span class="copy-text">{{ c }}</span>
+                        <button class="btn btn-outline-secondary copy-btn" onclick="copyText(this)"><i class="bi bi-clipboard"></i></button>
+                        <div class="char-count">{{ c|length }}/25 characters</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if ag.image_guidance %}
+        <div class="mt-3 image-guidance">
+            {% if ag.image_guidance.must_have %}<div><strong>Must-have images:</strong> {{ ag.image_guidance.must_have | join(' | ') }}</div>{% endif %}
+            {% if ag.image_guidance.avoid %}<div class="mt-1"><strong>Avoid:</strong> {{ ag.image_guidance.avoid | join(' | ') }}</div>{% endif %}
+            {% if ag.image_guidance.sizes %}<div class="mt-1"><strong>Sizes:</strong> {{ ag.image_guidance.sizes | join(', ') }}</div>{% endif %}
+            {% if ag.image_guidance.tips %}<div class="mt-2"><strong>Tips:</strong> {{ ag.image_guidance.tips | join(' | ') }}</div>{% endif %}
+        </div>
+        {% endif %}
+
+        {% if ag.audience_signals %}
+        <div class="mt-3">
+            <div class="text-muted" style="font-size: .85rem;"><strong>Audience signals</strong></div>
+            <div style="font-size: .9rem; color: #374151;">{{ ag.audience_signals | join(' | ') }}</div>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+{% if google_ads.implementation %}
+<div class="builder-card mt-3">
+    <h6 class="mb-3"><i class="bi bi-signpost-2"></i> How to Implement</h6>
+    {% for step in google_ads.implementation %}
+    <div class="d-flex align-items-start gap-2 mb-2">
+        <span class="step-number">{{ loop.index }}</span>
+        <span style="font-size: .9rem; color: #374151; line-height: 1.6;">{{ step }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% elif gformat == 'google_video' %}
+
+<div class="builder-card">
+    <h6 class="mb-3"><i class="bi bi-camera-video"></i> Video Scripts</h6>
+    {% if google_ads.scripts %}
+    <div class="copy-block"><strong>6s bumper</strong><div class="copy-text" style="display:block; margin-top:.25rem;">{{ google_ads.scripts.bumper_6s }}</div><button class="btn btn-outline-secondary copy-btn" onclick="copyText(this)"><i class="bi bi-clipboard"></i></button></div>
+    <div class="copy-block"><strong>15s in-stream</strong><div class="copy-text" style="display:block; margin-top:.25rem;">{{ google_ads.scripts.in_stream_15s }}</div><button class="btn btn-outline-secondary copy-btn" onclick="copyText(this)"><i class="bi bi-clipboard"></i></button></div>
+    <div class="copy-block"><strong>30s in-stream</strong><div class="copy-text" style="display:block; margin-top:.25rem;">{{ google_ads.scripts.in_stream_30s }}</div><button class="btn btn-outline-secondary copy-btn" onclick="copyText(this)"><i class="bi bi-clipboard"></i></button></div>
+    {% endif %}
+</div>
+
+{% if google_ads.creative_guidance %}
+<div class="builder-card">
+    <h6 class="mb-2"><i class="bi bi-magic"></i> Creative Guidance</h6>
+    <div class="image-guidance">
+        {% if google_ads.creative_guidance.cta %}<div><strong>CTA:</strong> {{ google_ads.creative_guidance.cta }}</div>{% endif %}
+        {% if google_ads.creative_guidance.shots %}<div class="mt-2"><strong>Shot list:</strong> {{ google_ads.creative_guidance.shots | join(' | ') }}</div>{% endif %}
+        {% if google_ads.creative_guidance.on_screen_text %}<div class="mt-2"><strong>On-screen text:</strong> {{ google_ads.creative_guidance.on_screen_text | join(' | ') }}</div>{% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% if google_ads.implementation %}
+<div class="builder-card mt-3">
+    <h6 class="mb-3"><i class="bi bi-signpost-2"></i> How to Implement</h6>
+    {% for step in google_ads.implementation %}
+    <div class="d-flex align-items-start gap-2 mb-2">
+        <span class="step-number">{{ loop.index }}</span>
+        <span style="font-size: .9rem; color: #374151; line-height: 1.6;">{{ step }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% endif %}
 {% endif %}
 
 <!-- ═══════ FACEBOOK ADS RESULTS ═══════ -->
@@ -325,6 +545,22 @@
         <i class="bi bi-arrow-left"></i> Build Another
     </a>
 </div>
+
+{% if facebook_ads.strategy or facebook_ads.rationale or facebook_ads.data_used %}
+<div class="alert alert-light border mb-3" style="font-size: .9rem;">
+    {% if facebook_ads.strategy %}
+    <div><strong>Objective:</strong> {{ facebook_ads.strategy | replace('_', ' ') | title }}</div>
+    {% endif %}
+    {% if facebook_ads.rationale %}
+    <div class="mt-1" style="color: #4b5563;"><strong>Why this fits:</strong> {{ facebook_ads.rationale }}</div>
+    {% endif %}
+    {% if facebook_ads.data_used %}
+    <div class="mt-1" style="color: #6b7280;">
+        <strong>Data used:</strong> {{ facebook_ads.data_used | join(', ') }}
+    </div>
+    {% endif %}
+</div>
+{% endif %}
 
 {% if facebook_ads.campaign_target %}
 <div class="alert alert-info py-2 mb-3" style="font-size: .9rem;">
