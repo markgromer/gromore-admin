@@ -139,6 +139,96 @@ def client_actions():
     )
 
 
+# ── Ad Builder ──
+
+@client_bp.route("/ad-builder")
+@client_login_required
+def client_ad_builder():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+
+    has_data = False
+    error = ""
+    try:
+        from webapp.report_runner import build_analysis_and_suggestions_for_brand
+        analysis, _ = build_analysis_and_suggestions_for_brand(db, brand, month)
+        has_data = bool(analysis)
+    except Exception as e:
+        error = str(e)
+
+    return render_template(
+        "client_ad_builder.html",
+        brand=brand,
+        month=month,
+        has_data=has_data,
+        google_ads=None,
+        facebook_ads=None,
+        error=error,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/ad-builder/generate", methods=["POST"])
+@client_login_required
+def client_ad_builder_generate():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    month = request.form.get("month") or datetime.now().strftime("%Y-%m")
+    platform = request.form.get("platform", "")
+
+    if platform not in ("google", "facebook"):
+        flash("Select a platform.", "error")
+        return redirect(url_for("client.client_ad_builder", month=month))
+
+    analysis = None
+    error = ""
+    try:
+        from webapp.report_runner import build_analysis_and_suggestions_for_brand
+        analysis, _ = build_analysis_and_suggestions_for_brand(db, brand, month)
+    except Exception as e:
+        error = str(e)
+
+    if not analysis:
+        flash(error or "No data available for this month.", "error")
+        return redirect(url_for("client.client_ad_builder", month=month))
+
+    google_ads = None
+    facebook_ads = None
+
+    from webapp.ad_builder import generate_google_ads, generate_facebook_ads
+
+    if platform == "google":
+        google_ads = generate_google_ads(analysis, brand)
+        if not google_ads:
+            flash("AI generation failed. Check that your OpenAI key is configured in Settings.", "error")
+            return redirect(url_for("client.client_ad_builder", month=month))
+    else:
+        facebook_ads = generate_facebook_ads(analysis, brand)
+        if not facebook_ads:
+            flash("AI generation failed. Check that your OpenAI key is configured in Settings.", "error")
+            return redirect(url_for("client.client_ad_builder", month=month))
+
+    return render_template(
+        "client_ad_builder.html",
+        brand=brand,
+        month=month,
+        has_data=True,
+        google_ads=google_ads,
+        facebook_ads=facebook_ads,
+        error="",
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
 # ── Campaigns ──
 
 @client_bp.route("/campaigns")

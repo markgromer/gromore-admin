@@ -398,6 +398,8 @@ def _build_action_cards(analysis, suggestions, brand):
             "category": _client_friendly_category(s["category"]),
             "what": _plain_english_what(s),
             "steps": [],
+            "impact": "",
+            "time": "",
             "data_point": s.get("data_point", ""),
         }
         actions.append(card)
@@ -407,7 +409,10 @@ def _build_action_cards(analysis, suggestions, brand):
     if ai_actions:
         for i, card in enumerate(actions):
             if i < len(ai_actions):
-                card["steps"] = ai_actions[i]
+                ai = ai_actions[i]
+                card["steps"] = ai.get("steps", [])
+                card["impact"] = ai.get("impact", "")
+                card["time"] = ai.get("time", "")
 
     return actions
 
@@ -469,22 +474,25 @@ def _generate_ai_actions(suggestions, analysis, brand):
     }
 
     system = (
-        "You are a senior paid media strategist inside an ad agency. "
-        "The client pays us to DO the work, not to tell them how to navigate a UI. "
-        "For each action item, produce 3-5 SPECIFIC deliverables based on the real data provided. "
-        "These are things WE are doing or recommending with precision, not generic advice anyone could Google.\n\n"
+        "You are the AI engine inside GroMore, a platform that replaces ad agencies for local service businesses. "
+        "The business owner reading this is in the driver's seat. You are their always-on marketing director.\n\n"
+        "For each action item, produce a JSON object with:\n"
+        "- \"steps\": array of 3-5 specific, concrete actions the owner can take (or that the platform is doing)\n"
+        "- \"impact\": one sentence estimating the expected result (e.g., 'Should save ~$180/month and generate 3-4 additional leads')\n"
+        "- \"time\": estimated time to execute (e.g., '10 minutes', '30 minutes', '1 hour')\n\n"
         "Rules:\n"
         "- Reference actual campaign names, keywords, metrics, and competitors from the data\n"
-        "- For ad copy: write the actual headlines/descriptions to test\n"
-        "- For keywords: name the specific keywords to pause, add, or bid on\n"
+        "- For ad copy: write the actual headlines and descriptions ready to paste\n"
+        "- For keywords: name the specific keywords to pause, add, or adjust bids on\n"
         "- For SEO: reference the actual pages and queries from the data\n"
         "- For budget: give exact dollar amounts and percentages based on the numbers\n"
         "- For competitors: name the competitor and the specific counter-move\n"
-        "- Never say 'log into' or 'click on' or 'navigate to' - we do the work, not the client\n"
-        "- Keep each deliverable to 1-2 sentences, direct and concrete\n"
-        "- If you don't have enough data for a specific item, still be concrete about the approach using what's available\n\n"
-        "Return ONLY valid JSON: an array of arrays. Outer array = one entry per action item. "
-        "Inner array = 3-5 deliverable strings for that action item. No markdown, no extra keys."
+        "- Be direct: 'Pause the emergency plumber keyword ($94 CPL)' not 'Consider pausing expensive keywords'\n"
+        "- Each step should be 1-2 sentences, actionable and specific\n"
+        "- If data is limited, still be concrete about the approach using what's available\n"
+        "- Never use filler phrases like 'consider', 'you might want to', 'it could be beneficial'\n\n"
+        "Return ONLY valid JSON: {\"actions\": [{\"steps\": [...], \"impact\": \"...\", \"time\": \"...\"}, ...]}. "
+        "One object per action item, in the same order as the input."
     )
 
     headers = {
@@ -521,24 +529,37 @@ def _generate_ai_actions(suggestions, analysis, brand):
 
         parsed = json.loads(content)
 
-        # Handle both {"actions": [[...]]} and [[...]] formats
+        # Extract the actions array from the response
+        actions_list = parsed
         if isinstance(parsed, dict):
-            # Find the first key that contains a list of lists
-            for v in parsed.values():
-                if isinstance(v, list):
-                    parsed = v
-                    break
+            actions_list = parsed.get("actions", [])
+            if not actions_list:
+                for v in parsed.values():
+                    if isinstance(v, list):
+                        actions_list = v
+                        break
 
-        if not isinstance(parsed, list):
+        if not isinstance(actions_list, list):
             return []
 
-        # Validate structure: list of lists of strings
+        # Each item should be {"steps": [...], "impact": "...", "time": "..."}
         result = []
-        for item in parsed:
-            if isinstance(item, list):
-                result.append([str(s) for s in item if s])
+        for item in actions_list:
+            if isinstance(item, dict):
+                result.append({
+                    "steps": [str(s) for s in item.get("steps", []) if s],
+                    "impact": str(item.get("impact", "")),
+                    "time": str(item.get("time", "")),
+                })
+            elif isinstance(item, list):
+                # Fallback: plain list of strings (old format)
+                result.append({
+                    "steps": [str(s) for s in item if s],
+                    "impact": "",
+                    "time": "",
+                })
             else:
-                result.append([])
+                result.append({"steps": [], "impact": "", "time": ""})
 
         return result
 

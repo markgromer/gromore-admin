@@ -1,0 +1,466 @@
+{% extends "client/client_base.html" %}
+
+{% block title %}Ad Builder{% endblock %}
+
+{% block head %}
+<style>
+    .builder-card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,.05);
+        margin-bottom: 1.5rem;
+    }
+    .copy-block {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: .75rem 1rem;
+        margin-bottom: .5rem;
+        position: relative;
+        font-size: .9rem;
+        line-height: 1.5;
+    }
+    .copy-block .copy-btn {
+        position: absolute;
+        top: .5rem;
+        right: .5rem;
+        padding: .15rem .5rem;
+        font-size: .75rem;
+    }
+    .copy-block .char-count {
+        font-size: .7rem;
+        color: #9ca3af;
+        margin-top: .25rem;
+    }
+    .variation-tab {
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+    }
+    .variation-tab.active-variation {
+        border-color: #6366f1;
+    }
+    .step-number {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: #6366f1;
+        color: #fff;
+        font-size: .8rem;
+        font-weight: 600;
+        flex-shrink: 0;
+    }
+    .platform-pick {
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1.5rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all .15s;
+    }
+    .platform-pick:hover {
+        border-color: #6366f1;
+        background: #f5f3ff;
+    }
+    .platform-pick.selected {
+        border-color: #6366f1;
+        background: #f5f3ff;
+    }
+    .platform-pick i {
+        font-size: 2rem;
+        margin-bottom: .5rem;
+    }
+    .image-guidance {
+        background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+        border-radius: 10px;
+        padding: 1.25rem;
+    }
+    .loading-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(255,255,255,.85);
+        z-index: 9999;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+    }
+    .loading-overlay.show { display: flex; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status"></div>
+    <h5 class="text-muted">Your AI is building ad copy from your account data...</h5>
+    <p class="text-muted">Analyzing performance, competitors, and keywords. ~15 seconds.</p>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1">Ad Builder</h4>
+        <p class="text-muted mb-0">AI writes your ad copy using your real performance data. Copy, paste, launch.</p>
+    </div>
+    <div class="month-selector">
+        <form method="GET" class="d-flex align-items-center gap-2">
+            <input type="month" name="month" value="{{ month }}" class="form-control form-control-sm" style="width: 160px;" onchange="this.form.submit()">
+        </form>
+    </div>
+</div>
+
+{% if error %}
+<div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle"></i> {{ error }}
+</div>
+{% endif %}
+
+{% if not has_data %}
+<div class="text-center py-5">
+    <i class="bi bi-brush" style="font-size: 3rem; color: #d1d5db;"></i>
+    <h5 class="mt-3 text-muted">No performance data for {{ month }}</h5>
+    <p class="text-muted">The Ad Builder uses your actual account data to write targeted copy. Connect your accounts and generate a report first.</p>
+</div>
+{% else %}
+
+<!-- Platform Selection -->
+{% if not google_ads and not facebook_ads %}
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <form method="POST" action="{{ url_for('client.client_ad_builder_generate') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="month" value="{{ month }}">
+            <input type="hidden" name="platform" value="google">
+            <button type="submit" class="platform-pick w-100 border-0 bg-transparent" style="border: 2px solid #e5e7eb !important; border-radius: 12px; padding: 1.5rem;" onclick="document.getElementById('loadingOverlay').classList.add('show')">
+                <i class="bi bi-google d-block" style="font-size: 2rem; color: #4285f4;"></i>
+                <h5 class="mt-2 mb-1">Google Search Ads</h5>
+                <p class="text-muted mb-0" style="font-size: .85rem;">
+                    15 headlines, 4 descriptions, sitelinks, keywords, and negative keywords.
+                    All sized to spec, ready to paste into a Responsive Search Ad.
+                </p>
+            </button>
+        </form>
+    </div>
+    <div class="col-md-6">
+        <form method="POST" action="{{ url_for('client.client_ad_builder_generate') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="month" value="{{ month }}">
+            <input type="hidden" name="platform" value="facebook">
+            <button type="submit" class="platform-pick w-100 border-0 bg-transparent" style="border: 2px solid #e5e7eb !important; border-radius: 12px; padding: 1.5rem;" onclick="document.getElementById('loadingOverlay').classList.add('show')">
+                <i class="bi bi-meta d-block" style="font-size: 2rem; color: #0668e1;"></i>
+                <h5 class="mt-2 mb-1">Facebook & Instagram Ads</h5>
+                <p class="text-muted mb-0" style="font-size: .85rem;">
+                    3 ad variations with different angles, image guidance, audience targeting,
+                    and exact paste-here instructions for Ads Manager.
+                </p>
+            </button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<!-- ═══════ GOOGLE ADS RESULTS ═══════ -->
+{% if google_ads %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0"><i class="bi bi-google" style="color: #4285f4;"></i> Google Search Ad Package</h5>
+    <a href="{{ url_for('client.client_ad_builder', month=month) }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Build Another
+    </a>
+</div>
+
+{% if google_ads.campaign_target %}
+<div class="alert alert-info py-2 mb-3" style="font-size: .9rem;">
+    <i class="bi bi-crosshair"></i> <strong>Target:</strong> {{ google_ads.campaign_target }}
+</div>
+{% endif %}
+
+<!-- Headlines -->
+<div class="builder-card">
+    <h6 class="mb-3"><i class="bi bi-type-h1"></i> Headlines <small class="text-muted">(max 30 characters each)</small></h6>
+    <div class="row g-2">
+        {% for h in google_ads.headlines or [] %}
+        <div class="col-md-6">
+            <div class="copy-block">
+                <span class="copy-text">{{ h }}</span>
+                <button class="btn btn-outline-secondary copy-btn" onclick="copyText(this)">
+                    <i class="bi bi-clipboard"></i>
+                </button>
+                <div class="char-count">{{ h|length }}/30 characters</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Descriptions -->
+<div class="builder-card">
+    <h6 class="mb-3"><i class="bi bi-text-paragraph"></i> Descriptions <small class="text-muted">(max 90 characters each)</small></h6>
+    {% for d in google_ads.descriptions or [] %}
+    <div class="copy-block">
+        <span class="copy-text">{{ d }}</span>
+        <button class="btn btn-outline-secondary copy-btn" onclick="copyText(this)">
+            <i class="bi bi-clipboard"></i>
+        </button>
+        <div class="char-count">{{ d|length }}/90 characters</div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Sitelinks -->
+{% if google_ads.sitelinks %}
+<div class="builder-card">
+    <h6 class="mb-3"><i class="bi bi-link-45deg"></i> Sitelink Extensions</h6>
+    <div class="row g-2">
+        {% for sl in google_ads.sitelinks %}
+        <div class="col-md-6">
+            <div class="copy-block">
+                <strong>{{ sl.title }}</strong>
+                <div style="font-size: .85rem; color: #4b5563;">{{ sl.description }}</div>
+                {% if sl.url_hint %}
+                <div style="font-size: .8rem; color: #9ca3af;">Link to: {{ sl.url_hint }}</div>
+                {% endif %}
+                <button class="btn btn-outline-secondary copy-btn" onclick="copyText(this)">
+                    <i class="bi bi-clipboard"></i>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Keywords -->
+<div class="row g-3">
+    {% if google_ads.keywords_to_target %}
+    <div class="col-md-6">
+        <div class="builder-card h-100">
+            <h6 class="mb-3"><i class="bi bi-plus-circle text-success"></i> Keywords to Target</h6>
+            {% for kw in google_ads.keywords_to_target %}
+            <div class="copy-block">
+                <span class="copy-text">{{ kw }}</span>
+                <button class="btn btn-outline-secondary copy-btn" onclick="copyText(this)">
+                    <i class="bi bi-clipboard"></i>
+                </button>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% if google_ads.negative_keywords %}
+    <div class="col-md-6">
+        <div class="builder-card h-100">
+            <h6 class="mb-3"><i class="bi bi-dash-circle text-danger"></i> Negative Keywords to Add</h6>
+            {% for nk in google_ads.negative_keywords %}
+            <div class="copy-block">
+                <span class="copy-text">{{ nk }}</span>
+                <button class="btn btn-outline-secondary copy-btn" onclick="copyText(this)">
+                    <i class="bi bi-clipboard"></i>
+                </button>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Implementation Steps -->
+{% if google_ads.implementation %}
+<div class="builder-card mt-3">
+    <h6 class="mb-3"><i class="bi bi-signpost-2"></i> How to Paste This Into Google Ads</h6>
+    {% for step in google_ads.implementation %}
+    <div class="d-flex align-items-start gap-2 mb-2">
+        <span class="step-number">{{ loop.index }}</span>
+        <span style="font-size: .9rem; color: #374151; line-height: 1.6;">{{ step }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endif %}
+
+<!-- ═══════ FACEBOOK ADS RESULTS ═══════ -->
+{% if facebook_ads %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0"><i class="bi bi-meta" style="color: #0668e1;"></i> Facebook & Instagram Ad Package</h5>
+    <a href="{{ url_for('client.client_ad_builder', month=month) }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Build Another
+    </a>
+</div>
+
+{% if facebook_ads.campaign_target %}
+<div class="alert alert-info py-2 mb-3" style="font-size: .9rem;">
+    <i class="bi bi-crosshair"></i> <strong>Target:</strong> {{ facebook_ads.campaign_target }}
+</div>
+{% endif %}
+
+<!-- Ad Variations -->
+{% for variation in facebook_ads.ad_variations or [] %}
+<div class="builder-card">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0">{{ variation.name or 'Variation ' ~ loop.index }}</h6>
+        {% if variation.angle %}
+        <span class="badge bg-light text-dark" style="font-size: .75rem;">{{ variation.angle }}</span>
+        {% endif %}
+    </div>
+
+    <div class="mb-3">
+        <label class="text-muted" style="font-size: .75rem; text-transform: uppercase; letter-spacing: .05em;">Primary Text <small>(above the image)</small></label>
+        <div class="copy-block">
+            <span class="copy-text" style="white-space: pre-line;">{{ variation.primary_text }}</span>
+            <button class="btn btn-outline-secondary copy-btn" onclick="copyText(this)">
+                <i class="bi bi-clipboard"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-6">
+            <label class="text-muted" style="font-size: .75rem; text-transform: uppercase; letter-spacing: .05em;">Headline <small>(below the image)</small></label>
+            <div class="copy-block">
+                <span class="copy-text">{{ variation.headline }}</span>
+                <button class="btn btn-outline-secondary copy-btn" onclick="copyText(this)">
+                    <i class="bi bi-clipboard"></i>
+                </button>
+                <div class="char-count">{{ variation.headline|length }}/40 characters</div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <label class="text-muted" style="font-size: .75rem; text-transform: uppercase; letter-spacing: .05em;">Description</label>
+            <div class="copy-block">
+                <span class="copy-text">{{ variation.description }}</span>
+                <button class="btn btn-outline-secondary copy-btn" onclick="copyText(this)">
+                    <i class="bi bi-clipboard"></i>
+                </button>
+                <div class="char-count">{{ variation.description|length }}/30 characters</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<!-- CTA Button -->
+{% if facebook_ads.cta_button %}
+<div class="builder-card">
+    <h6 class="mb-2"><i class="bi bi-cursor"></i> CTA Button</h6>
+    <span class="badge bg-primary" style="font-size: .9rem; padding: .5rem 1rem;">{{ facebook_ads.cta_button | replace('_', ' ') }}</span>
+</div>
+{% endif %}
+
+<!-- Image Guidance -->
+{% if facebook_ads.image_guidance %}
+<div class="builder-card">
+    <h6 class="mb-3"><i class="bi bi-image"></i> Image Guidance</h6>
+    <div class="image-guidance">
+        <div class="mb-2">
+            <strong style="font-size: .85rem;">Best option:</strong>
+            <div style="font-size: .9rem;">{{ facebook_ads.image_guidance.primary }}</div>
+        </div>
+        {% if facebook_ads.image_guidance.backup %}
+        <div class="mb-2">
+            <strong style="font-size: .85rem;">Backup option:</strong>
+            <div style="font-size: .9rem;">{{ facebook_ads.image_guidance.backup }}</div>
+        </div>
+        {% endif %}
+        {% if facebook_ads.image_guidance.specs %}
+        <div class="mb-2">
+            <strong style="font-size: .85rem;">Dimensions:</strong>
+            <span style="font-size: .9rem;">{{ facebook_ads.image_guidance.specs }}</span>
+        </div>
+        {% endif %}
+        {% if facebook_ads.image_guidance.tips %}
+        <div class="mt-2">
+            <strong style="font-size: .85rem;">Tips:</strong>
+            <ul class="mb-0 mt-1" style="font-size: .88rem;">
+                {% for tip in facebook_ads.image_guidance.tips %}
+                <li>{{ tip }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Audience Suggestions -->
+{% if facebook_ads.audience_suggestions %}
+<div class="builder-card">
+    <h6 class="mb-3"><i class="bi bi-people"></i> Audience Targeting</h6>
+    <div class="row g-3">
+        {% if facebook_ads.audience_suggestions.location %}
+        <div class="col-md-6">
+            <div class="copy-block">
+                <label class="text-muted" style="font-size: .7rem; text-transform: uppercase;">Location</label>
+                <div>{{ facebook_ads.audience_suggestions.location }}</div>
+            </div>
+        </div>
+        {% endif %}
+        {% if facebook_ads.audience_suggestions.age_range %}
+        <div class="col-md-6">
+            <div class="copy-block">
+                <label class="text-muted" style="font-size: .7rem; text-transform: uppercase;">Age Range</label>
+                <div>{{ facebook_ads.audience_suggestions.age_range }}</div>
+            </div>
+        </div>
+        {% endif %}
+        {% if facebook_ads.audience_suggestions.interests %}
+        <div class="col-md-6">
+            <div class="copy-block">
+                <label class="text-muted" style="font-size: .7rem; text-transform: uppercase;">Interests</label>
+                <div>{{ facebook_ads.audience_suggestions.interests | join(', ') }}</div>
+            </div>
+        </div>
+        {% endif %}
+        {% if facebook_ads.audience_suggestions.custom_audience %}
+        <div class="col-md-6">
+            <div class="copy-block">
+                <label class="text-muted" style="font-size: .7rem; text-transform: uppercase;">Custom Audience</label>
+                <div>{{ facebook_ads.audience_suggestions.custom_audience }}</div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Implementation Steps -->
+{% if facebook_ads.implementation %}
+<div class="builder-card">
+    <h6 class="mb-3"><i class="bi bi-signpost-2"></i> How to Paste This Into Facebook Ads Manager</h6>
+    {% for step in facebook_ads.implementation %}
+    <div class="d-flex align-items-start gap-2 mb-2">
+        <span class="step-number">{{ loop.index }}</span>
+        <span style="font-size: .9rem; color: #374151; line-height: 1.6;">{{ step }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endif %}
+
+{% endif %}{# has_data #}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyText(btn) {
+    const block = btn.closest('.copy-block');
+    const textEl = block.querySelector('.copy-text');
+    const text = textEl ? textEl.innerText : block.innerText;
+    navigator.clipboard.writeText(text.trim()).then(() => {
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check2"></i>';
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-success');
+        setTimeout(() => {
+            btn.innerHTML = orig;
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-outline-secondary');
+        }, 1500);
+    });
+}
+</script>
+{% endblock %}

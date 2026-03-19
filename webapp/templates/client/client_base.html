@@ -219,7 +219,10 @@
                 <i class="bi bi-megaphone"></i> Campaigns
             </a>
             <a href="{{ url_for('client.client_actions') }}" class="{% if request.endpoint == 'client.client_actions' %}active{% endif %}">
-                <i class="bi bi-list-check"></i> Action Steps
+                <i class="bi bi-lightning-charge"></i> Action Plan
+            </a>
+            <a href="{{ url_for('client.client_ad_builder') }}" class="{% if request.endpoint in ('client.client_ad_builder', 'client.client_ad_builder_generate') %}active{% endif %}">
+                <i class="bi bi-brush"></i> Ad Builder
             </a>
             <a href="{{ url_for('client.client_settings') }}" class="{% if request.endpoint == 'client.client_settings' %}active{% endif %}">
                 <i class="bi bi-plug"></i> Connections
