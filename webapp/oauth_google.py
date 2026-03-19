@@ -66,25 +66,31 @@ def connect(brand_id):
 
 @google_bp.route("/callback")
 def callback():
-    if "user_id" not in session:
+    # Accept either admin or client portal sessions
+    is_client = session.pop("google_oauth_source", None) == "client"
+    if not is_client and "user_id" not in session:
         return redirect(url_for("login"))
+    if is_client and "client_user_id" not in session:
+        return redirect(url_for("client.client_login"))
+
+    error_redirect = url_for("client.client_settings") if is_client else url_for("brands_list")
 
     error = request.args.get("error")
     if error:
         flash(f"Google authorization failed: {error}", "error")
-        return redirect(url_for("brands_list"))
+        return redirect(error_redirect)
 
     code = request.args.get("code")
     brand_id = session.pop("google_oauth_brand_id", None)
     if not code or not brand_id:
         flash("Invalid OAuth callback", "error")
-        return redirect(url_for("brands_list"))
+        return redirect(error_redirect)
 
     db = current_app.db
     brand = db.get_brand(brand_id)
     if not brand:
         flash("Brand not found", "error")
-        return redirect(url_for("brands_list"))
+        return redirect(error_redirect)
 
     # Exchange code for tokens
     callback_url = current_app.config["APP_URL"].rstrip("/") + url_for("google_oauth.callback")
@@ -100,6 +106,8 @@ def callback():
 
     if token_resp.status_code != 200:
         flash(f"Token exchange failed: {token_resp.text}", "error")
+        if is_client:
+            return redirect(url_for("client.client_settings"))
         return redirect(url_for("brand_detail", brand_id=brand_id))
 
     tokens = token_resp.json()
@@ -120,7 +128,19 @@ def callback():
     ga4_properties = _fetch_ga4_properties(access_token)
     gsc_sites = _fetch_gsc_sites(access_token)
 
-    # Store in session for the picker page
+    if is_client:
+        # Client portal flow - use client picker template
+        session["client_google_pick_brand_id"] = brand_id
+        session["client_google_pick_ga4"] = ga4_properties
+        session["client_google_pick_gsc"] = gsc_sites
+        return render_template(
+            "client/client_google_pick_properties.html",
+            brand=brand,
+            ga4_properties=ga4_properties,
+            gsc_sites=gsc_sites,
+        )
+
+    # Admin flow - use admin picker template
     session["google_pick_brand_id"] = brand_id
     session["google_pick_ga4"] = ga4_properties
     session["google_pick_gsc"] = gsc_sites

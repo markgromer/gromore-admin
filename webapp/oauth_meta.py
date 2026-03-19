@@ -61,35 +61,38 @@ def connect(brand_id):
 
 @meta_bp.route("/callback")
 def callback():
-    if "user_id" not in session:
+    # Accept either admin or client portal sessions
+    is_client = session.pop("meta_oauth_source", None) == "client"
+    if not is_client and "user_id" not in session:
         return redirect(url_for("login"))
+    if is_client and "client_user_id" not in session:
+        return redirect(url_for("client.client_login"))
+
+    error_redirect = url_for("client.client_settings") if is_client else url_for("brands_list")
 
     error = request.args.get("error")
     if error:
         desc = request.args.get("error_description", error)
         flash(f"Meta authorization failed: {desc}", "error")
-        return redirect(url_for("brands_list"))
+        return redirect(error_redirect)
 
     code = request.args.get("code")
     brand_id = session.pop("meta_oauth_brand_id", None)
     if not code or not brand_id:
         flash("Invalid OAuth callback", "error")
-        return redirect(url_for("brands_list"))
+        return redirect(error_redirect)
 
     db = current_app.db
     brand = db.get_brand(brand_id)
     if not brand:
         flash("Brand not found", "error")
-        return redirect(url_for("brands_list"))
+        return redirect(error_redirect)
 
     app_id = (db.get_setting("meta_app_id", "") or current_app.config.get("META_APP_ID", "")).strip()
     app_secret = (db.get_setting("meta_app_secret", "") or current_app.config.get("META_APP_SECRET", "")).strip()
     if not app_id or not app_secret:
-        flash(
-            "Meta OAuth not configured. Go to Settings to add your Meta App ID and App Secret (one-time agency setup).",
-            "error",
-        )
-        return redirect(url_for("brand_detail", brand_id=brand_id))
+        flash("Meta OAuth not configured.", "error")
+        return redirect(error_redirect)
 
     callback_url = current_app.config["APP_URL"].rstrip("/") + url_for("meta_oauth.callback")
 
@@ -103,7 +106,7 @@ def callback():
 
     if token_resp.status_code != 200:
         flash(f"Token exchange failed: {token_resp.text}", "error")
-        return redirect(url_for("brand_detail", brand_id=brand_id))
+        return redirect(error_redirect)
 
     short_token = token_resp.json().get("access_token")
 
@@ -140,7 +143,25 @@ def callback():
     if accounts_resp.status_code == 200:
         ad_accounts = accounts_resp.json().get("data", [])
 
-    # Store token temporarily and show account picker
+    if is_client:
+        # Client portal flow
+        session["client_meta_temp_token"] = access_token
+        session["client_meta_temp_expiry"] = expiry
+        session["client_meta_temp_brand_id"] = brand_id
+
+        if len(ad_accounts) == 1:
+            acct = ad_accounts[0]
+            _finalize_meta_connection(db, brand_id, access_token, expiry, acct)
+            flash(f"Meta ad account connected: {acct.get('name', acct['account_id'])}", "success")
+            return redirect(url_for("client.client_settings"))
+
+        return render_template(
+            "client/client_meta_pick_account.html",
+            brand=brand,
+            ad_accounts=ad_accounts,
+        )
+
+    # Admin flow
     session["meta_temp_token"] = access_token
     session["meta_temp_expiry"] = expiry
     session["meta_temp_brand_id"] = brand_id
