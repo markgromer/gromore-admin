@@ -183,7 +183,9 @@ def client_ad_builder_generate():
         abort(404)
 
     month = request.form.get("month") or datetime.now().strftime("%Y-%m")
+
     platform = request.form.get("platform", "")
+    strategy = request.form.get("strategy", "")
 
     if platform not in ("google", "facebook"):
         flash("Select a platform.", "error")
@@ -204,15 +206,16 @@ def client_ad_builder_generate():
     google_ads = None
     facebook_ads = None
 
+
     from webapp.ad_builder import generate_google_ads, generate_facebook_ads
 
     if platform == "google":
-        google_ads = generate_google_ads(analysis, brand)
+        google_ads = generate_google_ads(analysis, brand, strategy)
         if not google_ads:
             flash("AI generation failed. Check that your OpenAI key is configured in Settings.", "error")
             return redirect(url_for("client.client_ad_builder", month=month))
     else:
-        facebook_ads = generate_facebook_ads(analysis, brand)
+        facebook_ads = generate_facebook_ads(analysis, brand, strategy)
         if not facebook_ads:
             flash("AI generation failed. Check that your OpenAI key is configured in Settings.", "error")
             return redirect(url_for("client.client_ad_builder", month=month))

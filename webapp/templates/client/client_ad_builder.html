@@ -128,37 +128,72 @@
 </div>
 {% else %}
 
-<!-- Platform Selection -->
+<!-- Platform & Strategy Selection -->
 {% if not google_ads and not facebook_ads %}
 <div class="row g-3 mb-4">
     <div class="col-md-6">
-        <form method="POST" action="{{ url_for('client.client_ad_builder_generate') }}">
+        <form method="POST" action="{{ url_for('client.client_ad_builder_generate') }}" id="googleAdForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="month" value="{{ month }}">
             <input type="hidden" name="platform" value="google">
-            <button type="submit" class="platform-pick w-100 border-0 bg-transparent" style="border: 2px solid #e5e7eb !important; border-radius: 12px; padding: 1.5rem;" onclick="document.getElementById('loadingOverlay').classList.add('show')">
+            <div class="platform-pick w-100 border-0 bg-transparent" style="border: 2px solid #e5e7eb !important; border-radius: 12px; padding: 1.5rem;">
                 <i class="bi bi-google d-block" style="font-size: 2rem; color: #4285f4;"></i>
-                <h5 class="mt-2 mb-1">Google Search Ads</h5>
-                <p class="text-muted mb-0" style="font-size: .85rem;">
-                    15 headlines, 4 descriptions, sitelinks, keywords, and negative keywords.
+                <h5 class="mt-2 mb-1">Google Ads</h5>
+                <p class="text-muted mb-2" style="font-size: .85rem;">
+                    15 headlines, 4 descriptions, sitelinks, keywords, and negative keywords.<br>
                     All sized to spec, ready to paste into a Responsive Search Ad.
                 </p>
-            </button>
+                <div class="mb-2">
+                    <label for="google_strategy" class="form-label mb-1"><strong>Ad Strategy/Objective</strong></label>
+                    <select class="form-select" name="strategy" id="google_strategy" required>
+                        <option value="" disabled selected>Select a strategy</option>
+                        <option value="search">Search (Intent-driven, high-conversion. Use for direct leads/sales.)</option>
+                        <option value="display">Display (Brand awareness, retargeting. Use for broad reach or reminders.)</option>
+                        <option value="performance_max">Performance Max (Automated, multi-channel. Use for maximizing conversions with automation.)</option>
+                        <option value="video">Video (YouTube. Use for storytelling, education, or brand lift.)</option>
+                    </select>
+                    <div class="form-text mt-1" id="google_strategy_desc">
+                        Choose the objective that matches your goal. <br>
+                        <strong>Search:</strong> Best for capturing demand and driving leads.<br>
+                        <strong>Display:</strong> Best for awareness, retargeting, or visual reminders.<br>
+                        <strong>Performance Max:</strong> Best for automated, all-in-one campaigns.<br>
+                        <strong>Video:</strong> Best for brand storytelling and education.
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100 mt-2" onclick="document.getElementById('loadingOverlay').classList.add('show')">Build Google Ad Package</button>
+            </div>
         </form>
     </div>
     <div class="col-md-6">
-        <form method="POST" action="{{ url_for('client.client_ad_builder_generate') }}">
+        <form method="POST" action="{{ url_for('client.client_ad_builder_generate') }}" id="facebookAdForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="month" value="{{ month }}">
             <input type="hidden" name="platform" value="facebook">
-            <button type="submit" class="platform-pick w-100 border-0 bg-transparent" style="border: 2px solid #e5e7eb !important; border-radius: 12px; padding: 1.5rem;" onclick="document.getElementById('loadingOverlay').classList.add('show')">
+            <div class="platform-pick w-100 border-0 bg-transparent" style="border: 2px solid #e5e7eb !important; border-radius: 12px; padding: 1.5rem;">
                 <i class="bi bi-meta d-block" style="font-size: 2rem; color: #0668e1;"></i>
                 <h5 class="mt-2 mb-1">Facebook & Instagram Ads</h5>
-                <p class="text-muted mb-0" style="font-size: .85rem;">
-                    3 ad variations with different angles, image guidance, audience targeting,
+                <p class="text-muted mb-2" style="font-size: .85rem;">
+                    3 ad variations with different angles, image guidance, audience targeting,<br>
                     and exact paste-here instructions for Ads Manager.
                 </p>
-            </button>
+                <div class="mb-2">
+                    <label for="facebook_strategy" class="form-label mb-1"><strong>Ad Strategy/Objective</strong></label>
+                    <select class="form-select" name="strategy" id="facebook_strategy" required>
+                        <option value="" disabled selected>Select a strategy</option>
+                        <option value="awareness">Awareness (Maximize reach, build recognition. Use for new launches or markets.)</option>
+                        <option value="engagement">Engagement (Get likes, comments, shares. Use for social proof or community building.)</option>
+                        <option value="leads">Leads (Drive signups, form fills. Use for direct lead generation.)</option>
+                        <option value="sales">Sales (Drive purchases or bookings. Use for e-commerce or direct sales.)</option>
+                    </select>
+                    <div class="form-text mt-1" id="facebook_strategy_desc">
+                        <strong>Awareness:</strong> Best for new brands, launches, or entering new markets.<br>
+                        <strong>Engagement:</strong> Best for building community and social proof.<br>
+                        <strong>Leads:</strong> Best for direct inquiries, signups, or form fills.<br>
+                        <strong>Sales:</strong> Best for e-commerce, bookings, or direct sales.
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100 mt-2" onclick="document.getElementById('loadingOverlay').classList.add('show')">Build Facebook/Instagram Ad Package</button>
+            </div>
         </form>
     </div>
 </div>

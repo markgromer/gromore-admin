@@ -16,27 +16,28 @@ import requests as _requests
 log = logging.getLogger(__name__)
 
 
-def generate_google_ads(analysis, brand):
-    """Generate a complete Google Ads package: responsive search ad copy.
 
-    Returns dict with:
-        - headlines: list of 15 headlines (max 30 chars each)
-        - descriptions: list of 4 descriptions (max 90 chars each)
-        - sitelinks: list of 4 sitelink suggestions
-        - keywords_to_target: list of recommended keywords
-        - negative_keywords: list of negatives to add
-        - campaign_target: which campaign/ad group to apply to
-        - implementation: step-by-step paste instructions
-    """
+def generate_google_ads(analysis, brand, strategy=None):
+    """Generate a complete Google Ads package: responsive search ad copy, tailored to the selected strategy/objective."""
     api_key = _get_api_key()
     if not api_key:
         return None
 
     context = _build_ad_context(analysis, brand)
 
+    # Strategy-specific prompt guidance
+    strategy_map = {
+        "search": "Focus on high-intent search ads that drive direct leads or sales. Use best practices for Google Search campaigns.",
+        "display": "Focus on visual, awareness-driven ads for the Google Display Network. Use best practices for reach, retargeting, and brand recall.",
+        "performance_max": "Use Performance Max best practices: maximize conversions across all Google channels with automation. Include copy and creative guidance for multi-channel.",
+        "video": "Focus on YouTube video ads. Use best practices for storytelling, education, and brand lift. Include video script guidance if possible.",
+    }
+    strategy_text = strategy_map.get((strategy or '').lower(), "If the strategy is unclear, default to Search best practices.")
+
     system = (
-        "You are the AI ad copy engine inside GroMore, a platform for local service businesses. "
-        "Generate a complete Google Responsive Search Ad package ready to copy and paste.\n\n"
+        f"You are the AI ad copy engine inside GroMore, a platform for local service businesses. "
+        f"Generate a complete Google Ads package ready to copy and paste, tailored for the following objective: {strategy or 'Search'}\n\n"
+        f"Objective intent: {strategy_text}\n\n"
         "The business owner will paste these directly into Google Ads. Make every character count.\n\n"
         "Return ONLY valid JSON with this exact structure:\n"
         "{\n"
@@ -59,34 +60,35 @@ def generate_google_ads(analysis, brand):
         "- Sitelinks should point to logical pages (services, reviews, contact, areas served)\n"
         "- Implementation steps should tell them exactly: Campaign > Ad Group > Ads > New RSA > paste headline 1 here, etc.\n"
         "- Use sentence case for headlines, not ALL CAPS\n"
-        "- No generic filler. Every headline and description should earn its spot."
+        "- No generic filler. Every headline and description should earn its spot.\n"
+        "- Explain briefly why this strategy/objective is recommended for the current data and what results to expect.\n"
     )
 
     return _call_ai(api_key, system, context, "google_ads")
 
 
-def generate_facebook_ads(analysis, brand):
-    """Generate a complete Facebook/Instagram ad package.
 
-    Returns dict with:
-        - primary_text: the main ad copy (2-3 variations)
-        - headline: the headline below the image (2-3 variations)
-        - description: the description text (2-3 variations)
-        - cta_button: recommended CTA button type
-        - image_guidance: specific instructions for what image to use
-        - audience_suggestions: targeting recommendations
-        - campaign_target: which campaign to apply to
-        - implementation: step-by-step paste instructions
-    """
+def generate_facebook_ads(analysis, brand, strategy=None):
+    """Generate a complete Facebook/Instagram ad package, tailored to the selected strategy/objective."""
     api_key = _get_api_key()
     if not api_key:
         return None
 
     context = _build_ad_context(analysis, brand)
 
+    # Strategy-specific prompt guidance
+    strategy_map = {
+        "awareness": "Maximize reach and brand recall. Use best practices for Facebook Awareness campaigns. Explain when and why to invest in awareness.",
+        "engagement": "Drive likes, comments, shares, and social proof. Use best practices for Engagement campaigns.",
+        "leads": "Drive signups, form fills, or inquiries. Use best practices for Lead Generation campaigns.",
+        "sales": "Drive purchases, bookings, or direct sales. Use best practices for Sales/Conversion campaigns.",
+    }
+    strategy_text = strategy_map.get((strategy or '').lower(), "If the strategy is unclear, default to Awareness best practices.")
+
     system = (
-        "You are the AI ad copy engine inside GroMore, a platform for local service businesses. "
-        "Generate a complete Facebook/Instagram ad package ready to copy and paste.\n\n"
+        f"You are the AI ad copy engine inside GroMore, a platform for local service businesses. "
+        f"Generate a complete Facebook/Instagram ad package ready to copy and paste, tailored for the following objective: {strategy or 'Awareness'}\n\n"
+        f"Objective intent: {strategy_text}\n\n"
         "Return ONLY valid JSON with this exact structure:\n"
         "{\n"
         '  "campaign_target": "Which campaign this ad should go in (based on the data, or new campaign recommendation)",\n'
@@ -124,7 +126,8 @@ def generate_facebook_ads(analysis, brand):
         "- Implementation steps should be literal: 'Go to Ads Manager > Campaign Name > Ad Set > Create Ad > paste this in Primary Text'\n"
         "- No hashtags unless they're industry-standard\n"
         "- No emojis in headlines. Emojis OK in primary text if natural.\n"
-        "- Never use 'we' - the business owner is running this, use 'I/my' or their business name"
+        "- Never use 'we' - the business owner is running this, use 'I/my' or their business name\n"
+        "- Explain briefly why this strategy/objective is recommended for the current data and what results to expect.\n"
     )
 
     return _call_ai(api_key, system, context, "facebook_ads")
