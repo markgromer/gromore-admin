@@ -1,0 +1,450 @@
+{% extends "client/client_base.html" %}
+
+{% block title %}Local Rank Heatmap{% endblock %}
+
+{% block head %}
+<style>
+    .heatmap-grid {
+        display: grid;
+        gap: 4px;
+        max-width: 520px;
+        margin: 0 auto;
+    }
+    .heatmap-cell {
+        aspect-ratio: 1;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 1.1rem;
+        color: #fff;
+        cursor: default;
+        transition: transform .15s;
+        position: relative;
+        min-width: 0;
+    }
+    .heatmap-cell:hover {
+        transform: scale(1.08);
+        z-index: 2;
+    }
+    .heatmap-cell.rank-top { background: #22c55e; }
+    .heatmap-cell.rank-mid { background: #f59e0b; }
+    .heatmap-cell.rank-low { background: #ef4444; }
+    .heatmap-cell.rank-none { background: #d1d5db; color: #6b7280; }
+    .heatmap-cell.rank-center {
+        border: 3px solid #4f46e5;
+        box-shadow: 0 0 0 2px #fff;
+    }
+
+    .legend-item {
+        display: flex; align-items: center; gap: 6px; font-size: .82rem; color: #6b7280;
+    }
+    .legend-dot {
+        width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0;
+    }
+
+    .scan-history-item {
+        padding: 10px 14px;
+        border-radius: 10px;
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        cursor: pointer;
+        transition: background .15s, border-color .15s;
+    }
+    .scan-history-item:hover, .scan-history-item.active {
+        background: #eef2ff;
+        border-color: #a5b4fc;
+    }
+
+    .setup-card {
+        background: linear-gradient(135deg, #f0f4ff 0%, #faf5ff 100%);
+        border: 1px solid #e0e7ff;
+        border-radius: 14px;
+        padding: 2rem;
+    }
+
+    #scanSpinner {
+        display: none;
+    }
+    #scanSpinner.active {
+        display: inline-block;
+    }
+
+    .stat-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: .88rem;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-geo-alt me-2"></i>Local Rank Heatmap</h4>
+        <p class="text-muted mb-0">See where you rank in local search across your service area, just like Local Falcon.</p>
+    </div>
+</div>
+
+{% set has_location = brand.business_lat and brand.business_lng and brand.business_lat != 0 %}
+{% set has_api_key = brand.google_maps_api_key %}
+
+{% if not has_api_key %}
+<!-- No API Key -->
+<div class="setup-card text-center">
+    <i class="bi bi-key" style="font-size: 2.5rem; color: #6366f1;"></i>
+    <h5 class="mt-3">Google Maps API Key Required</h5>
+    <p class="text-muted mb-3">The heatmap uses Google's Places API to check your ranking at each grid point.<br>
+    Add your key in Connections to get started.</p>
+    <a href="{{ url_for('client.client_settings') }}" class="btn btn-primary">
+        <i class="bi bi-plug me-1"></i> Go to Connections
+    </a>
+    <div class="mt-3">
+        <small class="text-muted">You'll need: Places API (New) + Geocoding API enabled in Google Cloud Console.</small>
+    </div>
+</div>
+{% else %}
+
+<!-- Location Setup -->
+{% if not has_location %}
+<div class="setup-card mb-4">
+    <div class="row align-items-center">
+        <div class="col-md-7">
+            <h5 class="mb-2"><i class="bi bi-crosshair me-2"></i>Set Your Business Location</h5>
+            <p class="text-muted mb-3">Enter your business address so we know where to center the grid.</p>
+            <div class="input-group" style="max-width: 500px;">
+                <input type="text" class="form-control" id="addressInput"
+                       placeholder="123 Main St, Phoenix, AZ 85001" autocomplete="off">
+                <button class="btn btn-primary" type="button" id="geocodeBtn">
+                    <i class="bi bi-geo-alt-fill me-1"></i> Set Location
+                </button>
+            </div>
+            <div id="geocodeResult" class="mt-2" style="font-size:.88rem;"></div>
+        </div>
+        <div class="col-md-5 text-center mt-3 mt-md-0">
+            <i class="bi bi-pin-map" style="font-size: 4rem; color: #a5b4fc;"></i>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Scan Form -->
+<div class="card mb-4" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
+    <div class="card-body p-3 p-md-4">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-5">
+                <label class="form-label fw-medium mb-1" style="font-size:.88rem;">Keyword</label>
+                <input type="text" class="form-control" id="keywordInput"
+                       placeholder="e.g. plumber near me" autocomplete="off"
+                       {% if active_scan %}value="{{ active_scan.keyword }}"{% endif %}>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-medium mb-1" style="font-size:.88rem;">Radius (miles)</label>
+                <select class="form-select" id="radiusSelect">
+                    <option value="1" {% if active_scan and active_scan.radius_miles == 1 %}selected{% endif %}>1 mi</option>
+                    <option value="3" {% if active_scan and active_scan.radius_miles == 3 %}selected{% endif %}>3 mi</option>
+                    <option value="5" {% if not active_scan or active_scan.radius_miles == 5 %}selected{% endif %}>5 mi</option>
+                    <option value="10" {% if active_scan and active_scan.radius_miles == 10 %}selected{% endif %}>10 mi</option>
+                    <option value="15" {% if active_scan and active_scan.radius_miles == 15 %}selected{% endif %}>15 mi</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-medium mb-1" style="font-size:.88rem;">Grid</label>
+                <select class="form-select" id="gridSelect">
+                    <option value="4">4 x 4</option>
+                    <option value="5">5 x 5</option>
+                    <option value="6" selected>6 x 6</option>
+                    <option value="7">7 x 7</option>
+                    <option value="8">8 x 8</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-primary w-100" id="scanBtn" type="button"
+                        {% if not has_location %}disabled title="Set your business location first"{% endif %}>
+                    <span id="scanSpinner" class="spinner-border spinner-border-sm me-1" role="status"></span>
+                    <i class="bi bi-radar me-1" id="scanIcon"></i> Scan Rankings
+                </button>
+            </div>
+        </div>
+        {% if has_location %}
+        <div class="mt-2">
+            <small class="text-muted">
+                <i class="bi bi-crosshair me-1"></i>
+                Center: {{ "%.4f"|format(brand.business_lat) }}, {{ "%.4f"|format(brand.business_lng) }}
+                {% if brand.service_area %} ({{ brand.service_area }}){% endif %}
+                <a href="#" id="changeLocationLink" style="margin-left:8px;">Change location</a>
+            </small>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Location change form (hidden by default when location exists) -->
+<div class="card mb-4 {% if has_location %}d-none{% endif %}" id="locationChangeCard"
+     style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
+    <div class="card-body p-3 p-md-4">
+        <h6 class="mb-2"><i class="bi bi-crosshair me-1"></i> Update Business Location</h6>
+        <div class="input-group" style="max-width: 500px;">
+            <input type="text" class="form-control" id="addressInputAlt"
+                   placeholder="123 Main St, Phoenix, AZ 85001" autocomplete="off">
+            <button class="btn btn-primary" type="button" id="geocodeBtnAlt">
+                <i class="bi bi-geo-alt-fill me-1"></i> Update
+            </button>
+        </div>
+        <div id="geocodeResultAlt" class="mt-2" style="font-size:.88rem;"></div>
+    </div>
+</div>
+
+<!-- Results -->
+<div class="row">
+    <div class="col-lg-8 mb-4">
+        <div class="card" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
+            <div class="card-body p-3 p-md-4">
+                <div id="gridContainer">
+                    {% if active_scan and active_scan.results %}
+                    <div class="text-center mb-3">
+                        <h6 class="mb-1">"{{ active_scan.keyword }}"</h6>
+                        <small class="text-muted">{{ active_scan.radius_miles }} mile radius | {{ active_scan.grid_size }}x{{ active_scan.grid_size }} grid</small>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-grid-3x3" style="font-size: 3rem; color: #d1d5db;"></i>
+                        <h5 class="mt-3 text-muted">No scan yet</h5>
+                        <p class="text-muted">Enter a keyword and hit Scan to see your local rankings.</p>
+                    </div>
+                    {% endif %}
+                </div>
+                <div id="heatmapGrid" class="heatmap-grid"
+                     {% if active_scan %}style="grid-template-columns: repeat({{ active_scan.grid_size }}, 1fr);"{% endif %}>
+                    {% if active_scan and active_scan.results %}
+                    {% for cell in active_scan.results %}
+                    <div class="heatmap-cell {% if cell.rank >= 1 and cell.rank <= 3 %}rank-top{% elif cell.rank >= 4 and cell.rank <= 10 %}rank-mid{% elif cell.rank > 10 %}rank-low{% else %}rank-none{% endif %} {% if cell.row == (active_scan.grid_size // 2) and cell.col == (active_scan.grid_size // 2) %}rank-center{% endif %}"
+                         title="Rank {{ cell.rank if cell.rank > 0 else 'Not found' }} at ({{ cell.lat }}, {{ cell.lng }})">
+                        {{ cell.rank if cell.rank > 0 else '-' }}
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+                </div>
+
+                {% if active_scan and active_scan.results %}
+                <div id="statsBar" class="d-flex flex-wrap gap-2 justify-content-center mt-3">
+                    {% set ranked_cells = active_scan.results | selectattr('rank', '>', 0) | list %}
+                    <span class="stat-pill" style="background:#dcfce7; color:#166534;">
+                        Avg Rank: {{ active_scan.avg_rank }}
+                    </span>
+                    <span class="stat-pill" style="background:#e0e7ff; color:#3730a3;">
+                        Found: {{ ranked_cells | length }} / {{ active_scan.results | length }}
+                    </span>
+                    <span class="stat-pill" style="background:#dcfce7; color:#166534;">
+                        Top 3: {{ active_scan.results | selectattr('rank', '>=', 1) | selectattr('rank', '<=', 3) | list | length }}
+                    </span>
+                </div>
+                {% else %}
+                <div id="statsBar" class="d-flex flex-wrap gap-2 justify-content-center mt-3" style="display:none !important;"></div>
+                {% endif %}
+
+                <!-- Legend -->
+                <div class="d-flex flex-wrap gap-3 justify-content-center mt-3">
+                    <div class="legend-item"><div class="legend-dot" style="background:#22c55e;"></div> #1-3</div>
+                    <div class="legend-item"><div class="legend-dot" style="background:#f59e0b;"></div> #4-10</div>
+                    <div class="legend-item"><div class="legend-dot" style="background:#ef4444;"></div> #11-20</div>
+                    <div class="legend-item"><div class="legend-dot" style="background:#d1d5db;"></div> Not found</div>
+                    <div class="legend-item"><div class="legend-dot" style="background:#fff; border:2px solid #4f46e5;"></div> Your location</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scan History -->
+    <div class="col-lg-4 mb-4">
+        <div class="card" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
+            <div class="card-body p-3 p-md-4">
+                <h6 class="mb-3"><i class="bi bi-clock-history me-1"></i> Scan History</h6>
+                <div id="scanHistory">
+                    {% if scans %}
+                    {% for scan in scans %}
+                    <div class="scan-history-item mb-2 {% if loop.first %}active{% endif %}"
+                         data-scan-id="{{ scan.id }}" onclick="loadScan({{ scan.id }})">
+                        <div class="fw-semibold" style="font-size:.9rem;">{{ scan.keyword }}</div>
+                        <div class="d-flex justify-content-between align-items-center mt-1">
+                            <small class="text-muted">{{ scan.radius_miles }}mi | {{ scan.grid_size }}x{{ scan.grid_size }}</small>
+                            <small class="text-muted">
+                                {% if scan.avg_rank > 0 %}Avg #{{ scan.avg_rank }}{% else %}Not found{% endif %}
+                            </small>
+                        </div>
+                        <small class="text-muted" style="font-size:.75rem;">{{ scan.scanned_at[:16] }}</small>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="text-center py-3">
+                        <small class="text-muted">No scans yet. Run your first scan above.</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- How it works -->
+        <div class="card mt-3" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
+            <div class="card-body p-3 p-md-4">
+                <h6 class="mb-2"><i class="bi bi-info-circle me-1"></i> How It Works</h6>
+                <ul class="mb-0" style="font-size: .85rem; color: #4b5563; padding-left: 1.2rem;">
+                    <li>A grid of points is placed around your business location</li>
+                    <li>For each point, we search Google for your keyword</li>
+                    <li>Your ranking at each point is shown on the grid</li>
+                    <li>Green = top 3, Yellow = 4-10, Red = 11-20, Gray = not found</li>
+                    <li>The purple-bordered cell marks your business location</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Geocode handlers
+    function handleGeocode(inputId, resultId) {
+        var address = document.getElementById(inputId).value.trim();
+        if (!address) return;
+        var resultEl = document.getElementById(resultId);
+        resultEl.innerHTML = '<span class="text-primary"><i class="bi bi-hourglass-split"></i> Geocoding...</span>';
+
+        fetch('/client/heatmap/save-location', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({address: address})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.ok) {
+                resultEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> ' +
+                    data.formatted + ' (' + data.lat.toFixed(4) + ', ' + data.lng.toFixed(4) + ')</span>';
+                setTimeout(function() { location.reload(); }, 1000);
+            } else {
+                resultEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> ' + (data.error || 'Geocoding failed') + '</span>';
+            }
+        });
+    }
+
+    var geocodeBtn = document.getElementById('geocodeBtn');
+    if (geocodeBtn) geocodeBtn.addEventListener('click', function() { handleGeocode('addressInput', 'geocodeResult'); });
+
+    var geocodeBtnAlt = document.getElementById('geocodeBtnAlt');
+    if (geocodeBtnAlt) geocodeBtnAlt.addEventListener('click', function() { handleGeocode('addressInputAlt', 'geocodeResultAlt'); });
+
+    var changeLink = document.getElementById('changeLocationLink');
+    if (changeLink) {
+        changeLink.addEventListener('click', function(e) {
+            e.preventDefault();
+            document.getElementById('locationChangeCard').classList.remove('d-none');
+        });
+    }
+
+    // Scan handler
+    var scanBtn = document.getElementById('scanBtn');
+    if (scanBtn) {
+        scanBtn.addEventListener('click', function() {
+            var keyword = document.getElementById('keywordInput').value.trim();
+            if (!keyword) {
+                document.getElementById('keywordInput').focus();
+                return;
+            }
+            var radius = document.getElementById('radiusSelect').value;
+            var gridSize = parseInt(document.getElementById('gridSelect').value);
+
+            scanBtn.disabled = true;
+            document.getElementById('scanSpinner').classList.add('active');
+            document.getElementById('scanIcon').style.display = 'none';
+
+            fetch('/client/heatmap/scan', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({keyword: keyword, radius_miles: parseFloat(radius), grid_size: gridSize})
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                scanBtn.disabled = false;
+                document.getElementById('scanSpinner').classList.remove('active');
+                document.getElementById('scanIcon').style.display = '';
+
+                if (!data.ok) {
+                    alert(data.error || 'Scan failed');
+                    return;
+                }
+                renderGrid(data.results, gridSize, keyword, radius);
+                renderStats(data.avg_rank, data.found, data.total, data.results);
+                // reload page to update history
+                setTimeout(function() { location.reload(); }, 200);
+            })
+            .catch(function() {
+                scanBtn.disabled = false;
+                document.getElementById('scanSpinner').classList.remove('active');
+                document.getElementById('scanIcon').style.display = '';
+                alert('Network error. Check your connection and try again.');
+            });
+        });
+    }
+});
+
+function renderGrid(results, gridSize, keyword, radius) {
+    var container = document.getElementById('gridContainer');
+    container.innerHTML = '<div class="text-center mb-3"><h6 class="mb-1">"' + keyword +
+        '"</h6><small class="text-muted">' + radius + ' mile radius | ' + gridSize + 'x' + gridSize + ' grid</small></div>';
+
+    var grid = document.getElementById('heatmapGrid');
+    grid.style.gridTemplateColumns = 'repeat(' + gridSize + ', 1fr)';
+    grid.innerHTML = '';
+
+    var center = Math.floor(gridSize / 2);
+    results.forEach(function(cell) {
+        var div = document.createElement('div');
+        div.className = 'heatmap-cell';
+        if (cell.rank >= 1 && cell.rank <= 3) div.className += ' rank-top';
+        else if (cell.rank >= 4 && cell.rank <= 10) div.className += ' rank-mid';
+        else if (cell.rank > 10) div.className += ' rank-low';
+        else div.className += ' rank-none';
+        if (cell.row === center && cell.col === center) div.className += ' rank-center';
+        div.textContent = cell.rank > 0 ? cell.rank : '-';
+        div.title = 'Rank ' + (cell.rank > 0 ? cell.rank : 'Not found') +
+                    ' at (' + cell.lat.toFixed(4) + ', ' + cell.lng.toFixed(4) + ')';
+        grid.appendChild(div);
+    });
+}
+
+function renderStats(avgRank, found, total, results) {
+    var bar = document.getElementById('statsBar');
+    bar.style.display = '';
+    var top3 = results.filter(function(r) { return r.rank >= 1 && r.rank <= 3; }).length;
+    bar.innerHTML =
+        '<span class="stat-pill" style="background:#dcfce7; color:#166534;">Avg Rank: ' + avgRank + '</span>' +
+        '<span class="stat-pill" style="background:#e0e7ff; color:#3730a3;">Found: ' + found + ' / ' + total + '</span>' +
+        '<span class="stat-pill" style="background:#dcfce7; color:#166534;">Top 3: ' + top3 + '</span>';
+}
+
+function loadScan(scanId) {
+    document.querySelectorAll('.scan-history-item').forEach(function(el) {
+        el.classList.remove('active');
+    });
+    var clicked = document.querySelector('[data-scan-id="' + scanId + '"]');
+    if (clicked) clicked.classList.add('active');
+
+    fetch('/client/heatmap/scan/' + scanId)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (!data.ok) return;
+        var scan = data.scan;
+        var gridSize = scan.grid_size || 6;
+        renderGrid(scan.results, gridSize, scan.keyword, scan.radius_miles);
+        renderStats(scan.avg_rank,
+            scan.results.filter(function(r) { return r.rank > 0; }).length,
+            scan.results.length, scan.results);
+    });
+}
+</script>
+{% endblock %}

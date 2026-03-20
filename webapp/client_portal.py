@@ -207,6 +207,12 @@ def client_actions():
     except Exception as e:
         error = str(e)
 
+    # Generate a stable key for each action so dismissal persists
+    for action in actions:
+        action["key"] = action.get("title", "").strip().lower().replace(" ", "_")[:80]
+
+    dismissed = db.get_dismissed_actions(brand_id, month)
+
     return render_template(
         "client_actions.html",
         brand=brand,
@@ -215,9 +221,38 @@ def client_actions():
         run_analysis=run_analysis,
         ai_analysis=ai_analysis,
         actions=actions,
+        dismissed=dismissed,
         error=error,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
+
+
+@client_bp.route("/actions/dismiss", methods=["POST"])
+@client_login_required
+def client_actions_dismiss():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    data = request.get_json(silent=True) or {}
+    action_key = (data.get("action_key") or "").strip()
+    month = data.get("month") or datetime.now().strftime("%Y-%m")
+    if not action_key:
+        return jsonify({"error": "Missing action_key"}), 400
+    db.dismiss_action(brand_id, month, action_key)
+    return jsonify({"ok": True})
+
+
+@client_bp.route("/actions/restore", methods=["POST"])
+@client_login_required
+def client_actions_restore():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    data = request.get_json(silent=True) or {}
+    action_key = (data.get("action_key") or "").strip()
+    month = data.get("month") or datetime.now().strftime("%Y-%m")
+    if not action_key:
+        return jsonify({"error": "Missing action_key"}), 400
+    db.restore_action(brand_id, month, action_key)
+    return jsonify({"ok": True})
 
 
 @client_bp.route("/actions/chat", methods=["POST"])
@@ -2163,6 +2198,18 @@ def client_save_google_drive():
     return redirect(url_for("client.client_settings"))
 
 
+@client_bp.route("/settings/maps-api", methods=["POST"])
+@client_login_required
+def client_save_maps_api():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    api_key = (request.form.get("google_maps_api_key") or "").strip()[:200]
+    if api_key:
+        db.update_brand_text_field(brand_id, "google_maps_api_key", api_key)
+    flash("Google Maps API key saved.", "success")
+    return redirect(url_for("client.client_settings"))
+
+
 # ── Context processor ──
 
 @client_bp.context_processor
@@ -2194,6 +2241,132 @@ def inject_client_globals():
         "assistant_model_chat": assistant_model_chat,
         "assistant_models": [m for m in ALLOWED_AI_MODELS if m],
     }
+
+
+# ── Local Rank Heatmap ──
+
+@client_bp.route("/heatmap")
+@client_login_required
+def client_heatmap():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+    scans = db.get_heatmap_scans(brand_id, limit=20)
+    # parse results_json for the most recent scan to pre-render
+    active_scan = None
+    if scans:
+        import json as _json
+        top = scans[0]
+        try:
+            top["results"] = _json.loads(top.get("results_json") or "[]")
+        except Exception:
+            top["results"] = []
+        active_scan = top
+    return render_template(
+        "client_heatmap.html",
+        brand=brand,
+        scans=scans,
+        active_scan=active_scan,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/heatmap/scan", methods=["POST"])
+@client_login_required
+def client_heatmap_scan():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    data = request.get_json(silent=True) or {}
+    keyword = (data.get("keyword") or "").strip()
+    radius = float(data.get("radius_miles") or 5)
+    grid_size = int(data.get("grid_size") or 6)
+    if grid_size < 3:
+        grid_size = 3
+    if grid_size > 10:
+        grid_size = 10
+
+    if not keyword:
+        return jsonify(ok=False, error="Keyword is required"), 400
+
+    api_key = (brand.get("google_maps_api_key") or "").strip()
+    if not api_key:
+        return jsonify(ok=False, error="Google Maps API key not configured. Add it in Connections."), 400
+
+    lat = float(brand.get("business_lat") or 0)
+    lng = float(brand.get("business_lng") or 0)
+    if lat == 0 and lng == 0:
+        return jsonify(ok=False, error="Business location not set. Set your address on the heatmap page first."), 400
+
+    from webapp.heatmap import generate_grid, scan_grid
+    grid_points = generate_grid(lat, lng, radius, grid_size)
+    business_name = brand.get("display_name", "")
+    place_id = brand.get("google_place_id") or None
+    results = scan_grid(api_key, keyword, business_name, grid_points,
+                        place_id=place_id)
+
+    ranked = [r for r in results if r["rank"] > 0]
+    avg_rank = round(sum(r["rank"] for r in ranked) / len(ranked), 1) if ranked else 0
+
+    import json as _json
+    db.save_heatmap_scan(brand_id, keyword, grid_size, radius, lat, lng,
+                         _json.dumps(results), avg_rank)
+
+    return jsonify(ok=True, results=results, avg_rank=avg_rank,
+                   found=len(ranked), total=len(results))
+
+
+@client_bp.route("/heatmap/save-location", methods=["POST"])
+@client_login_required
+def client_heatmap_save_location():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    data = request.get_json(silent=True) or {}
+    address = (data.get("address") or "").strip()
+
+    if not address:
+        return jsonify(ok=False, error="Address is required"), 400
+
+    api_key = (brand.get("google_maps_api_key") or "").strip()
+    if not api_key:
+        return jsonify(ok=False, error="Google Maps API key not configured. Add it in Connections."), 400
+
+    from webapp.heatmap import geocode_address
+    result = geocode_address(api_key, address)
+    if not result:
+        return jsonify(ok=False, error="Could not geocode that address. Check spelling and try again."), 400
+
+    db.update_brand(brand_id, {
+        "business_lat": result["lat"],
+        "business_lng": result["lng"],
+    })
+
+    return jsonify(ok=True, lat=result["lat"], lng=result["lng"],
+                   formatted=result["formatted"])
+
+
+@client_bp.route("/heatmap/scan/<int:scan_id>")
+@client_login_required
+def client_heatmap_view_scan(scan_id):
+    db = _get_db()
+    scan = db.get_heatmap_scan(scan_id)
+    if not scan or scan["brand_id"] != session["client_brand_id"]:
+        return jsonify(ok=False, error="Scan not found"), 404
+    import json as _json
+    try:
+        scan["results"] = _json.loads(scan.get("results_json") or "[]")
+    except Exception:
+        scan["results"] = []
+    return jsonify(ok=True, scan=scan)
 
 
 # ── Help Center ──

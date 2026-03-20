@@ -175,10 +175,31 @@ class WebDB:
                 updated_at TEXT DEFAULT (datetime('now')),
                 FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
             );
+            CREATE TABLE IF NOT EXISTS dismissed_actions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                month TEXT NOT NULL,
+                action_key TEXT NOT NULL,
+                dismissed_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(brand_id, month, action_key),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS heatmap_scans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                keyword TEXT NOT NULL,
+                grid_size INTEGER DEFAULT 6,
+                radius_miles REAL DEFAULT 5.0,
+                center_lat REAL NOT NULL,
+                center_lng REAL NOT NULL,
+                results_json TEXT NOT NULL DEFAULT '[]',
+                avg_rank REAL DEFAULT 0,
+                scanned_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
         """)
         conn.commit()
-
-        # ── Migrations: add columns that may not exist on older DBs ──
         brand_columns = {r[1] for r in conn.execute("PRAGMA table_info(brands)").fetchall()}
         new_brand_cols = [
             ("brand_voice", "TEXT DEFAULT ''"),
@@ -208,6 +229,10 @@ class WebDB:
             ("google_drive_folder_id", "TEXT DEFAULT ''"),
             ("google_drive_sheet_id", "TEXT DEFAULT ''"),
             ("facebook_page_id", "TEXT DEFAULT ''"),
+            ("business_lat", "REAL DEFAULT 0"),
+            ("business_lng", "REAL DEFAULT 0"),
+            ("google_place_id", "TEXT DEFAULT ''"),
+            ("google_maps_api_key", "TEXT DEFAULT ''"),
         ]
         for col_name, col_def in new_brand_cols:
             if col_name not in brand_columns:
@@ -873,3 +898,70 @@ class WebDB:
             report_id = cur.lastrowid
         conn.close()
         return report_id
+
+    # ── Dismissed Actions ──
+
+    def get_dismissed_actions(self, brand_id, month):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT action_key FROM dismissed_actions WHERE brand_id = ? AND month = ?",
+            (brand_id, month),
+        ).fetchall()
+        conn.close()
+        return {r["action_key"] for r in rows}
+
+    def dismiss_action(self, brand_id, month, action_key):
+        conn = self._conn()
+        conn.execute(
+            "INSERT OR IGNORE INTO dismissed_actions (brand_id, month, action_key) VALUES (?, ?, ?)",
+            (brand_id, month, action_key),
+        )
+        conn.commit()
+        conn.close()
+
+    def restore_action(self, brand_id, month, action_key):
+        conn = self._conn()
+        conn.execute(
+            "DELETE FROM dismissed_actions WHERE brand_id = ? AND month = ? AND action_key = ?",
+            (brand_id, month, action_key),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_brand_briefs(self, brand_id, limit=12):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM ai_briefs WHERE brand_id = ? ORDER BY month DESC LIMIT ?",
+            (brand_id, limit),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    # ── Heatmap Scans ──
+
+    def save_heatmap_scan(self, brand_id, keyword, grid_size, radius_miles,
+                          center_lat, center_lng, results_json, avg_rank):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO heatmap_scans
+               (brand_id, keyword, grid_size, radius_miles, center_lat, center_lng, results_json, avg_rank)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (brand_id, keyword, grid_size, radius_miles, center_lat, center_lng, results_json, avg_rank),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_heatmap_scans(self, brand_id, limit=20):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM heatmap_scans WHERE brand_id = ? ORDER BY scanned_at DESC LIMIT ?",
+            (brand_id, limit),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_heatmap_scan(self, scan_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM heatmap_scans WHERE id = ?", (scan_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None

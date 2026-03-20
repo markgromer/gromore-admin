@@ -65,16 +65,35 @@
 
 {% if actions %}
 
+{% set active_actions = [] %}
+{% set done_actions = [] %}
+{% for action in actions %}
+    {% if action.key in dismissed %}
+        {% if done_actions.append(action) %}{% endif %}
+    {% else %}
+        {% if active_actions.append(action) %}{% endif %}
+    {% endif %}
+{% endfor %}
+
+{% if active_actions %}
 <div class="mb-3">
     <small class="text-muted">
-        {{ actions | length }} high-impact action{{ 's' if actions | length != 1 else '' }} for {{ month }}, ranked by expected ROI.
+        {{ active_actions | length }} action{{ 's' if active_actions | length != 1 else '' }} remaining for {{ month }}.
     </small>
 </div>
 
-{% for action in actions %}
-<div class="action-card priority-{{ action.priority_class }}">
+{% for action in active_actions %}
+<div class="action-card priority-{{ action.priority_class }}" id="action-{{ loop.index }}" style="transition: opacity .3s, max-height .4s; overflow:hidden;">
     <div class="d-flex justify-content-between align-items-start mb-2">
-        <div class="action-title" style="font-size: 1.1rem;">{{ action.title }}</div>
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-outline-success done-btn" type="button"
+                    title="Mark as done"
+                    data-action-key="{{ action.key }}" data-month="{{ month }}"
+                    style="width:32px; height:32px; border-radius:50%; padding:0; display:flex; align-items:center; justify-content:center;">
+                <i class="bi bi-check-lg"></i>
+            </button>
+            <div class="action-title" style="font-size: 1.1rem;">{{ action.title }}</div>
+        </div>
         <span class="badge bg-{{ action.priority_class }}">{{ action.priority }}</span>
     </div>
 
@@ -115,6 +134,40 @@
     {% endif %}
 </div>
 {% endfor %}
+{% else %}
+<div class="text-center py-4 mb-3">
+    <i class="bi bi-check-circle" style="font-size: 2.5rem; color: #10b981;"></i>
+    <h5 class="mt-2" style="color: #10b981;">All caught up!</h5>
+    <p class="text-muted mb-0">You've completed all action items for {{ month }}.</p>
+</div>
+{% endif %}
+
+{% if done_actions %}
+<div class="mt-4 mb-3">
+    <button class="btn btn-sm btn-outline-secondary" type="button"
+            data-bs-toggle="collapse" data-bs-target="#completedSection">
+        <i class="bi bi-check-circle me-1"></i> Completed ({{ done_actions | length }})
+    </button>
+    <div class="collapse mt-2" id="completedSection">
+        {% for action in done_actions %}
+        <div class="action-card" style="opacity:.5; border-left: 3px solid #10b981;">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-sm btn-outline-secondary restore-btn" type="button"
+                            title="Restore"
+                            data-action-key="{{ action.key }}" data-month="{{ month }}"
+                            style="width:28px; height:28px; border-radius:50%; padding:0; display:flex; align-items:center; justify-content:center; font-size:.75rem;">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                    </button>
+                    <span style="text-decoration: line-through; color: #9ca3af;">{{ action.title }}</span>
+                </div>
+                <span class="badge bg-success" style="font-size:.7rem;">Done</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 
 <div class="metric-card mt-4 mb-3">
     <h6><i class="bi bi-cpu"></i> How GroMore Builds Your Action Plan</h6>
@@ -136,4 +189,53 @@
 {% endif %}
 {% endif %}
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.done-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var key = this.dataset.actionKey;
+            var month = this.dataset.month;
+            var card = this.closest('.action-card');
+            card.style.opacity = '0.3';
+            card.style.pointerEvents = 'none';
+            fetch('/client/actions/dismiss', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action_key: key, month: month})
+            }).then(function(r) {
+                if (r.ok) {
+                    card.style.maxHeight = card.scrollHeight + 'px';
+                    requestAnimationFrame(function() {
+                        card.style.maxHeight = '0';
+                        card.style.marginBottom = '0';
+                        card.style.paddingTop = '0';
+                        card.style.paddingBottom = '0';
+                    });
+                    setTimeout(function() { location.reload(); }, 400);
+                } else {
+                    card.style.opacity = '1';
+                    card.style.pointerEvents = '';
+                }
+            });
+        });
+    });
+
+    document.querySelectorAll('.restore-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var key = this.dataset.actionKey;
+            var month = this.dataset.month;
+            var card = this.closest('.action-card');
+            card.style.opacity = '0.2';
+            fetch('/client/actions/restore', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action_key: key, month: month})
+            }).then(function(r) {
+                if (r.ok) location.reload();
+                else card.style.opacity = '0.5';
+            });
+        });
+    });
+});
+</script>
 {% endblock %}
