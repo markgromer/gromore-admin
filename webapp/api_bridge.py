@@ -278,17 +278,25 @@ def _get_page_access_token(page_id, user_access_token):
             "https://graph.facebook.com/v21.0/me/accounts",
             params={
                 "access_token": user_access_token,
-                "fields": "id,access_token",
+                "fields": "id,name,access_token",
             },
             timeout=15,
         )
         if resp.status_code == 200:
-            for page in resp.json().get("data", []):
+            pages = resp.json().get("data", [])
+            log.info("me/accounts returned %d pages for page_id=%s", len(pages), page_id)
+            for page in pages:
+                log.info("  Page: id=%s name=%s", page.get("id"), page.get("name"))
                 if page.get("id") == page_id:
+                    log.info("  -> Matched! Using page token.")
                     return page.get("access_token", user_access_token)
-    except Exception:
-        pass
+            log.warning("Page %s not found in me/accounts (%d pages). Token may lack pages_show_list permission.", page_id, len(pages))
+        else:
+            log.warning("me/accounts HTTP %s: %s", resp.status_code, resp.text[:200])
+    except Exception as e:
+        log.warning("me/accounts exception: %s", e)
     # Fall back to user token if we can't get a page token
+    log.warning("Falling back to user token for page %s (insights will likely fail)", page_id)
     return user_access_token
 
 
@@ -765,6 +773,7 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
     import requests
 
     base = f"https://graph.facebook.com/v21.0/{page_id}"
+    log.info("_pull_meta_organic: page_id=%s, range=%s to %s, token_len=%d", page_id, start_date, end_date, len(access_token or ""))
 
     # ── Page-level info (followers, fan count) ──
     page_resp = requests.get(
@@ -864,18 +873,10 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
                                 elif isinstance(v, (int, float)):
                                     total += v
                             insights_data[entry.get("name", "")] = total
-                except Exception:
-                    pass
-                metric_name = entry.get("name", "")
-                # Sum all daily values for the period
-                total = 0
-                for val in entry.get("values", []):
-                    v = val.get("value", 0)
-                    if isinstance(v, dict):
-                        total += sum(v.values())
-                    elif isinstance(v, (int, float)):
-                        total += v
-                insights_data[metric_name] = total
+                    else:
+                        log.warning("FB single metric %s HTTP %s: %s", metric, single_resp.status_code, single_resp.text[:200])
+                except Exception as exc:
+                    log.warning("FB single metric %s exception: %s", metric, exc)
     except Exception as e:
         log.warning("FB page insights exception: %s", e)
 
