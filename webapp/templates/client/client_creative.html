@@ -393,6 +393,7 @@
     const imagePreview = document.getElementById('imagePreview');
     const uploadPlaceholder = document.getElementById('uploadPlaceholder');
     const removeBtn = document.getElementById('removeImage');
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     let selectedFile = null;
     let selectedFormat = 'facebook_feed';
 
@@ -470,10 +471,15 @@
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Writing...';
 
         const fd = new FormData();
+        if (csrfToken) fd.append('csrf_token', csrfToken);
         fd.append('description', desc);
         fd.append('ad_format', selectedFormat);
 
-        fetch("{{ url_for('client.client_creative_ai_copy') }}", { method: 'POST', body: fd })
+        fetch("{{ url_for('client.client_creative_ai_copy') }}", {
+            method: 'POST',
+            body: fd,
+            headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {}
+        })
         .then(r => {
             const ct = r.headers.get('content-type') || '';
             if (!ct.includes('application/json')) throw new Error('Server error (' + r.status + '). Try again.');
@@ -508,6 +514,7 @@
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generating...';
 
         const fd = new FormData();
+        if (csrfToken) fd.append('csrf_token', csrfToken);
         fd.append('image', selectedFile);
         fd.append('headline', headline);
         fd.append('body_text', document.getElementById('bodyText').value.trim());
@@ -515,7 +522,11 @@
         fd.append('ad_format', selectedFormat);
         fd.append('image_description', document.getElementById('imageDescription').value.trim());
 
-        fetch("{{ url_for('client.client_creative_generate') }}", { method: 'POST', body: fd })
+        fetch("{{ url_for('client.client_creative_generate') }}", {
+            method: 'POST',
+            body: fd,
+            headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {}
+        })
         .then(r => {
             const ct = r.headers.get('content-type') || '';
             if (!ct.includes('application/json')) throw new Error('Server error (' + r.status + '). Check logs or try a smaller image.');
