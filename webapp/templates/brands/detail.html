@@ -128,6 +128,18 @@
                         {% endif %}
                     </div>
                 </div>
+
+                <!-- Facebook Page ID -->
+                <div class="mb-3 mt-3">
+                    <label class="form-label small text-muted mb-1">Facebook Page ID (for organic tracking)</label>
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control" value="{{ brand.facebook_page_id or '' }}"
+                               id="facebook_page_id" placeholder="e.g. 123456789012345">
+                        <button class="btn btn-outline-secondary" type="button" data-brand-id="{{ brand.id }}"
+                                onclick="saveApiField(this.dataset.brandId, 'facebook_page_id')">Save</button>
+                    </div>
+                    <small class="text-muted">Auto-detected on Meta connect. Paste manually if not detected.</small>
+                </div>
             </div>
         </div>
     </div>

@@ -472,6 +472,8 @@ def create_app():
             seo = {}
             google_ads = {}
 
+        fb_organic = analysis.get("facebook_organic") or {} if analysis else {}
+
         return render_template(
             "brands/insights.html",
             brand=brand,
@@ -481,6 +483,7 @@ def create_app():
             suggestions=suggestions,
             seo=seo,
             google_ads=google_ads,
+            fb_organic=fb_organic,
             competitor_watch=competitor_watch,
             seo_actions=seo_actions,
             google_ads_actions=google_ads_actions,

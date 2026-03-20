@@ -10,6 +10,7 @@
     <div class="d-flex gap-2">
         <a href="#seo" class="btn btn-outline-secondary btn-sm">SEO</a>
         <a href="#google-ads" class="btn btn-outline-secondary btn-sm">Google Ads</a>
+        <a href="#facebook-organic" class="btn btn-outline-secondary btn-sm">FB Organic</a>
         <a href="#competitors" class="btn btn-outline-secondary btn-sm">Competitors</a>
         <a href="#ai-plan" class="btn btn-outline-primary btn-sm">AI Plan</a>
     </div>
@@ -118,6 +119,63 @@
                 </div>
                 {% else %}
                 <div class="text-muted">No Google Ads campaign analysis yet. Connect Google Ads and generate this month.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12" id="facebook-organic">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong><i class="bi bi-facebook"></i> Facebook Organic Performance</strong>
+                <span class="badge bg-light text-dark border">{{ month }}</span>
+            </div>
+            <div class="card-body">
+                {% set fb_m = fb_organic.get('metrics', {}) if fb_organic else {} %}
+                {% if fb_m %}
+                <div class="row g-3 mb-3">
+                    <div class="col-md-2"><div class="border rounded p-2"><div class="small text-muted">Followers</div><div class="fw-semibold">{{ "{:,}".format(fb_m.followers or 0) }}</div></div></div>
+                    <div class="col-md-2"><div class="border rounded p-2"><div class="small text-muted">Organic Impressions</div><div class="fw-semibold">{{ "{:,}".format(fb_m.organic_impressions or 0) }}</div></div></div>
+                    <div class="col-md-2"><div class="border rounded p-2"><div class="small text-muted">Engaged Users</div><div class="fw-semibold">{{ "{:,}".format(fb_m.engaged_users or 0) }}</div></div></div>
+                    <div class="col-md-2"><div class="border rounded p-2"><div class="small text-muted">Engagements</div><div class="fw-semibold">{{ "{:,}".format(fb_m.post_engagements or 0) }}</div></div></div>
+                    <div class="col-md-2"><div class="border rounded p-2"><div class="small text-muted">Engagement Rate</div><div class="fw-semibold">{{ fb_m.engagement_rate or 0 }}%</div></div></div>
+                    <div class="col-md-2"><div class="border rounded p-2"><div class="small text-muted">Net New Fans</div><div class="fw-semibold">{{ fb_m.net_fans or 0 }}</div></div></div>
+                </div>
+
+                {% set top_posts = fb_organic.get('top_posts', []) if fb_organic else [] %}
+                {% if top_posts %}
+                <h6 class="mb-2">Top Posts</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th style="max-width:300px">Post</th>
+                                <th>Type</th>
+                                <th>Impressions</th>
+                                <th>Likes</th>
+                                <th>Comments</th>
+                                <th>Shares</th>
+                                <th>Engagement</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for post in top_posts[:10] %}
+                            <tr>
+                                <td style="max-width:300px" class="text-truncate">{{ (post.message or 'No text')[:80] }}</td>
+                                <td>{{ post.type or 'post' }}</td>
+                                <td>{{ "{:,}".format(post.impressions or 0) }}</td>
+                                <td>{{ post.likes or 0 }}</td>
+                                <td>{{ post.comments or 0 }}</td>
+                                <td>{{ post.shares or 0 }}</td>
+                                <td>{{ post.engagement_rate or 0 }}%</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+                {% else %}
+                <div class="text-muted">No Facebook organic data yet. Connect Meta and set the Facebook Page ID in brand settings, then regenerate the report.</div>
                 {% endif %}
             </div>
         </div>
