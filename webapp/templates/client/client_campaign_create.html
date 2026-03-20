@@ -77,7 +77,9 @@
                             Best for capturing people who are ready to buy right now.
                         </p>
                         {% if not has_google %}
-                        <div class="mt-2 text-muted" style="font-size: .8rem;">Not connected</div>
+                        <div class="mt-2" style="font-size: .8rem;">
+                            <span class="text-danger fw-semibold">Not connected</span>
+                        </div>
                         {% endif %}
                     </div>
                 </div>
@@ -90,11 +92,57 @@
                             Great for building awareness and generating leads.
                         </p>
                         {% if not has_meta %}
-                        <div class="mt-2 text-muted" style="font-size: .8rem;">Not connected</div>
+                        <div class="mt-2" style="font-size: .8rem;">
+                            <span class="text-danger fw-semibold">Not connected</span>
+                        </div>
                         {% endif %}
                     </div>
                 </div>
             </div>
+
+            {% if not has_google and not has_meta %}
+            <div class="card mt-4 border-0" style="background: #fffbeb; border-radius: 10px;">
+                <div class="card-body">
+                    <h6 class="mb-2"><i class="bi bi-lightbulb text-warning"></i> Need to connect your ad accounts first?</h6>
+                    <p style="font-size: .88rem; color: #4b5563; margin-bottom: .75rem;">Before you can launch campaigns, you need to connect at least one ad platform. Here's how:</p>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="p-3" style="background: #fff; border-radius: 8px;">
+                                <strong style="font-size: .9rem;"><i class="bi bi-google text-primary"></i> Google Ads Setup</strong>
+                                <ol style="font-size: .84rem; color: #374151; margin-bottom: .5rem; padding-left: 1.2rem;">
+                                    <li>Go to <a href="{{ url_for('client.client_settings') }}">Settings</a> and click <strong>Connect Google Account</strong></li>
+                                    <li>Sign in and grant access to Google Ads</li>
+                                    <li>Enter your <strong>Google Ads Customer ID</strong> (found at the top of your <a href="https://ads.google.com" target="_blank">Google Ads dashboard</a>, format: 123-456-7890)</li>
+                                </ol>
+                                <a href="{{ url_for('client.client_settings') }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-gear me-1"></i> Go to Settings
+                                </a>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="p-3" style="background: #fff; border-radius: 8px;">
+                                <strong style="font-size: .9rem;"><i class="bi bi-meta" style="color:#0081fb;"></i> Meta Ads Setup</strong>
+                                <ol style="font-size: .84rem; color: #374151; margin-bottom: .5rem; padding-left: 1.2rem;">
+                                    <li>Go to <a href="{{ url_for('client.client_settings') }}">Settings</a> and click <strong>Connect Meta Account</strong></li>
+                                    <li>Sign in with Facebook and select your ad account</li>
+                                    <li>Your account ID will be saved automatically</li>
+                                </ol>
+                                <a href="{{ url_for('client.client_settings') }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-gear me-1"></i> Go to Settings
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% elif not has_google or not has_meta %}
+            <div class="mt-3" style="font-size: .85rem; color: #6b7280;">
+                <i class="bi bi-info-circle"></i>
+                {% if not has_google %}Google Ads not connected yet.{% endif %}
+                {% if not has_meta %}Meta Ads not connected yet.{% endif %}
+                <a href="{{ url_for('client.client_settings') }}">Connect in Settings</a>
+            </div>
+            {% endif %}
 
             <div class="mt-4 text-end">
                 <button class="btn btn-primary" id="step1Next" disabled onclick="goToStep(2)">
@@ -185,10 +233,16 @@
     </div>
 
     <div id="configWarning" class="alert alert-warning mt-3" style="display: none; font-size: .85rem;">
-        <i class="bi bi-exclamation-triangle"></i>
-        <strong>Not ready to launch:</strong>
-        <span id="configWarningText"></span>
-        <br>You can still <strong>Save as Draft</strong> and launch later once everything is connected.
+        <div class="d-flex align-items-start gap-2">
+            <i class="bi bi-exclamation-triangle mt-1" style="font-size: 1.1rem;"></i>
+            <div style="flex: 1;">
+                <strong>Not ready to launch yet.</strong> A few things need to be set up first:
+                <div id="configSteps" class="mt-2"></div>
+                <div class="mt-2">
+                    You can <strong>Save as Draft</strong> now and come back to launch once everything is connected.
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="alert alert-info mt-3" style="font-size: .85rem;">
@@ -469,14 +523,38 @@ function checkConfig() {
         if (!selectedPlatform) return;
         const config = data[selectedPlatform];
         const warningEl = document.getElementById('configWarning');
-        const warningText = document.getElementById('configWarningText');
+        const stepsEl = document.getElementById('configSteps');
         if (config && !config.ready) {
-            warningText.textContent = config.missing.join(', ') + '.';
+            let html = '<ol style="margin: 0; padding-left: 1.2rem;">';
+            const settingsUrl = '{{ url_for("client.client_settings") }}';
+            config.missing.forEach(function(item) {
+                if (item.includes('OAuth')) {
+                    html += '<li><a href="' + settingsUrl + '"><strong>Connect your ' +
+                        (selectedPlatform === 'google' ? 'Google' : 'Meta') +
+                        ' account</strong></a> in Settings</li>';
+                } else if (item.includes('Customer ID')) {
+                    html += '<li><strong>Enter your Google Ads Customer ID</strong> ' +
+                        '(find it at the top-right of <a href="https://ads.google.com" target="_blank">ads.google.com</a>, ' +
+                        'format: 123-456-7890) then save it in <a href="' + settingsUrl + '">Settings</a></li>';
+                } else if (item.includes('Ad Account ID')) {
+                    html += '<li><strong>Enter your Meta Ad Account ID</strong> ' +
+                        '(find it in <a href="https://business.facebook.com/settings" target="_blank">Meta Business Settings</a>) ' +
+                        'then save it in <a href="' + settingsUrl + '">Settings</a></li>';
+                } else if (item.includes('Developer Token')) {
+                    html += '<li><strong>Developer Token needed</strong> - your agency admin sets this in the admin panel under Settings > Google Ads API. ' +
+                        'Contact your account manager if you see this.</li>';
+                } else {
+                    html += '<li>' + escHtml(item) + '</li>';
+                }
+            });
+            html += '</ol>';
+            stepsEl.innerHTML = html;
             warningEl.style.display = 'block';
             document.getElementById('launchBtn').classList.add('disabled');
-            document.getElementById('launchBtn').setAttribute('title', 'Missing configuration - see warning below');
+            document.getElementById('launchBtn').setAttribute('title', 'Missing configuration - see setup steps below');
         } else {
             warningEl.style.display = 'none';
+            stepsEl.innerHTML = '';
             document.getElementById('launchBtn').classList.remove('disabled');
             document.getElementById('launchBtn').removeAttribute('title');
         }
