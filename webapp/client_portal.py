@@ -316,12 +316,16 @@ def _client_assistant_chat_handler(payload):
             "analysis_error": analysis_error,
         }
 
+        from webapp.ai_assistant import DEFAULT_CHAT_SYSTEM_PROMPT
         assistant_reply = chat_with_jarvis(
             api_key=api_key,
             model=ai_model,
             context=context,
             messages=messages,
-            admin_system_prompt=db.get_setting("ai_chat_system_prompt", "").strip(),
+            admin_system_prompt=(
+                db.get_setting("ai_chat_system_prompt", "").strip()
+                or DEFAULT_CHAT_SYSTEM_PROMPT
+            ),
         )
         assistant_reply = (assistant_reply or "").strip()
         if assistant_reply:

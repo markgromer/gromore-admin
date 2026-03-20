@@ -111,7 +111,8 @@ def create_app():
     # Optional AI config
     app.config["OPENAI_API_KEY"] = _cfg("openai_api_key", "OPENAI_API_KEY")
     app.config["OPENAI_MODEL"] = _cfg("openai_model", "OPENAI_MODEL", "gpt-4o-mini")
-    app.config["AI_CHAT_SYSTEM_PROMPT"] = _cfg("ai_chat_system_prompt", "AI_CHAT_SYSTEM_PROMPT", "")
+    from webapp.ai_assistant import DEFAULT_CHAT_SYSTEM_PROMPT
+    app.config["AI_CHAT_SYSTEM_PROMPT"] = _cfg("ai_chat_system_prompt", "AI_CHAT_SYSTEM_PROMPT", "") or DEFAULT_CHAT_SYSTEM_PROMPT
 
     # Create default admin if none exists
     if not db.get_users():
@@ -1096,9 +1097,11 @@ def create_app():
         openai_configured = bool(
             db.get_setting("openai_api_key", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip()
         )
-        ai_chat_system_prompt = db.get_setting(
-            "ai_chat_system_prompt",
-            app.config.get("AI_CHAT_SYSTEM_PROMPT", ""),
+        from webapp.ai_assistant import DEFAULT_CHAT_SYSTEM_PROMPT
+        ai_chat_system_prompt = (
+            db.get_setting("ai_chat_system_prompt", "").strip()
+            or app.config.get("AI_CHAT_SYSTEM_PROMPT", "")
+            or DEFAULT_CHAT_SYSTEM_PROMPT
         )
         branding = {
             "agency_name": db.get_setting("agency_name", ""),
