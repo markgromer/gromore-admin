@@ -17,6 +17,32 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+GOOGLE_ADS_API_VERSION = "v19"
+
+
+def _parse_google_error(resp):
+    """Extract a human-readable error from a Google Ads API error response."""
+    try:
+        data = resp.json()
+        # Standard Google Ads API error structure
+        err = data.get("error", {})
+        if err.get("message"):
+            return f"{err['message']} (HTTP {resp.status_code})"
+        # Sometimes nested in details
+        details = err.get("details", [])
+        for d in details:
+            for e in d.get("errors", []):
+                msg = e.get("message", "")
+                if msg:
+                    return f"{msg} (HTTP {resp.status_code})"
+    except (ValueError, AttributeError):
+        pass
+    # Fallback: if response is HTML (e.g. 404 error page), don't dump it
+    text = resp.text[:200]
+    if "<html" in text.lower() or "<!doctype" in text.lower():
+        return f"Google Ads API returned HTTP {resp.status_code}. The API version or endpoint may be invalid."
+    return f"HTTP {resp.status_code}: {text}"
+
 
 # ── Helpers ──
 
@@ -139,7 +165,7 @@ def list_google_campaigns(db, brand, month: str = ""):
         "AND campaign.status != 'REMOVED'"
     )
 
-    url = f"https://googleads.googleapis.com/v18/customers/{customer_id}/googleAds:searchStream"
+    url = f"https://googleads.googleapis.com/{GOOGLE_ADS_API_VERSION}/customers/{customer_id}/googleAds:searchStream"
     headers = _google_headers(token, dev_token, login_cid)
 
     # Query 1: campaign list
@@ -215,7 +241,7 @@ def update_google_campaign_status(db, brand, campaign_id, new_status, changed_by
         return {"success": False, "error": "Missing Google Ads configuration"}
 
     resource = f"customers/{customer_id}/campaigns/{campaign_id}"
-    url = f"https://googleads.googleapis.com/v18/customers/{customer_id}/campaigns:mutate"
+    url = f"https://googleads.googleapis.com/{GOOGLE_ADS_API_VERSION}/customers/{customer_id}/campaigns:mutate"
     headers = _google_headers(token, dev_token, login_cid)
 
     body = {
@@ -247,7 +273,7 @@ def update_google_budget(db, brand, campaign_id, budget_resource, new_daily_budg
     if not all([customer_id, token, dev_token, budget_resource]):
         return {"success": False, "error": "Missing Google Ads configuration or budget resource"}
 
-    url = f"https://googleads.googleapis.com/v18/customers/{customer_id}/campaignBudgets:mutate"
+    url = f"https://googleads.googleapis.com/{GOOGLE_ADS_API_VERSION}/customers/{customer_id}/campaignBudgets:mutate"
     headers = _google_headers(token, dev_token, login_cid)
 
     amount_micros = str(int(float(new_daily_budget) * 1_000_000))
@@ -281,7 +307,7 @@ def add_google_negative_keyword(db, brand, campaign_id, keyword_text, match_type
     if not all([customer_id, token, dev_token]):
         return {"success": False, "error": "Missing Google Ads configuration"}
 
-    url = f"https://googleads.googleapis.com/v18/customers/{customer_id}/campaignCriteria:mutate"
+    url = f"https://googleads.googleapis.com/{GOOGLE_ADS_API_VERSION}/customers/{customer_id}/campaignCriteria:mutate"
     headers = _google_headers(token, dev_token, login_cid)
 
     body = {
@@ -328,7 +354,7 @@ def get_google_campaign_detail(db, brand, campaign_id, month: str = ""):
         f"WHERE campaign.id = {campaign_id}"
     )
 
-    url = f"https://googleads.googleapis.com/v18/customers/{customer_id}/googleAds:searchStream"
+    url = f"https://googleads.googleapis.com/{GOOGLE_ADS_API_VERSION}/customers/{customer_id}/googleAds:searchStream"
     resp = requests.post(url, json={"query": camp_query}, headers=headers, timeout=30)
     if resp.status_code != 200:
         return None
@@ -931,7 +957,7 @@ def launch_google_campaign(db, brand, plan, changed_by):
         return {"success": False, "error": f"Missing Google Ads configuration: {', '.join(missing)}. Use Save as Draft to keep this plan."}
 
     headers = _google_headers(token, dev_token, login_cid)
-    base_url = f"https://googleads.googleapis.com/v18/customers/{customer_id}"
+    base_url = f"https://googleads.googleapis.com/{GOOGLE_ADS_API_VERSION}/customers/{customer_id}"
 
     # Step 1: Create campaign budget
     daily_micros = str(int(float(plan.get("daily_budget", 50)) * 1_000_000))
@@ -950,7 +976,7 @@ def launch_google_campaign(db, brand, plan, changed_by):
         json=budget_body, headers=headers, timeout=30,
     )
     if budget_resp.status_code != 200:
-        return {"success": False, "error": f"Failed to create budget: {budget_resp.text[:300]}"}
+        return {"success": False, "error": f"Failed to create budget: {_parse_google_error(budget_resp)}"}
 
     budget_resource = budget_resp.json().get("results", [{}])[0].get("resourceName", "")
     if not budget_resource:
@@ -979,7 +1005,7 @@ def launch_google_campaign(db, brand, plan, changed_by):
         json=campaign_body, headers=headers, timeout=30,
     )
     if camp_resp.status_code != 200:
-        return {"success": False, "error": f"Failed to create campaign: {camp_resp.text[:300]}"}
+        return {"success": False, "error": f"Failed to create campaign: {_parse_google_error(camp_resp)}"}
 
     camp_resource = camp_resp.json().get("results", [{}])[0].get("resourceName", "")
     camp_id = camp_resource.split("/")[-1] if camp_resource else ""
