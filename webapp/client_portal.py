@@ -37,6 +37,47 @@ ALLOWED_AI_MODELS = {
 }
 
 
+def _pick_ai_model(brand, purpose, requested=""):
+    candidate = (requested or "").strip()
+    if candidate and candidate in ALLOWED_AI_MODELS:
+        return candidate
+
+    purpose_field = {
+        "chat": "openai_model_chat",
+        "images": "openai_model_images",
+        "analysis": "openai_model_analysis",
+        "ads": "openai_model_ads",
+    }.get((purpose or "").strip().lower())
+
+    if purpose_field:
+        purpose_model = ((brand or {}).get(purpose_field) or "").strip()
+        if purpose_model in ALLOWED_AI_MODELS and purpose_model:
+            return purpose_model
+
+    fallback_model = ((brand or {}).get("openai_model") or "").strip()
+    if fallback_model in ALLOWED_AI_MODELS and fallback_model:
+        return fallback_model
+    return "gpt-4o-mini"
+
+
+def _get_openai_api_key(brand):
+    api_key = ((brand or {}).get("openai_api_key") or "").strip()
+    if api_key:
+        return api_key
+    try:
+        from flask import current_app
+        return (current_app.config.get("OPENAI_API_KEY") or "").strip()
+    except RuntimeError:
+        return ""
+
+
+def _assistant_month():
+    month = (request.args.get("month") or request.form.get("month") or "").strip()
+    if re.match(r"^\d{4}-\d{2}$", month):
+        return month
+    return datetime.now().strftime("%Y-%m")
+
+
 def client_login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -141,10 +182,8 @@ def client_actions():
         abort(404)
 
     month = request.args.get("month") or datetime.now().strftime("%Y-%m")
-    ai_model = (request.args.get("ai_model") or "").strip()
+    ai_model = _pick_ai_model(brand, "analysis", request.args.get("ai_model", ""))
     run_analysis = request.args.get("run_analysis") == "1"
-    if ai_model not in ALLOWED_AI_MODELS:
-        ai_model = ""
 
     actions = []
     ai_analysis = ""
@@ -160,22 +199,13 @@ def client_actions():
                 analysis,
                 suggestions,
                 brand,
-                ai_model=ai_model or None,
+                ai_model=ai_model,
                 include_deep_analysis=run_analysis,
             )
             actions = data.get("actions", [])
             ai_analysis = data.get("ai_analysis", "")
     except Exception as e:
         error = str(e)
-
-    app_key = ""
-    try:
-        from flask import current_app
-        app_key = (current_app.config.get("OPENAI_API_KEY") or "").strip()
-    except RuntimeError:
-        app_key = ""
-
-    chat_messages = db.get_ai_chat_messages(brand_id, month, limit=30)
 
     return render_template(
         "client_actions.html",
@@ -185,8 +215,6 @@ def client_actions():
         run_analysis=run_analysis,
         ai_analysis=ai_analysis,
         actions=actions,
-        chat_messages=chat_messages,
-        openai_enabled=bool((brand.get("openai_api_key") or "").strip() or app_key),
         error=error,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
@@ -195,29 +223,54 @@ def client_actions():
 @client_bp.route("/actions/chat", methods=["POST"])
 @client_login_required
 def client_actions_chat():
+    return _client_assistant_chat_handler(request.form)
+
+
+@client_bp.route("/assistant/chat", methods=["POST"])
+@client_login_required
+def client_assistant_chat():
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        payload = {}
+    return _client_assistant_chat_handler(payload)
+
+
+@client_bp.route("/assistant/history")
+@client_login_required
+def client_assistant_history():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    month = _assistant_month()
+    rows = db.get_ai_chat_messages(brand_id, month, limit=50)
+    messages = [{"role": r.get("role"), "content": r.get("content", "")} for r in rows if r.get("content")]
+    return jsonify({"messages": messages, "month": month})
+
+
+def _client_assistant_chat_handler(payload):
     db = _get_db()
     brand_id = session["client_brand_id"]
     brand = db.get_brand(brand_id)
     if not brand:
         return jsonify({"error": "Brand not found"}), 404
 
-    month = request.form.get("month") or datetime.now().strftime("%Y-%m")
-    user_message = (request.form.get("message") or "").strip()
-    ai_model = (request.form.get("ai_model") or "").strip()
-    if ai_model not in ALLOWED_AI_MODELS:
-        ai_model = ""
+    month = (payload.get("month") or "").strip()
+    if not re.match(r"^\d{4}-\d{2}$", month):
+        month = datetime.now().strftime("%Y-%m")
+    user_message = (payload.get("message") or "").strip()
+    ai_model = _pick_ai_model(brand, "chat", payload.get("ai_model", ""))
+    page_context = {
+        "path": str(payload.get("page_path") or request.path),
+        "title": str(payload.get("page_title") or ""),
+        "endpoint": str(payload.get("page_endpoint") or request.endpoint or ""),
+        "hint": str(payload.get("page_hint") or ""),
+    }
 
     if not user_message:
         return jsonify({"error": "Message cannot be empty"}), 400
 
-    api_key = (brand.get("openai_api_key") or "").strip()
-    if not api_key:
-        from flask import current_app
-        api_key = (current_app.config.get("OPENAI_API_KEY") or "").strip()
+    api_key = _get_openai_api_key(brand)
     if not api_key:
         return jsonify({"error": "No OpenAI API key configured. Add one in Connections."}), 400
-
-    model = ai_model or (brand.get("openai_model") or "").strip() or "gpt-4o-mini"
 
     db.add_ai_chat_message(brand_id, month, "user", user_message)
 
@@ -257,6 +310,7 @@ def client_actions_chat():
                 "kpi_target_roas": brand.get("kpi_target_roas"),
             },
             "month": month,
+            "page_context": page_context,
             "analysis": summarize_analysis_for_ai(analysis) if isinstance(analysis, dict) else None,
             "suggestions": suggestions,
             "analysis_error": analysis_error,
@@ -264,7 +318,7 @@ def client_actions_chat():
 
         assistant_reply = chat_with_jarvis(
             api_key=api_key,
-            model=model,
+            model=ai_model,
             context=context,
             messages=messages,
         )
@@ -1483,7 +1537,7 @@ def client_creative_ai_copy():
     if not api_key:
         return jsonify({"error": "No OpenAI API key configured. Add one in Connections."}), 400
 
-    model = (brand.get("openai_model") or "").strip() or "gpt-4o-mini"
+    model = _pick_ai_model(brand, "images")
 
     prompt = f"""Generate ad copy for a {ad_format.replace('_', ' ')} ad creative.
 
@@ -1844,7 +1898,7 @@ def _suggest_creative_style(brand, prompt, ad_format):
     if not api_key:
         return None
 
-    model = (brand.get("openai_model") or "").strip() or "gpt-4o-mini"
+    model = _pick_ai_model(brand, "images")
 
     ask = f"""You are selecting visual style settings for an ad creative.
 
@@ -1942,9 +1996,21 @@ def client_save_openai():
 
     api_key = request.form.get("openai_api_key", "").strip()
     model = request.form.get("openai_model", "").strip()
+    model_chat = request.form.get("openai_model_chat", "").strip()
+    model_images = request.form.get("openai_model_images", "").strip()
+    model_analysis = request.form.get("openai_model_analysis", "").strip()
+    model_ads = request.form.get("openai_model_ads", "").strip()
 
-    if model not in ALLOWED_AI_MODELS:
-        model = "gpt-4o-mini"
+    for key, value in {
+        "openai_model": model,
+        "openai_model_chat": model_chat,
+        "openai_model_images": model_images,
+        "openai_model_analysis": model_analysis,
+        "openai_model_ads": model_ads,
+    }.items():
+        if value not in ALLOWED_AI_MODELS:
+            value = "gpt-4o-mini"
+        db.update_brand_text_field(brand_id, key, value)
 
     # Only update key if user actually entered something (don't blank it on empty submit)
     if api_key:
@@ -1953,7 +2019,6 @@ def client_save_openai():
             return redirect(url_for("client.client_settings"))
         db.update_brand_text_field(brand_id, "openai_api_key", api_key)
 
-    db.update_brand_text_field(brand_id, "openai_model", model)
     flash("AI settings saved.", "success")
     return redirect(url_for("client.client_settings"))
 
@@ -1978,10 +2043,32 @@ def client_save_google_drive():
 
 @client_bp.context_processor
 def inject_client_globals():
+    assistant_month = _assistant_month()
+    assistant_enabled = False
+    assistant_messages = []
+    assistant_model_chat = "gpt-4o-mini"
+
+    brand_id = session.get("client_brand_id")
+    if brand_id:
+        try:
+            db = _get_db()
+            brand = db.get_brand(brand_id) or {}
+            assistant_model_chat = _pick_ai_model(brand, "chat")
+            assistant_enabled = bool(_get_openai_api_key(brand))
+            rows = db.get_ai_chat_messages(brand_id, assistant_month, limit=30)
+            assistant_messages = [{"role": r.get("role"), "content": r.get("content", "")} for r in rows if r.get("content")]
+        except Exception:
+            assistant_messages = []
+
     return {
         "client_user": session.get("client_name"),
         "client_brand": session.get("client_brand_name"),
         "now": datetime.now(),
+        "assistant_enabled": assistant_enabled,
+        "assistant_messages": assistant_messages,
+        "assistant_month": assistant_month,
+        "assistant_model_chat": assistant_model_chat,
+        "assistant_models": [m for m in ALLOWED_AI_MODELS if m],
     }
 
 

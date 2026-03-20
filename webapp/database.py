@@ -185,6 +185,10 @@ class WebDB:
             ("google_ads_customer_id", "TEXT DEFAULT ''"),
             ("openai_api_key", "TEXT DEFAULT ''"),
             ("openai_model", "TEXT DEFAULT ''"),
+            ("openai_model_chat", "TEXT DEFAULT ''"),
+            ("openai_model_images", "TEXT DEFAULT ''"),
+            ("openai_model_analysis", "TEXT DEFAULT ''"),
+            ("openai_model_ads", "TEXT DEFAULT ''"),
             ("logo_path", "TEXT DEFAULT ''"),
             ("logo_variants", "TEXT DEFAULT '[]'"),
             ("brand_colors", "TEXT DEFAULT ''"),
@@ -330,6 +334,7 @@ class WebDB:
             "reporting_notes", "call_tracking_number",
             "crm_type", "crm_api_key", "crm_webhook_url", "crm_pipeline_id",
             "openai_api_key", "openai_model",
+            "openai_model_chat", "openai_model_images", "openai_model_analysis", "openai_model_ads",
             "logo_path", "logo_variants", "brand_colors",
             "google_drive_folder_id", "google_drive_sheet_id",
         }
