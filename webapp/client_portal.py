@@ -746,9 +746,10 @@ def client_creative_generate():
         bg.thumbnail((max(w, h) * 2, max(w, h) * 2), Image.LANCZOS)  # cap source size
         bg = bg.convert("RGB")
         bg = _fit_cover_rgb(bg, target_size)
+        brand_color = _pick_brand_color(brand)
 
         # Apply selected overlay template
-        dark = Image.new("RGB", (w, h), (0, 0, 0))
+        dark = Image.new("RGB", (w, h), brand_color)
         grad_mask = Image.new("L", (w, h), 0)
 
         if overlay_template == "full_overlay":
@@ -780,7 +781,6 @@ def client_creative_generate():
         # Draw text
         draw = ImageDraw.Draw(bg)
         margin = int(w * 0.06)
-        brand_color = _pick_brand_color(brand)
 
         font_headline = _get_font(int(h * 0.065), bold=True, family=font_family)
         font_body = _get_font(int(h * 0.038), family=font_family)
@@ -819,15 +819,24 @@ def client_creative_generate():
             box_left = max(text_x - 20, 0)
             box_right = min(text_x + text_width + 20, w)
             box_radius = 0 if shape_style == "sharp" else (28 if shape_style == "pill" else 18)
+            box_mask = Image.new("L", (w, h), 0)
+            box_mask_draw = ImageDraw.Draw(box_mask)
             if box_radius > 0:
-                draw.rounded_rectangle([box_left, box_top, box_right, box_bottom], radius=box_radius, fill=(20, 20, 20))
+                box_mask_draw.rounded_rectangle([box_left, box_top, box_right, box_bottom], radius=box_radius, fill=165)
             else:
-                draw.rectangle([box_left, box_top, box_right, box_bottom], fill=(20, 20, 20))
+                box_mask_draw.rectangle([box_left, box_top, box_right, box_bottom], fill=165)
+            bg = Image.composite(Image.new("RGB", (w, h), brand_color), bg, box_mask)
+            draw = ImageDraw.Draw(bg)
 
         if overlay_template == "brand_bar":
             bar_top = int(h * 0.72)
-            draw.rectangle([0, bar_top, w, h], fill=brand_color)
-            draw.rectangle([0, bar_top - 12, w, bar_top], fill=(255, 255, 255))
+            bar_mask = Image.new("L", (w, h), 0)
+            bar_mask_draw = ImageDraw.Draw(bar_mask)
+            bar_mask_draw.rectangle([0, bar_top, w, h], fill=195)
+            bg = Image.composite(Image.new("RGB", (w, h), brand_color), bg, bar_mask)
+            draw = ImageDraw.Draw(bg)
+            stripe_color = tuple(min(c + 120, 255) for c in brand_color)
+            draw.rectangle([0, bar_top - 10, w, bar_top], fill=stripe_color)
 
         if overlay_template == "diagonal_band":
             poly = [
@@ -836,7 +845,11 @@ def client_creative_generate():
                 (w, h),
                 (0, h),
             ]
-            draw.polygon(poly, fill=(20, 20, 20))
+            band_mask = Image.new("L", (w, h), 0)
+            band_mask_draw = ImageDraw.Draw(band_mask)
+            band_mask_draw.polygon(poly, fill=185)
+            bg = Image.composite(Image.new("RGB", (w, h), brand_color), bg, band_mask)
+            draw = ImageDraw.Draw(bg)
 
         # Headline
         _draw_text_wrapped(draw, ad_copy_headline, text_x, y_cursor, text_width, font_headline, fill="white")
@@ -873,7 +886,7 @@ def client_creative_generate():
             if logo_file.exists():
                 try:
                     logo = Image.open(str(logo_file)).convert("RGBA")
-                    logo_w = int(w * 0.12)
+                    logo_w = int(w * 0.36)  # 3x larger than original 12%
                     ratio = logo_w / logo.width
                     logo_h = int(logo.height * ratio)
                     logo = logo.resize((logo_w, logo_h), Image.LANCZOS)
@@ -920,6 +933,9 @@ def client_creative_generate():
             ad_copy_body = request.form.get("body_text", "").strip()[:150]
             cta_text = request.form.get("cta_text", "").strip()[:30] or "Learn More"
             ad_format = request.form.get("ad_format", "facebook_feed")
+            db = _get_db()
+            fallback_brand = db.get_brand(session.get("client_brand_id")) if session.get("client_brand_id") else None
+            brand_color = _pick_brand_color(fallback_brand or {})
 
             format_sizes = {
                 "facebook_feed": (1200, 628),
@@ -938,12 +954,12 @@ def client_creative_generate():
             bg = bg.convert("RGB")
             bg = _fit_cover_rgb(bg, target_size)
 
-            # Basic lower-third dark overlay
-            dark = Image.new("RGB", (w, h), (0, 0, 0))
+            # Basic lower-third semi-transparent brand overlay
+            dark = Image.new("RGB", (w, h), brand_color)
             grad_mask = Image.new("L", (w, h), 0)
             start_y = int(h * 0.55)
             for y in range(start_y, h):
-                alpha = int(210 * (y - start_y) / max(h - start_y, 1))
+                alpha = int(185 * (y - start_y) / max(h - start_y, 1))
                 grad_mask.paste(alpha, (0, y, w, y + 1))
             bg = Image.composite(dark, bg, grad_mask)
 
@@ -971,10 +987,25 @@ def client_creative_generate():
             cta_x = margin
             cta_y = y_cursor
             try:
-                draw.rounded_rectangle([cta_x, cta_y, cta_x + cta_w, cta_y + cta_h], radius=8, fill=(99, 102, 241))
+                draw.rounded_rectangle([cta_x, cta_y, cta_x + cta_w, cta_y + cta_h], radius=8, fill=brand_color)
             except Exception:
-                draw.rectangle([cta_x, cta_y, cta_x + cta_w, cta_y + cta_h], fill=(99, 102, 241))
+                draw.rectangle([cta_x, cta_y, cta_x + cta_w, cta_y + cta_h], fill=brand_color)
             draw.text((cta_x + 18, cta_y + 10), cta_text, fill="white", font=font_cta)
+
+            if fallback_brand and fallback_brand.get("logo_path"):
+                uploads_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads"))
+                logo_file = uploads_dir / fallback_brand["logo_path"]
+                if logo_file.exists():
+                    try:
+                        logo = Image.open(str(logo_file)).convert("RGBA")
+                        logo_w = int(w * 0.36)  # 3x larger than original 12%
+                        ratio = logo_w / logo.width
+                        logo_h = int(logo.height * ratio)
+                        logo = logo.resize((logo_w, logo_h), Image.LANCZOS)
+                        logo_margin = int(w * 0.04)
+                        bg.paste(logo, (logo_margin, logo_margin), logo)
+                    except Exception:
+                        pass
 
             output_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads")) / "creatives" / str(session.get("client_brand_id"))
             output_dir.mkdir(parents=True, exist_ok=True)
