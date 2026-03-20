@@ -375,6 +375,16 @@
                         <option value="upper_third">Upper Third</option>
                         <option value="full_overlay">Full Overlay</option>
                         <option value="soft_box">Soft Text Box</option>
+                        <option value="brand_bar">Brand Bar</option>
+                        <option value="diagonal_band">Diagonal Band</option>
+                    </select>
+                </div>
+                <div class="style-field">
+                    <label for="shapeStyle">Shape Style</label>
+                    <select id="shapeStyle" class="style-select">
+                        <option value="rounded" selected>Rounded</option>
+                        <option value="sharp">Sharp</option>
+                        <option value="pill">Pill</option>
                     </select>
                 </div>
                 <div class="style-field">
@@ -392,6 +402,10 @@
                         <option value="classic">Classic Serif</option>
                         <option value="clean">Clean Condensed</option>
                     </select>
+                </div>
+                <div class="style-field">
+                    <label for="creativePrompt">AI Creative Direction Prompt</label>
+                    <textarea id="creativePrompt" rows="2" class="style-select" style="resize:vertical" placeholder="Example: Make this feel premium and local, keep text very readable, emphasize trust and fast response."></textarea>
                 </div>
             </div>
         </div>
@@ -580,8 +594,10 @@
         fd.append('ad_format', selectedFormat);
         fd.append('image_description', document.getElementById('imageDescription').value.trim());
         fd.append('overlay_template', document.getElementById('overlayTemplate').value);
+        fd.append('shape_style', document.getElementById('shapeStyle').value);
         fd.append('text_placement', document.getElementById('textPlacement').value);
         fd.append('font_family', document.getElementById('fontFamily').value);
+        fd.append('creative_prompt', document.getElementById('creativePrompt').value.trim());
 
         fetch("{{ url_for('client.client_creative_generate') }}", {
             method: 'POST',
@@ -619,6 +635,35 @@
         document.getElementById('previewArea').classList.remove('has-preview');
         document.getElementById('previewActions').style.display = 'none';
     };
+
+    // Prefill from Ad Builder transfer
+    try {
+        const raw = sessionStorage.getItem('creative_prefill');
+        if (raw) {
+            const data = JSON.parse(raw);
+            if (data.headline) document.getElementById('headline').value = data.headline;
+            if (data.body_text) document.getElementById('bodyText').value = data.body_text;
+            if (data.cta_text) document.getElementById('ctaText').value = data.cta_text;
+            if (data.image_description) document.getElementById('imageDescription').value = data.image_description;
+            if (data.creative_prompt) document.getElementById('creativePrompt').value = data.creative_prompt;
+
+            if (data.ad_format) {
+                const target = document.querySelector(`.format-option[data-format="${data.ad_format}"]`);
+                if (target) window.selectFormat(target);
+            }
+            if (data.overlay_template) document.getElementById('overlayTemplate').value = data.overlay_template;
+            if (data.shape_style) document.getElementById('shapeStyle').value = data.shape_style;
+            if (data.text_placement) document.getElementById('textPlacement').value = data.text_placement;
+            if (data.font_family) document.getElementById('fontFamily').value = data.font_family;
+
+            ['headline','bodyText','ctaText','imageDescription'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.dispatchEvent(new Event('input'));
+            });
+
+            sessionStorage.removeItem('creative_prefill');
+        }
+    } catch (_) {}
 })();
 </script>
 {% endblock %}

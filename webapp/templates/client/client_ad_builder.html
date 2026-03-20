@@ -203,9 +203,24 @@
 {% if google_ads %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="mb-0"><i class="bi bi-google" style="color: #4285f4;"></i> Google Ad Package</h5>
-    <a href="{{ url_for('client.client_ad_builder', month=month) }}" class="btn btn-sm btn-outline-secondary">
-        <i class="bi bi-arrow-left"></i> Build Another
-    </a>
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-primary" onclick='sendToCreative({
+            headline: {{ ((google_ads.headlines or [google_ads.long_headline])|select|list|first or "")|tojson }},
+            body_text: {{ ((google_ads.descriptions or [])|first or "")|tojson }},
+            cta_text: {{ (google_ads.cta_button or "Learn More")|replace("_", " ")|tojson }},
+            image_description: {{ (google_ads.image_guidance.primary if google_ads.image_guidance and google_ads.image_guidance.primary else "")|tojson }},
+            ad_format: "google_display_landscape",
+            overlay_template: "brand_bar",
+            shape_style: "rounded",
+            text_placement: "left",
+            font_family: "modern"
+        })'>
+            <i class="bi bi-palette"></i> Send to Creative
+        </button>
+        <a href="{{ url_for('client.client_ad_builder', month=month) }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Build Another
+        </a>
+    </div>
 </div>
 
 {% if google_ads.strategy or google_ads.rationale or google_ads.data_used %}
@@ -573,9 +588,24 @@
 <div class="builder-card">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h6 class="mb-0">{{ variation.name or 'Variation ' ~ loop.index }}</h6>
-        {% if variation.angle %}
-        <span class="badge bg-light text-dark" style="font-size: .75rem;">{{ variation.angle }}</span>
-        {% endif %}
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-primary" onclick='sendToCreative({
+                headline: {{ (variation.headline or "")|tojson }},
+                body_text: {{ (variation.primary_text or "")|tojson }},
+                cta_text: {{ (facebook_ads.cta_button or "Learn More")|replace("_", " ")|tojson }},
+                image_description: {{ (facebook_ads.image_guidance.primary if facebook_ads.image_guidance and facebook_ads.image_guidance.primary else "")|tojson }},
+                ad_format: "instagram_feed",
+                overlay_template: "lower_third",
+                shape_style: "rounded",
+                text_placement: "left",
+                font_family: "modern"
+            })'>
+                <i class="bi bi-palette"></i> Send to Creative
+            </button>
+            {% if variation.angle %}
+            <span class="badge bg-light text-dark" style="font-size: .75rem;">{{ variation.angle }}</span>
+            {% endif %}
+        </div>
     </div>
 
     <div class="mb-3">
@@ -732,6 +762,13 @@ function copyText(btn) {
             btn.classList.add('btn-outline-secondary');
         }, 1500);
     });
+}
+
+function sendToCreative(payload) {
+    try {
+        sessionStorage.setItem('creative_prefill', JSON.stringify(payload || {}));
+    } catch (_) {}
+    window.location.href = "{{ url_for('client.client_creative') }}";
 }
 </script>
 {% endblock %}

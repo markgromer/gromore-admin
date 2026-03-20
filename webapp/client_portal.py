@@ -687,18 +687,31 @@ def client_creative_generate():
         cta_text = request.form.get("cta_text", "").strip()[:30]
         ad_format = request.form.get("ad_format", "facebook_feed")
         overlay_template = request.form.get("overlay_template", "lower_third")
+        shape_style = request.form.get("shape_style", "rounded")
         text_placement = request.form.get("text_placement", "left")
         font_family = request.form.get("font_family", "modern")
+        creative_prompt = request.form.get("creative_prompt", "").strip()[:800]
 
-        allowed_overlay_templates = {"lower_third", "upper_third", "full_overlay", "soft_box"}
+        allowed_overlay_templates = {"lower_third", "upper_third", "full_overlay", "soft_box", "brand_bar", "diagonal_band"}
+        allowed_shape_styles = {"rounded", "sharp", "pill"}
         allowed_text_placements = {"left", "center", "right"}
         allowed_font_families = {"modern", "classic", "clean"}
         if overlay_template not in allowed_overlay_templates:
             overlay_template = "lower_third"
+        if shape_style not in allowed_shape_styles:
+            shape_style = "rounded"
         if text_placement not in allowed_text_placements:
             text_placement = "left"
         if font_family not in allowed_font_families:
             font_family = "modern"
+
+        if creative_prompt:
+            ai_suggestion = _suggest_creative_style(brand, creative_prompt, ad_format)
+            if ai_suggestion:
+                overlay_template = ai_suggestion.get("overlay_template", overlay_template)
+                shape_style = ai_suggestion.get("shape_style", shape_style)
+                text_placement = ai_suggestion.get("text_placement", text_placement)
+                font_family = ai_suggestion.get("font_family", font_family)
 
         if not image_file or not image_file.filename:
             return jsonify({"error": "Please upload a background image."}), 400
@@ -746,6 +759,15 @@ def client_creative_generate():
             for y in range(0, top_end):
                 alpha = int(200 * (1 - (y / top_end)))
                 grad_mask.paste(alpha, (0, y, w, y + 1))
+        elif overlay_template == "brand_bar":
+            start_y = int(h * 0.72)
+            for y in range(start_y, h):
+                grad_mask.paste(235, (0, y, w, y + 1))
+        elif overlay_template == "diagonal_band":
+            start_y = int(h * 0.52)
+            for y in range(start_y, h):
+                alpha = int(190 * (y - start_y) / max(h - start_y, 1))
+                grad_mask.paste(alpha, (0, y, w, y + 1))
         else:
             start_y = int(h * 0.55)
             for y in range(start_y, h):
@@ -758,6 +780,7 @@ def client_creative_generate():
         # Draw text
         draw = ImageDraw.Draw(bg)
         margin = int(w * 0.06)
+        brand_color = _pick_brand_color(brand)
 
         font_headline = _get_font(int(h * 0.065), bold=True, family=font_family)
         font_body = _get_font(int(h * 0.038), family=font_family)
@@ -776,6 +799,8 @@ def client_creative_generate():
             y_cursor = int(h * 0.12)
         elif overlay_template == "full_overlay":
             y_cursor = int(h * 0.35)
+        elif overlay_template == "brand_bar":
+            y_cursor = int(h * 0.76)
         else:
             y_cursor = int(h * 0.60)
 
@@ -793,7 +818,25 @@ def client_creative_generate():
             box_bottom = min(y_cursor + headline_h + body_h + cta_h + 36, h)
             box_left = max(text_x - 20, 0)
             box_right = min(text_x + text_width + 20, w)
-            draw.rounded_rectangle([box_left, box_top, box_right, box_bottom], radius=18, fill=(20, 20, 20))
+            box_radius = 0 if shape_style == "sharp" else (28 if shape_style == "pill" else 18)
+            if box_radius > 0:
+                draw.rounded_rectangle([box_left, box_top, box_right, box_bottom], radius=box_radius, fill=(20, 20, 20))
+            else:
+                draw.rectangle([box_left, box_top, box_right, box_bottom], fill=(20, 20, 20))
+
+        if overlay_template == "brand_bar":
+            bar_top = int(h * 0.72)
+            draw.rectangle([0, bar_top, w, h], fill=brand_color)
+            draw.rectangle([0, bar_top - 12, w, bar_top], fill=(255, 255, 255))
+
+        if overlay_template == "diagonal_band":
+            poly = [
+                (0, int(h * 0.66)),
+                (w, int(h * 0.56)),
+                (w, h),
+                (0, h),
+            ]
+            draw.polygon(poly, fill=(20, 20, 20))
 
         # Headline
         _draw_text_wrapped(draw, ad_copy_headline, text_x, y_cursor, text_width, font_headline, fill="white")
@@ -816,7 +859,11 @@ def client_creative_generate():
             else:
                 cta_x = text_x
             cta_y = y_cursor
-            draw.rounded_rectangle([cta_x, cta_y, cta_x + cta_w, cta_y + cta_h], radius=8, fill=(99, 102, 241))
+            cta_radius = 0 if shape_style == "sharp" else (24 if shape_style == "pill" else 8)
+            if cta_radius > 0:
+                draw.rounded_rectangle([cta_x, cta_y, cta_x + cta_w, cta_y + cta_h], radius=cta_radius, fill=brand_color)
+            else:
+                draw.rectangle([cta_x, cta_y, cta_x + cta_w, cta_y + cta_h], fill=brand_color)
             draw.text((cta_x + 18, cta_y + 10), cta_text, fill="white", font=font_cta)
 
         # Place logo (top-left)
@@ -1153,6 +1200,77 @@ def _count_lines(text, max_width, font):
             lines += 1
             current = word
     return lines
+
+
+def _pick_brand_color(brand):
+    raw = (brand.get("brand_colors") or "").strip()
+    if not raw:
+        return (99, 102, 241)
+
+    parts = [p.strip() for p in raw.replace(";", ",").split(",") if p.strip()]
+    for part in parts:
+        value = part.lstrip("#")
+        if len(value) == 3:
+            value = "".join(ch * 2 for ch in value)
+        if len(value) == 6:
+            try:
+                return tuple(int(value[i:i+2], 16) for i in (0, 2, 4))
+            except ValueError:
+                continue
+    return (99, 102, 241)
+
+
+def _suggest_creative_style(brand, prompt, ad_format):
+    api_key = (brand.get("openai_api_key") or "").strip()
+    if not api_key:
+        from flask import current_app
+        api_key = (current_app.config.get("OPENAI_API_KEY") or "").strip()
+    if not api_key:
+        return None
+
+    model = (brand.get("openai_model") or "").strip() or "gpt-4o-mini"
+
+    ask = f"""You are selecting visual style settings for an ad creative.
+
+Brand voice: {brand.get('brand_voice', '')}
+Industry: {brand.get('industry', '')}
+Ad format: {ad_format}
+User direction prompt: {prompt}
+
+Return JSON only with:
+- overlay_template: one of [lower_third, upper_third, full_overlay, soft_box, brand_bar, diagonal_band]
+- shape_style: one of [rounded, sharp, pill]
+- text_placement: one of [left, center, right]
+- font_family: one of [modern, classic, clean]
+
+JSON only, no markdown."""
+
+    import requests as req
+    try:
+        resp = req.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"model": model, "messages": [{"role": "user", "content": ask}], "temperature": 0.5},
+            timeout=20,
+        )
+        if resp.status_code != 200:
+            return None
+        content = resp.json()["choices"][0]["message"]["content"].strip()
+        if content.startswith("```"):
+            content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+        data = json.loads(content)
+        if not isinstance(data, dict):
+            return None
+        return {
+            "overlay_template": data.get("overlay_template"),
+            "shape_style": data.get("shape_style"),
+            "text_placement": data.get("text_placement"),
+            "font_family": data.get("font_family"),
+        }
+    except Exception:
+        return None
 
 
 @client_bp.route("/settings")
