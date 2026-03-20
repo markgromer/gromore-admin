@@ -853,7 +853,96 @@ def client_creative_generate():
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({"error": f"Failed to generate creative: {str(e)}"}), 500
+
+        # Fail-safe fallback: generate a simple version instead of hard failing
+        try:
+            from pathlib import Path
+            from flask import current_app
+            from PIL import Image, ImageDraw
+            import uuid
+
+            image_file = request.files.get("image")
+            if not image_file or not image_file.filename:
+                return jsonify({"error": f"Failed to generate creative: {str(e)}"}), 500
+
+            ext = image_file.filename.rsplit(".", 1)[-1].lower() if "." in image_file.filename else ""
+            if ext not in {"png", "jpg", "jpeg", "webp"}:
+                return jsonify({"error": f"Failed to generate creative: {str(e)}"}), 500
+
+            ad_copy_headline = request.form.get("headline", "").strip()[:90] or "Your Next Best Offer"
+            ad_copy_body = request.form.get("body_text", "").strip()[:150]
+            cta_text = request.form.get("cta_text", "").strip()[:30] or "Learn More"
+            ad_format = request.form.get("ad_format", "facebook_feed")
+
+            format_sizes = {
+                "facebook_feed": (1200, 628),
+                "facebook_story": (1080, 1920),
+                "instagram_feed": (1080, 1080),
+                "instagram_story": (1080, 1920),
+                "google_display_landscape": (1200, 628),
+                "google_display_square": (1200, 1200),
+            }
+            target_size = format_sizes.get(ad_format, (1200, 628))
+            w, h = target_size
+
+            image_file.seek(0)
+            bg = Image.open(image_file)
+            bg.thumbnail((max(w, h) * 2, max(w, h) * 2), Image.LANCZOS)
+            bg = bg.convert("RGB")
+            bg = _fit_cover_rgb(bg, target_size)
+
+            # Basic lower-third dark overlay
+            dark = Image.new("RGB", (w, h), (0, 0, 0))
+            grad_mask = Image.new("L", (w, h), 0)
+            start_y = int(h * 0.55)
+            for y in range(start_y, h):
+                alpha = int(210 * (y - start_y) / max(h - start_y, 1))
+                grad_mask.paste(alpha, (0, y, w, y + 1))
+            bg = Image.composite(dark, bg, grad_mask)
+
+            draw = ImageDraw.Draw(bg)
+            margin = int(w * 0.06)
+            text_width = int(w * 0.84)
+            y_cursor = int(h * 0.60)
+
+            font_headline = _get_font(int(h * 0.065), bold=True, family="modern")
+            font_body = _get_font(int(h * 0.038), family="modern")
+            font_cta = _get_font(int(h * 0.04), bold=True, family="modern")
+
+            _draw_text_wrapped(draw, ad_copy_headline, margin, y_cursor, text_width, font_headline, fill="white")
+            headline_lines = _count_lines(ad_copy_headline, text_width, font_headline)
+            y_cursor += int(headline_lines * _font_size(font_headline) * 1.3) + 8
+
+            if ad_copy_body:
+                _draw_text_wrapped(draw, ad_copy_body, margin, y_cursor, text_width, font_body, fill=(220, 220, 220))
+                body_lines = _count_lines(ad_copy_body, text_width, font_body)
+                y_cursor += int(body_lines * _font_size(font_body) * 1.3) + 12
+
+            cta_bbox = draw.textbbox((0, 0), cta_text, font=font_cta)
+            cta_w = cta_bbox[2] - cta_bbox[0] + 36
+            cta_h = cta_bbox[3] - cta_bbox[1] + 20
+            cta_x = margin
+            cta_y = y_cursor
+            try:
+                draw.rounded_rectangle([cta_x, cta_y, cta_x + cta_w, cta_y + cta_h], radius=8, fill=(99, 102, 241))
+            except Exception:
+                draw.rectangle([cta_x, cta_y, cta_x + cta_w, cta_y + cta_h], fill=(99, 102, 241))
+            draw.text((cta_x + 18, cta_y + 10), cta_text, fill="white", font=font_cta)
+
+            output_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads")) / "creatives" / str(session.get("client_brand_id"))
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_name = f"creative_{uuid.uuid4().hex[:8]}.jpg"
+            output_path = output_dir / output_name
+            bg.save(str(output_path), "JPEG", quality=90)
+
+            rel_path = f"creatives/{session.get('client_brand_id')}/{output_name}"
+            return jsonify({
+                "image_url": url_for("client.client_serve_upload", filename=rel_path),
+                "filename": output_name,
+                "warning": "Used simplified template fallback",
+            })
+        except Exception:
+            return jsonify({"error": f"Failed to generate creative: {str(e)}"}), 500
 
 
 @client_bp.route("/creative/ai-copy", methods=["POST"])
