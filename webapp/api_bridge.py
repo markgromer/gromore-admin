@@ -4,9 +4,12 @@ Bridge between web app OAuth tokens and the existing API pull modules.
 Uses stored OAuth tokens from the web DB instead of credential files.
 Handles automatic token refresh when tokens expire.
 """
+import logging
 import sys
 from pathlib import Path
 from datetime import datetime, timedelta
+
+log = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE_DIR))
@@ -217,19 +220,76 @@ def pull_api_data_for_brand(brand, connections, month):
             errors.append(f"Meta pull failed: {str(e)}")
 
     # Facebook Organic (Page Insights)
-    if meta_conn and meta_conn.get("status") == "connected" and (brand.get("facebook_page_id") or "").strip():
+    if meta_conn and meta_conn.get("status") == "connected":
+        page_id = (brand.get("facebook_page_id") or "").strip()
         try:
             token = _get_meta_token(db, brand["id"], meta_conn)
-            data["facebook_organic"] = _pull_meta_organic(
-                brand["facebook_page_id"],
-                token,
-                start_date,
-                end_date,
-            )
+            page_token = None
+            # Auto-detect page ID if not stored yet
+            if not page_id:
+                page_id, page_token = _auto_detect_facebook_page(db, brand["id"], token)
+            if page_id:
+                # Page Insights require a page access token, not a user token
+                if not page_token:
+                    page_token = _get_page_access_token(page_id, token)
+                data["facebook_organic"] = _pull_meta_organic(
+                    page_id,
+                    page_token,
+                    start_date,
+                    end_date,
+                )
         except Exception as e:
             errors.append(f"Facebook organic pull failed: {str(e)}")
 
     return data, errors
+
+
+def _auto_detect_facebook_page(db, brand_id, access_token):
+    """Try to find and store the Facebook Page ID from the user's token.
+    Returns (page_id, page_access_token) or (None, None)."""
+    import requests
+    try:
+        resp = requests.get(
+            "https://graph.facebook.com/v21.0/me/accounts",
+            params={"access_token": access_token, "fields": "id,name,access_token"},
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            pages = resp.json().get("data", [])
+            if pages:
+                page = pages[0]
+                page_id = page["id"]
+                page_token = page.get("access_token", access_token)
+                # Store page ID so we don't have to detect every time
+                db.update_brand_api_field(brand_id, "facebook_page_id", page_id)
+                log.info("Auto-detected Facebook Page ID %s for brand %s", page_id, brand_id)
+                return page_id, page_token
+    except Exception as e:
+        log.warning("Facebook page auto-detect failed: %s", e)
+    return None, None
+
+
+def _get_page_access_token(page_id, user_access_token):
+    """Exchange a user access token for a page-specific access token.
+    Page Insights and post-level insights require the page token."""
+    import requests
+    try:
+        resp = requests.get(
+            "https://graph.facebook.com/v21.0/me/accounts",
+            params={
+                "access_token": user_access_token,
+                "fields": "id,access_token",
+            },
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            for page in resp.json().get("data", []):
+                if page.get("id") == page_id:
+                    return page.get("access_token", user_access_token)
+    except Exception:
+        pass
+    # Fall back to user token if we can't get a page token
+    return user_access_token
 
 
 def _pull_ga4(property_id, access_token, start_date, end_date):
@@ -718,12 +778,17 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
     page_info = {}
     if page_resp.status_code == 200:
         d = page_resp.json()
-        page_info = {
-            "name": d.get("name", ""),
-            "fans": d.get("fan_count", 0),
-            "followers": d.get("followers_count", 0),
-            "category": d.get("category", ""),
-        }
+        if "error" in d:
+            log.warning("FB page info error for %s: %s", page_id, d["error"].get("message", d["error"]))
+        else:
+            page_info = {
+                "name": d.get("name", ""),
+                "fans": d.get("fan_count", 0),
+                "followers": d.get("followers_count", 0),
+                "category": d.get("category", ""),
+            }
+    else:
+        log.warning("FB page info request failed (%s): %s", page_resp.status_code, page_resp.text[:200])
 
     # ── Page Insights (aggregated metrics for the period) ──
     # Note: page/insights requires "since"/"until" as Unix timestamps
@@ -756,7 +821,10 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
             timeout=30,
         )
         if insights_resp.status_code == 200:
-            for entry in insights_resp.json().get("data", []):
+            resp_data = insights_resp.json()
+            if "error" in resp_data:
+                log.warning("FB page insights error: %s", resp_data["error"].get("message", resp_data["error"]))
+            for entry in resp_data.get("data", []):
                 metric_name = entry.get("name", "")
                 # Sum all daily values for the period
                 total = 0
@@ -767,8 +835,8 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
                     elif isinstance(v, (int, float)):
                         total += v
                 insights_data[metric_name] = total
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("FB page insights exception: %s", e)
 
     page_metrics = {
         "followers": page_info.get("followers", 0),
@@ -804,7 +872,10 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
             timeout=30,
         )
         if posts_resp.status_code == 200:
-            for post in posts_resp.json().get("data", []):
+            posts_data = posts_resp.json()
+            if "error" in posts_data:
+                log.warning("FB posts error: %s", posts_data["error"].get("message", posts_data["error"]))
+            for post in posts_data.get("data", []):
                 post_insights = {}
                 for ins in (post.get("insights", {}).get("data", [])):
                     val = ins.get("values", [{}])[0].get("value", 0)
@@ -838,8 +909,8 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
                     "clicks": clicks,
                     "engagement_rate": engagement_rate,
                 })
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("FB posts exception: %s", e)
 
     # Sort by engagement
     posts.sort(key=lambda x: (x.get("likes", 0) + x.get("comments", 0) + x.get("shares", 0)), reverse=True)
