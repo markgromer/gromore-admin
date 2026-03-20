@@ -491,6 +491,190 @@ def create_app():
             ai_plan=ai_plan,
         )
 
+    @app.route("/brands/<int:brand_id>/test-organic")
+    @login_required
+    def brand_test_organic(brand_id):
+        """Diagnostic endpoint: test Facebook organic API calls and show raw results."""
+        brand = db.get_brand(brand_id)
+        if not brand:
+            abort(404)
+
+        import requests as _req
+        results = {"brand": brand["display_name"], "checks": []}
+
+        page_id = (brand.get("facebook_page_id") or "").strip()
+        results["facebook_page_id"] = page_id or "(not set)"
+
+        connections = db.get_brand_connections(brand_id)
+        meta_conn = connections.get("meta")
+        if not meta_conn or meta_conn.get("status") != "connected":
+            results["checks"].append({"step": "Meta connection", "status": "FAIL", "detail": "Meta is not connected"})
+            return jsonify(results)
+
+        results["checks"].append({"step": "Meta connection", "status": "OK", "detail": f"Connected as {meta_conn.get('account_name', '?')}"})
+
+        # Get token
+        from webapp.api_bridge import _get_meta_token, _get_page_access_token
+        try:
+            user_token = _get_meta_token(db, brand_id, meta_conn)
+            results["checks"].append({"step": "User token", "status": "OK", "detail": f"Token length: {len(user_token)}"})
+        except Exception as e:
+            results["checks"].append({"step": "User token", "status": "FAIL", "detail": str(e)})
+            return jsonify(results)
+
+        # Check me/accounts (what pages does this token have access to?)
+        pages_resp = _req.get(
+            "https://graph.facebook.com/v21.0/me/accounts",
+            params={"access_token": user_token, "fields": "id,name,access_token"},
+            timeout=15,
+        )
+        if pages_resp.status_code == 200:
+            pages_data = pages_resp.json().get("data", [])
+            page_names = [{"id": p["id"], "name": p.get("name", "?")} for p in pages_data]
+            results["checks"].append({
+                "step": "me/accounts (pages with access)",
+                "status": "OK" if pages_data else "WARN",
+                "detail": page_names if pages_data else "No pages returned. Token may lack pages_show_list permission.",
+            })
+        else:
+            results["checks"].append({
+                "step": "me/accounts",
+                "status": "FAIL",
+                "detail": pages_resp.text[:300],
+            })
+            pages_data = []
+
+        if not page_id:
+            results["checks"].append({"step": "Page ID", "status": "FAIL", "detail": "No facebook_page_id set on brand"})
+            return jsonify(results)
+
+        # Get page token
+        page_token = _get_page_access_token(page_id, user_token)
+        is_page_token = page_token != user_token
+        results["checks"].append({
+            "step": "Page access token",
+            "status": "OK" if is_page_token else "WARN",
+            "detail": "Got page-specific token" if is_page_token else "Using user token as fallback (page not in me/accounts)",
+        })
+
+        # Test page info
+        info_resp = _req.get(
+            f"https://graph.facebook.com/v21.0/{page_id}",
+            params={"access_token": page_token, "fields": "name,fan_count,followers_count"},
+            timeout=15,
+        )
+        results["checks"].append({
+            "step": "Page info",
+            "status": "OK" if info_resp.status_code == 200 and "error" not in info_resp.json() else "FAIL",
+            "detail": info_resp.json(),
+        })
+
+        # Test page insights (one metric at a time to isolate failures)
+        from datetime import datetime as _dt, date as _date
+        today = _date.today()
+        first_of_month = today.replace(day=1)
+        since_ts = int(_dt(first_of_month.year, first_of_month.month, first_of_month.day).timestamp())
+        until_ts = int(_dt(today.year, today.month, today.day).timestamp())
+
+        test_metrics = [
+            "page_impressions",
+            "page_impressions_organic",
+            "page_engaged_users",
+            "page_post_engagements",
+            "page_fan_adds",
+            "page_views_total",
+        ]
+        for metric in test_metrics:
+            try:
+                m_resp = _req.get(
+                    f"https://graph.facebook.com/v21.0/{page_id}/insights",
+                    params={
+                        "access_token": page_token,
+                        "metric": metric,
+                        "period": "day",
+                        "since": since_ts,
+                        "until": until_ts,
+                    },
+                    timeout=15,
+                )
+                if m_resp.status_code == 200:
+                    m_data = m_resp.json()
+                    if "error" in m_data:
+                        results["checks"].append({
+                            "step": f"Insight: {metric}",
+                            "status": "FAIL",
+                            "detail": m_data["error"].get("message", str(m_data["error"])),
+                        })
+                    else:
+                        entries = m_data.get("data", [])
+                        total = 0
+                        for entry in entries:
+                            for val in entry.get("values", []):
+                                v = val.get("value", 0)
+                                if isinstance(v, (int, float)):
+                                    total += v
+                                elif isinstance(v, dict):
+                                    total += sum(v.values())
+                        results["checks"].append({
+                            "step": f"Insight: {metric}",
+                            "status": "OK",
+                            "detail": f"Total: {total} ({len(entries)} entries, {sum(len(e.get('values',[])) for e in entries)} days)",
+                        })
+                else:
+                    results["checks"].append({
+                        "step": f"Insight: {metric}",
+                        "status": "FAIL",
+                        "detail": f"HTTP {m_resp.status_code}: {m_resp.text[:200]}",
+                    })
+            except Exception as e:
+                results["checks"].append({
+                    "step": f"Insight: {metric}",
+                    "status": "FAIL",
+                    "detail": str(e),
+                })
+
+        # Test posts
+        try:
+            posts_resp = _req.get(
+                f"https://graph.facebook.com/v21.0/{page_id}/posts",
+                params={
+                    "access_token": page_token,
+                    "fields": "id,message,created_time,type",
+                    "since": since_ts,
+                    "until": until_ts,
+                    "limit": 5,
+                },
+                timeout=15,
+            )
+            if posts_resp.status_code == 200:
+                posts_data = posts_resp.json()
+                if "error" in posts_data:
+                    results["checks"].append({
+                        "step": "Posts",
+                        "status": "FAIL",
+                        "detail": posts_data["error"].get("message", str(posts_data["error"])),
+                    })
+                else:
+                    post_list = posts_data.get("data", [])
+                    results["checks"].append({
+                        "step": "Posts",
+                        "status": "OK" if post_list else "WARN",
+                        "detail": f"Found {len(post_list)} posts" + (
+                            f". First: {post_list[0].get('created_time','')} - {(post_list[0].get('message','') or '')[:60]}"
+                            if post_list else ". No posts returned for this date range."
+                        ),
+                    })
+            else:
+                results["checks"].append({
+                    "step": "Posts",
+                    "status": "FAIL",
+                    "detail": f"HTTP {posts_resp.status_code}: {posts_resp.text[:200]}",
+                })
+        except Exception as e:
+            results["checks"].append({"step": "Posts", "status": "FAIL", "detail": str(e)})
+
+        return jsonify(results)
+
     @app.route("/brands/<int:brand_id>/finance", methods=["POST"])
     @login_required
     def brand_save_month_finance(brand_id):

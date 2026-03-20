@@ -804,7 +804,6 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
         "page_fan_adds",
         "page_fan_removes",
         "page_views_total",
-        "page_actions_post_reactions_total",
     ]
 
     insights_data = {}
@@ -835,6 +834,48 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
                     elif isinstance(v, (int, float)):
                         total += v
                 insights_data[metric_name] = total
+        else:
+            log.warning(
+                "FB page insights HTTP %s: %s",
+                insights_resp.status_code,
+                insights_resp.text[:300],
+            )
+            # Try metrics one at a time as fallback
+            for metric in metrics:
+                try:
+                    single_resp = requests.get(
+                        f"{base}/insights",
+                        params={
+                            "access_token": access_token,
+                            "metric": metric,
+                            "period": "day",
+                            "since": since_ts,
+                            "until": until_ts,
+                        },
+                        timeout=15,
+                    )
+                    if single_resp.status_code == 200:
+                        for entry in single_resp.json().get("data", []):
+                            total = 0
+                            for val in entry.get("values", []):
+                                v = val.get("value", 0)
+                                if isinstance(v, dict):
+                                    total += sum(v.values())
+                                elif isinstance(v, (int, float)):
+                                    total += v
+                            insights_data[entry.get("name", "")] = total
+                except Exception:
+                    pass
+                metric_name = entry.get("name", "")
+                # Sum all daily values for the period
+                total = 0
+                for val in entry.get("values", []):
+                    v = val.get("value", 0)
+                    if isinstance(v, dict):
+                        total += sum(v.values())
+                    elif isinstance(v, (int, float)):
+                        total += v
+                insights_data[metric_name] = total
     except Exception as e:
         log.warning("FB page insights exception: %s", e)
 
@@ -851,6 +892,10 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
         "net_fans": insights_data.get("page_fan_adds", 0) - insights_data.get("page_fan_removes", 0),
         "page_views": insights_data.get("page_views_total", 0),
         "reactions": insights_data.get("page_actions_post_reactions_total", 0),
+        "_debug": {
+            "insights_metrics_found": list(insights_data.keys()),
+            "page_token_type": "page" if page_info.get("name") else "unknown",
+        },
     }
 
     # ── Top posts for the period ──
