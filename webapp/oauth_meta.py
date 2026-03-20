@@ -237,6 +237,7 @@ def disconnect(brand_id):
     db = current_app.db
     db.disconnect_platform(brand_id, "meta")
     db.update_brand_api_field(brand_id, "meta_ad_account_id", "")
+    db.update_brand_api_field(brand_id, "facebook_page_id", "")
     flash("Meta account disconnected", "success")
     return redirect(url_for("brand_detail", brand_id=brand_id))
 
@@ -253,12 +254,23 @@ def _finalize_meta_connection(db, brand_id, access_token, expiry, acct):
     })
     db.update_brand_api_field(brand_id, "meta_ad_account_id", account_id)
 
-    # Auto-detect Facebook Page if not already set
+    # Auto-detect Facebook Page for organic tracking
     brand = db.get_brand(brand_id)
-    if brand and not (brand.get("facebook_page_id") or "").strip():
-        pages = _fetch_facebook_pages(access_token)
-        if pages:
+    pages = _fetch_facebook_pages(access_token)
+    if pages:
+        # If page ID already set and still in list, keep it
+        current_page_id = (brand.get("facebook_page_id") or "").strip() if brand else ""
+        matched = any(p["id"] == current_page_id for p in pages) if current_page_id else False
+        if not matched:
             db.update_brand_api_field(brand_id, "facebook_page_id", pages[0]["id"])
+        page_names = ", ".join(f"{p.get('name', 'Unknown')} ({p['id']})" for p in pages[:5])
+        flash(f"Facebook Pages detected: {page_names}. Using first page for organic tracking.", "info")
+    else:
+        flash(
+            "No Facebook Pages detected. Organic tracking won't work until a page is linked. "
+            "When reconnecting Meta, make sure to check your business page in the 'Pages' permissions screen.",
+            "warning",
+        )
 
 
 def _fetch_facebook_pages(access_token):
