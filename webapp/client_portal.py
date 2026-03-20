@@ -688,6 +688,79 @@ def client_set_primary_logo():
     return redirect(url_for("client.client_my_business"))
 
 
+@client_bp.route("/my-business/logo/rename", methods=["POST"])
+@client_login_required
+def client_rename_logo_variant():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    variant_key = (request.form.get("variant_key", "") or "").strip().lower()
+    variant_label = (request.form.get("variant_label", "") or "").strip()[:40]
+    if not variant_key or not variant_label:
+        flash("Variant and label are required.", "error")
+        return redirect(url_for("client.client_my_business"))
+
+    variants = _parse_logo_variants(brand.get("logo_variants"))
+    target = next((v for v in variants if (v.get("key") or "").strip().lower() == variant_key), None)
+    if not target:
+        flash("Logo variant not found.", "error")
+        return redirect(url_for("client.client_my_business"))
+
+    target["label"] = variant_label
+    db.update_brand_text_field(brand_id, "logo_variants", json.dumps(variants))
+    flash("Logo variant renamed.", "success")
+    return redirect(url_for("client.client_my_business"))
+
+
+@client_bp.route("/my-business/logo/delete", methods=["POST"])
+@client_login_required
+def client_delete_logo_variant():
+    from pathlib import Path
+    from flask import current_app
+
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    variant_key = (request.form.get("variant_key", "") or "").strip().lower()
+    if not variant_key:
+        flash("No variant selected.", "error")
+        return redirect(url_for("client.client_my_business"))
+
+    variants = _parse_logo_variants(brand.get("logo_variants"))
+    target = next((v for v in variants if (v.get("key") or "").strip().lower() == variant_key), None)
+    if not target:
+        flash("Logo variant not found.", "error")
+        return redirect(url_for("client.client_my_business"))
+
+    target_path = (target.get("path") or "").strip()
+    kept = [v for v in variants if (v.get("key") or "").strip().lower() != variant_key]
+    db.update_brand_text_field(brand_id, "logo_variants", json.dumps(kept))
+
+    current_primary = (brand.get("logo_path") or "").strip()
+    if current_primary == target_path:
+        new_primary = (kept[0].get("path") if kept else "") or ""
+        db.update_brand_text_field(brand_id, "logo_path", new_primary)
+
+    # Attempt file cleanup (best effort)
+    try:
+        if target_path:
+            uploads_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads"))
+            file_path = uploads_dir / target_path
+            if file_path.exists():
+                file_path.unlink()
+    except Exception:
+        pass
+
+    flash("Logo variant deleted.", "success")
+    return redirect(url_for("client.client_my_business"))
+
+
 @client_bp.route("/uploads/<path:filename>")
 @client_login_required
 def client_serve_upload(filename):
