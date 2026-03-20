@@ -139,6 +139,32 @@
         color: #374151;
         margin-bottom: .3rem;
     }
+    .preset-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: .5rem;
+        margin-bottom: .8rem;
+    }
+    .preset-btn {
+        border: 1.5px solid #e5e7eb;
+        border-radius: 8px;
+        background: #fff;
+        font-size: .78rem;
+        padding: .45rem .55rem;
+        text-align: left;
+        color: #374151;
+        cursor: pointer;
+        transition: all .15s;
+    }
+    .preset-btn:hover { border-color: #6366f1; background: #f5f3ff; }
+    .tune-label {
+        display: flex;
+        justify-content: space-between;
+        font-size: .8rem;
+        color: #4b5563;
+        margin-bottom: .25rem;
+    }
+    .tune-range { width: 100%; }
 
     /* Copy input fields */
     .copy-field { margin-bottom: 1rem; }
@@ -368,6 +394,12 @@
                 <div class="hint">Choose text region, overlay template, and font style</div>
             </div>
             <div class="creative-card-body">
+                <div class="preset-grid">
+                    <button type="button" class="preset-btn" onclick="applyPreset('bold')"><strong>Bold Promo</strong><br><span style="color:#6b7280">High contrast + centered</span></button>
+                    <button type="button" class="preset-btn" onclick="applyPreset('clean')"><strong>Clean Minimal</strong><br><span style="color:#6b7280">Soft box + subtle tint</span></button>
+                    <button type="button" class="preset-btn" onclick="applyPreset('story')"><strong>Story Social</strong><br><span style="color:#6b7280">Bubbles + playful font</span></button>
+                    <button type="button" class="preset-btn" onclick="applyPreset('luxury')"><strong>Luxury Classic</strong><br><span style="color:#6b7280">Upper third + serif</span></button>
+                </div>
                 <div class="style-field">
                     <label for="overlayTemplate">Overlay Template</label>
                     <select id="overlayTemplate" class="style-select">
@@ -412,7 +444,28 @@
                         <option value="modern" selected>Modern Sans</option>
                         <option value="classic">Classic Serif</option>
                         <option value="clean">Clean Condensed</option>
+                        <option value="elegant">Elegant Serif</option>
+                        <option value="friendly">Friendly Rounded</option>
+                        <option value="strong">Strong Display</option>
+                        <option value="mono">Tech Mono</option>
+                        <option value="playful">Playful</option>
                     </select>
+                </div>
+                <div class="style-field">
+                    <div class="tune-label"><span>Headline Size</span><span id="headlineScaleLabel">100%</span></div>
+                    <input id="headlineScale" class="tune-range" type="range" min="80" max="150" step="5" value="100">
+                </div>
+                <div class="style-field">
+                    <div class="tune-label"><span>Body Size</span><span id="bodyScaleLabel">100%</span></div>
+                    <input id="bodyScale" class="tune-range" type="range" min="80" max="150" step="5" value="100">
+                </div>
+                <div class="style-field">
+                    <div class="tune-label"><span>Overlay Strength</span><span id="overlayOpacityLabel">65%</span></div>
+                    <input id="overlayOpacity" class="tune-range" type="range" min="30" max="95" step="5" value="65">
+                </div>
+                <div class="style-field">
+                    <div class="tune-label"><span>Logo Size</span><span id="logoScaleLabel">100%</span></div>
+                    <input id="logoScale" class="tune-range" type="range" min="50" max="180" step="5" value="100">
                 </div>
                 <div class="style-field">
                     <label for="logoCorner">Logo Position</label>
@@ -495,6 +548,36 @@
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     let selectedFile = null;
     let selectedFormat = 'facebook_feed';
+
+    function bindRange(id, labelId, suffix='%') {
+        const input = document.getElementById(id);
+        const label = document.getElementById(labelId);
+        if (!input || !label) return;
+        const sync = () => { label.textContent = `${input.value}${suffix}`; };
+        input.addEventListener('input', sync);
+        sync();
+    }
+    bindRange('headlineScale', 'headlineScaleLabel');
+    bindRange('bodyScale', 'bodyScaleLabel');
+    bindRange('overlayOpacity', 'overlayOpacityLabel');
+    bindRange('logoScale', 'logoScaleLabel');
+
+    window.applyPreset = function(name) {
+        const set = (id, val) => { const el = document.getElementById(id); if (el) { el.value = val; el.dispatchEvent(new Event('input')); } };
+        if (name === 'bold') {
+            set('overlayTemplate', 'full_lower_third'); set('backgroundTreatment', 'flat'); set('shapeStyle', 'sharp');
+            set('textPlacement', 'center'); set('fontFamily', 'strong'); set('overlayOpacity', 80); set('headlineScale', 125); set('bodyScale', 105);
+        } else if (name === 'clean') {
+            set('overlayTemplate', 'soft_box'); set('backgroundTreatment', 'brand_gradient'); set('shapeStyle', 'rounded');
+            set('textPlacement', 'left'); set('fontFamily', 'clean'); set('overlayOpacity', 55); set('headlineScale', 100); set('bodyScale', 95);
+        } else if (name === 'story') {
+            set('overlayTemplate', 'bubbles'); set('backgroundTreatment', 'brand_gradient'); set('shapeStyle', 'pill');
+            set('textPlacement', 'center'); set('fontFamily', 'playful'); set('overlayOpacity', 60); set('headlineScale', 120); set('bodyScale', 100);
+        } else if (name === 'luxury') {
+            set('overlayTemplate', 'upper_third'); set('backgroundTreatment', 'brand_gradient'); set('shapeStyle', 'rounded');
+            set('textPlacement', 'left'); set('fontFamily', 'elegant'); set('overlayOpacity', 70); set('headlineScale', 110); set('bodyScale', 100);
+        }
+    };
 
     // Drag and drop
     uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
@@ -625,6 +708,10 @@
         fd.append('shape_style', document.getElementById('shapeStyle').value);
         fd.append('text_placement', document.getElementById('textPlacement').value);
         fd.append('font_family', document.getElementById('fontFamily').value);
+        fd.append('headline_scale', document.getElementById('headlineScale').value);
+        fd.append('body_scale', document.getElementById('bodyScale').value);
+        fd.append('overlay_opacity', document.getElementById('overlayOpacity').value);
+        fd.append('logo_scale', document.getElementById('logoScale').value);
         fd.append('logo_corner', document.getElementById('logoCorner').value);
         fd.append('include_phone', document.getElementById('includePhone').checked ? '1' : '0');
         fd.append('include_website', document.getElementById('includeWebsite').checked ? '1' : '0');
@@ -687,6 +774,10 @@
             if (data.shape_style) document.getElementById('shapeStyle').value = data.shape_style;
             if (data.text_placement) document.getElementById('textPlacement').value = data.text_placement;
             if (data.font_family) document.getElementById('fontFamily').value = data.font_family;
+            if (data.headline_scale) { document.getElementById('headlineScale').value = data.headline_scale; document.getElementById('headlineScale').dispatchEvent(new Event('input')); }
+            if (data.body_scale) { document.getElementById('bodyScale').value = data.body_scale; document.getElementById('bodyScale').dispatchEvent(new Event('input')); }
+            if (data.overlay_opacity) { document.getElementById('overlayOpacity').value = data.overlay_opacity; document.getElementById('overlayOpacity').dispatchEvent(new Event('input')); }
+            if (data.logo_scale) { document.getElementById('logoScale').value = data.logo_scale; document.getElementById('logoScale').dispatchEvent(new Event('input')); }
             if (data.logo_corner) document.getElementById('logoCorner').value = data.logo_corner;
             if (typeof data.include_phone !== 'undefined') document.getElementById('includePhone').checked = !!data.include_phone;
             if (typeof data.include_website !== 'undefined') document.getElementById('includeWebsite').checked = !!data.include_website;

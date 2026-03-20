@@ -691,6 +691,10 @@ def client_creative_generate():
         shape_style = request.form.get("shape_style", "rounded")
         text_placement = request.form.get("text_placement", "left")
         font_family = request.form.get("font_family", "modern")
+        headline_scale = float(request.form.get("headline_scale", "100") or 100)
+        body_scale = float(request.form.get("body_scale", "100") or 100)
+        overlay_opacity = float(request.form.get("overlay_opacity", "65") or 65)
+        logo_scale = float(request.form.get("logo_scale", "100") or 100)
         logo_corner = request.form.get("logo_corner", "top_left")
         include_phone = request.form.get("include_phone", "1") in ("1", "true", "True", "yes", "on")
         include_website = request.form.get("include_website", "0") in ("1", "true", "True", "yes", "on")
@@ -700,7 +704,7 @@ def client_creative_generate():
         allowed_background_treatments = {"brand_gradient", "flat", "none"}
         allowed_shape_styles = {"rounded", "sharp", "pill"}
         allowed_text_placements = {"left", "center", "right"}
-        allowed_font_families = {"modern", "classic", "clean"}
+        allowed_font_families = {"modern", "classic", "clean", "elegant", "friendly", "strong", "mono", "playful"}
         allowed_logo_corners = {"top_left", "top_right", "bottom_left", "bottom_right"}
         if overlay_template not in allowed_overlay_templates:
             overlay_template = "lower_third"
@@ -712,6 +716,10 @@ def client_creative_generate():
             text_placement = "left"
         if font_family not in allowed_font_families:
             font_family = "modern"
+        headline_scale = max(80.0, min(150.0, headline_scale))
+        body_scale = max(80.0, min(150.0, body_scale))
+        overlay_opacity = max(30.0, min(95.0, overlay_opacity))
+        logo_scale = max(50.0, min(180.0, logo_scale))
         if logo_corner not in allowed_logo_corners:
             logo_corner = "top_left"
 
@@ -764,39 +772,52 @@ def client_creative_generate():
 
         if background_treatment != "none":
             if overlay_template == "full_overlay":
-                alpha_full = 110 if background_treatment == "brand_gradient" else 145
+                alpha_full = int((110 if background_treatment == "brand_gradient" else 145) * (overlay_opacity / 65.0))
+                alpha_full = max(20, min(240, alpha_full))
                 for y in range(0, h):
                     grad_mask.paste(alpha_full, (0, y, w, y + 1))
             elif overlay_template == "upper_third":
                 top_end = max(int(h * 0.45), 1)
                 for y in range(0, top_end):
                     if background_treatment == "flat":
-                        alpha = 165
+                        alpha = int(165 * (overlay_opacity / 65.0))
                     else:
-                        alpha = int(200 * (1 - (y / top_end)))
+                        alpha = int(200 * (1 - (y / top_end)) * (overlay_opacity / 65.0))
+                    alpha = max(15, min(240, alpha))
                     grad_mask.paste(alpha, (0, y, w, y + 1))
             elif overlay_template in ("brand_bar", "full_lower_third"):
                 start_y = int(h * 0.66 if overlay_template == "full_lower_third" else 0.72 * h)
                 for y in range(start_y, h):
-                    alpha = 210 if background_treatment == "flat" else 190
+                    base_alpha = 210 if background_treatment == "flat" else 190
+                    alpha = int(base_alpha * (overlay_opacity / 65.0))
+                    alpha = max(15, min(240, alpha))
                     grad_mask.paste(alpha, (0, y, w, y + 1))
             elif overlay_template == "diagonal_band":
                 start_y = int(h * 0.52)
                 for y in range(start_y, h):
                     if background_treatment == "flat":
-                        alpha = 165
+                        alpha = int(165 * (overlay_opacity / 65.0))
                     else:
-                        alpha = int(190 * (y - start_y) / max(h - start_y, 1))
+                        alpha = int(190 * (y - start_y) / max(h - start_y, 1) * (overlay_opacity / 65.0))
+                    alpha = max(15, min(240, alpha))
                     grad_mask.paste(alpha, (0, y, w, y + 1))
             elif overlay_template in ("bubbles", "boxes"):
                 start_y = int(h * 0.52)
                 for y in range(start_y, h):
-                    alpha = 150 if background_treatment == "flat" else int(170 * (y - start_y) / max(h - start_y, 1))
+                    if background_treatment == "flat":
+                        alpha = int(150 * (overlay_opacity / 65.0))
+                    else:
+                        alpha = int(170 * (y - start_y) / max(h - start_y, 1) * (overlay_opacity / 65.0))
+                    alpha = max(15, min(240, alpha))
                     grad_mask.paste(alpha, (0, y, w, y + 1))
             else:
                 start_y = int(h * 0.55)
                 for y in range(start_y, h):
-                    alpha = 165 if background_treatment == "flat" else int(210 * (y - start_y) / max(h - start_y, 1))
+                    if background_treatment == "flat":
+                        alpha = int(165 * (overlay_opacity / 65.0))
+                    else:
+                        alpha = int(210 * (y - start_y) / max(h - start_y, 1) * (overlay_opacity / 65.0))
+                    alpha = max(15, min(240, alpha))
                     grad_mask.paste(alpha, (0, y, w, y + 1))
 
         if background_treatment != "none":
@@ -807,9 +828,9 @@ def client_creative_generate():
         draw = ImageDraw.Draw(bg)
         margin = int(w * 0.06)
 
-        font_headline = _get_font(int(h * 0.065), bold=True, family=font_family)
-        font_body = _get_font(int(h * 0.038), family=font_family)
-        font_cta = _get_font(int(h * 0.04), bold=True, family=font_family)
+        font_headline = _get_font(int(h * 0.065 * (headline_scale / 100.0)), bold=True, family=font_family)
+        font_body = _get_font(int(h * 0.038 * (body_scale / 100.0)), family=font_family)
+        font_cta = _get_font(int(h * 0.04 * (headline_scale / 100.0)), bold=True, family=font_family)
 
         text_width = int(w * 0.84)
         margin = int(w * 0.06)
@@ -938,7 +959,7 @@ def client_creative_generate():
             if logo_file.exists():
                 try:
                     logo = Image.open(str(logo_file)).convert("RGBA")
-                    logo_w = int(w * 0.36)  # 3x larger than original 12%
+                    logo_w = int(w * 0.36 * (logo_scale / 100.0))
                     ratio = logo_w / logo.width
                     logo_h = int(logo.height * ratio)
                     logo = logo.resize((logo_w, logo_h), Image.LANCZOS)
@@ -1081,7 +1102,7 @@ def client_creative_generate():
                 if logo_file.exists():
                     try:
                         logo = Image.open(str(logo_file)).convert("RGBA")
-                        logo_w = int(w * 0.36)  # 3x larger than original 12%
+                        logo_w = int(w * 0.36 * (logo_scale / 100.0))
                         ratio = logo_w / logo.width
                         logo_h = int(logo.height * ratio)
                         logo = logo.resize((logo_w, logo_h), Image.LANCZOS)
@@ -1276,6 +1297,68 @@ def _get_font(size, bold=False, family="modern"):
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             ],
         },
+        "elegant": {
+            "bold": [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+                "DejaVuSerif-Bold.ttf",
+            ],
+            "regular": [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+                "DejaVuSerif.ttf",
+            ],
+        },
+        "friendly": {
+            "bold": [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                "DejaVuSans-Bold.ttf",
+            ],
+            "regular": [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                "DejaVuSans.ttf",
+            ],
+        },
+        "strong": {
+            "bold": [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
+                "/usr/share/fonts/TTF/DejaVuSansCondensed-Bold.ttf",
+                "DejaVuSansCondensed-Bold.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            ],
+            "regular": [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf",
+                "/usr/share/fonts/TTF/DejaVuSansCondensed.ttf",
+                "DejaVuSansCondensed.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            ],
+        },
+        "mono": {
+            "bold": [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationMono-Bold.ttf",
+                "DejaVuSansMono-Bold.ttf",
+            ],
+            "regular": [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+                "DejaVuSansMono.ttf",
+            ],
+        },
+        "playful": {
+            "bold": [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            ],
+            "regular": [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            ],
+        },
     }
 
     chosen = font_sets.get(family, font_sets["modern"])
@@ -1383,7 +1466,7 @@ Return JSON only with:
 - overlay_template: one of [lower_third, full_lower_third, upper_third, full_overlay, soft_box, brand_bar, diagonal_band, bubbles, boxes]
 - shape_style: one of [rounded, sharp, pill]
 - text_placement: one of [left, center, right]
-- font_family: one of [modern, classic, clean]
+- font_family: one of [modern, classic, clean, elegant, friendly, strong, mono, playful]
 
 JSON only, no markdown."""
 
