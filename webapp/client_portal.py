@@ -761,13 +761,13 @@ def client_creative_generate():
         y_cursor = int(h * 0.62)
         _draw_text_wrapped(draw, ad_copy_headline, margin, y_cursor, w - margin * 2, font_headline, fill="white")
         headline_lines = _count_lines(ad_copy_headline, w - margin * 2, font_headline)
-        y_cursor += int(headline_lines * font_headline.size * 1.3) + 8
+        y_cursor += int(headline_lines * _font_size(font_headline) * 1.3) + 8
 
         # Body text
         if ad_copy_body:
             _draw_text_wrapped(draw, ad_copy_body, margin, y_cursor, w - margin * 2, font_body, fill=(220, 220, 220))
             body_lines = _count_lines(ad_copy_body, w - margin * 2, font_body)
-            y_cursor += int(body_lines * font_body.size * 1.3) + 12
+            y_cursor += int(body_lines * _font_size(font_body) * 1.3) + 12
 
         # CTA button
         if cta_text:
@@ -886,22 +886,46 @@ def _fit_cover(img, target_size):
 def _get_font(size, bold=False):
     """Try to load a system font, fall back to Pillow default."""
     from PIL import ImageFont
-    # Common font paths
+    import os
+    # Common font paths by name and full Linux paths
     candidates = []
     if bold:
-        candidates = ["arialbd.ttf", "Arial Bold.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf"]
+        candidates = [
+            "arialbd.ttf", "Arial Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf",
+        ]
     else:
-        candidates = ["arial.ttf", "Arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf"]
+        candidates = [
+            "arial.ttf", "Arial.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/TTF/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "DejaVuSans.ttf", "LiberationSans-Regular.ttf",
+        ]
     for name in candidates:
         try:
-            return ImageFont.truetype(name, size)
+            f = ImageFont.truetype(name, size)
+            f._fallback_size = size  # stash size for our helpers
+            return f
         except (OSError, IOError):
             continue
-    # Last resort: default
+    # Last resort: default bitmap font
     try:
-        return ImageFont.load_default(size=size)
+        f = ImageFont.load_default(size=size)
     except TypeError:
-        return ImageFont.load_default()
+        f = ImageFont.load_default()
+    f._fallback_size = size
+    return f
+
+
+def _font_size(font):
+    """Get the effective font size, works with both truetype and default fonts."""
+    if hasattr(font, 'size') and font.size:
+        return font.size
+    return getattr(font, '_fallback_size', 16)
 
 
 def _draw_text_wrapped(draw, text, x, y, max_width, font, fill="white"):
@@ -923,7 +947,7 @@ def _draw_text_wrapped(draw, text, x, y, max_width, font, fill="white"):
 
     for line in lines:
         draw.text((x, y), line, fill=fill, font=font)
-        y += int(font.size * 1.3)
+        y += int(_font_size(font) * 1.3)
 
 
 def _count_lines(text, max_width, font):

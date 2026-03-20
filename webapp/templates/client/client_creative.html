@@ -512,7 +512,10 @@
         fd.append('image_description', document.getElementById('imageDescription').value.trim());
 
         fetch("{{ url_for('client.client_creative_generate') }}", { method: 'POST', body: fd })
-        .then(r => r.json())
+        .then(r => {
+            if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Server error ' + r.status); });
+            return r.json();
+        })
         .then(data => {
             if (data.error) { alert(data.error); return; }
             const preview = document.getElementById('previewImage');
@@ -526,7 +529,7 @@
             document.getElementById('downloadLink').href = data.image_url;
             document.getElementById('downloadLink').download = data.filename || 'creative.png';
         })
-        .catch(() => alert('Creative generation failed. Try again.'))
+        .catch(e => alert(e.message || 'Creative generation failed. Try again.'))
         .finally(() => {
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-magic"></i> Generate Creative';
