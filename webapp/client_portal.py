@@ -671,8 +671,7 @@ def client_creative_generate():
     try:
         from pathlib import Path
         from flask import current_app
-        from PIL import Image, ImageDraw, ImageFont, ImageFilter
-        import io
+        from PIL import Image, ImageDraw, ImageFont
         import uuid
 
         db = _get_db()
@@ -687,7 +686,6 @@ def client_creative_generate():
         ad_copy_body = request.form.get("body_text", "").strip()[:150]
         cta_text = request.form.get("cta_text", "").strip()[:30]
         ad_format = request.form.get("ad_format", "facebook_feed")
-        description = request.form.get("image_description", "").strip()[:500]
 
         if not image_file or not image_file.filename:
             return jsonify({"error": "Please upload a background image."}), 400
@@ -715,53 +713,33 @@ def client_creative_generate():
             "google_display_square": (1200, 1200),
         }
         target_size = FORMAT_SIZES.get(ad_format, (1200, 628))
-
-        # Open and resize the background image
-        bg = Image.open(image_file).convert("RGBA")
-        bg = _fit_cover(bg, target_size)
-
-        # Darken bottom portion for text readability using a gradient image
         w, h = target_size
-        gradient = Image.new("L", (1, h), 0)
-        for y in range(h):
-            if y < h // 2:
-                gradient.putpixel((0, y), 0)
-            else:
-                gradient.putpixel((0, y), int(180 * (y - h // 2) / (h // 2)))
-        gradient = gradient.resize((w, h), Image.NEAREST)
-        overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        black = Image.new("RGBA", (w, h), (0, 0, 0, 255))
-        overlay = Image.composite(black, overlay, gradient)
-        bg = Image.alpha_composite(bg, overlay)
 
-        # Load logo if available
-        logo_img = None
-        if brand.get("logo_path"):
-            uploads_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads"))
-            logo_file = uploads_dir / brand["logo_path"]
-            if logo_file.exists():
-                try:
-                    logo_img = Image.open(str(logo_file)).convert("RGBA")
-                    # Scale logo to ~12% of image width
-                    logo_w = int(target_size[0] * 0.12)
-                    ratio = logo_w / logo_img.width
-                    logo_h = int(logo_img.height * ratio)
-                    logo_img = logo_img.resize((logo_w, logo_h), Image.LANCZOS)
-                except Exception:
-                    logo_img = None
+        # Open as RGB (not RGBA - saves 25% memory), resize immediately
+        bg = Image.open(image_file)
+        bg.thumbnail((max(w, h) * 2, max(w, h) * 2), Image.LANCZOS)  # cap source size
+        bg = bg.convert("RGB")
+        bg = _fit_cover_rgb(bg, target_size)
+
+        # Apply gradient darkening on bottom half using paste + mask
+        dark = Image.new("RGB", (w, h), (0, 0, 0))
+        grad_mask = Image.new("L", (w, h), 0)
+        for y in range(h // 3, h):
+            alpha = int(200 * (y - h // 3) / (h - h // 3))
+            grad_mask.paste(alpha, (0, y, w, y + 1))
+        bg = Image.composite(dark, bg, grad_mask)
+        del dark, grad_mask  # free memory
 
         # Draw text
         draw = ImageDraw.Draw(bg)
-        w, h = target_size
         margin = int(w * 0.06)
 
-        # Try to load a font, fall back to default
         font_headline = _get_font(int(h * 0.065), bold=True)
         font_body = _get_font(int(h * 0.038))
         font_cta = _get_font(int(h * 0.04), bold=True)
 
         # Headline
-        y_cursor = int(h * 0.62)
+        y_cursor = int(h * 0.60)
         _draw_text_wrapped(draw, ad_copy_headline, margin, y_cursor, w - margin * 2, font_headline, fill="white")
         headline_lines = _count_lines(ad_copy_headline, w - margin * 2, font_headline)
         y_cursor += int(headline_lines * _font_size(font_headline) * 1.3) + 8
@@ -779,23 +757,39 @@ def client_creative_generate():
             cta_h = cta_bbox[3] - cta_bbox[1] + 20
             cta_x = margin
             cta_y = y_cursor
-            # Draw rounded CTA button
             draw.rounded_rectangle([cta_x, cta_y, cta_x + cta_w, cta_y + cta_h], radius=8, fill=(99, 102, 241))
             draw.text((cta_x + 18, cta_y + 10), cta_text, fill="white", font=font_cta)
 
-        # Place logo (top-left or top-right)
-        if logo_img:
-            logo_margin = int(w * 0.04)
-            bg.paste(logo_img, (logo_margin, logo_margin), logo_img)
+        # Place logo (top-left)
+        if brand.get("logo_path"):
+            uploads_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads"))
+            logo_file = uploads_dir / brand["logo_path"]
+            if logo_file.exists():
+                try:
+                    logo = Image.open(str(logo_file)).convert("RGBA")
+                    logo_w = int(w * 0.12)
+                    ratio = logo_w / logo.width
+                    logo_h = int(logo.height * ratio)
+                    logo = logo.resize((logo_w, logo_h), Image.LANCZOS)
+                    logo_margin = int(w * 0.04)
+                    bg.paste(logo, (logo_margin, logo_margin), logo)
+                    del logo
+                except Exception:
+                    pass
 
-        # Save output
+        # Save as JPEG (much smaller + faster than PNG)
         output_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads")) / "creatives" / str(brand_id)
         output_dir.mkdir(parents=True, exist_ok=True)
-        output_name = f"creative_{uuid.uuid4().hex[:8]}.png"
+        output_name = f"creative_{uuid.uuid4().hex[:8]}.jpg"
         output_path = output_dir / output_name
+        bg.save(str(output_path), "JPEG", quality=90)
+        del bg
 
-        final = bg.convert("RGB")
-        final.save(str(output_path), "PNG", quality=95)
+        rel_path = f"creatives/{brand_id}/{output_name}"
+        return jsonify({
+            "image_url": url_for("client.client_serve_upload", filename=rel_path),
+            "filename": output_name,
+        })
 
         rel_path = f"creatives/{brand_id}/{output_name}"
         return jsonify({
@@ -877,6 +871,19 @@ JSON only, no markdown."""
 
 def _fit_cover(img, target_size):
     """Resize and crop image to cover target_size (center crop)."""
+    from PIL import Image
+    tw, th = target_size
+    iw, ih = img.size
+    scale = max(tw / iw, th / ih)
+    new_w, new_h = int(iw * scale), int(ih * scale)
+    img = img.resize((new_w, new_h), Image.LANCZOS)
+    left = (new_w - tw) // 2
+    top = (new_h - th) // 2
+    return img.crop((left, top, left + tw, top + th))
+
+
+def _fit_cover_rgb(img, target_size):
+    """Memory-efficient resize and center crop for RGB images."""
     from PIL import Image
     tw, th = target_size
     iw, ih = img.size
