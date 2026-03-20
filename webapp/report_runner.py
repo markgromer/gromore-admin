@@ -93,7 +93,7 @@ def build_analysis_and_suggestions_for_brand(db, brand, month):
 
             api_data, api_errors = pull_api_data_for_brand(brand, connections, month)
             # Merge: API data wins over CSV (more current from live connection)
-            for key in ("google_analytics", "meta_business", "search_console", "google_ads"):
+            for key in ("google_analytics", "meta_business", "search_console", "google_ads", "facebook_organic"):
                 if key in api_data and api_data[key]:
                     data[key] = api_data[key]
         except Exception as e:

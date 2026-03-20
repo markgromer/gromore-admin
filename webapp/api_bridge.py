@@ -216,6 +216,19 @@ def pull_api_data_for_brand(brand, connections, month):
         except Exception as e:
             errors.append(f"Meta pull failed: {str(e)}")
 
+    # Facebook Organic (Page Insights)
+    if meta_conn and meta_conn.get("status") == "connected" and (brand.get("facebook_page_id") or "").strip():
+        try:
+            token = _get_meta_token(db, brand["id"], meta_conn)
+            data["facebook_organic"] = _pull_meta_organic(
+                brand["facebook_page_id"],
+                token,
+                start_date,
+                end_date,
+            )
+        except Exception as e:
+            errors.append(f"Facebook organic pull failed: {str(e)}")
+
     return data, errors
 
 
@@ -680,4 +693,168 @@ def _pull_meta(ad_account_id, access_token, start_date, end_date):
         "by_ad_set": {},
         "top_ads": top_ads[:20],
         "row_count": len(top_ads) if top_ads else 1,
+    }
+
+
+def _pull_meta_organic(page_id, access_token, start_date, end_date):
+    """Pull organic Facebook Page insights using the Graph API.
+
+    Returns page-level metrics (followers, reach, engagement) and
+    top-performing posts for the date range.
+    """
+    import requests
+
+    base = f"https://graph.facebook.com/v21.0/{page_id}"
+
+    # ── Page-level info (followers, fan count) ──
+    page_resp = requests.get(
+        base,
+        params={
+            "access_token": access_token,
+            "fields": "name,fan_count,followers_count,about,category,website",
+        },
+        timeout=15,
+    )
+    page_info = {}
+    if page_resp.status_code == 200:
+        d = page_resp.json()
+        page_info = {
+            "name": d.get("name", ""),
+            "fans": d.get("fan_count", 0),
+            "followers": d.get("followers_count", 0),
+            "category": d.get("category", ""),
+        }
+
+    # ── Page Insights (aggregated metrics for the period) ──
+    # Note: page/insights requires "since"/"until" as Unix timestamps
+    from datetime import datetime as _dt
+    since_ts = int(_dt.strptime(start_date, "%Y-%m-%d").timestamp())
+    until_ts = int(_dt.strptime(end_date, "%Y-%m-%d").timestamp())
+
+    metrics = [
+        "page_impressions",
+        "page_impressions_organic",
+        "page_engaged_users",
+        "page_post_engagements",
+        "page_fan_adds",
+        "page_fan_removes",
+        "page_views_total",
+        "page_actions_post_reactions_total",
+    ]
+
+    insights_data = {}
+    try:
+        insights_resp = requests.get(
+            f"{base}/insights",
+            params={
+                "access_token": access_token,
+                "metric": ",".join(metrics),
+                "period": "day",
+                "since": since_ts,
+                "until": until_ts,
+            },
+            timeout=30,
+        )
+        if insights_resp.status_code == 200:
+            for entry in insights_resp.json().get("data", []):
+                metric_name = entry.get("name", "")
+                # Sum all daily values for the period
+                total = 0
+                for val in entry.get("values", []):
+                    v = val.get("value", 0)
+                    if isinstance(v, dict):
+                        total += sum(v.values())
+                    elif isinstance(v, (int, float)):
+                        total += v
+                insights_data[metric_name] = total
+    except Exception:
+        pass
+
+    page_metrics = {
+        "followers": page_info.get("followers", 0),
+        "fans": page_info.get("fans", 0),
+        "page_name": page_info.get("name", ""),
+        "impressions": insights_data.get("page_impressions", 0),
+        "organic_impressions": insights_data.get("page_impressions_organic", 0),
+        "engaged_users": insights_data.get("page_engaged_users", 0),
+        "post_engagements": insights_data.get("page_post_engagements", 0),
+        "new_fans": insights_data.get("page_fan_adds", 0),
+        "lost_fans": insights_data.get("page_fan_removes", 0),
+        "net_fans": insights_data.get("page_fan_adds", 0) - insights_data.get("page_fan_removes", 0),
+        "page_views": insights_data.get("page_views_total", 0),
+        "reactions": insights_data.get("page_actions_post_reactions_total", 0),
+    }
+
+    # ── Top posts for the period ──
+    posts = []
+    try:
+        posts_resp = requests.get(
+            f"{base}/posts",
+            params={
+                "access_token": access_token,
+                "fields": "id,message,created_time,type,permalink_url,"
+                          "shares,likes.limit(0).summary(true),"
+                          "comments.limit(0).summary(true),"
+                          "insights.metric(post_impressions,post_engaged_users,"
+                          "post_clicks,post_reactions_by_type_total)",
+                "since": since_ts,
+                "until": until_ts,
+                "limit": 50,
+            },
+            timeout=30,
+        )
+        if posts_resp.status_code == 200:
+            for post in posts_resp.json().get("data", []):
+                post_insights = {}
+                for ins in (post.get("insights", {}).get("data", [])):
+                    val = ins.get("values", [{}])[0].get("value", 0)
+                    if isinstance(val, dict):
+                        val = sum(val.values())
+                    post_insights[ins.get("name", "")] = val
+
+                likes_count = post.get("likes", {}).get("summary", {}).get("total_count", 0)
+                comments_count = post.get("comments", {}).get("summary", {}).get("total_count", 0)
+                shares_count = (post.get("shares") or {}).get("count", 0)
+                impressions = post_insights.get("post_impressions", 0)
+                engaged = post_insights.get("post_engaged_users", 0)
+                clicks = post_insights.get("post_clicks", 0)
+
+                engagement_rate = 0
+                if impressions > 0:
+                    engagement_rate = round((likes_count + comments_count + shares_count) / impressions * 100, 2)
+
+                message = (post.get("message") or "")
+                posts.append({
+                    "id": post.get("id", ""),
+                    "message": message[:150] + ("..." if len(message) > 150 else ""),
+                    "created_time": post.get("created_time", ""),
+                    "type": post.get("type", "status"),
+                    "permalink": post.get("permalink_url", ""),
+                    "likes": likes_count,
+                    "comments": comments_count,
+                    "shares": shares_count,
+                    "impressions": impressions,
+                    "engaged_users": engaged,
+                    "clicks": clicks,
+                    "engagement_rate": engagement_rate,
+                })
+    except Exception:
+        pass
+
+    # Sort by engagement
+    posts.sort(key=lambda x: (x.get("likes", 0) + x.get("comments", 0) + x.get("shares", 0)), reverse=True)
+
+    # Calculate engagement rate for the period
+    total_engagement_rate = 0
+    if page_metrics["organic_impressions"] > 0:
+        total_engagement_rate = round(
+            page_metrics["post_engagements"] / page_metrics["organic_impressions"] * 100, 2
+        )
+
+    page_metrics["engagement_rate"] = total_engagement_rate
+
+    return {
+        "metrics": page_metrics,
+        "top_posts": posts[:15],
+        "post_count": len(posts),
     }

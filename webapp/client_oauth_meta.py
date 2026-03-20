@@ -18,6 +18,8 @@ SCOPES = [
     "ads_management",
     "read_insights",
     "business_management",
+    "pages_show_list",
+    "pages_read_engagement",
 ]
 
 

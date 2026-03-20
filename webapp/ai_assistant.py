@@ -132,6 +132,9 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
     google_ads = analysis.get("google_ads") or {}
     ga = analysis.get("google_analytics") or {}
     gsc = analysis.get("search_console") or {}
+    fb_organic = analysis.get("facebook_organic") or {}
+
+    fb_metrics = fb_organic.get("metrics") or {}
 
     out: Dict[str, Any] = {
         "client": {
@@ -209,6 +212,18 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
                     "cpr_pct": _safe_float(_pick(google_ads, "month_over_month.cost_per_result.change_pct")),
                 },
             },
+            "facebook_organic": {
+                "followers": fb_metrics.get("followers"),
+                "fans": fb_metrics.get("fans"),
+                "organic_impressions": fb_metrics.get("organic_impressions"),
+                "engaged_users": fb_metrics.get("engaged_users"),
+                "post_engagements": fb_metrics.get("post_engagements"),
+                "engagement_rate": fb_metrics.get("engagement_rate"),
+                "new_fans": fb_metrics.get("new_fans"),
+                "net_fans": fb_metrics.get("net_fans"),
+                "page_views": fb_metrics.get("page_views"),
+                "post_count": fb_organic.get("post_count", 0),
+            },
         },
         "seo_detail": {
             "top_queries": (gsc.get("top_queries") or [])[:20],
@@ -226,16 +241,24 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
             "top_ads": (meta.get("top_ads") or [])[:20],
             "month_over_month": meta.get("month_over_month") or {},
         },
+        "facebook_organic_detail": {
+            "top_posts": (fb_organic.get("top_posts") or [])[:10],
+        },
         "competitor_watch": analysis.get("competitor_watch") or {},
     }
 
     # Remove empty channel objects to reduce noise
     for channel in ("meta", "ga", "gsc", "google_ads"):
         if not any(v is not None for v in (out["kpis"][channel] or {}).values() if not isinstance(v, dict)):
-            # keep MoM dict if it has content
             mom = out["kpis"][channel].get("mom") if isinstance(out["kpis"][channel], dict) else None
             if not (isinstance(mom, dict) and any(x is not None for x in mom.values())):
                 out["kpis"].pop(channel, None)
+
+    # Remove facebook_organic if no data
+    fb_kpis = out["kpis"].get("facebook_organic", {})
+    if not any(v for v in fb_kpis.values() if v):
+        out["kpis"].pop("facebook_organic", None)
+        out.pop("facebook_organic_detail", None)
 
     return out
 

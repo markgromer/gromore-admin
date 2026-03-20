@@ -207,6 +207,7 @@ class WebDB:
             ("brand_colors", "TEXT DEFAULT ''"),
             ("google_drive_folder_id", "TEXT DEFAULT ''"),
             ("google_drive_sheet_id", "TEXT DEFAULT ''"),
+            ("facebook_page_id", "TEXT DEFAULT ''"),
         ]
         for col_name, col_def in new_brand_cols:
             if col_name not in brand_columns:
@@ -333,7 +334,7 @@ class WebDB:
         conn.close()
 
     def update_brand_api_field(self, brand_id, field, value):
-        allowed = {"ga4_property_id", "gsc_site_url", "meta_ad_account_id", "google_ads_customer_id", "wp_category_id"}
+        allowed = {"ga4_property_id", "gsc_site_url", "meta_ad_account_id", "google_ads_customer_id", "wp_category_id", "facebook_page_id"}
         if field not in allowed:
             raise ValueError(f"Cannot update field: {field}")
         conn = self._conn()

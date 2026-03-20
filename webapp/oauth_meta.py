@@ -23,6 +23,8 @@ SCOPES = [
     "ads_management",
     "read_insights",
     "business_management",
+    "pages_show_list",
+    "pages_read_engagement",
 ]
 
 
@@ -250,3 +252,29 @@ def _finalize_meta_connection(db, brand_id, access_token, expiry, acct):
         "scopes": ",".join(SCOPES),
     })
     db.update_brand_api_field(brand_id, "meta_ad_account_id", account_id)
+
+    # Auto-detect Facebook Page if not already set
+    brand = db.get_brand(brand_id)
+    if brand and not (brand.get("facebook_page_id") or "").strip():
+        pages = _fetch_facebook_pages(access_token)
+        if pages:
+            db.update_brand_api_field(brand_id, "facebook_page_id", pages[0]["id"])
+
+
+def _fetch_facebook_pages(access_token):
+    """Fetch Facebook Pages the user manages."""
+    try:
+        resp = requests.get(
+            "https://graph.facebook.com/v21.0/me/accounts",
+            params={
+                "access_token": access_token,
+                "fields": "id,name,category,fan_count,followers_count",
+                "limit": 50,
+            },
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            return []
+        return resp.json().get("data", [])
+    except Exception:
+        return []

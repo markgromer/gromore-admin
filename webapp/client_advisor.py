@@ -39,6 +39,10 @@ def build_client_dashboard(analysis, suggestions, brand, ai_model=None, include_
     if meta:
         channels["facebook_ads"] = _explain_meta(meta)
 
+    fb_organic = analysis.get("facebook_organic")
+    if fb_organic:
+        channels["facebook_organic"] = _explain_facebook_organic(fb_organic)
+
     google_ads = analysis.get("google_ads")
     if google_ads:
         channels["google_ads"] = _explain_google_ads(google_ads)
@@ -222,6 +226,118 @@ def _explain_meta(meta):
         })
 
     return {"title": "Facebook & Instagram Ads", "icon": "bi-meta", "cards": cards}
+
+
+def _explain_facebook_organic(fb_organic):
+    metrics = fb_organic.get("metrics") or {}
+    top_posts = fb_organic.get("top_posts") or []
+    post_count = fb_organic.get("post_count", 0)
+
+    cards = []
+
+    followers = metrics.get("followers") or 0
+    fans = metrics.get("fans") or 0
+    new_fans = metrics.get("new_fans") or 0
+    net_fans = metrics.get("net_fans") or 0
+
+    cards.append({
+        "metric": "Page Followers",
+        "value": f"{followers:,}",
+        "status": "good" if net_fans > 0 else ("warning" if net_fans < 0 else "neutral"),
+        "explanation": (
+            f"Your Facebook page has {followers:,} followers."
+            + (f" You gained {net_fans:,} net new followers this month - your audience is growing!"
+               if net_fans > 0
+               else f" You lost {abs(net_fans):,} followers this month. Review your content mix to keep people engaged."
+               if net_fans < 0
+               else "")
+        ),
+    })
+
+    organic_impressions = metrics.get("organic_impressions") or 0
+    if organic_impressions > 0 or followers > 0:
+        reach_pct = round((organic_impressions / followers) * 100, 1) if followers > 0 else 0
+        cards.append({
+            "metric": "Organic Reach",
+            "value": f"{organic_impressions:,}",
+            "status": "good" if reach_pct > 30 else ("warning" if reach_pct < 15 else "neutral"),
+            "explanation": (
+                f"Your posts were seen {organic_impressions:,} times organically (without paying). "
+                + (f"That's {reach_pct}% of your followers."
+                   if followers > 0 else "")
+                + (" Great reach - your content is getting shared and picked up by the algorithm."
+                   if reach_pct > 30
+                   else " Try posting more engaging content (questions, before/after photos, videos) to boost this."
+                   if reach_pct < 15 and followers > 0
+                   else "")
+            ),
+        })
+
+    post_engagements = metrics.get("post_engagements") or 0
+    engagement_rate = metrics.get("engagement_rate") or 0
+    cards.append({
+        "metric": "Engagement",
+        "value": f"{post_engagements:,}",
+        "status": "good" if engagement_rate > 2 else ("warning" if engagement_rate < 1 else "neutral"),
+        "explanation": (
+            f"Your posts received {post_engagements:,} total engagements (likes, comments, shares). "
+            + (f"That's a {engagement_rate:.1f}% engagement rate. "
+               if engagement_rate > 0 else "")
+            + ("This is strong for a local business page."
+               if engagement_rate > 2
+               else "This is below average. Posting more consistently and using photos/videos from your actual work can help."
+               if engagement_rate < 1
+               else "Solid engagement - keep the content coming.")
+        ),
+    })
+
+    cards.append({
+        "metric": "Posts This Month",
+        "value": str(post_count),
+        "status": "good" if post_count >= 12 else ("warning" if post_count < 8 else "neutral"),
+        "explanation": (
+            f"You published {post_count} posts this month. "
+            + ("Great consistency! Regular posting keeps your page active in the algorithm."
+               if post_count >= 12
+               else "Aim for at least 3 posts per week (12+/month). Consistency matters more than perfection."
+               if post_count < 8
+               else "Decent posting pace. A few more posts per week could help grow your reach.")
+        ),
+    })
+
+    # Top post highlight
+    if top_posts:
+        best = top_posts[0]
+        best_eng = best.get("engagement_rate", 0)
+        best_type = best.get("type", "post")
+        best_msg = (best.get("message") or "")[:80]
+        if best_eng > 0:
+            cards.append({
+                "metric": "Top Post",
+                "value": f"{best_eng:.1f}% engagement",
+                "status": "good" if best_eng > 3 else "neutral",
+                "explanation": (
+                    f"Your best-performing post was a {best_type}"
+                    + (f': "{best_msg}..."' if best_msg else "")
+                    + f" with {best_eng:.1f}% engagement. "
+                    "Look at what made this one work and create more content like it."
+                ),
+            })
+
+    page_views = metrics.get("page_views") or 0
+    if page_views > 0:
+        cards.append({
+            "metric": "Page Views",
+            "value": f"{page_views:,}",
+            "status": "neutral",
+            "explanation": (
+                f"Your Facebook page was viewed {page_views:,} times. "
+                "These are people actively looking at your business page, "
+                "so make sure your page info, services, and contact details are up to date."
+            ),
+        })
+
+    return {"title": "Facebook Organic", "icon": "bi-facebook", "cards": cards}
 
 
 def _explain_google_ads(google_ads):
@@ -499,10 +615,12 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
     _cat_paid = {"paid_advertising", "budget", "creative"}
     _cat_seo = {"seo"}
     _cat_web = {"website"}
+    _cat_organic = {"organic_social"}
 
     google_ads_detail = analysis_summary.get("google_ads_detail", {})
     meta_detail = analysis_summary.get("meta_detail", {})
     seo_detail = analysis_summary.get("seo_detail", {})
+    fb_organic_detail = analysis_summary.get("facebook_organic_detail", {})
     kpis = analysis_summary.get("kpis", {})
 
     action_items = []
@@ -548,6 +666,12 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
 
         if cat in _cat_web:
             item["relevant_data"]["website_kpis"] = kpis.get("ga", {})
+
+        if cat in _cat_organic or "organic" in s["title"].lower():
+            item["relevant_data"]["fb_organic_top_posts"] = (
+                fb_organic_detail.get("top_posts") or []
+            )[:10]
+            item["relevant_data"]["fb_organic_kpis"] = kpis.get("facebook_organic", {})
 
         # Competitor data is relevant across all categories
         comp = analysis_summary.get("competitor_watch") or {}

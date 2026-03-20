@@ -21,6 +21,7 @@ CATEGORY_WEBSITE = "website"
 CATEGORY_STRATEGY = "strategy"
 CATEGORY_CREATIVE = "creative"
 CATEGORY_BUDGET = "budget"
+CATEGORY_ORGANIC = "organic_social"
 
 
 def make_suggestion(title, detail, priority, category, impact_area, data_point=None):
@@ -63,6 +64,11 @@ def generate_suggestions(analysis):
     google_ads = analysis.get("google_ads")
     if google_ads:
         suggestions.extend(_google_ads_suggestions(google_ads, industry, goals))
+
+    # ── Facebook Organic suggestions ──
+    fb_organic = analysis.get("facebook_organic")
+    if fb_organic:
+        suggestions.extend(_facebook_organic_suggestions(fb_organic, industry, goals))
 
     # ── Search Console suggestions ──
     gsc = analysis.get("search_console")
@@ -278,6 +284,116 @@ def _meta_suggestions(meta, industry, goals, client_config):
             "or shift some budget to less competitive time slots.",
             PRIORITY_MEDIUM, CATEGORY_PAID, "cost_efficiency",
             data_point=f"CPM: ${cpm} (+{cpm_mom['change_pct']}%)"
+        ))
+
+    return suggestions
+
+
+def _facebook_organic_suggestions(fb_organic, industry, goals):
+    suggestions = []
+    metrics = fb_organic.get("metrics") or {}
+    top_posts = fb_organic.get("top_posts") or []
+    post_count = fb_organic.get("post_count", 0)
+
+    followers = metrics.get("followers") or 0
+    organic_impressions = metrics.get("organic_impressions") or 0
+    engaged_users = metrics.get("engaged_users") or 0
+    post_engagements = metrics.get("post_engagements") or 0
+    new_fans = metrics.get("new_fans") or 0
+    lost_fans = metrics.get("lost_fans") or 0
+    net_fans = metrics.get("net_fans") or 0
+    page_views = metrics.get("page_views") or 0
+    engagement_rate = metrics.get("engagement_rate") or 0
+
+    # Low posting frequency
+    if post_count < 8:
+        suggestions.append(make_suggestion(
+            "Increase Facebook Posting Frequency",
+            f"Only {post_count} posts this month. For home services, aim for 12-20 posts/month. "
+            "Mix content types: job completion photos (before/after), quick tips for homeowners, "
+            "team spotlights, customer reviews/shoutouts, seasonal maintenance reminders, "
+            "and behind-the-scenes content. Consistency builds trust with local audiences.",
+            PRIORITY_HIGH, CATEGORY_ORGANIC, "organic_reach",
+            data_point=f"{post_count} posts this month"
+        ))
+
+    # Low engagement rate
+    if followers > 0 and engagement_rate < 1.0 and post_count > 0:
+        suggestions.append(make_suggestion(
+            "Boost Organic Engagement Rate",
+            f"Engagement rate is {engagement_rate:.1f}%, below the 1-3% benchmark for local businesses. "
+            "Try asking questions in posts ('What project are you tackling this weekend?'), "
+            "run simple polls, respond to every comment within 2 hours, "
+            "post at peak times (typically 9-11am and 7-9pm for local service pages), "
+            "and tag customers (with permission) in job completion posts.",
+            PRIORITY_HIGH, CATEGORY_ORGANIC, "engagement",
+            data_point=f"Engagement rate: {engagement_rate:.1f}%"
+        ))
+
+    # Losing followers
+    if net_fans < 0:
+        suggestions.append(make_suggestion(
+            "Address Follower Decline",
+            f"Lost {abs(net_fans)} net followers this month ({new_fans} gained, {lost_fans} lost). "
+            "Review recent content for anything that may be turning people off. "
+            "Focus on value-driven posts: seasonal tips, free advice, community involvement. "
+            "Avoid posting only promotions; aim for 80% helpful content, 20% sales.",
+            PRIORITY_HIGH, CATEGORY_ORGANIC, "audience_growth",
+            data_point=f"Net fans: {net_fans}"
+        ))
+
+    # Low organic reach relative to followers
+    if followers > 100 and organic_impressions > 0:
+        reach_pct = (organic_impressions / followers) * 100 if followers else 0
+        if reach_pct < 20:
+            suggestions.append(make_suggestion(
+                "Improve Organic Reach",
+                f"Organic impressions reached {reach_pct:.0f}% of followers. Facebook's algorithm "
+                "favors engagement-heavy content. Try Reels/short videos (30-60 seconds of a job in progress), "
+                "carousel posts with multiple project photos, and posts that spark conversation. "
+                "Also consider going Live once a month for a quick Q&A or job walkthrough.",
+                PRIORITY_MEDIUM, CATEGORY_ORGANIC, "organic_reach",
+                data_point=f"Reach: {reach_pct:.0f}% of {followers} followers"
+            ))
+
+    # Best performing post analysis
+    if top_posts:
+        best = top_posts[0]
+        best_type = best.get("type", "post")
+        best_eng = best.get("engagement_rate", 0)
+        if best_eng > 3:
+            suggestions.append(make_suggestion(
+                "Double Down on Top-Performing Content Type",
+                f"Your best post this month ({best_type}) hit {best_eng:.1f}% engagement. "
+                "Create more content in this style. Analyze what made it work: "
+                "was it the visual, the caption, the timing, or the topic? "
+                "Replicate the winning formula 2-3 times in the coming month.",
+                PRIORITY_MEDIUM, CATEGORY_ORGANIC, "content_strategy",
+                data_point=f"Top post engagement: {best_eng:.1f}%"
+            ))
+
+    # Low page views
+    if page_views < 50 and followers > 100:
+        suggestions.append(make_suggestion(
+            "Drive More Facebook Page Visits",
+            f"Only {page_views} page views this month. Make sure your page info is complete: "
+            "business hours, service area, phone number, website link, and a clear CTA button. "
+            "Pin your best review or a seasonal offer to the top of the page. "
+            "Cross-link your Facebook page from your website, email signature, and Google Business Profile.",
+            PRIORITY_LOW, CATEGORY_ORGANIC, "page_visibility",
+            data_point=f"{page_views} page views"
+        ))
+
+    # Audience growth opportunity
+    if followers > 0 and new_fans > 0 and net_fans >= 0 and "increase_leads" in goals:
+        suggestions.append(make_suggestion(
+            "Leverage Organic Growth for Lead Generation",
+            f"Gained {new_fans} new followers this month. Convert followers into leads: "
+            "post special offers exclusively for Facebook followers, use Facebook Events for "
+            "seasonal promotions, and add a 'Book Now' or 'Get Quote' CTA button to your page. "
+            "Share customer success stories with a clear call-to-action.",
+            PRIORITY_MEDIUM, CATEGORY_ORGANIC, "lead_generation",
+            data_point=f"+{new_fans} new followers"
         ))
 
     return suggestions

@@ -840,6 +840,7 @@ def build_full_analysis(client_id, month, current_data, client_config):
         "meta_business": meta_analysis,
         "google_ads": google_ads_analysis,
         "search_console": gsc_analysis,
+        "facebook_organic": current_data.get("facebook_organic"),
         "highlights": all_highlights,
         "concerns": all_concerns,
         "overall_score": overall_score,
