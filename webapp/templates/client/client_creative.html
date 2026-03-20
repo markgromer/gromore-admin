@@ -372,11 +372,22 @@
                     <label for="overlayTemplate">Overlay Template</label>
                     <select id="overlayTemplate" class="style-select">
                         <option value="lower_third" selected>Lower Third</option>
+                        <option value="full_lower_third">Full Lower Third</option>
                         <option value="upper_third">Upper Third</option>
                         <option value="full_overlay">Full Overlay</option>
                         <option value="soft_box">Soft Text Box</option>
                         <option value="brand_bar">Brand Bar</option>
                         <option value="diagonal_band">Diagonal Band</option>
+                        <option value="bubbles">Bubbles</option>
+                        <option value="boxes">Boxes</option>
+                    </select>
+                </div>
+                <div class="style-field">
+                    <label for="backgroundTreatment">Background Treatment</label>
+                    <select id="backgroundTreatment" class="style-select">
+                        <option value="brand_gradient" selected>Brand Gradient</option>
+                        <option value="flat">Flat Overlay</option>
+                        <option value="none">None</option>
                     </select>
                 </div>
                 <div class="style-field">
@@ -402,6 +413,22 @@
                         <option value="classic">Classic Serif</option>
                         <option value="clean">Clean Condensed</option>
                     </select>
+                </div>
+                <div class="style-field">
+                    <label for="logoCorner">Logo Position</label>
+                    <select id="logoCorner" class="style-select">
+                        <option value="top_left" selected>Top Left</option>
+                        <option value="top_right">Top Right</option>
+                        <option value="bottom_left">Bottom Left</option>
+                        <option value="bottom_right">Bottom Right</option>
+                    </select>
+                </div>
+                <div class="style-field">
+                    <label style="margin-bottom:.45rem">Footer Info</label>
+                    <div class="d-flex gap-3" style="font-size:.85rem;color:#374151">
+                        <label class="d-flex align-items-center gap-2 mb-0"><input type="checkbox" id="includePhone" checked> Include phone number</label>
+                        <label class="d-flex align-items-center gap-2 mb-0"><input type="checkbox" id="includeWebsite"> Include website</label>
+                    </div>
                 </div>
                 <div class="style-field">
                     <label for="creativePrompt">AI Creative Direction Prompt</label>
@@ -594,9 +621,13 @@
         fd.append('ad_format', selectedFormat);
         fd.append('image_description', document.getElementById('imageDescription').value.trim());
         fd.append('overlay_template', document.getElementById('overlayTemplate').value);
+        fd.append('background_treatment', document.getElementById('backgroundTreatment').value);
         fd.append('shape_style', document.getElementById('shapeStyle').value);
         fd.append('text_placement', document.getElementById('textPlacement').value);
         fd.append('font_family', document.getElementById('fontFamily').value);
+        fd.append('logo_corner', document.getElementById('logoCorner').value);
+        fd.append('include_phone', document.getElementById('includePhone').checked ? '1' : '0');
+        fd.append('include_website', document.getElementById('includeWebsite').checked ? '1' : '0');
         fd.append('creative_prompt', document.getElementById('creativePrompt').value.trim());
 
         fetch("{{ url_for('client.client_creative_generate') }}", {
@@ -652,9 +683,13 @@
                 if (target) window.selectFormat(target);
             }
             if (data.overlay_template) document.getElementById('overlayTemplate').value = data.overlay_template;
+            if (data.background_treatment) document.getElementById('backgroundTreatment').value = data.background_treatment;
             if (data.shape_style) document.getElementById('shapeStyle').value = data.shape_style;
             if (data.text_placement) document.getElementById('textPlacement').value = data.text_placement;
             if (data.font_family) document.getElementById('fontFamily').value = data.font_family;
+            if (data.logo_corner) document.getElementById('logoCorner').value = data.logo_corner;
+            if (typeof data.include_phone !== 'undefined') document.getElementById('includePhone').checked = !!data.include_phone;
+            if (typeof data.include_website !== 'undefined') document.getElementById('includeWebsite').checked = !!data.include_website;
 
             ['headline','bodyText','ctaText','imageDescription'].forEach(id => {
                 const el = document.getElementById(id);

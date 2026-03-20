@@ -687,23 +687,33 @@ def client_creative_generate():
         cta_text = request.form.get("cta_text", "").strip()[:30]
         ad_format = request.form.get("ad_format", "facebook_feed")
         overlay_template = request.form.get("overlay_template", "lower_third")
+        background_treatment = request.form.get("background_treatment", "brand_gradient")
         shape_style = request.form.get("shape_style", "rounded")
         text_placement = request.form.get("text_placement", "left")
         font_family = request.form.get("font_family", "modern")
+        logo_corner = request.form.get("logo_corner", "top_left")
+        include_phone = request.form.get("include_phone", "1") in ("1", "true", "True", "yes", "on")
+        include_website = request.form.get("include_website", "0") in ("1", "true", "True", "yes", "on")
         creative_prompt = request.form.get("creative_prompt", "").strip()[:800]
 
-        allowed_overlay_templates = {"lower_third", "upper_third", "full_overlay", "soft_box", "brand_bar", "diagonal_band"}
+        allowed_overlay_templates = {"lower_third", "full_lower_third", "upper_third", "full_overlay", "soft_box", "brand_bar", "diagonal_band", "bubbles", "boxes"}
+        allowed_background_treatments = {"brand_gradient", "flat", "none"}
         allowed_shape_styles = {"rounded", "sharp", "pill"}
         allowed_text_placements = {"left", "center", "right"}
         allowed_font_families = {"modern", "classic", "clean"}
+        allowed_logo_corners = {"top_left", "top_right", "bottom_left", "bottom_right"}
         if overlay_template not in allowed_overlay_templates:
             overlay_template = "lower_third"
+        if background_treatment not in allowed_background_treatments:
+            background_treatment = "brand_gradient"
         if shape_style not in allowed_shape_styles:
             shape_style = "rounded"
         if text_placement not in allowed_text_placements:
             text_placement = "left"
         if font_family not in allowed_font_families:
             font_family = "modern"
+        if logo_corner not in allowed_logo_corners:
+            logo_corner = "top_left"
 
         if creative_prompt:
             ai_suggestion = _suggest_creative_style(brand, creative_prompt, ad_format)
@@ -752,30 +762,45 @@ def client_creative_generate():
         dark = Image.new("RGB", (w, h), brand_color)
         grad_mask = Image.new("L", (w, h), 0)
 
-        if overlay_template == "full_overlay":
-            for y in range(0, h):
-                grad_mask.paste(120, (0, y, w, y + 1))
-        elif overlay_template == "upper_third":
-            top_end = max(int(h * 0.45), 1)
-            for y in range(0, top_end):
-                alpha = int(200 * (1 - (y / top_end)))
-                grad_mask.paste(alpha, (0, y, w, y + 1))
-        elif overlay_template == "brand_bar":
-            start_y = int(h * 0.72)
-            for y in range(start_y, h):
-                grad_mask.paste(235, (0, y, w, y + 1))
-        elif overlay_template == "diagonal_band":
-            start_y = int(h * 0.52)
-            for y in range(start_y, h):
-                alpha = int(190 * (y - start_y) / max(h - start_y, 1))
-                grad_mask.paste(alpha, (0, y, w, y + 1))
-        else:
-            start_y = int(h * 0.55)
-            for y in range(start_y, h):
-                alpha = int(210 * (y - start_y) / max(h - start_y, 1))
-                grad_mask.paste(alpha, (0, y, w, y + 1))
+        if background_treatment != "none":
+            if overlay_template == "full_overlay":
+                alpha_full = 110 if background_treatment == "brand_gradient" else 145
+                for y in range(0, h):
+                    grad_mask.paste(alpha_full, (0, y, w, y + 1))
+            elif overlay_template == "upper_third":
+                top_end = max(int(h * 0.45), 1)
+                for y in range(0, top_end):
+                    if background_treatment == "flat":
+                        alpha = 165
+                    else:
+                        alpha = int(200 * (1 - (y / top_end)))
+                    grad_mask.paste(alpha, (0, y, w, y + 1))
+            elif overlay_template in ("brand_bar", "full_lower_third"):
+                start_y = int(h * 0.66 if overlay_template == "full_lower_third" else 0.72 * h)
+                for y in range(start_y, h):
+                    alpha = 210 if background_treatment == "flat" else 190
+                    grad_mask.paste(alpha, (0, y, w, y + 1))
+            elif overlay_template == "diagonal_band":
+                start_y = int(h * 0.52)
+                for y in range(start_y, h):
+                    if background_treatment == "flat":
+                        alpha = 165
+                    else:
+                        alpha = int(190 * (y - start_y) / max(h - start_y, 1))
+                    grad_mask.paste(alpha, (0, y, w, y + 1))
+            elif overlay_template in ("bubbles", "boxes"):
+                start_y = int(h * 0.52)
+                for y in range(start_y, h):
+                    alpha = 150 if background_treatment == "flat" else int(170 * (y - start_y) / max(h - start_y, 1))
+                    grad_mask.paste(alpha, (0, y, w, y + 1))
+            else:
+                start_y = int(h * 0.55)
+                for y in range(start_y, h):
+                    alpha = 165 if background_treatment == "flat" else int(210 * (y - start_y) / max(h - start_y, 1))
+                    grad_mask.paste(alpha, (0, y, w, y + 1))
 
-        bg = Image.composite(dark, bg, grad_mask)
+        if background_treatment != "none":
+            bg = Image.composite(dark, bg, grad_mask)
         del dark, grad_mask  # free memory
 
         # Draw text
@@ -799,7 +824,7 @@ def client_creative_generate():
             y_cursor = int(h * 0.12)
         elif overlay_template == "full_overlay":
             y_cursor = int(h * 0.35)
-        elif overlay_template == "brand_bar":
+        elif overlay_template in ("brand_bar", "full_lower_third"):
             y_cursor = int(h * 0.76)
         else:
             y_cursor = int(h * 0.60)
@@ -828,8 +853,8 @@ def client_creative_generate():
             bg = Image.composite(Image.new("RGB", (w, h), brand_color), bg, box_mask)
             draw = ImageDraw.Draw(bg)
 
-        if overlay_template == "brand_bar":
-            bar_top = int(h * 0.72)
+        if overlay_template in ("brand_bar", "full_lower_third"):
+            bar_top = int(h * (0.66 if overlay_template == "full_lower_third" else 0.72))
             bar_mask = Image.new("L", (w, h), 0)
             bar_mask_draw = ImageDraw.Draw(bar_mask)
             bar_mask_draw.rectangle([0, bar_top, w, h], fill=195)
@@ -849,6 +874,33 @@ def client_creative_generate():
             band_mask_draw = ImageDraw.Draw(band_mask)
             band_mask_draw.polygon(poly, fill=185)
             bg = Image.composite(Image.new("RGB", (w, h), brand_color), bg, band_mask)
+            draw = ImageDraw.Draw(bg)
+
+        if overlay_template == "bubbles":
+            bubble_color = tuple(min(c + 70, 255) for c in brand_color)
+            bubble_alpha = 115
+            bubbles_mask = Image.new("L", (w, h), 0)
+            bubbles_draw = ImageDraw.Draw(bubbles_mask)
+            for i in range(10):
+                radius = int(min(w, h) * (0.03 + (i % 4) * 0.01))
+                cx = int((i * 0.13 % 1) * w)
+                cy = int(h * (0.55 + ((i * 0.07) % 0.35)))
+                bubbles_draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=bubble_alpha)
+            bg = Image.composite(Image.new("RGB", (w, h), bubble_color), bg, bubbles_mask)
+            draw = ImageDraw.Draw(bg)
+
+        if overlay_template == "boxes":
+            box_color = tuple(min(c + 55, 255) for c in brand_color)
+            boxes_mask = Image.new("L", (w, h), 0)
+            boxes_draw = ImageDraw.Draw(boxes_mask)
+            base_y = int(h * 0.58)
+            for i in range(6):
+                bw = int(w * (0.11 + (i % 3) * 0.04))
+                bh = int(h * (0.06 + (i % 2) * 0.03))
+                x = int((0.06 + i * 0.15) * w) % max(w - bw, 1)
+                y = base_y + int((i % 3) * h * 0.07)
+                boxes_draw.rectangle([x, y, x + bw, y + bh], fill=120)
+            bg = Image.composite(Image.new("RGB", (w, h), box_color), bg, boxes_mask)
             draw = ImageDraw.Draw(bg)
 
         # Headline
@@ -891,10 +943,38 @@ def client_creative_generate():
                     logo_h = int(logo.height * ratio)
                     logo = logo.resize((logo_w, logo_h), Image.LANCZOS)
                     logo_margin = int(w * 0.04)
-                    bg.paste(logo, (logo_margin, logo_margin), logo)
+                    if logo_corner == "top_right":
+                        lx = max(w - logo_w - logo_margin, 0)
+                        ly = logo_margin
+                    elif logo_corner == "bottom_left":
+                        lx = logo_margin
+                        ly = max(h - logo_h - logo_margin, 0)
+                    elif logo_corner == "bottom_right":
+                        lx = max(w - logo_w - logo_margin, 0)
+                        ly = max(h - logo_h - logo_margin, 0)
+                    else:
+                        lx = logo_margin
+                        ly = logo_margin
+                    bg.paste(logo, (lx, ly), logo)
                     del logo
                 except Exception:
                     pass
+
+        footer_items = []
+        if include_phone and (brand.get("call_tracking_number") or "").strip():
+            footer_items.append((brand.get("call_tracking_number") or "").strip())
+        if include_website and (brand.get("website") or "").strip():
+            footer_items.append((brand.get("website") or "").strip())
+        if footer_items:
+            footer_text = "  |  ".join(footer_items)[:120]
+            footer_font = _get_font(int(h * 0.026), family=font_family)
+            fb = draw.textbbox((0, 0), footer_text, font=footer_font)
+            fw = fb[2] - fb[0]
+            fh = fb[3] - fb[1]
+            fx = max((w - fw) // 2, 12)
+            fy = max(h - fh - int(h * 0.02), 8)
+            draw.rectangle([fx - 12, fy - 6, min(fx + fw + 12, w - 4), min(fy + fh + 6, h - 4)], fill=(0, 0, 0))
+            draw.text((fx, fy), footer_text, fill="white", font=footer_font)
 
         # Save as JPEG (much smaller + faster than PNG)
         output_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads")) / "creatives" / str(brand_id)
@@ -933,6 +1013,9 @@ def client_creative_generate():
             ad_copy_body = request.form.get("body_text", "").strip()[:150]
             cta_text = request.form.get("cta_text", "").strip()[:30] or "Learn More"
             ad_format = request.form.get("ad_format", "facebook_feed")
+            logo_corner = request.form.get("logo_corner", "top_left")
+            include_phone = request.form.get("include_phone", "1") in ("1", "true", "True", "yes", "on")
+            include_website = request.form.get("include_website", "0") in ("1", "true", "True", "yes", "on")
             db = _get_db()
             fallback_brand = db.get_brand(session.get("client_brand_id")) if session.get("client_brand_id") else None
             brand_color = _pick_brand_color(fallback_brand or {})
@@ -1003,9 +1086,37 @@ def client_creative_generate():
                         logo_h = int(logo.height * ratio)
                         logo = logo.resize((logo_w, logo_h), Image.LANCZOS)
                         logo_margin = int(w * 0.04)
-                        bg.paste(logo, (logo_margin, logo_margin), logo)
+                        if logo_corner == "top_right":
+                            lx = max(w - logo_w - logo_margin, 0)
+                            ly = logo_margin
+                        elif logo_corner == "bottom_left":
+                            lx = logo_margin
+                            ly = max(h - logo_h - logo_margin, 0)
+                        elif logo_corner == "bottom_right":
+                            lx = max(w - logo_w - logo_margin, 0)
+                            ly = max(h - logo_h - logo_margin, 0)
+                        else:
+                            lx = logo_margin
+                            ly = logo_margin
+                        bg.paste(logo, (lx, ly), logo)
                     except Exception:
                         pass
+
+            footer_items = []
+            if include_phone and fallback_brand and (fallback_brand.get("call_tracking_number") or "").strip():
+                footer_items.append((fallback_brand.get("call_tracking_number") or "").strip())
+            if include_website and fallback_brand and (fallback_brand.get("website") or "").strip():
+                footer_items.append((fallback_brand.get("website") or "").strip())
+            if footer_items:
+                footer_text = "  |  ".join(footer_items)[:120]
+                footer_font = _get_font(int(h * 0.026), family="modern")
+                fb = draw.textbbox((0, 0), footer_text, font=footer_font)
+                fw = fb[2] - fb[0]
+                fh = fb[3] - fb[1]
+                fx = max((w - fw) // 2, 12)
+                fy = max(h - fh - int(h * 0.02), 8)
+                draw.rectangle([fx - 12, fy - 6, min(fx + fw + 12, w - 4), min(fy + fh + 6, h - 4)], fill=(0, 0, 0))
+                draw.text((fx, fy), footer_text, fill="white", font=footer_font)
 
             output_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads")) / "creatives" / str(session.get("client_brand_id"))
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -1269,7 +1380,7 @@ Ad format: {ad_format}
 User direction prompt: {prompt}
 
 Return JSON only with:
-- overlay_template: one of [lower_third, upper_third, full_overlay, soft_box, brand_bar, diagonal_band]
+- overlay_template: one of [lower_third, full_lower_third, upper_third, full_overlay, soft_box, brand_bar, diagonal_band, bubbles, boxes]
 - shape_style: one of [rounded, sharp, pill]
 - text_placement: one of [left, center, right]
 - font_family: one of [modern, classic, clean]
