@@ -214,7 +214,13 @@
                                placeholder="{{ '******  (saved)' if openai_configured else 'sk-...' }}">
                         <small class="text-muted">Leave blank to keep current.</small>
                     </div>
-                    <button type="submit" class="btn btn-primary">Save OpenAI Key</button>
+                    <div class="mb-3">
+                        <label class="form-label">Chatbot System Prompt (Admin-Controlled)</label>
+                        <textarea name="ai_chat_system_prompt" class="form-control" rows="6"
+                                  placeholder="Core instructions for the chatbot behavior, tone, and constraints.">{{ ai_chat_system_prompt or '' }}</textarea>
+                        <small class="text-muted">Applied server-side to admin and client chat. Clients cannot edit this prompt.</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save OpenAI Settings</button>
                     <button type="button" class="btn btn-outline-secondary ms-2" onclick="testConnection('openai')">Test Key</button>
                     <span id="openai-test-result" class="ms-2 small"></span>
                     {% if openai_configured %}

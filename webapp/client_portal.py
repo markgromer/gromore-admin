@@ -321,6 +321,7 @@ def _client_assistant_chat_handler(payload):
             model=ai_model,
             context=context,
             messages=messages,
+            admin_system_prompt=db.get_setting("ai_chat_system_prompt", "").strip(),
         )
         assistant_reply = (assistant_reply or "").strip()
         if assistant_reply:

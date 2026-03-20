@@ -291,6 +291,7 @@ def chat_with_jarvis(
     api_key: str,
     messages: list[dict[str, str]],
     context: Optional[Dict[str, Any]] = None,
+    admin_system_prompt: str = "",
     model: Optional[str] = None,
     timeout: int = 60,
 ) -> str:
@@ -341,6 +342,10 @@ def chat_with_jarvis(
             "If evidence is missing, clearly say what data is needed before acting. "
             "Do not blame platforms or algorithm changes unless specific metrics show that pattern."
         )
+
+    admin_system_prompt = (admin_system_prompt or "").strip()
+    if admin_system_prompt:
+        system += " Admin directive: " + admin_system_prompt
 
     ctx_user = {
         "role": "user",

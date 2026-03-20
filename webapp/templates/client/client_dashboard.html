@@ -7,7 +7,11 @@
     /* Loading overlay */
     .dash-loader {
         text-align: center;
-        padding: 4rem 1rem;
+        padding: 3rem 1.25rem;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        box-shadow: 0 10px 28px rgba(15, 23, 42, .06);
     }
     .loader-orb {
         width: 80px; height: 80px;
@@ -72,7 +76,7 @@
     .dash-content.visible { display: block; }
 </style>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-head">
     <div>
         <h4 class="mb-1">Welcome back{% if client_name %}, {{ client_name }}{% endif %}</h4>
         <p class="text-muted mb-0">Here's how your marketing is performing</p>

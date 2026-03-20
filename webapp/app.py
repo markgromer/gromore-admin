@@ -111,6 +111,7 @@ def create_app():
     # Optional AI config
     app.config["OPENAI_API_KEY"] = _cfg("openai_api_key", "OPENAI_API_KEY")
     app.config["OPENAI_MODEL"] = _cfg("openai_model", "OPENAI_MODEL", "gpt-4o-mini")
+    app.config["AI_CHAT_SYSTEM_PROMPT"] = _cfg("ai_chat_system_prompt", "AI_CHAT_SYSTEM_PROMPT", "")
 
     # Create default admin if none exists
     if not db.get_users():
@@ -589,6 +590,10 @@ def create_app():
                 model=model,
                 context=context,
                 messages=messages,
+                admin_system_prompt=(
+                    db.get_setting("ai_chat_system_prompt", "").strip()
+                    or app.config.get("AI_CHAT_SYSTEM_PROMPT", "")
+                ),
             )
 
             if assistant_reply:
@@ -1074,9 +1079,10 @@ def create_app():
                 if key:
                     db.save_setting("openai_api_key", key)
                     app.config["OPENAI_API_KEY"] = db.get_setting("openai_api_key", "")
-                    flash("OpenAI API key saved", "success")
-                else:
-                    flash("OpenAI API key unchanged (blank)", "warning")
+                prompt = request.form.get("ai_chat_system_prompt", "").strip()
+                db.save_setting("ai_chat_system_prompt", prompt)
+                app.config["AI_CHAT_SYSTEM_PROMPT"] = prompt
+                flash("OpenAI settings saved", "success")
             elif section == "branding":
                 db.save_setting("agency_name", request.form.get("agency_name", "").strip())
                 db.save_setting("agency_logo_url", request.form.get("agency_logo_url", "").strip())
@@ -1090,6 +1096,10 @@ def create_app():
         openai_configured = bool(
             db.get_setting("openai_api_key", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip()
         )
+        ai_chat_system_prompt = db.get_setting(
+            "ai_chat_system_prompt",
+            app.config.get("AI_CHAT_SYSTEM_PROMPT", ""),
+        )
         branding = {
             "agency_name": db.get_setting("agency_name", ""),
             "agency_logo_url": db.get_setting("agency_logo_url", ""),
@@ -1100,6 +1110,7 @@ def create_app():
             "settings.html",
             wp_settings=wp_settings,
             openai_configured=openai_configured,
+            ai_chat_system_prompt=ai_chat_system_prompt,
             branding=branding,
         )
 
