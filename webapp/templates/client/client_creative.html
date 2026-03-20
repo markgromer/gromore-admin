@@ -116,6 +116,30 @@
     .format-option .fmt-icon { font-size: 1.3rem; display: block; margin-bottom: 4px; }
     .format-option .fmt-size { font-size: .7rem; color: #9ca3af; margin-top: 2px; }
 
+    .style-select {
+        width: 100%;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 10px;
+        padding: .6rem .75rem;
+        font-size: .88rem;
+        color: #1f2937;
+        background: #fff;
+    }
+    .style-select:focus {
+        border-color: #6366f1;
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+    }
+    .style-field { margin-bottom: .8rem; }
+    .style-field:last-child { margin-bottom: 0; }
+    .style-field label {
+        display: block;
+        font-size: .82rem;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: .3rem;
+    }
+
     /* Copy input fields */
     .copy-field { margin-bottom: 1rem; }
     .copy-field:last-child { margin-bottom: 0; }
@@ -338,6 +362,40 @@
             </div>
         </div>
 
+        <div class="creative-card">
+            <div class="creative-card-header">
+                <h5><i class="bi bi-sliders me-2" style="opacity:.5"></i>Style Controls</h5>
+                <div class="hint">Choose text region, overlay template, and font style</div>
+            </div>
+            <div class="creative-card-body">
+                <div class="style-field">
+                    <label for="overlayTemplate">Overlay Template</label>
+                    <select id="overlayTemplate" class="style-select">
+                        <option value="lower_third" selected>Lower Third</option>
+                        <option value="upper_third">Upper Third</option>
+                        <option value="full_overlay">Full Overlay</option>
+                        <option value="soft_box">Soft Text Box</option>
+                    </select>
+                </div>
+                <div class="style-field">
+                    <label for="textPlacement">Text Placement</label>
+                    <select id="textPlacement" class="style-select">
+                        <option value="left" selected>Left</option>
+                        <option value="center">Center</option>
+                        <option value="right">Right</option>
+                    </select>
+                </div>
+                <div class="style-field">
+                    <label for="fontFamily">Font Style</label>
+                    <select id="fontFamily" class="style-select">
+                        <option value="modern" selected>Modern Sans</option>
+                        <option value="classic">Classic Serif</option>
+                        <option value="clean">Clean Condensed</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
         <!-- Logo status -->
         <div class="creative-card">
             <div class="creative-card-body" style="padding:1rem 1.5rem">
@@ -521,6 +579,9 @@
         fd.append('cta_text', document.getElementById('ctaText').value.trim());
         fd.append('ad_format', selectedFormat);
         fd.append('image_description', document.getElementById('imageDescription').value.trim());
+        fd.append('overlay_template', document.getElementById('overlayTemplate').value);
+        fd.append('text_placement', document.getElementById('textPlacement').value);
+        fd.append('font_family', document.getElementById('fontFamily').value);
 
         fetch("{{ url_for('client.client_creative_generate') }}", {
             method: 'POST',

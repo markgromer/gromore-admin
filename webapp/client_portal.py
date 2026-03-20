@@ -671,7 +671,7 @@ def client_creative_generate():
     try:
         from pathlib import Path
         from flask import current_app
-        from PIL import Image, ImageDraw, ImageFont
+        from PIL import Image, ImageDraw
         import uuid
 
         db = _get_db()
@@ -686,6 +686,19 @@ def client_creative_generate():
         ad_copy_body = request.form.get("body_text", "").strip()[:150]
         cta_text = request.form.get("cta_text", "").strip()[:30]
         ad_format = request.form.get("ad_format", "facebook_feed")
+        overlay_template = request.form.get("overlay_template", "lower_third")
+        text_placement = request.form.get("text_placement", "left")
+        font_family = request.form.get("font_family", "modern")
+
+        allowed_overlay_templates = {"lower_third", "upper_third", "full_overlay", "soft_box"}
+        allowed_text_placements = {"left", "center", "right"}
+        allowed_font_families = {"modern", "classic", "clean"}
+        if overlay_template not in allowed_overlay_templates:
+            overlay_template = "lower_third"
+        if text_placement not in allowed_text_placements:
+            text_placement = "left"
+        if font_family not in allowed_font_families:
+            font_family = "modern"
 
         if not image_file or not image_file.filename:
             return jsonify({"error": "Please upload a background image."}), 400
@@ -721,12 +734,24 @@ def client_creative_generate():
         bg = bg.convert("RGB")
         bg = _fit_cover_rgb(bg, target_size)
 
-        # Apply gradient darkening on bottom half using paste + mask
+        # Apply selected overlay template
         dark = Image.new("RGB", (w, h), (0, 0, 0))
         grad_mask = Image.new("L", (w, h), 0)
-        for y in range(h // 3, h):
-            alpha = int(200 * (y - h // 3) / (h - h // 3))
-            grad_mask.paste(alpha, (0, y, w, y + 1))
+
+        if overlay_template == "full_overlay":
+            for y in range(0, h):
+                grad_mask.paste(120, (0, y, w, y + 1))
+        elif overlay_template == "upper_third":
+            top_end = max(int(h * 0.45), 1)
+            for y in range(0, top_end):
+                alpha = int(200 * (1 - (y / top_end)))
+                grad_mask.paste(alpha, (0, y, w, y + 1))
+        else:
+            start_y = int(h * 0.55)
+            for y in range(start_y, h):
+                alpha = int(210 * (y - start_y) / max(h - start_y, 1))
+                grad_mask.paste(alpha, (0, y, w, y + 1))
+
         bg = Image.composite(dark, bg, grad_mask)
         del dark, grad_mask  # free memory
 
@@ -734,20 +759,49 @@ def client_creative_generate():
         draw = ImageDraw.Draw(bg)
         margin = int(w * 0.06)
 
-        font_headline = _get_font(int(h * 0.065), bold=True)
-        font_body = _get_font(int(h * 0.038))
-        font_cta = _get_font(int(h * 0.04), bold=True)
+        font_headline = _get_font(int(h * 0.065), bold=True, family=font_family)
+        font_body = _get_font(int(h * 0.038), family=font_family)
+        font_cta = _get_font(int(h * 0.04), bold=True, family=font_family)
+
+        text_width = int(w * 0.84)
+        margin = int(w * 0.06)
+        if text_placement == "center":
+            text_x = (w - text_width) // 2
+        elif text_placement == "right":
+            text_x = max(w - margin - text_width, 0)
+        else:
+            text_x = margin
+
+        if overlay_template == "upper_third":
+            y_cursor = int(h * 0.12)
+        elif overlay_template == "full_overlay":
+            y_cursor = int(h * 0.35)
+        else:
+            y_cursor = int(h * 0.60)
+
+        headline_lines = _count_lines(ad_copy_headline, text_width, font_headline)
+        body_lines = _count_lines(ad_copy_body, text_width, font_body) if ad_copy_body else 0
+        headline_h = int(headline_lines * _font_size(font_headline) * 1.3)
+        body_h = int(body_lines * _font_size(font_body) * 1.3) if ad_copy_body else 0
+        cta_h = 0
+        if cta_text:
+            cta_bbox = draw.textbbox((0, 0), cta_text, font=font_cta)
+            cta_h = (cta_bbox[3] - cta_bbox[1]) + 20
+
+        if overlay_template == "soft_box":
+            box_top = max(y_cursor - 18, 0)
+            box_bottom = min(y_cursor + headline_h + body_h + cta_h + 36, h)
+            box_left = max(text_x - 20, 0)
+            box_right = min(text_x + text_width + 20, w)
+            draw.rounded_rectangle([box_left, box_top, box_right, box_bottom], radius=18, fill=(20, 20, 20))
 
         # Headline
-        y_cursor = int(h * 0.60)
-        _draw_text_wrapped(draw, ad_copy_headline, margin, y_cursor, w - margin * 2, font_headline, fill="white")
-        headline_lines = _count_lines(ad_copy_headline, w - margin * 2, font_headline)
+        _draw_text_wrapped(draw, ad_copy_headline, text_x, y_cursor, text_width, font_headline, fill="white")
         y_cursor += int(headline_lines * _font_size(font_headline) * 1.3) + 8
 
         # Body text
         if ad_copy_body:
-            _draw_text_wrapped(draw, ad_copy_body, margin, y_cursor, w - margin * 2, font_body, fill=(220, 220, 220))
-            body_lines = _count_lines(ad_copy_body, w - margin * 2, font_body)
+            _draw_text_wrapped(draw, ad_copy_body, text_x, y_cursor, text_width, font_body, fill=(220, 220, 220))
             y_cursor += int(body_lines * _font_size(font_body) * 1.3) + 12
 
         # CTA button
@@ -755,7 +809,12 @@ def client_creative_generate():
             cta_bbox = draw.textbbox((0, 0), cta_text, font=font_cta)
             cta_w = cta_bbox[2] - cta_bbox[0] + 36
             cta_h = cta_bbox[3] - cta_bbox[1] + 20
-            cta_x = margin
+            if text_placement == "center":
+                cta_x = text_x + max((text_width - cta_w) // 2, 0)
+            elif text_placement == "right":
+                cta_x = text_x + max(text_width - cta_w, 0)
+            else:
+                cta_x = text_x
             cta_y = y_cursor
             draw.rounded_rectangle([cta_x, cta_y, cta_x + cta_w, cta_y + cta_h], radius=8, fill=(99, 102, 241))
             draw.text((cta_x + 18, cta_y + 10), cta_text, fill="white", font=font_cta)
@@ -784,12 +843,6 @@ def client_creative_generate():
         output_path = output_dir / output_name
         bg.save(str(output_path), "JPEG", quality=90)
         del bg
-
-        rel_path = f"creatives/{brand_id}/{output_name}"
-        return jsonify({
-            "image_url": url_for("client.client_serve_upload", filename=rel_path),
-            "filename": output_name,
-        })
 
         rel_path = f"creatives/{brand_id}/{output_name}"
         return jsonify({
@@ -895,28 +948,60 @@ def _fit_cover_rgb(img, target_size):
     return img.crop((left, top, left + tw, top + th))
 
 
-def _get_font(size, bold=False):
+def _get_font(size, bold=False, family="modern"):
     """Try to load a system font, fall back to Pillow default."""
     from PIL import ImageFont
-    import os
-    # Common font paths by name and full Linux paths
-    candidates = []
-    if bold:
-        candidates = [
-            "arialbd.ttf", "Arial Bold.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-            "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-            "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf",
-        ]
-    else:
-        candidates = [
-            "arial.ttf", "Arial.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "/usr/share/fonts/TTF/DejaVuSans.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-            "DejaVuSans.ttf", "LiberationSans-Regular.ttf",
-        ]
+    family = (family or "modern").lower()
+
+    font_sets = {
+        "modern": {
+            "bold": [
+                "arialbd.ttf", "Arial Bold.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf",
+            ],
+            "regular": [
+                "arial.ttf", "Arial.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/TTF/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                "DejaVuSans.ttf", "LiberationSans-Regular.ttf",
+            ],
+        },
+        "classic": {
+            "bold": [
+                "timesbd.ttf", "Times New Roman Bold.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+                "DejaVuSerif-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+            ],
+            "regular": [
+                "times.ttf", "Times New Roman.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+                "DejaVuSerif.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+            ],
+        },
+        "clean": {
+            "bold": [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
+                "DejaVuSansCondensed-Bold.ttf",
+                "/usr/share/fonts/TTF/DejaVuSansCondensed-Bold.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            ],
+            "regular": [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf",
+                "DejaVuSansCondensed.ttf",
+                "/usr/share/fonts/TTF/DejaVuSansCondensed.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            ],
+        },
+    }
+
+    chosen = font_sets.get(family, font_sets["modern"])
+    candidates = chosen["bold" if bold else "regular"]
     for name in candidates:
         try:
             f = ImageFont.truetype(name, size)
