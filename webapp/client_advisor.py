@@ -475,7 +475,6 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
         if not api_key:
             api_key = (current_app.config.get("OPENAI_API_KEY", "") or "").strip()
     except RuntimeError:
-        # Outside app context (e.g. testing)
         if not api_key:
             api_key = os.environ.get("OPENAI_API_KEY", "").strip()
 
@@ -492,15 +491,73 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
     from webapp.ai_assistant import _summarize_analysis_for_ai
     analysis_summary = _summarize_analysis_for_ai(analysis)
 
-    # Build the request
+    # ── Build per-action-item context with relevant data attached ──
+    # Instead of sending raw data in a separate blob, attach the relevant
+    # slice of detailed data directly to each action item so the AI can't
+    # ignore it.
+
+    _cat_paid = {"paid_advertising", "budget", "creative"}
+    _cat_seo = {"seo"}
+    _cat_web = {"website"}
+
+    google_ads_detail = analysis_summary.get("google_ads_detail", {})
+    meta_detail = analysis_summary.get("meta_detail", {})
+    seo_detail = analysis_summary.get("seo_detail", {})
+    kpis = analysis_summary.get("kpis", {})
+
     action_items = []
     for s in suggestions:
-        action_items.append({
+        cat = s.get("category", "")
+        item = {
             "title": s["title"],
             "detail": s["detail"],
-            "category": s["category"],
+            "category": cat,
             "data_point": s.get("data_point", ""),
-        })
+            "relevant_data": {},
+        }
+
+        # Attach channel-specific data the AI must reference
+        if cat in _cat_paid or "google" in s["title"].lower() or "cpc" in s["title"].lower():
+            campaigns = google_ads_detail.get("campaigns") or []
+            item["relevant_data"]["google_ads_campaigns"] = campaigns[:10]
+            item["relevant_data"]["google_ads_search_terms"] = (
+                google_ads_detail.get("search_terms") or []
+            )[:30]
+            item["relevant_data"]["google_ads_kpis"] = kpis.get("google_ads", {})
+
+        if cat in _cat_paid or "meta" in s["title"].lower() or "facebook" in s["title"].lower():
+            item["relevant_data"]["meta_campaigns"] = (
+                meta_detail.get("campaigns") or []
+            )[:10]
+            item["relevant_data"]["meta_top_ads"] = (
+                meta_detail.get("top_ads") or []
+            )[:10]
+            item["relevant_data"]["meta_kpis"] = kpis.get("meta", {})
+
+        if cat in _cat_seo or "seo" in cat or "keyword" in s["title"].lower():
+            item["relevant_data"]["seo_top_queries"] = (
+                seo_detail.get("top_queries") or []
+            )[:15]
+            item["relevant_data"]["seo_keyword_opportunities"] = (
+                seo_detail.get("keyword_opportunities") or []
+            )[:15]
+            item["relevant_data"]["seo_top_pages"] = (
+                seo_detail.get("top_pages") or []
+            )[:10]
+            item["relevant_data"]["seo_kpis"] = kpis.get("gsc", {})
+
+        if cat in _cat_web:
+            item["relevant_data"]["website_kpis"] = kpis.get("ga", {})
+
+        # Competitor data is relevant across all categories
+        comp = analysis_summary.get("competitor_watch") or {}
+        if comp:
+            item["relevant_data"]["competitors"] = comp
+
+        # Strip empty relevant_data keys
+        item["relevant_data"] = {k: v for k, v in item["relevant_data"].items() if v}
+
+        action_items.append(item)
 
     client_info = analysis_summary.get("client", {})
 
@@ -516,39 +573,51 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
             "target_audience": client_info.get("target_audience"),
             "active_offers": client_info.get("active_offers"),
         },
-        "kpis": analysis_summary.get("kpis", {}),
-        "seo_detail": analysis_summary.get("seo_detail", {}),
-        "google_ads_detail": analysis_summary.get("google_ads_detail", {}),
-        "meta_detail": analysis_summary.get("meta_detail", {}),
-        "competitor_watch": analysis_summary.get("competitor_watch", {}),
         "highlights": analysis_summary.get("highlights", []),
         "concerns": analysis_summary.get("concerns", []),
         "action_items": action_items,
     }
 
     system = (
-        "You are the AI engine inside GroMore, a platform that replaces ad agencies for local service businesses. "
-        "The business owner reading this is in the driver's seat. You are their always-on marketing director.\n\n"
-        "For each action item, produce a JSON object with:\n"
-        "- \"steps\": array of 3-5 specific, concrete actions the owner can take (or that the platform is doing)\n"
-        "- \"impact\": one sentence estimating the expected result (e.g., 'Should save ~$180/month and generate 3-4 additional leads')\n"
-        "- \"time\": estimated time to execute (e.g., '10 minutes', '30 minutes', '1 hour')\n\n"
-        "Rules:\n"
-        "- DO NOT give generic recommendations; every recommendation must cite concrete evidence from provided metrics, campaigns, keywords, queries, or competitors\n"
-        "- If evidence is missing for a tactic, do not include that tactic\n"
-        "- Never blame external platforms (Google, Meta, algorithm changes) unless a specific metric in data proves the issue\n"
-        "- Reference actual campaign names, keywords, metrics, and competitors from the data\n"
-        "- For ad copy: write the actual headlines and descriptions ready to paste\n"
-        "- For keywords: name the specific keywords to pause, add, or adjust bids on\n"
-        "- For SEO: reference the actual pages and queries from the data\n"
-        "- For budget: give exact dollar amounts and percentages based on the numbers\n"
-        "- For competitors: name the competitor and the specific counter-move\n"
-        "- Be direct: 'Pause the emergency plumber keyword ($94 CPL)' not 'Consider pausing expensive keywords'\n"
-        "- Each step should be 1-2 sentences, actionable and specific\n"
-        "- If data is limited, still be concrete about the approach using what's available\n"
-        "- Never use filler phrases like 'consider', 'you might want to', 'it could be beneficial'\n\n"
-        "Return ONLY valid JSON: {\"actions\": [{\"steps\": [...], \"impact\": \"...\", \"time\": \"...\"}, ...]}. "
-        "One object per action item, in the same order as the input."
+        "You are the senior paid-media and SEO strategist inside GroMore. "
+        "You have already completed a deep-dive analysis of this account. "
+        "Now produce the EXACT steps the business owner should execute.\n\n"
+
+        "OUTPUT FORMAT (JSON only):\n"
+        "{\"actions\": [{\"steps\": [...], \"impact\": \"...\", \"time\": \"...\"}, ...]}\n"
+        "One object per action_item, same order as input.\n\n"
+
+        "STEP REQUIREMENTS:\n"
+        "- 4-6 steps per action item\n"
+        "- Every step MUST reference specific data from the relevant_data attached to that action item: "
+        "name the campaign, the keyword, the search term, the ad, the page URL, the query, the dollar amount, the metric value\n"
+        "- Steps should be the actual work product: the exact keywords to add/pause/negate, "
+        "the exact ad copy to test (write the headlines and descriptions), "
+        "the exact budget numbers to change, the exact pages to optimize and for which queries\n"
+        "- Write like a hands-on marketing director giving a junior marketer a task list they can execute without asking questions\n"
+        "- Each step: 2-3 sentences. First sentence = what to do. Remaining = why, using a specific number from the data.\n\n"
+
+        "WHAT MAKES A BAD STEP (never do this):\n"
+        "- 'Review your campaigns and pause underperformers' (which campaigns? what metric?)\n"
+        "- 'Add negative keywords to reduce waste' (which negative keywords?)\n"
+        "- 'Optimize your landing pages' (which pages? for what?)\n"
+        "- 'Consider testing new ad copy' (write the actual copy)\n"
+        "- 'Monitor performance and adjust' (adjust what? to what number?)\n\n"
+
+        "WHAT MAKES A GOOD STEP (do this):\n"
+        "- 'Pause the \"emergency plumber near me\" keyword - it spent $340 this month with 0 conversions while your \"water heater repair\" keyword converted at $42/lead.'\n"
+        "- 'Add these negative keywords to your Google Ads campaigns: \"DIY\", \"how to\", \"salary\", \"jobs\" - these search terms appeared 89 times and burned ~$120 with no conversions.'\n"
+        "- 'Test this new headline on your top campaign: \"Same-Day AC Repair - Licensed & Insured | Free Estimates\" - your current CTR is 2.1% vs 4-5% benchmark for HVAC.'\n"
+        "- 'Move $200/month from \"Brand Awareness\" campaign ($0.89 CPC, 0 conversions) to \"Emergency Services\" campaign ($1.20 CPC, 14 conversions at $38 each).'\n"
+        "- 'Create a dedicated page for \"water heater installation [city]\" - this query has 1,200 impressions but you rank position 18. Your current /services page ranks but isn\\'t specific enough.'\n\n"
+
+        "IMPACT: One sentence with a specific projected result using numbers from the data. "
+        "Example: 'Reallocating $200/month should generate ~5 additional leads at the Emergency Services campaign\\'s current $38 CPA.'\n\n"
+
+        "TIME: Be specific. '15 minutes', '30 minutes', '1-2 hours'. Not 'varies' or 'ongoing'.\n\n"
+
+        "If relevant_data for an action item is empty, build the best steps you can from the detail and data_point fields, "
+        "but still be specific and never use filler phrases like 'consider', 'you might want to', or 'it could be beneficial'."
     )
 
     headers = {
@@ -562,14 +631,14 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
             headers=headers,
             json={
                 "model": model,
-                "temperature": 0.3,
+                "temperature": 0.4,
                 "messages": [
                     {"role": "system", "content": system},
                     {"role": "user", "content": json.dumps(prompt_data)},
                 ],
                 "response_format": {"type": "json_object"},
             },
-            timeout=45,
+            timeout=60,
         )
 
         if resp.status_code != 200:
