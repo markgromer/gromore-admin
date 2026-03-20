@@ -164,6 +164,15 @@ def callback():
             brand=brand,
             ga4_properties=ga4_properties,
             gsc_sites=gsc_sites,
+            # client_base.html expects these from the client_bp context processor,
+            # but this route lives in google_bp so we supply them manually.
+            client_brand=session.get("client_brand_name", brand.get("display_name", "")),
+            client_user=session.get("client_name", ""),
+            assistant_enabled=False,
+            assistant_messages=[],
+            assistant_month="",
+            assistant_model_chat="gpt-4o-mini",
+            assistant_models=[],
         )
 
     # Admin flow - use admin picker template

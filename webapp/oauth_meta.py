@@ -159,6 +159,15 @@ def callback():
             "client/client_meta_pick_account.html",
             brand=brand,
             ad_accounts=ad_accounts,
+            # client_base.html expects these from the client_bp context processor,
+            # but this route lives in meta_bp so we supply them manually.
+            client_brand=session.get("client_brand_name", brand.get("display_name", "")),
+            client_user=session.get("client_name", ""),
+            assistant_enabled=False,
+            assistant_messages=[],
+            assistant_month="",
+            assistant_model_chat="gpt-4o-mini",
+            assistant_models=[],
         )
 
     # Admin flow
