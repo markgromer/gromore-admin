@@ -105,7 +105,33 @@ def callback():
     }, timeout=30)
 
     if token_resp.status_code != 200:
-        flash(f"Token exchange failed: {token_resp.text}", "error")
+        try:
+            err_data = token_resp.json()
+            err_code = err_data.get("error", "")
+            err_desc = err_data.get("error_description", "")
+        except Exception:
+            err_code, err_desc = "", token_resp.text[:200]
+
+        if err_code == "invalid_client":
+            msg = (
+                "Google rejected the client credentials. Go to Settings and verify your "
+                "Google OAuth Client ID and Client Secret match exactly what's in the "
+                "Google Cloud Console (APIs & Credentials). Also confirm the OAuth client "
+                "type is 'Web application' and the redirect URI is correct."
+            )
+        elif err_code == "redirect_uri_mismatch":
+            msg = (
+                "Google says the redirect URI doesn't match. In your Google Cloud Console, "
+                "add this exact Authorized Redirect URI: "
+                f"{current_app.config['APP_URL'].rstrip('/')}{url_for('google_oauth.callback')}"
+            )
+        elif err_desc:
+            msg = f"Google OAuth error: {err_desc}"
+        else:
+            msg = f"Token exchange failed ({token_resp.status_code}). Check your Google OAuth settings."
+
+        current_app.logger.warning("Google token exchange failed: %s %s", err_code, err_desc)
+        flash(msg, "error")
         if is_client:
             return redirect(url_for("client.client_settings"))
         return redirect(url_for("brand_detail", brand_id=brand_id))
