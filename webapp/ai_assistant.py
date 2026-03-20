@@ -473,6 +473,17 @@ def chat_with_jarvis(
         "9. Uncertain? Say so, then share what the data suggests. "
         "10. Missing data source? Say what's missing and point to Settings. "
         "11. Use actual campaign names, spend, conversions, and KPI targets from the context.",
+
+        # Conversation style
+        "CONVERSATION STYLE: "
+        "This is a real-time chat. Keep it flowing like a natural conversation. "
+        "Short messages get short answers. Don't over-explain unless asked. "
+        "Use Markdown formatting naturally: **bold** for emphasis, bullet lists for multiple items, "
+        "headers for longer structured answers. But don't force formatting on a casual reply. "
+        "If someone says 'thanks' or 'cool,' reply casually. Don't turn every message into a lecture. "
+        "Remember what was said earlier in this conversation. Reference it. Build on it. "
+        "If you recommended something 3 messages ago, you should remember that. "
+        "Ask follow-up questions when it makes sense. Make it feel like a back-and-forth, not a one-way FAQ.",
     ]
 
     system = "\n\n".join(system_parts)
@@ -536,7 +547,7 @@ def chat_with_jarvis(
         headers=headers,
         json={
             "model": model,
-            "temperature": 0.4,
+            "temperature": 0.6,
             "messages": [
                 {"role": "system", "content": system},
                 ctx_user,

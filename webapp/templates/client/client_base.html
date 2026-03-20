@@ -171,8 +171,8 @@
             right: 0;
             bottom: 0;
             width: 420px;
-            background: rgba(255,255,255,.92);
-            backdrop-filter: blur(8px);
+            background: rgba(255,255,255,.95);
+            backdrop-filter: blur(12px);
             border-left: 1px solid var(--line);
             box-shadow: -10px 0 24px rgba(15,23,42,.06);
             z-index: 950;
@@ -194,6 +194,7 @@
             overflow: auto;
             padding: .8rem;
             background: #f6f9fe;
+            scroll-behavior: smooth;
         }
         .assistant-footer {
             border-top: 1px solid var(--line);
@@ -202,23 +203,95 @@
         }
         .assistant-bubble {
             max-width: 92%;
-            border-radius: 10px;
-            padding: 9px 11px;
+            border-radius: 14px;
+            padding: 10px 14px;
             font-size: .86rem;
-            white-space: pre-wrap;
-            margin-bottom: .45rem;
-            line-height: 1.45;
+            margin-bottom: .5rem;
+            line-height: 1.55;
+            position: relative;
         }
         .assistant-bubble.user {
             margin-left: auto;
-            background: #e8edff;
-            color: #1e3a8a;
+            background: linear-gradient(135deg, #4f46e5, #6366f1);
+            color: #fff;
+            border-bottom-right-radius: 4px;
         }
         .assistant-bubble.assistant {
             margin-right: auto;
             background: #fff;
             color: #334155;
-            border: 1px solid #dde6f2;
+            border: 1px solid #e2e8f0;
+            border-bottom-left-radius: 4px;
+        }
+        /* Markdown inside AI bubbles */
+        .assistant-bubble.assistant p { margin: 0 0 .5rem; }
+        .assistant-bubble.assistant p:last-child { margin-bottom: 0; }
+        .assistant-bubble.assistant ul,
+        .assistant-bubble.assistant ol { margin: .25rem 0 .5rem; padding-left: 1.25rem; }
+        .assistant-bubble.assistant li { margin-bottom: .15rem; }
+        .assistant-bubble.assistant strong { color: #1e293b; }
+        .assistant-bubble.assistant code {
+            background: #f1f5f9; padding: 1px 5px; border-radius: 4px; font-size: .82rem;
+        }
+        .assistant-bubble.assistant pre {
+            background: #1e293b; color: #e2e8f0; padding: 10px 12px; border-radius: 8px;
+            overflow-x: auto; font-size: .8rem; margin: .4rem 0;
+        }
+        .assistant-bubble.assistant pre code {
+            background: none; padding: 0; color: inherit;
+        }
+        .assistant-bubble.assistant h1,
+        .assistant-bubble.assistant h2,
+        .assistant-bubble.assistant h3 {
+            font-size: .92rem; font-weight: 700; margin: .5rem 0 .25rem; color: #0f172a;
+        }
+        /* Copy button on AI messages */
+        .bubble-actions {
+            display: none;
+            position: absolute;
+            top: 4px;
+            right: 6px;
+        }
+        .assistant-bubble.assistant:hover .bubble-actions { display: flex; gap: 4px; }
+        .bubble-actions button {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 2px 7px;
+            font-size: .72rem;
+            color: #64748b;
+            cursor: pointer;
+            transition: all .12s;
+        }
+        .bubble-actions button:hover {
+            background: #e2e8f0;
+            color: #334155;
+        }
+        /* Typing indicator */
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 10px 14px;
+            max-width: 80px;
+            margin-right: auto;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            border-bottom-left-radius: 4px;
+            margin-bottom: .5rem;
+        }
+        .typing-dot {
+            width: 7px; height: 7px;
+            background: #94a3b8;
+            border-radius: 50%;
+            animation: typingBounce .9s ease-in-out infinite;
+        }
+        .typing-dot:nth-child(2) { animation-delay: .15s; }
+        .typing-dot:nth-child(3) { animation-delay: .3s; }
+        @keyframes typingBounce {
+            0%, 60%, 100% { transform: translateY(0); opacity: .4; }
+            30% { transform: translateY(-5px); opacity: 1; }
         }
         .assistant-collapsed .assistant-body,
         .assistant-collapsed .assistant-footer,
@@ -506,9 +579,12 @@
         <div class="assistant-header">
             <i class="bi bi-stars text-primary"></i>
             <div style="flex:1; min-width:0;">
-                <div style="font-size:.88rem; font-weight:600; color:#0f172a;">GroMore AI Assistant</div>
-                <div class="assistant-meta text-muted" style="font-size:.72rem;">Page-aware GPT help across all tabs</div>
+                <div style="font-size:.88rem; font-weight:600; color:#0f172a;">Jarvis</div>
+                <div class="assistant-meta text-muted" style="font-size:.72rem;">Your AI marketing strategist</div>
             </div>
+            <button class="btn btn-sm btn-outline-secondary" type="button" id="assistantClearBtn" title="Clear conversation" style="font-size:.72rem; padding:2px 8px;">
+                <i class="bi bi-trash3"></i>
+            </button>
             <button class="btn btn-sm btn-outline-secondary" type="button" id="assistantCollapseBtn" title="Collapse">
                 <i class="bi bi-chevron-right"></i>
             </button>
@@ -524,9 +600,10 @@
                 </select>
             </div>
             <div class="input-group input-group-sm">
-                <input type="text" class="form-control" id="assistantInput" placeholder="Ask about this page, your data, or next actions..." {% if not assistant_enabled %}disabled{% endif %}>
-                <button class="btn btn-primary" id="assistantSend" type="button" {% if not assistant_enabled %}disabled{% endif %}>Send</button>
+                <textarea class="form-control" id="assistantInput" placeholder="Message Jarvis..." rows="1" style="resize:none; max-height:100px; overflow-y:auto;" {% if not assistant_enabled %}disabled{% endif %}></textarea>
+                <button class="btn btn-primary" id="assistantSend" type="button" {% if not assistant_enabled %}disabled{% endif %}><i class="bi bi-send-fill"></i></button>
             </div>
+            <div class="text-muted text-center" style="font-size:.68rem; margin-top:4px;">Enter to send, Shift+Enter for new line</div>
             {% if not assistant_enabled %}
             <small class="text-muted d-block mt-2">Add your OpenAI key in Connections to enable assistant chat.</small>
             {% endif %}
@@ -552,6 +629,7 @@
 
     <script id="assistantInitialMessages" type="application/json">{{ assistant_messages | tojson }}</script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
     (function() {
         document.body.classList.add('has-assistant');
@@ -562,23 +640,27 @@
                 var href = link.getAttribute('href');
                 if (!href || href === '#' || href === window.location.pathname) return;
                 e.preventDefault();
-                // Visual feedback
                 link.classList.add('nav-loading');
                 document.getElementById('navProgress').classList.add('running');
                 document.getElementById('pageFade').classList.add('active');
-                // Navigate after a tiny delay so animation is visible
                 setTimeout(function() { window.location.href = href; }, 80);
             });
         });
 
         var shell = document.getElementById('globalAssistantShell');
         var collapseBtn = document.getElementById('assistantCollapseBtn');
+        var clearBtn = document.getElementById('assistantClearBtn');
         var log = document.getElementById('assistantLog');
         var input = document.getElementById('assistantInput');
         var send = document.getElementById('assistantSend');
         var monthEl = document.getElementById('assistantMonth');
         var modelEl = document.getElementById('assistantModel');
         var csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+        // Configure marked for safe rendering
+        if (window.marked) {
+            marked.setOptions({ breaks: true, gfm: true });
+        }
 
         var initialMessages = [];
         var initialMessagesNode = document.getElementById('assistantInitialMessages');
@@ -590,23 +672,74 @@
             }
         }
 
-        function addBubble(role, text) {
+        function renderMarkdown(text) {
+            if (!text) return '';
+            if (window.marked) {
+                try { return marked.parse(text); } catch(e) {}
+            }
+            // Fallback: escape HTML and preserve newlines
+            return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+        }
+
+        function addBubble(role, text, skipScroll) {
             if (!log) return;
             var div = document.createElement('div');
             div.className = 'assistant-bubble ' + (role === 'user' ? 'user' : 'assistant');
-            div.textContent = text || '';
+
+            if (role === 'user') {
+                div.textContent = text || '';
+            } else {
+                // AI messages: render as Markdown with copy button
+                div.innerHTML = renderMarkdown(text);
+                var actions = document.createElement('div');
+                actions.className = 'bubble-actions';
+                var copyBtn = document.createElement('button');
+                copyBtn.innerHTML = '<i class="bi bi-clipboard"></i> Copy';
+                copyBtn.onclick = function() {
+                    navigator.clipboard.writeText(text || '').then(function() {
+                        copyBtn.innerHTML = '<i class="bi bi-check2"></i> Copied';
+                        setTimeout(function() { copyBtn.innerHTML = '<i class="bi bi-clipboard"></i> Copy'; }, 1500);
+                    });
+                };
+                actions.appendChild(copyBtn);
+                div.appendChild(actions);
+            }
+
             log.appendChild(div);
+            if (!skipScroll) log.scrollTop = log.scrollHeight;
+        }
+
+        function showTyping() {
+            if (!log) return;
+            var el = document.createElement('div');
+            el.className = 'typing-indicator';
+            el.id = 'typingIndicator';
+            el.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+            log.appendChild(el);
             log.scrollTop = log.scrollHeight;
+        }
+
+        function hideTyping() {
+            var el = document.getElementById('typingIndicator');
+            if (el) el.remove();
         }
 
         function renderInitial() {
             if (!log) return;
             log.innerHTML = '';
             if (!initialMessages || !initialMessages.length) {
-                addBubble('assistant', 'I can help with this page, your account data, campaign actions, creative ideas, and execution steps.');
+                addBubble('assistant', "Hey there. I'm Jarvis, your AI strategist. Ask me anything about your campaigns, performance, or what to do next.", true);
                 return;
             }
-            initialMessages.forEach(function(m) { addBubble(m.role, m.content); });
+            initialMessages.forEach(function(m) { addBubble(m.role, m.content, true); });
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // Auto-resize textarea
+        function autoResize() {
+            if (!input) return;
+            input.style.height = 'auto';
+            input.style.height = Math.min(input.scrollHeight, 100) + 'px';
         }
 
         async function sendMessage() {
@@ -615,7 +748,10 @@
             if (!msg) return;
             addBubble('user', msg);
             input.value = '';
+            autoResize();
             send.disabled = true;
+            input.disabled = true;
+            showTyping();
             try {
                 var res = await fetch('{{ url_for("client.client_assistant_chat") }}', {
                     method: 'POST',
@@ -633,18 +769,33 @@
                         page_hint: document.querySelector('h1,h2,h3,h4') ? document.querySelector('h1,h2,h3,h4').textContent.trim().slice(0, 160) : '',
                     }),
                 });
+                hideTyping();
                 var data = await res.json();
                 if (!res.ok) {
-                    addBubble('assistant', data.error || 'Request failed.');
+                    addBubble('assistant', data.error || 'Something went wrong. Try again.');
                 } else {
                     addBubble('assistant', data.reply || '');
                 }
             } catch (e) {
+                hideTyping();
                 addBubble('assistant', 'Connection error. Please try again.');
             } finally {
                 send.disabled = false;
+                input.disabled = false;
                 input.focus();
             }
+        }
+
+        async function clearChat() {
+            if (!confirm('Clear this conversation?')) return;
+            try {
+                await fetch('{{ url_for("client.client_assistant_clear") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                });
+                initialMessages = [];
+                renderInitial();
+            } catch(e) {}
         }
 
         if (collapseBtn && shell) {
@@ -656,6 +807,8 @@
             });
         }
 
+        if (clearBtn) clearBtn.addEventListener('click', clearChat);
+
         var mobileToggle = document.getElementById('assistantMobileToggle');
         if (mobileToggle && shell) {
             mobileToggle.addEventListener('click', function() {
@@ -666,11 +819,12 @@
         if (send) send.addEventListener('click', sendMessage);
         if (input) {
             input.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
+                if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     sendMessage();
                 }
             });
+            input.addEventListener('input', autoResize);
         }
         renderInitial();
     })();

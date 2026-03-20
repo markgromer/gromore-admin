@@ -660,6 +660,15 @@ class WebDB:
         conn.close()
         return [dict(r) for r in rows]
 
+    def clear_ai_chat_messages(self, brand_id, month):
+        conn = self._conn()
+        conn.execute(
+            "DELETE FROM ai_chat_messages WHERE brand_id = ? AND month = ?",
+            (brand_id, month),
+        )
+        conn.commit()
+        conn.close()
+
     def mark_report_published(self, report_id, url):
         conn = self._conn()
         conn.execute(

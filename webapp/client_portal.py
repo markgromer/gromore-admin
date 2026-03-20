@@ -246,6 +246,16 @@ def client_assistant_history():
     return jsonify({"messages": messages, "month": month})
 
 
+@client_bp.route("/assistant/clear", methods=["POST"])
+@client_login_required
+def client_assistant_clear():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    month = _assistant_month()
+    db.clear_ai_chat_messages(brand_id, month)
+    return jsonify({"success": True})
+
+
 def _client_assistant_chat_handler(payload):
     db = _get_db()
     brand_id = session["client_brand_id"]
@@ -286,8 +296,8 @@ def _client_assistant_chat_handler(payload):
         except Exception as e:
             analysis_error = str(e)
 
-        history = db.get_ai_chat_messages(brand_id, month, limit=30)
-        trimmed = history[-12:] if len(history) > 12 else history
+        history = db.get_ai_chat_messages(brand_id, month, limit=50)
+        trimmed = history[-25:] if len(history) > 25 else history
         messages = [{"role": m["role"], "content": m["content"]} for m in trimmed if m.get("content")]
 
         context = {
