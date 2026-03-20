@@ -389,7 +389,7 @@ def _pull_google_ads(customer_id, access_token, start_date, end_date):
         raise ValueError("Google Ads developer token not configured in Settings")
 
     login_customer_id = re.sub(r"\D", "", (current_app.config.get("GOOGLE_ADS_LOGIN_CUSTOMER_ID", "") or "").strip())
-    url = f"https://googleads.googleapis.com/v18/customers/{clean_customer_id}/googleAds:searchStream"
+    url = f"https://googleads.googleapis.com/v19/customers/{clean_customer_id}/googleAds:searchStream"
 
     def _search_stream(gaql_query: str):
         resp = requests.post(url, json={"query": gaql_query}, headers=headers, timeout=30)
