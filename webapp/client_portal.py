@@ -286,7 +286,7 @@ def _client_assistant_chat_handler(payload):
 
     try:
         from webapp.report_runner import build_analysis_and_suggestions_for_brand
-        from webapp.ai_assistant import chat_with_jarvis, summarize_analysis_for_ai
+        from webapp.ai_assistant import chat_with_warren, summarize_analysis_for_ai
 
         analysis = None
         suggestions = None
@@ -327,7 +327,7 @@ def _client_assistant_chat_handler(payload):
         }
 
         from webapp.ai_assistant import DEFAULT_CHAT_SYSTEM_PROMPT
-        assistant_reply = chat_with_jarvis(
+        assistant_reply = chat_with_warren(
             api_key=api_key,
             model=ai_model,
             context=context,

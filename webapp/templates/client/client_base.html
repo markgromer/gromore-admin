@@ -579,7 +579,7 @@
         <div class="assistant-header">
             <i class="bi bi-stars text-primary"></i>
             <div style="flex:1; min-width:0;">
-                <div style="font-size:.88rem; font-weight:600; color:#0f172a;">Jarvis</div>
+                <div style="font-size:.88rem; font-weight:600; color:#0f172a;">Warren</div>
                 <div class="assistant-meta text-muted" style="font-size:.72rem;">Your AI marketing strategist</div>
             </div>
             <button class="btn btn-sm btn-outline-secondary" type="button" id="assistantClearBtn" title="Clear conversation" style="font-size:.72rem; padding:2px 8px;">
@@ -600,7 +600,7 @@
                 </select>
             </div>
             <div class="input-group input-group-sm">
-                <textarea class="form-control" id="assistantInput" placeholder="Message Jarvis..." rows="1" style="resize:none; max-height:100px; overflow-y:auto;" {% if not assistant_enabled %}disabled{% endif %}></textarea>
+                <textarea class="form-control" id="assistantInput" placeholder="Message Warren..." rows="1" style="resize:none; max-height:100px; overflow-y:auto;" {% if not assistant_enabled %}disabled{% endif %}></textarea>
                 <button class="btn btn-primary" id="assistantSend" type="button" {% if not assistant_enabled %}disabled{% endif %}><i class="bi bi-send-fill"></i></button>
             </div>
             <div class="text-muted text-center" style="font-size:.68rem; margin-top:4px;">Enter to send, Shift+Enter for new line</div>
@@ -728,7 +728,7 @@
             if (!log) return;
             log.innerHTML = '';
             if (!initialMessages || !initialMessages.length) {
-                addBubble('assistant', "Hey there. I'm Jarvis, your AI strategist. Ask me anything about your campaigns, performance, or what to do next.", true);
+                addBubble('assistant', "I'm Warren. Ask me where your money should go, and I'll give you one clear answer.", true);
                 return;
             }
             initialMessages.forEach(function(m) { addBubble(m.role, m.content, true); });

@@ -734,7 +734,7 @@ def create_app():
 
         try:
             from webapp.report_runner import build_analysis_and_suggestions_for_brand
-            from webapp.ai_assistant import chat_with_jarvis, summarize_analysis_for_ai
+            from webapp.ai_assistant import chat_with_warren, summarize_analysis_for_ai
 
             analysis = None
             suggestions = None
@@ -773,7 +773,7 @@ def create_app():
                 "analysis_error": analysis_error,
             }
 
-            assistant_reply = chat_with_jarvis(
+            assistant_reply = chat_with_warren(
                 api_key=api_key,
                 model=model,
                 context=context,
@@ -811,7 +811,7 @@ def create_app():
 
         try:
             from webapp.report_runner import build_analysis_and_suggestions_for_brand
-            from webapp.ai_assistant import generate_jarvis_brief
+            from webapp.ai_assistant import generate_warren_brief
 
             analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
 
@@ -821,14 +821,14 @@ def create_app():
                 or app.config.get("OPENAI_MODEL")
                 or "gpt-4o-mini"
             )
-            internal = generate_jarvis_brief(
+            internal = generate_warren_brief(
                 api_key=api_key,
                 analysis=analysis,
                 suggestions=suggestions,
                 variant="internal",
                 model=model or None,
             )
-            client = generate_jarvis_brief(
+            client = generate_warren_brief(
                 api_key=api_key,
                 analysis=analysis,
                 suggestions=suggestions,
