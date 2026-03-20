@@ -429,7 +429,16 @@ def _pull_gsc(site_url, access_token, start_date, end_date):
     total_clicks = sum(r.get("clicks", 0) for r in rows)
     total_impressions = sum(r.get("impressions", 0) for r in rows)
     avg_ctr = (total_clicks / total_impressions * 100) if total_impressions > 0 else 0
-    avg_position = sum(r.get("position", 0) for r in rows) / len(rows) if rows else 0
+
+    # Avg position: top 5 queries by impressions, then best 3 positions from those
+    if rows:
+        sorted_by_imp = sorted(rows, key=lambda r: r.get("impressions", 0), reverse=True)
+        top5 = sorted_by_imp[:5]
+        top5_positions = sorted([r.get("position", 0) for r in top5])  # ascending = best first
+        best3 = top5_positions[:3]
+        avg_position = round(sum(best3) / len(best3), 1) if best3 else 0
+    else:
+        avg_position = 0
 
     top_queries = []
     for r in rows[:20]:

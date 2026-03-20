@@ -72,6 +72,13 @@ def pull_search_console_data(site_url, month_str, credentials_path=None):
     # ── Pull aggregate totals ──
     totals = _pull_totals(service, site_url, start_date, end_date)
 
+    # Override avg_position: top 5 queries by impressions, best 3 positions from those
+    if len(query_data) >= 3:
+        sorted_by_imp = sorted(query_data, key=lambda r: r.get("impressions", 0), reverse=True)
+        top5 = sorted_by_imp[:5]
+        best3_positions = sorted([r.get("position", 0) for r in top5])[:3]
+        totals["avg_position"] = round(sum(best3_positions) / len(best3_positions), 1)
+
     # ── Build top queries list ──
     top_queries = []
     for row in sorted(query_data, key=lambda r: r["clicks"], reverse=True)[:50]:

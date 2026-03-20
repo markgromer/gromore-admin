@@ -334,8 +334,16 @@ def parse_search_console(filepath):
         else:
             totals["ctr"] = 0.0
     if "position" in df.columns:
-        # Weighted avg position
-        if "impressions" in df.columns and totals.get("impressions", 0) > 0:
+        # Avg position: top 5 queries by impressions, best 3 positions from those
+        if "impressions" in df.columns and "query" in df.columns and len(df) >= 3:
+            by_query = df.groupby("query").agg(
+                position=("position", "mean"),
+                impressions=("impressions", "sum"),
+            ).reset_index()
+            top5 = by_query.nlargest(5, "impressions")
+            best3 = top5.nsmallest(3, "position")
+            totals["avg_position"] = round(best3["position"].mean(), 1)
+        elif "impressions" in df.columns and totals.get("impressions", 0) > 0:
             totals["avg_position"] = round(
                 (df["position"] * df["impressions"]).sum() / df["impressions"].sum(), 1
             )
