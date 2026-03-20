@@ -11,7 +11,48 @@
     <div class="month-selector">
         <form method="GET" class="d-flex align-items-center gap-2">
             <input type="month" name="month" value="{{ month }}" class="form-control form-control-sm" style="width: 160px;" onchange="this.form.submit()">
+            <input type="hidden" name="ai_model" value="{{ ai_model or '' }}">
+            {% if run_analysis %}<input type="hidden" name="run_analysis" value="1">{% endif %}
         </form>
+    </div>
+</div>
+
+<div class="card mb-4" style="border:none; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
+    <div class="card-body p-3 p-md-4">
+        <div class="d-flex flex-wrap align-items-end gap-3">
+            <form method="GET" class="d-flex flex-wrap align-items-end gap-2">
+                <input type="hidden" name="month" value="{{ month }}">
+                <div>
+                    <label class="form-label mb-1" style="font-size:.85rem;">AI Model</label>
+                    <select name="ai_model" class="form-select form-select-sm" style="width:220px;">
+                        <option value="gpt-4o-mini" {{ 'selected' if ai_model == 'gpt-4o-mini' or not ai_model }}>GPT-4o Mini</option>
+                        <option value="gpt-4o" {{ 'selected' if ai_model == 'gpt-4o' }}>GPT-4o</option>
+                        <option value="gpt-4-turbo" {{ 'selected' if ai_model == 'gpt-4-turbo' }}>GPT-4 Turbo</option>
+                        <option value="gpt-4.1-mini" {{ 'selected' if ai_model == 'gpt-4.1-mini' }}>GPT-4.1 Mini</option>
+                        <option value="gpt-4.1" {{ 'selected' if ai_model == 'gpt-4.1' }}>GPT-4.1</option>
+                        <option value="o3-mini" {{ 'selected' if ai_model == 'o3-mini' }}>o3-mini</option>
+                        <option value="o4-mini" {{ 'selected' if ai_model == 'o4-mini' }}>o4-mini</option>
+                    </select>
+                </div>
+                <button class="btn btn-outline-secondary btn-sm" type="submit">Apply Model</button>
+            </form>
+
+            <form method="GET" class="d-flex align-items-end gap-2">
+                <input type="hidden" name="month" value="{{ month }}">
+                <input type="hidden" name="ai_model" value="{{ ai_model or '' }}">
+                <input type="hidden" name="run_analysis" value="1">
+                <button class="btn btn-primary btn-sm" type="submit">
+                    <i class="bi bi-stars me-1"></i> Run Deep AI Analysis
+                </button>
+            </form>
+        </div>
+
+        {% if ai_analysis %}
+        <div class="mt-3 p-3" style="background:#f8fafc; border-radius:10px; border:1px solid #e5e7eb;">
+            <div class="fw-semibold mb-2"><i class="bi bi-cpu me-1"></i> AI Analysis</div>
+            <div style="white-space: pre-wrap; font-size:.92rem; color:#334155;">{{ ai_analysis }}</div>
+        </div>
+        {% endif %}
     </div>
 </div>
 
@@ -94,5 +135,109 @@
 </div>
 {% endif %}
 {% endif %}
+
+<div class="card mt-4" style="border:none; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
+    <div class="card-body p-3 p-md-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="mb-0"><i class="bi bi-chat-dots me-1"></i> Ask AI About Your Data</h6>
+            {% if not openai_enabled %}
+            <span class="badge bg-warning text-dark">OpenAI key required</span>
+            {% endif %}
+        </div>
+
+        <div id="aiChatLog" style="max-height:320px; overflow:auto; border:1px solid #e5e7eb; border-radius:10px; padding:12px; background:#fff;">
+            {% if chat_messages %}
+                {% for m in chat_messages %}
+                <div class="mb-2 d-flex {{ 'justify-content-end' if m.role == 'user' else 'justify-content-start' }}">
+                    {% if m.role == 'user' %}
+                    <div style="max-width:82%; border-radius:10px; padding:10px 12px; font-size:.9rem; white-space:pre-wrap; background:#eef2ff; color:#1e3a8a;">{{ m.content }}</div>
+                    {% else %}
+                    <div style="max-width:82%; border-radius:10px; padding:10px 12px; font-size:.9rem; white-space:pre-wrap; background:#f8fafc; color:#334155; border:1px solid #e5e7eb;">{{ m.content }}</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="text-muted" style="font-size:.9rem;">Ask questions like: "What should I fix first this month?" or "Which campaign is wasting budget?"</div>
+            {% endif %}
+        </div>
+
+        <form id="aiChatForm" class="mt-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="month" value="{{ month }}">
+            <input type="hidden" name="ai_model" value="{{ ai_model or '' }}">
+            <div class="input-group">
+                <input type="text" class="form-control" id="aiChatMessage" name="message" placeholder="Ask about performance, competitors, budget, or next steps..." {% if not openai_enabled %}disabled{% endif %}>
+                <button class="btn btn-primary" type="submit" {% if not openai_enabled %}disabled{% endif %}>Send</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+(function () {
+    const form = document.getElementById('aiChatForm');
+    const log = document.getElementById('aiChatLog');
+    const input = document.getElementById('aiChatMessage');
+    if (!form || !log || !input) return;
+
+    log.scrollTop = log.scrollHeight;
+
+    const appendMessage = (role, text) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'mb-2 d-flex ' + (role === 'user' ? 'justify-content-end' : 'justify-content-start');
+        const bubble = document.createElement('div');
+        bubble.style.maxWidth = '82%';
+        bubble.style.borderRadius = '10px';
+        bubble.style.padding = '10px 12px';
+        bubble.style.fontSize = '.9rem';
+        bubble.style.whiteSpace = 'pre-wrap';
+        if (role === 'user') {
+            bubble.style.background = '#eef2ff';
+            bubble.style.color = '#1e3a8a';
+        } else {
+            bubble.style.background = '#f8fafc';
+            bubble.style.color = '#334155';
+            bubble.style.border = '1px solid #e5e7eb';
+        }
+        bubble.textContent = text;
+        wrap.appendChild(bubble);
+        log.appendChild(wrap);
+        log.scrollTop = log.scrollHeight;
+    };
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const message = input.value.trim();
+        if (!message) return;
+
+        const submitBtn = form.querySelector('button[type="submit"]');
+        appendMessage('user', message);
+        input.value = '';
+        submitBtn.disabled = true;
+
+        const fd = new FormData(form);
+        fd.set('message', message);
+
+        try {
+            const res = await fetch('{{ url_for("client.client_actions_chat") }}', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': fd.get('csrf_token') },
+                body: fd,
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                appendMessage('assistant', data.error || 'AI request failed.');
+            } else {
+                appendMessage('assistant', data.reply || '');
+            }
+        } catch (err) {
+            appendMessage('assistant', 'Connection error. Please try again.');
+        } finally {
+            submitBtn.disabled = false;
+            input.focus();
+        }
+    });
+})();
+</script>
 
 {% endblock %}

@@ -334,6 +334,14 @@ def chat_with_jarvis(
     if voice_parts:
         system += " " + " ".join(voice_parts)
 
+    if context.get("client_mode"):
+        system += (
+            " Client mode guardrails: avoid generic marketing advice. "
+            "Only recommend actions supported by provided data points. "
+            "If evidence is missing, clearly say what data is needed before acting. "
+            "Do not blame platforms or algorithm changes unless specific metrics show that pattern."
+        )
+
     ctx_user = {
         "role": "user",
         "content": "Context JSON:\n" + json.dumps(context, ensure_ascii=False),

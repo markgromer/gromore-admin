@@ -162,6 +162,58 @@
     </div>
 </div>
 
+<!-- Google Drive / Sheets Sync -->
+<div class="card mb-4" style="border-radius:12px; border:none; box-shadow:0 1px 3px rgba(0,0,0,.05);">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-start">
+            <div class="d-flex align-items-center gap-3">
+                <div style="width:48px; height:48px; border-radius:12px; background:#f0f2f5; display:flex; align-items:center; justify-content:center;">
+                    <i class="bi bi-cloud-arrow-up" style="font-size:1.3rem; color:#34a853;"></i>
+                </div>
+                <div>
+                    <h5 class="mb-1 fw-semibold">Google Drive + Sheets Sync</h5>
+                    <p class="text-muted mb-0" style="font-size:.88rem;">Store exports in Drive and send action-plan snapshots to a Sheet.</p>
+                </div>
+            </div>
+            {% if google_connected and drive_scoped %}
+            <span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i> Ready</span>
+            {% elif google_connected %}
+            <span class="badge bg-warning text-dark rounded-pill px-3 py-2">Reconnect to add Drive scope</span>
+            {% else %}
+            <span class="badge bg-secondary rounded-pill px-3 py-2">Not Connected</span>
+            {% endif %}
+        </div>
+
+        <div class="mt-3">
+            {% if not google_connected %}
+            <p class="text-muted mb-2" style="font-size:.88rem;">Connect Google first, then configure your Drive folder and Sheet destination.</p>
+            {% elif not drive_scoped %}
+            <p class="text-muted mb-2" style="font-size:.88rem;">Your current Google connection does not include Drive/Sheets scope yet.</p>
+            <a href="{{ url_for('client_google_oauth.connect') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat me-1"></i> Reconnect Google With Drive Access</a>
+            {% endif %}
+        </div>
+
+        <form method="POST" action="{{ url_for('client.client_save_google_drive') }}" class="mt-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">Drive Folder ID (optional)</label>
+                    <input type="text" class="form-control" name="google_drive_folder_id" value="{{ brand.google_drive_folder_id or '' }}" placeholder="Folder ID from Drive URL" {% if not google_connected %}disabled{% endif %}>
+                    <small class="text-muted">Used as the destination folder for generated reports and exports.</small>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">Google Sheet ID (optional)</label>
+                    <input type="text" class="form-control" name="google_drive_sheet_id" value="{{ brand.google_drive_sheet_id or '' }}" placeholder="Sheet ID from docs.google.com URL" {% if not google_connected %}disabled{% endif %}>
+                    <small class="text-muted">Used for action-plan snapshots and operational trackers.</small>
+                </div>
+            </div>
+            <div class="mt-3">
+                <button class="btn btn-primary" type="submit" {% if not google_connected %}disabled{% endif %}>Save Drive Sync Settings</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Connection status summary -->
 <div class="card" style="border-radius:12px; border:none; box-shadow:0 1px 3px rgba(0,0,0,.05);">
     <div class="card-body p-4">

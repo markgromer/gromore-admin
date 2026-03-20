@@ -188,6 +188,8 @@ class WebDB:
             ("logo_path", "TEXT DEFAULT ''"),
             ("logo_variants", "TEXT DEFAULT '[]'"),
             ("brand_colors", "TEXT DEFAULT ''"),
+            ("google_drive_folder_id", "TEXT DEFAULT ''"),
+            ("google_drive_sheet_id", "TEXT DEFAULT ''"),
         ]
         for col_name, col_def in new_brand_cols:
             if col_name not in brand_columns:
@@ -329,6 +331,7 @@ class WebDB:
             "crm_type", "crm_api_key", "crm_webhook_url", "crm_pipeline_id",
             "openai_api_key", "openai_model",
             "logo_path", "logo_variants", "brand_colors",
+            "google_drive_folder_id", "google_drive_sheet_id",
         }
         if field not in allowed:
             raise ValueError(f"Cannot update field: {field}")

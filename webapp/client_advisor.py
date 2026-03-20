@@ -19,7 +19,7 @@ import requests as _requests
 log = logging.getLogger(__name__)
 
 
-def build_client_dashboard(analysis, suggestions, brand):
+def build_client_dashboard(analysis, suggestions, brand, ai_model=None, include_deep_analysis=False):
     """
     Build the full client dashboard payload from raw analysis + suggestions.
 
@@ -47,13 +47,13 @@ def build_client_dashboard(analysis, suggestions, brand):
     if gsc:
         channels["seo"] = _explain_seo(gsc)
 
-    actions = _build_action_cards(analysis, suggestions, brand)
+    actions = _build_action_cards(analysis, suggestions, brand, ai_model=ai_model)
     kpi_status = _explain_kpis(analysis)
 
     overall_score = analysis.get("overall_score")
     overall_grade = analysis.get("overall_grade", "N/A")
 
-    return {
+    result = {
         "health": {
             "grade": overall_grade,
             "score": overall_score,
@@ -65,6 +65,16 @@ def build_client_dashboard(analysis, suggestions, brand):
         "highlights": analysis.get("highlights", []),
         "concerns": analysis.get("concerns", []),
     }
+
+    if include_deep_analysis:
+        result["ai_analysis"] = _generate_ai_analysis_brief(
+            analysis,
+            suggestions,
+            brand,
+            ai_model=ai_model,
+        )
+
+    return result
 
 
 # ── Metric Explanations ──
@@ -366,7 +376,7 @@ def _explain_seo(gsc):
 
 # ── Action Cards with AI-Generated Deliverables ──
 
-def _build_action_cards(analysis, suggestions, brand):
+def _build_action_cards(analysis, suggestions, brand, ai_model=None):
     """Convert top suggestions into action cards with AI-generated deliverables.
 
     Max 2 per priority level (2 high + 2 medium = 4 max).
@@ -405,7 +415,7 @@ def _build_action_cards(analysis, suggestions, brand):
         actions.append(card)
 
     # Generate AI deliverables using actual account data
-    ai_actions = _generate_ai_actions(selected, analysis, brand)
+    ai_actions = _generate_ai_actions(selected, analysis, brand, ai_model=ai_model)
     if ai_actions:
         for i, card in enumerate(actions):
             if i < len(ai_actions):
@@ -417,7 +427,7 @@ def _build_action_cards(analysis, suggestions, brand):
     return actions
 
 
-def _generate_ai_actions(suggestions, analysis, brand):
+def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
     """Call AI to generate specific deliverables for each action card.
 
     Instead of 'go to Google Ads and click...', this produces the actual work:
@@ -426,15 +436,20 @@ def _generate_ai_actions(suggestions, analysis, brand):
 
     Returns a list of step-lists (one per suggestion), or empty list on failure.
     """
+    api_key = (brand.get("openai_api_key") or "").strip()
     try:
         from flask import current_app
-        api_key = (current_app.config.get("OPENAI_API_KEY", "") or "").strip()
+        if not api_key:
+            api_key = (current_app.config.get("OPENAI_API_KEY", "") or "").strip()
     except RuntimeError:
         # Outside app context (e.g. testing)
-        api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+        if not api_key:
+            api_key = os.environ.get("OPENAI_API_KEY", "").strip()
 
     if not api_key:
         return []
+
+    model = (ai_model or "").strip() or (brand.get("openai_model") or "").strip() or "gpt-4o-mini"
 
     from webapp.ai_assistant import _summarize_analysis_for_ai
     analysis_summary = _summarize_analysis_for_ai(analysis)
@@ -481,6 +496,9 @@ def _generate_ai_actions(suggestions, analysis, brand):
         "- \"impact\": one sentence estimating the expected result (e.g., 'Should save ~$180/month and generate 3-4 additional leads')\n"
         "- \"time\": estimated time to execute (e.g., '10 minutes', '30 minutes', '1 hour')\n\n"
         "Rules:\n"
+        "- DO NOT give generic recommendations; every recommendation must cite concrete evidence from provided metrics, campaigns, keywords, queries, or competitors\n"
+        "- If evidence is missing for a tactic, do not include that tactic\n"
+        "- Never blame external platforms (Google, Meta, algorithm changes) unless a specific metric in data proves the issue\n"
         "- Reference actual campaign names, keywords, metrics, and competitors from the data\n"
         "- For ad copy: write the actual headlines and descriptions ready to paste\n"
         "- For keywords: name the specific keywords to pause, add, or adjust bids on\n"
@@ -505,7 +523,7 @@ def _generate_ai_actions(suggestions, analysis, brand):
             "https://api.openai.com/v1/chat/completions",
             headers=headers,
             json={
-                "model": "gpt-4o-mini",
+                "model": model,
                 "temperature": 0.3,
                 "messages": [
                     {"role": "system", "content": system},
@@ -566,6 +584,72 @@ def _generate_ai_actions(suggestions, analysis, brand):
     except Exception as e:
         log.warning("AI action generation error: %s", e)
         return []
+
+
+def _generate_ai_analysis_brief(analysis, suggestions, brand, ai_model=None):
+    """Generate a deeper cross-source analysis brief for the Action Plan page."""
+    api_key = (brand.get("openai_api_key") or "").strip()
+    try:
+        from flask import current_app
+        if not api_key:
+            api_key = (current_app.config.get("OPENAI_API_KEY", "") or "").strip()
+    except RuntimeError:
+        if not api_key:
+            api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+
+    if not api_key:
+        return ""
+
+    model = (ai_model or "").strip() or (brand.get("openai_model") or "").strip() or "gpt-4o-mini"
+
+    from webapp.ai_assistant import _summarize_analysis_for_ai
+    analysis_summary = _summarize_analysis_for_ai(analysis)
+
+    payload = {
+        "analysis": analysis_summary,
+        "suggestions": suggestions,
+    }
+
+    system = (
+        "You are a principal growth operator writing a short executive analysis for a business owner. "
+        "Use only data in context. No generic filler, no speculation, no platform blame without proof. "
+        "Return concise markdown with sections: Top Risks, Best Opportunities, 30-Day Action Plan, What To Watch Weekly. "
+        "Each bullet must include at least one concrete data point (metric, campaign, keyword, query, spend, CPA, CTR, or position)."
+    )
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        resp = _requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json={
+                "model": model,
+                "temperature": 0.3,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": json.dumps(payload)},
+                ],
+            },
+            timeout=45,
+        )
+        if resp.status_code != 200:
+            log.warning("AI analysis brief failed (%s): %s", resp.status_code, resp.text[:200])
+            return ""
+
+        data = resp.json()
+        content = (
+            (data.get("choices") or [{}])[0]
+            .get("message", {})
+            .get("content", "")
+        )
+        return (content or "").strip()
+    except Exception as e:
+        log.warning("AI analysis brief error: %s", e)
+        return ""
 
 
 def _explain_kpis(analysis):

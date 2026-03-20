@@ -25,6 +25,18 @@ client_bp = Blueprint(
 )
 
 
+ALLOWED_AI_MODELS = {
+    "",
+    "gpt-4o-mini",
+    "gpt-4o",
+    "gpt-4-turbo",
+    "gpt-4.1-mini",
+    "gpt-4.1",
+    "o3-mini",
+    "o4-mini",
+}
+
+
 def client_login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -129,8 +141,13 @@ def client_actions():
         abort(404)
 
     month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+    ai_model = (request.args.get("ai_model") or "").strip()
+    run_analysis = request.args.get("run_analysis") == "1"
+    if ai_model not in ALLOWED_AI_MODELS:
+        ai_model = ""
 
     actions = []
+    ai_analysis = ""
     error = ""
 
     try:
@@ -139,19 +156,125 @@ def client_actions():
 
         analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
         if analysis:
-            data = build_client_dashboard(analysis, suggestions, brand)
+            data = build_client_dashboard(
+                analysis,
+                suggestions,
+                brand,
+                ai_model=ai_model or None,
+                include_deep_analysis=run_analysis,
+            )
             actions = data.get("actions", [])
+            ai_analysis = data.get("ai_analysis", "")
     except Exception as e:
         error = str(e)
+
+    app_key = ""
+    try:
+        from flask import current_app
+        app_key = (current_app.config.get("OPENAI_API_KEY") or "").strip()
+    except RuntimeError:
+        app_key = ""
+
+    chat_messages = db.get_ai_chat_messages(brand_id, month, limit=30)
 
     return render_template(
         "client_actions.html",
         brand=brand,
         month=month,
+        ai_model=ai_model,
+        run_analysis=run_analysis,
+        ai_analysis=ai_analysis,
         actions=actions,
+        chat_messages=chat_messages,
+        openai_enabled=bool((brand.get("openai_api_key") or "").strip() or app_key),
         error=error,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
+
+
+@client_bp.route("/actions/chat", methods=["POST"])
+@client_login_required
+def client_actions_chat():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"error": "Brand not found"}), 404
+
+    month = request.form.get("month") or datetime.now().strftime("%Y-%m")
+    user_message = (request.form.get("message") or "").strip()
+    ai_model = (request.form.get("ai_model") or "").strip()
+    if ai_model not in ALLOWED_AI_MODELS:
+        ai_model = ""
+
+    if not user_message:
+        return jsonify({"error": "Message cannot be empty"}), 400
+
+    api_key = (brand.get("openai_api_key") or "").strip()
+    if not api_key:
+        from flask import current_app
+        api_key = (current_app.config.get("OPENAI_API_KEY") or "").strip()
+    if not api_key:
+        return jsonify({"error": "No OpenAI API key configured. Add one in Connections."}), 400
+
+    model = ai_model or (brand.get("openai_model") or "").strip() or "gpt-4o-mini"
+
+    db.add_ai_chat_message(brand_id, month, "user", user_message)
+
+    try:
+        from webapp.report_runner import build_analysis_and_suggestions_for_brand
+        from webapp.ai_assistant import chat_with_jarvis, summarize_analysis_for_ai
+
+        analysis = None
+        suggestions = None
+        analysis_error = ""
+        try:
+            analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
+        except Exception as e:
+            analysis_error = str(e)
+
+        history = db.get_ai_chat_messages(brand_id, month, limit=30)
+        trimmed = history[-12:] if len(history) > 12 else history
+        messages = [{"role": m["role"], "content": m["content"]} for m in trimmed if m.get("content")]
+
+        context = {
+            "client_mode": True,
+            "brand": {
+                "name": brand.get("display_name"),
+                "industry": brand.get("industry"),
+                "service_area": brand.get("service_area"),
+                "primary_services": brand.get("primary_services"),
+                "monthly_budget": brand.get("monthly_budget"),
+                "website": brand.get("website"),
+                "goals": brand.get("goals"),
+                "brand_voice": brand.get("brand_voice"),
+                "active_offers": brand.get("active_offers"),
+                "target_audience": brand.get("target_audience"),
+                "competitors": brand.get("competitors"),
+                "reporting_notes": brand.get("reporting_notes"),
+                "kpi_target_cpa": brand.get("kpi_target_cpa"),
+                "kpi_target_leads": brand.get("kpi_target_leads"),
+                "kpi_target_roas": brand.get("kpi_target_roas"),
+            },
+            "month": month,
+            "analysis": summarize_analysis_for_ai(analysis) if isinstance(analysis, dict) else None,
+            "suggestions": suggestions,
+            "analysis_error": analysis_error,
+        }
+
+        assistant_reply = chat_with_jarvis(
+            api_key=api_key,
+            model=model,
+            context=context,
+            messages=messages,
+        )
+        assistant_reply = (assistant_reply or "").strip()
+        if assistant_reply:
+            db.add_ai_chat_message(brand_id, month, "assistant", assistant_reply)
+
+        return jsonify({"reply": assistant_reply})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ── Ad Builder ──
@@ -1782,12 +1905,15 @@ def client_settings():
     connections = db.get_brand_connections(brand_id)
     google_conn = connections.get("google", {})
     meta_conn = connections.get("meta", {})
+    scopes = (google_conn.get("scopes") or "").lower()
+    drive_scoped = ("drive.file" in scopes) or ("spreadsheets" in scopes)
 
     return render_template(
         "client_settings.html",
         brand=brand,
         google_connected=(google_conn.get("status") == "connected"),
         meta_connected=(meta_conn.get("status") == "connected"),
+        drive_scoped=drive_scoped,
         google_conn=google_conn,
         meta_conn=meta_conn,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
@@ -1817,11 +1943,7 @@ def client_save_openai():
     api_key = request.form.get("openai_api_key", "").strip()
     model = request.form.get("openai_model", "").strip()
 
-    ALLOWED_MODELS = {
-        "", "gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-4.1-mini", "gpt-4.1",
-        "o3-mini", "o4-mini",
-    }
-    if model not in ALLOWED_MODELS:
+    if model not in ALLOWED_AI_MODELS:
         model = "gpt-4o-mini"
 
     # Only update key if user actually entered something (don't blank it on empty submit)
@@ -1833,6 +1955,22 @@ def client_save_openai():
 
     db.update_brand_text_field(brand_id, "openai_model", model)
     flash("AI settings saved.", "success")
+    return redirect(url_for("client.client_settings"))
+
+
+@client_bp.route("/settings/google-drive", methods=["POST"])
+@client_login_required
+def client_save_google_drive():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    folder_id = (request.form.get("google_drive_folder_id") or "").strip()[:200]
+    sheet_id = (request.form.get("google_drive_sheet_id") or "").strip()[:200]
+
+    db.update_brand_text_field(brand_id, "google_drive_folder_id", folder_id)
+    db.update_brand_text_field(brand_id, "google_drive_sheet_id", sheet_id)
+
+    flash("Google Drive sync settings saved.", "success")
     return redirect(url_for("client.client_settings"))
 
 
