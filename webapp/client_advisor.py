@@ -424,7 +424,40 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None):
                 card["impact"] = ai.get("impact", "")
                 card["time"] = ai.get("time", "")
 
+    # Fallback: if AI didn't return steps, generate basic ones from the suggestion data
+    for i, card in enumerate(actions):
+        if not card["steps"] and i < len(selected):
+            s = selected[i]
+            card["steps"] = _fallback_steps(s)
+            if not card["time"]:
+                card["time"] = "15-30 minutes"
+
     return actions
+
+
+def _fallback_steps(suggestion):
+    """Build basic actionable steps from the suggestion when AI generation fails."""
+    steps = []
+    detail = suggestion.get("detail", "")
+    title = suggestion.get("title", "")
+    category = suggestion.get("category", "")
+    data_point = suggestion.get("data_point", "")
+
+    if detail:
+        # Split detail into sentences and use each as a step
+        sentences = [s.strip() for s in detail.replace(". ", ".\n").split("\n") if s.strip()]
+        for s in sentences[:4]:
+            if not s.endswith("."):
+                s += "."
+            steps.append(s)
+
+    if not steps:
+        steps.append(f"Review your {category} performance data for this month.")
+        if data_point:
+            steps.append(f"Focus on the key metric: {data_point}.")
+        steps.append(f"Take action on: {title}.")
+
+    return steps
 
 
 def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
