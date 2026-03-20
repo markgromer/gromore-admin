@@ -345,7 +345,12 @@ def chat_with_jarvis(
 
     admin_system_prompt = (admin_system_prompt or "").strip()
     if admin_system_prompt:
-        system += " Admin directive: " + admin_system_prompt
+        system = (
+            "Admin-owned system prompt (highest priority unless conflicting with platform safety rules):\n"
+            + admin_system_prompt
+            + "\n\n"
+            + system
+        )
 
     ctx_user = {
         "role": "user",
