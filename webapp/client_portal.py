@@ -556,6 +556,11 @@ def client_my_business():
             db.update_brand_text_field(brand_id, "call_tracking_number", call_num)
             flash("Performance targets saved.", "success")
 
+        elif section == "branding":
+            brand_colors = request.form.get("brand_colors", "")[:200].strip()
+            db.update_brand_text_field(brand_id, "brand_colors", brand_colors)
+            flash("Brand colors saved.", "success")
+
         return redirect(url_for("client.client_my_business"))
 
     # Reload latest
@@ -581,6 +586,363 @@ def client_my_business():
         profile_score=profile_score,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
+
+
+# ── Logo Upload ──
+
+@client_bp.route("/upload-logo", methods=["POST"])
+@client_login_required
+def client_upload_logo():
+    from pathlib import Path
+    from flask import current_app
+    from werkzeug.utils import secure_filename
+
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    f = request.files.get("logo")
+    if not f or not f.filename:
+        flash("No file selected.", "error")
+        return redirect(url_for("client.client_my_business"))
+
+    ALLOWED_EXT = {"png", "jpg", "jpeg", "svg", "webp"}
+    ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+    if ext not in ALLOWED_EXT:
+        flash("Invalid file type. Use PNG, JPG, SVG, or WebP.", "error")
+        return redirect(url_for("client.client_my_business"))
+
+    # 5MB limit
+    f.seek(0, 2)
+    size = f.tell()
+    f.seek(0)
+    if size > 5 * 1024 * 1024:
+        flash("File too large. Maximum 5MB.", "error")
+        return redirect(url_for("client.client_my_business"))
+
+    uploads_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads"))
+    logo_dir = uploads_dir / "logos" / str(brand_id)
+    logo_dir.mkdir(parents=True, exist_ok=True)
+
+    filename = secure_filename(f"logo_{brand_id}.{ext}")
+    filepath = logo_dir / filename
+    f.save(str(filepath))
+
+    # Store relative path: logos/<brand_id>/logo_<id>.<ext>
+    rel_path = f"logos/{brand_id}/{filename}"
+    db.update_brand_text_field(brand_id, "logo_path", rel_path)
+    flash("Logo uploaded.", "success")
+    return redirect(url_for("client.client_my_business"))
+
+
+@client_bp.route("/uploads/<path:filename>")
+@client_login_required
+def client_serve_upload(filename):
+    from pathlib import Path
+    from flask import current_app, send_from_directory
+
+    uploads_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads"))
+    return send_from_directory(str(uploads_dir), filename)
+
+
+# ── Creative Center ──
+
+@client_bp.route("/creative")
+@client_login_required
+def client_creative():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    return render_template(
+        "client_creative.html",
+        brand=brand,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/creative/generate", methods=["POST"])
+@client_login_required
+def client_creative_generate():
+    from pathlib import Path
+    from flask import current_app
+
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"error": "Brand not found"}), 404
+
+    # Get inputs
+    image_file = request.files.get("image")
+    ad_copy_headline = request.form.get("headline", "").strip()[:90]
+    ad_copy_body = request.form.get("body_text", "").strip()[:150]
+    cta_text = request.form.get("cta_text", "").strip()[:30]
+    ad_format = request.form.get("ad_format", "facebook_feed")
+    description = request.form.get("image_description", "").strip()[:500]
+    color_scheme = request.form.get("color_scheme", "auto")
+
+    if not image_file or not image_file.filename:
+        return jsonify({"error": "Please upload a background image."}), 400
+
+    if not ad_copy_headline:
+        return jsonify({"error": "Headline is required."}), 400
+
+    # Validate image
+    ext = image_file.filename.rsplit(".", 1)[-1].lower() if "." in image_file.filename else ""
+    if ext not in {"png", "jpg", "jpeg", "webp"}:
+        return jsonify({"error": "Image must be PNG, JPG, or WebP."}), 400
+
+    image_file.seek(0, 2)
+    if image_file.tell() > 10 * 1024 * 1024:
+        return jsonify({"error": "Image too large. Max 10MB."}), 400
+    image_file.seek(0)
+
+    # Format dimensions
+    FORMAT_SIZES = {
+        "facebook_feed": (1200, 628),
+        "facebook_story": (1080, 1920),
+        "instagram_feed": (1080, 1080),
+        "instagram_story": (1080, 1920),
+        "google_display_landscape": (1200, 628),
+        "google_display_square": (1200, 1200),
+    }
+    target_size = FORMAT_SIZES.get(ad_format, (1200, 628))
+
+    try:
+        from PIL import Image, ImageDraw, ImageFont, ImageFilter
+        import io
+        import uuid
+
+        # Open and resize the background image
+        bg = Image.open(image_file).convert("RGBA")
+        bg = _fit_cover(bg, target_size)
+
+        # Darken bottom portion for text readability
+        overlay = Image.new("RGBA", target_size, (0, 0, 0, 0))
+        draw_overlay = ImageDraw.Draw(overlay)
+        h = target_size[1]
+        for y in range(h // 2, h):
+            alpha = int(180 * (y - h // 2) / (h // 2))
+            draw_overlay.rectangle([0, y, target_size[0], y + 1], fill=(0, 0, 0, alpha))
+        bg = Image.alpha_composite(bg, overlay)
+
+        # Load logo if available
+        logo_img = None
+        if brand.get("logo_path"):
+            uploads_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads"))
+            logo_file = uploads_dir / brand["logo_path"]
+            if logo_file.exists():
+                try:
+                    logo_img = Image.open(str(logo_file)).convert("RGBA")
+                    # Scale logo to ~12% of image width
+                    logo_w = int(target_size[0] * 0.12)
+                    ratio = logo_w / logo_img.width
+                    logo_h = int(logo_img.height * ratio)
+                    logo_img = logo_img.resize((logo_w, logo_h), Image.LANCZOS)
+                except Exception:
+                    logo_img = None
+
+        # Draw text
+        draw = ImageDraw.Draw(bg)
+        w, h = target_size
+        margin = int(w * 0.06)
+
+        # Try to load a font, fall back to default
+        font_headline = _get_font(int(h * 0.065), bold=True)
+        font_body = _get_font(int(h * 0.038))
+        font_cta = _get_font(int(h * 0.04), bold=True)
+
+        # Headline
+        y_cursor = int(h * 0.62)
+        _draw_text_wrapped(draw, ad_copy_headline, margin, y_cursor, w - margin * 2, font_headline, fill="white")
+        headline_lines = _count_lines(ad_copy_headline, w - margin * 2, font_headline)
+        y_cursor += int(headline_lines * font_headline.size * 1.3) + 8
+
+        # Body text
+        if ad_copy_body:
+            _draw_text_wrapped(draw, ad_copy_body, margin, y_cursor, w - margin * 2, font_body, fill=(220, 220, 220))
+            body_lines = _count_lines(ad_copy_body, w - margin * 2, font_body)
+            y_cursor += int(body_lines * font_body.size * 1.3) + 12
+
+        # CTA button
+        if cta_text:
+            cta_bbox = draw.textbbox((0, 0), cta_text, font=font_cta)
+            cta_w = cta_bbox[2] - cta_bbox[0] + 36
+            cta_h = cta_bbox[3] - cta_bbox[1] + 20
+            cta_x = margin
+            cta_y = y_cursor
+            # Draw rounded CTA button
+            draw.rounded_rectangle([cta_x, cta_y, cta_x + cta_w, cta_y + cta_h], radius=8, fill=(99, 102, 241))
+            draw.text((cta_x + 18, cta_y + 10), cta_text, fill="white", font=font_cta)
+
+        # Place logo (top-left or top-right)
+        if logo_img:
+            logo_margin = int(w * 0.04)
+            bg.paste(logo_img, (logo_margin, logo_margin), logo_img)
+
+        # Save output
+        output_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads")) / "creatives" / str(brand_id)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_name = f"creative_{uuid.uuid4().hex[:8]}.png"
+        output_path = output_dir / output_name
+
+        final = bg.convert("RGB")
+        final.save(str(output_path), "PNG", quality=95)
+
+        rel_path = f"creatives/{brand_id}/{output_name}"
+        return jsonify({
+            "image_url": url_for("client.client_serve_upload", filename=rel_path),
+            "filename": output_name,
+        })
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to generate creative: {str(e)}"}), 500
+
+
+@client_bp.route("/creative/ai-copy", methods=["POST"])
+@client_login_required
+def client_creative_ai_copy():
+    """Use AI to generate ad copy from an image description."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"error": "Brand not found"}), 404
+
+    description = request.form.get("description", "").strip()
+    ad_format = request.form.get("ad_format", "facebook_feed")
+    if not description:
+        return jsonify({"error": "Please describe the image."}), 400
+
+    # Get API key - brand's own key first, then system key
+    api_key = (brand.get("openai_api_key") or "").strip()
+    if not api_key:
+        from flask import current_app
+        api_key = current_app.config.get("OPENAI_API_KEY", "")
+    if not api_key:
+        return jsonify({"error": "No OpenAI API key configured. Add one in Connections."}), 400
+
+    model = (brand.get("openai_model") or "").strip() or "gpt-4o-mini"
+
+    prompt = f"""Generate ad copy for a {ad_format.replace('_', ' ')} ad creative.
+
+Brand: {brand.get('display_name', '')}
+Industry: {brand.get('industry', '')}
+Brand Voice: {brand.get('brand_voice', 'professional and friendly')}
+Active Offers: {brand.get('active_offers', 'none specified')}
+Image Description: {description}
+
+Return JSON only with these fields:
+- headline: max 40 characters, punchy and attention-grabbing
+- body_text: max 125 characters, supports the headline, includes value proposition
+- cta_text: max 20 characters, action-oriented button text (e.g. "Get Your Quote", "Book Now", "Learn More")
+
+JSON only, no markdown."""
+
+    import requests as req
+    try:
+        resp = req.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"model": model, "messages": [{"role": "user", "content": prompt}], "temperature": 0.7},
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            return jsonify({"error": "AI request failed. Check your API key."}), 500
+        content = resp.json()["choices"][0]["message"]["content"]
+        # Strip markdown fences if present
+        content = content.strip()
+        if content.startswith("```"):
+            content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+        import json as _json
+        data = _json.loads(content)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": f"AI generation failed: {str(e)}"}), 500
+
+
+# ── Creative helpers ──
+
+def _fit_cover(img, target_size):
+    """Resize and crop image to cover target_size (center crop)."""
+    from PIL import Image
+    tw, th = target_size
+    iw, ih = img.size
+    scale = max(tw / iw, th / ih)
+    new_w, new_h = int(iw * scale), int(ih * scale)
+    img = img.resize((new_w, new_h), Image.LANCZOS)
+    left = (new_w - tw) // 2
+    top = (new_h - th) // 2
+    return img.crop((left, top, left + tw, top + th))
+
+
+def _get_font(size, bold=False):
+    """Try to load a system font, fall back to Pillow default."""
+    from PIL import ImageFont
+    # Common font paths
+    candidates = []
+    if bold:
+        candidates = ["arialbd.ttf", "Arial Bold.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf"]
+    else:
+        candidates = ["arial.ttf", "Arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf"]
+    for name in candidates:
+        try:
+            return ImageFont.truetype(name, size)
+        except (OSError, IOError):
+            continue
+    # Last resort: default
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
+
+
+def _draw_text_wrapped(draw, text, x, y, max_width, font, fill="white"):
+    """Draw text wrapping at max_width."""
+    words = text.split()
+    lines = []
+    current = ""
+    for word in words:
+        test = f"{current} {word}".strip()
+        bbox = draw.textbbox((0, 0), test, font=font)
+        if bbox[2] - bbox[0] <= max_width:
+            current = test
+        else:
+            if current:
+                lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+
+    for line in lines:
+        draw.text((x, y), line, fill=fill, font=font)
+        y += int(font.size * 1.3)
+
+
+def _count_lines(text, max_width, font):
+    """Estimate number of wrapped lines."""
+    from PIL import ImageDraw, Image
+    tmp = Image.new("RGB", (1, 1))
+    draw = ImageDraw.Draw(tmp)
+    words = text.split()
+    lines = 1
+    current = ""
+    for word in words:
+        test = f"{current} {word}".strip()
+        bbox = draw.textbbox((0, 0), test, font=font)
+        if bbox[2] - bbox[0] <= max_width:
+            current = test
+        else:
+            lines += 1
+            current = word
+    return lines
 
 
 @client_bp.route("/settings")

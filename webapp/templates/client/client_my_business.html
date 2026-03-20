@@ -209,6 +209,31 @@
         font-size: .78rem;
         color: #9ca3af;
     }
+
+    .logo-upload-area {
+        border: 2px dashed #d1d5db;
+        border-radius: 12px;
+        padding: 1.5rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all .2s;
+        background: #fafbfc;
+    }
+    .logo-upload-area:hover {
+        border-color: #6366f1;
+        background: #faf5ff;
+    }
+    .logo-upload-area.has-logo {
+        border-style: solid;
+        border-color: #e5e7eb;
+    }
+    .logo-preview {
+        max-width: 180px;
+        max-height: 100px;
+        object-fit: contain;
+        margin-bottom: .75rem;
+        border-radius: 8px;
+    }
 </style>
 
 <!-- Header -->
@@ -225,6 +250,59 @@
 </div>
 
 <div class="row g-4">
+    <!-- Logo & Brand Colors -->
+    <div class="col-12">
+        <div class="biz-section">
+            <div class="biz-section-header">
+                <div class="d-flex align-items-center justify-content-between">
+                    <h5><i class="bi bi-palette me-2" style="color:#8b5cf6;"></i> Logo & Brand Colors</h5>
+                    <span class="ai-badge"><i class="bi bi-stars"></i> Used in Creatives</span>
+                </div>
+                <div class="section-hint">Your logo appears on AI-generated ad creatives. Brand colors guide the design.</div>
+            </div>
+            <div class="biz-section-body">
+                <div class="row g-4 align-items-start">
+                    <div class="col-md-5">
+                        <form method="POST" action="{{ url_for('client.client_upload_logo') }}" enctype="multipart/form-data">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="logo-upload-area {{ 'has-logo' if brand.logo_path }}" onclick="document.getElementById('logoInput').click()">
+                                {% if brand.logo_path %}
+                                <img src="{{ url_for('client.client_serve_upload', filename=brand.logo_path) }}" alt="Logo" class="logo-preview"><br>
+                                <small class="text-muted">Click to replace</small>
+                                {% else %}
+                                <i class="bi bi-cloud-arrow-up" style="font-size:2rem; color:#9ca3af;"></i>
+                                <div style="font-size:.88rem; color:#6b7280; margin-top:.5rem;">Click to upload your logo</div>
+                                <small class="text-muted">PNG, JPG, SVG, or WebP. Max 5MB.</small>
+                                {% endif %}
+                            </div>
+                            <input type="file" id="logoInput" name="logo" accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                                   style="display:none;" onchange="this.form.submit()">
+                        </form>
+                    </div>
+                    <div class="col-md-7">
+                        <form method="POST" action="{{ url_for('client.client_my_business') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="section" value="branding">
+                            <div class="biz-field">
+                                <label>
+                                    <span class="field-icon"><i class="bi bi-droplet-half"></i></span>
+                                    Brand Colors
+                                </label>
+                                <input type="text" name="brand_colors" maxlength="200"
+                                       value="{{ brand.brand_colors or '' }}"
+                                       placeholder="e.g. Primary: #2563eb (blue), Secondary: #f59e0b (gold), Dark: #1a1d2e">
+                                <div class="field-help">Used by AI when generating ad creatives. Hex codes or color names.</div>
+                            </div>
+                            <button type="submit" class="biz-save-btn" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed);">
+                                <i class="bi bi-check2 me-1"></i> Save Colors
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Left column: Brand profile -->
     <div class="col-lg-7">
         <form method="POST" action="{{ url_for('client.client_my_business') }}">

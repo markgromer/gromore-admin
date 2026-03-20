@@ -1,0 +1,544 @@
+{% extends "client_base.html" %}
+{% block title %}Creative Center{% endblock %}
+
+{% block content %}
+<style>
+    .creative-header {
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
+        border-radius: 16px;
+        padding: 2rem 2.25rem;
+        margin-bottom: 1.5rem;
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+    }
+    .creative-header::after {
+        content: '';
+        position: absolute;
+        top: -40%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(167,139,250,.2) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    .creative-header h3 { font-weight: 800; font-size: 1.4rem; margin-bottom: .25rem; }
+    .creative-header p { opacity: .7; font-size: .9rem; margin: 0; }
+
+    .creative-card {
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 1px 4px rgba(0,0,0,.06);
+        margin-bottom: 1.25rem;
+        overflow: hidden;
+    }
+    .creative-card-header {
+        padding: 1.25rem 1.5rem .75rem;
+        border-bottom: 1px solid #f1f3f5;
+    }
+    .creative-card-header h5 { font-weight: 700; font-size: 1.05rem; color: #1a1d2e; margin: 0; }
+    .creative-card-header .hint { font-size: .82rem; color: #6b7280; margin-top: 2px; }
+    .creative-card-body { padding: 1.25rem 1.5rem 1.5rem; }
+
+    /* Upload zone */
+    .upload-zone {
+        border: 2.5px dashed #d1d5db;
+        border-radius: 14px;
+        padding: 2.5rem 1.5rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all .25s ease;
+        background: #fafbfc;
+        position: relative;
+    }
+    .upload-zone:hover, .upload-zone.dragover {
+        border-color: #6366f1;
+        background: #f5f3ff;
+    }
+    .upload-zone.has-image {
+        padding: 0;
+        border-style: solid;
+        border-color: #6366f1;
+    }
+    .upload-zone .upload-icon {
+        font-size: 2.5rem;
+        color: #9ca3af;
+        margin-bottom: .5rem;
+    }
+    .upload-zone .upload-text { font-size: .92rem; color: #6b7280; }
+    .upload-zone .upload-text strong { color: #6366f1; }
+    .upload-zone img {
+        max-width: 100%;
+        max-height: 350px;
+        border-radius: 11px;
+        display: block;
+    }
+    .upload-zone .remove-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        background: rgba(0,0,0,.6);
+        color: #fff;
+        border: none;
+        border-radius: 50%;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: .85rem;
+    }
+
+    /* Format selector */
+    .format-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: .75rem;
+    }
+    .format-option {
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        padding: .75rem .6rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all .2s ease;
+        font-size: .82rem;
+        color: #4b5563;
+    }
+    .format-option:hover { border-color: #a5b4fc; background: #f5f3ff; }
+    .format-option.selected {
+        border-color: #6366f1;
+        background: #eef2ff;
+        color: #4338ca;
+        font-weight: 600;
+    }
+    .format-option .fmt-icon { font-size: 1.3rem; display: block; margin-bottom: 4px; }
+    .format-option .fmt-size { font-size: .7rem; color: #9ca3af; margin-top: 2px; }
+
+    /* Copy input fields */
+    .copy-field { margin-bottom: 1rem; }
+    .copy-field:last-child { margin-bottom: 0; }
+    .copy-field label {
+        font-weight: 600; font-size: .88rem; color: #1a1d2e; margin-bottom: .35rem; display: block;
+    }
+    .copy-field input, .copy-field textarea {
+        width: 100%;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 10px;
+        padding: .65rem .9rem;
+        font-size: .9rem;
+        transition: border-color .2s;
+    }
+    .copy-field input:focus, .copy-field textarea:focus {
+        border-color: #6366f1;
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+    }
+    .copy-field .char-count { font-size: .75rem; color: #9ca3af; text-align: right; margin-top: 2px; }
+
+    /* AI generate button */
+    .btn-ai-generate {
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        padding: .6rem 1.2rem;
+        font-weight: 600;
+        font-size: .88rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all .2s ease;
+    }
+    .btn-ai-generate:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(99,102,241,.35); color: #fff; }
+    .btn-ai-generate:disabled { opacity: .6; transform: none; box-shadow: none; }
+
+    /* Generate creative button */
+    .btn-generate-creative {
+        background: linear-gradient(135deg, #4338ca, #6366f1);
+        color: #fff;
+        border: none;
+        border-radius: 12px;
+        padding: .85rem 2rem;
+        font-weight: 700;
+        font-size: 1rem;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: all .25s ease;
+    }
+    .btn-generate-creative:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(67,56,202,.35); color: #fff; }
+    .btn-generate-creative:disabled { opacity: .6; transform: none; box-shadow: none; }
+
+    /* Preview area */
+    .preview-area {
+        min-height: 200px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f8fafc;
+        border-radius: 14px;
+        border: 2px dashed #e5e7eb;
+        padding: 2rem;
+        text-align: center;
+        color: #9ca3af;
+    }
+    .preview-area.has-preview {
+        border: none;
+        padding: .75rem;
+        background: #1e293b;
+    }
+    .preview-area img {
+        max-width: 100%;
+        border-radius: 10px;
+        box-shadow: 0 4px 20px rgba(0,0,0,.15);
+    }
+    .preview-actions {
+        display: flex;
+        gap: .75rem;
+        margin-top: 1rem;
+    }
+
+    /* Description AI hint */
+    .ai-hint {
+        background: linear-gradient(135deg, #eef2ff, #f5f3ff);
+        border: 1px solid #c7d2fe;
+        border-radius: 10px;
+        padding: .75rem 1rem;
+        font-size: .82rem;
+        color: #4338ca;
+        margin-bottom: 1rem;
+    }
+    .ai-hint i { margin-right: 4px; }
+
+    @media (max-width: 768px) {
+        .format-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+</style>
+
+<!-- Header -->
+<div class="creative-header">
+    <h3><i class="bi bi-palette me-2"></i>Creative Center</h3>
+    <p>Upload an image and turn it into a ready-to-run ad creative with your branding.</p>
+</div>
+
+<div class="row g-4">
+    <!-- Left Column - Inputs -->
+    <div class="col-lg-7">
+        <!-- Image Upload -->
+        <div class="creative-card">
+            <div class="creative-card-header">
+                <h5><i class="bi bi-image me-2" style="opacity:.5"></i>Background Image</h5>
+                <div class="hint">Upload a photo to use as the ad background</div>
+            </div>
+            <div class="creative-card-body">
+                <div class="upload-zone" id="uploadZone" onclick="document.getElementById('imageInput').click()">
+                    <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp" style="display:none">
+                    <div id="uploadPlaceholder">
+                        <div class="upload-icon"><i class="bi bi-cloud-arrow-up"></i></div>
+                        <div class="upload-text"><strong>Click to upload</strong> or drag and drop<br>PNG, JPG, or WebP up to 10MB</div>
+                    </div>
+                    <img id="imagePreview" style="display:none" alt="Preview">
+                    <button type="button" class="remove-btn" id="removeImage" style="display:none" onclick="event.stopPropagation(); removeImage();">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ad Copy -->
+        <div class="creative-card">
+            <div class="creative-card-header">
+                <h5><i class="bi bi-type me-2" style="opacity:.5"></i>Ad Copy</h5>
+                <div class="hint">Enter text or let AI write it based on your image</div>
+            </div>
+            <div class="creative-card-body">
+                <div class="ai-hint">
+                    <i class="bi bi-stars"></i>
+                    Describe your image below and click <strong>AI Generate</strong> to create matching ad copy automatically.
+                </div>
+
+                <div class="copy-field">
+                    <label>Image Description <span style="font-weight:400;color:#9ca3af">(for AI)</span></label>
+                    <textarea id="imageDescription" rows="2" placeholder="e.g. A smiling family standing in front of their newly remodeled kitchen..." maxlength="500"></textarea>
+                    <div class="char-count"><span id="descCount">0</span>/500</div>
+                </div>
+
+                <div class="mb-3 text-end">
+                    <button type="button" class="btn-ai-generate" id="btnAiCopy" onclick="generateAiCopy()">
+                        <i class="bi bi-stars"></i> AI Generate Copy
+                    </button>
+                </div>
+
+                <hr class="my-3" style="border-color:#f1f3f5">
+
+                <div class="copy-field">
+                    <label>Headline</label>
+                    <input type="text" id="headline" placeholder="Your attention-grabbing headline" maxlength="90">
+                    <div class="char-count"><span id="headlineCount">0</span>/90</div>
+                </div>
+                <div class="copy-field">
+                    <label>Body Text</label>
+                    <textarea id="bodyText" rows="2" placeholder="Supporting text with your value proposition" maxlength="150"></textarea>
+                    <div class="char-count"><span id="bodyCount">0</span>/150</div>
+                </div>
+                <div class="copy-field">
+                    <label>CTA Button</label>
+                    <input type="text" id="ctaText" value="Learn More" placeholder="e.g. Get Your Quote, Book Now" maxlength="30">
+                    <div class="char-count"><span id="ctaCount">10</span>/30</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column - Format + Preview -->
+    <div class="col-lg-5">
+        <!-- Format Selector -->
+        <div class="creative-card">
+            <div class="creative-card-header">
+                <h5><i class="bi bi-aspect-ratio me-2" style="opacity:.5"></i>Ad Format</h5>
+                <div class="hint">Select a format that matches where the ad will run</div>
+            </div>
+            <div class="creative-card-body">
+                <div class="format-grid">
+                    <div class="format-option selected" data-format="facebook_feed" onclick="selectFormat(this)">
+                        <span class="fmt-icon"><i class="bi bi-facebook"></i></span>
+                        FB Feed
+                        <div class="fmt-size">1200 x 628</div>
+                    </div>
+                    <div class="format-option" data-format="facebook_story" onclick="selectFormat(this)">
+                        <span class="fmt-icon"><i class="bi bi-phone"></i></span>
+                        FB Story
+                        <div class="fmt-size">1080 x 1920</div>
+                    </div>
+                    <div class="format-option" data-format="instagram_feed" onclick="selectFormat(this)">
+                        <span class="fmt-icon"><i class="bi bi-instagram"></i></span>
+                        IG Feed
+                        <div class="fmt-size">1080 x 1080</div>
+                    </div>
+                    <div class="format-option" data-format="instagram_story" onclick="selectFormat(this)">
+                        <span class="fmt-icon"><i class="bi bi-phone"></i></span>
+                        IG Story
+                        <div class="fmt-size">1080 x 1920</div>
+                    </div>
+                    <div class="format-option" data-format="google_display_landscape" onclick="selectFormat(this)">
+                        <span class="fmt-icon"><i class="bi bi-google"></i></span>
+                        Display Wide
+                        <div class="fmt-size">1200 x 628</div>
+                    </div>
+                    <div class="format-option" data-format="google_display_square" onclick="selectFormat(this)">
+                        <span class="fmt-icon"><i class="bi bi-google"></i></span>
+                        Display Square
+                        <div class="fmt-size">1200 x 1200</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Logo status -->
+        <div class="creative-card">
+            <div class="creative-card-body" style="padding:1rem 1.5rem">
+                <div class="d-flex align-items-center gap-2">
+                    {% if brand.get('logo_path') %}
+                    <img src="{{ url_for('client.client_serve_upload', filename=brand['logo_path']) }}" alt="Logo" style="height:32px;border-radius:6px">
+                    <span style="font-size:.88rem;color:#1a1d2e;font-weight:600">Logo will appear on creative</span>
+                    <span class="badge bg-success" style="font-size:.7rem;margin-left:auto">Active</span>
+                    {% else %}
+                    <i class="bi bi-image" style="font-size:1.3rem;color:#d1d5db"></i>
+                    <span style="font-size:.88rem;color:#6b7280">No logo uploaded.</span>
+                    <a href="{{ url_for('client.client_my_business') }}" style="font-size:.82rem;margin-left:auto" class="text-decoration-none">Upload in My Business <i class="bi bi-arrow-right"></i></a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Generate Button -->
+        <button type="button" class="btn-generate-creative mb-3" id="btnGenerate" onclick="generateCreative()">
+            <i class="bi bi-magic"></i> Generate Creative
+        </button>
+
+        <!-- Preview -->
+        <div class="creative-card">
+            <div class="creative-card-header">
+                <h5><i class="bi bi-eye me-2" style="opacity:.5"></i>Preview</h5>
+            </div>
+            <div class="creative-card-body">
+                <div class="preview-area" id="previewArea">
+                    <div id="previewPlaceholder">
+                        <i class="bi bi-image" style="font-size:2rem;display:block;margin-bottom:.5rem"></i>
+                        Your generated creative will appear here
+                    </div>
+                    <img id="previewImage" style="display:none" alt="Generated Creative">
+                </div>
+                <div class="preview-actions" id="previewActions" style="display:none">
+                    <a id="downloadLink" href="#" download class="btn btn-sm btn-primary flex-fill text-center" style="border-radius:8px">
+                        <i class="bi bi-download me-1"></i> Download PNG
+                    </a>
+                    <button type="button" class="btn btn-sm btn-outline-secondary flex-fill" style="border-radius:8px" onclick="resetCreative()">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Start Over
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function(){
+    const uploadZone = document.getElementById('uploadZone');
+    const imageInput = document.getElementById('imageInput');
+    const imagePreview = document.getElementById('imagePreview');
+    const uploadPlaceholder = document.getElementById('uploadPlaceholder');
+    const removeBtn = document.getElementById('removeImage');
+    let selectedFile = null;
+    let selectedFormat = 'facebook_feed';
+
+    // Drag and drop
+    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+    uploadZone.addEventListener('drop', e => {
+        e.preventDefault();
+        uploadZone.classList.remove('dragover');
+        const files = e.dataTransfer.files;
+        if (files.length) handleFile(files[0]);
+    });
+
+    imageInput.addEventListener('change', () => {
+        if (imageInput.files.length) handleFile(imageInput.files[0]);
+    });
+
+    function handleFile(file) {
+        const validTypes = ['image/png', 'image/jpeg', 'image/webp'];
+        if (!validTypes.includes(file.type)) {
+            alert('Please upload a PNG, JPG, or WebP image.');
+            return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+            alert('Image must be under 10MB.');
+            return;
+        }
+        selectedFile = file;
+        const reader = new FileReader();
+        reader.onload = e => {
+            imagePreview.src = e.target.result;
+            imagePreview.style.display = 'block';
+            uploadPlaceholder.style.display = 'none';
+            removeBtn.style.display = 'flex';
+            uploadZone.classList.add('has-image');
+        };
+        reader.readAsDataURL(file);
+    }
+
+    window.removeImage = function() {
+        selectedFile = null;
+        imageInput.value = '';
+        imagePreview.style.display = 'none';
+        imagePreview.src = '';
+        uploadPlaceholder.style.display = '';
+        removeBtn.style.display = 'none';
+        uploadZone.classList.remove('has-image');
+    };
+
+    window.selectFormat = function(el) {
+        document.querySelectorAll('.format-option').forEach(o => o.classList.remove('selected'));
+        el.classList.add('selected');
+        selectedFormat = el.dataset.format;
+    };
+
+    // Char counters
+    function counter(inputId, countId) {
+        const inp = document.getElementById(inputId);
+        const cnt = document.getElementById(countId);
+        if (inp && cnt) {
+            inp.addEventListener('input', () => { cnt.textContent = inp.value.length; });
+        }
+    }
+    counter('imageDescription', 'descCount');
+    counter('headline', 'headlineCount');
+    counter('bodyText', 'bodyCount');
+    counter('ctaText', 'ctaCount');
+
+    // AI Generate Copy
+    window.generateAiCopy = function() {
+        const desc = document.getElementById('imageDescription').value.trim();
+        if (!desc) { alert('Describe the image first so AI can write matching copy.'); return; }
+        const btn = document.getElementById('btnAiCopy');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Writing...';
+
+        const fd = new FormData();
+        fd.append('description', desc);
+        fd.append('ad_format', selectedFormat);
+
+        fetch("{{ url_for('client.client_creative_ai_copy') }}", { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert(data.error); return; }
+            if (data.headline) document.getElementById('headline').value = data.headline;
+            if (data.body_text) document.getElementById('bodyText').value = data.body_text;
+            if (data.cta_text) document.getElementById('ctaText').value = data.cta_text;
+            // Update counters
+            ['headline','bodyText','ctaText'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.dispatchEvent(new Event('input'));
+            });
+        })
+        .catch(() => alert('AI generation failed. Try again.'))
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-stars"></i> AI Generate Copy';
+        });
+    };
+
+    // Generate Creative
+    window.generateCreative = function() {
+        if (!selectedFile) { alert('Upload a background image first.'); return; }
+        const headline = document.getElementById('headline').value.trim();
+        if (!headline) { alert('Enter a headline for your ad.'); return; }
+
+        const btn = document.getElementById('btnGenerate');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generating...';
+
+        const fd = new FormData();
+        fd.append('image', selectedFile);
+        fd.append('headline', headline);
+        fd.append('body_text', document.getElementById('bodyText').value.trim());
+        fd.append('cta_text', document.getElementById('ctaText').value.trim());
+        fd.append('ad_format', selectedFormat);
+        fd.append('image_description', document.getElementById('imageDescription').value.trim());
+
+        fetch("{{ url_for('client.client_creative_generate') }}", { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert(data.error); return; }
+            const preview = document.getElementById('previewImage');
+            const area = document.getElementById('previewArea');
+            const placeholder = document.getElementById('previewPlaceholder');
+            preview.src = data.image_url;
+            preview.style.display = 'block';
+            placeholder.style.display = 'none';
+            area.classList.add('has-preview');
+            document.getElementById('previewActions').style.display = 'flex';
+            document.getElementById('downloadLink').href = data.image_url;
+            document.getElementById('downloadLink').download = data.filename || 'creative.png';
+        })
+        .catch(() => alert('Creative generation failed. Try again.'))
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-magic"></i> Generate Creative';
+        });
+    };
+
+    window.resetCreative = function() {
+        document.getElementById('previewImage').style.display = 'none';
+        document.getElementById('previewPlaceholder').style.display = '';
+        document.getElementById('previewArea').classList.remove('has-preview');
+        document.getElementById('previewActions').style.display = 'none';
+    };
+})();
+</script>
+{% endblock %}

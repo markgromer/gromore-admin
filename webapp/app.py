@@ -56,9 +56,11 @@ def create_app():
     if on_render:
         app.config["IMPORTS_DIR"] = os.environ.get("IMPORTS_DIR", "/data/imports")
         app.config["REPORTS_DIR"] = os.environ.get("REPORTS_DIR", "/data/reports")
+        app.config["UPLOADS_DIR"] = os.environ.get("UPLOADS_DIR", "/data/uploads")
     else:
         app.config["IMPORTS_DIR"] = os.environ.get("IMPORTS_DIR", str(BASE_DIR / "data" / "imports"))
         app.config["REPORTS_DIR"] = os.environ.get("REPORTS_DIR", str(BASE_DIR / "reports"))
+        app.config["UPLOADS_DIR"] = os.environ.get("UPLOADS_DIR", str(BASE_DIR / "data" / "uploads"))
 
     # Make available to helper modules (report_runner reads these env vars)
     os.environ.setdefault("IMPORTS_DIR", app.config["IMPORTS_DIR"])
