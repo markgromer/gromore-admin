@@ -661,7 +661,12 @@ def client_campaign_generate():
 
     from webapp.campaign_manager import generate_campaign_plan
 
-    result = generate_campaign_plan(brand, service, location, monthly_budget, platform, notes)
+    try:
+        result = generate_campaign_plan(brand, service, location, monthly_budget, platform, notes)
+    except Exception as exc:
+        from flask import current_app
+        current_app.logger.exception("Campaign plan generation failed")
+        result = {"success": False, "error": f"Plan generation error: {exc}"}
     return jsonify(result)
 
 
@@ -688,12 +693,17 @@ def client_campaign_launch():
 
     from webapp.campaign_manager import launch_google_campaign, launch_meta_campaign
 
-    if platform == "google":
-        result = launch_google_campaign(db, brand, plan, changed_by)
-    elif platform == "meta":
-        result = launch_meta_campaign(db, brand, plan, changed_by)
-    else:
-        return jsonify({"success": False, "error": "Invalid platform"})
+    try:
+        if platform == "google":
+            result = launch_google_campaign(db, brand, plan, changed_by)
+        elif platform == "meta":
+            result = launch_meta_campaign(db, brand, plan, changed_by)
+        else:
+            return jsonify({"success": False, "error": "Invalid platform"})
+    except Exception as exc:
+        from flask import current_app
+        current_app.logger.exception("Campaign launch failed")
+        result = {"success": False, "error": f"Launch error: {exc}"}
 
     return jsonify(result)
 
