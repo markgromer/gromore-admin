@@ -105,7 +105,22 @@ def callback():
     }, timeout=30)
 
     if token_resp.status_code != 200:
-        flash(f"Token exchange failed: {token_resp.text}", "error")
+        try:
+            err_data = token_resp.json()
+            err_msg = err_data.get("error", {}).get("message", "") if isinstance(err_data.get("error"), dict) else str(err_data)
+        except Exception:
+            err_msg = token_resp.text[:200]
+
+        if "client secret" in err_msg.lower() or "validating client" in err_msg.lower():
+            msg = (
+                "Meta rejected your App Secret. Go to developers.facebook.com > "
+                "your app > App Settings > Basic, click Show next to App Secret, "
+                "copy it, and paste it into the Meta App Secret field in your admin Settings."
+            )
+        else:
+            msg = f"Meta OAuth error: {err_msg}"
+
+        flash(msg, "error")
         return redirect(error_redirect)
 
     short_token = token_resp.json().get("access_token")
