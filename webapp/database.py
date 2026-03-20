@@ -162,6 +162,19 @@ class WebDB:
 
             CREATE INDEX IF NOT EXISTS idx_campaign_changes_brand
             ON campaign_changes(brand_id, created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS campaign_drafts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                platform TEXT NOT NULL,
+                campaign_name TEXT DEFAULT '',
+                plan_json TEXT NOT NULL,
+                status TEXT DEFAULT 'draft',
+                created_by TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
         """)
         conn.commit()
 
@@ -756,6 +769,47 @@ class WebDB:
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
+    # ── Campaign Drafts ──
+
+    def save_campaign_draft(self, brand_id, platform, campaign_name, plan_json, created_by):
+        conn = self._conn()
+        conn.execute(
+            "INSERT INTO campaign_drafts (brand_id, platform, campaign_name, plan_json, created_by) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (brand_id, platform, campaign_name, plan_json, created_by),
+        )
+        conn.commit()
+        draft_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.close()
+        return draft_id
+
+    def get_campaign_drafts(self, brand_id):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM campaign_drafts WHERE brand_id = ? ORDER BY created_at DESC",
+            (brand_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_campaign_draft(self, draft_id, brand_id):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM campaign_drafts WHERE id = ? AND brand_id = ?",
+            (draft_id, brand_id),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def delete_campaign_draft(self, draft_id, brand_id):
+        conn = self._conn()
+        conn.execute(
+            "DELETE FROM campaign_drafts WHERE id = ? AND brand_id = ?",
+            (draft_id, brand_id),
+        )
+        conn.commit()
+        conn.close()
 
     # ── Settings ──
 

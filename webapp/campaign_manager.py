@@ -876,6 +876,44 @@ Requirements:
         return {"success": False, "error": str(e)}
 
 
+def check_google_ads_config(db, brand):
+    """Return a dict describing which Google Ads config pieces are present/missing."""
+    customer_id = _clean_customer_id(brand.get("google_ads_customer_id"))
+    token, conn = _get_tokens(db, brand["id"], "google")
+    dev_token, login_cid = _google_config()
+    missing = []
+    if not customer_id:
+        missing.append("Google Ads Customer ID (set in brand settings)")
+    if not token:
+        missing.append("Google OAuth connection (connect via Settings > Google)")
+    if not dev_token:
+        missing.append("Google Ads Developer Token (set in admin Settings > Google Ads API)")
+    return {
+        "ready": len(missing) == 0,
+        "missing": missing,
+        "customer_id": customer_id,
+        "has_token": bool(token),
+        "has_dev_token": bool(dev_token),
+    }
+
+
+def check_meta_ads_config(db, brand):
+    """Return a dict describing which Meta Ads config pieces are present/missing."""
+    account_id = brand.get("meta_ad_account_id", "")
+    token, conn = _get_tokens(db, brand["id"], "meta")
+    missing = []
+    if not account_id:
+        missing.append("Meta Ad Account ID (set in brand settings)")
+    if not token:
+        missing.append("Meta OAuth connection (connect via Settings > Facebook)")
+    return {
+        "ready": len(missing) == 0,
+        "missing": missing,
+        "account_id": account_id,
+        "has_token": bool(token),
+    }
+
+
 def launch_google_campaign(db, brand, plan, changed_by):
     """Create a Google Ads campaign from an AI-generated plan."""
     customer_id = _clean_customer_id(brand.get("google_ads_customer_id"))
@@ -883,7 +921,14 @@ def launch_google_campaign(db, brand, plan, changed_by):
     dev_token, login_cid = _google_config()
 
     if not all([customer_id, token, dev_token]):
-        return {"success": False, "error": "Missing Google Ads configuration"}
+        missing = []
+        if not customer_id:
+            missing.append("Google Ads Customer ID")
+        if not token:
+            missing.append("Google OAuth connection")
+        if not dev_token:
+            missing.append("Developer Token")
+        return {"success": False, "error": f"Missing Google Ads configuration: {', '.join(missing)}. Use Save as Draft to keep this plan."}
 
     headers = _google_headers(token, dev_token, login_cid)
     base_url = f"https://googleads.googleapis.com/v18/customers/{customer_id}"
@@ -1076,7 +1121,12 @@ def launch_meta_campaign(db, brand, plan, changed_by):
     token, conn = _get_tokens(db, brand["id"], "meta")
 
     if not token or not account_id:
-        return {"success": False, "error": "Meta Ads not connected"}
+        missing = []
+        if not account_id:
+            missing.append("Meta Ad Account ID")
+        if not token:
+            missing.append("Meta OAuth connection")
+        return {"success": False, "error": f"Missing Meta Ads configuration: {', '.join(missing)}. Use Save as Draft to keep this plan."}
 
     # Step 1: Create campaign
     camp_resp = requests.post(

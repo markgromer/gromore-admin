@@ -154,6 +154,44 @@
 </div>
 {% endif %}
 
+<!-- Saved Drafts -->
+{% if drafts %}
+<div class="mt-4">
+    <h6><i class="bi bi-file-earmark-text"></i> Saved Campaign Drafts</h6>
+    <div class="row g-3">
+        {% for draft in drafts %}
+        <div class="col-md-6 col-lg-4">
+            <div class="card border-0 shadow-sm" id="draft-{{ draft.id }}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="badge bg-{{ 'primary' if draft.platform == 'google' else 'info' }} mb-1">
+                                <i class="bi bi-{{ 'google' if draft.platform == 'google' else 'meta' }}"></i>
+                                {{ 'Google Ads' if draft.platform == 'google' else 'Meta Ads' }}
+                            </span>
+                            <h6 class="mb-0">{{ draft.campaign_name }}</h6>
+                        </div>
+                        <span class="badge bg-warning text-dark">Draft</span>
+                    </div>
+                    <div class="text-muted" style="font-size: .8rem;">
+                        Saved {{ draft.created_at[:16] }} by {{ draft.created_by }}
+                    </div>
+                    <div class="d-flex gap-2 mt-3">
+                        <button class="btn btn-sm btn-success" onclick="launchDraft({{ draft.id }}, '{{ draft.campaign_name | e }}')">
+                            <i class="bi bi-rocket-takeoff"></i> Launch
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteDraft({{ draft.id }})">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
 <!-- Recent Changes -->
 {% if changes %}
 <div class="mt-4">
@@ -183,4 +221,54 @@
 </div>
 {% endif %}
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+function launchDraft(draftId, name) {
+    if (!confirm('Launch "' + name + '"? It will be created in a PAUSED state.')) return;
+
+    const formData = new FormData();
+    formData.append('csrf_token', csrfToken);
+
+    fetch('/client/campaigns/drafts/' + draftId + '/launch', {
+        method: 'POST',
+        body: formData,
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message || 'Campaign launched!');
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Failed to launch campaign.'));
+        }
+    })
+    .catch(() => alert('Network error.'));
+}
+
+function deleteDraft(draftId) {
+    if (!confirm('Delete this draft?')) return;
+
+    const formData = new FormData();
+    formData.append('csrf_token', csrfToken);
+
+    fetch('/client/campaigns/drafts/' + draftId + '/delete', {
+        method: 'POST',
+        body: formData,
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            const el = document.getElementById('draft-' + draftId);
+            if (el) el.closest('.col-md-6').remove();
+        } else {
+            alert('Error: ' + (data.error || 'Failed to delete draft.'));
+        }
+    })
+    .catch(() => alert('Network error.'));
+}
+</script>
 {% endblock %}

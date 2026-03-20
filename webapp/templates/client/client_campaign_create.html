@@ -174,9 +174,21 @@
                 <i class="bi bi-arrow-repeat"></i> Regenerate Plan
             </button>
         </div>
-        <button class="btn btn-success btn-lg" id="launchBtn" onclick="launchCampaign()">
-            <i class="bi bi-rocket-takeoff"></i> Launch Campaign (Paused)
-        </button>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-success" id="saveDraftBtn" onclick="saveDraft()">
+                <i class="bi bi-save"></i> Save as Draft
+            </button>
+            <button class="btn btn-success btn-lg" id="launchBtn" onclick="launchCampaign()">
+                <i class="bi bi-rocket-takeoff"></i> Launch Campaign (Paused)
+            </button>
+        </div>
+    </div>
+
+    <div id="configWarning" class="alert alert-warning mt-3" style="display: none; font-size: .85rem;">
+        <i class="bi bi-exclamation-triangle"></i>
+        <strong>Not ready to launch:</strong>
+        <span id="configWarningText"></span>
+        <br>You can still <strong>Save as Draft</strong> and launch later once everything is connected.
     </div>
 
     <div class="alert alert-info mt-3" style="font-size: .85rem;">
@@ -272,6 +284,7 @@ function generatePlan() {
             currentPlan = data.plan;
             renderPlan(data.plan);
             goToStep(3);
+            checkConfig();
         } else {
             alert('Error: ' + (data.error || 'Failed to generate plan. Please try again.'));
         }
@@ -403,13 +416,72 @@ function launchCampaign() {
             document.getElementById('successMessage').textContent = data.message || 'Campaign created successfully!';
             goToStep(4);
         } else {
-            alert('Error: ' + (data.error || 'Failed to create campaign. Please try again.'));
+            if ((data.error || '').includes('Save as Draft')) {
+                if (confirm(data.error + '\n\nWould you like to save this plan as a draft instead?')) {
+                    saveDraft();
+                }
+            } else {
+                alert('Error: ' + (data.error || 'Failed to create campaign. Please try again.'));
+            }
         }
     })
     .catch(err => {
         hideLoading();
         alert('Network error. Please try again.');
     });
+}
+
+function saveDraft() {
+    if (!currentPlan) { alert('No plan to save.'); return; }
+
+    showLoading('Saving draft...');
+
+    const formData = new FormData();
+    formData.append('csrf_token', csrfToken);
+    formData.append('plan', JSON.stringify(currentPlan));
+
+    fetch('{{ url_for("client.client_campaign_save_draft") }}', {
+        method: 'POST',
+        body: formData,
+    })
+    .then(r => r.json())
+    .then(data => {
+        hideLoading();
+        if (data.success) {
+            document.getElementById('successMessage').innerHTML =
+                '<i class="bi bi-save me-1"></i> ' + escHtml(data.message) +
+                '<br><small class="text-muted">You can launch it from the Campaigns page once your ad account is connected.</small>';
+            goToStep(4);
+        } else {
+            alert('Error: ' + (data.error || 'Failed to save draft.'));
+        }
+    })
+    .catch(err => {
+        hideLoading();
+        alert('Network error. Please try again.');
+    });
+}
+
+function checkConfig() {
+    fetch('{{ url_for("client.client_campaign_check_config") }}')
+    .then(r => r.json())
+    .then(data => {
+        if (!selectedPlatform) return;
+        const config = data[selectedPlatform];
+        const warningEl = document.getElementById('configWarning');
+        const warningText = document.getElementById('configWarningText');
+        if (config && !config.ready) {
+            warningText.textContent = config.missing.join(', ') + '.';
+            warningEl.style.display = 'block';
+            document.getElementById('launchBtn').classList.add('disabled');
+            document.getElementById('launchBtn').setAttribute('title', 'Missing configuration - see warning below');
+        } else {
+            warningEl.style.display = 'none';
+            document.getElementById('launchBtn').classList.remove('disabled');
+            document.getElementById('launchBtn').removeAttribute('title');
+        }
+    })
+    .catch(() => {});
 }
 
 function resetWizard() {

@@ -454,6 +454,7 @@ def client_campaigns():
             pass
 
     changes = db.get_campaign_changes(brand_id, limit=20)
+    drafts = db.get_campaign_drafts(brand_id)
 
     return render_template(
         "client_campaigns.html",
@@ -462,6 +463,7 @@ def client_campaigns():
         campaigns=campaigns,
         recommendations=recommendations,
         changes=changes,
+        drafts=drafts,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
 
@@ -706,6 +708,103 @@ def client_campaign_launch():
         result = {"success": False, "error": f"Launch error: {exc}"}
 
     return jsonify(result)
+
+
+@client_bp.route("/campaigns/new/save-draft", methods=["POST"])
+@client_login_required
+def client_campaign_save_draft():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    plan_json = request.form.get("plan", "")
+    if not plan_json:
+        return jsonify({"success": False, "error": "No campaign plan provided"})
+
+    try:
+        plan = json.loads(plan_json)
+    except json.JSONDecodeError:
+        return jsonify({"success": False, "error": "Invalid plan data"})
+
+    platform = plan.get("platform", "")
+    campaign_name = plan.get("campaign_name", "Untitled Campaign")
+    created_by = session.get("client_name", "client")
+
+    draft_id = db.save_campaign_draft(
+        brand_id, platform, campaign_name, plan_json, created_by,
+    )
+
+    return jsonify({
+        "success": True,
+        "draft_id": draft_id,
+        "message": f"Campaign plan saved as draft. You can launch it later from the Campaigns page.",
+    })
+
+
+@client_bp.route("/campaigns/drafts/<int:draft_id>/launch", methods=["POST"])
+@client_login_required
+def client_campaign_launch_draft(draft_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"success": False, "error": "Brand not found"})
+
+    draft = db.get_campaign_draft(draft_id, brand_id)
+    if not draft:
+        return jsonify({"success": False, "error": "Draft not found"})
+
+    try:
+        plan = json.loads(draft["plan_json"])
+    except json.JSONDecodeError:
+        return jsonify({"success": False, "error": "Invalid draft data"})
+
+    platform = plan.get("platform", "")
+    changed_by = session.get("client_name", "client")
+
+    from webapp.campaign_manager import launch_google_campaign, launch_meta_campaign
+
+    try:
+        if platform == "google":
+            result = launch_google_campaign(db, brand, plan, changed_by)
+        elif platform == "meta":
+            result = launch_meta_campaign(db, brand, plan, changed_by)
+        else:
+            return jsonify({"success": False, "error": "Invalid platform"})
+    except Exception as exc:
+        from flask import current_app
+        current_app.logger.exception("Campaign draft launch failed")
+        result = {"success": False, "error": f"Launch error: {exc}"}
+
+    if result.get("success"):
+        db.delete_campaign_draft(draft_id, brand_id)
+
+    return jsonify(result)
+
+
+@client_bp.route("/campaigns/drafts/<int:draft_id>/delete", methods=["POST"])
+@client_login_required
+def client_campaign_delete_draft(draft_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    db.delete_campaign_draft(draft_id, brand_id)
+    return jsonify({"success": True, "message": "Draft deleted."})
+
+
+@client_bp.route("/campaigns/check-config")
+@client_login_required
+def client_campaign_check_config():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"success": False, "error": "Brand not found"})
+
+    from webapp.campaign_manager import check_google_ads_config, check_meta_ads_config
+
+    return jsonify({
+        "google": check_google_ads_config(db, brand),
+        "meta": check_meta_ads_config(db, brand),
+    })
 
 
 # ── Settings / Connections ──
