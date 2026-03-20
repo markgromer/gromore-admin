@@ -690,7 +690,15 @@ def client_creative_generate():
         background_treatment = request.form.get("background_treatment", "brand_gradient")
         shape_style = request.form.get("shape_style", "rounded")
         text_placement = request.form.get("text_placement", "left")
-        font_family = request.form.get("font_family", "modern")
+        headline_font_family = request.form.get("headline_font_family", "strong")
+        headline_font_weight = request.form.get("headline_font_weight", "bold")
+        headline_font_color = request.form.get("headline_font_color", "#ffffff")
+        body_font_family = request.form.get("body_font_family", "modern")
+        body_font_weight = request.form.get("body_font_weight", "normal")
+        body_font_color = request.form.get("body_font_color", "#dcdcdc")
+        cta_font_family = request.form.get("cta_font_family", "strong")
+        cta_font_weight = request.form.get("cta_font_weight", "bold")
+        cta_font_color = request.form.get("cta_font_color", "#ffffff")
         headline_scale = float(request.form.get("headline_scale", "100") or 100)
         body_scale = float(request.form.get("body_scale", "100") or 100)
         overlay_opacity = float(request.form.get("overlay_opacity", "65") or 65)
@@ -704,7 +712,8 @@ def client_creative_generate():
         allowed_background_treatments = {"brand_gradient", "flat", "none"}
         allowed_shape_styles = {"rounded", "sharp", "pill"}
         allowed_text_placements = {"left", "center", "right"}
-        allowed_font_families = {"modern", "classic", "clean", "elegant", "friendly", "strong", "mono", "playful"}
+        allowed_font_families = {"modern", "classic", "clean", "elegant", "friendly", "strong", "mono", "playful", "geometric", "serif_alt"}
+        allowed_weights = {"normal", "semibold", "bold"}
         allowed_logo_corners = {"top_left", "top_right", "bottom_left", "bottom_right"}
         if overlay_template not in allowed_overlay_templates:
             overlay_template = "lower_third"
@@ -714,8 +723,18 @@ def client_creative_generate():
             shape_style = "rounded"
         if text_placement not in allowed_text_placements:
             text_placement = "left"
-        if font_family not in allowed_font_families:
-            font_family = "modern"
+        if headline_font_family not in allowed_font_families:
+            headline_font_family = "strong"
+        if body_font_family not in allowed_font_families:
+            body_font_family = "modern"
+        if cta_font_family not in allowed_font_families:
+            cta_font_family = "strong"
+        if headline_font_weight not in allowed_weights:
+            headline_font_weight = "bold"
+        if body_font_weight not in allowed_weights:
+            body_font_weight = "normal"
+        if cta_font_weight not in allowed_weights:
+            cta_font_weight = "bold"
         headline_scale = max(80.0, min(150.0, headline_scale))
         body_scale = max(80.0, min(150.0, body_scale))
         overlay_opacity = max(30.0, min(95.0, overlay_opacity))
@@ -729,7 +748,9 @@ def client_creative_generate():
                 overlay_template = ai_suggestion.get("overlay_template", overlay_template)
                 shape_style = ai_suggestion.get("shape_style", shape_style)
                 text_placement = ai_suggestion.get("text_placement", text_placement)
-                font_family = ai_suggestion.get("font_family", font_family)
+                headline_font_family = ai_suggestion.get("headline_font_family", headline_font_family)
+                body_font_family = ai_suggestion.get("body_font_family", body_font_family)
+                cta_font_family = ai_suggestion.get("cta_font_family", cta_font_family)
 
         if not image_file or not image_file.filename:
             return jsonify({"error": "Please upload a background image."}), 400
@@ -827,19 +848,24 @@ def client_creative_generate():
         # Draw text
         draw = ImageDraw.Draw(bg)
         margin = int(w * 0.06)
+        safe_pad = 16
 
-        font_headline = _get_font(int(h * 0.065 * (headline_scale / 100.0)), bold=True, family=font_family)
-        font_body = _get_font(int(h * 0.038 * (body_scale / 100.0)), family=font_family)
-        font_cta = _get_font(int(h * 0.04 * (headline_scale / 100.0)), bold=True, family=font_family)
+        headline_color = _parse_hex_color(headline_font_color, (255, 255, 255))
+        body_color = _parse_hex_color(body_font_color, (220, 220, 220))
+        cta_color = _parse_hex_color(cta_font_color, (255, 255, 255))
 
-        text_width = int(w * 0.84)
+        font_headline = _get_font(int(h * 0.065 * (headline_scale / 100.0)), family=headline_font_family, weight=headline_font_weight)
+        font_body = _get_font(int(h * 0.038 * (body_scale / 100.0)), family=body_font_family, weight=body_font_weight)
+        font_cta = _get_font(int(h * 0.04 * (headline_scale / 100.0)), family=cta_font_family, weight=cta_font_weight)
+
+        text_width = min(int(w * 0.84), max(w - (safe_pad * 2), 120))
         margin = int(w * 0.06)
         if text_placement == "center":
-            text_x = (w - text_width) // 2
+            text_x = max((w - text_width) // 2, safe_pad)
         elif text_placement == "right":
-            text_x = max(w - margin - text_width, 0)
+            text_x = max(w - margin - text_width, safe_pad)
         else:
-            text_x = margin
+            text_x = max(margin, safe_pad)
 
         if overlay_template == "upper_third":
             y_cursor = int(h * 0.12)
@@ -849,6 +875,7 @@ def client_creative_generate():
             y_cursor = int(h * 0.76)
         else:
             y_cursor = int(h * 0.60)
+        y_cursor = max(y_cursor, safe_pad)
 
         headline_lines = _count_lines(ad_copy_headline, text_width, font_headline)
         body_lines = _count_lines(ad_copy_body, text_width, font_body) if ad_copy_body else 0
@@ -925,12 +952,12 @@ def client_creative_generate():
             draw = ImageDraw.Draw(bg)
 
         # Headline
-        _draw_text_wrapped(draw, ad_copy_headline, text_x, y_cursor, text_width, font_headline, fill="white")
+        _draw_text_wrapped(draw, ad_copy_headline, text_x, y_cursor, text_width, font_headline, fill=headline_color)
         y_cursor += int(headline_lines * _font_size(font_headline) * 1.3) + 8
 
         # Body text
         if ad_copy_body:
-            _draw_text_wrapped(draw, ad_copy_body, text_x, y_cursor, text_width, font_body, fill=(220, 220, 220))
+            _draw_text_wrapped(draw, ad_copy_body, text_x, y_cursor, text_width, font_body, fill=body_color)
             y_cursor += int(body_lines * _font_size(font_body) * 1.3) + 12
 
         # CTA button
@@ -944,13 +971,14 @@ def client_creative_generate():
                 cta_x = text_x + max(text_width - cta_w, 0)
             else:
                 cta_x = text_x
-            cta_y = y_cursor
+            cta_x = max(min(cta_x, w - cta_w - safe_pad), safe_pad)
+            cta_y = max(min(y_cursor, h - cta_h - safe_pad), safe_pad)
             cta_radius = 0 if shape_style == "sharp" else (24 if shape_style == "pill" else 8)
             if cta_radius > 0:
                 draw.rounded_rectangle([cta_x, cta_y, cta_x + cta_w, cta_y + cta_h], radius=cta_radius, fill=brand_color)
             else:
                 draw.rectangle([cta_x, cta_y, cta_x + cta_w, cta_y + cta_h], fill=brand_color)
-            draw.text((cta_x + 18, cta_y + 10), cta_text, fill="white", font=font_cta)
+            draw.text((cta_x + 18, cta_y + 10), cta_text, fill=cta_color, font=font_cta)
 
         # Place logo (top-left)
         if brand.get("logo_path"):
@@ -963,7 +991,7 @@ def client_creative_generate():
                     ratio = logo_w / logo.width
                     logo_h = int(logo.height * ratio)
                     logo = logo.resize((logo_w, logo_h), Image.LANCZOS)
-                    logo_margin = int(w * 0.04)
+                    logo_margin = max(int(w * 0.04), safe_pad)
                     if logo_corner == "top_right":
                         lx = max(w - logo_w - logo_margin, 0)
                         ly = logo_margin
@@ -988,13 +1016,13 @@ def client_creative_generate():
             footer_items.append((brand.get("website") or "").strip())
         if footer_items:
             footer_text = "  |  ".join(footer_items)[:120]
-            footer_font = _get_font(int(h * 0.026), family=font_family)
+            footer_font = _get_font(int(h * 0.026), family=body_font_family, weight=body_font_weight)
             fb = draw.textbbox((0, 0), footer_text, font=footer_font)
             fw = fb[2] - fb[0]
             fh = fb[3] - fb[1]
-            fx = max((w - fw) // 2, 12)
-            fy = max(h - fh - int(h * 0.02), 8)
-            draw.rectangle([fx - 12, fy - 6, min(fx + fw + 12, w - 4), min(fy + fh + 6, h - 4)], fill=(0, 0, 0))
+            fx = max((w - fw) // 2, safe_pad)
+            fy = max(h - fh - int(h * 0.02), safe_pad)
+            draw.rectangle([fx - 12, fy - 6, min(fx + fw + 12, w - safe_pad), min(fy + fh + 6, h - safe_pad)], fill=(0, 0, 0))
             draw.text((fx, fy), footer_text, fill="white", font=footer_font)
 
         # Save as JPEG (much smaller + faster than PNG)
@@ -1247,10 +1275,15 @@ def _fit_cover_rgb(img, target_size):
     return img.crop((left, top, left + tw, top + th))
 
 
-def _get_font(size, bold=False, family="modern"):
+def _get_font(size, bold=False, family="modern", weight=None):
     """Try to load a system font, fall back to Pillow default."""
     from PIL import ImageFont
     family = (family or "modern").lower()
+    if weight is None:
+        weight = "bold" if bold else "normal"
+    weight = (weight or "normal").lower()
+    if weight not in ("normal", "semibold", "bold"):
+        weight = "normal"
 
     font_sets = {
         "modern": {
@@ -1359,10 +1392,39 @@ def _get_font(size, bold=False, family="modern"):
                 "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
             ],
         },
+        "geometric": {
+            "bold": [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
+                "DejaVuSansCondensed-Bold.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            ],
+            "regular": [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf",
+                "DejaVuSansCondensed.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            ],
+        },
+        "serif_alt": {
+            "bold": [
+                "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+                "DejaVuSerif-Bold.ttf",
+            ],
+            "regular": [
+                "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+                "DejaVuSerif.ttf",
+            ],
+        },
     }
 
     chosen = font_sets.get(family, font_sets["modern"])
-    candidates = chosen["bold" if bold else "regular"]
+    if weight == "bold":
+        candidates = chosen["bold"]
+    elif weight == "semibold":
+        candidates = chosen["bold"] + chosen["regular"]
+    else:
+        candidates = chosen["regular"]
     for name in candidates:
         try:
             f = ImageFont.truetype(name, size)
@@ -1445,6 +1507,21 @@ def _pick_brand_color(brand):
     return (99, 102, 241)
 
 
+def _parse_hex_color(value, fallback=(255, 255, 255)):
+    raw = (value or "").strip()
+    if not raw:
+        return fallback
+    raw = raw.lstrip("#")
+    if len(raw) == 3:
+        raw = "".join(ch * 2 for ch in raw)
+    if len(raw) != 6:
+        return fallback
+    try:
+        return tuple(int(raw[i:i+2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return fallback
+
+
 def _suggest_creative_style(brand, prompt, ad_format):
     api_key = (brand.get("openai_api_key") or "").strip()
     if not api_key:
@@ -1466,7 +1543,9 @@ Return JSON only with:
 - overlay_template: one of [lower_third, full_lower_third, upper_third, full_overlay, soft_box, brand_bar, diagonal_band, bubbles, boxes]
 - shape_style: one of [rounded, sharp, pill]
 - text_placement: one of [left, center, right]
-- font_family: one of [modern, classic, clean, elegant, friendly, strong, mono, playful]
+- headline_font_family: one of [modern, classic, clean, elegant, friendly, strong, mono, playful, geometric, serif_alt]
+- body_font_family: one of [modern, classic, clean, elegant, friendly, strong, mono, playful, geometric, serif_alt]
+- cta_font_family: one of [modern, classic, clean, elegant, friendly, strong, mono, playful, geometric, serif_alt]
 
 JSON only, no markdown."""
 
@@ -1492,7 +1571,9 @@ JSON only, no markdown."""
             "overlay_template": data.get("overlay_template"),
             "shape_style": data.get("shape_style"),
             "text_placement": data.get("text_placement"),
-            "font_family": data.get("font_family"),
+            "headline_font_family": data.get("headline_font_family"),
+            "body_font_family": data.get("body_font_family"),
+            "cta_font_family": data.get("cta_font_family"),
         }
     except Exception:
         return None

@@ -439,17 +439,84 @@
                     </select>
                 </div>
                 <div class="style-field">
-                    <label for="fontFamily">Font Style</label>
-                    <select id="fontFamily" class="style-select">
-                        <option value="modern" selected>Modern Sans</option>
-                        <option value="classic">Classic Serif</option>
+                    <label for="headlineFontFamily">Headline Font</label>
+                    <select id="headlineFontFamily" class="style-select">
+                        <option value="strong" selected>Strong Display</option>
+                        <option value="modern">Modern Sans</option>
                         <option value="clean">Clean Condensed</option>
+                        <option value="classic">Classic Serif</option>
                         <option value="elegant">Elegant Serif</option>
                         <option value="friendly">Friendly Rounded</option>
-                        <option value="strong">Strong Display</option>
                         <option value="mono">Tech Mono</option>
                         <option value="playful">Playful</option>
+                        <option value="geometric">Geometric Sans</option>
+                        <option value="serif_alt">Serif Alt</option>
                     </select>
+                </div>
+                <div class="style-field">
+                    <label for="headlineFontWeight">Headline Weight</label>
+                    <select id="headlineFontWeight" class="style-select">
+                        <option value="normal">Normal</option>
+                        <option value="semibold">Semibold</option>
+                        <option value="bold" selected>Bold</option>
+                    </select>
+                </div>
+                <div class="style-field">
+                    <label for="headlineFontColor">Headline Color</label>
+                    <input id="headlineFontColor" type="color" class="style-select" value="#ffffff">
+                </div>
+                <div class="style-field">
+                    <label for="bodyFontFamily">Body Font</label>
+                    <select id="bodyFontFamily" class="style-select">
+                        <option value="modern" selected>Modern Sans</option>
+                        <option value="clean">Clean Condensed</option>
+                        <option value="friendly">Friendly Rounded</option>
+                        <option value="classic">Classic Serif</option>
+                        <option value="elegant">Elegant Serif</option>
+                        <option value="mono">Tech Mono</option>
+                        <option value="playful">Playful</option>
+                        <option value="geometric">Geometric Sans</option>
+                        <option value="serif_alt">Serif Alt</option>
+                    </select>
+                </div>
+                <div class="style-field">
+                    <label for="bodyFontWeight">Body Weight</label>
+                    <select id="bodyFontWeight" class="style-select">
+                        <option value="normal" selected>Normal</option>
+                        <option value="semibold">Semibold</option>
+                        <option value="bold">Bold</option>
+                    </select>
+                </div>
+                <div class="style-field">
+                    <label for="bodyFontColor">Body Color</label>
+                    <input id="bodyFontColor" type="color" class="style-select" value="#dcdcdc">
+                </div>
+                <div class="style-field">
+                    <label for="ctaFontFamily">CTA Font</label>
+                    <select id="ctaFontFamily" class="style-select">
+                        <option value="strong" selected>Strong Display</option>
+                        <option value="modern">Modern Sans</option>
+                        <option value="clean">Clean Condensed</option>
+                        <option value="friendly">Friendly Rounded</option>
+                        <option value="classic">Classic Serif</option>
+                        <option value="elegant">Elegant Serif</option>
+                        <option value="mono">Tech Mono</option>
+                        <option value="playful">Playful</option>
+                        <option value="geometric">Geometric Sans</option>
+                        <option value="serif_alt">Serif Alt</option>
+                    </select>
+                </div>
+                <div class="style-field">
+                    <label for="ctaFontWeight">CTA Weight</label>
+                    <select id="ctaFontWeight" class="style-select">
+                        <option value="normal">Normal</option>
+                        <option value="semibold">Semibold</option>
+                        <option value="bold" selected>Bold</option>
+                    </select>
+                </div>
+                <div class="style-field">
+                    <label for="ctaFontColor">CTA Text Color</label>
+                    <input id="ctaFontColor" type="color" class="style-select" value="#ffffff">
                 </div>
                 <div class="style-field">
                     <div class="tune-label"><span>Headline Size</span><span id="headlineScaleLabel">100%</span></div>
@@ -566,16 +633,32 @@
         const set = (id, val) => { const el = document.getElementById(id); if (el) { el.value = val; el.dispatchEvent(new Event('input')); } };
         if (name === 'bold') {
             set('overlayTemplate', 'full_lower_third'); set('backgroundTreatment', 'flat'); set('shapeStyle', 'sharp');
-            set('textPlacement', 'center'); set('fontFamily', 'strong'); set('overlayOpacity', 80); set('headlineScale', 125); set('bodyScale', 105);
+            set('textPlacement', 'center');
+            set('headlineFontFamily', 'strong'); set('headlineFontWeight', 'bold'); set('headlineFontColor', '#ffffff');
+            set('bodyFontFamily', 'modern'); set('bodyFontWeight', 'semibold'); set('bodyFontColor', '#f5f5f5');
+            set('ctaFontFamily', 'strong'); set('ctaFontWeight', 'bold'); set('ctaFontColor', '#ffffff');
+            set('overlayOpacity', 80); set('headlineScale', 125); set('bodyScale', 105);
         } else if (name === 'clean') {
             set('overlayTemplate', 'soft_box'); set('backgroundTreatment', 'brand_gradient'); set('shapeStyle', 'rounded');
-            set('textPlacement', 'left'); set('fontFamily', 'clean'); set('overlayOpacity', 55); set('headlineScale', 100); set('bodyScale', 95);
+            set('textPlacement', 'left');
+            set('headlineFontFamily', 'clean'); set('headlineFontWeight', 'semibold'); set('headlineFontColor', '#ffffff');
+            set('bodyFontFamily', 'clean'); set('bodyFontWeight', 'normal'); set('bodyFontColor', '#e9e9e9');
+            set('ctaFontFamily', 'clean'); set('ctaFontWeight', 'semibold'); set('ctaFontColor', '#ffffff');
+            set('overlayOpacity', 55); set('headlineScale', 100); set('bodyScale', 95);
         } else if (name === 'story') {
             set('overlayTemplate', 'bubbles'); set('backgroundTreatment', 'brand_gradient'); set('shapeStyle', 'pill');
-            set('textPlacement', 'center'); set('fontFamily', 'playful'); set('overlayOpacity', 60); set('headlineScale', 120); set('bodyScale', 100);
+            set('textPlacement', 'center');
+            set('headlineFontFamily', 'playful'); set('headlineFontWeight', 'bold'); set('headlineFontColor', '#ffffff');
+            set('bodyFontFamily', 'friendly'); set('bodyFontWeight', 'normal'); set('bodyFontColor', '#f3f3f3');
+            set('ctaFontFamily', 'playful'); set('ctaFontWeight', 'bold'); set('ctaFontColor', '#ffffff');
+            set('overlayOpacity', 60); set('headlineScale', 120); set('bodyScale', 100);
         } else if (name === 'luxury') {
             set('overlayTemplate', 'upper_third'); set('backgroundTreatment', 'brand_gradient'); set('shapeStyle', 'rounded');
-            set('textPlacement', 'left'); set('fontFamily', 'elegant'); set('overlayOpacity', 70); set('headlineScale', 110); set('bodyScale', 100);
+            set('textPlacement', 'left');
+            set('headlineFontFamily', 'elegant'); set('headlineFontWeight', 'bold'); set('headlineFontColor', '#ffffff');
+            set('bodyFontFamily', 'classic'); set('bodyFontWeight', 'normal'); set('bodyFontColor', '#efefef');
+            set('ctaFontFamily', 'elegant'); set('ctaFontWeight', 'semibold'); set('ctaFontColor', '#ffffff');
+            set('overlayOpacity', 70); set('headlineScale', 110); set('bodyScale', 100);
         }
     };
 
@@ -707,7 +790,15 @@
         fd.append('background_treatment', document.getElementById('backgroundTreatment').value);
         fd.append('shape_style', document.getElementById('shapeStyle').value);
         fd.append('text_placement', document.getElementById('textPlacement').value);
-        fd.append('font_family', document.getElementById('fontFamily').value);
+        fd.append('headline_font_family', document.getElementById('headlineFontFamily').value);
+        fd.append('headline_font_weight', document.getElementById('headlineFontWeight').value);
+        fd.append('headline_font_color', document.getElementById('headlineFontColor').value);
+        fd.append('body_font_family', document.getElementById('bodyFontFamily').value);
+        fd.append('body_font_weight', document.getElementById('bodyFontWeight').value);
+        fd.append('body_font_color', document.getElementById('bodyFontColor').value);
+        fd.append('cta_font_family', document.getElementById('ctaFontFamily').value);
+        fd.append('cta_font_weight', document.getElementById('ctaFontWeight').value);
+        fd.append('cta_font_color', document.getElementById('ctaFontColor').value);
         fd.append('headline_scale', document.getElementById('headlineScale').value);
         fd.append('body_scale', document.getElementById('bodyScale').value);
         fd.append('overlay_opacity', document.getElementById('overlayOpacity').value);
@@ -773,7 +864,15 @@
             if (data.background_treatment) document.getElementById('backgroundTreatment').value = data.background_treatment;
             if (data.shape_style) document.getElementById('shapeStyle').value = data.shape_style;
             if (data.text_placement) document.getElementById('textPlacement').value = data.text_placement;
-            if (data.font_family) document.getElementById('fontFamily').value = data.font_family;
+            if (data.headline_font_family) document.getElementById('headlineFontFamily').value = data.headline_font_family;
+            if (data.headline_font_weight) document.getElementById('headlineFontWeight').value = data.headline_font_weight;
+            if (data.headline_font_color) document.getElementById('headlineFontColor').value = data.headline_font_color;
+            if (data.body_font_family) document.getElementById('bodyFontFamily').value = data.body_font_family;
+            if (data.body_font_weight) document.getElementById('bodyFontWeight').value = data.body_font_weight;
+            if (data.body_font_color) document.getElementById('bodyFontColor').value = data.body_font_color;
+            if (data.cta_font_family) document.getElementById('ctaFontFamily').value = data.cta_font_family;
+            if (data.cta_font_weight) document.getElementById('ctaFontWeight').value = data.cta_font_weight;
+            if (data.cta_font_color) document.getElementById('ctaFontColor').value = data.cta_font_color;
             if (data.headline_scale) { document.getElementById('headlineScale').value = data.headline_scale; document.getElementById('headlineScale').dispatchEvent(new Event('input')); }
             if (data.body_scale) { document.getElementById('bodyScale').value = data.body_scale; document.getElementById('bodyScale').dispatchEvent(new Event('input')); }
             if (data.overlay_opacity) { document.getElementById('overlayOpacity').value = data.overlay_opacity; document.getElementById('overlayOpacity').dispatchEvent(new Event('input')); }
