@@ -328,8 +328,17 @@ def parse_search_console(filepath):
     if "impressions" in df.columns:
         totals["impressions"] = int(df["impressions"].sum())
     if "ctr" in df.columns:
-        # Weighted CTR
-        if totals.get("impressions", 0) > 0:
+        # CTR: top 10 queries by impressions to avoid long-tail dilution
+        if "impressions" in df.columns and "query" in df.columns and len(df) >= 3:
+            by_query = df.groupby("query").agg(
+                clicks=("clicks", "sum"),
+                impressions=("impressions", "sum"),
+            ).reset_index()
+            top10 = by_query.nlargest(10, "impressions")
+            top10_clicks = top10["clicks"].sum()
+            top10_impressions = top10["impressions"].sum()
+            totals["ctr"] = round((top10_clicks / top10_impressions) * 100, 2) if top10_impressions > 0 else 0.0
+        elif totals.get("impressions", 0) > 0:
             totals["ctr"] = round((totals.get("clicks", 0) / totals["impressions"]) * 100, 2)
         else:
             totals["ctr"] = 0.0

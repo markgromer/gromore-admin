@@ -425,7 +425,7 @@ def _gsc_suggestions(gsc, industry, client_config):
     if avg_pos > 15:
         suggestions.append(make_suggestion(
             "Improve Overall SEO Visibility",
-            f"Average search position is {avg_pos}, meaning most pages rank on page 2+. "
+            f"Your top search terms average position {avg_pos}, which is page 2+. "
             "Focus on: optimizing title tags and meta descriptions for click-through, "
             "building local citations and Google Business Profile optimization, "
             "getting customer reviews that mention specific services and location.",
@@ -434,10 +434,10 @@ def _gsc_suggestions(gsc, industry, client_config):
         ))
     elif avg_pos > 8:
         suggestions.append(make_suggestion(
-            "Push Page 2 Rankings to Page 1",
-            f"Average position is {avg_pos}. Many keywords are close to page 1. "
-            "Focus link building efforts on pages ranking positions 8-15. "
-            "Add more content depth to these pages - FAQs, how-to sections, cost guides.",
+            "Push Rankings Higher on Page 1",
+            f"Your top search terms average position {avg_pos}, putting you on page 1 but not in the top spots. "
+            "Focus link building efforts on these core pages. "
+            "Add more content depth - FAQs, how-to sections, cost guides.",
             PRIORITY_MEDIUM, CATEGORY_SEO, "organic_traffic",
             data_point=f"Avg position: {avg_pos}"
         ))

@@ -79,6 +79,14 @@ def pull_search_console_data(site_url, month_str, credentials_path=None):
         best3_positions = sorted([r.get("position", 0) for r in top5])[:3]
         totals["avg_position"] = round(sum(best3_positions) / len(best3_positions), 1)
 
+    # Override CTR: top 10 queries by impressions to avoid long-tail dilution
+    if len(query_data) >= 3:
+        top10 = sorted(query_data, key=lambda r: r.get("impressions", 0), reverse=True)[:10]
+        top10_clicks = sum(r.get("clicks", 0) for r in top10)
+        top10_impressions = sum(r.get("impressions", 0) for r in top10)
+        if top10_impressions > 0:
+            totals["ctr"] = round(top10_clicks / top10_impressions * 100, 2)
+
     # ── Build top queries list ──
     top_queries = []
     for row in sorted(query_data, key=lambda r: r["clicks"], reverse=True)[:50]:

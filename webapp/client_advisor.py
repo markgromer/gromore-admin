@@ -462,11 +462,11 @@ def _explain_seo(gsc):
             "value": f"#{avg_pos:.1f}",
             "status": _score_to_status(scores.get("avg_position", "no_data")),
             "explanation": (
-                f"Your average ranking across all keywords is position {avg_pos:.1f} ({page}). "
+                f"For your top search terms, you rank around position {avg_pos:.1f} ({page}). "
                 + ("Most clicks go to the top 3 results. Being on page 2+ means most people "
                    "never see your listing."
                    if avg_pos > 10
-                   else "You're on page 1 on average, which is where you want to be."
+                   else "You're showing up on page 1 for your most important searches, which is where you want to be."
                    if avg_pos <= 10
                    else "")
             ),

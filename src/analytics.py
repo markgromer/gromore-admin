@@ -562,11 +562,11 @@ def analyze_search_console(gsc_data, prev_gsc_data, benchmarks_seo, industry):
                     else:
                         if change <= -5:  # Position going down (lower) is good
                             analysis["highlights"].append(
-                                f"Average position improved from {prev_val} to {current_val}"
+                                f"Search position improved from {prev_val} to {current_val} (top queries)"
                             )
                         elif change >= 5:
                             analysis["concerns"].append(
-                                f"Average position worsened from {prev_val} to {current_val}"
+                                f"Search position worsened from {prev_val} to {current_val} (top queries)"
                             )
 
             if config["benchmark_key"] and industry_benchmarks:
