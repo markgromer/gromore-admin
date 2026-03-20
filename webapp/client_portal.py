@@ -7,6 +7,8 @@ action instructions, and manage their ad campaigns directly.
 """
 import os
 import json
+import re
+import time
 from functools import wraps
 from datetime import datetime
 
@@ -565,6 +567,7 @@ def client_my_business():
 
     # Reload latest
     brand = db.get_brand(brand_id)
+    logo_variants = _parse_logo_variants(brand.get("logo_variants"))
 
     # Calculate completion score for the profile
     profile_fields = [
@@ -583,6 +586,7 @@ def client_my_business():
     return render_template(
         "client_my_business.html",
         brand=brand,
+        logo_variants=logo_variants,
         profile_score=profile_score,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
@@ -626,14 +630,61 @@ def client_upload_logo():
     logo_dir = uploads_dir / "logos" / str(brand_id)
     logo_dir.mkdir(parents=True, exist_ok=True)
 
-    filename = secure_filename(f"logo_{brand_id}.{ext}")
+    variant_key = (request.form.get("variant_key", "primary") or "primary").strip().lower()
+    custom_label = (request.form.get("variant_label", "") or "").strip()[:40]
+    variant_key = re.sub(r"[^a-z0-9_\-]", "_", variant_key)[:32] or "primary"
+    variant_label = custom_label or variant_key.replace("_", " ").title()
+
+    filename = secure_filename(f"logo_{variant_key}_{int(time.time())}.{ext}")
     filepath = logo_dir / filename
     f.save(str(filepath))
 
     # Store relative path: logos/<brand_id>/logo_<id>.<ext>
     rel_path = f"logos/{brand_id}/{filename}"
-    db.update_brand_text_field(brand_id, "logo_path", rel_path)
-    flash("Logo uploaded.", "success")
+
+    variants = _parse_logo_variants(brand.get("logo_variants"))
+    updated = False
+    for item in variants:
+        if item.get("key") == variant_key:
+            item["path"] = rel_path
+            item["label"] = variant_label
+            updated = True
+            break
+    if not updated:
+        variants.append({"key": variant_key, "label": variant_label, "path": rel_path})
+
+    db.update_brand_text_field(brand_id, "logo_variants", json.dumps(variants))
+
+    # Keep logo_path as the primary/default logo
+    if variant_key == "primary" or not (brand.get("logo_path") or "").strip():
+        db.update_brand_text_field(brand_id, "logo_path", rel_path)
+
+    flash(f"Logo uploaded to variant: {variant_label}.", "success")
+    return redirect(url_for("client.client_my_business"))
+
+
+@client_bp.route("/my-business/logo/primary", methods=["POST"])
+@client_login_required
+def client_set_primary_logo():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    target_path = (request.form.get("variant_path", "") or "").strip()
+    if not target_path:
+        flash("No logo variant selected.", "error")
+        return redirect(url_for("client.client_my_business"))
+
+    variants = _parse_logo_variants(brand.get("logo_variants"))
+    match = next((v for v in variants if (v.get("path") or "") == target_path), None)
+    if not match:
+        flash("Logo variant not found.", "error")
+        return redirect(url_for("client.client_my_business"))
+
+    db.update_brand_text_field(brand_id, "logo_path", target_path)
+    flash(f"Primary logo set to: {match.get('label') or 'selected variant'}.", "success")
     return redirect(url_for("client.client_my_business"))
 
 
@@ -658,9 +709,12 @@ def client_creative():
     if not brand:
         abort(404)
 
+    logo_variants = _parse_logo_variants(brand.get("logo_variants"))
+
     return render_template(
         "client_creative.html",
         brand=brand,
+        logo_variants=logo_variants,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
 
@@ -703,6 +757,10 @@ def client_creative_generate():
         body_scale = float(request.form.get("body_scale", "100") or 100)
         overlay_opacity = float(request.form.get("overlay_opacity", "65") or 65)
         logo_scale = float(request.form.get("logo_scale", "100") or 100)
+        logo_variant = request.form.get("logo_variant", "")
+        logo_position_mode = request.form.get("logo_position_mode", "corner")
+        logo_pos_x = float(request.form.get("logo_pos_x", "50") or 50)
+        logo_pos_y = float(request.form.get("logo_pos_y", "50") or 50)
         logo_corner = request.form.get("logo_corner", "top_left")
         include_phone = request.form.get("include_phone", "1") in ("1", "true", "True", "yes", "on")
         include_website = request.form.get("include_website", "0") in ("1", "true", "True", "yes", "on")
@@ -715,6 +773,7 @@ def client_creative_generate():
         allowed_font_families = {"modern", "classic", "clean", "elegant", "friendly", "strong", "mono", "playful", "geometric", "serif_alt"}
         allowed_weights = {"normal", "semibold", "bold"}
         allowed_logo_corners = {"top_left", "top_right", "bottom_left", "bottom_right"}
+        allowed_logo_position_modes = {"corner", "custom"}
         if overlay_template not in allowed_overlay_templates:
             overlay_template = "lower_third"
         if background_treatment not in allowed_background_treatments:
@@ -741,6 +800,10 @@ def client_creative_generate():
         logo_scale = max(50.0, min(180.0, logo_scale))
         if logo_corner not in allowed_logo_corners:
             logo_corner = "top_left"
+        if logo_position_mode not in allowed_logo_position_modes:
+            logo_position_mode = "corner"
+        logo_pos_x = max(0.0, min(100.0, logo_pos_x))
+        logo_pos_y = max(0.0, min(100.0, logo_pos_y))
 
         if creative_prompt:
             ai_suggestion = _suggest_creative_style(brand, creative_prompt, ad_format)
@@ -981,9 +1044,10 @@ def client_creative_generate():
             draw.text((cta_x + 18, cta_y + 10), cta_text, fill=cta_color, font=font_cta)
 
         # Place logo (top-left)
-        if brand.get("logo_path"):
+        selected_logo_path = _resolve_logo_variant_path(brand, logo_variant)
+        if selected_logo_path:
             uploads_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads"))
-            logo_file = uploads_dir / brand["logo_path"]
+            logo_file = uploads_dir / selected_logo_path
             if logo_file.exists():
                 try:
                     logo = Image.open(str(logo_file)).convert("RGBA")
@@ -992,18 +1056,24 @@ def client_creative_generate():
                     logo_h = int(logo.height * ratio)
                     logo = logo.resize((logo_w, logo_h), Image.LANCZOS)
                     logo_margin = max(int(w * 0.04), safe_pad)
-                    if logo_corner == "top_right":
-                        lx = max(w - logo_w - logo_margin, 0)
-                        ly = logo_margin
-                    elif logo_corner == "bottom_left":
-                        lx = logo_margin
-                        ly = max(h - logo_h - logo_margin, 0)
-                    elif logo_corner == "bottom_right":
-                        lx = max(w - logo_w - logo_margin, 0)
-                        ly = max(h - logo_h - logo_margin, 0)
+                    if logo_position_mode == "custom":
+                        lx = int((w - logo_w) * (logo_pos_x / 100.0))
+                        ly = int((h - logo_h) * (logo_pos_y / 100.0))
+                        lx = max(safe_pad, min(lx, w - logo_w - safe_pad))
+                        ly = max(safe_pad, min(ly, h - logo_h - safe_pad))
                     else:
-                        lx = logo_margin
-                        ly = logo_margin
+                        if logo_corner == "top_right":
+                            lx = max(w - logo_w - logo_margin, 0)
+                            ly = logo_margin
+                        elif logo_corner == "bottom_left":
+                            lx = logo_margin
+                            ly = max(h - logo_h - logo_margin, 0)
+                        elif logo_corner == "bottom_right":
+                            lx = max(w - logo_w - logo_margin, 0)
+                            ly = max(h - logo_h - logo_margin, 0)
+                        else:
+                            lx = logo_margin
+                            ly = logo_margin
                     bg.paste(logo, (lx, ly), logo)
                     del logo
                 except Exception:
@@ -1063,6 +1133,9 @@ def client_creative_generate():
             cta_text = request.form.get("cta_text", "").strip()[:30] or "Learn More"
             ad_format = request.form.get("ad_format", "facebook_feed")
             logo_corner = request.form.get("logo_corner", "top_left")
+            logo_position_mode = request.form.get("logo_position_mode", "corner")
+            logo_pos_x = float(request.form.get("logo_pos_x", "50") or 50)
+            logo_pos_y = float(request.form.get("logo_pos_y", "50") or 50)
             include_phone = request.form.get("include_phone", "1") in ("1", "true", "True", "yes", "on")
             include_website = request.form.get("include_website", "0") in ("1", "true", "True", "yes", "on")
             db = _get_db()
@@ -1124,9 +1197,11 @@ def client_creative_generate():
                 draw.rectangle([cta_x, cta_y, cta_x + cta_w, cta_y + cta_h], fill=brand_color)
             draw.text((cta_x + 18, cta_y + 10), cta_text, fill="white", font=font_cta)
 
-            if fallback_brand and fallback_brand.get("logo_path"):
+            fallback_logo_variant = request.form.get("logo_variant", "")
+            selected_logo_path = _resolve_logo_variant_path(fallback_brand or {}, fallback_logo_variant)
+            if selected_logo_path:
                 uploads_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads"))
-                logo_file = uploads_dir / fallback_brand["logo_path"]
+                logo_file = uploads_dir / selected_logo_path
                 if logo_file.exists():
                     try:
                         logo = Image.open(str(logo_file)).convert("RGBA")
@@ -1134,19 +1209,25 @@ def client_creative_generate():
                         ratio = logo_w / logo.width
                         logo_h = int(logo.height * ratio)
                         logo = logo.resize((logo_w, logo_h), Image.LANCZOS)
-                        logo_margin = int(w * 0.04)
-                        if logo_corner == "top_right":
-                            lx = max(w - logo_w - logo_margin, 0)
-                            ly = logo_margin
-                        elif logo_corner == "bottom_left":
-                            lx = logo_margin
-                            ly = max(h - logo_h - logo_margin, 0)
-                        elif logo_corner == "bottom_right":
-                            lx = max(w - logo_w - logo_margin, 0)
-                            ly = max(h - logo_h - logo_margin, 0)
+                        logo_margin = max(int(w * 0.04), 16)
+                        if logo_position_mode == "custom":
+                            lx = int((w - logo_w) * (max(0.0, min(100.0, logo_pos_x)) / 100.0))
+                            ly = int((h - logo_h) * (max(0.0, min(100.0, logo_pos_y)) / 100.0))
+                            lx = max(16, min(lx, w - logo_w - 16))
+                            ly = max(16, min(ly, h - logo_h - 16))
                         else:
-                            lx = logo_margin
-                            ly = logo_margin
+                            if logo_corner == "top_right":
+                                lx = max(w - logo_w - logo_margin, 0)
+                                ly = logo_margin
+                            elif logo_corner == "bottom_left":
+                                lx = logo_margin
+                                ly = max(h - logo_h - logo_margin, 0)
+                            elif logo_corner == "bottom_right":
+                                lx = max(w - logo_w - logo_margin, 0)
+                                ly = max(h - logo_h - logo_margin, 0)
+                            else:
+                                lx = logo_margin
+                                ly = logo_margin
                         bg.paste(logo, (lx, ly), logo)
                     except Exception:
                         pass
@@ -1505,6 +1586,43 @@ def _pick_brand_color(brand):
             except ValueError:
                 continue
     return (99, 102, 241)
+
+
+def _parse_logo_variants(raw):
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return []
+    if not isinstance(data, list):
+        return []
+
+    cleaned = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        path = (item.get("path") or "").strip()
+        if not path:
+            continue
+        key = (item.get("key") or "custom").strip()
+        label = (item.get("label") or key.replace("_", " ").title()).strip()
+        cleaned.append({"key": key, "label": label, "path": path})
+    return cleaned
+
+
+def _resolve_logo_variant_path(brand, requested_variant_key):
+    if not brand:
+        return ""
+
+    variants = _parse_logo_variants(brand.get("logo_variants"))
+    req = (requested_variant_key or "").strip().lower()
+    if req and variants:
+        match = next((v for v in variants if (v.get("key") or "").strip().lower() == req), None)
+        if match and (match.get("path") or "").strip():
+            return match.get("path").strip()
+
+    return (brand.get("logo_path") or "").strip()
 
 
 def _parse_hex_color(value, fallback=(255, 255, 255)):

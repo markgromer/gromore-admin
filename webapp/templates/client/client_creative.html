@@ -543,6 +543,32 @@
                         <option value="bottom_right">Bottom Right</option>
                     </select>
                 </div>
+                {% if logo_variants %}
+                <div class="style-field">
+                    <label for="logoVariant">Logo Variant</label>
+                    <select id="logoVariant" class="style-select">
+                        <option value="">Primary</option>
+                        {% for lv in logo_variants %}
+                        <option value="{{ lv.key }}">{{ lv.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+                <div class="style-field">
+                    <label for="logoPositionMode">Logo Placement Mode</label>
+                    <select id="logoPositionMode" class="style-select">
+                        <option value="corner" selected>Corner Snap</option>
+                        <option value="custom">Custom X/Y</option>
+                    </select>
+                </div>
+                <div class="style-field">
+                    <div class="tune-label"><span>Logo X Position</span><span id="logoPosXLabel">50%</span></div>
+                    <input id="logoPosX" class="tune-range" type="range" min="0" max="100" step="1" value="50">
+                </div>
+                <div class="style-field">
+                    <div class="tune-label"><span>Logo Y Position</span><span id="logoPosYLabel">50%</span></div>
+                    <input id="logoPosY" class="tune-range" type="range" min="0" max="100" step="1" value="50">
+                </div>
                 <div class="style-field">
                     <label style="margin-bottom:.45rem">Footer Info</label>
                     <div class="d-flex gap-3" style="font-size:.85rem;color:#374151">
@@ -628,6 +654,8 @@
     bindRange('bodyScale', 'bodyScaleLabel');
     bindRange('overlayOpacity', 'overlayOpacityLabel');
     bindRange('logoScale', 'logoScaleLabel');
+    bindRange('logoPosX', 'logoPosXLabel');
+    bindRange('logoPosY', 'logoPosYLabel');
 
     window.applyPreset = function(name) {
         const set = (id, val) => { const el = document.getElementById(id); if (el) { el.value = val; el.dispatchEvent(new Event('input')); } };
@@ -804,6 +832,11 @@
         fd.append('overlay_opacity', document.getElementById('overlayOpacity').value);
         fd.append('logo_scale', document.getElementById('logoScale').value);
         fd.append('logo_corner', document.getElementById('logoCorner').value);
+        const logoVariantEl = document.getElementById('logoVariant');
+        if (logoVariantEl) fd.append('logo_variant', logoVariantEl.value);
+        fd.append('logo_position_mode', document.getElementById('logoPositionMode').value);
+        fd.append('logo_pos_x', document.getElementById('logoPosX').value);
+        fd.append('logo_pos_y', document.getElementById('logoPosY').value);
         fd.append('include_phone', document.getElementById('includePhone').checked ? '1' : '0');
         fd.append('include_website', document.getElementById('includeWebsite').checked ? '1' : '0');
         fd.append('creative_prompt', document.getElementById('creativePrompt').value.trim());
@@ -878,6 +911,10 @@
             if (data.overlay_opacity) { document.getElementById('overlayOpacity').value = data.overlay_opacity; document.getElementById('overlayOpacity').dispatchEvent(new Event('input')); }
             if (data.logo_scale) { document.getElementById('logoScale').value = data.logo_scale; document.getElementById('logoScale').dispatchEvent(new Event('input')); }
             if (data.logo_corner) document.getElementById('logoCorner').value = data.logo_corner;
+            if (data.logo_variant && document.getElementById('logoVariant')) document.getElementById('logoVariant').value = data.logo_variant;
+            if (data.logo_position_mode) document.getElementById('logoPositionMode').value = data.logo_position_mode;
+            if (typeof data.logo_pos_x !== 'undefined') { document.getElementById('logoPosX').value = data.logo_pos_x; document.getElementById('logoPosX').dispatchEvent(new Event('input')); }
+            if (typeof data.logo_pos_y !== 'undefined') { document.getElementById('logoPosY').value = data.logo_pos_y; document.getElementById('logoPosY').dispatchEvent(new Event('input')); }
             if (typeof data.include_phone !== 'undefined') document.getElementById('includePhone').checked = !!data.include_phone;
             if (typeof data.include_website !== 'undefined') document.getElementById('includeWebsite').checked = !!data.include_website;
 
