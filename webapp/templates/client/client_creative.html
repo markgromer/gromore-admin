@@ -474,7 +474,11 @@
         fd.append('ad_format', selectedFormat);
 
         fetch("{{ url_for('client.client_creative_ai_copy') }}", { method: 'POST', body: fd })
-        .then(r => r.json())
+        .then(r => {
+            const ct = r.headers.get('content-type') || '';
+            if (!ct.includes('application/json')) throw new Error('Server error (' + r.status + '). Try again.');
+            return r.json();
+        })
         .then(data => {
             if (data.error) { alert(data.error); return; }
             if (data.headline) document.getElementById('headline').value = data.headline;
@@ -486,7 +490,7 @@
                 if (el) el.dispatchEvent(new Event('input'));
             });
         })
-        .catch(() => alert('AI generation failed. Try again.'))
+        .catch(e => alert(e.message || 'AI generation failed. Try again.'))
         .finally(() => {
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-stars"></i> AI Generate Copy';
@@ -513,8 +517,9 @@
 
         fetch("{{ url_for('client.client_creative_generate') }}", { method: 'POST', body: fd })
         .then(r => {
-            if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Server error ' + r.status); });
-            return r.json();
+            const ct = r.headers.get('content-type') || '';
+            if (!ct.includes('application/json')) throw new Error('Server error (' + r.status + '). Check logs or try a smaller image.');
+            return r.json().then(data => { if (!r.ok) throw new Error(data.error || 'Server error ' + r.status); return data; });
         })
         .then(data => {
             if (data.error) { alert(data.error); return; }

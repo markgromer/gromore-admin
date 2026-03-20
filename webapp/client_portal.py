@@ -668,67 +668,70 @@ def client_creative():
 @client_bp.route("/creative/generate", methods=["POST"])
 @client_login_required
 def client_creative_generate():
-    from pathlib import Path
-    from flask import current_app
-
-    db = _get_db()
-    brand_id = session["client_brand_id"]
-    brand = db.get_brand(brand_id)
-    if not brand:
-        return jsonify({"error": "Brand not found"}), 404
-
-    # Get inputs
-    image_file = request.files.get("image")
-    ad_copy_headline = request.form.get("headline", "").strip()[:90]
-    ad_copy_body = request.form.get("body_text", "").strip()[:150]
-    cta_text = request.form.get("cta_text", "").strip()[:30]
-    ad_format = request.form.get("ad_format", "facebook_feed")
-    description = request.form.get("image_description", "").strip()[:500]
-    color_scheme = request.form.get("color_scheme", "auto")
-
-    if not image_file or not image_file.filename:
-        return jsonify({"error": "Please upload a background image."}), 400
-
-    if not ad_copy_headline:
-        return jsonify({"error": "Headline is required."}), 400
-
-    # Validate image
-    ext = image_file.filename.rsplit(".", 1)[-1].lower() if "." in image_file.filename else ""
-    if ext not in {"png", "jpg", "jpeg", "webp"}:
-        return jsonify({"error": "Image must be PNG, JPG, or WebP."}), 400
-
-    image_file.seek(0, 2)
-    if image_file.tell() > 10 * 1024 * 1024:
-        return jsonify({"error": "Image too large. Max 10MB."}), 400
-    image_file.seek(0)
-
-    # Format dimensions
-    FORMAT_SIZES = {
-        "facebook_feed": (1200, 628),
-        "facebook_story": (1080, 1920),
-        "instagram_feed": (1080, 1080),
-        "instagram_story": (1080, 1920),
-        "google_display_landscape": (1200, 628),
-        "google_display_square": (1200, 1200),
-    }
-    target_size = FORMAT_SIZES.get(ad_format, (1200, 628))
-
     try:
+        from pathlib import Path
+        from flask import current_app
         from PIL import Image, ImageDraw, ImageFont, ImageFilter
         import io
         import uuid
+
+        db = _get_db()
+        brand_id = session["client_brand_id"]
+        brand = db.get_brand(brand_id)
+        if not brand:
+            return jsonify({"error": "Brand not found"}), 404
+
+        # Get inputs
+        image_file = request.files.get("image")
+        ad_copy_headline = request.form.get("headline", "").strip()[:90]
+        ad_copy_body = request.form.get("body_text", "").strip()[:150]
+        cta_text = request.form.get("cta_text", "").strip()[:30]
+        ad_format = request.form.get("ad_format", "facebook_feed")
+        description = request.form.get("image_description", "").strip()[:500]
+
+        if not image_file or not image_file.filename:
+            return jsonify({"error": "Please upload a background image."}), 400
+
+        if not ad_copy_headline:
+            return jsonify({"error": "Headline is required."}), 400
+
+        # Validate image
+        ext = image_file.filename.rsplit(".", 1)[-1].lower() if "." in image_file.filename else ""
+        if ext not in {"png", "jpg", "jpeg", "webp"}:
+            return jsonify({"error": "Image must be PNG, JPG, or WebP."}), 400
+
+        image_file.seek(0, 2)
+        if image_file.tell() > 10 * 1024 * 1024:
+            return jsonify({"error": "Image too large. Max 10MB."}), 400
+        image_file.seek(0)
+
+        # Format dimensions
+        FORMAT_SIZES = {
+            "facebook_feed": (1200, 628),
+            "facebook_story": (1080, 1920),
+            "instagram_feed": (1080, 1080),
+            "instagram_story": (1080, 1920),
+            "google_display_landscape": (1200, 628),
+            "google_display_square": (1200, 1200),
+        }
+        target_size = FORMAT_SIZES.get(ad_format, (1200, 628))
 
         # Open and resize the background image
         bg = Image.open(image_file).convert("RGBA")
         bg = _fit_cover(bg, target_size)
 
-        # Darken bottom portion for text readability
-        overlay = Image.new("RGBA", target_size, (0, 0, 0, 0))
-        draw_overlay = ImageDraw.Draw(overlay)
-        h = target_size[1]
-        for y in range(h // 2, h):
-            alpha = int(180 * (y - h // 2) / (h // 2))
-            draw_overlay.rectangle([0, y, target_size[0], y + 1], fill=(0, 0, 0, alpha))
+        # Darken bottom portion for text readability using a gradient image
+        w, h = target_size
+        gradient = Image.new("L", (1, h), 0)
+        for y in range(h):
+            if y < h // 2:
+                gradient.putpixel((0, y), 0)
+            else:
+                gradient.putpixel((0, y), int(180 * (y - h // 2) / (h // 2)))
+        gradient = gradient.resize((w, h), Image.NEAREST)
+        overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        black = Image.new("RGBA", (w, h), (0, 0, 0, 255))
+        overlay = Image.composite(black, overlay, gradient)
         bg = Image.alpha_composite(bg, overlay)
 
         # Load logo if available
@@ -801,6 +804,8 @@ def client_creative_generate():
         })
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": f"Failed to generate creative: {str(e)}"}), 500
 
 
