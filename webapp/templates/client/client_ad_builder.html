@@ -91,6 +91,219 @@
         flex-direction: column;
     }
     .loading-overlay.show { display: flex; }
+
+    /* ── Google SERP Preview ── */
+    .serp-preview {
+        background: #fff;
+        border: 1px solid #dadce0;
+        border-radius: 12px;
+        padding: 1.25rem 1.5rem;
+        max-width: 620px;
+        font-family: Arial, sans-serif;
+    }
+    .serp-preview .serp-breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 4px;
+    }
+    .serp-preview .serp-favicon {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: #f1f3f4;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 700;
+        color: #5f6368;
+    }
+    .serp-preview .serp-site-name {
+        font-size: 14px;
+        color: #202124;
+        line-height: 1.3;
+    }
+    .serp-preview .serp-url {
+        font-size: 12px;
+        color: #4d5156;
+    }
+    .serp-preview .serp-headline {
+        font-size: 20px;
+        color: #1a0dab;
+        line-height: 1.3;
+        margin-bottom: 4px;
+        cursor: pointer;
+    }
+    .serp-preview .serp-headline:hover { text-decoration: underline; }
+    .serp-preview .serp-desc {
+        font-size: 14px;
+        color: #4d5156;
+        line-height: 1.58;
+    }
+    .serp-preview .serp-ad-badge {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 700;
+        color: #202124;
+        border: 1px solid #202124;
+        border-radius: 3px;
+        padding: 0 4px;
+        margin-right: 6px;
+        vertical-align: middle;
+        line-height: 1.5;
+    }
+    .serp-preview .serp-sitelinks {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px 16px;
+        margin-top: 8px;
+        font-size: 13px;
+    }
+    .serp-preview .serp-sitelinks a {
+        color: #1a0dab;
+        text-decoration: none;
+    }
+    .serp-preview .serp-sitelinks a:hover { text-decoration: underline; }
+    .serp-preview .serp-sitelinks .sl-desc {
+        font-size: 12px;
+        color: #4d5156;
+        margin-top: 1px;
+    }
+
+    /* ── Facebook Feed Preview ── */
+    .fb-preview {
+        background: #fff;
+        border: 1px solid #dadde1;
+        border-radius: 10px;
+        max-width: 500px;
+        overflow: hidden;
+        font-family: Helvetica, Arial, sans-serif;
+    }
+    .fb-preview .fb-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px 8px;
+    }
+    .fb-preview .fb-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #4f46e5, #7c3aed);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-weight: 700;
+        font-size: 16px;
+        flex-shrink: 0;
+    }
+    .fb-preview .fb-meta {
+        flex: 1;
+    }
+    .fb-preview .fb-page-name {
+        font-weight: 600;
+        font-size: 14px;
+        color: #050505;
+    }
+    .fb-preview .fb-sponsored {
+        font-size: 12px;
+        color: #65676b;
+    }
+    .fb-preview .fb-body {
+        padding: 0 16px 12px;
+        font-size: 15px;
+        color: #050505;
+        line-height: 1.5;
+        white-space: pre-line;
+    }
+    .fb-preview .fb-image-placeholder {
+        width: 100%;
+        aspect-ratio: 1200 / 628;
+        background: linear-gradient(135deg, #f0f2f5, #e4e6eb);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #8a8d91;
+        font-size: 14px;
+    }
+    .fb-preview .fb-link-area {
+        background: #f0f2f5;
+        padding: 12px 16px;
+        border-top: 1px solid #dadde1;
+    }
+    .fb-preview .fb-link-domain {
+        font-size: 12px;
+        color: #65676b;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+    }
+    .fb-preview .fb-link-headline {
+        font-size: 16px;
+        font-weight: 600;
+        color: #050505;
+        margin: 2px 0;
+        line-height: 1.3;
+    }
+    .fb-preview .fb-link-desc {
+        font-size: 14px;
+        color: #65676b;
+        line-height: 1.3;
+    }
+    .fb-preview .fb-cta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .fb-preview .fb-cta-btn {
+        background: #e4e6eb;
+        border: none;
+        border-radius: 6px;
+        padding: 6px 16px;
+        font-weight: 600;
+        font-size: 14px;
+        color: #050505;
+        cursor: default;
+        flex-shrink: 0;
+    }
+    .fb-preview .fb-actions {
+        display: flex;
+        gap: 4px;
+        padding: 4px 16px 10px;
+        border-top: 1px solid #dadde1;
+    }
+    .fb-preview .fb-action-btn {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 8px;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #65676b;
+        cursor: default;
+    }
+    .fb-preview .fb-action-btn:hover { background: #f0f2f5; }
+
+    .preview-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 8px;
+        font-size: .85rem;
+        font-weight: 500;
+        border: 1px solid #e5e7eb;
+        background: #f9fafb;
+        color: #374151;
+        cursor: pointer;
+        transition: all .15s;
+    }
+    .preview-toggle:hover { background: #f3f4f6; border-color: #d1d5db; }
+    .preview-toggle.active { background: #eef2ff; border-color: #6366f1; color: #4f46e5; }
 </style>
 {% endblock %}
 
@@ -249,6 +462,56 @@
 
 {% if gformat == 'google_search_rsa' %}
 
+<!-- SERP Preview -->
+<div class="builder-card">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0"><i class="bi bi-search"></i> Google Search Preview</h6>
+        <button class="preview-toggle active" onclick="togglePreview(this, 'serpPreview')">
+            <i class="bi bi-eye"></i> Preview
+        </button>
+    </div>
+    <div id="serpPreview">
+        <div class="serp-preview mx-auto">
+            <div class="serp-breadcrumb">
+                <div class="serp-favicon">{{ (brand.display_name or brand.name or 'B')[:1]|upper }}</div>
+                <div>
+                    <div class="serp-site-name">{{ brand.display_name or brand.name or 'Your Business' }}</div>
+                    <div class="serp-url">
+                        <span class="serp-ad-badge">Sponsored</span>
+                        {{ brand.website or 'yourbusiness.com' }}
+                    </div>
+                </div>
+            </div>
+            <div class="serp-headline" id="serpHeadline">
+                {{ (google_ads.headlines or ['Your Headline Here'])[:3] | join(' | ') }}
+            </div>
+            <div class="serp-desc" id="serpDesc">
+                {{ (google_ads.descriptions or ['Your description will appear here.'])[0] }}
+            </div>
+            {% if google_ads.sitelinks %}
+            <div class="serp-sitelinks">
+                {% for sl in google_ads.sitelinks[:4] %}
+                <div>
+                    <a href="javascript:void(0)">{{ sl.title }}</a>
+                    {% if sl.description %}<div class="sl-desc">{{ sl.description[:60] }}</div>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        <div class="text-center mt-2">
+            <small class="text-muted">This is an approximation of how your ad may appear in Google search results.</small>
+        </div>
+        {% if google_ads.headlines and google_ads.headlines|length > 3 %}
+        <div class="text-center mt-2">
+            <button class="btn btn-sm btn-outline-secondary" onclick="shuffleSerpHeadlines()">
+                <i class="bi bi-shuffle"></i> Shuffle headline combination
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
 <!-- Headlines -->
 <div class="builder-card">
     <h6 class="mb-3"><i class="bi bi-type-h1"></i> Headlines <small class="text-muted">(max 30 characters each)</small></h6>
@@ -351,6 +614,37 @@
 </div>
 {% endif %}
 {% elif gformat == 'google_display_rda' %}
+
+<!-- Display Ad Preview -->
+<div class="builder-card">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0"><i class="bi bi-badge-ad"></i> Display Ad Preview</h6>
+        <button class="preview-toggle active" onclick="togglePreview(this, 'displayPreview')">
+            <i class="bi bi-eye"></i> Preview
+        </button>
+    </div>
+    <div id="displayPreview">
+        <div class="mx-auto" style="max-width: 336px; background: #fff; border: 1px solid #dadce0; border-radius: 8px; overflow: hidden; font-family: Arial, sans-serif;">
+            <div style="width: 100%; aspect-ratio: 300/250; background: linear-gradient(135deg, #f0f2f5, #e4e6eb); display: flex; align-items: center; justify-content: center; color: #8a8d91; font-size: 13px;">
+                <div class="text-center">
+                    <i class="bi bi-image" style="font-size: 2rem;"></i>
+                    <div class="mt-1">300x250 image</div>
+                </div>
+            </div>
+            <div style="padding: 10px 12px;">
+                <div style="font-size: 15px; font-weight: 700; color: #202124; line-height: 1.3;">{{ (google_ads.short_headlines or ['Your Headline'])[0] }}</div>
+                <div style="font-size: 13px; color: #5f6368; line-height: 1.4; margin-top: 3px;">{{ (google_ads.descriptions or ['Your description'])[0][:90] }}</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+                    <span style="font-size: 11px; color: #80868b;">Ad · {{ (brand.website or 'yourbusiness.com')|replace('https://','')|replace('http://','')|replace('www.','')|truncate(25, True, '') }}</span>
+                    <span style="background: #1a73e8; color: #fff; font-size: 12px; font-weight: 600; padding: 4px 14px; border-radius: 4px;">Learn More</span>
+                </div>
+            </div>
+        </div>
+        <div class="text-center mt-2">
+            <small class="text-muted">Approximation of a responsive display ad placement.</small>
+        </div>
+    </div>
+</div>
 
 <div class="builder-card">
     <h6 class="mb-3"><i class="bi bi-badge-ad"></i> Display Ad Copy <small class="text-muted">(Responsive Display style)</small></h6>
@@ -583,6 +877,67 @@
 </div>
 {% endif %}
 
+<!-- Facebook Feed Preview -->
+{% if facebook_ads.ad_variations %}
+<div class="builder-card">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0"><i class="bi bi-phone"></i> Facebook Feed Preview</h6>
+        <div class="d-flex align-items-center gap-2">
+            {% for variation in facebook_ads.ad_variations %}
+            <button class="preview-toggle {% if loop.first %}active{% endif %}" onclick="showFbVariation({{ loop.index0 }}, this)">
+                V{{ loop.index }}
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+    {% for variation in facebook_ads.ad_variations %}
+    <div class="fb-variation-preview" id="fbVariation{{ loop.index0 }}" style="{% if not loop.first %}display:none;{% endif %}">
+        <div class="fb-preview mx-auto">
+            <div class="fb-header">
+                <div class="fb-avatar">{{ (brand.display_name or brand.name or 'B')[:1]|upper }}</div>
+                <div class="fb-meta">
+                    <div class="fb-page-name">{{ brand.display_name or brand.name or 'Your Business' }}</div>
+                    <div class="fb-sponsored">Sponsored · <i class="bi bi-globe2" style="font-size:11px;"></i></div>
+                </div>
+                <i class="bi bi-three-dots" style="color: #65676b;"></i>
+            </div>
+            <div class="fb-body">{{ variation.primary_text }}</div>
+            <div class="fb-image-placeholder">
+                <div class="text-center">
+                    <i class="bi bi-image" style="font-size: 2rem;"></i>
+                    <div class="mt-1">Your ad image here</div>
+                    {% if facebook_ads.image_guidance and facebook_ads.image_guidance.primary %}
+                    <div style="font-size: 12px; max-width: 300px; margin-top: 4px;">{{ facebook_ads.image_guidance.primary[:80] }}...</div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="fb-link-area">
+                <div class="fb-cta">
+                    <div>
+                        <div class="fb-link-domain">{{ (brand.website or 'yourbusiness.com')|replace('https://','')|replace('http://','')|replace('www.','')|truncate(30, True, '') }}</div>
+                        <div class="fb-link-headline">{{ variation.headline }}</div>
+                        {% if variation.description %}<div class="fb-link-desc">{{ variation.description }}</div>{% endif %}
+                    </div>
+                    <button class="fb-cta-btn">{{ (facebook_ads.cta_button or 'Learn More') | replace('_', ' ') }}</button>
+                </div>
+            </div>
+            <div class="fb-actions">
+                <div class="fb-action-btn"><i class="bi bi-hand-thumbs-up"></i> Like</div>
+                <div class="fb-action-btn"><i class="bi bi-chat"></i> Comment</div>
+                <div class="fb-action-btn"><i class="bi bi-share"></i> Share</div>
+            </div>
+        </div>
+        {% if variation.angle %}
+        <div class="text-center mt-2"><span class="badge bg-light text-dark border">Angle: {{ variation.angle }}</span></div>
+        {% endif %}
+    </div>
+    {% endfor %}
+    <div class="text-center mt-2">
+        <small class="text-muted">This is an approximation of how your ad may appear in the Facebook news feed.</small>
+    </div>
+</div>
+{% endif %}
+
 <!-- Ad Variations -->
 {% for variation in facebook_ads.ad_variations or [] %}
 <div class="builder-card">
@@ -769,6 +1124,32 @@ function sendToCreative(payload) {
         sessionStorage.setItem('creative_prefill', JSON.stringify(payload || {}));
     } catch (_) {}
     window.location.href = "{{ url_for('client.client_creative') }}";
+}
+
+/* ── Preview helpers ── */
+function togglePreview(btn, id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var hidden = el.style.display === 'none';
+    el.style.display = hidden ? '' : 'none';
+    btn.classList.toggle('active', hidden);
+}
+
+{% if google_ads and google_ads.headlines %}
+var _serpHL = {{ google_ads.headlines | tojson }};
+function shuffleSerpHeadlines() {
+    var shuffled = _serpHL.slice().sort(function() { return 0.5 - Math.random(); });
+    var pick = shuffled.slice(0, 3);
+    document.getElementById('serpHeadline').textContent = pick.join(' | ');
+}
+{% endif %}
+
+function showFbVariation(idx, btn) {
+    document.querySelectorAll('.fb-variation-preview').forEach(function(el) { el.style.display = 'none'; });
+    var target = document.getElementById('fbVariation' + idx);
+    if (target) target.style.display = '';
+    btn.closest('.d-flex').querySelectorAll('.preview-toggle').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
 }
 </script>
 {% endblock %}

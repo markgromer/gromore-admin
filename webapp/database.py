@@ -1252,7 +1252,7 @@ class WebDB:
         conn.commit()
         conn.close()
 
-    def get_ad_examples(self, platform=None, fmt=None, quality=None, limit=50):
+    def get_ad_examples(self, platform=None, fmt=None, quality=None, industry=None, limit=50):
         conn = self._conn()
         clauses, params = [], []
         if platform:
@@ -1261,6 +1261,8 @@ class WebDB:
             clauses.append("format = ?"); params.append(fmt)
         if quality:
             clauses.append("quality = ?"); params.append(quality)
+        if industry:
+            clauses.append("industry = ?"); params.append(industry)
         where = " WHERE " + " AND ".join(clauses) if clauses else ""
         rows = conn.execute(
             f"SELECT * FROM ad_examples{where} ORDER BY score DESC, created_at DESC LIMIT ?",

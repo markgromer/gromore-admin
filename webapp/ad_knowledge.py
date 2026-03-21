@@ -336,8 +336,10 @@ def seed_ad_knowledge(db):
     Skips if data already exists."""
     existing_examples = db.get_ad_examples(limit=1)
     if not existing_examples:
-        log.info("Seeding %d ad examples...", len(SEED_AD_EXAMPLES))
-        for ex in SEED_AD_EXAMPLES:
+        from webapp.niche_ad_library import ALL_NICHE_ADS
+        all_examples = SEED_AD_EXAMPLES + ALL_NICHE_ADS
+        log.info("Seeding %d ad examples (incl. niche library)...", len(all_examples))
+        for ex in all_examples:
             db.add_ad_example(
                 platform=ex["platform"],
                 fmt=ex["format"],
@@ -596,13 +598,21 @@ def build_ad_knowledge_context(db, platform, fmt, industry=None):
     Contains relevant examples (good + bad), best practices, and niche-specific
     rules for the given platform/format/industry."""
 
-    # Get relevant good examples
-    good_examples = db.get_ad_examples(platform=platform, fmt=fmt, quality="good", limit=5)
+    # Get relevant good examples - prefer industry-specific if available
+    good_examples = []
+    if industry:
+        good_examples = db.get_ad_examples(platform=platform, fmt=fmt, quality="good", industry=industry, limit=5)
+    if len(good_examples) < 3:
+        good_examples += db.get_ad_examples(platform=platform, fmt=fmt, quality="good", limit=5 - len(good_examples))
     if len(good_examples) < 3:
         good_examples += db.get_ad_examples(platform=platform, quality="good", limit=5 - len(good_examples))
 
-    # Get relevant bad examples
-    bad_examples = db.get_ad_examples(platform=platform, fmt=fmt, quality="bad", limit=3)
+    # Get relevant bad examples - prefer industry-specific
+    bad_examples = []
+    if industry:
+        bad_examples = db.get_ad_examples(platform=platform, fmt=fmt, quality="bad", industry=industry, limit=3)
+    if not bad_examples:
+        bad_examples = db.get_ad_examples(platform=platform, fmt=fmt, quality="bad", limit=3)
     if not bad_examples:
         bad_examples = db.get_ad_examples(platform=platform, quality="bad", limit=2)
 
