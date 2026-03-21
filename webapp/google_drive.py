@@ -205,10 +205,12 @@ def upload_file(db, brand_id, subfolder_name, filename, file_bytes, mime_type="i
     """
     folder_id = get_subfolder_id(db, brand_id, subfolder_name)
     if not folder_id:
+        logger.warning("Drive upload: could not resolve subfolder '%s' for brand %s", subfolder_name, brand_id)
         return None
 
     token = get_valid_access_token(db, brand_id)
     if not token:
+        logger.warning("Drive upload: no valid access token for brand %s", brand_id)
         return None
 
     # Multipart upload: metadata + file content
@@ -241,15 +243,22 @@ def upload_file(db, brand_id, subfolder_name, filename, file_bytes, mime_type="i
 
 def list_files(db, brand_id, subfolder_name, max_results=50):
     """
-    List files in a specific subfolder. Returns list of dicts with id, name,
-    mimeType, webViewLink, thumbnailLink, modifiedTime.
+    List files in a specific subfolder (or root folder if subfolder_name is None).
+    Returns list of dicts with id, name, mimeType, webViewLink, thumbnailLink, modifiedTime.
     """
-    folder_id = get_subfolder_id(db, brand_id, subfolder_name)
+    if subfolder_name is None:
+        # List from root folder directly
+        brand = db.get_brand(brand_id)
+        folder_id = _extract_folder_id(brand.get("google_drive_folder_id") or "")
+    else:
+        folder_id = get_subfolder_id(db, brand_id, subfolder_name)
     if not folder_id:
+        logger.warning("Drive list_files: no folder_id for brand %s subfolder=%s", brand_id, subfolder_name)
         return []
 
     token = get_valid_access_token(db, brand_id)
     if not token:
+        logger.warning("Drive list_files: no valid token for brand %s", brand_id)
         return []
 
     q = f"'{folder_id}' in parents and trashed = false"
@@ -261,6 +270,7 @@ def list_files(db, brand_id, subfolder_name, max_results=50):
     }, headers=_drive_headers(token), timeout=15)
 
     if resp.status_code != 200:
+        logger.warning("Drive list_files failed (%s): %s", resp.status_code, resp.text[:300])
         return []
     return resp.json().get("files", [])
 

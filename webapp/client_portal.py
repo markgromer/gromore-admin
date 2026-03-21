@@ -2241,7 +2241,7 @@ def client_settings():
     google_conn = connections.get("google", {})
     meta_conn = connections.get("meta", {})
     scopes = (google_conn.get("scopes") or "").lower()
-    drive_scoped = ("drive.file" in scopes) or ("spreadsheets" in scopes)
+    drive_scoped = ("drive" in scopes) or ("spreadsheets" in scopes)
 
     return render_template(
         "client_settings.html",
@@ -2349,14 +2349,14 @@ def client_save_google_drive():
 @client_bp.route("/api/drive/files/<subfolder>")
 @client_login_required
 def client_drive_list_files(subfolder):
-    """API: list files in a Drive subfolder."""
-    allowed = {"Creatives", "Ads", "Images", "Reports"}
+    """API: list files in a Drive subfolder (or root folder with 'Root')."""
+    allowed = {"Creatives", "Ads", "Images", "Reports", "Root"}
     if subfolder not in allowed:
         return jsonify({"error": "Invalid subfolder"}), 400
     db = _get_db()
     brand_id = session["client_brand_id"]
     from webapp.google_drive import list_files
-    files = list_files(db, brand_id, subfolder)
+    files = list_files(db, brand_id, None if subfolder == "Root" else subfolder)
     return jsonify({"files": files})
 
 

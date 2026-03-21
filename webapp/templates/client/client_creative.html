@@ -1963,15 +1963,23 @@
 
     {% if brand.get('google_drive_folder_id') %}
     (function loadDriveImages() {
-        fetch("{{ url_for('client.client_drive_list_files', subfolder='Images') }}")
-        .then(r => r.json())
-        .then(data => {
+        // Fetch from root folder AND Images subfolder, merge results
+        Promise.all([
+            fetch("{{ url_for('client.client_drive_list_files', subfolder='Root') }}").then(r => r.json()).catch(() => ({files:[]})),
+            fetch("{{ url_for('client.client_drive_list_files', subfolder='Images') }}").then(r => r.json()).catch(() => ({files:[]}))
+        ]).then(([rootData, imgData]) => {
+            const seen = new Set();
+            const allFiles = [...(rootData.files||[]), ...(imgData.files||[])].filter(f => {
+                if (seen.has(f.id)) return false;
+                seen.add(f.id);
+                return f.mimeType && f.mimeType.startsWith('image/');
+            });
             const grid = document.getElementById('driveAssetsGrid');
-            if (!data.files || !data.files.length) {
+            if (!allFiles.length) {
                 grid.innerHTML = '<div class="text-muted" style="font-size:.8rem;grid-column:1/-1">No images in Drive yet</div>';
                 return;
             }
-            grid.innerHTML = data.files.filter(f => f.mimeType && f.mimeType.startsWith('image/')).slice(0, 12).map(f =>
+            grid.innerHTML = allFiles.slice(0, 12).map(f =>
                 `<div class="asset-thumb" onclick="addDriveImage('${f.id}', '${f.name}')" title="${f.name}">
                     <img src="${f.thumbnailLink || ''}" alt="${f.name}" onerror="this.parentElement.style.display='none'">
                 </div>`
