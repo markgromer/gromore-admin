@@ -6,6 +6,7 @@ and listing files within the brand's Drive folder tree.
 """
 import io
 import json
+import re
 import logging
 from datetime import datetime, timedelta
 
@@ -20,6 +21,17 @@ DRIVE_UPLOAD_API = "https://www.googleapis.com/upload/drive/v3"
 
 # Subfolders auto-created inside the brand's root Drive folder
 SUBFOLDER_NAMES = ["Creatives", "Ads", "Images", "Reports"]
+
+
+def _extract_folder_id(raw):
+    """Extract a Google Drive folder ID from a raw string (could be an ID or full URL)."""
+    if not raw:
+        return ""
+    raw = raw.strip()
+    m = re.search(r'folders/([a-zA-Z0-9_-]+)', raw)
+    if m:
+        return m.group(1)
+    return raw
 
 
 # ── Token helpers ──
@@ -150,7 +162,7 @@ def ensure_folder_structure(db, brand_id):
     Returns None if Drive is not set up.
     """
     brand = db.get_brand(brand_id)
-    root_id = (brand.get("google_drive_folder_id") or "").strip()
+    root_id = _extract_folder_id(brand.get("google_drive_folder_id") or "")
     if not root_id:
         return None
 
@@ -172,7 +184,7 @@ def ensure_folder_structure(db, brand_id):
 def get_subfolder_id(db, brand_id, subfolder_name):
     """Return the ID of a specific subfolder, creating it if needed."""
     brand = db.get_brand(brand_id)
-    root_id = (brand.get("google_drive_folder_id") or "").strip()
+    root_id = _extract_folder_id(brand.get("google_drive_folder_id") or "")
     if not root_id:
         return None
 
@@ -275,7 +287,23 @@ def setup_brand_drive(db, brand_id):
     One-call setup: ensure folder structure exists and return mapping.
     Intended to be called when user first configures their Drive folder.
     """
+    brand = db.get_brand(brand_id)
+    raw_id = (brand.get("google_drive_folder_id") or "").strip()
+    root_id = _extract_folder_id(raw_id)
+    if not root_id:
+        return {"ok": False, "error": "No Drive folder ID provided."}
+
+    token = get_valid_access_token(db, brand_id)
+    if not token:
+        # Check if scopes are missing
+        conns = db.get_brand_connections(brand_id)
+        google = conns.get("google", {})
+        scopes = (google.get("scopes") or "").lower()
+        if "drive" not in scopes:
+            return {"ok": False, "error": "Google connection is missing Drive scope. Click 'Reconnect Google With Drive Access' first."}
+        return {"ok": False, "error": "Could not obtain a valid Google access token. Try reconnecting Google."}
+
     folders = ensure_folder_structure(db, brand_id)
     if not folders:
-        return {"ok": False, "error": "Could not set up Drive folders. Check your folder ID and Google connection."}
+        return {"ok": False, "error": "Could not create subfolders in the Drive folder. Make sure the folder ID is correct and shared with the Google account."}
     return {"ok": True, "folders": folders}

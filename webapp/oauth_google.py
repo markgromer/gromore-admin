@@ -141,12 +141,20 @@ def callback():
     if "expires_in" in tokens:
         expiry = (datetime.now() + timedelta(seconds=tokens["expires_in"])).isoformat()
 
-    # Save connection
+    # Save connection - use the correct scopes depending on flow
+    if is_client:
+        from webapp.client_oauth_google import SCOPES as CLIENT_SCOPES
+        granted_scopes = " ".join(CLIENT_SCOPES)
+    else:
+        granted_scopes = " ".join(SCOPES)
+    # Also check if Google returned the actual granted scopes
+    if tokens.get("scope"):
+        granted_scopes = tokens["scope"]
     db.upsert_connection(brand_id, "google", {
         "access_token": tokens.get("access_token", ""),
         "refresh_token": tokens.get("refresh_token", ""),
         "token_expiry": expiry,
-        "scopes": " ".join(SCOPES),
+        "scopes": granted_scopes,
     })
 
     # Fetch GA4 properties and GSC sites so user can pick

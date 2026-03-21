@@ -2310,8 +2310,18 @@ def client_save_google_drive():
     db = _get_db()
     brand_id = session["client_brand_id"]
 
-    folder_id = (request.form.get("google_drive_folder_id") or "").strip()[:200]
-    sheet_id = (request.form.get("google_drive_sheet_id") or "").strip()[:200]
+    folder_id = (request.form.get("google_drive_folder_id") or "").strip()[:500]
+    sheet_id = (request.form.get("google_drive_sheet_id") or "").strip()[:500]
+
+    # Extract folder ID from full Drive URL if user pasted one
+    import re
+    drive_url_match = re.search(r'folders/([a-zA-Z0-9_-]+)', folder_id)
+    if drive_url_match:
+        folder_id = drive_url_match.group(1)
+    # Extract sheet ID from full Sheets URL if user pasted one
+    sheet_url_match = re.search(r'/spreadsheets/d/([a-zA-Z0-9_-]+)', sheet_id)
+    if sheet_url_match:
+        sheet_id = sheet_url_match.group(1)
 
     db.update_brand_text_field(brand_id, "google_drive_folder_id", folder_id)
     db.update_brand_text_field(brand_id, "google_drive_sheet_id", sheet_id)
