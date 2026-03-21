@@ -217,6 +217,34 @@
         background: #f5f3ff;
     }
 
+    /* Color swatch */
+    .color-swatch {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        border: 2px solid #e5e7eb;
+        cursor: pointer;
+        transition: all .15s;
+        display: inline-block;
+    }
+    .color-swatch:hover { transform: scale(1.15); border-color: #6366f1; }
+
+    /* Brand asset thumbnail */
+    .brand-asset-thumb {
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        overflow: hidden;
+        cursor: pointer;
+        transition: all .15s;
+        aspect-ratio: 1;
+        background: #f8fafc;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .brand-asset-thumb:hover { border-color: #6366f1; transform: scale(1.03); }
+    .brand-asset-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
     /* Drive badge */
     .drive-badge {
         display: inline-flex;
@@ -305,6 +333,43 @@
                 <input type="text" id="aiImagePrompt" class="prop-input mt-2" placeholder="Describe the image you want...">
             </div>
         </div>
+
+        <!-- Brand Images -->
+        {% if logo_variants or brand.get('logo_path') %}
+        <div class="cc-card">
+            <div class="cc-card-header">
+                <h5><i class="bi bi-images me-2" style="opacity:.5"></i>Brand Images</h5>
+                <div class="hint">From My Business settings</div>
+            </div>
+            <div class="cc-card-body">
+                <div class="asset-grid">
+                    {% if brand.get('logo_path') %}
+                    <div class="brand-asset-thumb" onclick="addBrandImage('{{ url_for('client.client_serve_upload', filename=brand['logo_path']) }}', 'Primary Logo')" title="Primary Logo">
+                        <img src="{{ url_for('client.client_serve_upload', filename=brand['logo_path']) }}" alt="Primary Logo">
+                    </div>
+                    {% endif %}
+                    {% for lv in logo_variants %}
+                    <div class="brand-asset-thumb" onclick="addBrandImage('{{ url_for('client.client_serve_upload', filename=lv['path']) }}', '{{ lv['label'] }}')" title="{{ lv['label'] }}">
+                        <img src="{{ url_for('client.client_serve_upload', filename=lv['path']) }}" alt="{{ lv['label'] }}">
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Brand Colors -->
+        {% if brand.get('brand_colors') %}
+        <div class="cc-card">
+            <div class="cc-card-header">
+                <h5><i class="bi bi-palette me-2" style="opacity:.5"></i>Brand Colors</h5>
+                <div class="hint">Click to apply to selected element</div>
+            </div>
+            <div class="cc-card-body">
+                <div class="d-flex flex-wrap gap-2" id="brandColorsPanel"></div>
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Layers -->
         <div class="cc-card">
@@ -570,14 +635,16 @@
             shape = new fabric.Rect({
                 left: fullW * 0.1, top: fullH * 0.6,
                 width: fullW * 0.8, height: fullH * 0.25,
-                fill: 'rgba(0,0,0,0.55)', rx: 12, ry: 12,
+                fill: '#1a1d2e', opacity: 0.75, rx: 12, ry: 12,
+                stroke: '#6366f1', strokeWidth: 2,
                 _customType: 'shape',
             });
         } else if (type === 'circle') {
             shape = new fabric.Circle({
                 left: fullW * 0.35, top: fullH * 0.25,
                 radius: Math.min(fullW, fullH) * 0.15,
-                fill: 'rgba(99,102,241,0.5)',
+                fill: '#6366f1', opacity: 0.5,
+                stroke: '#4338ca', strokeWidth: 2,
                 _customType: 'shape',
             });
         }
@@ -875,11 +942,22 @@
                 </div>
             `;
         } else if (obj.type === 'rect' || obj.type === 'circle') {
+            const fillHex = (obj.fill && typeof obj.fill === 'string' && obj.fill.charAt(0) === '#') ? obj.fill : '#000000';
+            const strokeHex = (obj.stroke && typeof obj.stroke === 'string' && obj.stroke.charAt(0) === '#') ? obj.stroke : '#000000';
             html += `
                 <div class="prop-field">
-                    <label>Fill Color</label>
-                    <input type="color" class="prop-input" value="${obj.fill && obj.fill.charAt && obj.fill.charAt(0) === '#' ? obj.fill : '#000000'}"
+                    <label>Fill</label>
+                    <input type="color" class="prop-input" value="${fillHex}"
                            oninput="updateProp('fill', this.value)">
+                </div>
+                <div class="prop-field">
+                    <label>Stroke</label>
+                    <div class="d-flex gap-2 align-items-center">
+                        <input type="color" class="prop-input" value="${strokeHex}" style="flex:1"
+                               oninput="updateProp('stroke', this.value)">
+                        <input type="number" class="prop-input" value="${obj.strokeWidth || 0}" min="0" max="20" style="width:60px"
+                               oninput="updateProp('strokeWidth', parseInt(this.value))">
+                    </div>
                 </div>
                 <div class="prop-field">
                     <label>Opacity</label>
@@ -971,6 +1049,14 @@
     canvas.on('selection:updated', e => { showProperties(e.selected[0]); updateLayers(); });
     canvas.on('selection:cleared', () => { showDefaultProps(); updateLayers(); });
     canvas.on('object:modified', () => {
+        const active = canvas.getActiveObject();
+        if (active) showProperties(active);
+    });
+    canvas.on('object:moving', () => {
+        const active = canvas.getActiveObject();
+        if (active) showProperties(active);
+    });
+    canvas.on('object:scaling', () => {
         const active = canvas.getActiveObject();
         if (active) showProperties(active);
     });
@@ -1194,11 +1280,21 @@
     })();
 
     window.addDriveImage = function(fileId, name) {
-        // Use Drive thumbnail as proxy (actual download would need a server route)
-        // We'll use the direct download API endpoint through our server
-        const url = `{{ url_for('client.client_drive_list_files', subfolder='Images') }}`.replace('/files/Images', `/download/${fileId}`);
-        // For now, use the thumbnail link approach - most Drive thumbnails are accessible
-        alert('Adding ' + name + ' - pulling from Drive...');
+        const thumb = document.querySelector(`.asset-thumb[onclick*="'${fileId}'"] img`);
+        const thumbUrl = thumb ? thumb.src : null;
+        if (thumbUrl) {
+            const hiRes = thumbUrl.replace(/=s\d+/, '=s800');
+            fabric.Image.fromURL(hiRes, function(img) {
+                const sc = Math.min(fullW / img.width, fullH / img.height, 1);
+                img.set({ left: 0, top: 0, scaleX: sc, scaleY: sc, _customType: 'drive_image' });
+                canvas.add(img);
+                canvas.setActiveObject(img);
+                canvas.renderAll();
+                updateLayers();
+            }, { crossOrigin: 'anonymous' });
+        } else {
+            alert('Could not load thumbnail for ' + name);
+        }
     };
     {% endif %}
 
@@ -1243,6 +1339,71 @@
             sessionStorage.removeItem('creative_prefill');
         }
     } catch (_) {}
+
+    // ── Brand Colors ──
+
+    (function parseBrandColors() {
+        const raw = {{ (brand.get('brand_colors', '') or '')|tojson }};
+        if (!raw) return;
+        const panel = document.getElementById('brandColorsPanel');
+        if (!panel) return;
+
+        const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
+        const colors = [];
+        parts.forEach(part => {
+            const hex = part.match(/#[0-9a-fA-F]{3,8}/);
+            if (hex) {
+                const label = part.replace(hex[0], '').replace(/[:\(\)]/g, '').trim() || hex[0];
+                colors.push({ hex: hex[0], label: label });
+            }
+        });
+
+        if (!colors.length) {
+            // Try standalone hex matches
+            const hexMatches = raw.match(/#[0-9a-fA-F]{3,8}/g) || [];
+            hexMatches.forEach(h => colors.push({ hex: h, label: h }));
+        }
+
+        if (!colors.length) {
+            panel.innerHTML = '<span class="text-muted" style="font-size:.8rem">No hex codes found. Add colors like #2563eb in My Business.</span>';
+            return;
+        }
+
+        panel.innerHTML = colors.map(c =>
+            `<div style="text-align:center">
+                <div class="color-swatch" style="background:${c.hex}" onclick="applyBrandColor('${c.hex}')" title="${c.label}: ${c.hex}"></div>
+                <div style="font-size:.65rem;color:#6b7280;margin-top:2px;max-width:50px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.label}</div>
+            </div>`
+        ).join('');
+    })();
+
+    window.applyBrandColor = function(hex) {
+        const active = canvas.getActiveObject();
+        if (active) {
+            active.set('fill', hex);
+            canvas.renderAll();
+            showProperties(active);
+        } else {
+            navigator.clipboard.writeText(hex).catch(() => {});
+        }
+    };
+
+    // ── Brand Image helper ──
+
+    window.addBrandImage = function(url, name) {
+        fabric.Image.fromURL(url, function(img) {
+            const sc = Math.min(fullW / img.width, fullH / img.height, 1);
+            img.set({
+                left: fullW * 0.05, top: fullH * 0.05,
+                scaleX: sc, scaleY: sc,
+                _customType: 'brand_image',
+            });
+            canvas.add(img);
+            canvas.setActiveObject(img);
+            canvas.renderAll();
+            updateLayers();
+        }, { crossOrigin: 'anonymous' });
+    };
 
 })();
 </script>
