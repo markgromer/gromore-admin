@@ -761,10 +761,14 @@
         <div class="cc-card">
             <div class="cc-card-header">
                 <h5><i class="bi bi-google me-2" style="opacity:.5"></i>Drive Images</h5>
-                <div class="hint">Pull images from your Drive</div>
+                <div class="hint">Browse and pull images from your Drive</div>
             </div>
             <div class="cc-card-body">
-                <div class="asset-grid" id="driveAssetsGrid">
+                <div id="driveBreadcrumb" style="font-size:.75rem;margin-bottom:.5rem;display:none">
+                    <a href="#" onclick="driveBrowse(null);return false" style="text-decoration:none;color:#6366f1"><i class="bi bi-house-fill"></i> Root</a>
+                    <span id="driveBreadcrumbTrail"></span>
+                </div>
+                <div class="asset-grid" id="driveAssetsGrid" style="gap:6px">
                     <div class="text-muted" style="font-size:.8rem;grid-column:1/-1">Loading...</div>
                 </div>
             </div>
@@ -1962,27 +1966,80 @@
     // ── Load Drive images ──
 
     {% if brand.get('google_drive_folder_id') %}
-    (function loadDriveImages() {
-        // Single request: fetches images from root + all subfolders automatically
-        fetch("{{ url_for('client.client_drive_all_images') }}")
+    // Drive folder browsing state
+    window._drivePath = []; // [{id, name}, ...] breadcrumb trail
+
+    window.driveBrowse = function(folderId, folderName) {
+        const grid = document.getElementById('driveAssetsGrid');
+        grid.innerHTML = '<div class="text-muted" style="font-size:.8rem;grid-column:1/-1"><span class="spinner-border spinner-border-sm"></span> Loading...</div>';
+
+        // Update breadcrumb path
+        if (!folderId) {
+            window._drivePath = [];
+        } else if (folderName) {
+            // Check if we're going back to a folder already in path
+            const idx = window._drivePath.findIndex(p => p.id === folderId);
+            if (idx >= 0) {
+                window._drivePath = window._drivePath.slice(0, idx + 1);
+            } else {
+                window._drivePath.push({id: folderId, name: folderName});
+            }
+        }
+
+        // Update breadcrumb UI
+        const bc = document.getElementById('driveBreadcrumb');
+        const trail = document.getElementById('driveBreadcrumbTrail');
+        if (window._drivePath.length > 0) {
+            bc.style.display = 'block';
+            trail.innerHTML = window._drivePath.map(p =>
+                ` <i class="bi bi-chevron-right" style="font-size:.6rem;opacity:.4"></i> <a href="#" onclick="driveBrowse('${p.id}','${p.name.replace(/'/g,"\\'")}');return false" style="text-decoration:none;color:#6366f1">${p.name}</a>`
+            ).join('');
+        } else {
+            bc.style.display = 'none';
+            trail.innerHTML = '';
+        }
+
+        const url = folderId
+            ? "{{ url_for('client.client_drive_browse') }}?folder_id=" + encodeURIComponent(folderId)
+            : "{{ url_for('client.client_drive_browse') }}";
+
+        fetch(url)
         .then(r => r.json())
         .then(data => {
-            const grid = document.getElementById('driveAssetsGrid');
-            const files = (data.files || []);
-            if (!files.length) {
-                grid.innerHTML = '<div class="text-muted" style="font-size:.8rem;grid-column:1/-1">No images in Drive yet. Save a creative to get started.</div>';
-                return;
+            let html = '';
+
+            // Render folders first
+            if (data.folders && data.folders.length) {
+                html += data.folders.map(f =>
+                    `<div class="asset-thumb" onclick="driveBrowse('${f.id}','${f.name.replace(/'/g,"\\&#39;")}')" title="${f.name}" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f3f4f6;border-radius:8px;padding:4px">
+                        <i class="bi bi-folder-fill" style="font-size:1.4rem;color:#f59e0b"></i>
+                        <span style="font-size:.65rem;color:#374151;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;display:block;margin-top:2px">${f.name}</span>
+                    </div>`
+                ).join('');
             }
-            grid.innerHTML = files.slice(0, 20).map(f =>
-                `<div class="asset-thumb" onclick="addDriveImage('${f.id}', '${f.name}')" title="${f.name}">
-                    <img src="${f.thumbnailLink || ''}" alt="${f.name}" onerror="this.parentElement.style.display='none'">
-                </div>`
-            ).join('');
+
+            // Render images
+            if (data.images && data.images.length) {
+                html += data.images.map(f =>
+                    `<div class="asset-thumb" onclick="addDriveImage('${f.id}', '${f.name.replace(/'/g,"\\&#39;")}')" title="${f.name}">
+                        <img src="${f.thumbnailLink || ''}" alt="${f.name}" onerror="this.parentElement.style.display='none'">
+                    </div>`
+                ).join('');
+            }
+
+            if (!html) {
+                html = '<div class="text-muted" style="font-size:.8rem;grid-column:1/-1">No images in this folder</div>';
+            }
+
+            grid.innerHTML = html;
         })
         .catch(() => {
-            document.getElementById('driveAssetsGrid').innerHTML = '<div class="text-muted" style="font-size:.8rem;grid-column:1/-1">Could not load Drive images</div>';
+            grid.innerHTML = '<div class="text-muted" style="font-size:.8rem;grid-column:1/-1">Could not load Drive folder</div>';
         });
-    })();
+    };
+
+    // Initial load - browse root
+    driveBrowse(null);
 
     window.addDriveImage = function(fileId, name) {
         const thumb = document.querySelector(`.asset-thumb[onclick*="'${fileId}'"] img`);

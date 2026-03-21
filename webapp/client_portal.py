@@ -2423,6 +2423,21 @@ def client_drive_all_images():
     return jsonify({"files": files})
 
 
+@client_bp.route("/api/drive/browse")
+@client_login_required
+def client_drive_browse():
+    """API: browse a Drive folder - returns subfolders and image files."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    folder_id = request.args.get("folder_id") or None
+    # Validate folder_id format (alphanumeric + dashes/underscores only)
+    if folder_id and not all(c.isalnum() or c in "-_" for c in folder_id):
+        return jsonify({"error": "Invalid folder ID"}), 400
+    from webapp.google_drive import browse_folder
+    result = browse_folder(db, brand_id, folder_id)
+    return jsonify(result)
+
+
 @client_bp.route("/api/drive/files/<subfolder>")
 @client_login_required
 def client_drive_list_files(subfolder):

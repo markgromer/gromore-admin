@@ -275,6 +275,47 @@ def list_files(db, brand_id, subfolder_name, max_results=50):
     return resp.json().get("files", [])
 
 
+def browse_folder(db, brand_id, folder_id=None, max_results=50):
+    """
+    List folders and image files inside a given folder_id.
+    If folder_id is None, uses the brand's root Drive folder.
+    Returns {"folders": [...], "images": [...], "folder_id": "..."}.
+    """
+    brand = db.get_brand(brand_id)
+    root_id = _extract_folder_id(brand.get("google_drive_folder_id") or "")
+    if not root_id:
+        return {"folders": [], "images": [], "folder_id": None}
+
+    target_id = folder_id or root_id
+    token = get_valid_access_token(db, brand_id)
+    if not token:
+        return {"folders": [], "images": [], "folder_id": target_id}
+
+    headers = _drive_headers(token)
+
+    # Get folders
+    q_folders = f"'{target_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+    resp_f = requests.get(f"{DRIVE_API}/files", params={
+        "q": q_folders,
+        "fields": "files(id,name)",
+        "pageSize": 30,
+        "orderBy": "name",
+    }, headers=headers, timeout=15)
+    folders = resp_f.json().get("files", []) if resp_f.status_code == 200 else []
+
+    # Get image files
+    q_images = f"'{target_id}' in parents and mimeType contains 'image/' and trashed = false"
+    resp_i = requests.get(f"{DRIVE_API}/files", params={
+        "q": q_images,
+        "fields": "files(id,name,mimeType,webViewLink,thumbnailLink,modifiedTime,size)",
+        "pageSize": max_results,
+        "orderBy": "modifiedTime desc",
+    }, headers=headers, timeout=15)
+    images = resp_i.json().get("files", []) if resp_i.status_code == 200 else []
+
+    return {"folders": folders, "images": images, "folder_id": target_id, "is_root": target_id == root_id}
+
+
 def list_all_images(db, brand_id, max_results=40):
     """
     List image files from the root folder AND all its subfolders (one level deep).
