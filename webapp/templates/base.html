@@ -111,6 +111,9 @@
             </a>
 
             <div class="section-label">System</div>
+            <a class="nav-link {% if request.endpoint == 'ad_intelligence' %}active{% endif %}" href="{{ url_for('ad_intelligence') }}">
+                <i class="bi bi-lightbulb"></i> Ad Intelligence
+            </a>
             <a class="nav-link {% if request.endpoint == 'setup_guide' %}active{% endif %}" href="{{ url_for('setup_guide') }}">
                 <i class="bi bi-book"></i> Setup Guide
             </a>

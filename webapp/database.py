@@ -229,6 +229,76 @@ class WebDB:
                 FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
             );
         """)
+
+        # ── Ad Intelligence System ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ad_examples (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                platform TEXT NOT NULL DEFAULT 'google',
+                format TEXT NOT NULL DEFAULT 'search_rsa',
+                industry TEXT DEFAULT '',
+                headline TEXT DEFAULT '',
+                description TEXT DEFAULT '',
+                full_ad_json TEXT DEFAULT '{}',
+                quality TEXT NOT NULL DEFAULT 'good',
+                score INTEGER DEFAULT 0,
+                analysis TEXT DEFAULT '',
+                principles TEXT DEFAULT '[]',
+                source TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ad_best_practices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                platform TEXT NOT NULL DEFAULT 'all',
+                format TEXT DEFAULT '',
+                category TEXT NOT NULL DEFAULT 'general',
+                title TEXT NOT NULL DEFAULT '',
+                content TEXT NOT NULL DEFAULT '',
+                priority INTEGER DEFAULT 0,
+                source TEXT DEFAULT '',
+                is_active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ad_news_digests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                digest_date TEXT NOT NULL,
+                platform TEXT NOT NULL DEFAULT 'all',
+                raw_findings TEXT DEFAULT '[]',
+                summary TEXT DEFAULT '',
+                action_items TEXT DEFAULT '[]',
+                prompt_updates TEXT DEFAULT '',
+                status TEXT DEFAULT 'draft',
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ad_master_prompts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                prompt_type TEXT NOT NULL DEFAULT 'ad_builder',
+                platform TEXT DEFAULT 'all',
+                format TEXT DEFAULT '',
+                content TEXT NOT NULL DEFAULT '',
+                version INTEGER DEFAULT 1,
+                is_active INTEGER DEFAULT 1,
+                generated_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_ad_examples_platform_format
+            ON ad_examples(platform, format, quality);
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_ad_news_digests_date
+            ON ad_news_digests(digest_date DESC);
+        """)
+
         conn.commit()
         brand_columns = {r[1] for r in conn.execute("PRAGMA table_info(brands)").fetchall()}
         new_brand_cols = [
@@ -1105,6 +1175,192 @@ class WebDB:
         rows = conn.execute(
             "SELECT * FROM warren_memories WHERE brand_id = ? AND status = ? AND embedding IS NOT NULL ORDER BY updated_at DESC",
             (brand_id, status),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    # ── Ad Intelligence: Examples ──
+
+    def add_ad_example(self, platform, fmt, industry, headline, description,
+                       full_ad_json, quality, score, analysis, principles, source=""):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO ad_examples
+               (platform, format, industry, headline, description, full_ad_json,
+                quality, score, analysis, principles, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (platform, fmt, industry, headline, description, full_ad_json,
+             quality, score, analysis, principles, source),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_ad_examples(self, platform=None, fmt=None, quality=None, limit=50):
+        conn = self._conn()
+        clauses, params = [], []
+        if platform:
+            clauses.append("platform = ?"); params.append(platform)
+        if fmt:
+            clauses.append("format = ?"); params.append(fmt)
+        if quality:
+            clauses.append("quality = ?"); params.append(quality)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        rows = conn.execute(
+            f"SELECT * FROM ad_examples{where} ORDER BY score DESC, created_at DESC LIMIT ?",
+            (*params, limit),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_ad_example(self, example_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM ad_examples WHERE id = ?", (example_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def delete_ad_example(self, example_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM ad_examples WHERE id = ?", (example_id,))
+        conn.commit()
+        conn.close()
+
+    # ── Ad Intelligence: Best Practices ──
+
+    def add_ad_best_practice(self, platform, fmt, category, title, content, priority=0, source=""):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO ad_best_practices
+               (platform, format, category, title, content, priority, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (platform, fmt, category, title, content, priority, source),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_ad_best_practices(self, platform=None, fmt=None, category=None, active_only=True):
+        conn = self._conn()
+        clauses, params = [], []
+        if active_only:
+            clauses.append("is_active = 1")
+        if platform:
+            clauses.append("(platform = ? OR platform = 'all')"); params.append(platform)
+        if fmt:
+            clauses.append("(format = ? OR format = '')"); params.append(fmt)
+        if category:
+            clauses.append("category = ?"); params.append(category)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        rows = conn.execute(
+            f"SELECT * FROM ad_best_practices{where} ORDER BY priority DESC, created_at DESC",
+            params,
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def update_ad_best_practice(self, bp_id, **kwargs):
+        conn = self._conn()
+        sets = []
+        params = []
+        for k, v in kwargs.items():
+            if k in ("title", "content", "platform", "format", "category", "priority", "source", "is_active"):
+                sets.append(f"{k} = ?")
+                params.append(v)
+        if sets:
+            sets.append("updated_at = datetime('now')")
+            params.append(bp_id)
+            conn.execute(f"UPDATE ad_best_practices SET {', '.join(sets)} WHERE id = ?", params)
+            conn.commit()
+        conn.close()
+
+    def delete_ad_best_practice(self, bp_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM ad_best_practices WHERE id = ?", (bp_id,))
+        conn.commit()
+        conn.close()
+
+    # ── Ad Intelligence: News Digests ──
+
+    def add_ad_news_digest(self, digest_date, platform, raw_findings, summary,
+                           action_items, prompt_updates="", status="draft"):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO ad_news_digests
+               (digest_date, platform, raw_findings, summary, action_items, prompt_updates, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (digest_date, platform, raw_findings, summary, action_items, prompt_updates, status),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_ad_news_digests(self, limit=20):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM ad_news_digests ORDER BY digest_date DESC, created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_ad_news_digest(self, digest_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM ad_news_digests WHERE id = ?", (digest_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def update_ad_news_digest(self, digest_id, **kwargs):
+        conn = self._conn()
+        sets, params = [], []
+        for k, v in kwargs.items():
+            if k in ("summary", "action_items", "prompt_updates", "status", "raw_findings"):
+                sets.append(f"{k} = ?")
+                params.append(v)
+        if sets:
+            params.append(digest_id)
+            conn.execute(f"UPDATE ad_news_digests SET {', '.join(sets)} WHERE id = ?", params)
+            conn.commit()
+        conn.close()
+
+    # ── Ad Intelligence: Master Prompts ──
+
+    def get_active_master_prompt(self, prompt_type, platform="all", fmt=""):
+        conn = self._conn()
+        row = conn.execute(
+            """SELECT * FROM ad_master_prompts
+               WHERE prompt_type = ? AND platform = ? AND format = ? AND is_active = 1
+               ORDER BY version DESC LIMIT 1""",
+            (prompt_type, platform, fmt),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def save_master_prompt(self, prompt_type, platform, fmt, content):
+        conn = self._conn()
+        # Deactivate previous versions
+        conn.execute(
+            """UPDATE ad_master_prompts SET is_active = 0
+               WHERE prompt_type = ? AND platform = ? AND format = ?""",
+            (prompt_type, platform, fmt),
+        )
+        # Get next version number
+        row = conn.execute(
+            """SELECT COALESCE(MAX(version), 0) + 1 as next_v FROM ad_master_prompts
+               WHERE prompt_type = ? AND platform = ? AND format = ?""",
+            (prompt_type, platform, fmt),
+        ).fetchone()
+        version = row["next_v"] if row else 1
+        conn.execute(
+            """INSERT INTO ad_master_prompts
+               (prompt_type, platform, format, content, version, is_active)
+               VALUES (?, ?, ?, ?, ?, 1)""",
+            (prompt_type, platform, fmt, content, version),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_all_master_prompts(self, active_only=True):
+        conn = self._conn()
+        clause = " WHERE is_active = 1" if active_only else ""
+        rows = conn.execute(
+            f"SELECT * FROM ad_master_prompts{clause} ORDER BY prompt_type, platform, format, version DESC",
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]

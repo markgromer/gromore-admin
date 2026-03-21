@@ -51,6 +51,10 @@ def create_app():
     db.init()
     app.db = db
 
+    # Jinja filters
+    import json as _json
+    app.jinja_env.filters["from_json"] = lambda s: _json.loads(s) if s else []
+
     # Storage paths for uploads + generated reports
     # Local/dev uses repo folders. Render uses persisted disk under /data.
     if on_render:
@@ -1194,6 +1198,113 @@ def create_app():
         except Exception as e:
             flash(f"Publish error: {str(e)}", "error")
         return redirect(url_for("brand_detail", brand_id=report["brand_id"]))
+
+    # ── Ad Intelligence ──
+    @app.route("/ad-intelligence")
+    @login_required
+    def ad_intelligence():
+        from webapp.ad_knowledge import seed_ad_knowledge
+        # Auto-seed on first visit if DB is empty
+        seed_ad_knowledge(db)
+
+        examples = db.get_ad_examples(limit=100)
+        practices = db.get_ad_best_practices()
+        digests = db.get_ad_news_digests(limit=20)
+        master_prompt = db.get_active_master_prompt("ad_builder", "all", "")
+
+        good_count = sum(1 for e in examples if e.get("quality") == "good")
+        bad_count = sum(1 for e in examples if e.get("quality") == "bad")
+
+        return render_template(
+            "ad_intelligence.html",
+            examples=examples,
+            practices=practices,
+            digests=digests,
+            master_prompt=master_prompt,
+            good_count=good_count,
+            bad_count=bad_count,
+        )
+
+    @app.route("/ad-intelligence/add-example", methods=["POST"])
+    @login_required
+    def ad_intel_add_example():
+        import json as _json
+        principles = [p.strip() for p in request.form.get("principles", "").split(",") if p.strip()]
+        db.add_ad_example(
+            platform=request.form.get("platform", "google"),
+            fmt=request.form.get("format", "search_rsa"),
+            industry=request.form.get("industry", "").strip(),
+            headline=request.form.get("headline", "").strip(),
+            description=request.form.get("description", "").strip(),
+            full_ad_json="{}",
+            quality=request.form.get("quality", "good"),
+            score=int(request.form.get("score", 7)),
+            analysis=request.form.get("analysis", "").strip(),
+            principles=_json.dumps(principles),
+            source=request.form.get("source", "").strip(),
+        )
+        flash("Ad example added", "success")
+        return redirect(url_for("ad_intelligence") + "#tab-examples")
+
+    @app.route("/ad-intelligence/delete-example/<int:example_id>", methods=["POST"])
+    @login_required
+    def ad_intel_delete_example(example_id):
+        db.delete_ad_example(example_id)
+        flash("Example deleted", "success")
+        return redirect(url_for("ad_intelligence") + "#tab-examples")
+
+    @app.route("/ad-intelligence/add-practice", methods=["POST"])
+    @login_required
+    def ad_intel_add_practice():
+        db.add_ad_best_practice(
+            platform=request.form.get("platform", "all"),
+            fmt=request.form.get("format", ""),
+            category=request.form.get("category", "general"),
+            title=request.form.get("title", "").strip(),
+            content=request.form.get("content", "").strip(),
+            priority=int(request.form.get("priority", 5)),
+            source=request.form.get("source", "").strip(),
+        )
+        flash("Best practice added", "success")
+        return redirect(url_for("ad_intelligence") + "#tab-practices")
+
+    @app.route("/ad-intelligence/delete-practice/<int:bp_id>", methods=["POST"])
+    @login_required
+    def ad_intel_delete_practice(bp_id):
+        db.delete_ad_best_practice(bp_id)
+        flash("Practice deleted", "success")
+        return redirect(url_for("ad_intelligence") + "#tab-practices")
+
+    @app.route("/ad-intelligence/seed", methods=["POST"])
+    @login_required
+    def ad_intel_seed():
+        from webapp.ad_knowledge import seed_ad_knowledge
+        # Force re-seed by passing db (seed_ad_knowledge checks for empty tables)
+        seed_ad_knowledge(db)
+        flash("Database seeded with starter examples and best practices", "success")
+        return redirect(url_for("ad_intelligence"))
+
+    @app.route("/ad-intelligence/run-digest", methods=["POST"])
+    @login_required
+    def ad_intel_run_digest():
+        from webapp.ad_knowledge import run_news_digest
+        result = run_news_digest(db)
+        if "error" in result:
+            flash(f"News digest failed: {result['error']}", "error")
+        else:
+            flash("News digest complete. Review findings below.", "success")
+        return redirect(url_for("ad_intelligence") + "#tab-news")
+
+    @app.route("/ad-intelligence/rebuild-prompt", methods=["POST"])
+    @login_required
+    def ad_intel_rebuild_prompt():
+        from webapp.ad_knowledge import rebuild_master_prompt
+        result = rebuild_master_prompt(db)
+        if "error" in result:
+            flash(f"Master prompt build failed: {result['error']}", "error")
+        else:
+            flash("Master prompt rebuilt and saved. All future ad generation will use the new version.", "success")
+        return redirect(url_for("ad_intelligence"))
 
     # ── Settings ──
     @app.route("/settings", methods=["GET", "POST"])

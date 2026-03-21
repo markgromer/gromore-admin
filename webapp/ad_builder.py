@@ -49,6 +49,20 @@ def _data_availability(context):
 
 
 
+def _load_knowledge(platform, fmt):
+    """Load ad knowledge context from the database (examples, best practices, master prompt)."""
+    try:
+        from flask import current_app
+        db = getattr(current_app, "db", None)
+        if not db:
+            return ""
+        from webapp.ad_knowledge import build_ad_knowledge_context
+        return build_ad_knowledge_context(db, platform, fmt)
+    except Exception as e:
+        log.warning("Failed to load ad knowledge: %s", e)
+        return ""
+
+
 def generate_google_ads(analysis, brand, strategy=None):
     """Generate a Google ad package based on selected strategy.
 
@@ -71,13 +85,17 @@ def generate_google_ads(analysis, brand, strategy=None):
     if not strategy_n:
         strategy_n = "search"
 
+    # Load knowledge base for the specific platform/format
+    fmt_map = {"search": "search_rsa", "display": "display", "performance_max": "performance_max", "pmax": "performance_max", "video": "video"}
+    knowledge = _load_knowledge("google", fmt_map.get(strategy_n, "search_rsa"))
+
     if strategy_n == "display":
-        return _generate_google_display_ads(api_key, context, model)
+        return _generate_google_display_ads(api_key, context, model, knowledge)
     if strategy_n in ("performance_max", "pmax", "performance max"):
-        return _generate_google_pmax(api_key, context, model)
+        return _generate_google_pmax(api_key, context, model, knowledge)
     if strategy_n == "video":
-        return _generate_google_video_ads(api_key, context, model)
-    return _generate_google_search_rsa(api_key, context, model)
+        return _generate_google_video_ads(api_key, context, model, knowledge)
+    return _generate_google_search_rsa(api_key, context, model, knowledge)
 
 
 def _evidence_rules(prefix=""):
@@ -91,7 +109,7 @@ def _evidence_rules(prefix=""):
     )
 
 
-def _generate_google_search_rsa(api_key, context, model):
+def _generate_google_search_rsa(api_key, context, model, knowledge=""):
     system = (
         "You are the AI ad copy engine inside GroMore, a platform for local service businesses. "
         "Generate a complete Google Search Responsive Search Ad (RSA) package ready to copy and paste.\n\n"
@@ -129,10 +147,10 @@ def _generate_google_search_rsa(api_key, context, model):
         + _evidence_rules()
     )
 
-    return _call_ai(api_key, system, context, "google_ads_search", model)
+    return _call_ai(api_key, system, context, "google_ads_search", model, knowledge)
 
 
-def _generate_google_display_ads(api_key, context, model):
+def _generate_google_display_ads(api_key, context, model, knowledge=""):
     system = (
         "You are the AI ad copy engine inside GroMore, a platform for local service businesses. "
         "Generate a complete Google Display ad package (Responsive Display Ad style) ready to copy and paste.\n\n"
@@ -157,10 +175,10 @@ def _generate_google_display_ads(api_key, context, model):
         "- No invented guarantees or claims.\n\n"
         + _evidence_rules()
     )
-    return _call_ai(api_key, system, context, "google_ads_display", model)
+    return _call_ai(api_key, system, context, "google_ads_display", model, knowledge)
 
 
-def _generate_google_pmax(api_key, context, model):
+def _generate_google_pmax(api_key, context, model, knowledge=""):
     system = (
         "You are the AI ad copy engine inside GroMore, a platform for local service businesses. "
         "Generate a Performance Max asset group package ready to paste into Google Ads.\n\n"
@@ -192,10 +210,10 @@ def _generate_google_pmax(api_key, context, model):
         "- If google_ads.campaigns exists, align the asset group to what has worked (high CTR, low CPA) but do not invent numbers.\n\n"
         + _evidence_rules()
     )
-    return _call_ai(api_key, system, context, "google_ads_pmax", model)
+    return _call_ai(api_key, system, context, "google_ads_pmax", model, knowledge)
 
 
-def _generate_google_video_ads(api_key, context, model):
+def _generate_google_video_ads(api_key, context, model, knowledge=""):
     system = (
         "You are the AI ad copy engine inside GroMore, a platform for local service businesses. "
         "Generate a YouTube video ad package (scripts + copy + targeting guidance) ready to implement.\n\n"
@@ -219,7 +237,7 @@ def _generate_google_video_ads(api_key, context, model):
         "- No invented awards or review counts.\n\n"
         + _evidence_rules()
     )
-    return _call_ai(api_key, system, context, "google_ads_video", model)
+    return _call_ai(api_key, system, context, "google_ads_video", model, knowledge)
 
 
 
@@ -296,7 +314,8 @@ def generate_facebook_ads(analysis, brand, strategy=None):
         + _evidence_rules()
     )
 
-    return _call_ai(api_key, system, context, "facebook_ads", model)
+    knowledge = _load_knowledge("meta", "feed")
+    return _call_ai(api_key, system, context, "facebook_ads", model, knowledge)
 
 
 def _get_api_key(brand=None):
@@ -340,8 +359,11 @@ def _build_ad_context(analysis, brand):
     }
 
 
-def _call_ai(api_key, system, context, label, model):
+def _call_ai(api_key, system, context, label, model, knowledge=""):
     """Make the OpenAI API call and parse the response."""
+    if knowledge:
+        system = knowledge + "\n\n" + system
+
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",

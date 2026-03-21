@@ -1,0 +1,421 @@
+{% extends "base.html" %}
+{% block title %}Ad Intelligence{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-4">
+    <h2 class="mb-0"><i class="bi bi-lightbulb"></i> Ad Intelligence</h2>
+    <span class="badge bg-primary ms-3">Master Knowledge Base</span>
+</div>
+
+<p class="text-muted mb-4">
+    Curated ad examples, research-backed best practices, and weekly platform news digests.
+    This knowledge feeds every ad generated across all client accounts.
+</p>
+
+<!-- Tabs -->
+<ul class="nav nav-tabs mb-4" role="tablist">
+    <li class="nav-item">
+        <a class="nav-link active" data-bs-toggle="tab" href="#tab-master-prompt" role="tab">
+            <i class="bi bi-cpu"></i> Master Prompt
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#tab-examples" role="tab">
+            <i class="bi bi-collection"></i> Ad Examples <span class="badge bg-secondary">{{ examples|length }}</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#tab-practices" role="tab">
+            <i class="bi bi-journal-check"></i> Best Practices <span class="badge bg-secondary">{{ practices|length }}</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#tab-news" role="tab">
+            <i class="bi bi-newspaper"></i> News Digests <span class="badge bg-secondary">{{ digests|length }}</span>
+        </a>
+    </li>
+</ul>
+
+<div class="tab-content">
+
+    <!-- Master Prompt Tab -->
+    <div class="tab-pane fade show active" id="tab-master-prompt" role="tabpanel">
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <strong>Active Master Advertising Prompt</strong>
+                        {% if master_prompt %}
+                        <span class="badge bg-success">v{{ master_prompt.version }} - {{ master_prompt.generated_at[:10] }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="card-body">
+                        {% if master_prompt %}
+                        <pre class="bg-light p-3 rounded" style="white-space: pre-wrap; font-size: .85rem; max-height: 500px; overflow-y: auto;">{{ master_prompt.content }}</pre>
+                        {% else %}
+                        <div class="text-center py-4 text-muted">
+                            <i class="bi bi-cpu" style="font-size: 2rem;"></i>
+                            <p class="mt-2">No master prompt generated yet. Click "Rebuild Master Prompt" to create one from your examples and best practices.</p>
+                        </div>
+                        {% endif %}
+
+                        <div class="mt-3">
+                            <form method="POST" action="{{ url_for('ad_intel_rebuild_prompt') }}" class="d-inline">
+                                <button type="submit" class="btn btn-primary" id="rebuildBtn" onclick="this.disabled=true; this.innerHTML='<span class=\'spinner-border spinner-border-sm\'></span> Building...'; this.form.submit();">
+                                    <i class="bi bi-arrow-repeat"></i> Rebuild Master Prompt
+                                </button>
+                            </form>
+                            <small class="text-muted ms-2">Synthesizes all examples, practices, and news into one optimized prompt</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card mb-4">
+                    <div class="card-header"><strong>Knowledge Stats</strong></div>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Good Ad Examples</span>
+                            <strong>{{ good_count }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Bad Ad Examples</span>
+                            <strong>{{ bad_count }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Best Practices</span>
+                            <strong>{{ practices|length }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>News Digests</span>
+                            <strong>{{ digests|length }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Master Prompt Version</span>
+                            <strong>{{ master_prompt.version if master_prompt else 'None' }}</strong>
+                        </div>
+                        <hr>
+                        <small class="text-muted">
+                            Every ad generated across all client accounts references this knowledge base.
+                            More examples and practices = better ads.
+                        </small>
+                    </div>
+                </div>
+                <div class="card mb-4">
+                    <div class="card-header"><strong>How It Works</strong></div>
+                    <div class="card-body small text-muted">
+                        <p><strong>1. Ad Examples</strong> - Curated database of good and bad ads with analysis of WHY they work or fail.</p>
+                        <p><strong>2. Best Practices</strong> - Research-backed rules from Google, Meta, conversion studies, and psychology.</p>
+                        <p><strong>3. News Digest</strong> - Weekly AI agent scans for platform updates and identifies what changed.</p>
+                        <p><strong>4. Master Prompt</strong> - AI synthesizes everything into one optimized prompt that all client ad builders reference.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ad Examples Tab -->
+    <div class="tab-pane fade" id="tab-examples" role="tabpanel">
+        <!-- Add Example Form -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <strong><i class="bi bi-plus-circle"></i> Add Ad Example</strong>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('ad_intel_add_example') }}">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label">Platform</label>
+                            <select name="platform" class="form-select" required>
+                                <option value="google">Google Ads</option>
+                                <option value="meta">Meta/Facebook</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Format</label>
+                            <select name="format" class="form-select" required>
+                                <option value="search_rsa">Search RSA</option>
+                                <option value="display">Display</option>
+                                <option value="performance_max">Performance Max</option>
+                                <option value="video">Video</option>
+                                <option value="feed">Meta Feed</option>
+                                <option value="stories">Meta Stories</option>
+                                <option value="reels">Meta Reels</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Quality</label>
+                            <select name="quality" class="form-select" required>
+                                <option value="good">Good (learn from)</option>
+                                <option value="bad">Bad (avoid)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Score (1-10)</label>
+                            <input type="number" name="score" class="form-control" min="1" max="10" value="7" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Industry</label>
+                            <input type="text" name="industry" class="form-control" placeholder="e.g. plumbing, dental, legal">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Headline</label>
+                            <input type="text" name="headline" class="form-control" required placeholder="The ad headline">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Description / Ad Copy</label>
+                            <textarea name="description" class="form-control" rows="2" required placeholder="The full ad copy or description"></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Analysis (why is this good/bad?)</label>
+                            <textarea name="analysis" class="form-control" rows="3" required placeholder="Explain specifically WHY this ad works or fails. Reference principles."></textarea>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Principles (comma-separated tags)</label>
+                            <input type="text" name="principles" class="form-control" placeholder="e.g. urgency, social_proof, specific_numbers, weak_cta">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Source</label>
+                            <input type="text" name="source" class="form-control" placeholder="Where you found this">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-success mt-3"><i class="bi bi-plus"></i> Add Example</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Examples List -->
+        {% if examples %}
+        <div class="row">
+            {% for ex in examples %}
+            <div class="col-lg-6 mb-3">
+                <div class="card border-{{ 'success' if ex.quality == 'good' else 'danger' }}">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>
+                            <span class="badge bg-{{ 'success' if ex.quality == 'good' else 'danger' }}">{{ ex.quality|upper }}</span>
+                            <span class="badge bg-secondary">{{ ex.platform }}/{{ ex.format }}</span>
+                            {% if ex.industry %}<span class="badge bg-info">{{ ex.industry }}</span>{% endif %}
+                            <strong class="ms-2">Score: {{ ex.score }}/10</strong>
+                        </span>
+                        <form method="POST" action="{{ url_for('ad_intel_delete_example', example_id=ex.id) }}" class="d-inline"
+                              onsubmit="return confirm('Delete this example?');">
+                            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </div>
+                    <div class="card-body">
+                        <h6 class="card-title">{{ ex.headline }}</h6>
+                        <p class="card-text small">{{ ex.description }}</p>
+                        <p class="card-text small text-muted"><strong>Analysis:</strong> {{ ex.analysis }}</p>
+                        {% if ex.principles %}
+                        <div>
+                            {% for p in ex.principles|replace('[', '')|replace(']', '')|replace('"', '')|split(',') %}
+                            {% if p.strip() %}
+                            <span class="badge bg-light text-dark border me-1">{{ p.strip() }}</span>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-4 text-muted">
+            <p>No ad examples yet. Add some above or click "Seed Database" below.</p>
+            <form method="POST" action="{{ url_for('ad_intel_seed') }}">
+                <button type="submit" class="btn btn-outline-primary"><i class="bi bi-database"></i> Seed Database with Starter Examples</button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Best Practices Tab -->
+    <div class="tab-pane fade" id="tab-practices" role="tabpanel">
+        <!-- Add Practice Form -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <strong><i class="bi bi-plus-circle"></i> Add Best Practice</strong>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('ad_intel_add_practice') }}">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label">Platform</label>
+                            <select name="platform" class="form-select">
+                                <option value="all">All Platforms</option>
+                                <option value="google">Google Ads</option>
+                                <option value="meta">Meta/Facebook</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Category</label>
+                            <select name="category" class="form-select">
+                                <option value="psychology">Psychology</option>
+                                <option value="copywriting">Copywriting</option>
+                                <option value="structure">Structure</option>
+                                <option value="technical">Technical</option>
+                                <option value="creative">Creative</option>
+                                <option value="targeting">Targeting</option>
+                                <option value="landing_page">Landing Page</option>
+                                <option value="general">General</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Format (optional)</label>
+                            <select name="format" class="form-select">
+                                <option value="">All Formats</option>
+                                <option value="search_rsa">Search RSA</option>
+                                <option value="display">Display</option>
+                                <option value="performance_max">Performance Max</option>
+                                <option value="video">Video</option>
+                                <option value="feed">Meta Feed</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Priority (0-10)</label>
+                            <input type="number" name="priority" class="form-control" min="0" max="10" value="5">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Title</label>
+                            <input type="text" name="title" class="form-control" required placeholder="Clear, specific title for this practice">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Content</label>
+                            <textarea name="content" class="form-control" rows="4" required placeholder="Detailed explanation of the practice, why it works, and how to apply it."></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Source</label>
+                            <input type="text" name="source" class="form-control" placeholder="Research paper, platform docs, testing data, etc.">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-success mt-3"><i class="bi bi-plus"></i> Add Practice</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Practices List -->
+        {% if practices %}
+        {% set categories = practices|map(attribute='category')|unique|list %}
+        {% for cat in categories %}
+        <h5 class="mt-4 mb-3 text-capitalize"><i class="bi bi-tag"></i> {{ cat|replace('_', ' ') }}</h5>
+        {% for bp in practices if bp.category == cat %}
+        <div class="card mb-2">
+            <div class="card-body py-2 px-3">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <span class="badge bg-secondary me-1">{{ bp.platform }}</span>
+                        {% if bp.format %}<span class="badge bg-info me-1">{{ bp.format }}</span>{% endif %}
+                        <span class="badge bg-warning text-dark me-2">P{{ bp.priority }}</span>
+                        <strong>{{ bp.title }}</strong>
+                        <p class="mb-0 mt-1 small text-muted">{{ bp.content[:200] }}{% if bp.content|length > 200 %}...{% endif %}</p>
+                        {% if bp.source %}<small class="text-muted fst-italic">Source: {{ bp.source }}</small>{% endif %}
+                    </div>
+                    <form method="POST" action="{{ url_for('ad_intel_delete_practice', bp_id=bp.id) }}" class="d-inline flex-shrink-0 ms-2"
+                          onsubmit="return confirm('Delete this practice?');">
+                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        {% endfor %}
+        {% else %}
+        <div class="text-center py-4 text-muted">
+            <p>No best practices yet. Add some above or seed the database.</p>
+            <form method="POST" action="{{ url_for('ad_intel_seed') }}">
+                <button type="submit" class="btn btn-outline-primary"><i class="bi bi-database"></i> Seed Database with Starter Practices</button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- News Digests Tab -->
+    <div class="tab-pane fade" id="tab-news" role="tabpanel">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong><i class="bi bi-newspaper"></i> Weekly News Digest Agent</strong>
+                <form method="POST" action="{{ url_for('ad_intel_run_digest') }}" class="d-inline">
+                    <button type="submit" class="btn btn-sm btn-primary" id="digestBtn"
+                            onclick="this.disabled=true; this.innerHTML='<span class=\'spinner-border spinner-border-sm\'></span> Scanning...'; this.form.submit();">
+                        <i class="bi bi-search"></i> Run News Scan Now
+                    </button>
+                </form>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-0">
+                    Scans Google Ads and Meta Ads news sources for platform changes, new features, and policy updates.
+                    Identifies actionable changes and suggests prompt updates. Run weekly or on-demand.
+                </p>
+            </div>
+        </div>
+
+        {% if digests %}
+        {% for d in digests %}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>
+                    <i class="bi bi-calendar"></i> <strong>{{ d.digest_date }}</strong>
+                    <span class="badge bg-{{ 'success' if d.status == 'applied' else 'warning' if d.status == 'draft' else 'secondary' }} ms-2">{{ d.status }}</span>
+                </span>
+            </div>
+            <div class="card-body">
+                {% if d.summary %}
+                <div class="mb-3">
+                    <h6>Summary</h6>
+                    <p class="small">{{ d.summary }}</p>
+                </div>
+                {% endif %}
+
+                {% set findings_raw = d.raw_findings|default('[]') %}
+                {% set findings_list = findings_raw|from_json %}
+                {% if findings_list %}
+                <h6>Findings</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered small">
+                        <thead class="table-light">
+                            <tr><th>Platform</th><th>Change</th><th>Impact</th><th>Action Items</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for f in findings_list %}
+                            <tr>
+                                <td><span class="badge bg-secondary">{{ f.platform }}</span></td>
+                                <td><strong>{{ f.title }}</strong><br><small>{{ f.summary }}</small></td>
+                                <td><span class="badge bg-{{ 'danger' if f.impact == 'high' else 'warning' if f.impact == 'medium' else 'info' }}">{{ f.impact }}</span></td>
+                                <td>
+                                    {% for a in f.action_items|default([]) %}
+                                    <small>- {{ a }}</small><br>
+                                    {% endfor %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+
+                {% if d.prompt_updates and d.prompt_updates != 'No prompt updates needed this week.' %}
+                <div class="alert alert-info small mt-2">
+                    <strong><i class="bi bi-arrow-right-circle"></i> Suggested Prompt Updates:</strong>
+                    <p class="mb-0 mt-1">{{ d.prompt_updates }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="text-center py-4 text-muted">
+            <i class="bi bi-newspaper" style="font-size: 2rem;"></i>
+            <p class="mt-2">No news digests yet. Click "Run News Scan Now" to generate the first one.</p>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// JSON parsing helper for Jinja
+</script>
+{% endblock %}
