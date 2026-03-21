@@ -660,7 +660,7 @@
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generating...';
 
-        fetch("{{ url_for('client.client_chat_warren') }}", {
+        fetch("{{ url_for('client.client_assistant_chat') }}", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
             body: JSON.stringify({
