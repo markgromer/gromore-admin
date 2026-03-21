@@ -490,8 +490,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 renderStats(data.avg_rank, data.found, data.total, data.results);
                 if (data.debug) showDebug(data.debug);
                 plotMapMarkers(data.results);
-                // reload page to update history
-                setTimeout(function() { location.reload(); }, 500);
             })
             .catch(function() {
                 scanBtn.disabled = false;
