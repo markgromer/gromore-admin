@@ -245,6 +245,9 @@
         .assistant-bubble.assistant h3 {
             font-size: .92rem; font-weight: 700; margin: .5rem 0 .25rem; color: #0f172a;
         }
+        .assistant-bubble.assistant img {
+            max-width: 100%; border-radius: 8px; margin: .5rem 0; cursor: pointer;
+        }
         /* Copy button on AI messages */
         .bubble-actions {
             display: none;
@@ -694,6 +697,10 @@
             } else {
                 // AI messages: render as Markdown with copy button
                 div.innerHTML = renderMarkdown(text);
+                // Make images clickable to open full-size
+                div.querySelectorAll('img').forEach(function(img) {
+                    img.addEventListener('click', function() { window.open(img.src, '_blank'); });
+                });
                 var actions = document.createElement('div');
                 actions.className = 'bubble-actions';
                 var copyBtn = document.createElement('button');

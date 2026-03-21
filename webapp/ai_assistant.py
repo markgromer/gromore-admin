@@ -5,13 +5,158 @@ This is intentionally on-demand and best-effort: failures should not break core 
 """
 
 import json
+import logging
 import re
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 import requests
 
+log = logging.getLogger(__name__)
 
 DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+
+
+# ── Warren tool definitions (OpenAI function calling) ──
+
+WARREN_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": (
+                "Search the web for current information. Use when the user asks about "
+                "something you don't have data for, wants a link, wants pricing, wants to "
+                "know about a competitor, or needs any real-time information."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query to look up on the web.",
+                    }
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_image",
+            "description": (
+                "Generate an image using DALL-E. Use when the user asks you to create, "
+                "make, design, or generate an image, graphic, illustration, or visual."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompt": {
+                        "type": "string",
+                        "description": "Detailed description of the image to generate.",
+                    },
+                    "size": {
+                        "type": "string",
+                        "enum": ["1024x1024", "1792x1024", "1024x1792"],
+                        "description": "Image dimensions. Use 1024x1024 for square, 1792x1024 for landscape, 1024x1792 for portrait.",
+                    },
+                },
+                "required": ["prompt"],
+            },
+        },
+    },
+]
+
+
+def _execute_web_search(query: str) -> str:
+    """Fetch web results using Google Custom Search JSON API or a simple scrape fallback."""
+    # Try Google Custom Search if configured (via env)
+    import os
+    cse_key = os.environ.get("GOOGLE_CSE_API_KEY", "")
+    cse_cx = os.environ.get("GOOGLE_CSE_CX", "")
+    if cse_key and cse_cx:
+        try:
+            resp = requests.get(
+                "https://www.googleapis.com/customsearch/v1",
+                params={"key": cse_key, "cx": cse_cx, "q": query, "num": 5},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                items = resp.json().get("items", [])
+                results = []
+                for item in items[:5]:
+                    results.append(
+                        f"**{item.get('title', '')}**\n"
+                        f"{item.get('link', '')}\n"
+                        f"{item.get('snippet', '')}"
+                    )
+                if results:
+                    return "\n\n".join(results)
+        except Exception as exc:
+            log.warning("Google CSE error: %s", exc)
+
+    # Fallback: use DuckDuckGo instant answer API (no key needed)
+    try:
+        resp = requests.get(
+            "https://api.duckduckgo.com/",
+            params={"q": query, "format": "json", "no_html": 1, "skip_disambig": 1},
+            timeout=10,
+            headers={"User-Agent": "GroMore-Warren/1.0"},
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            parts = []
+            if data.get("AbstractText"):
+                parts.append(data["AbstractText"])
+                if data.get("AbstractURL"):
+                    parts.append(f"Source: {data['AbstractURL']}")
+            for r in (data.get("RelatedTopics") or [])[:5]:
+                if isinstance(r, dict) and r.get("Text"):
+                    text = r["Text"]
+                    url = r.get("FirstURL", "")
+                    parts.append(f"- {text}" + (f" ({url})" if url else ""))
+            if parts:
+                return "\n".join(parts)
+    except Exception as exc:
+        log.warning("DuckDuckGo API error: %s", exc)
+
+    return f"I wasn't able to find web results for '{query}'. Try being more specific, or search directly at google.com."
+
+
+def _execute_image_generation(api_key: str, prompt: str, size: str = "1024x1024") -> str:
+    """Generate an image with DALL-E 3 and return the URL."""
+    try:
+        resp = requests.post(
+            "https://api.openai.com/v1/images/generations",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "dall-e-3",
+                "prompt": prompt,
+                "n": 1,
+                "size": size,
+                "quality": "standard",
+            },
+            timeout=60,
+        )
+        if resp.status_code != 200:
+            error_msg = resp.json().get("error", {}).get("message", resp.text[:200])
+            return f"Image generation failed: {error_msg}"
+        data = resp.json()
+        url = data["data"][0].get("url", "")
+        revised = data["data"][0].get("revised_prompt", "")
+        if url:
+            result = f"![Generated Image]({url})"
+            if revised and revised != prompt:
+                result += f"\n\n*Refined prompt: {revised}*"
+            return result
+        return "Image generation returned no URL."
+    except Exception as exc:
+        log.warning("DALL-E error: %s", exc)
+        return f"Image generation error: {str(exc)}"
 
 DEFAULT_CHAT_SYSTEM_PROMPT = (
     "You are Warren (Weighted Analysis for Revenue, Reach, Engagement & Navigation), "
@@ -585,6 +730,19 @@ def chat_with_warren(
         "If someone says 'thanks' or 'cool,' reply casually. Don't turn every message into a lecture. "
         "Remember what was said earlier in this conversation. Reference it. Build on it. "
         "Ask follow-up questions when it makes sense. Make it feel like a back-and-forth, not a one-way FAQ.",
+
+        # Tools / capabilities
+        "YOUR TOOLS: "
+        "You have two special tools you can use anytime: "
+        "1. **web_search** - Search the web for real-time info. Use it when someone asks about competitors, "
+        "pricing, industry trends, links, products, news, or anything you don't have in your data. "
+        "Just call it naturally, no need to ask permission. "
+        "2. **generate_image** - Create images with DALL-E 3. Use it when someone asks you to make, "
+        "create, design, or generate any kind of image, graphic, visual, ad creative mockup, "
+        "social media post image, logo concept, etc. Describe the image in detail in your prompt "
+        "and incorporate the brand's colors, style, and identity when relevant. "
+        "Use these tools proactively. If someone mentions a competitor, look them up. "
+        "If someone asks for a creative concept, generate an image. Don't say you can't do it.",
     ]
 
     system = "\n\n".join(system_parts)
@@ -638,32 +796,81 @@ def chat_with_warren(
         "content": "Context JSON:\n" + json.dumps(context, ensure_ascii=False),
     }
 
-    headers = {
+    http_headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
 
-    resp = requests.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers=headers,
-        json={
+    api_messages = [
+        {"role": "system", "content": system},
+        ctx_user,
+        *messages,
+    ]
+
+    # ── Tool-calling loop (max 3 rounds to prevent runaway) ──
+    for _round in range(4):
+        payload = {
             "model": model,
             "temperature": 0.6,
-            "messages": [
-                {"role": "system", "content": system},
-                ctx_user,
-                *messages,
-            ],
-        },
-        timeout=timeout,
-    )
+            "messages": api_messages,
+            "tools": WARREN_TOOLS,
+            "tool_choice": "auto",
+        }
 
-    if resp.status_code != 200:
-        raise ValueError(f"OpenAI request failed ({resp.status_code}): {resp.text}")
+        resp = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=http_headers,
+            json=payload,
+            timeout=timeout,
+        )
 
-    data = resp.json()
-    content = ((data.get("choices") or [{}])[0].get("message", {}) or {}).get("content", "")
-    return (content or "").strip()
+        if resp.status_code != 200:
+            raise ValueError(f"OpenAI request failed ({resp.status_code}): {resp.text}")
+
+        data = resp.json()
+        choice = (data.get("choices") or [{}])[0]
+        msg = choice.get("message") or {}
+        finish = choice.get("finish_reason", "")
+
+        # If the model wants to call tools, execute them and loop back
+        if finish == "tool_calls" or msg.get("tool_calls"):
+            # Append the assistant message with tool_calls
+            api_messages.append(msg)
+
+            for tc in (msg.get("tool_calls") or []):
+                fn_name = tc.get("function", {}).get("name", "")
+                fn_args_raw = tc.get("function", {}).get("arguments", "{}")
+                try:
+                    fn_args = json.loads(fn_args_raw)
+                except json.JSONDecodeError:
+                    fn_args = {}
+
+                tool_result = ""
+                if fn_name == "web_search":
+                    query = fn_args.get("query", "")
+                    log.info("Warren tool: web_search('%s')", query)
+                    tool_result = _execute_web_search(query)
+                elif fn_name == "generate_image":
+                    prompt = fn_args.get("prompt", "")
+                    size = fn_args.get("size", "1024x1024")
+                    log.info("Warren tool: generate_image('%s', size=%s)", prompt[:80], size)
+                    tool_result = _execute_image_generation(api_key, prompt, size)
+                else:
+                    tool_result = f"Unknown function: {fn_name}"
+
+                api_messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.get("id", ""),
+                    "content": tool_result,
+                })
+            continue  # Loop back for the model to incorporate tool results
+
+        # No tool calls - return the final text content
+        content = (msg.get("content") or "").strip()
+        return content
+
+    # Exhausted rounds - return whatever we have
+    return (msg.get("content") or "").strip()
 
 
 def generate_account_operator_plan(

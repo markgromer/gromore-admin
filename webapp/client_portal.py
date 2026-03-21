@@ -353,6 +353,8 @@ def _client_assistant_chat_handler(payload):
                 "kpi_target_cpa": brand.get("kpi_target_cpa"),
                 "kpi_target_leads": brand.get("kpi_target_leads"),
                 "kpi_target_roas": brand.get("kpi_target_roas"),
+                "brand_colors": brand.get("brand_colors"),
+                "call_tracking_number": brand.get("call_tracking_number"),
             },
             "month": month,
             "page_context": page_context,
@@ -371,6 +373,7 @@ def _client_assistant_chat_handler(payload):
                 db.get_setting("ai_chat_system_prompt", "").strip()
                 or DEFAULT_CHAT_SYSTEM_PROMPT
             ),
+            timeout=90,
         )
         assistant_reply = (assistant_reply or "").strip()
         if assistant_reply:
