@@ -213,6 +213,22 @@ def client_actions():
 
     dismissed = db.get_dismissed_actions(brand_id, month)
 
+    # ── Monthly cap: 20 total (completed + visible) ──
+    # Already-completed items count toward the cap. The remaining visible
+    # slots are filled from the generated pool so the user always sees
+    # fresh work when they finish items.
+    monthly_cap = 20
+    completed_count = len(dismissed)
+    visible_slots = max(0, monthly_cap - completed_count)
+
+    # Show only enough active items to fit the cap, but always show at least
+    # 4 so the page doesn't look empty when they have lots of completed items.
+    visible_slots = max(visible_slots, min(4, len(actions)))
+
+    # Split into active and completed
+    active_actions = [a for a in actions if a["key"] not in dismissed][:visible_slots]
+    done_actions = [a for a in actions if a["key"] in dismissed]
+
     return render_template(
         "client_actions.html",
         brand=brand,
@@ -221,7 +237,11 @@ def client_actions():
         run_analysis=run_analysis,
         ai_analysis=ai_analysis,
         actions=actions,
+        active_actions=active_actions,
+        done_actions=done_actions,
         dismissed=dismissed,
+        monthly_cap=monthly_cap,
+        completed_count=completed_count,
         error=error,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )

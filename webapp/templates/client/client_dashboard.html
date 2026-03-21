@@ -4,6 +4,141 @@
 
 {% block content %}
 <style>
+    /* ── Cockpit Strip ── */
+    .cockpit {
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #3730a3 100%);
+        border-radius: 16px;
+        padding: 1.75rem 2rem;
+        margin-bottom: 1.5rem;
+        color: #fff;
+        box-shadow: 0 8px 32px rgba(30, 27, 75, .25);
+    }
+    .cockpit-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1.25rem;
+    }
+    .cockpit-title {
+        font-size: 1rem;
+        font-weight: 600;
+        color: rgba(255,255,255,.7);
+        text-transform: uppercase;
+        letter-spacing: .08em;
+    }
+    .cockpit-grade {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        font-size: 1.75rem;
+        font-weight: 800;
+        border: 3px solid rgba(255,255,255,.3);
+    }
+    .cockpit-grade.cg-A { background: rgba(16,185,129,.25); color: #6ee7b7; border-color: #10b981; }
+    .cockpit-grade.cg-B { background: rgba(52,211,153,.2); color: #6ee7b7; border-color: #34d399; }
+    .cockpit-grade.cg-C { background: rgba(251,191,36,.2); color: #fde68a; border-color: #fbbf24; }
+    .cockpit-grade.cg-D { background: rgba(245,158,11,.2); color: #fcd34d; border-color: #f59e0b; }
+    .cockpit-grade.cg-F { background: rgba(239,68,68,.2); color: #fca5a5; border-color: #ef4444; }
+    .cockpit-grade.cg-NA { background: rgba(156,163,175,.2); color: #d1d5db; border-color: #9ca3af; }
+
+    .cockpit-gauges {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.25rem;
+    }
+    .cockpit-gauge {
+        background: rgba(255,255,255,.08);
+        border-radius: 12px;
+        padding: 1rem 1.15rem;
+        border: 1px solid rgba(255,255,255,.1);
+    }
+    .gauge-label {
+        font-size: .75rem;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: rgba(255,255,255,.55);
+        margin-bottom: .35rem;
+    }
+    .gauge-row {
+        display: flex;
+        align-items: baseline;
+        gap: .75rem;
+    }
+    .gauge-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+    .gauge-value.on-track { color: #6ee7b7; }
+    .gauge-value.off-track { color: #fca5a5; }
+    .gauge-target {
+        font-size: .8rem;
+        color: rgba(255,255,255,.4);
+    }
+    .gauge-bar-bg {
+        height: 4px;
+        background: rgba(255,255,255,.12);
+        border-radius: 2px;
+        margin-top: .5rem;
+        overflow: hidden;
+    }
+    .gauge-bar-fill {
+        height: 100%;
+        border-radius: 2px;
+        transition: width .6s ease;
+    }
+    .gauge-bar-fill.on-track { background: #10b981; }
+    .gauge-bar-fill.off-track { background: #ef4444; }
+
+    .gauge-meaning {
+        font-size: .8rem;
+        color: rgba(255,255,255,.6);
+        margin-top: .4rem;
+        line-height: 1.4;
+    }
+    .cockpit-action {
+        background: rgba(255,255,255,.1);
+        border: 1px solid rgba(255,255,255,.15);
+        border-radius: 12px;
+        padding: 1rem 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    .cockpit-action-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: rgba(99,102,241,.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+    }
+    .cockpit-action-text {
+        font-size: .92rem;
+        color: rgba(255,255,255,.9);
+        line-height: 1.45;
+    }
+    .cockpit-action-text strong {
+        color: #fff;
+    }
+    .cockpit-action-link {
+        margin-left: auto;
+        flex-shrink: 0;
+    }
+    .cockpit-action-link a {
+        color: #a5b4fc;
+        font-size: .85rem;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    .cockpit-action-link a:hover { color: #c7d2fe; text-decoration: underline; }
+
     /* Loading overlay */
     .dash-loader {
         text-align: center;
@@ -197,28 +332,62 @@
         var container = document.getElementById('dashContent');
         var html = '';
 
-        // Health Grade + KPIs
-        html += '<div class="row g-3 mb-4">';
-        html += '<div class="col-md-3"><div class="metric-card text-center">';
-        html += '<div class="metric-label">Overall Grade</div>';
-        var gradeClass = (d.health.grade || 'NA').replace('/', '');
-        html += '<div class="grade-badge grade-' + gradeClass + ' mx-auto my-2">' + d.health.grade + '</div>';
-        html += '<div class="metric-explain">' + (d.health.label || '') + '</div>';
-        html += '</div></div>';
-
-        if (d.kpi_status) {
-            d.kpi_status.forEach(function(kpi) {
-                html += '<div class="col-md-3"><div class="metric-card h-100">';
-                html += '<div class="metric-label">' + kpi.label + '</div>';
-                html += '<div class="metric-value">';
-                html += '<span class="' + (kpi.on_track ? 'kpi-on-track' : 'kpi-off-track') + '">' + kpi.actual + '</span>';
-                html += '</div>';
-                html += '<div><span class="target">Target: ' + kpi.target + '</span></div>';
-                html += '<div class="metric-explain mt-1">' + (kpi.explanation || '') + '</div>';
-                html += '</div></div>';
-            });
-        }
+        // ── Cockpit Strip ──
+        var gradeClean = (d.health.grade || 'NA').replace('/', '');
+        html += '<div class="cockpit">';
+        html += '<div class="cockpit-header">';
+        html += '<div class="cockpit-title"><i class="bi bi-speedometer2 me-2"></i>Performance Cockpit</div>';
+        html += '<div class="cockpit-grade cg-' + gradeClean + '">' + esc(d.health.grade) + '</div>';
         html += '</div>';
+
+        // KPI Gauges
+        if (d.kpi_status && d.kpi_status.length) {
+            html += '<div class="cockpit-gauges">';
+            d.kpi_status.forEach(function(kpi) {
+                var trackClass = kpi.on_track ? 'on-track' : 'off-track';
+                // Calculate bar percentage (cap at 100%)
+                var pct = 50; // default
+                try {
+                    var numActual = parseFloat(String(kpi.actual).replace(/[^0-9.\-]/g, ''));
+                    var numTarget = parseFloat(String(kpi.target).replace(/[^0-9.\-]/g, ''));
+                    if (numTarget > 0 && !isNaN(numActual)) {
+                        // For CPA-type metrics, lower is better
+                        var label = (kpi.label || '').toLowerCase();
+                        if (label.indexOf('cpa') >= 0 || label.indexOf('cost') >= 0 || label.indexOf('cpl') >= 0) {
+                            pct = Math.min(100, Math.round((numTarget / Math.max(numActual, 0.01)) * 100));
+                        } else {
+                            pct = Math.min(100, Math.round((numActual / numTarget) * 100));
+                        }
+                    }
+                } catch(e) {}
+                html += '<div class="cockpit-gauge">';
+                html += '<div class="gauge-label">' + esc(kpi.label) + '</div>';
+                html += '<div class="gauge-row">';
+                html += '<div class="gauge-value ' + trackClass + '">' + esc(kpi.actual) + '</div>';
+                html += '<div class="gauge-target">target: ' + esc(kpi.target) + '</div>';
+                html += '</div>';
+                html += '<div class="gauge-bar-bg"><div class="gauge-bar-fill ' + trackClass + '" style="width:' + pct + '%"></div></div>';
+                if (kpi.explanation) {
+                    html += '<div class="gauge-meaning">' + esc(kpi.explanation) + '</div>';
+                }
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        // Top recommended action
+        if (d.actions && d.actions.length) {
+            var topAction = d.actions[0];
+            html += '<div class="cockpit-action">';
+            html += '<div class="cockpit-action-icon"><i class="bi bi-lightning-charge-fill"></i></div>';
+            html += '<div class="cockpit-action-text"><strong>#1 Move:</strong> ' + esc(topAction.title) + (topAction.what ? ' - ' + esc(topAction.what) : '') + '</div>';
+            html += '<div class="cockpit-action-link"><a href="/client/actions?month=' + encodeURIComponent('{{ month }}') + '">See Plan <i class="bi bi-arrow-right"></i></a></div>';
+            html += '</div>';
+        }
+
+        html += '</div>'; // end .cockpit
+
+        // ── Existing dashboard content below ──
 
         // Highlights & Concerns
         if ((d.highlights && d.highlights.length) || (d.concerns && d.concerns.length)) {
@@ -311,34 +480,40 @@
 
 {% if dashboard %}
 
-<!-- Health Grade + KPIs Row -->
-<div class="row g-3 mb-4">
-    <div class="col-md-3">
-        <div class="metric-card text-center">
-            <div class="metric-label">Overall Grade</div>
-            <div class="grade-badge grade-{{ dashboard.health.grade | replace('/', '') | default('NA') }} mx-auto my-2">
-                {{ dashboard.health.grade }}
-            </div>
-            <div class="metric-explain">{{ dashboard.health.label }}</div>
+<!-- ── Cockpit Strip ── -->
+<div class="cockpit">
+    <div class="cockpit-header">
+        <div class="cockpit-title"><i class="bi bi-speedometer2 me-2"></i>Performance Cockpit</div>
+        <div class="cockpit-grade cg-{{ dashboard.health.grade | replace('/', '') | default('NA') }}">
+            {{ dashboard.health.grade }}
         </div>
     </div>
 
-    {% for kpi in dashboard.kpi_status %}
-    <div class="col-md-3">
-        <div class="kpi-card h-100">
-            <div class="kpi-label">{{ kpi.label }}</div>
-            <div class="kpi-values">
-                <div>
-                    <span class="actual {{ 'kpi-on-track' if kpi.on_track else 'kpi-off-track' }}">{{ kpi.actual }}</span>
-                </div>
-                <div>
-                    <span class="target">Target: {{ kpi.target }}</span>
-                </div>
+    {% if dashboard.kpi_status %}
+    <div class="cockpit-gauges">
+        {% for kpi in dashboard.kpi_status %}
+        <div class="cockpit-gauge">
+            <div class="gauge-label">{{ kpi.label }}</div>
+            <div class="gauge-row">
+                <div class="gauge-value {{ 'on-track' if kpi.on_track else 'off-track' }}">{{ kpi.actual }}</div>
+                <div class="gauge-target">target: {{ kpi.target }}</div>
             </div>
-            <div class="metric-explain mt-1">{{ kpi.explanation }}</div>
+            <div class="gauge-bar-bg"><div class="gauge-bar-fill {{ 'on-track' if kpi.on_track else 'off-track' }}" style="width:50%"></div></div>
+            {% if kpi.explanation %}
+            <div class="gauge-meaning">{{ kpi.explanation }}</div>
+            {% endif %}
         </div>
+        {% endfor %}
     </div>
-    {% endfor %}
+    {% endif %}
+
+    {% if dashboard.actions %}
+    <div class="cockpit-action">
+        <div class="cockpit-action-icon"><i class="bi bi-lightning-charge-fill"></i></div>
+        <div class="cockpit-action-text"><strong>#1 Move:</strong> {{ dashboard.actions[0].title }}{% if dashboard.actions[0].what %} - {{ dashboard.actions[0].what }}{% endif %}</div>
+        <div class="cockpit-action-link"><a href="{{ url_for('client.client_actions', month=month) }}">See Plan <i class="bi bi-arrow-right"></i></a></div>
+    </div>
+    {% endif %}
 </div>
 
 <!-- Highlights & Concerns -->

@@ -495,22 +495,23 @@ def _explain_seo(gsc):
 def _build_action_cards(analysis, suggestions, brand, ai_model=None):
     """Convert top suggestions into action cards with AI-generated deliverables.
 
-    Max 2 per priority level (2 high + 2 medium = 4 max).
-    The AI reads actual account data and produces specific work product,
-    not generic how-to instructions.
+    Generate up to 10 action items per load (high priority first, then medium,
+    then low). The monthly cap of 20 is enforced at the route level by tracking
+    completed items in the database, so we generate a healthy pool here.
     """
     high_cards = []
     medium_cards = []
+    low_cards = []
 
     for s in suggestions:
-        if s["priority"] == "high" and len(high_cards) < 2:
+        if s["priority"] == "high" and len(high_cards) < 5:
             high_cards.append(s)
-        elif s["priority"] == "medium" and len(medium_cards) < 2:
+        elif s["priority"] == "medium" and len(medium_cards) < 5:
             medium_cards.append(s)
-        if len(high_cards) >= 2 and len(medium_cards) >= 2:
-            break
+        elif s["priority"] == "low" and len(low_cards) < 3:
+            low_cards.append(s)
 
-    selected = high_cards + medium_cards
+    selected = high_cards + medium_cards + low_cards
     if not selected:
         return []
 
@@ -707,36 +708,43 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
         "You have already completed a deep-dive analysis of this account. "
         "Now produce the EXACT steps the business owner should execute.\n\n"
 
+        "CRITICAL: These steps are for a business owner, not a marketing professional. "
+        "Every step must tell them exactly what to DO, not what 'should happen' or what to 'consider'. "
+        "Write like you are sitting next to them, pointing at their screen, walking them through it click by click.\n\n"
+
         "OUTPUT FORMAT (JSON only):\n"
         "{\"actions\": [{\"steps\": [...], \"impact\": \"...\", \"time\": \"...\"}, ...]}\n"
         "One object per action_item, same order as input.\n\n"
 
         "STEP REQUIREMENTS:\n"
-        "- 4-6 steps per action item\n"
+        "- 4-8 steps per action item. More steps = more specific = better.\n"
+        "- Every step starts with a verb: Log in, Open, Click, Type, Navigate, Download, Copy, Paste, Call, Write, Create, Search, Check, Compare\n"
         "- Every step MUST reference specific data from the relevant_data attached to that action item: "
         "name the campaign, the keyword, the search term, the ad, the page URL, the query, the dollar amount, the metric value\n"
+        "- Include WHERE to go: 'Log into Google Ads > Campaigns > [campaign name]' or 'Open your Facebook Ads Manager and click on [specific ad set]'\n"
         "- Steps should be the actual work product: the exact keywords to add/pause/negate, "
         "the exact ad copy to test (write the headlines and descriptions), "
         "the exact budget numbers to change, the exact pages to optimize and for which queries\n"
-        "- Write like a hands-on marketing director giving a junior marketer a task list they can execute without asking questions\n"
-        "- Each step: 2-3 sentences. First sentence = what to do. Remaining = why, using a specific number from the data.\n\n"
+        "- Each step: 2-3 sentences max. First sentence = exactly what to do and where. Remaining = why, using a specific number from the data.\n\n"
 
         "WHAT MAKES A BAD STEP (never do this):\n"
         "- 'Review your campaigns and pause underperformers' (which campaigns? what metric?)\n"
         "- 'Add negative keywords to reduce waste' (which negative keywords?)\n"
         "- 'Optimize your landing pages' (which pages? for what?)\n"
         "- 'Consider testing new ad copy' (write the actual copy)\n"
-        "- 'Monitor performance and adjust' (adjust what? to what number?)\n\n"
+        "- 'Monitor performance and adjust' (adjust what? to what number?)\n"
+        "- 'You should look into...' (do not suggest looking into things, tell them what to do)\n"
+        "- 'It would be beneficial to...' (never use this phrase)\n\n"
 
         "WHAT MAKES A GOOD STEP (do this):\n"
-        "- 'Pause the \"emergency plumber near me\" keyword - it spent $340 this month with 0 conversions while your \"water heater repair\" keyword converted at $42/lead.'\n"
-        "- 'Add these negative keywords to your Google Ads campaigns: \"DIY\", \"how to\", \"salary\", \"jobs\" - these search terms appeared 89 times and burned ~$120 with no conversions.'\n"
-        "- 'Test this new headline on your top campaign: \"Same-Day AC Repair - Licensed & Insured | Free Estimates\" - your current CTR is 2.1% vs 4-5% benchmark for HVAC.'\n"
-        "- 'Move $200/month from \"Brand Awareness\" campaign ($0.89 CPC, 0 conversions) to \"Emergency Services\" campaign ($1.20 CPC, 14 conversions at $38 each).'\n"
-        "- 'Create a dedicated page for \"water heater installation [city]\" - this query has 1,200 impressions but you rank position 18. Your current /services page ranks but isn\\'t specific enough.'\n\n"
+        "- 'Log into Google Ads, go to Keywords, sort by Cost (high to low). Pause the \"emergency plumber near me\" keyword. It spent $340 this month with 0 conversions while your \"water heater repair\" keyword converted at $42/lead.'\n"
+        "- 'In Google Ads, go to Search Terms report. Add these as negative keywords: \"DIY\", \"how to\", \"salary\", \"jobs\". These search terms appeared 89 times and burned about $120 with no conversions.'\n"
+        "- 'Go to your top campaign and click Ads & Extensions. Create a new responsive search ad with this headline: \"Same-Day AC Repair - Licensed & Insured | Free Estimates\". Your current CTR is 2.1% vs 4-5% benchmark for HVAC.'\n"
+        "- 'Open Google Ads > Campaigns. Click on \"Brand Awareness\" campaign. Lower the daily budget from its current level by $7/day. Then open \"Emergency Services\" campaign and increase its budget by $7/day. The Emergency campaign converts at $38/lead vs Brand Awareness at $0.'\n"
+        "- 'Open Google Search Console. Search for \"water heater installation [city]\". You have 1,200 impressions but rank position 18. Create a new dedicated page on your website targeting this exact keyword.'\n\n"
 
         "IMPACT: One sentence with a specific projected result using numbers from the data. "
-        "Example: 'Reallocating $200/month should generate ~5 additional leads at the Emergency Services campaign\\'s current $38 CPA.'\n\n"
+        "Example: 'Moving $200/month could generate about 5 more leads based on the Emergency Services campaign current $38 CPA.'\n\n"
 
         "TIME: Be specific. '15 minutes', '30 minutes', '1-2 hours'. Not 'varies' or 'ongoing'.\n\n"
 
