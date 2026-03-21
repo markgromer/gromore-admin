@@ -203,7 +203,8 @@
 <!-- Results -->
 <div class="row">
     <div class="col-lg-8 mb-4">
-        <div class="card" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
+        <!-- Grid Card -->
+        <div class="card mb-3" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
             <div class="card-body p-3 p-md-4">
                 <div id="gridContainer">
                     {% if active_scan and active_scan.results %}
@@ -258,6 +259,11 @@
                 </div>
             </div>
         </div>
+
+        <!-- Map Card -->
+        <div class="card" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05); overflow:hidden;">
+            <div id="rankMap" style="width:100%; height:450px; background:#e5e7eb;"></div>
+        </div>
     </div>
 
     <!-- Scan History -->
@@ -308,8 +314,101 @@
 
 <script>
 var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+var mapApiKey = '{{ brand.google_maps_api_key|default("", true) }}';
+var centerLat = {{ brand.business_lat or 0 }};
+var centerLng = {{ brand.business_lng or 0 }};
+var gmap = null;
+var mapMarkers = [];
+var mapsLoaded = false;
+
+// Load Google Maps JS API
+function loadMapsApi() {
+    if (mapsLoaded || !mapApiKey) return;
+    mapsLoaded = true;
+    var s = document.createElement('script');
+    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + mapApiKey + '&callback=initMap&loading=async';
+    s.async = true;
+    s.defer = true;
+    document.head.appendChild(s);
+}
+
+function initMap() {
+    var mapEl = document.getElementById('rankMap');
+    if (!mapEl || !centerLat) return;
+    gmap = new google.maps.Map(mapEl, {
+        center: {lat: centerLat, lng: centerLng},
+        zoom: 10,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: true,
+    });
+    // Business location marker
+    new google.maps.Marker({
+        position: {lat: centerLat, lng: centerLng},
+        map: gmap,
+        icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 10,
+            fillColor: '#4f46e5',
+            fillOpacity: 1,
+            strokeColor: '#fff',
+            strokeWeight: 3,
+        },
+        title: 'Your Business',
+        zIndex: 999,
+    });
+    // If we have server-rendered results, plot them
+    {% if active_scan and active_scan.results %}
+    var initialResults = {{ active_scan.results | tojson }};
+    plotMapMarkers(initialResults);
+    {% endif %}
+}
+
+function rankColor(rank) {
+    if (rank >= 1 && rank <= 3) return '#22c55e';
+    if (rank >= 4 && rank <= 10) return '#f59e0b';
+    if (rank > 10) return '#ef4444';
+    return '#9ca3af';
+}
+
+function plotMapMarkers(results) {
+    if (!gmap) return;
+    // Clear old markers
+    mapMarkers.forEach(function(m) { m.setMap(null); });
+    mapMarkers = [];
+    var bounds = new google.maps.LatLngBounds();
+    bounds.extend({lat: centerLat, lng: centerLng});
+    results.forEach(function(cell) {
+        var color = rankColor(cell.rank);
+        var marker = new google.maps.Marker({
+            position: {lat: cell.lat, lng: cell.lng},
+            map: gmap,
+            icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 18,
+                fillColor: color,
+                fillOpacity: 0.85,
+                strokeColor: '#fff',
+                strokeWeight: 2,
+            },
+            label: {
+                text: cell.rank > 0 ? String(cell.rank) : '-',
+                color: '#fff',
+                fontWeight: 'bold',
+                fontSize: '11px',
+            },
+            title: 'Rank ' + (cell.rank > 0 ? cell.rank : 'Not found'),
+            zIndex: cell.rank > 0 ? (100 - cell.rank) : 1,
+        });
+        mapMarkers.push(marker);
+        bounds.extend({lat: cell.lat, lng: cell.lng});
+    });
+    gmap.fitBounds(bounds, 40);
+}
 
 document.addEventListener('DOMContentLoaded', function() {
+    loadMapsApi();
+
     // Geocode handlers
     function handleGeocode(inputId, resultId) {
         var address = document.getElementById(inputId).value.trim();
@@ -389,8 +488,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 renderGrid(data.results, gridSize, keyword, radius);
                 renderStats(data.avg_rank, data.found, data.total, data.results);
+                plotMapMarkers(data.results);
                 // reload page to update history
-                setTimeout(function() { location.reload(); }, 200);
+                setTimeout(function() { location.reload(); }, 500);
             })
             .catch(function() {
                 scanBtn.disabled = false;
@@ -454,6 +554,7 @@ function loadScan(scanId) {
         renderStats(scan.avg_rank,
             scan.results.filter(function(r) { return r.rank > 0; }).length,
             scan.results.length, scan.results);
+        plotMapMarkers(scan.results);
     });
 }
 </script>

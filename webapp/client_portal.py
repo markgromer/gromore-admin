@@ -2303,12 +2303,13 @@ def client_heatmap_scan():
     if lat == 0 and lng == 0:
         return jsonify(ok=False, error="Business location not set. Set your address on the heatmap page first."), 400
 
-    from webapp.heatmap import generate_grid, scan_grid
+    from webapp.heatmap import generate_grid, scan_grid, calc_search_radius_m
     grid_points = generate_grid(lat, lng, radius, grid_size)
+    search_radius = calc_search_radius_m(radius, grid_size)
     business_name = brand.get("display_name", "")
     place_id = brand.get("google_place_id") or None
     results = scan_grid(api_key, keyword, business_name, grid_points,
-                        place_id=place_id)
+                        place_id=place_id, search_radius_m=search_radius)
 
     ranked = [r for r in results if r["rank"] > 0]
     avg_rank = round(sum(r["rank"] for r in ranked) / len(ranked), 1) if ranked else 0

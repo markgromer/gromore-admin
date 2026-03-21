@@ -8,6 +8,7 @@ for a keyword at each point.
 
 import math
 import logging
+import re
 import requests
 
 log = logging.getLogger(__name__)
@@ -37,6 +38,13 @@ def generate_grid(center_lat, center_lng, radius_miles, grid_size=6):
     return points
 
 
+def calc_search_radius_m(radius_miles, grid_size):
+    """Calculate the per-point search radius based on grid spacing."""
+    step_km = (2 * radius_miles * MILES_TO_KM) / max(grid_size - 1, 1)
+    # Use half the grid spacing as search radius, with a floor of 2km
+    return max(step_km * 1000 / 2, 2000)
+
+
 def geocode_address(api_key, address):
     """Convert an address string to lat/lng using Google Geocoding API."""
     resp = requests.get(
@@ -58,7 +66,7 @@ def geocode_address(api_key, address):
             "formatted": data["results"][0].get("formatted_address", address)}
 
 
-def _search_places(api_key, keyword, lat, lng, radius_m=500):
+def _search_places(api_key, keyword, lat, lng, radius_m=2000):
     """Query Google Places Text Search (New) for a keyword near a point."""
     url = "https://places.googleapis.com/v1/places:searchText"
     headers = {
@@ -71,7 +79,7 @@ def _search_places(api_key, keyword, lat, lng, radius_m=500):
         "locationBias": {
             "circle": {
                 "center": {"latitude": lat, "longitude": lng},
-                "radius": float(radius_m),
+                "radius": float(min(radius_m, 50000)),
             }
         },
         "maxResultCount": 20,
@@ -79,29 +87,52 @@ def _search_places(api_key, keyword, lat, lng, radius_m=500):
     try:
         resp = requests.post(url, json=body, headers=headers, timeout=15)
         resp.raise_for_status()
-        return resp.json().get("places", [])
+        places = resp.json().get("places", [])
+        if not places:
+            log.debug("No places returned at (%.4f, %.4f) for '%s'", lat, lng, keyword)
+        return places
     except Exception as exc:
         log.warning("Places API error at (%.4f, %.4f): %s", lat, lng, exc)
         return []
 
 
+def _tokenize(name):
+    """Split a name into lowercase word tokens."""
+    return set(re.findall(r'[a-z0-9]+', (name or "").lower()))
+
+
 def _match_business(places, business_name, place_id=None):
-    """Find the rank (1-based) of a business in Places results."""
+    """Find the rank (1-based) of a business in Places results.
+    Matches by place_id first, then exact substring, then word overlap."""
     bname = (business_name or "").lower().strip()
+    btokens = _tokenize(business_name)
+    stop_words = {'the', 'and', 'of', 'in', 'at', 'for', 'a', 'an', 'llc', 'inc', 'co'}
+    btokens_clean = btokens - stop_words
+
     for i, p in enumerate(places, 1):
         pid = p.get("id", "")
         pname = (p.get("displayName", {}).get("text", "") or "").lower().strip()
+
+        # Exact place_id match
         if place_id and pid == place_id:
             return i
-        if bname and bname in pname:
+
+        # Substring match (either direction)
+        if bname and (bname in pname or pname in bname):
             return i
-        if bname and pname in bname:
-            return i
+
+        # Word overlap match: if 2+ significant words match, count it
+        if len(btokens_clean) >= 2:
+            ptokens = _tokenize(pname) - stop_words
+            overlap = btokens_clean & ptokens
+            if len(overlap) >= 2 and len(overlap) >= len(btokens_clean) * 0.5:
+                return i
+
     return 0  # not found
 
 
 def scan_grid(api_key, keyword, business_name, grid_points,
-              place_id=None, search_radius_m=500):
+              place_id=None, search_radius_m=2000):
     """Run a full grid scan. Returns list of point dicts with 'rank' added."""
     results = []
     for pt in grid_points:
@@ -110,6 +141,12 @@ def scan_grid(api_key, keyword, business_name, grid_points,
         rank = _match_business(places, business_name, place_id)
         results.append({
             "row": pt["row"],
+            "col": pt["col"],
+            "lat": pt["lat"],
+            "lng": pt["lng"],
+            "rank": rank,
+        })
+    return results
             "col": pt["col"],
             "lat": pt["lat"],
             "lng": pt["lng"],
