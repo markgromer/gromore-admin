@@ -2008,6 +2008,18 @@
         .then(data => {
             let html = '';
 
+            // File type icon helper
+            function fileIcon(mime) {
+                if (!mime) return 'bi-file-earmark';
+                if (mime.startsWith('image/')) return 'bi-file-image';
+                if (mime.startsWith('video/')) return 'bi-file-play';
+                if (mime.includes('pdf')) return 'bi-file-pdf';
+                if (mime.includes('spreadsheet') || mime.includes('excel')) return 'bi-file-spreadsheet';
+                if (mime.includes('document') || mime.includes('word')) return 'bi-file-word';
+                if (mime.includes('presentation') || mime.includes('powerpoint')) return 'bi-file-slides';
+                return 'bi-file-earmark';
+            }
+
             // Render folders first
             if (data.folders && data.folders.length) {
                 html += data.folders.map(f =>
@@ -2018,17 +2030,26 @@
                 ).join('');
             }
 
-            // Render images
-            if (data.images && data.images.length) {
-                html += data.images.map(f =>
-                    `<div class="asset-thumb" onclick="addDriveImage('${f.id}', '${f.name.replace(/'/g,"\\&#39;")}')" title="${f.name}">
-                        <img src="${f.thumbnailLink || ''}" alt="${f.name}" onerror="this.parentElement.style.display='none'">
-                    </div>`
-                ).join('');
+            // Render all files (images get thumbnails, others get icons)
+            if (data.files && data.files.length) {
+                html += data.files.map(f => {
+                    const isImage = f.mimeType && f.mimeType.startsWith('image/');
+                    if (isImage) {
+                        return `<div class="asset-thumb" onclick="addDriveImage('${f.id}', '${f.name.replace(/'/g,"\\&#39;")}')" title="${f.name}">
+                            <img src="${f.thumbnailLink || ''}" alt="${f.name}" onerror="this.innerHTML='<i class=\\'bi ${fileIcon(f.mimeType)}\\' style=\\'font-size:1.4rem;color:#6b7280\\'></i>';this.parentElement.querySelector('img')?.remove()">
+                        </div>`;
+                    } else {
+                        const link = f.webViewLink ? `window.open('${f.webViewLink}','_blank')` : '';
+                        return `<div class="asset-thumb" onclick="${link}" title="${f.name}" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f9fafb;border-radius:8px;padding:4px">
+                            ${f.thumbnailLink ? `<img src="${f.thumbnailLink}" alt="${f.name}" style="max-height:48px;border-radius:4px" onerror="this.outerHTML='<i class=\\'bi ${fileIcon(f.mimeType)}\\' style=\\'font-size:1.4rem;color:#6b7280\\'></i>'">` : `<i class="bi ${fileIcon(f.mimeType)}" style="font-size:1.4rem;color:#6b7280"></i>`}
+                            <span style="font-size:.6rem;color:#374151;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;display:block;margin-top:2px">${f.name}</span>
+                        </div>`;
+                    }
+                }).join('');
             }
 
             if (!html) {
-                html = '<div class="text-muted" style="font-size:.8rem;grid-column:1/-1">No images in this folder</div>';
+                html = '<div class="text-muted" style="font-size:.8rem;grid-column:1/-1">This folder is empty</div>';
             }
 
             grid.innerHTML = html;
