@@ -208,9 +208,9 @@
                         <p class="card-text small text-muted"><strong>Analysis:</strong> {{ ex.analysis }}</p>
                         {% if ex.principles %}
                         <div>
-                            {% for p in ex.principles|replace('[', '')|replace(']', '')|replace('"', '')|split(',') %}
-                            {% if p.strip() %}
-                            <span class="badge bg-light text-dark border me-1">{{ p.strip() }}</span>
+                            {% for p in ex.principles|from_json %}
+                            {% if p %}
+                            <span class="badge bg-light text-dark border me-1">{{ p }}</span>
                             {% endif %}
                             {% endfor %}
                         </div>
