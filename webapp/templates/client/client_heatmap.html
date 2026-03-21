@@ -322,7 +322,12 @@ document.addEventListener('DOMContentLoaded', function() {
             headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
             body: JSON.stringify({address: address})
         })
-        .then(function(r) { return r.json(); })
+        .then(function(r) {
+            if (!r.ok && r.headers.get('content-type')?.indexOf('json') === -1) {
+                throw new Error('Server returned ' + r.status);
+            }
+            return r.json();
+        })
         .then(function(data) {
             if (data.ok) {
                 resultEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> ' +
@@ -331,6 +336,9 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 resultEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> ' + (data.error || 'Geocoding failed') + '</span>';
             }
+        })
+        .catch(function(err) {
+            resultEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> Error: ' + err.message + '</span>';
         });
     }
 

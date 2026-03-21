@@ -2341,7 +2341,10 @@ def client_heatmap_save_location():
         return jsonify(ok=False, error="Google Maps API key not configured. Add it in Connections."), 400
 
     from webapp.heatmap import geocode_address
-    result = geocode_address(api_key, address)
+    try:
+        result = geocode_address(api_key, address)
+    except Exception as exc:
+        return jsonify(ok=False, error="Geocoding API error: " + str(exc)), 500
     if not result:
         return jsonify(ok=False, error="Could not geocode that address. Check spelling and try again."), 400
 

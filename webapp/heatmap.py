@@ -46,7 +46,12 @@ def geocode_address(api_key, address):
     )
     resp.raise_for_status()
     data = resp.json()
-    if data.get("status") != "OK" or not data.get("results"):
+    status = data.get("status", "")
+    if status not in ("OK",) or not data.get("results"):
+        msg = data.get("error_message") or status
+        log.warning("Geocoding failed for '%s': %s", address, msg)
+        if msg and msg != "ZERO_RESULTS":
+            raise RuntimeError(msg)
         return None
     loc = data["results"][0]["geometry"]["location"]
     return {"lat": loc["lat"], "lng": loc["lng"],
