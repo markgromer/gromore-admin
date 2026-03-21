@@ -330,6 +330,9 @@ def _client_assistant_chat_handler(payload):
         "hint": str(payload.get("page_hint") or ""),
     }
 
+    # Canvas screenshot from Creative Center (base64 data URI)
+    canvas_image = (payload.get("canvas_image") or "").strip() or None
+
     if not user_message:
         return jsonify({"error": "Message cannot be empty"}), 400
 
@@ -396,6 +399,7 @@ def _client_assistant_chat_handler(payload):
             timeout=90,
             db=db,
             brand_id=brand_id,
+            canvas_image=canvas_image,
         )
         assistant_reply = (assistant_reply or "").strip()
         if assistant_reply:

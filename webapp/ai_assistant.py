@@ -808,6 +808,7 @@ def chat_with_warren(
     timeout: int = 60,
     db=None,
     brand_id: Optional[int] = None,
+    canvas_image: Optional[str] = None,
 ) -> str:
     if not api_key:
         raise ValueError("OpenAI API key not configured")
@@ -1049,6 +1050,34 @@ def chat_with_warren(
     if memory_context:
         system += "\n\n" + memory_context
 
+    # ── Creative vision analysis (when canvas screenshot is attached) ──
+    if canvas_image:
+        system += (
+            "\n\nCREATIVE VISION ANALYSIS (canvas screenshot attached):\n"
+            "The user has shared a screenshot of their ad creative from the Creative Center canvas. "
+            "You can SEE the actual design. Analyze it thoroughly and provide expert visual feedback.\n\n"
+            "EVALUATE THESE DIMENSIONS:\n"
+            "1. Visual Hierarchy - Is the most important element (headline, CTA, product) the first thing you notice? "
+            "Is there a clear reading path?\n"
+            "2. Contrast & Readability - Can all text be easily read? Is there enough contrast between text and background? "
+            "Are font sizes appropriate for the format?\n"
+            "3. Brand Consistency - Do the colors, fonts, and overall feel match the brand profile you have? "
+            "Does it feel professional and on-brand?\n"
+            "4. CTA Strength - Is the call-to-action visible, compelling, and well-positioned? "
+            "Would a viewer know what to do next?\n"
+            "5. Composition & Balance - Is the layout balanced? Is there appropriate whitespace? "
+            "Does it feel cluttered or sparse?\n"
+            "6. Platform Fit - Based on common ad dimensions, would this work well as a social ad, display ad, or story? "
+            "Consider safe zones, text density rules (Meta's old 20% rule), and thumb-stopping potential.\n"
+            "7. Color Psychology - Are the colors working for the intended emotion and action? "
+            "Do they stand out in a feed?\n"
+            "8. Overall Impact - Would this stop someone scrolling? Rate the creative honestly 1-10 and explain why.\n\n"
+            "BE SPECIFIC: Reference actual elements you see. 'The red button in the bottom-right' not 'the CTA.' "
+            "'The white text over the light photo' not 'readability could improve.'\n"
+            "BE HONEST: If it's great, say so. If it needs work, say so directly. Don't sugarcoat.\n"
+            "SUGGEST FIXES: For every issue, give a concrete fix they can apply right now in the canvas editor."
+        )
+
     ctx_user = {
         "role": "user",
         "content": "Context JSON:\n" + json.dumps(context, ensure_ascii=False),
@@ -1064,6 +1093,25 @@ def chat_with_warren(
         ctx_user,
         *messages,
     ]
+
+    # ── Attach canvas screenshot to the last user message for vision ──
+    if canvas_image and api_messages:
+        # Find the last user message and convert to multi-part content with image
+        for i in range(len(api_messages) - 1, -1, -1):
+            if api_messages[i].get("role") == "user":
+                text_content = api_messages[i].get("content", "")
+                if isinstance(text_content, str):
+                    api_messages[i]["content"] = [
+                        {"type": "text", "text": text_content},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": canvas_image,
+                                "detail": "high",
+                            },
+                        },
+                    ]
+                break
 
     # ── Tool-calling loop (max 3 rounds to prevent runaway) ──
     for _round in range(4):

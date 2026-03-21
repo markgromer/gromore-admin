@@ -835,6 +835,9 @@
     let viewScale = scale;
     let zoomFactor = 1;
 
+    // Expose canvas to window so Warren chat can capture screenshots
+    window._groMoreCanvas = canvas;
+
     function resizeCanvas() {
         const s = displayScale() * zoomFactor;
         viewScale = s;

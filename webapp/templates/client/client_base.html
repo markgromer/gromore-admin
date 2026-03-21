@@ -777,6 +777,14 @@
                         page_title: document.title,
                         page_endpoint: '{{ request.endpoint or "" }}',
                         page_hint: document.querySelector('h1,h2,h3,h4') ? document.querySelector('h1,h2,h3,h4').textContent.trim().slice(0, 160) : '',
+                        canvas_image: (function() {
+                            try {
+                                if (window._groMoreCanvas && typeof window._groMoreCanvas.toDataURL === 'function') {
+                                    return window._groMoreCanvas.toDataURL({format: 'jpeg', quality: 0.7});
+                                }
+                            } catch(e) {}
+                            return null;
+                        })(),
                     }),
                 });
                 hideTyping();
