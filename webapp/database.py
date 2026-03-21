@@ -386,7 +386,8 @@ class WebDB:
         conn.close()
 
     def update_brand_number_field(self, brand_id, field, value):
-        allowed = {"kpi_target_cpa", "kpi_target_leads", "kpi_target_roas"}
+        allowed = {"kpi_target_cpa", "kpi_target_leads", "kpi_target_roas",
+                   "business_lat", "business_lng"}
         if field not in allowed:
             raise ValueError(f"Cannot update field: {field}")
         try:

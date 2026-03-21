@@ -2348,10 +2348,8 @@ def client_heatmap_save_location():
     if not result:
         return jsonify(ok=False, error="Could not geocode that address. Check spelling and try again."), 400
 
-    db.update_brand(brand_id, {
-        "business_lat": result["lat"],
-        "business_lng": result["lng"],
-    })
+    db.update_brand_number_field(brand_id, "business_lat", result["lat"])
+    db.update_brand_number_field(brand_id, "business_lng", result["lng"])
 
     return jsonify(ok=True, lat=result["lat"], lng=result["lng"],
                    formatted=result["formatted"])
