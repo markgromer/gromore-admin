@@ -1469,6 +1469,72 @@ class WebDB:
         conn.commit()
         conn.close()
 
+    # ── Campaign Strategies ──────────────────────────────────────
+
+    def get_all_campaign_strategies(self, active_only=True):
+        conn = self._conn()
+        if active_only:
+            rows = conn.execute(
+                "SELECT * FROM campaign_strategies WHERE is_active = 1 ORDER BY sort_order, name",
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM campaign_strategies ORDER BY sort_order, name",
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_campaign_strategy(self, strategy_key):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM campaign_strategies WHERE strategy_key = ?",
+            (strategy_key,),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def save_campaign_strategy(self, strategy_key, platform="meta", name="",
+                                icon="bi-megaphone-fill", color="#6366f1",
+                                tagline="", description="", best_for="",
+                                recommended_min=200, objective="",
+                                is_active=1, sort_order=0):
+        conn = self._conn()
+        existing = conn.execute(
+            "SELECT id FROM campaign_strategies WHERE strategy_key = ?",
+            (strategy_key,),
+        ).fetchone()
+        if existing:
+            conn.execute(
+                """UPDATE campaign_strategies
+                   SET platform=?, name=?, icon=?, color=?, tagline=?,
+                       description=?, best_for=?, recommended_min=?,
+                       objective=?, is_active=?, sort_order=?,
+                       updated_at=datetime('now')
+                   WHERE id=?""",
+                (platform, name, icon, color, tagline, description,
+                 best_for, recommended_min, objective, is_active,
+                 sort_order, existing["id"]),
+            )
+        else:
+            conn.execute(
+                """INSERT INTO campaign_strategies
+                   (strategy_key, platform, name, icon, color, tagline,
+                    description, best_for, recommended_min, objective,
+                    is_active, sort_order)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (strategy_key, platform, name, icon, color, tagline,
+                 description, best_for, recommended_min, objective,
+                 is_active, sort_order),
+            )
+        conn.commit()
+        conn.close()
+
+    def delete_campaign_strategy(self, strategy_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM campaign_strategies WHERE id = ?", (strategy_id,))
+        conn.commit()
+        conn.close()
+
     # ── Competitors (structured) ─────────────────────────────────
 
     def add_competitor(self, brand_id, name, website="", facebook_url="",
