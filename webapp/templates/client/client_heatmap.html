@@ -307,6 +307,8 @@
 {% endif %}
 
 <script>
+var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
 document.addEventListener('DOMContentLoaded', function() {
     // Geocode handlers
     function handleGeocode(inputId, resultId) {
@@ -317,7 +319,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         fetch('/client/heatmap/save-location', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
             body: JSON.stringify({address: address})
         })
         .then(function(r) { return r.json(); })
@@ -364,7 +366,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             fetch('/client/heatmap/scan', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
                 body: JSON.stringify({keyword: keyword, radius_miles: parseFloat(radius), grid_size: gridSize})
             })
             .then(function(r) { return r.json(); })

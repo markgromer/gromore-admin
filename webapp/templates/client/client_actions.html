@@ -190,6 +190,8 @@
 {% endif %}
 
 <script>
+var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
 document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.done-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
@@ -200,7 +202,7 @@ document.addEventListener('DOMContentLoaded', function() {
             card.style.pointerEvents = 'none';
             fetch('/client/actions/dismiss', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
                 body: JSON.stringify({action_key: key, month: month})
             }).then(function(r) {
                 if (r.ok) {
@@ -228,7 +230,7 @@ document.addEventListener('DOMContentLoaded', function() {
             card.style.opacity = '0.2';
             fetch('/client/actions/restore', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
                 body: JSON.stringify({action_key: key, month: month})
             }).then(function(r) {
                 if (r.ok) location.reload();
