@@ -66,6 +66,51 @@ def geocode_address(api_key, address):
             "formatted": data["results"][0].get("formatted_address", address)}
 
 
+def verify_place_id(api_key, place_id):
+    """Look up a Place ID via Place Details to verify what it resolves to.
+    Returns dict with name, address, location or error string."""
+    if not place_id:
+        return None
+    # Try New API first
+    url = f"https://places.googleapis.com/v1/places/{place_id}"
+    headers = {
+        "X-Goog-Api-Key": api_key,
+        "X-Goog-FieldMask": "displayName,formattedAddress,location",
+    }
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        if resp.status_code == 200:
+            d = resp.json()
+            return {
+                "name": d.get("displayName", {}).get("text", ""),
+                "address": d.get("formattedAddress", ""),
+                "lat": d.get("location", {}).get("latitude"),
+                "lng": d.get("location", {}).get("longitude"),
+            }
+        # Fallback to legacy
+    except Exception:
+        pass
+    # Legacy Place Details
+    url2 = "https://maps.googleapis.com/maps/api/place/details/json"
+    try:
+        resp = requests.get(url2, params={
+            "place_id": place_id, "fields": "name,formatted_address,geometry",
+            "key": api_key,
+        }, timeout=10)
+        data = resp.json()
+        if data.get("status") == "OK" and data.get("result"):
+            r = data["result"]
+            loc = r.get("geometry", {}).get("location", {})
+            return {
+                "name": r.get("name", ""),
+                "address": r.get("formatted_address", ""),
+                "lat": loc.get("lat"),
+                "lng": loc.get("lng"),
+            }
+        return {"error": data.get("status", "UNKNOWN"), "message": data.get("error_message", "")}
+    except Exception as exc:
+        return {"error": str(exc)}
+
 def _search_places(api_key, keyword, lat, lng, radius_m=2000):
     """Query Google Places APIs for a keyword near a point.
     Tries: New Text Search -> Legacy Text Search -> Legacy Nearby Search.

@@ -372,13 +372,16 @@ var centerLng = {{ brand.business_lng or 0 }};
 var gmap = null;
 var mapMarkers = [];
 var mapsLoaded = false;
+var placesService = null;
+var brandPlaceId = '{{ brand.google_place_id|default("", true) }}';
+var brandName = '{{ brand.display_name|default("", true) }}';
 
 // Load Google Maps JS API
 function loadMapsApi() {
     if (mapsLoaded || !mapApiKey) return;
     mapsLoaded = true;
     var s = document.createElement('script');
-    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + mapApiKey + '&callback=initMap&loading=async';
+    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + mapApiKey + '&libraries=places&callback=initMap&loading=async';
     s.async = true;
     s.defer = true;
     document.head.appendChild(s);
@@ -394,6 +397,7 @@ function initMap() {
         streetViewControl: false,
         fullscreenControl: true,
     });
+    placesService = new google.maps.places.PlacesService(gmap);
     // Business location marker
     new google.maps.Marker({
         position: {lat: centerLat, lng: centerLng},
@@ -742,6 +746,21 @@ function showDebug(d) {
             diagHtml += '<br>Nearby Search: not needed (earlier API returned results)';
         }
         el.innerHTML += diagHtml;
+    }
+
+    // Place ID verification
+    if (d.place_id_verification) {
+        var pv = d.place_id_verification;
+        var pvHtml = '<br><strong>Place ID resolves to:</strong> ';
+        if (pv.error) {
+            pvHtml += '<span style="color:red">ERROR - ' + pv.error + (pv.message ? ': ' + pv.message : '') + '</span>';
+        } else {
+            pvHtml += '"' + (pv.name || '?') + '" at ' + (pv.address || '?');
+            if (pv.lat && pv.lng) {
+                pvHtml += ' (' + pv.lat.toFixed(4) + ', ' + pv.lng.toFixed(4) + ')';
+            }
+        }
+        el.innerHTML += pvHtml;
     }
 }
 
