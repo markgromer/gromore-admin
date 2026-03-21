@@ -133,6 +133,50 @@
 </div>
 {% endif %}
 
+<!-- Place ID Setup -->
+{% if has_api_key and has_location %}
+<div class="card mb-4" id="placeIdCard" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);{% if brand.google_place_id %} border-left: 4px solid #22c55e !important;{% else %} border-left: 4px solid #f59e0b !important;{% endif %}">
+    <div class="card-body p-3 p-md-4">
+        {% if brand.google_place_id %}
+        <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-check-circle-fill text-success"></i>
+            <span class="fw-medium" style="font-size:.9rem;">Place ID linked: <code style="font-size:.8rem;">{{ brand.google_place_id[:25] }}...</code></span>
+            <button class="btn btn-sm btn-outline-secondary ms-auto" type="button" onclick="document.getElementById('placeIdSearch').classList.toggle('d-none');">
+                <i class="bi bi-pencil me-1"></i> Change
+            </button>
+        </div>
+        <div id="placeIdSearch" class="d-none mt-3">
+        {% else %}
+        <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-exclamation-triangle text-warning" style="font-size:1.1rem;"></i>
+            <span class="fw-medium" style="font-size:.9rem;">Link your Google Business listing for accurate ranking</span>
+        </div>
+        <p class="text-muted mb-3" style="font-size:.85rem;">Without a Place ID, the heatmap can't reliably match your business in search results. Search for your business name below and select the correct listing.</p>
+        <div id="placeIdSearch">
+        {% endif %}
+            <div class="row g-2 align-items-end">
+                <div class="col-md-7">
+                    <input type="text" class="form-control" id="heatmapPlaceSearch"
+                           placeholder="Search: {{ brand.display_name }}" autocomplete="off"
+                           value="{{ brand.display_name }}">
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-primary w-100" type="button" id="heatmapPlaceSearchBtn">
+                        <i class="bi bi-search me-1"></i> Find
+                    </button>
+                </div>
+            </div>
+            <div id="heatmapPlaceResults" class="mt-2" style="display:none;"></div>
+            <div id="heatmapPlaceSaved" class="mt-2" style="display:none;">
+                <span class="badge bg-success rounded-pill px-3 py-2">
+                    <i class="bi bi-check-circle me-1"></i> Place ID saved! Reloading...
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Scan Form -->
 <div class="card mb-4" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
     <div class="card-body p-3 p-md-4">
@@ -452,6 +496,74 @@ document.addEventListener('DOMContentLoaded', function() {
         changeLink.addEventListener('click', function(e) {
             e.preventDefault();
             document.getElementById('locationChangeCard').classList.remove('d-none');
+        });
+    }
+
+    // Place ID search handler
+    var placeSearchBtn = document.getElementById('heatmapPlaceSearchBtn');
+    if (placeSearchBtn) {
+        placeSearchBtn.addEventListener('click', function() {
+            var q = document.getElementById('heatmapPlaceSearch').value.trim();
+            if (!q) return;
+            var resultsDiv = document.getElementById('heatmapPlaceResults');
+            var savedDiv = document.getElementById('heatmapPlaceSaved');
+            placeSearchBtn.disabled = true;
+            placeSearchBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+            fetch('/client/settings/search-place', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+                body: JSON.stringify({query: q})
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                placeSearchBtn.disabled = false;
+                placeSearchBtn.innerHTML = '<i class="bi bi-search me-1"></i> Find';
+                if (!data.ok) { alert(data.error || 'Search failed'); return; }
+                if (!data.results.length) {
+                    resultsDiv.innerHTML = '<p class="text-muted mb-0">No results. Try a different search.</p>';
+                    resultsDiv.style.display = '';
+                    return;
+                }
+                var html = '<div class="list-group">';
+                data.results.forEach(function(p) {
+                    html += '<button type="button" class="list-group-item list-group-item-action hm-place-pick" data-pid="' + p.place_id + '">' +
+                        '<strong>' + p.name + '</strong><br>' +
+                        '<small class="text-muted">' + p.address + '</small>' +
+                        '</button>';
+                });
+                html += '</div>';
+                resultsDiv.innerHTML = html;
+                resultsDiv.style.display = '';
+
+                resultsDiv.querySelectorAll('.hm-place-pick').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        var pid = this.getAttribute('data-pid');
+                        fetch('/client/settings/save-place-id', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+                            body: JSON.stringify({place_id: pid})
+                        })
+                        .then(function(r) { return r.json(); })
+                        .then(function(sdata) {
+                            if (sdata.ok) {
+                                resultsDiv.style.display = 'none';
+                                savedDiv.style.display = '';
+                                setTimeout(function() { location.reload(); }, 1000);
+                            } else { alert(sdata.error || 'Save failed'); }
+                        });
+                    });
+                });
+            })
+            .catch(function() {
+                placeSearchBtn.disabled = false;
+                placeSearchBtn.innerHTML = '<i class="bi bi-search me-1"></i> Find';
+                alert('Network error');
+            });
+        });
+
+        document.getElementById('heatmapPlaceSearch').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); placeSearchBtn.click(); }
         });
     }
 

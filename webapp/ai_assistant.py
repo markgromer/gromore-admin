@@ -96,30 +96,73 @@ def _execute_web_search(query: str) -> str:
         except Exception as exc:
             log.warning("Google CSE error: %s", exc)
 
-    # Fallback: use DuckDuckGo instant answer API (no key needed)
+    # Fallback: scrape DuckDuckGo HTML search results (no key needed)
     try:
         resp = requests.get(
-            "https://api.duckduckgo.com/",
-            params={"q": query, "format": "json", "no_html": 1, "skip_disambig": 1},
+            "https://html.duckduckgo.com/html/",
+            params={"q": query},
             timeout=10,
-            headers={"User-Agent": "GroMore-Warren/1.0"},
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
         )
         if resp.status_code == 200:
-            data = resp.json()
-            parts = []
-            if data.get("AbstractText"):
-                parts.append(data["AbstractText"])
-                if data.get("AbstractURL"):
-                    parts.append(f"Source: {data['AbstractURL']}")
-            for r in (data.get("RelatedTopics") or [])[:5]:
-                if isinstance(r, dict) and r.get("Text"):
-                    text = r["Text"]
-                    url = r.get("FirstURL", "")
-                    parts.append(f"- {text}" + (f" ({url})" if url else ""))
-            if parts:
-                return "\n".join(parts)
+            # Parse result snippets from the HTML
+            from html.parser import HTMLParser
+
+            class DDGParser(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.results = []
+                    self._in_result = False
+                    self._in_title = False
+                    self._in_snippet = False
+                    self._cur = {}
+                    self._text = ""
+
+                def handle_starttag(self, tag, attrs):
+                    attrs_d = dict(attrs)
+                    cls = attrs_d.get("class", "")
+                    if tag == "a" and "result__a" in cls:
+                        self._in_title = True
+                        self._text = ""
+                        href = attrs_d.get("href", "")
+                        # DDG wraps URLs in a redirect; extract the real URL
+                        if "uddg=" in href:
+                            from urllib.parse import unquote, parse_qs, urlparse as _up
+                            qs = parse_qs(_up(href).query)
+                            href = unquote(qs.get("uddg", [href])[0])
+                        self._cur["url"] = href
+                    elif tag == "a" and "result__snippet" in cls:
+                        self._in_snippet = True
+                        self._text = ""
+
+                def handle_endtag(self, tag):
+                    if tag == "a" and self._in_title:
+                        self._in_title = False
+                        self._cur["title"] = self._text.strip()
+                    elif tag == "a" and self._in_snippet:
+                        self._in_snippet = False
+                        self._cur["snippet"] = self._text.strip()
+                        if self._cur.get("title"):
+                            self.results.append(self._cur)
+                        self._cur = {}
+
+                def handle_data(self, data):
+                    if self._in_title or self._in_snippet:
+                        self._text += data
+
+            parser = DDGParser()
+            parser.feed(resp.text)
+            if parser.results:
+                parts = []
+                for r in parser.results[:5]:
+                    parts.append(
+                        f"**{r.get('title', '')}**\n"
+                        f"{r.get('url', '')}\n"
+                        f"{r.get('snippet', '')}"
+                    )
+                return "\n\n".join(parts)
     except Exception as exc:
-        log.warning("DuckDuckGo API error: %s", exc)
+        log.warning("DuckDuckGo HTML search error: %s", exc)
 
     return f"I wasn't able to find web results for '{query}'. Try being more specific, or search directly at google.com."
 
