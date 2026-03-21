@@ -1976,7 +1976,10 @@
             });
             const grid = document.getElementById('driveAssetsGrid');
             if (!allFiles.length) {
-                grid.innerHTML = '<div class="text-muted" style="font-size:.8rem;grid-column:1/-1">No images in Drive yet</div>';
+                // Show debug info if available
+                const debugInfo = rootData.debug || imgData.debug || '';
+                grid.innerHTML = '<div class="text-muted" style="font-size:.8rem;grid-column:1/-1">No images in Drive yet' +
+                    (debugInfo ? '<br><small style="opacity:.6">' + debugInfo + '</small>' : '') + '</div>';
                 return;
             }
             grid.innerHTML = allFiles.slice(0, 12).map(f =>

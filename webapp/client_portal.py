@@ -2355,9 +2355,28 @@ def client_drive_list_files(subfolder):
         return jsonify({"error": "Invalid subfolder"}), 400
     db = _get_db()
     brand_id = session["client_brand_id"]
-    from webapp.google_drive import list_files
+
+    # Pre-flight checks with diagnostics
+    from webapp.google_drive import list_files, get_valid_access_token, _extract_folder_id
+    brand = db.get_brand(brand_id)
+    folder_id = _extract_folder_id(brand.get("google_drive_folder_id") or "")
+    if not folder_id:
+        return jsonify({"files": [], "debug": "No Drive folder ID configured. Go to Settings and enter your Google Drive folder URL."})
+
+    conns = db.get_brand_connections(brand_id)
+    google = conns.get("google", {})
+    scopes = google.get("scopes") or ""
+    if not google.get("access_token"):
+        return jsonify({"files": [], "debug": "No Google access token. Reconnect Google in Settings."})
+    if "drive" not in scopes.lower():
+        return jsonify({"files": [], "debug": f"Missing Drive scope. Current scopes: {scopes[:120]}. Reconnect Google With Drive Access in Settings."})
+
+    token = get_valid_access_token(db, brand_id)
+    if not token:
+        return jsonify({"files": [], "debug": "Could not refresh Google access token. Try reconnecting Google."})
+
     files = list_files(db, brand_id, None if subfolder == "Root" else subfolder)
-    return jsonify({"files": files})
+    return jsonify({"files": files, "debug": f"OK. folder_id={folder_id[:20]}, subfolder={subfolder}, found={len(files)} files"})
 
 
 @client_bp.route("/api/drive/upload", methods=["POST"])
@@ -2370,6 +2389,23 @@ def client_drive_upload():
     allowed = {"Creatives", "Ads", "Images", "Reports"}
     if subfolder not in allowed:
         return jsonify({"error": "Invalid subfolder"}), 400
+
+    # Pre-flight checks
+    from webapp.google_drive import get_valid_access_token, _extract_folder_id
+    brand = db.get_brand(brand_id)
+    folder_id = _extract_folder_id(brand.get("google_drive_folder_id") or "")
+    if not folder_id:
+        return jsonify({"error": "No Drive folder configured. Go to Settings and enter your Google Drive folder URL."}), 400
+
+    conns = db.get_brand_connections(brand_id)
+    google = conns.get("google", {})
+    scopes = google.get("scopes") or ""
+    if "drive" not in scopes.lower():
+        return jsonify({"error": f"Missing Drive scope. Reconnect Google With Drive Access in Settings. Current scopes: {scopes[:80]}"}), 403
+
+    token = get_valid_access_token(db, brand_id)
+    if not token:
+        return jsonify({"error": "Could not get a valid Google token. Try reconnecting Google."}), 401
 
     f = request.files.get("file")
     if not f or not f.filename:
@@ -2385,7 +2421,7 @@ def client_drive_upload():
     result = drive_upload(db, brand_id, subfolder, f.filename, f.read(), f.content_type or "application/octet-stream")
     if result:
         return jsonify({"ok": True, "file": result})
-    return jsonify({"error": "Upload failed. Check your Google Drive connection."}), 500
+    return jsonify({"error": "Upload failed. The Google token may lack permission for this folder. Try reconnecting Google With Drive Access."}), 500
 
 
 @client_bp.route("/settings/maps-api", methods=["POST"])
