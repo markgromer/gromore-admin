@@ -336,6 +336,21 @@ def _build_ad_context(analysis, brand):
     summary = _summarize_analysis_for_ai(analysis)
 
     client = summary.get("client", {})
+    # Build structured competitor profiles if available
+    competitor_profiles = client.get("competitor_profiles") or []
+    competitor_info = []
+    for cp in competitor_profiles:
+        parts = [cp.get("name", "")]
+        if cp.get("website"):
+            parts.append(f"website: {cp['website']}")
+        if cp.get("facebook_url"):
+            parts.append(f"facebook: {cp['facebook_url']}")
+        if cp.get("google_maps_url"):
+            parts.append(f"GMB: {cp['google_maps_url']}")
+        if cp.get("notes"):
+            parts.append(f"notes: {cp['notes']}")
+        competitor_info.append(" | ".join(parts))
+
     return {
         "business": {
             "name": brand.get("display_name") or client.get("name"),
@@ -346,6 +361,7 @@ def _build_ad_context(analysis, brand):
             "active_offers": client.get("active_offers"),
             "brand_voice": client.get("brand_voice"),
             "competitors": client.get("competitors"),
+            "competitor_profiles": competitor_info if competitor_info else None,
         },
         "performance": {
             "kpis": summary.get("kpis", {}),

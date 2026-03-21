@@ -181,8 +181,10 @@ def build_strategy_prompt(strategy_key, brand, service, location,
     system_parts.append(
         "You are a senior digital advertising strategist who builds "
         "campaign plans that are practical, conversion-focused, and ready "
-        "to launch through the advertising API. Return ONLY valid JSON, "
-        "no markdown fences or commentary."
+        "to launch through the advertising API. The client's brand voice, "
+        "competitors, offers, and audience are provided in the prompt. "
+        "Ad copy MUST reflect their brand voice and positioning. "
+        "Return ONLY valid JSON, no markdown fences or commentary."
     )
     system_prompt = "\n\n".join(system_parts)
 
@@ -196,6 +198,23 @@ def build_strategy_prompt(strategy_key, brand, service, location,
     )
     if notes:
         header += f"Additional notes: {notes}\n"
+
+    # Brand identity context
+    voice = (brand.get("brand_voice") or "").strip()
+    if voice:
+        header += f"Brand voice / tone: {voice}\n"
+    audience = (brand.get("target_audience") or "").strip()
+    if audience:
+        header += f"Target audience: {audience}\n"
+    offers = (brand.get("active_offers") or "").strip()
+    if offers:
+        header += f"Active offers / promotions: {offers}\n"
+    services = (brand.get("primary_services") or "").strip()
+    if services:
+        header += f"Primary services: {services}\n"
+    competitors = (brand.get("competitors") or "").strip()
+    if competitors:
+        header += f"Known competitors: {competitors}\n"
 
     # ── Strategy-specific prompt ──
     builder = _PROMPT_BUILDERS.get(strategy_key)

@@ -772,6 +772,55 @@ def list_all_campaigns(db, brand, month: str = ""):
 #  AI CAMPAIGN CREATION
 # ═══════════════════════════════════════════════════════════════════
 
+
+def _get_brand_api_key(brand):
+    """Return the brand's OpenAI key, falling back to the app-level key."""
+    key = ((brand or {}).get("openai_api_key") or "").strip()
+    if key:
+        return key
+    try:
+        from flask import current_app
+        return (current_app.config.get("OPENAI_API_KEY", "") or "").strip()
+    except RuntimeError:
+        import os
+        return os.environ.get("OPENAI_API_KEY", "").strip()
+
+
+def _get_brand_model(brand, purpose="ads"):
+    """Return the brand's preferred model for a purpose, with fallback."""
+    field_map = {
+        "ads": "openai_model_ads",
+        "chat": "openai_model_chat",
+        "analysis": "openai_model_analysis",
+    }
+    field = field_map.get(purpose, "openai_model_ads")
+    model = ((brand or {}).get(field) or "").strip()
+    if not model:
+        model = ((brand or {}).get("openai_model") or "").strip()
+    return model or "gpt-4o-mini"
+
+
+def _brand_context_block(brand):
+    """Build a brand identity block to inject into campaign prompts."""
+    lines = []
+    voice = (brand.get("brand_voice") or "").strip()
+    if voice:
+        lines.append(f"Brand voice / tone: {voice}")
+    audience = (brand.get("target_audience") or "").strip()
+    if audience:
+        lines.append(f"Target audience: {audience}")
+    offers = (brand.get("active_offers") or "").strip()
+    if offers:
+        lines.append(f"Active offers / promotions: {offers}")
+    services = (brand.get("primary_services") or "").strip()
+    if services:
+        lines.append(f"Primary services: {services}")
+    competitors = (brand.get("competitors") or "").strip()
+    if competitors:
+        lines.append(f"Known competitors: {competitors}")
+    return "\n".join(lines)
+
+
 def generate_campaign_plan(brand, service, location, monthly_budget,
                            platform, notes="", strategy_type=""):
     """Use GPT to generate a complete campaign plan ready for launch.
@@ -782,12 +831,12 @@ def generate_campaign_plan(brand, service, location, monthly_budget,
     generic prompt.
     """
     import openai
-    from flask import current_app
 
-    api_key = (current_app.config.get("OPENAI_API_KEY", "") or "").strip()
+    api_key = _get_brand_api_key(brand)
     if not api_key:
         return {"success": False, "error": "OpenAI API key not configured"}
 
+    model = _get_brand_model(brand, "ads")
     client = openai.OpenAI(api_key=api_key)
 
     # ── Strategy-based prompt (preferred) ──
@@ -800,7 +849,7 @@ def generate_campaign_plan(brand, service, location, monthly_budget,
             system_prompt, user_prompt = result
             try:
                 response = client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=model,
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
@@ -828,6 +877,8 @@ def generate_campaign_plan(brand, service, location, monthly_budget,
     # ── Generic fallback (no strategy selected) ──
     industry = brand.get("industry", "home services")
     brand_name = brand.get("display_name", brand.get("name", ""))
+    brand_ctx = _brand_context_block(brand)
+    daily = round(float(monthly_budget) / 30, 2)
 
     if platform == "google":
         prompt = f"""Create a Google Ads Search campaign plan for a {industry} business.
@@ -836,12 +887,13 @@ Business: {brand_name}
 Service to promote: {service}
 Target location: {location}
 Monthly budget: ${monthly_budget}
+{brand_ctx}
 {f'Additional notes: {notes}' if notes else ''}
 
 Return a JSON object with this exact structure:
 {{
     "campaign_name": "descriptive campaign name",
-    "daily_budget": {round(float(monthly_budget) / 30, 2)},
+    "daily_budget": {daily},
     "ad_groups": [
         {{
             "name": "ad group name",
@@ -863,7 +915,10 @@ Requirements:
 - Descriptions must be under 90 characters each
 - Include relevant negative keywords to prevent wasted spend
 - Focus on high-intent commercial keywords
-- Daily budget should be ${round(float(monthly_budget) / 30, 2)}"""
+- Daily budget should be ${daily}
+- Ad copy MUST reflect the brand voice and tone described above
+- If competitors are listed, position against their weaknesses
+- If active offers exist, feature them prominently in ad copy"""
 
     else:  # meta
         prompt = f"""Create a Facebook/Instagram Ads campaign plan for a {industry} business.
@@ -872,13 +927,14 @@ Business: {brand_name}
 Service to promote: {service}
 Target location: {location}
 Monthly budget: ${monthly_budget}
+{brand_ctx}
 {f'Additional notes: {notes}' if notes else ''}
 
 Return a JSON object with this exact structure:
 {{
     "campaign_name": "descriptive campaign name",
     "objective": "OUTCOME_LEADS",
-    "daily_budget": {round(float(monthly_budget) / 30, 2)},
+    "daily_budget": {daily},
     "ad_sets": [
         {{
             "name": "ad set name",
@@ -903,22 +959,27 @@ Requirements:
 - Create 2-3 ad sets with different targeting approaches
 - Each ad set should have 2-3 ad variations
 - Focus on lead generation
-- Use compelling, benefit-focused copy
+- Use compelling, benefit-focused copy that matches the brand voice above
 - Headlines should be short and punchy
 - Primary text should address pain points and include a clear call to action
+- If competitors are listed, differentiate against them
+- If active offers exist, weave them into ad copy
 - Call to action options: GET_QUOTE, LEARN_MORE, CONTACT_US, SIGN_UP, BOOK_NOW
-- Daily budget should be ${round(float(monthly_budget) / 30, 2)}"""
+- Daily budget should be ${daily}"""
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[
                 {
                     "role": "system",
                     "content": (
-                        "You are a senior digital advertising strategist. "
-                        "Generate campaign plans that are practical, conversion-focused, "
-                        "and ready to launch. Return ONLY valid JSON, no markdown."
+                        "You are a senior digital advertising strategist working inside "
+                        "GroMore, an ad management platform. Generate campaign plans that "
+                        "are practical, conversion-focused, and ready to launch. "
+                        "The client's brand identity and competitive landscape are included "
+                        "in the prompt - use them to make ad copy specific, not generic. "
+                        "Return ONLY valid JSON, no markdown."
                     ),
                 },
                 {"role": "user", "content": prompt},
@@ -1299,12 +1360,12 @@ def launch_meta_campaign(db, brand, plan, changed_by):
 def get_campaign_recommendations(brand, campaigns):
     """Get AI-powered recommendations for existing campaigns."""
     import openai
-    from flask import current_app
 
-    api_key = (current_app.config.get("OPENAI_API_KEY", "") or "").strip()
+    api_key = _get_brand_api_key(brand)
     if not api_key:
         return []
 
+    model = _get_brand_model(brand, "ads")
     client = openai.OpenAI(api_key=api_key)
 
     # Build a summary of campaign performance
@@ -1336,22 +1397,27 @@ def get_campaign_recommendations(brand, campaigns):
     industry = brand.get("industry", "home services")
     summary = "\n".join(summary_lines)
 
+    brand_ctx = _brand_context_block(brand)
+    brand_note = f"\n\nBrand context:\n{brand_ctx}" if brand_ctx else ""
+
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[
                 {
                     "role": "system",
                     "content": (
                         "You are a senior paid media strategist analyzing campaign performance "
-                        f"for a {industry} business. Give specific, actionable recommendations. "
+                        f"for a {industry} business. Give specific, actionable recommendations "
+                        "that align with the brand voice and competitive positioning. "
                         "Be direct and practical. No fluff."
                     ),
                 },
                 {
                     "role": "user",
                     "content": (
-                        f"Here are the campaigns for the last 30 days:\n{summary}\n\n"
+                        f"Here are the campaigns for the last 30 days:\n{summary}"
+                        f"{brand_note}\n\n"
                         "Give me 3-5 specific recommendations. For each, include:\n"
                         "1. Which campaign it applies to\n"
                         "2. What the problem or opportunity is\n"
