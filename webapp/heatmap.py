@@ -147,9 +147,3 @@ def scan_grid(api_key, keyword, business_name, grid_points,
             "rank": rank,
         })
     return results
-            "col": pt["col"],
-            "lat": pt["lat"],
-            "lng": pt["lng"],
-            "rank": rank,
-        })
-    return results
