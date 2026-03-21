@@ -391,6 +391,7 @@
         </div>
         <p class="text-muted mb-3" style="font-size:.88rem;">Required for the Local Rank Heatmap feature. Enable the Places API and Geocoding API in your Google Cloud project.</p>
         <form action="{{ url_for('client.client_save_maps_api') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="row g-3 align-items-end">
                 <div class="col-md-8">
                     <label class="form-label fw-medium" style="font-size:.88rem;">Google Maps API Key</label>
