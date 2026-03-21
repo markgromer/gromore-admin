@@ -2435,6 +2435,9 @@ def client_drive_browse():
         return jsonify({"error": "Invalid folder ID"}), 400
     from webapp.google_drive import browse_folder
     result = browse_folder(db, brand_id, folder_id)
+    # Include granted scopes for debugging
+    conns = db.get_brand_connections(brand_id)
+    result["scopes"] = (conns.get("google", {}).get("scopes") or "")[-80:]
     return jsonify(result)
 
 
