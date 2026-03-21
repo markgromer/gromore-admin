@@ -488,6 +488,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 renderGrid(data.results, gridSize, keyword, radius);
                 renderStats(data.avg_rank, data.found, data.total, data.results);
+                if (data.debug) showDebug(data.debug);
                 plotMapMarkers(data.results);
                 // reload page to update history
                 setTimeout(function() { location.reload(); }, 500);
@@ -535,6 +536,25 @@ function renderStats(avgRank, found, total, results) {
         '<span class="stat-pill" style="background:#dcfce7; color:#166534;">Avg Rank: ' + avgRank + '</span>' +
         '<span class="stat-pill" style="background:#e0e7ff; color:#3730a3;">Found: ' + found + ' / ' + total + '</span>' +
         '<span class="stat-pill" style="background:#dcfce7; color:#166534;">Top 3: ' + top3 + '</span>';
+}
+
+function showDebug(d) {
+    var el = document.getElementById('debugInfo');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'debugInfo';
+        el.style.cssText = 'margin:10px 0; padding:10px; background:#f1f5f9; border-radius:8px; font-size:13px;';
+        document.getElementById('statsBar').parentNode.insertBefore(el, document.getElementById('statsBar').nextSibling);
+    }
+    el.innerHTML =
+        '<strong>Debug:</strong> Matching business name: <code>' + (d.business_name_used || 'none') + '</code>' +
+        ' | Place ID: <code>' + (d.place_id_used || 'none') + '</code>' +
+        ' | Search radius: ' + d.search_radius_m + 'm' +
+        ' | Places returned: ' + d.places_returned +
+        '<br><strong>Top 5 Google results (first grid point):</strong> ' +
+        (d.top_5_names && d.top_5_names.length ? d.top_5_names.map(function(n, i) {
+            return '<br>' + (i+1) + '. ' + n;
+        }).join('') : '<em>none returned</em>');
 }
 
 function loadScan(scanId) {

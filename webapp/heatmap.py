@@ -135,10 +135,26 @@ def scan_grid(api_key, keyword, business_name, grid_points,
               place_id=None, search_radius_m=2000):
     """Run a full grid scan. Returns list of point dicts with 'rank' added."""
     results = []
+    debug_sample = None
     for pt in grid_points:
         places = _search_places(api_key, keyword, pt["lat"], pt["lng"],
                                 radius_m=search_radius_m)
         rank = _match_business(places, business_name, place_id)
+        # Capture first point's raw results for diagnostics
+        if debug_sample is None:
+            debug_sample = {
+                "business_name_used": business_name,
+                "place_id_used": place_id,
+                "search_radius_m": search_radius_m,
+                "places_returned": len(places),
+                "top_5_names": [
+                    (p.get("displayName", {}).get("text", "") or "")
+                    for p in places[:5]
+                ],
+            }
+            log.info("Heatmap debug - matching '%s' (place_id=%s) | "
+                     "top results: %s", business_name, place_id,
+                     debug_sample["top_5_names"])
         results.append({
             "row": pt["row"],
             "col": pt["col"],
@@ -146,4 +162,4 @@ def scan_grid(api_key, keyword, business_name, grid_points,
             "lng": pt["lng"],
             "rank": rank,
         })
-    return results
+    return results, debug_sample

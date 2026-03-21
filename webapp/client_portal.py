@@ -2308,8 +2308,8 @@ def client_heatmap_scan():
     search_radius = calc_search_radius_m(radius, grid_size)
     business_name = brand.get("display_name", "")
     place_id = brand.get("google_place_id") or None
-    results = scan_grid(api_key, keyword, business_name, grid_points,
-                        place_id=place_id, search_radius_m=search_radius)
+    results, debug_info = scan_grid(api_key, keyword, business_name, grid_points,
+                                    place_id=place_id, search_radius_m=search_radius)
 
     ranked = [r for r in results if r["rank"] > 0]
     avg_rank = round(sum(r["rank"] for r in ranked) / len(ranked), 1) if ranked else 0
@@ -2319,7 +2319,8 @@ def client_heatmap_scan():
                          _json.dumps(results), avg_rank)
 
     return jsonify(ok=True, results=results, avg_rank=avg_rank,
-                   found=len(ranked), total=len(results))
+                   found=len(ranked), total=len(results),
+                   debug=debug_info)
 
 
 @client_bp.route("/heatmap/save-location", methods=["POST"])
