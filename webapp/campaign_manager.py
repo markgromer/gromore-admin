@@ -976,7 +976,13 @@ def launch_google_campaign(db, brand, plan, changed_by):
         json=budget_body, headers=headers, timeout=30,
     )
     if budget_resp.status_code != 200:
-        return {"success": False, "error": f"Failed to create budget: {_parse_google_error(budget_resp)}"}
+        err_msg = _parse_google_error(budget_resp)
+        if budget_resp.status_code == 501 or "not implemented" in err_msg.lower():
+            err_msg = ("Your Google Ads developer token only has test-level access, "
+                       "which cannot create campaigns in production accounts. "
+                       "Apply for Basic Access in your MCC account under "
+                       "Tools & Settings > API Center. Save as Draft to keep this plan.")
+        return {"success": False, "error": f"Failed to create budget: {err_msg}"}
 
     budget_resource = budget_resp.json().get("results", [{}])[0].get("resourceName", "")
     if not budget_resource:

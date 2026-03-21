@@ -193,7 +193,7 @@ def pull_api_data_for_brand(brand, connections, month):
         except Exception as e:
             errors.append(f"GSC pull failed: {str(e)}")
 
-    # Google Ads
+    # Google Ads (direct API, then GA4 fallback)
     if google_conn and google_conn.get("status") == "connected" and brand.get("google_ads_customer_id"):
         try:
             token = _get_google_token(db, brand["id"], google_conn)
@@ -204,7 +204,39 @@ def pull_api_data_for_brand(brand, connections, month):
                 end_date,
             )
         except Exception as e:
-            errors.append(f"Google Ads pull failed: {str(e)}")
+            ads_err = str(e)
+            # If direct API failed and we have a GA4 property, try pulling ads data through GA4
+            if brand.get("ga4_property_id"):
+                try:
+                    token = _get_google_token(db, brand["id"], google_conn)
+                    data["google_ads"] = _pull_google_ads_via_ga4(
+                        brand["ga4_property_id"],
+                        token,
+                        start_date,
+                        end_date,
+                    )
+                    log.info("Google Ads data pulled via GA4 fallback for brand %s", brand["id"])
+                except Exception as e2:
+                    errors.append(f"Google Ads pull failed: {ads_err}")
+                    errors.append(f"GA4 Ads fallback also failed: {str(e2)}")
+            else:
+                errors.append(f"Google Ads pull failed: {ads_err}")
+
+    # Google Ads via GA4 only (no customer ID set, but GA4 may have linked ads data)
+    elif google_conn and google_conn.get("status") == "connected" and not brand.get("google_ads_customer_id") and brand.get("ga4_property_id"):
+        try:
+            token = _get_google_token(db, brand["id"], google_conn)
+            data["google_ads"] = _pull_google_ads_via_ga4(
+                brand["ga4_property_id"],
+                token,
+                start_date,
+                end_date,
+            )
+            log.info("Google Ads data pulled via GA4 (no customer ID) for brand %s", brand["id"])
+        except Exception as e:
+            # Not an error if there's simply no ads data in GA4
+            if "No Google Ads data found" not in str(e):
+                errors.append(f"GA4 Ads data pull failed: {str(e)}")
 
     # Meta Ads
     if meta_conn and meta_conn.get("status") == "connected" and brand.get("meta_ad_account_id"):
@@ -470,6 +502,116 @@ def _pull_gsc(site_url, access_token, start_date, end_date):
         "top_pages": [],
         "opportunity_queries": [],
         "row_count": len(rows),
+    }
+
+
+def _pull_google_ads_via_ga4(property_id, access_token, start_date, end_date):
+    """Pull Google Ads campaign data through the GA4 Data API.
+
+    Works when Google Ads is linked to GA4 in the GA4 Admin panel.
+    Does NOT require a Google Ads developer token.
+    Returns the same structure as _pull_google_ads() for drop-in use.
+    """
+    import requests
+
+    url = f"https://analyticsdata.googleapis.com/v1beta/properties/{property_id}:runReport"
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    def _run_report(metric_names, dimension_names=None, limit=100):
+        body = {
+            "dateRanges": [{"startDate": start_date, "endDate": end_date}],
+            "metrics": [{"name": m} for m in metric_names],
+            "limit": limit,
+        }
+        if dimension_names:
+            body["dimensions"] = [{"name": d} for d in dimension_names]
+        resp = requests.post(url, json=body, headers=headers, timeout=30)
+        resp.raise_for_status()
+        return resp.json().get("rows", [])
+
+    # Campaign-level breakdown
+    campaign_rows = _run_report(
+        ["advertiserAdClicks", "advertiserAdCost", "advertiserAdImpressions"],
+        dimension_names=["sessionGoogleAdsCampaignName"],
+        limit=200,
+    )
+
+    by_campaign = {}
+    totals = {
+        "impressions": 0,
+        "clicks": 0,
+        "spend": 0.0,
+        "results": 0.0,
+        "ctr": 0.0,
+        "cpc": 0.0,
+        "cost_per_result": 0.0,
+    }
+
+    for row in campaign_rows:
+        dims = row.get("dimensionValues", [])
+        vals = row.get("metricValues", [])
+        campaign_name = dims[0].get("value", "(not set)") if dims else "(not set)"
+        if campaign_name == "(not set)":
+            continue
+
+        clicks = int(float(vals[0].get("value", "0"))) if len(vals) > 0 else 0
+        spend = float(vals[1].get("value", "0")) if len(vals) > 1 else 0.0
+        impressions = int(float(vals[2].get("value", "0"))) if len(vals) > 2 else 0
+        ctr = (clicks / impressions * 100) if impressions > 0 else 0.0
+        cpc = (spend / clicks) if clicks > 0 else 0.0
+
+        by_campaign[campaign_name] = {
+            "campaign_id": "",
+            "channel_type": "",
+            "impressions": impressions,
+            "clicks": clicks,
+            "spend": round(spend, 2),
+            "results": 0.0,
+            "ctr": round(ctr, 2),
+            "cpc": round(cpc, 2),
+            "cost_per_result": 0.0,
+        }
+
+        totals["impressions"] += impressions
+        totals["clicks"] += clicks
+        totals["spend"] += spend
+
+    if totals["impressions"] > 0:
+        totals["ctr"] = round(totals["clicks"] / totals["impressions"] * 100, 2)
+    if totals["clicks"] > 0:
+        totals["cpc"] = round(totals["spend"] / totals["clicks"], 2)
+
+    # Try to get conversion data separately (may not be available)
+    try:
+        conv_rows = _run_report(
+            ["conversions"],
+            dimension_names=["sessionGoogleAdsCampaignName"],
+            limit=200,
+        )
+        for row in conv_rows:
+            dims = row.get("dimensionValues", [])
+            vals = row.get("metricValues", [])
+            name = dims[0].get("value", "") if dims else ""
+            convs = float(vals[0].get("value", "0")) if vals else 0.0
+            if name in by_campaign:
+                by_campaign[name]["results"] = round(convs, 2)
+                s = by_campaign[name]["spend"]
+                by_campaign[name]["cost_per_result"] = round(s / convs, 2) if convs > 0 else 0.0
+                totals["results"] += convs
+    except Exception:
+        pass  # Conversions may not be configured
+
+    if totals["results"] > 0 and totals["spend"] > 0:
+        totals["cost_per_result"] = round(totals["spend"] / totals["results"], 2)
+
+    if not by_campaign:
+        raise ValueError("No Google Ads data found in GA4. Make sure Google Ads is linked to GA4 in the GA4 Admin panel.")
+
+    return {
+        "totals": totals,
+        "by_campaign": by_campaign,
+        "search_terms": [],
+        "source": "ga4",
     }
 
 
