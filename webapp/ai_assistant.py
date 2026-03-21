@@ -550,6 +550,7 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
             "active_offers": client_config.get("active_offers"),
             "target_audience": client_config.get("target_audience"),
             "competitors": client_config.get("competitors"),
+            "competitor_profiles": client_config.get("competitor_profiles", []),
             "reporting_notes": client_config.get("reporting_notes"),
             "kpi_target_cpa": _safe_float(client_config.get("kpi_target_cpa")),
             "kpi_target_leads": _safe_float(client_config.get("kpi_target_leads")),

@@ -920,13 +920,11 @@ def client_my_business():
             brand_voice = request.form.get("brand_voice", "")[:2000].strip()
             active_offers = request.form.get("active_offers", "")[:1000].strip()
             target_audience = request.form.get("target_audience", "")[:2000].strip()
-            competitors = request.form.get("competitors", "")[:1000].strip()
             reporting_notes = request.form.get("reporting_notes", "")[:1000].strip()
 
             db.update_brand_text_field(brand_id, "brand_voice", brand_voice)
             db.update_brand_text_field(brand_id, "active_offers", active_offers)
             db.update_brand_text_field(brand_id, "target_audience", target_audience)
-            db.update_brand_text_field(brand_id, "competitors", competitors)
             db.update_brand_text_field(brand_id, "reporting_notes", reporting_notes)
             flash("Brand profile updated.", "success")
 
@@ -953,13 +951,14 @@ def client_my_business():
     # Reload latest
     brand = db.get_brand(brand_id)
     logo_variants = _parse_logo_variants(brand.get("logo_variants"))
+    competitors = db.get_competitors(brand_id)
 
     # Calculate completion score for the profile
     profile_fields = [
         brand.get("brand_voice"),
         brand.get("active_offers"),
         brand.get("target_audience"),
-        brand.get("competitors"),
+        len(competitors) > 0,
     ]
     target_fields = [
         brand.get("kpi_target_cpa") and float(brand.get("kpi_target_cpa", 0)) > 0,
@@ -972,9 +971,57 @@ def client_my_business():
         "client_my_business.html",
         brand=brand,
         logo_variants=logo_variants,
+        competitors=competitors,
         profile_score=profile_score,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
+
+
+def _sync_competitors_text(db, brand_id):
+    """Keep the legacy brands.competitors text field in sync with the
+    structured competitors table so the analytics pipeline keeps working."""
+    comps = db.get_competitors(brand_id)
+    names = ", ".join(c["name"] for c in comps)
+    db.update_brand_text_field(brand_id, "competitors", names)
+
+
+@client_bp.route("/competitors/add", methods=["POST"])
+@client_login_required
+def client_add_competitor():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    name = request.form.get("name", "").strip()[:200]
+    if not name:
+        flash("Competitor name is required.", "error")
+        return redirect(url_for("client.client_my_business"))
+
+    db.add_competitor(
+        brand_id=brand_id,
+        name=name,
+        website=request.form.get("website", "").strip()[:500],
+        facebook_url=request.form.get("facebook_url", "").strip()[:500],
+        google_maps_url=request.form.get("google_maps_url", "").strip()[:500],
+        yelp_url=request.form.get("yelp_url", "").strip()[:500],
+        instagram_url=request.form.get("instagram_url", "").strip()[:500],
+        notes=request.form.get("notes", "").strip()[:500],
+    )
+    _sync_competitors_text(db, brand_id)
+    flash(f"Competitor '{name}' added.", "success")
+    return redirect(url_for("client.client_my_business"))
+
+
+@client_bp.route("/competitors/<int:competitor_id>/delete", methods=["POST"])
+@client_login_required
+def client_delete_competitor(competitor_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    comp = db.get_competitor(competitor_id, brand_id)
+    if comp:
+        db.delete_competitor(competitor_id, brand_id)
+        _sync_competitors_text(db, brand_id)
+        flash(f"Competitor '{comp['name']}' removed.", "success")
+    return redirect(url_for("client.client_my_business"))
 
 
 # ── Logo Upload ──

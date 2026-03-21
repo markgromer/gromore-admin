@@ -70,6 +70,14 @@ def build_analysis_and_suggestions_for_brand(db, brand, month):
     slug = brand["slug"]
     client_config = _brand_to_client_config(brand)
 
+    # Inject structured competitor profiles if available
+    try:
+        competitor_rows = db.get_competitors(brand["id"])
+        if competitor_rows:
+            client_config["competitor_profiles"] = [dict(r) for r in competitor_rows]
+    except Exception:
+        pass
+
     # Try loading data from CSV imports first
     imports_base = IMPORTS_ROOT
     if not (IMPORTS_ROOT / slug / month).exists() and (LEGACY_IMPORTS_ROOT / slug / month).exists():

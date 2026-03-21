@@ -299,6 +299,27 @@ class WebDB:
             ON ad_news_digests(digest_date DESC);
         """)
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS competitors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                website TEXT DEFAULT '',
+                facebook_url TEXT DEFAULT '',
+                google_maps_url TEXT DEFAULT '',
+                yelp_url TEXT DEFAULT '',
+                instagram_url TEXT DEFAULT '',
+                notes TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id)
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_competitors_brand
+            ON competitors(brand_id);
+        """)
+
         conn.commit()
         brand_columns = {r[1] for r in conn.execute("PRAGMA table_info(brands)").fetchall()}
         new_brand_cols = [
@@ -1364,3 +1385,69 @@ class WebDB:
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
+    # ── Competitors (structured) ─────────────────────────────────
+
+    def add_competitor(self, brand_id, name, website="", facebook_url="",
+                       google_maps_url="", yelp_url="", instagram_url="",
+                       notes=""):
+        conn = self._conn()
+        cur = conn.execute(
+            """INSERT INTO competitors
+               (brand_id, name, website, facebook_url, google_maps_url,
+                yelp_url, instagram_url, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (brand_id, name, website, facebook_url, google_maps_url,
+             yelp_url, instagram_url, notes),
+        )
+        conn.commit()
+        new_id = cur.lastrowid
+        conn.close()
+        return new_id
+
+    def get_competitors(self, brand_id):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM competitors WHERE brand_id = ? ORDER BY name",
+            (brand_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_competitor(self, competitor_id, brand_id):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM competitors WHERE id = ? AND brand_id = ?",
+            (competitor_id, brand_id),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def update_competitor(self, competitor_id, brand_id, **kwargs):
+        allowed = {"name", "website", "facebook_url", "google_maps_url",
+                    "yelp_url", "instagram_url", "notes"}
+        sets, params = [], []
+        for k, v in kwargs.items():
+            if k in allowed:
+                sets.append(f"{k} = ?")
+                params.append(v)
+        if not sets:
+            return
+        sets.append("updated_at = datetime('now')")
+        params.extend([competitor_id, brand_id])
+        conn = self._conn()
+        conn.execute(
+            f"UPDATE competitors SET {', '.join(sets)} WHERE id = ? AND brand_id = ?",
+            params,
+        )
+        conn.commit()
+        conn.close()
+
+    def delete_competitor(self, competitor_id, brand_id):
+        conn = self._conn()
+        conn.execute(
+            "DELETE FROM competitors WHERE id = ? AND brand_id = ?",
+            (competitor_id, brand_id),
+        )
+        conn.commit()
+        conn.close()
