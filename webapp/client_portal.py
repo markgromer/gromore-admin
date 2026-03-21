@@ -2235,6 +2235,7 @@ def client_search_place():
     import requests as _req
     lat = float(brand.get("business_lat") or 0)
     lng = float(brand.get("business_lng") or 0)
+    api_errors = []
 
     # Try Places API (New) first
     url_new = "https://places.googleapis.com/v1/places:searchText"
@@ -2260,8 +2261,10 @@ def client_search_place():
                     "name": (p.get("displayName", {}).get("text", "") or ""),
                     "address": p.get("formattedAddress", ""),
                 })
-    except Exception:
-        pass
+        else:
+            api_errors.append(f"Places API (New): {resp.status_code} - {resp.text[:200]}")
+    except Exception as exc:
+        api_errors.append(f"Places API (New): {exc}")
 
     # Fallback: legacy Places Text Search
     if not places:
@@ -2272,17 +2275,49 @@ def client_search_place():
             params["radius"] = 50000
         try:
             resp = _req.get(url_leg, params=params, timeout=15)
-            resp.raise_for_status()
-            raw = resp.json().get("results", [])
-            for r in raw[:5]:
-                places.append({
-                    "place_id": r.get("place_id", ""),
-                    "name": r.get("name", ""),
-                    "address": r.get("formatted_address", ""),
-                })
+            data = resp.json()
+            status = data.get("status", "")
+            if status == "OK":
+                for r in data.get("results", [])[:5]:
+                    places.append({
+                        "place_id": r.get("place_id", ""),
+                        "name": r.get("name", ""),
+                        "address": r.get("formatted_address", ""),
+                    })
+            else:
+                err_msg = data.get("error_message", status)
+                api_errors.append(f"Places API (Legacy): {err_msg}")
         except Exception as exc:
-            if not places:
-                return jsonify(ok=False, error="Places API error: " + str(exc)), 500
+            api_errors.append(f"Places API (Legacy): {exc}")
+
+    # Fallback: Find Place from text (different endpoint, sometimes enabled separately)
+    if not places:
+        url_find = "https://maps.googleapis.com/maps/api/place/findplacefromtext/json"
+        params = {
+            "input": query,
+            "inputtype": "textquery",
+            "fields": "place_id,name,formatted_address",
+            "key": api_key,
+        }
+        if lat != 0 or lng != 0:
+            params["locationbias"] = f"circle:50000@{lat},{lng}"
+        try:
+            resp = _req.get(url_find, params=params, timeout=15)
+            data = resp.json()
+            if data.get("status") == "OK":
+                for c in data.get("candidates", [])[:5]:
+                    places.append({
+                        "place_id": c.get("place_id", ""),
+                        "name": c.get("name", ""),
+                        "address": c.get("formatted_address", ""),
+                    })
+            else:
+                api_errors.append(f"Find Place: {data.get('error_message', data.get('status'))}")
+        except Exception as exc:
+            api_errors.append(f"Find Place: {exc}")
+
+    if not places and api_errors:
+        return jsonify(ok=False, error="No results. API errors: " + " | ".join(api_errors)), 200
 
     return jsonify(ok=True, results=places)
 
