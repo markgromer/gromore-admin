@@ -2346,6 +2346,72 @@ def client_save_google_drive():
     return redirect(url_for("client.client_settings"))
 
 
+@client_bp.route("/api/drive/diagnose")
+@client_login_required
+def client_drive_diagnose():
+    """Diagnostic endpoint: test every step of Drive access and report results."""
+    import requests as _req
+    from webapp.google_drive import (
+        get_valid_access_token, _extract_folder_id, _drive_headers,
+        _find_subfolder, DRIVE_API
+    )
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    steps = []
+
+    # Step 1: folder ID
+    raw_folder = brand.get("google_drive_folder_id") or ""
+    folder_id = _extract_folder_id(raw_folder)
+    steps.append({"step": "folder_id", "raw": raw_folder[:60], "extracted": folder_id[:40] if folder_id else "EMPTY"})
+    if not folder_id:
+        return jsonify({"steps": steps, "error": "No folder ID"})
+
+    # Step 2: connection + scopes
+    conns = db.get_brand_connections(brand_id)
+    google = conns.get("google", {})
+    scopes = google.get("scopes") or ""
+    has_token = bool(google.get("access_token"))
+    steps.append({"step": "connection", "has_token": has_token, "scopes": scopes[:200]})
+
+    # Step 3: get valid token
+    token = get_valid_access_token(db, brand_id)
+    steps.append({"step": "token_refresh", "ok": bool(token)})
+    if not token:
+        return jsonify({"steps": steps, "error": "Cannot get valid token"})
+
+    # Step 4: list ALL items in root folder (files + folders)
+    q = f"'{folder_id}' in parents and trashed = false"
+    resp = _req.get(f"{DRIVE_API}/files", params={
+        "q": q,
+        "fields": "files(id,name,mimeType,size)",
+        "pageSize": 30,
+    }, headers=_drive_headers(token), timeout=15)
+    steps.append({
+        "step": "list_root",
+        "status": resp.status_code,
+        "items": resp.json().get("files", []) if resp.status_code == 200 else [],
+        "error_body": resp.text[:300] if resp.status_code != 200 else None,
+    })
+
+    # Step 5: try to find "Creatives" subfolder
+    creatives_id = _find_subfolder(token, folder_id, "Creatives")
+    steps.append({"step": "find_creatives_subfolder", "found_id": creatives_id or "NOT FOUND"})
+
+    # Step 6: check folder metadata (verify it's accessible)
+    meta_resp = _req.get(f"{DRIVE_API}/files/{folder_id}",
+                         params={"fields": "id,name,mimeType,ownedByMe,capabilities"},
+                         headers=_drive_headers(token), timeout=15)
+    if meta_resp.status_code == 200:
+        meta = meta_resp.json()
+        steps.append({"step": "folder_meta", "name": meta.get("name"), "mimeType": meta.get("mimeType"),
+                       "ownedByMe": meta.get("ownedByMe"), "capabilities": meta.get("capabilities", {})})
+    else:
+        steps.append({"step": "folder_meta", "status": meta_resp.status_code, "error": meta_resp.text[:300]})
+
+    return jsonify({"steps": steps})
+
+
 @client_bp.route("/api/drive/files/<subfolder>")
 @client_login_required
 def client_drive_list_files(subfolder):
