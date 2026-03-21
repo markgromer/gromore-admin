@@ -188,8 +188,16 @@
             {% if not google_connected %}
             <p class="text-muted mb-2" style="font-size:.88rem;">Connect Google first, then configure your Drive folder and Sheet destination.</p>
             {% elif not drive_scoped %}
-            <p class="text-muted mb-2" style="font-size:.88rem;">Your current Google connection does not include Drive/Sheets scope yet.</p>
-            <a href="{{ url_for('client_google_oauth.connect') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat me-1"></i> Reconnect Google With Drive Access</a>
+            <div class="alert alert-warning d-flex align-items-center gap-3 mb-3" style="border-radius:10px">
+                <i class="bi bi-exclamation-triangle-fill" style="font-size:1.5rem"></i>
+                <div>
+                    <strong>Limited Drive access.</strong> Your current connection only lets the app see files it created.
+                    To see all your Drive files (Team photos, Brand assets, etc.), click the button below to re-authorize with full Drive access.
+                </div>
+            </div>
+            <a href="{{ url_for('client_google_oauth.connect') }}" class="btn btn-primary mb-3">
+                <i class="bi bi-arrow-repeat me-1"></i> Reconnect Google With Full Drive Access
+            </a>
             {% endif %}
         </div>
 
