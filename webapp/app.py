@@ -1211,6 +1211,8 @@ def create_app():
         practices = db.get_ad_best_practices()
         digests = db.get_ad_news_digests(limit=20)
         master_prompt = db.get_active_master_prompt("ad_builder", "all", "")
+        niche_prompts = db.get_all_niche_prompts()
+        strategies = db.get_all_campaign_strategies(active_only=False)
 
         good_count = sum(1 for e in examples if e.get("quality") == "good")
         bad_count = sum(1 for e in examples if e.get("quality") == "bad")
@@ -1223,6 +1225,9 @@ def create_app():
             master_prompt=master_prompt,
             good_count=good_count,
             bad_count=bad_count,
+            niche_prompts=niche_prompts,
+            strategies=strategies,
+            industries=_get_industries(),
         )
 
     @app.route("/ad-intelligence/add-example", methods=["POST"])
@@ -1305,6 +1310,75 @@ def create_app():
         else:
             flash("Master prompt rebuilt and saved. All future ad generation will use the new version.", "success")
         return redirect(url_for("ad_intelligence"))
+
+    # ── Ad Intelligence: Niche Prompts ──
+    @app.route("/ad-intelligence/save-niche", methods=["POST"])
+    @login_required
+    def ad_intel_save_niche():
+        industry = request.form.get("industry", "").strip()
+        title = request.form.get("title", "").strip()
+        content = request.form.get("content", "").strip()
+        if not industry or not content:
+            flash("Industry and content are required.", "error")
+            return redirect(url_for("ad_intelligence") + "#tab-niches")
+        db.save_niche_prompt(industry, title, content)
+        flash(f"Niche prompt for '{industry}' saved.", "success")
+        return redirect(url_for("ad_intelligence") + "#tab-niches")
+
+    @app.route("/ad-intelligence/delete-niche/<int:niche_id>", methods=["POST"])
+    @login_required
+    def ad_intel_delete_niche(niche_id):
+        db.delete_niche_prompt(niche_id)
+        flash("Niche prompt deleted.", "success")
+        return redirect(url_for("ad_intelligence") + "#tab-niches")
+
+    @app.route("/ad-intelligence/seed-niches", methods=["POST"])
+    @login_required
+    def ad_intel_seed_niches():
+        from webapp.ad_knowledge import seed_niche_prompts
+        seed_niche_prompts(db)
+        flash("Starter niche prompts seeded for all industries.", "success")
+        return redirect(url_for("ad_intelligence") + "#tab-niches")
+
+    # ── Ad Intelligence: Campaign Strategies ──
+    @app.route("/ad-intelligence/save-strategy", methods=["POST"])
+    @login_required
+    def ad_intel_save_strategy():
+        strategy_key = request.form.get("strategy_key", "").strip()
+        name = request.form.get("name", "").strip()
+        if not strategy_key or not name:
+            flash("Strategy key and name are required.", "error")
+            return redirect(url_for("ad_intelligence") + "#tab-strategies")
+        db.save_campaign_strategy(
+            strategy_key=strategy_key,
+            platform=request.form.get("platform", "meta"),
+            name=name,
+            icon=request.form.get("icon", "bi-megaphone-fill").strip(),
+            color=request.form.get("color", "#6366f1").strip(),
+            tagline=request.form.get("tagline", "").strip(),
+            description=request.form.get("description", "").strip(),
+            best_for=request.form.get("best_for", "").strip(),
+            recommended_min=int(request.form.get("recommended_min", 200)),
+            objective=request.form.get("objective", "").strip(),
+            sort_order=int(request.form.get("sort_order", 0)),
+        )
+        flash(f"Strategy '{name}' saved.", "success")
+        return redirect(url_for("ad_intelligence") + "#tab-strategies")
+
+    @app.route("/ad-intelligence/delete-strategy/<int:strategy_id>", methods=["POST"])
+    @login_required
+    def ad_intel_delete_strategy(strategy_id):
+        db.delete_campaign_strategy(strategy_id)
+        flash("Strategy deleted.", "success")
+        return redirect(url_for("ad_intelligence") + "#tab-strategies")
+
+    @app.route("/ad-intelligence/seed-strategies", methods=["POST"])
+    @login_required
+    def ad_intel_seed_strategies():
+        from webapp.ad_knowledge import seed_campaign_strategies
+        seed_campaign_strategies(db)
+        flash("Default campaign strategies seeded.", "success")
+        return redirect(url_for("ad_intelligence") + "#tab-strategies")
 
     # ── Settings ──
     @app.route("/settings", methods=["GET", "POST"])

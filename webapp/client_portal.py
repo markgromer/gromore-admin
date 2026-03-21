@@ -714,14 +714,14 @@ def client_campaign_create():
     has_meta = (connections.get("meta", {}).get("status") == "connected"
                 and brand.get("meta_ad_account_id"))
 
-    from webapp.campaign_templates import CAMPAIGN_STRATEGIES
+    from webapp.campaign_templates import get_active_strategies
 
     return render_template(
         "client_campaign_create.html",
         brand=brand,
         has_google=has_google,
         has_meta=has_meta,
-        strategies=CAMPAIGN_STRATEGIES,
+        strategies=get_active_strategies(),
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
 

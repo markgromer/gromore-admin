@@ -145,8 +145,23 @@ CAMPAIGN_STRATEGIES = {
 
 def get_strategies_for_platform(platform):
     """Return {key: strategy_dict} for the given platform."""
-    return {k: v for k, v in CAMPAIGN_STRATEGIES.items()
+    strategies = get_active_strategies()
+    return {k: v for k, v in strategies.items()
             if v["platform"] == platform}
+
+
+def get_active_strategies():
+    """Load strategies from DB if available, fall back to hardcoded defaults."""
+    try:
+        from flask import current_app
+        db = getattr(current_app, "db", None)
+        if db:
+            rows = db.get_all_campaign_strategies(active_only=True)
+            if rows:
+                return {r["strategy_key"]: r for r in rows}
+    except Exception:
+        pass
+    return CAMPAIGN_STRATEGIES
 
 
 def build_strategy_prompt(strategy_key, brand, service, location,
@@ -155,7 +170,8 @@ def build_strategy_prompt(strategy_key, brand, service, location,
     Build (system_prompt, user_prompt) for a campaign strategy.
     Returns None if strategy_key is invalid.
     """
-    strategy = CAMPAIGN_STRATEGIES.get(strategy_key)
+    strategies = get_active_strategies()
+    strategy = strategies.get(strategy_key)
     if not strategy:
         return None
 
@@ -171,7 +187,7 @@ def build_strategy_prompt(strategy_key, brand, service, location,
         from flask import current_app
         db = getattr(current_app, "db", None)
         if db:
-            knowledge = build_ad_knowledge_context(db, platform, "campaign")
+            knowledge = build_ad_knowledge_context(db, platform, "campaign", industry=industry)
     except Exception:
         pass
 

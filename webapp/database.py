@@ -300,6 +300,22 @@ class WebDB:
         """)
 
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS ad_niche_prompts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                industry TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                content TEXT NOT NULL DEFAULT '',
+                is_active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+        conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_ad_niche_industry
+            ON ad_niche_prompts(industry) WHERE is_active = 1;
+        """)
+
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS competitors (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand_id INTEGER NOT NULL,
@@ -318,6 +334,26 @@ class WebDB:
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_competitors_brand
             ON competitors(brand_id);
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS campaign_strategies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                strategy_key TEXT NOT NULL UNIQUE,
+                platform TEXT NOT NULL DEFAULT 'meta',
+                name TEXT NOT NULL DEFAULT '',
+                icon TEXT DEFAULT 'bi-megaphone-fill',
+                color TEXT DEFAULT '#6366f1',
+                tagline TEXT DEFAULT '',
+                description TEXT DEFAULT '',
+                best_for TEXT DEFAULT '',
+                recommended_min INTEGER DEFAULT 200,
+                objective TEXT DEFAULT '',
+                is_active INTEGER DEFAULT 1,
+                sort_order INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
         """)
 
         conn.commit()
@@ -1385,6 +1421,53 @@ class WebDB:
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
+    # ── Ad Intelligence: Niche Prompts ──
+
+    def get_niche_prompt(self, industry):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM ad_niche_prompts WHERE industry = ? AND is_active = 1",
+            (industry,),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_all_niche_prompts(self):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM ad_niche_prompts WHERE is_active = 1 ORDER BY industry",
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def save_niche_prompt(self, industry, title, content):
+        conn = self._conn()
+        existing = conn.execute(
+            "SELECT id FROM ad_niche_prompts WHERE industry = ? AND is_active = 1",
+            (industry,),
+        ).fetchone()
+        if existing:
+            conn.execute(
+                """UPDATE ad_niche_prompts
+                   SET title = ?, content = ?, updated_at = datetime('now')
+                   WHERE id = ?""",
+                (title, content, existing["id"]),
+            )
+        else:
+            conn.execute(
+                """INSERT INTO ad_niche_prompts (industry, title, content)
+                   VALUES (?, ?, ?)""",
+                (industry, title, content),
+            )
+        conn.commit()
+        conn.close()
+
+    def delete_niche_prompt(self, niche_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM ad_niche_prompts WHERE id = ?", (niche_id,))
+        conn.commit()
+        conn.close()
 
     # ── Competitors (structured) ─────────────────────────────────
 

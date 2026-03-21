@@ -367,13 +367,234 @@ def seed_ad_knowledge(db):
             )
 
 
+def seed_niche_prompts(db):
+    """Populate starter niche-specific prompts for all industries."""
+    NICHE_SEEDS = {
+        "plumbing": (
+            "Plumbing Ad Rules",
+            "Industry terminology: Use 'licensed plumber', 'master plumber', not just 'plumber'. "
+            "Mention specific services (drain cleaning, water heater, slab leak, repiping) rather than generic 'plumbing services'.\n\n"
+            "Compliance: Never guarantee results ('we will fix it') - use 'diagnose and repair'. "
+            "Always include license number or 'licensed & insured' language.\n\n"
+            "Seasonal patterns: Water heater ads peak Nov-Feb. AC-related plumbing (drain lines) peaks summer. "
+            "Slab leak and repiping are year-round but spike after freezes.\n\n"
+            "What works: Emergency/urgency angles ('leaking now?', 'no hot water?'). "
+            "Upfront pricing removes the #1 objection. Same-day service is the strongest differentiator. "
+            "Before/after photos of real jobs massively outperform stock images.\n\n"
+            "What fails: 'Best plumber in town' - empty claim. Generic 'call us today' CTAs. "
+            "Stock photos of smiling plumbers. Listing every service in one ad.\n\n"
+            "Audience psychology: Homeowners searching for plumbers are usually in distress (leak, backup, no hot water). "
+            "Speed and trust matter more than price. They want to know you can come NOW and that you won't rip them off."
+        ),
+        "hvac": (
+            "HVAC Ad Rules",
+            "Industry terminology: Use 'HVAC technician', 'certified technician', 'NATE-certified'. "
+            "Specify systems: central AC, heat pump, furnace, ductless mini-split, duct cleaning.\n\n"
+            "Compliance: EPA regulations on refrigerants - never mention specific refrigerant handling in ads. "
+            "Include 'licensed & insured'. Energy efficiency claims must be substantiated.\n\n"
+            "Seasonal patterns: AC repair/install peaks May-Sep. Heating peaks Oct-Feb. "
+            "Maintenance/tune-up campaigns work best 2-4 weeks before peak season. "
+            "Spring and fall are prime for 'system replacement' campaigns.\n\n"
+            "What works: Temperature-based urgency ('90 degrees tomorrow - is your AC ready?'). "
+            "Energy savings angles with specific dollar amounts. Financing offers for replacements. "
+            "Maintenance plan subscriptions as a lead magnet.\n\n"
+            "What fails: Technical jargon (SEER ratings, tonnage) in consumer-facing ads. "
+            "Generic 'heating and cooling' without specific pain points.\n\n"
+            "Audience psychology: AC emergencies drive panic searches (similar to plumbing). "
+            "Replacement decisions are big-ticket ($5K-$15K) so financing and trust signals matter enormously. "
+            "Energy bill savings resonate strongly with homeowners."
+        ),
+        "electrical": (
+            "Electrical Services Ad Rules",
+            "Industry terminology: 'Licensed electrician', 'master electrician', 'electrical contractor'. "
+            "Specify: panel upgrades, rewiring, EV charger install, generator install, lighting, outlets.\n\n"
+            "Compliance: ALWAYS emphasize safety and licensing. Electrical work requires permits in most areas. "
+            "Never suggest DIY electrical in any ad. Include 'licensed & insured' prominently.\n\n"
+            "Seasonal patterns: Generator installs spike before storm season. EV charger installs trending year-round. "
+            "Holiday lighting installs Oct-Dec. Panel upgrades peak during home sale season (spring).\n\n"
+            "What works: Safety angles ('outdated wiring is a fire risk'). Code compliance urgency. "
+            "EV charger and smart home angles for newer homeowners. Generator ads tied to weather events.\n\n"
+            "What fails: Price-only messaging (people don't cheap out on electrical). "
+            "Overly technical ads about wiring types. Generic 'electrician near me' without specialization.\n\n"
+            "Audience psychology: People fear electrical problems (fire, shock). "
+            "Safety and credentials matter most. Price is secondary to trust."
+        ),
+        "roofing": (
+            "Roofing Ad Rules",
+            "Industry terminology: 'Licensed roofing contractor', specific materials (asphalt shingle, metal, tile, TPO). "
+            "Mention inspection, repair, replacement, storm damage, leak repair.\n\n"
+            "Compliance: Never promise insurance claim outcomes. Don't use 'free roof' language that implies insurance fraud. "
+            "Can say 'we work with your insurance company' or 'storm damage assessment'.\n\n"
+            "Seasonal patterns: Storm damage campaigns immediately after weather events. "
+            "Replacement season peaks spring through fall. Leak repair searches spike during/after rain.\n\n"
+            "What works: Storm damage + insurance assistance angles. Free inspection offers. "
+            "Financing for full replacements. Before/after photos. Specific warranty terms.\n\n"
+            "What fails: 'Free roof' clickbait. Price-per-square messaging (confuses homeowners). "
+            "Stock photos of roofs that don't match the local market.\n\n"
+            "Audience psychology: Roofing is stressful and expensive. People want a contractor they trust "
+            "not to upsell unnecessary work. Warranty and workmanship guarantees reduce anxiety."
+        ),
+        "landscaping": (
+            "Landscaping Ad Rules",
+            "Industry terminology: Differentiate maintenance (mowing, edging, trimming) from design/install "
+            "(hardscape, irrigation, landscape design, sod, drainage).\n\n"
+            "Seasonal patterns: Lawn care peaks spring through fall. Landscape design/install peaks spring. "
+            "Fall cleanup and leaf removal Oct-Nov. Snow removal and holiday lighting in winter markets.\n\n"
+            "What works: Before/after transformation photos (the #1 converting content). "
+            "Seasonal package pricing. 'First mow free' for maintenance. Design renderings for install projects.\n\n"
+            "What fails: Just showing a green lawn with no context. Generic 'landscaping services'. "
+            "Competing on price alone (race to the bottom in lawn care).\n\n"
+            "Audience psychology: Homeowners want curb appeal and a hassle-free yard. "
+            "Commercial clients want reliability and professionalism. Show the transformation, not the process."
+        ),
+        "pest_control": (
+            "Pest Control Ad Rules",
+            "Industry terminology: Name specific pests (termites, roaches, mosquitoes, bed bugs, rodents, ants, spiders). "
+            "Differentiate one-time treatment from ongoing prevention plans.\n\n"
+            "Compliance: EPA-registered products only. Don't claim to 'eliminate all pests forever'. "
+            "Some states require license info in advertising.\n\n"
+            "Seasonal patterns: Termite swarm season (spring). Mosquito season (summer). "
+            "Rodent intrusion (fall/winter). Bed bugs and roaches are year-round.\n\n"
+            "What works: 'See any pest, and we come back free' guarantee messaging. "
+            "Specific pest photos (carefully chosen - not too gross for social). "
+            "Seasonal urgency ('termite swarm season is here'). Bundle pricing for annual plans.\n\n"
+            "What fails: Generic 'pest control' without naming pests. Overly graphic images on social. "
+            "Fear-mongering without solutions.\n\n"
+            "Audience psychology: People searching for pest control have an active, urgent problem. "
+            "They want someone who can come fast and guarantee the problem goes away. "
+            "Prevention plans sell better after a scare."
+        ),
+        "cleaning": (
+            "Cleaning Services Ad Rules",
+            "Industry terminology: Differentiate residential vs commercial. Specify deep clean, move-in/move-out, "
+            "recurring (weekly/biweekly/monthly), post-construction, Airbnb turnover.\n\n"
+            "What works: Trust signals are everything (background-checked, bonded, insured). "
+            "Satisfaction guarantee. Real photos of team in uniform. Online booking. "
+            "'First clean' discount to remove trial friction. Recurring client acquisition.\n\n"
+            "What fails: Competing purely on price (attracts flaky clients). "
+            "Stock photos of cleaning supplies. No trust signals.\n\n"
+            "Audience psychology: Letting strangers into your home requires trust. "
+            "Busy professionals value consistency and reliability over price. "
+            "Property managers want speed, reliability, and availability."
+        ),
+        "general_contracting": (
+            "General Contracting Ad Rules",
+            "Industry terminology: Specify project types - kitchen remodel, bathroom remodel, room addition, "
+            "whole-home renovation, ADU, deck/patio, commercial buildout.\n\n"
+            "Compliance: Include general contractor license. Don't promise timelines without 'estimated'. "
+            "Be careful with 'guaranteed' pricing language.\n\n"
+            "What works: Portfolio photos and project showcases. Financing options for big projects. "
+            "Specific project types rather than 'we do everything'. Client testimonial videos. "
+            "Design-build messaging (one point of contact).\n\n"
+            "What fails: Listing 100 services in one ad. No portfolio or social proof. "
+            "'Cheap remodeling' positioning (attracts bad clients).\n\n"
+            "Audience psychology: Remodeling is a massive financial and emotional commitment. "
+            "People research extensively before choosing. They want to see past work, read reviews, "
+            "and feel confident the contractor won't disappear mid-project."
+        ),
+        "painting": (
+            "Painting Services Ad Rules",
+            "Industry terminology: Interior vs exterior. Cabinet painting/refinishing. "
+            "Commercial painting. Deck staining. Pressure washing as upsell.\n\n"
+            "What works: Before/after photos are king. Color consultation as a differentiator. "
+            "'Free color consultation' lead magnet. Seasonal exterior painting campaigns (spring/summer). "
+            "Cabinet painting as a budget-friendly kitchen refresh angle.\n\n"
+            "What fails: Just showing paint cans or color swatches. Price-per-room without context. "
+            "No photos of completed work.\n\n"
+            "Audience psychology: People painting are either selling a home, just bought one, or refreshing. "
+            "They want it done right, on time, and without mess. Professional results they can't achieve themselves."
+        ),
+        "garage_door": (
+            "Garage Door Ad Rules",
+            "Industry terminology: Spring replacement, opener install/repair, panel replacement, "
+            "new garage door install, smart opener, insulated doors.\n\n"
+            "What works: Emergency repair messaging (broken spring = can't leave the house). "
+            "Same-day service. Specific pricing for common repairs. "
+            "New door installation with curb appeal angle. Smart home integration for openers.\n\n"
+            "What fails: Generic 'garage door services'. No pricing transparency.\n\n"
+            "Audience psychology: Broken garage doors are immediate emergencies. "
+            "New door purchases are driven by curb appeal and home value. "
+            "Speed of repair and upfront pricing are the top buying factors."
+        ),
+        "foundation_repair": (
+            "Foundation Repair Ad Rules",
+            "Industry terminology: Pier and beam, slab foundation, mudjacking, helical piers, "
+            "drainage solutions, crack repair, structural assessment.\n\n"
+            "Compliance: Never diagnose through an ad. Use 'free inspection' and 'assessment'. "
+            "Warranty terms should be specific.\n\n"
+            "What works: Free foundation inspection offers. Warning sign education (cracks, doors sticking, "
+            "uneven floors). Financing for expensive repairs. Transferable warranty messaging. "
+            "Real estate transaction urgency (foundation issues kill deals).\n\n"
+            "What fails: Fear-mongering without offering solutions. Technical jargon about soil types. "
+            "No warranty or financing information.\n\n"
+            "Audience psychology: Foundation problems are terrifying for homeowners (house falling apart). "
+            "They need reassurance that the problem is fixable and affordable. "
+            "Free inspection lowers the barrier to getting help."
+        ),
+        "water_damage": (
+            "Water Damage Restoration Ad Rules",
+            "Industry terminology: Water extraction, structural drying, mold remediation, "
+            "flood restoration, insurance restoration, moisture mapping.\n\n"
+            "Compliance: IICRC certification. 'We work with insurance' is fine, don't promise coverage.\n\n"
+            "What works: 24/7 emergency response messaging. Insurance assistance. "
+            "'On-site in 60 minutes' type promises. Mold prevention angle. "
+            "Before/during/after documentation.\n\n"
+            "What fails: Stock photos of floods. Generic water damage messaging. "
+            "No urgency in ads for an inherently urgent service.\n\n"
+            "Audience psychology: Water damage is a crisis. Every hour matters (mold, structural damage). "
+            "People want immediate response and someone who handles the insurance paperwork."
+        ),
+        "pet_waste_removal": (
+            "Pet Waste Removal Ad Rules",
+            "Industry terminology: Poop scooping, yard cleanup, pet waste removal, dog waste service. "
+            "Recurring service (weekly/biweekly). One-time cleanups. Deodorizing.\n\n"
+            "What works: Humor in ads works well for this niche. 'Life's too short to pick up poop.' "
+            "Pain point messaging (stepping in it, kids playing in yard, hosting guests). "
+            "Recurring service pricing. First visit free/discounted.\n\n"
+            "What fails: Being too clinical or gross. No personality. "
+            "Competing purely on price for a service most people didn't know existed.\n\n"
+            "Audience psychology: People who hire pet waste services value their time and comfort. "
+            "They often feel guilty about not doing it themselves. "
+            "Normalize the service and make it easy to say yes."
+        ),
+    }
+
+    for industry, (title, content) in NICHE_SEEDS.items():
+        existing = db.get_niche_prompt(industry)
+        if not existing:
+            db.save_niche_prompt(industry, title, content)
+    log.info("Seeded %d niche prompts", len(NICHE_SEEDS))
+
+
+def seed_campaign_strategies(db):
+    """Seed the default campaign strategies into the DB."""
+    from webapp.campaign_templates import CAMPAIGN_STRATEGIES
+
+    for i, (key, s) in enumerate(CAMPAIGN_STRATEGIES.items()):
+        db.save_campaign_strategy(
+            strategy_key=key,
+            platform=s["platform"],
+            name=s["name"],
+            icon=s.get("icon", "bi-megaphone-fill"),
+            color=s.get("color", "#6366f1"),
+            tagline=s.get("tagline", ""),
+            description=s.get("description", ""),
+            best_for=s.get("best_for", ""),
+            recommended_min=s.get("recommended_min", 200),
+            objective=s.get("objective", ""),
+            sort_order=i,
+        )
+    log.info("Seeded %d campaign strategies", len(CAMPAIGN_STRATEGIES))
+
+
 # ─────────────────────────────────────────────────────────────
 #  Build context for ad generation (examples + best practices)
 # ─────────────────────────────────────────────────────────────
 
-def build_ad_knowledge_context(db, platform, fmt):
+def build_ad_knowledge_context(db, platform, fmt, industry=None):
     """Return a knowledge block that gets injected into the ad builder's system prompt.
-    Contains relevant examples (good + bad) and best practices for the given platform/format."""
+    Contains relevant examples (good + bad), best practices, and niche-specific
+    rules for the given platform/format/industry."""
 
     # Get relevant good examples
     good_examples = db.get_ad_examples(platform=platform, fmt=fmt, quality="good", limit=5)
@@ -428,6 +649,15 @@ def build_ad_knowledge_context(db, platform, fmt):
         for bp in practices:
             lines.append(f"\n[{bp['category'].upper()}] {bp['title']}:\n  {bp['content']}")
         parts.append("\n".join(lines))
+
+    # Inject niche-specific prompt if available for this industry
+    if industry:
+        niche = db.get_niche_prompt(industry)
+        if niche and niche.get("content"):
+            parts.append(
+                f"NICHE-SPECIFIC RULES ({niche.get('title', industry).upper()}):\n"
+                + niche["content"]
+            )
 
     return "\n\n".join(parts) if parts else ""
 

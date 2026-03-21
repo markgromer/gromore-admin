@@ -34,6 +34,16 @@
             <i class="bi bi-newspaper"></i> News Digests <span class="badge bg-secondary">{{ digests|length }}</span>
         </a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#tab-niches" role="tab">
+            <i class="bi bi-building"></i> Niche Prompts <span class="badge bg-secondary">{{ niche_prompts|length }}</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#tab-strategies" role="tab">
+            <i class="bi bi-signpost-split"></i> Strategies <span class="badge bg-secondary">{{ strategies|length }}</span>
+        </a>
+    </li>
 </ul>
 
 <div class="tab-content">
@@ -409,6 +419,185 @@
             <p class="mt-2">No news digests yet. Click "Run News Scan Now" to generate the first one.</p>
         </div>
         {% endif %}
+    </div>
+
+    <!-- Niche Prompts Tab -->
+    <div class="tab-pane fade" id="tab-niches" role="tabpanel">
+        <div class="row">
+            <div class="col-lg-5">
+                <div class="card mb-4">
+                    <div class="card-header"><strong><i class="bi bi-building"></i> Add / Edit Niche Prompt</strong></div>
+                    <div class="card-body">
+                        <form method="POST" action="{{ url_for('ad_intel_save_niche') }}">
+                            <div class="mb-3">
+                                <label class="form-label">Industry / Niche</label>
+                                <select name="industry" class="form-select" required>
+                                    <option value="" disabled selected>Select niche...</option>
+                                    {% for value, label in industries %}
+                                    <option value="{{ value }}">{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Title</label>
+                                <input type="text" name="title" class="form-control" placeholder="e.g. Plumbing Ad Rules" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Niche-Specific Prompt Content</label>
+                                <textarea name="content" class="form-control" rows="10" required
+                                    placeholder="Include: industry terminology, compliance rules, seasonal patterns, what works/fails in this niche, example hooks, audience psychology, common objections, proven CTA styles..."></textarea>
+                                <div class="form-text">This gets injected into the ad generation system prompt whenever a brand in this niche generates ads or campaigns.</div>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100"><i class="bi bi-save"></i> Save Niche Prompt</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-7">
+                <h5 class="mb-3">Active Niche Prompts</h5>
+                {% if niche_prompts %}
+                {% for np in niche_prompts %}
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>
+                            <span class="badge bg-primary">{{ np.industry }}</span>
+                            <strong class="ms-2">{{ np.title }}</strong>
+                        </span>
+                        <form method="POST" action="{{ url_for('ad_intel_delete_niche', niche_id=np.id) }}" class="d-inline">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this niche prompt?')">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </div>
+                    <div class="card-body">
+                        <pre class="bg-light p-3 rounded small" style="white-space: pre-wrap; max-height: 300px; overflow-y: auto;">{{ np.content }}</pre>
+                        <small class="text-muted">Updated: {{ np.updated_at[:10] if np.updated_at else 'N/A' }}</small>
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="bi bi-building" style="font-size: 2rem;"></i>
+                    <p class="mt-2">No niche prompts yet. Select an industry and write rules specific to that vertical.</p>
+                    <form method="POST" action="{{ url_for('ad_intel_seed_niches') }}">
+                        <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-magic"></i> Seed Starter Niche Prompts</button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Strategies Tab -->
+    <div class="tab-pane fade" id="tab-strategies" role="tabpanel">
+        <div class="row">
+            <div class="col-lg-5">
+                <div class="card mb-4">
+                    <div class="card-header"><strong><i class="bi bi-signpost-split"></i> Add / Edit Strategy</strong></div>
+                    <div class="card-body">
+                        <form method="POST" action="{{ url_for('ad_intel_save_strategy') }}">
+                            <div class="row g-2 mb-3">
+                                <div class="col-6">
+                                    <label class="form-label">Strategy Key</label>
+                                    <input type="text" name="strategy_key" class="form-control" placeholder="meta_lead_gen" required
+                                        pattern="[a-z0-9_]+" title="Lowercase letters, numbers, underscores">
+                                    <div class="form-text">Unique ID (e.g. meta_omnipresent)</div>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Platform</label>
+                                    <select name="platform" class="form-select" required>
+                                        <option value="meta">Meta (Facebook/Instagram)</option>
+                                        <option value="google">Google Ads</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Display Name</label>
+                                <input type="text" name="name" class="form-control" placeholder="Lead Generation" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Tagline</label>
+                                <input type="text" name="tagline" class="form-control" placeholder="Turn scrollers into leads">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Description</label>
+                                <textarea name="description" class="form-control" rows="3" placeholder="What this strategy does and how it works..."></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Best For</label>
+                                <input type="text" name="best_for" class="form-control" placeholder="Phone calls, form fills, quote requests">
+                            </div>
+                            <div class="row g-2 mb-3">
+                                <div class="col-4">
+                                    <label class="form-label">Min Budget ($)</label>
+                                    <input type="number" name="recommended_min" class="form-control" value="200" min="50">
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label">Icon</label>
+                                    <input type="text" name="icon" class="form-control" value="bi-megaphone-fill" placeholder="bi-eye-fill">
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label">Color</label>
+                                    <input type="color" name="color" class="form-control form-control-color" value="#6366f1">
+                                </div>
+                            </div>
+                            <div class="row g-2 mb-3">
+                                <div class="col-6">
+                                    <label class="form-label">Objective (Meta only)</label>
+                                    <select name="objective" class="form-select">
+                                        <option value="">N/A (Google)</option>
+                                        <option value="OUTCOME_AWARENESS">Awareness</option>
+                                        <option value="OUTCOME_LEADS">Leads</option>
+                                        <option value="OUTCOME_SALES">Sales</option>
+                                        <option value="OUTCOME_ENGAGEMENT">Engagement</option>
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Sort Order</label>
+                                    <input type="number" name="sort_order" class="form-control" value="0">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100"><i class="bi bi-save"></i> Save Strategy</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-7">
+                <h5 class="mb-3">Campaign Strategies</h5>
+                <p class="text-muted small">These strategies appear on the client dashboard when creating campaigns.</p>
+                {% if strategies %}
+                {% for s in strategies %}
+                <div class="card mb-3" style="border-left: 4px solid {{ s.color }}">
+                    <div class="card-body py-2 d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="badge" style="background: {{ s.color }}"><i class="bi {{ s.icon }}"></i></span>
+                            <strong class="ms-2">{{ s.name }}</strong>
+                            <span class="badge bg-{{ 'info' if s.platform == 'meta' else 'primary' }} ms-1">{{ s.platform }}</span>
+                            <span class="badge bg-light text-dark ms-1">{{ s.strategy_key }}</span>
+                            {% if not s.is_active %}<span class="badge bg-secondary ms-1">Inactive</span>{% endif %}
+                            <br>
+                            <small class="text-muted">{{ s.tagline }}</small>
+                            {% if s.best_for %}<br><small class="text-muted">Best for: {{ s.best_for }}</small>{% endif %}
+                        </div>
+                        <form method="POST" action="{{ url_for('ad_intel_delete_strategy', strategy_id=s.id) }}" class="d-inline">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this strategy?')">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="bi bi-signpost-split" style="font-size: 2rem;"></i>
+                    <p class="mt-2">No strategies defined yet. Add strategies or seed the defaults.</p>
+                    <form method="POST" action="{{ url_for('ad_intel_seed_strategies') }}">
+                        <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-magic"></i> Seed Default Strategies</button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
     </div>
 
 </div>

@@ -49,7 +49,7 @@ def _data_availability(context):
 
 
 
-def _load_knowledge(platform, fmt):
+def _load_knowledge(platform, fmt, industry=None):
     """Load ad knowledge context from the database (examples, best practices, master prompt)."""
     try:
         from flask import current_app
@@ -57,7 +57,7 @@ def _load_knowledge(platform, fmt):
         if not db:
             return ""
         from webapp.ad_knowledge import build_ad_knowledge_context
-        return build_ad_knowledge_context(db, platform, fmt)
+        return build_ad_knowledge_context(db, platform, fmt, industry=industry)
     except Exception as e:
         log.warning("Failed to load ad knowledge: %s", e)
         return ""
@@ -87,7 +87,7 @@ def generate_google_ads(analysis, brand, strategy=None):
 
     # Load knowledge base for the specific platform/format
     fmt_map = {"search": "search_rsa", "display": "display", "performance_max": "performance_max", "pmax": "performance_max", "video": "video"}
-    knowledge = _load_knowledge("google", fmt_map.get(strategy_n, "search_rsa"))
+    knowledge = _load_knowledge("google", fmt_map.get(strategy_n, "search_rsa"), industry=(brand or {}).get("industry"))
 
     if strategy_n == "display":
         return _generate_google_display_ads(api_key, context, model, knowledge)
@@ -314,7 +314,7 @@ def generate_facebook_ads(analysis, brand, strategy=None):
         + _evidence_rules()
     )
 
-    knowledge = _load_knowledge("meta", "feed")
+    knowledge = _load_knowledge("meta", "feed", industry=(brand or {}).get("industry"))
     return _call_ai(api_key, system, context, "facebook_ads", model, knowledge)
 
 
