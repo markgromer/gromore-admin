@@ -723,13 +723,23 @@ function showDebug(d) {
         }
         if (ad.legacy_api) {
             if (ad.legacy_api.error) {
-                diagHtml += '<br>Legacy API: Error - ' + ad.legacy_api.error;
+                diagHtml += '<br>Legacy Text Search: Error - ' + ad.legacy_api.error;
             } else {
-                diagHtml += '<br>Legacy API: HTTP ' + ad.legacy_api.status + ' | Google status: ' + (ad.legacy_api.gstatus || '?');
+                diagHtml += '<br>Legacy Text Search: HTTP ' + ad.legacy_api.status + ' | Google status: ' + (ad.legacy_api.gstatus || '?');
                 if (ad.legacy_api.error_message) diagHtml += ' | ' + ad.legacy_api.error_message;
             }
         } else {
-            diagHtml += '<br>Legacy API: not attempted';
+            diagHtml += '<br>Legacy Text Search: not attempted';
+        }
+        if (ad.nearby_api) {
+            if (ad.nearby_api.error) {
+                diagHtml += '<br>Nearby Search: Error - ' + ad.nearby_api.error;
+            } else {
+                diagHtml += '<br>Nearby Search: HTTP ' + ad.nearby_api.status + ' | Google status: ' + (ad.nearby_api.gstatus || '?');
+                if (ad.nearby_api.error_message) diagHtml += ' | ' + ad.nearby_api.error_message;
+            }
+        } else {
+            diagHtml += '<br>Nearby Search: not needed (earlier API returned results)';
         }
         el.innerHTML += diagHtml;
     }

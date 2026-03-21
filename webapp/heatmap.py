@@ -67,12 +67,12 @@ def geocode_address(api_key, address):
 
 
 def _search_places(api_key, keyword, lat, lng, radius_m=2000):
-    """Query Google Places Text Search for a keyword near a point.
-    Tries the New API first, falls back to the legacy API.
+    """Query Google Places APIs for a keyword near a point.
+    Tries: New Text Search -> Legacy Text Search -> Legacy Nearby Search.
     Returns (places_list, diag_dict)."""
-    diag = {"new_api": None, "legacy_api": None}
+    diag = {"new_api": None, "legacy_api": None, "nearby_api": None}
 
-    # --- Try Places API (New) ---
+    # --- Try Places API (New) Text Search ---
     url_new = "https://places.googleapis.com/v1/places:searchText"
     headers = {
         "X-Goog-Api-Key": api_key,
@@ -97,15 +97,14 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000):
             places = resp.json().get("places", [])
             if places:
                 return places, diag
-            # New API returned 200 but empty - fall through to legacy
         else:
-            log.info("Places API (New) returned %s - trying legacy API. Body: %s",
+            log.info("Places API (New) returned %s - trying legacy. Body: %s",
                      resp.status_code, resp_body)
     except Exception as exc:
         diag["new_api"] = {"error": str(exc)}
         log.warning("Places API (New) error at (%.4f, %.4f): %s", lat, lng, exc)
 
-    # --- Fallback: Legacy Places Text Search ---
+    # --- Fallback 1: Legacy Text Search ---
     url_legacy = "https://maps.googleapis.com/maps/api/place/textsearch/json"
     params = {
         "query": keyword,
@@ -120,11 +119,40 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000):
         diag["legacy_api"] = {"status": resp.status_code, "gstatus": data.get("status"),
                               "error_message": data.get("error_message", "")}
         raw = data.get("results", [])
+        if raw:
+            places = []
+            for r in raw:
+                places.append({
+                    "displayName": {"text": r.get("name", "")},
+                    "id": r.get("place_id", ""),
+                    "formattedAddress": r.get("formatted_address", ""),
+                })
+            return places, diag
+        log.debug("Legacy Text Search empty at (%.4f, %.4f) for '%s' - status: %s",
+                  lat, lng, keyword, data.get("status"))
+    except Exception as exc:
+        diag["legacy_api"] = {"error": str(exc)}
+        log.warning("Legacy Text Search error at (%.4f, %.4f): %s", lat, lng, exc)
+
+    # --- Fallback 2: Legacy Nearby Search (keyword-based, better for SABs) ---
+    url_nearby = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+    params_nearby = {
+        "keyword": keyword,
+        "location": f"{lat},{lng}",
+        "radius": int(min(radius_m, 50000)),
+        "key": api_key,
+    }
+    try:
+        resp = requests.get(url_nearby, params=params_nearby, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+        diag["nearby_api"] = {"status": resp.status_code, "gstatus": data.get("status"),
+                              "error_message": data.get("error_message", "")}
+        raw = data.get("results", [])
         if not raw:
-            log.debug("Legacy Places also empty at (%.4f, %.4f) for '%s' - status: %s",
+            log.debug("Nearby Search also empty at (%.4f, %.4f) for '%s' - status: %s",
                       lat, lng, keyword, data.get("status"))
             return [], diag
-        # Normalize to the same shape as New API output
         places = []
         for r in raw:
             places.append({
@@ -134,8 +162,8 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000):
             })
         return places, diag
     except Exception as exc:
-        diag["legacy_api"] = {"error": str(exc)}
-        log.warning("Legacy Places API error at (%.4f, %.4f): %s", lat, lng, exc)
+        diag["nearby_api"] = {"error": str(exc)}
+        log.warning("Nearby Search error at (%.4f, %.4f): %s", lat, lng, exc)
         return [], diag
 
 
