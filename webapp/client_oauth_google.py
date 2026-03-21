@@ -92,7 +92,18 @@ def select_properties():
     if gsc_site_url:
         db.update_brand_api_field(brand_id, "gsc_site_url", gsc_site_url)
 
-    flash("Google account connected and properties selected.", "success")
+    # Auto-setup Drive folders if folder ID was already saved
+    brand = db.get_brand(brand_id)
+    folder_id = (brand.get("google_drive_folder_id") or "").strip()
+    if folder_id:
+        from webapp.google_drive import setup_brand_drive
+        result = setup_brand_drive(db, brand_id)
+        if result.get("ok"):
+            flash("Google account connected and Drive folders created.", "success")
+        else:
+            flash("Google account connected. Drive folder setup pending - try saving Drive settings again.", "warning")
+    else:
+        flash("Google account connected and properties selected.", "success")
     return redirect(url_for("client.client_settings"))
 
 

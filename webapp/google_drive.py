@@ -293,17 +293,18 @@ def setup_brand_drive(db, brand_id):
     if not root_id:
         return {"ok": False, "error": "No Drive folder ID provided."}
 
+    # Check scopes BEFORE attempting any Drive operations
+    conns = db.get_brand_connections(brand_id)
+    google = conns.get("google", {})
+    scopes = (google.get("scopes") or "").lower()
+    if "drive" not in scopes:
+        return {"ok": False, "error": "Your Google connection does not include Drive permissions yet. Click 'Reconnect Google With Drive Access' above, complete the Google sign-in, then save your Drive settings again."}
+
     token = get_valid_access_token(db, brand_id)
     if not token:
-        # Check if scopes are missing
-        conns = db.get_brand_connections(brand_id)
-        google = conns.get("google", {})
-        scopes = (google.get("scopes") or "").lower()
-        if "drive" not in scopes:
-            return {"ok": False, "error": "Google connection is missing Drive scope. Click 'Reconnect Google With Drive Access' first."}
         return {"ok": False, "error": "Could not obtain a valid Google access token. Try reconnecting Google."}
 
     folders = ensure_folder_structure(db, brand_id)
     if not folders:
-        return {"ok": False, "error": "Could not create subfolders in the Drive folder. Make sure the folder ID is correct and shared with the Google account."}
+        return {"ok": False, "error": "Could not create subfolders in the Drive folder. Make sure the folder ID is correct and the Google account has edit access to it."}
     return {"ok": True, "folders": folders}

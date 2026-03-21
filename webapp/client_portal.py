@@ -2328,12 +2328,19 @@ def client_save_google_drive():
 
     # Auto-create subfolder structure if folder ID was provided
     if folder_id:
-        from webapp.google_drive import setup_brand_drive
-        result = setup_brand_drive(db, brand_id)
-        if result.get("ok"):
-            flash("Google Drive connected and folders created.", "success")
+        # Check if Drive scope exists before attempting setup
+        connections = db.get_brand_connections(brand_id)
+        google_conn = connections.get("google", {})
+        scopes = (google_conn.get("scopes") or "").lower()
+        if "drive" not in scopes:
+            flash("Folder ID saved. To complete setup, click 'Reconnect Google With Drive Access' above to grant Drive permissions, then save again.", "warning")
         else:
-            flash(f"Folder ID saved but auto-setup failed: {result.get('error', 'Unknown error')}", "warning")
+            from webapp.google_drive import setup_brand_drive
+            result = setup_brand_drive(db, brand_id)
+            if result.get("ok"):
+                flash("Google Drive connected and folders created.", "success")
+            else:
+                flash(f"Folder ID saved but auto-setup failed: {result.get('error', 'Unknown error')}", "warning")
     else:
         flash("Google Drive sync settings saved.", "success")
     return redirect(url_for("client.client_settings"))
