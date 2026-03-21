@@ -3,7 +3,7 @@
 
 {% block head %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700&family=Lato:wght@400;700&family=Merriweather:wght@400;700&family=Montserrat:wght@400;600;700;800&family=Open+Sans:wght@400;600;700&family=Oswald:wght@400;600;700&family=Playfair+Display:wght@400;700&family=Poppins:wght@400;500;600;700&family=Raleway:wght@400;600;700&family=Roboto:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@100;300;400;500;600;700;800;900&family=Barlow:wght@300;400;500;600;700;800;900&family=Bebas+Neue&family=Bitter:wght@300;400;500;600;700;800;900&family=Cabin:wght@400;500;600;700&family=Comfortaa:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&family=Exo+2:wght@300;400;500;600;700;800;900&family=Fjalla+One&family=Fredoka:wght@300;400;500;600;700&family=Fugaz+One&family=Inter:wght@300;400;500;600;700;800;900&family=Josefin+Sans:wght@300;400;500;600;700&family=Kanit:wght@300;400;500;600;700;800;900&family=Lato:wght@300;400;700;900&family=Lexend:wght@300;400;500;600;700;800;900&family=Lobster&family=Merriweather:wght@300;400;700;900&family=Montserrat:wght@300;400;500;600;700;800;900&family=Nunito:wght@300;400;500;600;700;800;900&family=Open+Sans:wght@300;400;500;600;700;800&family=Oswald:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&family=Pacifico&family=Permanent+Marker&family=Playfair+Display:wght@400;500;600;700;800;900&family=Poppins:wght@300;400;500;600;700;800;900&family=Quicksand:wght@300;400;500;600;700&family=Raleway:wght@300;400;500;600;700;800;900&family=Righteous&family=Roboto:wght@300;400;500;700;900&family=Roboto+Condensed:wght@300;400;500;600;700;800;900&family=Rubik:wght@300;400;500;600;700;800;900&family=Russo+One&family=Shadows+Into+Light&family=Signika:wght@300;400;500;600;700&family=Sora:wght@300;400;500;600;700;800&family=Source+Serif+4:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Titan+One&family=Ubuntu:wght@300;400;500;700&family=Work+Sans:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
     .creative-header {
         background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
@@ -316,6 +316,30 @@
     /* Toolbar separator */
     .tool-sep { width: 1px; background: #e5e7eb; margin: 0 .15rem; align-self: stretch; }
 
+    /* Shapes dropdown */
+    .shapes-dropdown { position: relative; display: inline-block; }
+    .shapes-menu {
+        display: none; position: absolute; top: 100%; left: 0; z-index: 100;
+        background: #fff; border: 1.5px solid #e5e7eb; border-radius: 12px;
+        padding: .5rem; box-shadow: 0 8px 24px rgba(0,0,0,.12);
+        min-width: 220px; max-height: 320px; overflow-y: auto;
+    }
+    .shapes-menu.open { display: block; }
+    .shapes-menu .shape-row {
+        display: flex; align-items: center; gap: 8px; padding: .4rem .55rem;
+        border-radius: 8px; cursor: pointer; font-size: .82rem; color: #374151;
+        transition: all .12s;
+    }
+    .shapes-menu .shape-row:hover { background: #f5f3ff; color: #4338ca; }
+    .shapes-menu .shape-row svg { width: 22px; height: 22px; flex-shrink: 0; }
+    .shapes-menu .shape-section { font-size: .7rem; font-weight: 700; color: #9ca3af; padding: .3rem .55rem .15rem; text-transform: uppercase; letter-spacing: .5px; }
+
+    /* Font weight labels */
+    .weight-label {
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .weight-label span { font-size: .72rem; color: #9ca3af; font-weight: 400; }
+
     /* Lock indicator */
     .layer-item.locked { opacity: .55; }
     .layer-item.locked .layer-name { font-style: italic; }
@@ -473,12 +497,31 @@
                 <i class="bi bi-cursor"></i> CTA
             </button>
             <div class="tool-sep"></div>
-            <button class="tool-btn" onclick="addShape('rect')" title="Add Rectangle">
-                <i class="bi bi-square"></i> Box
-            </button>
-            <button class="tool-btn" onclick="addShape('circle')" title="Add Circle">
-                <i class="bi bi-circle"></i> Circle
-            </button>
+            <div class="shapes-dropdown">
+                <button class="tool-btn" onclick="toggleShapesMenu()" title="Add Shape">
+                    <i class="bi bi-pentagon"></i> Shapes <i class="bi bi-chevron-down" style="font-size:.65rem;opacity:.5"></i>
+                </button>
+                <div class="shapes-menu" id="shapesMenu">
+                    <div class="shape-section">Basic</div>
+                    <div class="shape-row" onclick="addShape('rect');closeShapesMenu()"><svg viewBox="0 0 24 24" fill="#6366f1"><rect x="2" y="4" width="20" height="16" rx="3"/></svg> Rectangle</div>
+                    <div class="shape-row" onclick="addShape('circle');closeShapesMenu()"><svg viewBox="0 0 24 24" fill="#6366f1"><circle cx="12" cy="12" r="10"/></svg> Circle</div>
+                    <div class="shape-row" onclick="addShape('triangle');closeShapesMenu()"><svg viewBox="0 0 24 24" fill="#6366f1"><polygon points="12,2 22,22 2,22"/></svg> Triangle</div>
+                    <div class="shape-row" onclick="addShape('diamond');closeShapesMenu()"><svg viewBox="0 0 24 24" fill="#6366f1"><polygon points="12,1 23,12 12,23 1,12"/></svg> Diamond</div>
+                    <div class="shape-row" onclick="addShape('hexagon');closeShapesMenu()"><svg viewBox="0 0 24 24" fill="#6366f1"><polygon points="12,1 22,6 22,18 12,23 2,18 2,6"/></svg> Hexagon</div>
+                    <div class="shape-section">Favorites</div>
+                    <div class="shape-row" onclick="addShape('star');closeShapesMenu()"><svg viewBox="0 0 24 24" fill="#f59e0b"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg> Star</div>
+                    <div class="shape-row" onclick="addShape('heart');closeShapesMenu()"><svg viewBox="0 0 24 24" fill="#ef4444"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg> Heart</div>
+                    <div class="shape-row" onclick="addShape('arrow_right');closeShapesMenu()"><svg viewBox="0 0 24 24" fill="#6366f1"><polygon points="2,8 14,8 14,3 23,12 14,21 14,16 2,16"/></svg> Arrow</div>
+                    <div class="shape-section">Fun</div>
+                    <div class="shape-row" onclick="addShape('paw');closeShapesMenu()"><svg viewBox="0 0 512 512" fill="#8b5cf6"><path d="M256 351c-35 0-67-15-90-40-6-7-18-7-24 0-23 25-55 40-90 40-17 0-30 14-30 31s13 31 30 31c52 0 99-22 132-57h4c33 35 80 57 132 57 17 0 30-14 30-31s-13-31-30-31c-35 0-67-15-90-40-6-7-18-7-24 0zM144 288c26 0 48-29 48-64s-22-64-48-64-48 29-48 64 22 64 48 64zm224 0c26 0 48-29 48-64s-22-64-48-64-48 29-48 64 22 64 48 64zm-112-48c26 0 48-29 48-64s-22-64-48-64-48 29-48 64 22 64 48 64z"/></svg> Paw Print</div>
+                    <div class="shape-row" onclick="addShape('bone');closeShapesMenu()"><svg viewBox="0 0 512 512" fill="#f59e0b"><path d="M148 76c-28-28-74-28-102 0s-28 74 0 102l14 14-14 14c-28 28-28 74 0 102s74 28 102 0l14-14 196 196 14-14c28 28 74 28 102 0s28-74 0-102l-14-14 14-14c28-28 28-74 0-102s-74-28-102 0l-14 14L162 62l-14 14z"/></svg> Dog Bone</div>
+                    <div class="shape-row" onclick="addShape('speech');closeShapesMenu()"><svg viewBox="0 0 24 24" fill="#06b6d4"><path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4l4 4 4-4h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg> Speech Bubble</div>
+                    <div class="shape-row" onclick="addShape('thought');closeShapesMenu()"><svg viewBox="0 0 24 24" fill="#8b5cf6"><path d="M20 2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h2v-1a2 2 0 114 0v1h4v-1a2 2 0 114 0v1h2c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/><circle cx="7" cy="20" r="2"/><circle cx="4" cy="23" r="1.2"/></svg> Thought Bubble</div>
+                    <div class="shape-row" onclick="addShape('badge');closeShapesMenu()"><svg viewBox="0 0 24 24" fill="#059669"><path d="M12 1l3.09 6.26L22 8.27l-5 4.87L18.18 20 12 16.77 5.82 20 7 13.14l-5-4.87 6.91-1.01z"/><circle cx="12" cy="12" r="5" fill="#fff" opacity=".3"/></svg> Badge</div>
+                    <div class="shape-row" onclick="addShape('ribbon');closeShapesMenu()"><svg viewBox="0 0 24 24" fill="#dc2626"><path d="M1 4h22v10H1z"/><polygon points="1,14 1,18 5,14" opacity=".6"/><polygon points="23,14 23,18 19,14" opacity=".6"/></svg> Ribbon</div>
+                    <div class="shape-row" onclick="addShape('cross');closeShapesMenu()"><svg viewBox="0 0 24 24" fill="#6366f1"><path d="M9 2h6v7h7v6h-7v7H9v-7H2V9h7z"/></svg> Cross / Plus</div>
+                </div>
+            </div>
             <button class="tool-btn" onclick="addLogo()" title="Add Logo">
                 <i class="bi bi-patch-check"></i> Logo
             </button>
@@ -732,8 +775,23 @@
         updateLayers();
     };
 
+    // ── Shapes menu ──
+
+    window.toggleShapesMenu = function() {
+        document.getElementById('shapesMenu').classList.toggle('open');
+    };
+    window.closeShapesMenu = function() {
+        document.getElementById('shapesMenu').classList.remove('open');
+    };
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.shapes-dropdown')) closeShapesMenu();
+    });
+
     window.addShape = function(type) {
         let shape;
+        const cx = fullW * 0.25, cy = fullH * 0.3;
+        const sz = Math.min(fullW, fullH) * 0.25;
+
         if (type === 'rect') {
             shape = new fabric.Rect({
                 left: fullW * 0.1, top: fullH * 0.6,
@@ -750,7 +808,99 @@
                 stroke: '#4338ca', strokeWidth: 2,
                 _customType: 'shape',
             });
+        } else if (type === 'triangle') {
+            shape = new fabric.Triangle({
+                left: cx, top: cy, width: sz, height: sz,
+                fill: '#f59e0b', opacity: 0.8,
+                stroke: '#d97706', strokeWidth: 2,
+                _customType: 'shape',
+            });
+        } else if (type === 'diamond') {
+            const pts = [{x:0,y:-sz/2},{x:sz/2,y:0},{x:0,y:sz/2},{x:-sz/2,y:0}];
+            shape = new fabric.Polygon(pts, {
+                left: cx, top: cy, fill: '#8b5cf6', opacity: 0.7,
+                stroke: '#7c3aed', strokeWidth: 2, _customType: 'shape',
+            });
+        } else if (type === 'hexagon') {
+            const r = sz / 2, pts = [];
+            for (let i = 0; i < 6; i++) { const a = Math.PI/3*i - Math.PI/2; pts.push({x: r*Math.cos(a), y: r*Math.sin(a)}); }
+            shape = new fabric.Polygon(pts, {
+                left: cx, top: cy, fill: '#06b6d4', opacity: 0.7,
+                stroke: '#0891b2', strokeWidth: 2, _customType: 'shape',
+            });
+        } else if (type === 'star') {
+            const r = sz/2, ri = sz/4.5, pts = [];
+            for (let i = 0; i < 5; i++) {
+                let ao = Math.PI/2*-1 + i*2*Math.PI/5;
+                pts.push({x: r*Math.cos(ao), y: r*Math.sin(ao)});
+                let ai = ao + Math.PI/5;
+                pts.push({x: ri*Math.cos(ai), y: ri*Math.sin(ai)});
+            }
+            shape = new fabric.Polygon(pts, {
+                left: cx, top: cy, fill: '#f59e0b', opacity: 0.85,
+                stroke: '#d97706', strokeWidth: 2, _customType: 'shape',
+            });
+        } else if (type === 'heart') {
+            shape = new fabric.Path('M 0 -60 C -30 -100, -100 -70, -100 -20 C -100 25, -55 65, 0 100 C 55 65, 100 25, 100 -20 C 100 -70, 30 -100, 0 -60 Z', {
+                left: cx, top: cy, fill: '#ef4444', opacity: 0.85,
+                stroke: '#dc2626', strokeWidth: 2,
+                scaleX: sz/200, scaleY: sz/200, _customType: 'shape',
+            });
+        } else if (type === 'arrow_right') {
+            const pts = [{x:0,y:-sz/6},{x:sz*0.55,y:-sz/6},{x:sz*0.55,y:-sz/3},{x:sz,y:0},{x:sz*0.55,y:sz/3},{x:sz*0.55,y:sz/6},{x:0,y:sz/6}];
+            shape = new fabric.Polygon(pts, {
+                left: cx, top: cy, fill: '#6366f1', opacity: 0.8,
+                stroke: '#4f46e5', strokeWidth: 2, _customType: 'shape',
+            });
+        } else if (type === 'paw') {
+            shape = new fabric.Path('M 50 85 C 50 85, 28 65, 8 55 C -8 47, -5 20, 12 20 C 25 20, 30 35, 30 35 C 30 35, 35 10, 50 10 C 65 10, 70 35, 70 35 C 70 35, 75 20, 88 20 C 105 20, 108 47, 92 55 C 72 65, 50 85, 50 85 Z M 25 0 A 12 14 0 1 1 25 0.01 M 75 0 A 12 14 0 1 1 75 0.01 M 8 30 A 10 12 -20 1 1 8 30.01 M 92 30 A 10 12 20 1 1 92 30.01', {
+                left: cx, top: cy, fill: '#8b5cf6', opacity: 0.85,
+                scaleX: sz/100, scaleY: sz/100,
+                stroke: '#7c3aed', strokeWidth: 1, _customType: 'shape',
+            });
+        } else if (type === 'bone') {
+            shape = new fabric.Path('M 20 35 C 10 35, 0 28, 0 18 C 0 8, 10 0, 20 0 C 27 0, 32 4, 35 10 L 65 10 C 68 4, 73 0, 80 0 C 90 0, 100 8, 100 18 C 100 28, 90 35, 80 35 C 73 35, 68 31, 65 25 L 35 25 C 32 31, 27 35, 20 35 Z', {
+                left: cx, top: cy, fill: '#f59e0b', opacity: 0.85,
+                scaleX: sz/100, scaleY: sz/100,
+                stroke: '#d97706', strokeWidth: 1, _customType: 'shape',
+            });
+        } else if (type === 'speech') {
+            shape = new fabric.Path('M 0 5 Q 0 0, 5 0 L 95 0 Q 100 0, 100 5 L 100 65 Q 100 70, 95 70 L 35 70 L 15 90 L 20 70 L 5 70 Q 0 70, 0 65 Z', {
+                left: cx, top: cy, fill: '#06b6d4', opacity: 0.8,
+                scaleX: sz/100, scaleY: sz/100,
+                stroke: '#0891b2', strokeWidth: 1, _customType: 'shape',
+            });
+        } else if (type === 'thought') {
+            shape = new fabric.Path('M 5 10 Q 5 0, 20 0 L 80 0 Q 95 0, 95 10 L 95 50 Q 95 60, 80 60 L 40 60 Q 35 60, 30 60 L 20 60 Q 5 60, 5 50 Z M 25 62 A 6 6 0 1 1 25 74 M 15 76 A 4 4 0 1 1 15 84', {
+                left: cx, top: cy, fill: '#8b5cf6', opacity: 0.8,
+                scaleX: sz/100, scaleY: sz/100,
+                stroke: '#7c3aed', strokeWidth: 1, _customType: 'shape',
+            });
+        } else if (type === 'badge') {
+            const r = sz/2, ri = sz/2.5, pts = [];
+            for (let i = 0; i < 10; i++) {
+                const a = Math.PI/2*-1 + i*Math.PI/5;
+                const rad = i % 2 === 0 ? r : ri;
+                pts.push({x: rad*Math.cos(a), y: rad*Math.sin(a)});
+            }
+            shape = new fabric.Polygon(pts, {
+                left: cx, top: cy, fill: '#059669', opacity: 0.85,
+                stroke: '#047857', strokeWidth: 2, _customType: 'shape',
+            });
+        } else if (type === 'ribbon') {
+            shape = new fabric.Path('M 0 10 L 8 10 L 8 0 L 92 0 L 92 10 L 100 10 L 100 45 L 88 35 L 88 45 L 12 45 L 12 35 L 0 45 Z', {
+                left: cx, top: cy, fill: '#dc2626', opacity: 0.85,
+                scaleX: sz/100, scaleY: sz/80,
+                stroke: '#b91c1c', strokeWidth: 1, _customType: 'shape',
+            });
+        } else if (type === 'cross') {
+            shape = new fabric.Path('M 35 0 L 65 0 L 65 35 L 100 35 L 100 65 L 65 65 L 65 100 L 35 100 L 35 65 L 0 65 L 0 35 L 35 35 Z', {
+                left: cx, top: cy, fill: '#6366f1', opacity: 0.8,
+                scaleX: sz/100, scaleY: sz/100,
+                stroke: '#4f46e5', strokeWidth: 1, _customType: 'shape',
+            });
         }
+
         if (shape) {
             canvas.add(shape);
             canvas.setActiveObject(shape);
@@ -947,7 +1097,9 @@
             const icon = (obj.type === 'i-text' || obj.type === 'text') ? 'bi-type' :
                          obj.type === 'image' ? 'bi-image' :
                          label === 'overlay' ? 'bi-layers-half' :
-                         label === 'logo' ? 'bi-patch-check' : 'bi-square';
+                         label === 'logo' ? 'bi-patch-check' :
+                         (obj.type === 'polygon' || obj.type === 'path') ? 'bi-pentagon' :
+                         obj.type === 'triangle' ? 'bi-triangle' : 'bi-square';
             const sel = (obj === active) ? 'selected' : '';
             const lockClass = obj.lockMovementX ? 'locked' : '';
             const lockIcon = obj.lockMovementX ? 'bi-lock-fill' : 'bi-unlock';
@@ -1016,7 +1168,6 @@
         let html = '';
 
         if (obj.type === 'i-text' || obj.type === 'text') {
-            const isBold = obj.fontWeight === 'bold' || obj.fontWeight >= 700;
             const isItalic = obj.fontStyle === 'italic';
             const isUnderline = obj.underline;
             const align = obj.textAlign || 'left';
@@ -1027,47 +1178,38 @@
                 </div>
                 <div class="prop-field">
                     <label>Font</label>
-                    <select class="prop-input" onchange="updateProp('fontFamily', this.value)">
+                    <select class="prop-input" onchange="updateProp('fontFamily', this.value)" style="font-family: ${obj.fontFamily || 'Arial'}">
                         <optgroup label="Sans Serif">
-                            <option ${obj.fontFamily==='Arial'?'selected':''}>Arial</option>
-                            <option ${obj.fontFamily==='Helvetica'?'selected':''}>Helvetica</option>
-                            <option ${obj.fontFamily==='Verdana'?'selected':''}>Verdana</option>
-                            <option ${obj.fontFamily==='Montserrat'?'selected':''}>Montserrat</option>
-                            <option ${obj.fontFamily==='Roboto'?'selected':''}>Roboto</option>
-                            <option ${obj.fontFamily==='Open Sans'?'selected':''}>Open Sans</option>
-                            <option ${obj.fontFamily==='Poppins'?'selected':''}>Poppins</option>
-                            <option ${obj.fontFamily==='Lato'?'selected':''}>Lato</option>
-                            <option ${obj.fontFamily==='Raleway'?'selected':''}>Raleway</option>
-                            <option ${obj.fontFamily==='Inter'?'selected':''}>Inter</option>
+                            ${['Arial','Helvetica','Verdana','Inter','DM Sans','Montserrat','Roboto','Roboto Condensed','Open Sans','Poppins','Lato','Nunito','Raleway','Outfit','Barlow','Work Sans','Lexend','Sora','Space Grotesk','Quicksand','Josefin Sans','Kanit','Cabin','Signika','Ubuntu','Exo 2','Archivo','Comfortaa','Fredoka'].map(f => '<option' + (obj.fontFamily===f?' selected':'') + ' style="font-family:' + f + '">' + f + '</option>').join('')}
                         </optgroup>
                         <optgroup label="Serif">
-                            <option ${obj.fontFamily==='Georgia'?'selected':''}>Georgia</option>
-                            <option ${obj.fontFamily==='Times New Roman'?'selected':''}>Times New Roman</option>
-                            <option ${obj.fontFamily==='Playfair Display'?'selected':''}>Playfair Display</option>
-                            <option ${obj.fontFamily==='Merriweather'?'selected':''}>Merriweather</option>
+                            ${['Georgia','Times New Roman','Playfair Display','Merriweather','Bitter','Source Serif 4','DM Serif Display'].map(f => '<option' + (obj.fontFamily===f?' selected':'') + ' style="font-family:' + f + '">' + f + '</option>').join('')}
                         </optgroup>
-                        <optgroup label="Display">
-                            <option ${obj.fontFamily==='Impact'?'selected':''}>Impact</option>
-                            <option ${obj.fontFamily==='Bebas Neue'?'selected':''}>Bebas Neue</option>
-                            <option ${obj.fontFamily==='Oswald'?'selected':''}>Oswald</option>
+                        <optgroup label="Display / Decorative">
+                            ${['Impact','Bebas Neue','Oswald','Anton','Fjalla One','Russo One','Titan One','Righteous','Fugaz One','Permanent Marker','Lobster','Pacifico','Shadows Into Light'].map(f => '<option' + (obj.fontFamily===f?' selected':'') + ' style="font-family:' + f + '">' + f + '</option>').join('')}
                         </optgroup>
                         <optgroup label="Mono">
-                            <option ${obj.fontFamily==='Courier New'?'selected':''}>Courier New</option>
-                            <option ${obj.fontFamily==='Space Mono'?'selected':''}>Space Mono</option>
+                            ${['Courier New','Space Mono'].map(f => '<option' + (obj.fontFamily===f?' selected':'') + ' style="font-family:' + f + '">' + f + '</option>').join('')}
                         </optgroup>
                     </select>
                 </div>
                 <div class="prop-field">
                     <label>Size</label>
-                    <input type="number" class="prop-input" value="${obj.fontSize || 32}" min="8" max="200"
+                    <input type="number" class="prop-input" value="${obj.fontSize || 32}" min="8" max="400"
                            oninput="updateProp('fontSize', parseInt(this.value))">
+                </div>
+                <div class="prop-field">
+                    <label class="weight-label">Weight <span>${weightName(obj.fontWeight)}</span></label>
+                    <input type="range" class="prop-input" min="100" max="900" step="100"
+                           value="${numericWeight(obj.fontWeight)}"
+                           oninput="updateProp('fontWeight', parseInt(this.value)); this.previousElementSibling.querySelector('span').textContent = weightName(this.value)">
                 </div>
                 <div class="prop-field">
                     <label>Style</label>
                     <div class="font-style-group">
-                        <button class="${isBold ? 'active' : ''}" onclick="toggleBold()" title="Bold"><b>B</b></button>
                         <button class="${isItalic ? 'active' : ''}" onclick="toggleItalic()" title="Italic"><i>I</i></button>
                         <button class="${isUnderline ? 'active' : ''}" onclick="toggleUnderline()" title="Underline"><u>U</u></button>
+                        <button class="${(obj.linethrough) ? 'active' : ''}" onclick="toggleStrikethrough()" title="Strikethrough"><s>S</s></button>
                     </div>
                 </div>
                 <div class="prop-field">
@@ -1089,10 +1231,16 @@
                            oninput="updateProp('opacity', this.value / 100)">
                 </div>
                 <div class="prop-field">
-                    <label>Letter Spacing</label>
+                    <label class="weight-label">Line Height <span>${(obj.lineHeight || 1.16).toFixed(2)}</span></label>
+                    <input type="range" class="prop-input" min="0.5" max="3" step="0.05"
+                           value="${obj.lineHeight || 1.16}"
+                           oninput="updateProp('lineHeight', parseFloat(this.value)); this.previousElementSibling.querySelector('span').textContent = parseFloat(this.value).toFixed(2)">
+                </div>
+                <div class="prop-field">
+                    <label class="weight-label">Letter Spacing <span>${obj.charSpacing || 0}</span></label>
                     <input type="range" class="prop-input" min="-100" max="800" step="10"
                            value="${obj.charSpacing || 0}"
-                           oninput="updateProp('charSpacing', parseInt(this.value))">
+                           oninput="updateProp('charSpacing', parseInt(this.value)); this.previousElementSibling.querySelector('span').textContent = this.value">
                 </div>
                 <div class="prop-field">
                     <label>Shadow</label>
@@ -1102,7 +1250,7 @@
                     </div>
                 </div>
             `;
-        } else if (obj.type === 'rect' || obj.type === 'circle') {
+        } else if (['rect','circle','triangle','polygon','path'].includes(obj.type)) {
             const fillHex = (obj.fill && typeof obj.fill === 'string' && obj.fill.charAt(0) === '#') ? obj.fill : '#000000';
             const strokeHex = (obj.stroke && typeof obj.stroke === 'string' && obj.stroke.charAt(0) === '#') ? obj.stroke : '#000000';
             html += `
@@ -1784,12 +1932,21 @@
 
     // ── Text formatting helpers ──
 
-    window.toggleBold = function() {
-        const obj = canvas.getActiveObject();
-        if (!obj) return;
-        obj.set('fontWeight', obj.fontWeight === 'bold' ? 'normal' : 'bold');
-        canvas.renderAll(); showProperties(obj);
-    };
+    function weightName(w) {
+        w = parseInt(w) || 400;
+        const names = {100:'Thin',200:'ExtraLight',300:'Light',400:'Regular',500:'Medium',600:'SemiBold',700:'Bold',800:'ExtraBold',900:'Black'};
+        return names[w] || w;
+    }
+    window.weightName = weightName;
+
+    function numericWeight(w) {
+        if (typeof w === 'number') return w;
+        if (w === 'bold') return 700;
+        if (w === 'normal') return 400;
+        return parseInt(w) || 400;
+    }
+    window.numericWeight = numericWeight;
+
     window.toggleItalic = function() {
         const obj = canvas.getActiveObject();
         if (!obj) return;
@@ -1800,6 +1957,12 @@
         const obj = canvas.getActiveObject();
         if (!obj) return;
         obj.set('underline', !obj.underline);
+        canvas.renderAll(); showProperties(obj);
+    };
+    window.toggleStrikethrough = function() {
+        const obj = canvas.getActiveObject();
+        if (!obj) return;
+        obj.set('linethrough', !obj.linethrough);
         canvas.renderAll(); showProperties(obj);
     };
     window.setTextAlign = function(align) {
