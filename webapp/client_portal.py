@@ -2317,7 +2317,10 @@ def client_search_place():
             api_errors.append(f"Find Place: {exc}")
 
     if not places and api_errors:
-        return jsonify(ok=False, error="No results. API errors: " + " | ".join(api_errors)), 200
+        return jsonify(ok=False, error="No results. API errors: " + " | ".join(api_errors))
+
+    if not places:
+        return jsonify(ok=False, error="No results found. This usually means your API key has HTTP referrer restrictions that block server-side requests. In Google Cloud Console, edit your API key and either remove restrictions or add your server's IP to the allowed list.")
 
     return jsonify(ok=True, results=places)
 

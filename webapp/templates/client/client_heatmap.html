@@ -172,6 +172,14 @@
                     <i class="bi bi-check-circle me-1"></i> Place ID saved! Reloading...
                 </span>
             </div>
+            <hr class="my-3" style="border-color:#e2e8f0;">
+            <div>
+                <small class="text-muted d-block mb-2">Or paste your Place ID directly. Find it at <a href="https://developers.google.com/maps/documentation/places/web-service/place-id#find-id" target="_blank" rel="noopener">Google's Place ID Finder</a>.</small>
+                <div class="input-group" style="max-width:500px;">
+                    <input type="text" class="form-control" id="manualPlaceId" placeholder="ChIJ..." autocomplete="off">
+                    <button class="btn btn-outline-primary" type="button" id="saveManualPlaceIdBtn">Save</button>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -565,6 +573,39 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('heatmapPlaceSearch').addEventListener('keydown', function(e) {
             if (e.key === 'Enter') { e.preventDefault(); placeSearchBtn.click(); }
         });
+
+        // Manual Place ID paste handler
+        var manualBtn = document.getElementById('saveManualPlaceIdBtn');
+        if (manualBtn) {
+            manualBtn.addEventListener('click', function() {
+                var pid = document.getElementById('manualPlaceId').value.trim();
+                if (!pid) { alert('Paste a Place ID first.'); return; }
+                manualBtn.disabled = true;
+                manualBtn.textContent = 'Saving...';
+                fetch('/client/settings/save-place-id', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+                    body: JSON.stringify({place_id: pid})
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (d.ok) {
+                        manualBtn.textContent = 'Saved!';
+                        manualBtn.classList.replace('btn-outline-primary', 'btn-success');
+                        setTimeout(function() { location.reload(); }, 1000);
+                    } else {
+                        manualBtn.disabled = false;
+                        manualBtn.textContent = 'Save';
+                        alert(d.error || 'Save failed');
+                    }
+                })
+                .catch(function() {
+                    manualBtn.disabled = false;
+                    manualBtn.textContent = 'Save';
+                    alert('Network error');
+                });
+            });
+        }
     }
 
     // Scan handler
