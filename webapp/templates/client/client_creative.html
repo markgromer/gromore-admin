@@ -218,6 +218,62 @@
         background: #f5f3ff;
     }
 
+    /* Template list items */
+    .template-item {
+        display: flex;
+        align-items: center;
+        gap: .6rem;
+        padding: .5rem;
+        border-radius: 8px;
+        cursor: pointer;
+        border: 1px solid #f3f4f6;
+        margin-bottom: .4rem;
+        transition: background .15s, border-color .15s;
+    }
+    .template-item:hover { background: #f5f3ff; border-color: #c7d2fe; }
+    .template-thumb {
+        width: 48px;
+        height: 36px;
+        object-fit: cover;
+        border-radius: 6px;
+        background: #f3f4f6;
+        flex-shrink: 0;
+    }
+    .template-thumb-placeholder {
+        width: 48px;
+        height: 36px;
+        border-radius: 6px;
+        background: #f3f4f6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #d1d5db;
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+    .template-info { flex: 1; min-width: 0; }
+    .template-name {
+        font-size: .82rem;
+        font-weight: 600;
+        color: #1a1d2e;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .template-meta {
+        font-size: .72rem;
+        color: #9ca3af;
+        text-transform: capitalize;
+    }
+    .template-del {
+        opacity: 0;
+        transition: opacity .15s;
+        font-size: .75rem;
+        padding: .2rem .4rem;
+        flex-shrink: 0;
+    }
+    .template-item:hover .template-del { opacity: 1; }
+
     /* Color swatch */
     .color-swatch {
         width: 32px;
@@ -474,6 +530,25 @@
                 <div class="text-muted" style="font-size:.82rem" id="layersEmpty">Add elements to see layers here</div>
             </div>
         </div>
+
+        <!-- Saved Templates -->
+        <div class="cc-card">
+            <div class="cc-card-header">
+                <h5><i class="bi bi-bookmark me-2" style="opacity:.5"></i>Templates</h5>
+                <div class="hint">Save and reuse your designs</div>
+            </div>
+            <div class="cc-card-body">
+                <div class="d-flex gap-2 mb-2">
+                    <input type="text" id="templateName" class="prop-input" placeholder="Template name..." maxlength="120" style="flex:1">
+                    <button class="tool-btn" onclick="saveTemplate()" title="Save current canvas as template" style="white-space:nowrap">
+                        <i class="bi bi-bookmark-plus"></i> Save
+                    </button>
+                </div>
+                <div id="templatesList" style="max-height:200px;overflow-y:auto">
+                    <div class="text-muted" style="font-size:.8rem">Loading templates...</div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Center: Canvas -->
@@ -564,6 +639,13 @@
             <button class="btn-export flex-fill" onclick="exportCanvas()" id="btnExport">
                 <i class="bi bi-download"></i> Export as PNG
             </button>
+            {% if brand.get('google_drive_folder_id') %}
+            <button class="btn-export flex-fill" onclick="saveToDrive()" id="btnDriveSave" style="background:linear-gradient(135deg,#4285f4,#34a853)">
+                <i class="bi bi-google"></i> Save to Drive
+            </button>
+            {% endif %}
+        </div>
+        <div class="d-flex gap-2 mt-2">
             <button class="btn-export flex-fill" onclick="serverGenerate()" id="btnServerGen" style="background:linear-gradient(135deg,#059669,#10b981)">
                 <i class="bi bi-magic"></i> Server Generate (Pillow)
             </button>
@@ -571,7 +653,7 @@
 
         {% if brand.get('google_drive_folder_id') %}
         <div class="text-center mt-2">
-            <span class="drive-badge"><i class="bi bi-cloud-check"></i> Auto-saves to Google Drive</span>
+            <span class="drive-badge"><i class="bi bi-cloud-check"></i> Google Drive connected</span>
         </div>
         {% endif %}
     </div>
@@ -1584,40 +1666,12 @@
         link.click();
         document.body.removeChild(link);
 
-        // Also upload to Drive if connected
-        try {
-            const blobBin = atob(dataURL.split(',')[1]);
-            const arr = new Uint8Array(blobBin.length);
-            for (let i = 0; i < blobBin.length; i++) arr[i] = blobBin.charCodeAt(i);
-            const blob = new Blob([arr], { type: 'image/png' });
-
-            const fd = new FormData();
-            fd.append('file', blob, link.download);
-            fd.append('subfolder', 'Creatives');
-            if (csrfToken) fd.append('csrf_token', csrfToken);
-
-            fetch("{{ url_for('client.client_drive_upload') }}", {
-                method: 'POST',
-                body: fd,
-                headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {}
-            }).then(r => r.json()).then(data => {
-                if (data.ok) {
-                    ccToast('Exported + saved to Google Drive', 'success');
-                    btn.innerHTML = '<i class="bi bi-check2"></i> Exported + Saved to Drive';
-                    btn.classList.add('btn-success');
-                    setTimeout(() => {
-                        btn.innerHTML = '<i class="bi bi-download"></i> Export as PNG';
-                        btn.classList.remove('btn-success');
-                    }, 3000);
-                }
-            }).catch(() => {});
-        } catch (_) {}
-
         btn.disabled = false;
-        if (!btn.classList.contains('btn-success')) {
+        btn.innerHTML = '<i class="bi bi-check2"></i> Downloaded';
+        ccToast('Exported as PNG', 'success');
+        setTimeout(() => {
             btn.innerHTML = '<i class="bi bi-download"></i> Export as PNG';
-            ccToast('Exported as PNG', 'success');
-        }
+        }, 2000);
     };
 
     // ── Server Generate (legacy Pillow path) ──
@@ -2030,6 +2084,190 @@
             showProperties(active);
         }
     });
+
+    // ── Templates ──
+
+    function getCanvasThumbnail() {
+        // Generate a small thumbnail data URL for the templates list
+        removeGuides();
+        const dataURL = canvas.toDataURL({ format: 'png', multiplier: 0.15 / viewScale });
+        return dataURL;
+    }
+
+    window.saveTemplate = function() {
+        const nameEl = document.getElementById('templateName');
+        const name = (nameEl.value || '').trim() || ('Template ' + new Date().toLocaleDateString());
+        const canvasJson = JSON.stringify(canvas.toJSON(['_customType', '_isGuide']));
+        const thumbnail = getCanvasThumbnail();
+
+        fetch("{{ url_for('client.client_creative_templates_save') }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                name: name,
+                ad_format: currentFormat,
+                canvas_json: canvasJson,
+                thumbnail: thumbnail,
+                canvas_width: fullW,
+                canvas_height: fullH,
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                ccToast('Template saved: ' + name, 'success');
+                nameEl.value = '';
+                loadTemplatesList();
+            } else {
+                ccToast(data.error || 'Failed to save template', 'error');
+            }
+        })
+        .catch(() => ccToast('Failed to save template', 'error'));
+    };
+
+    window.loadTemplate = function(templateId) {
+        fetch("{{ url_for('client.client_creative_templates_list') }}".replace(/\/+$/, '') + '/' + templateId, {
+            credentials: 'same-origin'
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.template) { ccToast('Template not found', 'error'); return; }
+            const tpl = data.template;
+
+            // Set canvas dimensions
+            fullW = tpl.canvas_width || 1200;
+            fullH = tpl.canvas_height || 628;
+            currentFormat = tpl.ad_format || 'facebook_feed';
+            resizeCanvas();
+
+            // Highlight matching format button
+            document.querySelectorAll('.format-option').forEach(o => {
+                o.classList.toggle('selected', o.dataset.format === currentFormat);
+            });
+
+            // Load canvas state
+            const json = JSON.parse(tpl.canvas_json);
+            canvas.loadFromJSON(json, function() {
+                canvas.renderAll();
+                updateLayers();
+                undoStack = [];
+                redoStack = [];
+                saveState();
+                updateStatus();
+                ccToast('Template loaded: ' + tpl.name, 'success');
+            });
+        })
+        .catch(() => ccToast('Failed to load template', 'error'));
+    };
+
+    window.deleteTemplate = function(templateId, e) {
+        e.stopPropagation();
+        if (!confirm('Delete this template?')) return;
+        fetch("{{ url_for('client.client_creative_templates_list') }}".replace(/\/+$/, '') + '/' + templateId, {
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': csrfToken },
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                ccToast('Template deleted', 'success');
+                loadTemplatesList();
+            }
+        })
+        .catch(() => {});
+    };
+
+    function loadTemplatesList() {
+        const container = document.getElementById('templatesList');
+        fetch("{{ url_for('client.client_creative_templates_list') }}", { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(data => {
+            const templates = data.templates || [];
+            if (!templates.length) {
+                container.innerHTML = '<div class="text-muted" style="font-size:.8rem">No saved templates yet. Design something and hit Save.</div>';
+                return;
+            }
+            let html = '';
+            templates.forEach(function(tpl) {
+                html += '<div class="template-item" onclick="loadTemplate(' + tpl.id + ')" title="Click to load">';
+                if (tpl.thumbnail) {
+                    html += '<img src="' + tpl.thumbnail + '" class="template-thumb" alt="">';
+                } else {
+                    html += '<div class="template-thumb-placeholder"><i class="bi bi-image"></i></div>';
+                }
+                html += '<div class="template-info">';
+                html += '<div class="template-name">' + (tpl.name || 'Untitled') + '</div>';
+                html += '<div class="template-meta">' + (tpl.ad_format || '').replace(/_/g, ' ') + ' &middot; ' + (tpl.canvas_width || '?') + 'x' + (tpl.canvas_height || '?') + '</div>';
+                html += '</div>';
+                html += '<button class="tool-btn template-del" onclick="deleteTemplate(' + tpl.id + ', event)" title="Delete"><i class="bi bi-trash"></i></button>';
+                html += '</div>';
+            });
+            container.innerHTML = html;
+        })
+        .catch(() => {
+            container.innerHTML = '<div class="text-muted" style="font-size:.8rem">Could not load templates.</div>';
+        });
+    }
+
+    // Load templates on page init
+    loadTemplatesList();
+
+    // ── Save to Google Drive ──
+
+    window.saveToDrive = function() {
+        const btn = document.getElementById('btnDriveSave');
+        if (!btn) return;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+
+        removeGuides();
+        const dataURL = canvas.toDataURL({ format: 'png', multiplier: 1 / viewScale });
+
+        const blobBin = atob(dataURL.split(',')[1]);
+        const arr = new Uint8Array(blobBin.length);
+        for (let i = 0; i < blobBin.length; i++) arr[i] = blobBin.charCodeAt(i);
+        const blob = new Blob([arr], { type: 'image/png' });
+
+        const filename = 'creative_' + currentFormat + '_' + Date.now() + '.png';
+        const fd = new FormData();
+        fd.append('file', blob, filename);
+        fd.append('subfolder', 'Creatives');
+        if (csrfToken) fd.append('csrf_token', csrfToken);
+
+        fetch("{{ url_for('client.client_drive_upload') }}", {
+            method: 'POST',
+            body: fd,
+            headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {}
+        })
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            if (data.ok && data.file) {
+                ccToast('Saved to Google Drive', 'success');
+                btn.innerHTML = '<i class="bi bi-check2"></i> Saved to Drive';
+                btn.classList.add('btn-success');
+                // Open Drive link if available
+                if (data.file.webViewLink) {
+                    setTimeout(() => window.open(data.file.webViewLink, '_blank'), 500);
+                }
+                setTimeout(() => {
+                    btn.innerHTML = '<i class="bi bi-google"></i> Save to Drive';
+                    btn.classList.remove('btn-success');
+                }, 3000);
+            } else {
+                ccToast(data.error || 'Drive save failed. Check your connection in Settings.', 'error');
+                btn.innerHTML = '<i class="bi bi-google"></i> Save to Drive';
+            }
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-google"></i> Save to Drive';
+            ccToast('Drive save failed. Check your connection.', 'error');
+        });
+    };
 
 })();
 </script>

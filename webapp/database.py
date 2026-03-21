@@ -213,6 +213,22 @@ class WebDB:
                 FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
             );
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS creative_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                name TEXT NOT NULL DEFAULT 'Untitled Template',
+                ad_format TEXT NOT NULL DEFAULT 'facebook_feed',
+                canvas_json TEXT NOT NULL,
+                thumbnail TEXT DEFAULT '',
+                canvas_width INTEGER DEFAULT 1200,
+                canvas_height INTEGER DEFAULT 628,
+                created_by TEXT NOT NULL DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+        """)
         conn.commit()
         brand_columns = {r[1] for r in conn.execute("PRAGMA table_info(brands)").fetchall()}
         new_brand_cols = [
@@ -858,6 +874,58 @@ class WebDB:
         conn.execute(
             "DELETE FROM campaign_drafts WHERE id = ? AND brand_id = ?",
             (draft_id, brand_id),
+        )
+        conn.commit()
+        conn.close()
+
+    # ── Creative Templates ──
+
+    def save_creative_template(self, brand_id, name, ad_format, canvas_json, thumbnail, canvas_width, canvas_height, created_by):
+        conn = self._conn()
+        conn.execute(
+            "INSERT INTO creative_templates (brand_id, name, ad_format, canvas_json, thumbnail, canvas_width, canvas_height, created_by) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (brand_id, name, ad_format, canvas_json, thumbnail, canvas_width, canvas_height, created_by),
+        )
+        conn.commit()
+        tid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.close()
+        return tid
+
+    def get_creative_templates(self, brand_id):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT id, name, ad_format, thumbnail, canvas_width, canvas_height, created_at "
+            "FROM creative_templates WHERE brand_id = ? ORDER BY updated_at DESC",
+            (brand_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_creative_template(self, template_id, brand_id):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM creative_templates WHERE id = ? AND brand_id = ?",
+            (template_id, brand_id),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def update_creative_template(self, template_id, brand_id, name, canvas_json, thumbnail, canvas_width, canvas_height):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE creative_templates SET name=?, canvas_json=?, thumbnail=?, canvas_width=?, canvas_height=?, updated_at=datetime('now') "
+            "WHERE id=? AND brand_id=?",
+            (name, canvas_json, thumbnail, canvas_width, canvas_height, template_id, brand_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def delete_creative_template(self, template_id, brand_id):
+        conn = self._conn()
+        conn.execute(
+            "DELETE FROM creative_templates WHERE id = ? AND brand_id = ?",
+            (template_id, brand_id),
         )
         conn.commit()
         conn.close()

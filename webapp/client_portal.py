@@ -1166,6 +1166,75 @@ def client_creative():
     )
 
 
+# ── Creative Templates API ──
+
+@client_bp.route("/creative/templates", methods=["GET"])
+@client_login_required
+def client_creative_templates_list():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    templates = db.get_creative_templates(brand_id)
+    return jsonify({"templates": templates})
+
+
+@client_bp.route("/creative/templates", methods=["POST"])
+@client_login_required
+def client_creative_templates_save():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "Untitled Template").strip()[:120]
+    ad_format = (data.get("ad_format") or "facebook_feed").strip()
+    canvas_json = data.get("canvas_json", "")
+    thumbnail = (data.get("thumbnail") or "")[:200000]  # cap thumbnail data URL size
+    canvas_width = int(data.get("canvas_width", 1200))
+    canvas_height = int(data.get("canvas_height", 628))
+    if not canvas_json:
+        return jsonify({"error": "No canvas data"}), 400
+    created_by = session.get("client_name", "client")
+    tid = db.save_creative_template(
+        brand_id, name, ad_format, canvas_json, thumbnail, canvas_width, canvas_height, created_by
+    )
+    return jsonify({"ok": True, "id": tid})
+
+
+@client_bp.route("/creative/templates/<int:template_id>", methods=["GET"])
+@client_login_required
+def client_creative_template_load(template_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    tpl = db.get_creative_template(template_id, brand_id)
+    if not tpl:
+        return jsonify({"error": "Template not found"}), 404
+    return jsonify({"template": tpl})
+
+
+@client_bp.route("/creative/templates/<int:template_id>", methods=["PUT"])
+@client_login_required
+def client_creative_template_update(template_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "Untitled Template").strip()[:120]
+    canvas_json = data.get("canvas_json", "")
+    thumbnail = (data.get("thumbnail") or "")[:200000]
+    canvas_width = int(data.get("canvas_width", 1200))
+    canvas_height = int(data.get("canvas_height", 628))
+    if not canvas_json:
+        return jsonify({"error": "No canvas data"}), 400
+    db.update_creative_template(template_id, brand_id, name, canvas_json, thumbnail, canvas_width, canvas_height)
+    return jsonify({"ok": True})
+
+
+@client_bp.route("/creative/templates/<int:template_id>", methods=["DELETE"])
+@client_login_required
+def client_creative_template_delete(template_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    db.delete_creative_template(template_id, brand_id)
+    return jsonify({"ok": True})
+
+
 @client_bp.route("/creative/generate", methods=["POST"])
 @client_login_required
 def client_creative_generate():
