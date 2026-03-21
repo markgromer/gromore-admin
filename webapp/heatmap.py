@@ -68,7 +68,10 @@ def geocode_address(api_key, address):
 
 def _search_places(api_key, keyword, lat, lng, radius_m=2000):
     """Query Google Places Text Search for a keyword near a point.
-    Tries the New API first, falls back to the legacy API."""
+    Tries the New API first, falls back to the legacy API.
+    Returns (places_list, diag_dict)."""
+    diag = {"new_api": None, "legacy_api": None}
+
     # --- Try Places API (New) ---
     url_new = "https://places.googleapis.com/v1/places:searchText"
     headers = {
@@ -88,15 +91,18 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000):
     }
     try:
         resp = requests.post(url_new, json=body, headers=headers, timeout=15)
+        resp_body = resp.text[:500]
+        diag["new_api"] = {"status": resp.status_code, "body": resp_body}
         if resp.status_code == 200:
             places = resp.json().get("places", [])
             if places:
-                return places
-            # New API returned empty - fall through to legacy
+                return places, diag
+            # New API returned 200 but empty - fall through to legacy
         else:
             log.info("Places API (New) returned %s - trying legacy API. Body: %s",
-                     resp.status_code, resp.text[:300])
+                     resp.status_code, resp_body)
     except Exception as exc:
+        diag["new_api"] = {"error": str(exc)}
         log.warning("Places API (New) error at (%.4f, %.4f): %s", lat, lng, exc)
 
     # --- Fallback: Legacy Places Text Search ---
@@ -111,11 +117,13 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000):
         resp = requests.get(url_legacy, params=params, timeout=15)
         resp.raise_for_status()
         data = resp.json()
+        diag["legacy_api"] = {"status": resp.status_code, "gstatus": data.get("status"),
+                              "error_message": data.get("error_message", "")}
         raw = data.get("results", [])
         if not raw:
             log.debug("Legacy Places also empty at (%.4f, %.4f) for '%s' - status: %s",
                       lat, lng, keyword, data.get("status"))
-            return []
+            return [], diag
         # Normalize to the same shape as New API output
         places = []
         for r in raw:
@@ -124,10 +132,11 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000):
                 "id": r.get("place_id", ""),
                 "formattedAddress": r.get("formatted_address", ""),
             })
-        return places
+        return places, diag
     except Exception as exc:
+        diag["legacy_api"] = {"error": str(exc)}
         log.warning("Legacy Places API error at (%.4f, %.4f): %s", lat, lng, exc)
-        return []
+        return [], diag
 
 
 def _tokenize(name):
@@ -171,8 +180,8 @@ def scan_grid(api_key, keyword, business_name, grid_points,
     results = []
     debug_sample = None
     for pt in grid_points:
-        places = _search_places(api_key, keyword, pt["lat"], pt["lng"],
-                                radius_m=search_radius_m)
+        places, api_diag = _search_places(api_key, keyword, pt["lat"], pt["lng"],
+                                          radius_m=search_radius_m)
         rank = _match_business(places, business_name, place_id)
         # Capture first point's raw results for diagnostics
         if debug_sample is None:
@@ -185,10 +194,12 @@ def scan_grid(api_key, keyword, business_name, grid_points,
                     (p.get("displayName", {}).get("text", "") or "")
                     for p in places[:5]
                 ],
+                "api_diagnostics": api_diag,
             }
             log.info("Heatmap debug - matching '%s' (place_id=%s) | "
-                     "top results: %s", business_name, place_id,
-                     debug_sample["top_5_names"])
+                     "top results: %s | api_diag: %s",
+                     business_name, place_id,
+                     debug_sample["top_5_names"], api_diag)
         results.append({
             "row": pt["row"],
             "col": pt["col"],

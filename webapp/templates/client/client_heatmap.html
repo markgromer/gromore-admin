@@ -706,6 +706,33 @@ function showDebug(d) {
         (d.top_5_names && d.top_5_names.length ? d.top_5_names.map(function(n, i) {
             return '<br>' + (i+1) + '. ' + n;
         }).join('') : '<em>none returned</em>');
+
+    // Show API diagnostics when available
+    if (d.api_diagnostics) {
+        var ad = d.api_diagnostics;
+        var diagHtml = '<br><strong>API Diagnostics (first grid point):</strong>';
+        if (ad.new_api) {
+            if (ad.new_api.error) {
+                diagHtml += '<br>New API: Error - ' + ad.new_api.error;
+            } else {
+                diagHtml += '<br>New API: HTTP ' + ad.new_api.status;
+                if (ad.new_api.body) diagHtml += ' - <code style="word-break:break-all">' + ad.new_api.body.substring(0, 300) + '</code>';
+            }
+        } else {
+            diagHtml += '<br>New API: not attempted';
+        }
+        if (ad.legacy_api) {
+            if (ad.legacy_api.error) {
+                diagHtml += '<br>Legacy API: Error - ' + ad.legacy_api.error;
+            } else {
+                diagHtml += '<br>Legacy API: HTTP ' + ad.legacy_api.status + ' | Google status: ' + (ad.legacy_api.gstatus || '?');
+                if (ad.legacy_api.error_message) diagHtml += ' | ' + ad.legacy_api.error_message;
+            }
+        } else {
+            diagHtml += '<br>Legacy API: not attempted';
+        }
+        el.innerHTML += diagHtml;
+    }
 }
 
 function loadScan(scanId) {
