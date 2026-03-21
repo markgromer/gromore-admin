@@ -199,6 +199,20 @@ class WebDB:
                 FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
             );
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS warren_memories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                category TEXT NOT NULL DEFAULT 'insight',
+                title TEXT NOT NULL DEFAULT '',
+                content TEXT NOT NULL,
+                embedding TEXT DEFAULT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+        """)
         conn.commit()
         brand_columns = {r[1] for r in conn.execute("PRAGMA table_info(brands)").fetchall()}
         new_brand_cols = [
@@ -967,3 +981,62 @@ class WebDB:
         row = conn.execute("SELECT * FROM heatmap_scans WHERE id = ?", (scan_id,)).fetchone()
         conn.close()
         return dict(row) if row else None
+
+    # ── Warren Memories ──
+
+    def add_warren_memory(self, brand_id, category, title, content, embedding=None):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO warren_memories (brand_id, category, title, content, embedding)
+               VALUES (?, ?, ?, ?, ?)""",
+            (brand_id, category, title, content, embedding),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_warren_memories(self, brand_id, category=None, status="active", limit=50):
+        conn = self._conn()
+        if category:
+            rows = conn.execute(
+                "SELECT * FROM warren_memories WHERE brand_id = ? AND category = ? AND status = ? ORDER BY updated_at DESC LIMIT ?",
+                (brand_id, category, status, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM warren_memories WHERE brand_id = ? AND status = ? ORDER BY updated_at DESC LIMIT ?",
+                (brand_id, status, limit),
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def update_warren_memory(self, memory_id, content=None, status=None, title=None):
+        conn = self._conn()
+        updates = []
+        params = []
+        if content is not None:
+            updates.append("content = ?")
+            params.append(content)
+        if status is not None:
+            updates.append("status = ?")
+            params.append(status)
+        if title is not None:
+            updates.append("title = ?")
+            params.append(title)
+        if updates:
+            updates.append("updated_at = datetime('now')")
+            params.append(memory_id)
+            conn.execute(
+                f"UPDATE warren_memories SET {', '.join(updates)} WHERE id = ?",
+                params,
+            )
+            conn.commit()
+        conn.close()
+
+    def get_warren_memories_with_embeddings(self, brand_id, status="active"):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM warren_memories WHERE brand_id = ? AND status = ? AND embedding IS NOT NULL ORDER BY updated_at DESC",
+            (brand_id, status),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]

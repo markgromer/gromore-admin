@@ -6,8 +6,9 @@ This is intentionally on-demand and best-effort: failures should not break core 
 
 import json
 import logging
+import math
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import requests
@@ -66,7 +67,163 @@ WARREN_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "save_memory",
+            "description": (
+                "Save an important insight, strategy, decision, or learning about this brand "
+                "to your long-term memory. Use this when you make a recommendation, note a pattern, "
+                "document a strategy being tested, or record an outcome. This builds your knowledge "
+                "of the business over time. Categories: strategy (a plan or approach being used), "
+                "insight (a data-driven observation), decision (a choice that was made), "
+                "learning (what worked or didn't)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "category": {
+                        "type": "string",
+                        "enum": ["strategy", "insight", "decision", "learning"],
+                        "description": "Type of memory to save.",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Short title (5-10 words) summarizing this memory.",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Detailed content of the memory. Include context, numbers, and reasoning.",
+                    },
+                },
+                "required": ["category", "title", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recall_memories",
+            "description": (
+                "Search your long-term memory for relevant past insights, strategies, "
+                "decisions, and learnings about this brand. Use this before making recommendations "
+                "to check what you've previously noted."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "What to search for in your memories about this brand.",
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": ["strategy", "insight", "decision", "learning", "all"],
+                        "description": "Filter by category, or 'all' for everything.",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
 ]
+
+
+# ── Embedding & vector search helpers ──
+
+def _get_embedding(api_key: str, text: str) -> List[float]:
+    """Get an embedding vector from OpenAI."""
+    resp = requests.post(
+        "https://api.openai.com/v1/embeddings",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json={"model": "text-embedding-3-small", "input": text[:8000]},
+        timeout=15,
+    )
+    if resp.status_code != 200:
+        log.warning("Embedding API error: %s", resp.text[:200])
+        return []
+    data = resp.json()
+    return data.get("data", [{}])[0].get("embedding", [])
+
+
+def _cosine_similarity(a: List[float], b: List[float]) -> float:
+    """Compute cosine similarity between two vectors."""
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(x * x for x in b))
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def recall_relevant_memories(db, brand_id: int, query: str, api_key: str,
+                             category: str = "all", top_k: int = 10) -> List[Dict]:
+    """Retrieve memories most relevant to a query using vector similarity."""
+    query_emb = _get_embedding(api_key, query)
+    if not query_emb:
+        # Fallback: return recent memories without ranking
+        memories = db.get_warren_memories(brand_id, limit=top_k)
+        return memories
+
+    all_memories = db.get_warren_memories_with_embeddings(brand_id)
+    if category and category != "all":
+        all_memories = [m for m in all_memories if m["category"] == category]
+
+    scored = []
+    for mem in all_memories:
+        try:
+            mem_emb = json.loads(mem["embedding"])
+        except (json.JSONDecodeError, TypeError):
+            continue
+        sim = _cosine_similarity(query_emb, mem_emb)
+        scored.append((sim, mem))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [m for _, m in scored[:top_k]]
+
+
+def save_memory_with_embedding(db, brand_id: int, category: str, title: str,
+                               content: str, api_key: str):
+    """Save a memory and generate its embedding for future search."""
+    emb_text = f"{title}: {content}"
+    emb = _get_embedding(api_key, emb_text)
+    emb_json = json.dumps(emb) if emb else None
+    db.add_warren_memory(brand_id, category, title, content, emb_json)
+
+
+def get_memory_context_for_chat(db, brand_id: int, user_message: str,
+                                api_key: str) -> str:
+    """Build a memory context string for injecting into Warren's chat.
+    Called before each chat to give Warren access to relevant past knowledge."""
+    # Get recent memories across all categories
+    recent = db.get_warren_memories(brand_id, limit=8)
+    # Get vector-search relevant memories
+    relevant = recall_relevant_memories(db, brand_id, user_message, api_key, top_k=5)
+
+    # Merge and deduplicate
+    seen_ids = set()
+    combined = []
+    for m in relevant + recent:
+        if m["id"] not in seen_ids:
+            seen_ids.add(m["id"])
+            combined.append(m)
+
+    if not combined:
+        return ""
+
+    parts = ["YOUR MEMORIES ABOUT THIS BRAND (use these to inform your response):"]
+    for m in combined[:12]:
+        parts.append(
+            f"- [{m['category'].upper()}] {m['title']} ({m['created_at'][:10]}): {m['content'][:300]}"
+        )
+    parts.append(
+        "\nUse these memories as context. Reference past strategies and their results. "
+        "Build on what you already know. When you make new recommendations or observations, "
+        "save them with save_memory so you remember next time."
+    )
+    return "\n".join(parts)
 
 
 def _execute_web_search(query: str) -> str:
@@ -635,6 +792,8 @@ def chat_with_warren(
     admin_system_prompt: str = "",
     model: Optional[str] = None,
     timeout: int = 60,
+    db=None,
+    brand_id: Optional[int] = None,
 ) -> str:
     if not api_key:
         raise ValueError("OpenAI API key not configured")
@@ -786,6 +945,22 @@ def chat_with_warren(
         "and incorporate the brand's colors, style, and identity when relevant. "
         "Use these tools proactively. If someone mentions a competitor, look them up. "
         "If someone asks for a creative concept, generate an image. Don't say you can't do it.",
+
+        # Long-term memory
+        "YOUR MEMORY: "
+        "You have long-term memory that persists across conversations. You can: "
+        "3. **save_memory** - Save important insights, strategies, decisions, and learnings about this brand. "
+        "Use this often. Every time you identify a pattern, make a recommendation, note a strategy change, "
+        "or learn what worked or didn't, save it. Categories: strategy, insight, decision, learning. "
+        "4. **recall_memories** - Search your past memories about this brand. Use this when you need "
+        "context about what's been tried before, what strategies are active, or what outcomes were observed. "
+        "MEMORY DISCIPLINE: "
+        "You are not a stateless chatbot. You grow with this business. "
+        "Before making significant recommendations, recall what you've previously advised. "
+        "When you notice trends, save them. When strategies produce results, document the outcome. "
+        "When the client makes a decision, record it. Your memories are loaded automatically, "
+        "but you can also search for specific ones using recall_memories. "
+        "Always build on past knowledge rather than starting from scratch.",
     ]
 
     system = "\n\n".join(system_parts)
@@ -833,6 +1008,17 @@ def chat_with_warren(
             + "\n\n"
             + system
         )
+
+    # ── Inject long-term memory context ──
+    memory_context = ""
+    if db and brand_id:
+        try:
+            user_msg = messages[-1]["content"] if messages else ""
+            memory_context = get_memory_context_for_chat(db, brand_id, user_msg, api_key)
+        except Exception as exc:
+            log.warning("Failed to load Warren memories: %s", exc)
+    if memory_context:
+        system += "\n\n" + memory_context
 
     ctx_user = {
         "role": "user",
@@ -898,6 +1084,31 @@ def chat_with_warren(
                     size = fn_args.get("size", "1024x1024")
                     log.info("Warren tool: generate_image('%s', size=%s)", prompt[:80], size)
                     tool_result = _execute_image_generation(api_key, prompt, size)
+                elif fn_name == "save_memory" and db and brand_id:
+                    cat = fn_args.get("category", "insight")
+                    title = fn_args.get("title", "")
+                    content = fn_args.get("content", "")
+                    log.info("Warren tool: save_memory(%s, '%s')", cat, title[:60])
+                    try:
+                        save_memory_with_embedding(db, brand_id, cat, title, content, api_key)
+                        tool_result = f"Memory saved: [{cat}] {title}"
+                    except Exception as exc:
+                        tool_result = f"Failed to save memory: {exc}"
+                elif fn_name == "recall_memories" and db and brand_id:
+                    q = fn_args.get("query", "")
+                    cat = fn_args.get("category", "all")
+                    log.info("Warren tool: recall_memories('%s', cat=%s)", q[:60], cat)
+                    try:
+                        memories = recall_relevant_memories(db, brand_id, q, api_key, category=cat, top_k=8)
+                        if memories:
+                            lines = []
+                            for m in memories:
+                                lines.append(f"[{m['category'].upper()}] {m['title']} ({m['created_at'][:10]}): {m['content'][:400]}")
+                            tool_result = "\n\n".join(lines)
+                        else:
+                            tool_result = "No memories found for this query. This is a new area - build knowledge by saving insights."
+                    except Exception as exc:
+                        tool_result = f"Memory recall error: {exc}"
                 else:
                     tool_result = f"Unknown function: {fn_name}"
 

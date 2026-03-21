@@ -374,6 +374,8 @@ def _client_assistant_chat_handler(payload):
                 or DEFAULT_CHAT_SYSTEM_PROMPT
             ),
             timeout=90,
+            db=db,
+            brand_id=brand_id,
         )
         assistant_reply = (assistant_reply or "").strip()
         if assistant_reply:
