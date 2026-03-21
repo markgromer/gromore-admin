@@ -400,6 +400,26 @@
     .layer-item.locked { opacity: .55; }
     .layer-item.locked .layer-name { font-style: italic; }
 
+    /* Image fit mode buttons */
+    .fit-mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+    .fit-mode-grid .tool-btn { font-size: .75rem; padding: .35rem .4rem; justify-content: center; }
+
+    /* Canvas grid overlay */
+    .canvas-grid-line {
+        position: absolute; background: rgba(99,102,241,.18); pointer-events: none; z-index: 5;
+    }
+
+    /* Blend mode select */
+    .blend-select {
+        width: 100%; border: 1.5px solid #e5e7eb; border-radius: 8px;
+        padding: .4rem .6rem; font-size: .8rem; background: #fff;
+    }
+    .blend-select:focus { border-color: #6366f1; outline: none; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+
+    /* Shadow controls */
+    .shadow-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 4px; }
+    .shadow-controls .prop-input { font-size: .78rem; padding: .3rem .5rem; }
+
     @media (max-width: 768px) {
         .format-grid { grid-template-columns: repeat(2, 1fr); }
         .asset-grid { grid-template-columns: repeat(2, 1fr); }
@@ -604,6 +624,15 @@
             <button class="tool-btn" onclick="duplicateSelected()" title="Duplicate (Ctrl+D)">
                 <i class="bi bi-copy"></i>
             </button>
+            <button class="tool-btn" onclick="toggleGrid()" title="Toggle Grid (G)" id="btnGrid">
+                <i class="bi bi-grid-3x3"></i>
+            </button>
+            <button class="tool-btn" onclick="groupSelected()" title="Group (Ctrl+G)">
+                <i class="bi bi-union"></i>
+            </button>
+            <button class="tool-btn" onclick="ungroupSelected()" title="Ungroup (Ctrl+Shift+G)">
+                <i class="bi bi-subtract"></i>
+            </button>
             <div style="flex:1"></div>
             <button class="tool-btn" onclick="deleteSelected()" title="Delete (Del)">
                 <i class="bi bi-trash"></i>
@@ -631,7 +660,7 @@
         <div class="canvas-status" id="canvasStatus">
             <span id="statusSize">1200 × 628</span>
             <span id="statusSelection">No selection</span>
-            <span id="statusHint">Ctrl+Z undo · Del delete · Ctrl+D duplicate</span>
+            <span id="statusHint">Ctrl+Z undo · Del delete · Ctrl+D dup · Ctrl+G group · G grid</span>
         </div>
 
         <!-- Export -->
@@ -825,6 +854,7 @@
         fullH = parseInt(el.dataset.h);
         resizeCanvas();
         updateStatus();
+        if (gridVisible) drawGrid();
     };
 
     window.addEventListener('resize', resizeCanvas);
@@ -1034,14 +1064,20 @@
                     // Scale to fit canvas while keeping proportions
                     const sc = Math.min(fullW / img.width, fullH / img.height, 1);
                     img.set({
-                        left: 0, top: 0,
+                        left: (fullW - img.width * sc) / 2,
+                        top: (fullH - img.height * sc) / 2,
                         scaleX: sc, scaleY: sc,
                         _customType: 'image',
                     });
                     canvas.add(img);
-                    // If it's the first image, send to back as background
-                    if (canvas.getObjects().length === 1) {
-                        img.set({ left: 0, top: 0, scaleX: fullW / img.width, scaleY: fullH / img.height });
+                    // If it's the first image, use cover mode (fills canvas, maintains ratio)
+                    if (canvas.getObjects().filter(o => !o._isGuide && !o._isGrid).length === 1) {
+                        const coverSc = Math.max(fullW / img.width, fullH / img.height);
+                        img.set({
+                            scaleX: coverSc, scaleY: coverSc,
+                            left: (fullW - img.width * coverSc) / 2,
+                            top: (fullH - img.height * coverSc) / 2,
+                        });
                         canvas.sendToBack(img);
                     }
                     canvas.setActiveObject(img);
@@ -1160,7 +1196,7 @@
     function updateLayers() {
         const panel = document.getElementById('layersPanel');
         const empty = document.getElementById('layersEmpty');
-        const objects = canvas.getObjects().filter(o => !o._isGuide);
+        const objects = canvas.getObjects().filter(o => !o._isGuide && !o._isGrid);
         if (!objects.length) {
             panel.innerHTML = '';
             panel.appendChild(empty);
@@ -1178,6 +1214,7 @@
             const name = obj.text ? obj.text.substring(0, 20) : label;
             const icon = (obj.type === 'i-text' || obj.type === 'text') ? 'bi-type' :
                          obj.type === 'image' ? 'bi-image' :
+                         obj.type === 'group' ? 'bi-collection' :
                          label === 'overlay' ? 'bi-layers-half' :
                          label === 'logo' ? 'bi-patch-check' :
                          (obj.type === 'polygon' || obj.type === 'path') ? 'bi-pentagon' :
@@ -1325,11 +1362,30 @@
                            oninput="updateProp('charSpacing', parseInt(this.value)); this.previousElementSibling.querySelector('span').textContent = this.value">
                 </div>
                 <div class="prop-field">
+                    <label>Text Outline</label>
+                    <div class="d-flex gap-2 align-items-center">
+                        <input type="color" class="prop-input" value="${(obj.stroke && typeof obj.stroke === 'string' && obj.stroke.charAt(0) === '#') ? obj.stroke : '#000000'}" style="flex:1;height:32px"
+                               oninput="updateProp('stroke', this.value)">
+                        <input type="number" class="prop-input" value="${obj.strokeWidth || 0}" min="0" max="10" style="width:60px"
+                               oninput="updateProp('strokeWidth', parseInt(this.value))">
+                    </div>
+                </div>
+                <div class="prop-field">
                     <label>Shadow</label>
                     <div class="d-flex gap-2 align-items-center">
                         <input type="checkbox" ${obj.shadow ? 'checked' : ''} onchange="toggleShadow(this.checked)" id="shadowToggle">
                         <label for="shadowToggle" style="font-size:.78rem;color:#6b7280;margin:0;font-weight:400">Drop shadow</label>
                     </div>
+                    ${obj.shadow ? `<div class="shadow-controls">
+                        <input type="color" class="prop-input" value="${obj.shadow.color || '#000000'}" style="height:28px" title="Shadow color"
+                               oninput="updateShadowProp('color', this.value)">
+                        <input type="number" class="prop-input" value="${obj.shadow.blur || 4}" min="0" max="50" title="Blur"
+                               oninput="updateShadowProp('blur', parseInt(this.value))">
+                        <input type="number" class="prop-input" value="${obj.shadow.offsetX || 2}" min="-30" max="30" title="Offset X"
+                               oninput="updateShadowProp('offsetX', parseInt(this.value))">
+                        <input type="number" class="prop-input" value="${obj.shadow.offsetY || 2}" min="-30" max="30" title="Offset Y"
+                               oninput="updateShadowProp('offsetY', parseInt(this.value))">
+                    </div>` : ''}
                 </div>
             `;
         } else if (['rect','circle','triangle','polygon','path'].includes(obj.type)) {
@@ -1386,14 +1442,26 @@
                 </div>
                 <div class="prop-field">
                     <label>Fit to Canvas</label>
-                    <button class="tool-btn w-100" onclick="fitImageToCanvas()"><i class="bi bi-arrows-fullscreen"></i> Fill Canvas</button>
+                    <div class="fit-mode-grid">
+                        <button class="tool-btn" onclick="fitImageFit()" title="Fit inside canvas, maintain ratio"><i class="bi bi-aspect-ratio"></i> Fit</button>
+                        <button class="tool-btn" onclick="fitImageFill()" title="Cover canvas, maintain ratio"><i class="bi bi-arrows-fullscreen"></i> Fill</button>
+                        <button class="tool-btn" onclick="fitImageStretch()" title="Stretch to fill canvas"><i class="bi bi-arrows-angle-expand"></i> Stretch</button>
+                        <button class="tool-btn" onclick="fitImageOriginal()" title="Original size, centered"><i class="bi bi-image"></i> Original</button>
+                    </div>
                 </div>
             `;
         }
 
-        // Universal position
+        // Universal position + blend mode
+        const currentBlend = obj.globalCompositeOperation || 'source-over';
         html += `
             <hr style="border-color:#f1f3f5;margin:.6rem 0">
+            <div class="prop-field">
+                <label>Blend Mode</label>
+                <select class="blend-select" onchange="updateProp('globalCompositeOperation', this.value)">
+                    ${[['source-over','Normal'],['multiply','Multiply'],['screen','Screen'],['overlay','Overlay'],['darken','Darken'],['lighten','Lighten'],['color-dodge','Color Dodge'],['color-burn','Color Burn'],['hard-light','Hard Light'],['soft-light','Soft Light'],['difference','Difference'],['exclusion','Exclusion']].map(([v,l]) => '<option value="'+v+'"'+(currentBlend===v?' selected':'')+'>'+l+'</option>').join('')}
+                </select>
+            </div>
             <div class="prop-field">
                 <label>X</label>
                 <input type="number" class="prop-input" value="${Math.round(obj.left || 0)}" oninput="updateProp('left', parseInt(this.value))">
@@ -1426,12 +1494,150 @@
     window.fitImageToCanvas = function() {
         const active = canvas.getActiveObject();
         if (!active || active.type !== 'image') return;
+        const sc = Math.max(fullW / active.width, fullH / active.height);
+        active.set({
+            scaleX: sc, scaleY: sc,
+            left: (fullW - active.width * sc) / 2,
+            top: (fullH - active.height * sc) / 2,
+        });
+        canvas.renderAll(); saveState();
+    };
+
+    // Image fit modes
+    window.fitImageFit = function() {
+        const active = canvas.getActiveObject();
+        if (!active || active.type !== 'image') return;
+        const sc = Math.min(fullW / active.width, fullH / active.height);
+        active.set({
+            scaleX: sc, scaleY: sc,
+            left: (fullW - active.width * sc) / 2,
+            top: (fullH - active.height * sc) / 2,
+        });
+        canvas.renderAll(); saveState();
+    };
+
+    window.fitImageFill = function() {
+        const active = canvas.getActiveObject();
+        if (!active || active.type !== 'image') return;
+        const sc = Math.max(fullW / active.width, fullH / active.height);
+        active.set({
+            scaleX: sc, scaleY: sc,
+            left: (fullW - active.width * sc) / 2,
+            top: (fullH - active.height * sc) / 2,
+        });
+        canvas.renderAll(); saveState();
+    };
+
+    window.fitImageStretch = function() {
+        const active = canvas.getActiveObject();
+        if (!active || active.type !== 'image') return;
         active.set({
             left: 0, top: 0,
             scaleX: fullW / active.width,
             scaleY: fullH / active.height,
         });
+        canvas.renderAll(); saveState();
+    };
+
+    window.fitImageOriginal = function() {
+        const active = canvas.getActiveObject();
+        if (!active || active.type !== 'image') return;
+        active.set({
+            scaleX: 1, scaleY: 1,
+            left: (fullW - active.width) / 2,
+            top: (fullH - active.height) / 2,
+        });
+        canvas.renderAll(); saveState();
+    };
+
+    // Shadow property update
+    window.updateShadowProp = function(prop, value) {
+        const active = canvas.getActiveObject();
+        if (!active || !active.shadow) return;
+        active.shadow[prop] = value;
+        active.set('dirty', true);
         canvas.renderAll();
+    };
+
+    // ── Grid toggle ──
+
+    let gridVisible = false;
+    let gridObjects = [];
+
+    window.toggleGrid = function() {
+        gridVisible = !gridVisible;
+        const btn = document.getElementById('btnGrid');
+        if (btn) btn.classList.toggle('active', gridVisible);
+        if (gridVisible) {
+            drawGrid();
+        } else {
+            clearGrid();
+        }
+    };
+
+    function drawGrid() {
+        clearGrid();
+        const stepX = fullW / 12;
+        const stepY = fullH / 12;
+        for (let i = 1; i < 12; i++) {
+            const vLine = new fabric.Line([stepX * i, 0, stepX * i, fullH], {
+                stroke: 'rgba(99,102,241,0.2)', strokeWidth: 1,
+                selectable: false, evented: false, _isGrid: true, excludeFromExport: true,
+            });
+            const hLine = new fabric.Line([0, stepY * i, fullW, stepY * i], {
+                stroke: 'rgba(99,102,241,0.2)', strokeWidth: 1,
+                selectable: false, evented: false, _isGrid: true, excludeFromExport: true,
+            });
+            canvas.add(vLine);
+            canvas.add(hLine);
+            gridObjects.push(vLine, hLine);
+        }
+        // Center lines thicker
+        const cX = new fabric.Line([fullW / 2, 0, fullW / 2, fullH], {
+            stroke: 'rgba(99,102,241,0.4)', strokeWidth: 1, strokeDashArray: [8, 4],
+            selectable: false, evented: false, _isGrid: true, excludeFromExport: true,
+        });
+        const cY = new fabric.Line([0, fullH / 2, fullW, fullH / 2], {
+            stroke: 'rgba(99,102,241,0.4)', strokeWidth: 1, strokeDashArray: [8, 4],
+            selectable: false, evented: false, _isGrid: true, excludeFromExport: true,
+        });
+        canvas.add(cX); canvas.add(cY);
+        gridObjects.push(cX, cY);
+        canvas.renderAll();
+    }
+
+    function clearGrid() {
+        gridObjects.forEach(o => canvas.remove(o));
+        gridObjects = [];
+        canvas.renderAll();
+    }
+
+    // ── Element grouping ──
+
+    window.groupSelected = function() {
+        const active = canvas.getActiveObject();
+        if (!active || active.type !== 'activeSelection') {
+            ccToast('Select multiple elements first (Ctrl+click or Ctrl+A)', 'error');
+            return;
+        }
+        active.toGroup();
+        canvas.renderAll();
+        updateLayers();
+        saveState();
+        ccToast('Elements grouped', 'success');
+    };
+
+    window.ungroupSelected = function() {
+        const active = canvas.getActiveObject();
+        if (!active || active.type !== 'group') {
+            ccToast('Select a group to ungroup', 'error');
+            return;
+        }
+        active.toActiveSelection();
+        canvas.renderAll();
+        updateLayers();
+        saveState();
+        ccToast('Group ungrouped', 'success');
     };
 
     // ── Undo / Redo ──
@@ -1442,8 +1648,8 @@
 
     function saveState() {
         if (undoLock) return;
-        const json = canvas.toJSON(['_customType', '_isGuide']);
-        json.objects = json.objects.filter(o => !o._isGuide);
+        const json = canvas.toJSON(['_customType', '_isGuide', '_isGrid', 'globalCompositeOperation']);
+        json.objects = json.objects.filter(o => !o._isGuide && !o._isGrid);
         undoStack.push(JSON.stringify(json));
         if (undoStack.length > 50) undoStack.shift();
         redoStack = [];
@@ -1651,12 +1857,15 @@
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Exporting...';
 
-        // Export at full resolution - remove guides first
+        // Export at full resolution - remove guides and hide grid first
         removeGuides();
+        const gridWasVisible = gridVisible;
+        if (gridWasVisible) { gridObjects.forEach(o => o.set('visible', false)); canvas.renderAll(); }
         const dataURL = canvas.toDataURL({
             format: 'png',
             multiplier: 1 / viewScale,
         });
+        if (gridWasVisible) { gridObjects.forEach(o => o.set('visible', true)); canvas.renderAll(); }
 
         // Download locally
         const link = document.createElement('a');
@@ -2028,8 +2237,9 @@
     window.toggleShadow = function(on) {
         const obj = canvas.getActiveObject();
         if (!obj) return;
-        obj.set('shadow', on ? new fabric.Shadow({ color: 'rgba(0,0,0,0.5)', blur: 4, offsetX: 1, offsetY: 1 }) : null);
+        obj.set('shadow', on ? new fabric.Shadow({ color: 'rgba(0,0,0,0.5)', blur: 4, offsetX: 2, offsetY: 2 }) : null);
         canvas.renderAll();
+        showProperties(obj);
     };
 
     // ── Status bar ──
@@ -2057,18 +2267,23 @@
         if (e.ctrlKey && e.key === 'z' && !e.shiftKey) { undo(); e.preventDefault(); }
         if (e.ctrlKey && ((e.key === 'z' && e.shiftKey) || e.key === 'y')) { redo(); e.preventDefault(); }
         if (e.ctrlKey && e.key === 'd') { duplicateSelected(); e.preventDefault(); }
+        if (e.ctrlKey && e.key === 'g' && !e.shiftKey) { groupSelected(); e.preventDefault(); }
+        if (e.ctrlKey && e.key === 'g' && e.shiftKey) { ungroupSelected(); e.preventDefault(); }
         if (e.ctrlKey && e.key === 'c') { copySelected(); e.preventDefault(); }
         if (e.ctrlKey && e.key === 'v') { pasteClipboard(); e.preventDefault(); }
         if (e.ctrlKey && e.key === 'a') {
             e.preventDefault();
             canvas.discardActiveObject();
-            const objs = canvas.getObjects().filter(o => !o._isGuide && o.selectable !== false);
+            const objs = canvas.getObjects().filter(o => !o._isGuide && !o._isGrid && o.selectable !== false);
             if (objs.length) {
                 const sel = new fabric.ActiveSelection(objs, { canvas: canvas });
                 canvas.setActiveObject(sel);
                 canvas.renderAll();
             }
         }
+
+        // Grid toggle
+        if (e.key === 'g' && !e.ctrlKey && !e.shiftKey) { toggleGrid(); }
 
         // Arrow nudge
         const active = canvas.getActiveObject();
@@ -2088,16 +2303,18 @@
     // ── Templates ──
 
     function getCanvasThumbnail() {
-        // Generate a small thumbnail data URL for the templates list
         removeGuides();
+        const gridWasThumb = gridVisible;
+        if (gridWasThumb) { gridObjects.forEach(o => o.set('visible', false)); canvas.renderAll(); }
         const dataURL = canvas.toDataURL({ format: 'png', multiplier: 0.15 / viewScale });
+        if (gridWasThumb) { gridObjects.forEach(o => o.set('visible', true)); canvas.renderAll(); }
         return dataURL;
     }
 
     window.saveTemplate = function() {
         const nameEl = document.getElementById('templateName');
         const name = (nameEl.value || '').trim() || ('Template ' + new Date().toLocaleDateString());
-        const canvasJson = JSON.stringify(canvas.toJSON(['_customType', '_isGuide']));
+        const canvasJson = JSON.stringify(canvas.toJSON(['_customType', '_isGuide', '_isGrid', 'globalCompositeOperation']));
         const thumbnail = getCanvasThumbnail();
 
         fetch("{{ url_for('client.client_creative_templates_save') }}", {
@@ -2224,7 +2441,10 @@
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
 
         removeGuides();
+        const gridWasDrive = gridVisible;
+        if (gridWasDrive) { gridObjects.forEach(o => o.set('visible', false)); canvas.renderAll(); }
         const dataURL = canvas.toDataURL({ format: 'png', multiplier: 1 / viewScale });
+        if (gridWasDrive) { gridObjects.forEach(o => o.set('visible', true)); canvas.renderAll(); }
 
         const blobBin = atob(dataURL.split(',')[1]);
         const arr = new Uint8Array(blobBin.length);
