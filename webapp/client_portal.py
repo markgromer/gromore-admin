@@ -2241,7 +2241,9 @@ def client_settings():
     google_conn = connections.get("google", {})
     meta_conn = connections.get("meta", {})
     scopes = (google_conn.get("scopes") or "").lower()
-    drive_scoped = ("drive" in scopes) or ("spreadsheets" in scopes)
+    # Check for full 'auth/drive' scope (not just drive.file)
+    has_full_drive = "auth/drive " in (scopes + " ") or scopes.endswith("auth/drive")
+    drive_scoped = has_full_drive or ("spreadsheets" in scopes)
 
     return render_template(
         "client_settings.html",
