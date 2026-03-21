@@ -376,6 +376,7 @@ class WebDB:
             "openai_model_chat", "openai_model_images", "openai_model_analysis", "openai_model_ads",
             "logo_path", "logo_variants", "brand_colors",
             "google_drive_folder_id", "google_drive_sheet_id",
+            "google_maps_api_key", "google_place_id",
         }
         if field not in allowed:
             raise ValueError(f"Cannot update field: {field}")
