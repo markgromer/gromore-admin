@@ -47,6 +47,23 @@
         flex-direction: column;
     }
     #loadingOverlay.show { display: flex; }
+    .strategy-card {
+        cursor: pointer;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1.25rem;
+        transition: all .2s;
+        height: 100%;
+    }
+    .strategy-card:hover { border-color: #3b82f6; background: #f8fafc; }
+    .strategy-card.selected { border-color: #3b82f6; background: #eff6ff; }
+    .strategy-icon {
+        width: 44px; height: 44px;
+        border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.3rem; flex-shrink: 0;
+    }
+    .strategy-card-wrap.hidden { display: none; }
 </style>
 {% endblock %}
 
@@ -153,11 +170,74 @@
     </div>
 </div>
 
-<!-- Step 2: Campaign Details -->
+<!-- Step 2: Choose Strategy -->
 <div class="wizard-step" id="step2">
     <div class="card border-0 shadow-sm" style="border-radius: 12px;">
         <div class="card-body">
-            <h5 class="mb-1">Step 2: Tell Us About Your Campaign</h5>
+            <h5 class="mb-1">Step 2: Choose Your Campaign Strategy</h5>
+            <p class="text-muted mb-4">Each strategy is built on proven ad architectures and best practices.</p>
+
+            <div class="row g-3" id="strategyCards">
+                {% for key, s in strategies.items() %}
+                <div class="col-md-6 strategy-card-wrap" data-platform="{{ s.platform }}">
+                    <div class="strategy-card" data-strategy="{{ key }}" onclick="selectStrategy(this, '{{ key }}')">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="strategy-icon" style="background: {{ s.color }}15; color: {{ s.color }};">
+                                <i class="bi {{ s.icon }}"></i>
+                            </div>
+                            <div style="flex: 1;">
+                                <h6 class="mb-0">{{ s.name }}</h6>
+                                <div style="font-size: .78rem; color: {{ s.color }}; font-weight: 600; margin-bottom: .25rem;">{{ s.tagline }}</div>
+                                <p style="font-size: .82rem; color: #6b7280; margin-bottom: .5rem;">{{ s.description }}</p>
+                                <div style="font-size: .78rem; color: #9ca3af;">
+                                    <i class="bi bi-check-circle"></i> Best for: {{ s.best_for }}
+                                </div>
+                                <div style="font-size: .78rem; color: #9ca3af;">
+                                    <i class="bi bi-cash-stack"></i> Recommended min: ${{ s.recommended_min }}/mo
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+                <!-- Custom strategy option -->
+                <div class="col-md-6 strategy-card-wrap" data-platform="google meta">
+                    <div class="strategy-card" data-strategy="custom" onclick="selectStrategy(this, 'custom')">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="strategy-icon" style="background: #6b728015; color: #6b7280;">
+                                <i class="bi bi-sliders"></i>
+                            </div>
+                            <div style="flex: 1;">
+                                <h6 class="mb-0">Custom Campaign</h6>
+                                <div style="font-size: .78rem; color: #6b7280; font-weight: 600; margin-bottom: .25rem;">Build from scratch</div>
+                                <p style="font-size: .82rem; color: #6b7280; margin-bottom: .5rem;">
+                                    Tell the AI what you need and it will create a campaign plan
+                                    tailored to your specific requirements. No preset structure.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4 d-flex justify-content-between">
+                <button class="btn btn-outline-secondary" onclick="goToStep(1)">
+                    <i class="bi bi-arrow-left"></i> Back
+                </button>
+                <button class="btn btn-primary" id="step2Next" disabled onclick="goToStep(3)">
+                    Next <i class="bi bi-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Step 3: Campaign Details -->
+<div class="wizard-step" id="step3">
+    <div class="card border-0 shadow-sm" style="border-radius: 12px;">
+        <div class="card-body">
+            <h5 class="mb-1">Step 3: Tell Us About Your Campaign</h5>
             <p class="text-muted mb-4">Our AI will build a complete campaign plan based on your answers.</p>
 
             <div class="row g-3">
@@ -191,7 +271,7 @@
             </div>
 
             <div class="mt-4 d-flex justify-content-between">
-                <button class="btn btn-outline-secondary" onclick="goToStep(1)">
+                <button class="btn btn-outline-secondary" onclick="goToStep(2)">
                     <i class="bi bi-arrow-left"></i> Back
                 </button>
                 <button class="btn btn-primary" id="generateBtn" onclick="generatePlan()">
@@ -202,11 +282,11 @@
     </div>
 </div>
 
-<!-- Step 3: Review Plan -->
-<div class="wizard-step" id="step3">
+<!-- Step 4: Review Plan -->
+<div class="wizard-step" id="step4">
     <div class="card border-0 shadow-sm mb-3" style="border-radius: 12px;">
         <div class="card-body">
-            <h5 class="mb-1">Step 3: Review Your Campaign Plan</h5>
+            <h5 class="mb-1">Step 4: Review Your Campaign Plan</h5>
             <p class="text-muted mb-3">Our AI built this plan for you. Review it, then launch when ready.</p>
         </div>
     </div>
@@ -215,7 +295,7 @@
 
     <div class="d-flex justify-content-between mt-4">
         <div class="d-flex gap-2">
-            <button class="btn btn-outline-secondary" onclick="goToStep(2)">
+            <button class="btn btn-outline-secondary" onclick="goToStep(3)">
                 <i class="bi bi-arrow-left"></i> Back & Edit
             </button>
             <button class="btn btn-outline-primary" onclick="generatePlan()">
@@ -252,8 +332,8 @@
     </div>
 </div>
 
-<!-- Step 4: Success -->
-<div class="wizard-step" id="step4">
+<!-- Step 5: Success -->
+<div class="wizard-step" id="step5">
     <div class="text-center py-5">
         <div style="font-size: 4rem; color: #10b981;"><i class="bi bi-check-circle-fill"></i></div>
         <h4 class="mt-3">Campaign Created!</h4>
@@ -281,6 +361,7 @@
 {% block scripts %}
 <script>
 let selectedPlatform = '';
+let selectedStrategy = '';
 let currentPlan = null;
 const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
@@ -290,6 +371,28 @@ function selectPlatform(el, platform) {
     el.classList.add('selected');
     selectedPlatform = platform;
     document.getElementById('step1Next').disabled = false;
+
+    // Reset strategy if platform changed
+    selectedStrategy = '';
+    document.querySelectorAll('.strategy-card').forEach(c => c.classList.remove('selected'));
+    document.getElementById('step2Next').disabled = true;
+
+    // Show/hide strategy cards based on platform
+    document.querySelectorAll('.strategy-card-wrap').forEach(function(wrap) {
+        const plat = wrap.getAttribute('data-platform');
+        if (plat === platform || plat.includes(platform)) {
+            wrap.classList.remove('hidden');
+        } else {
+            wrap.classList.add('hidden');
+        }
+    });
+}
+
+function selectStrategy(el, strategy) {
+    document.querySelectorAll('.strategy-card').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedStrategy = strategy;
+    document.getElementById('step2Next').disabled = false;
 }
 
 function goToStep(step) {
@@ -325,6 +428,7 @@ function generatePlan() {
     formData.append('location', location);
     formData.append('monthly_budget', budget);
     formData.append('platform', selectedPlatform);
+    formData.append('strategy_type', selectedStrategy === 'custom' ? '' : selectedStrategy);
     formData.append('notes', notes);
 
     fetch('{{ url_for("client.client_campaign_generate") }}', {
@@ -337,7 +441,7 @@ function generatePlan() {
         if (data.success) {
             currentPlan = data.plan;
             renderPlan(data.plan);
-            goToStep(3);
+            goToStep(4);
             checkConfig();
         } else {
             alert('Error: ' + (data.error || 'Failed to generate plan. Please try again.'));
@@ -468,7 +572,7 @@ function launchCampaign() {
         hideLoading();
         if (data.success) {
             document.getElementById('successMessage').textContent = data.message || 'Campaign created successfully!';
-            goToStep(4);
+            goToStep(5);
         } else {
             if ((data.error || '').includes('Save as Draft')) {
                 if (confirm(data.error + '\n\nWould you like to save this plan as a draft instead?')) {
@@ -505,7 +609,7 @@ function saveDraft() {
             document.getElementById('successMessage').innerHTML =
                 '<i class="bi bi-save me-1"></i> ' + escHtml(data.message) +
                 '<br><small class="text-muted">You can launch it from the Campaigns page once your ad account is connected.</small>';
-            goToStep(4);
+            goToStep(5);
         } else {
             alert('Error: ' + (data.error || 'Failed to save draft.'));
         }
@@ -564,9 +668,12 @@ function checkConfig() {
 
 function resetWizard() {
     selectedPlatform = '';
+    selectedStrategy = '';
     currentPlan = null;
     document.querySelectorAll('.platform-card').forEach(c => c.classList.remove('selected'));
+    document.querySelectorAll('.strategy-card').forEach(c => c.classList.remove('selected'));
     document.getElementById('step1Next').disabled = true;
+    document.getElementById('step2Next').disabled = true;
     document.getElementById('serviceInput').value = '';
     document.getElementById('notesInput').value = '';
     document.getElementById('planContent').innerHTML = '';

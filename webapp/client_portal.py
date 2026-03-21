@@ -714,11 +714,14 @@ def client_campaign_create():
     has_meta = (connections.get("meta", {}).get("status") == "connected"
                 and brand.get("meta_ad_account_id"))
 
+    from webapp.campaign_templates import CAMPAIGN_STRATEGIES
+
     return render_template(
         "client_campaign_create.html",
         brand=brand,
         has_google=has_google,
         has_meta=has_meta,
+        strategies=CAMPAIGN_STRATEGIES,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
 
@@ -736,6 +739,7 @@ def client_campaign_generate():
     location = request.form.get("location", "").strip()
     monthly_budget = request.form.get("monthly_budget", "0").strip()
     platform = request.form.get("platform", "").strip()
+    strategy_type = request.form.get("strategy_type", "").strip()
     notes = request.form.get("notes", "").strip()
 
     if not service or not location or not monthly_budget or not platform:
@@ -751,7 +755,10 @@ def client_campaign_generate():
     from webapp.campaign_manager import generate_campaign_plan
 
     try:
-        result = generate_campaign_plan(brand, service, location, monthly_budget, platform, notes)
+        result = generate_campaign_plan(
+            brand, service, location, monthly_budget, platform, notes,
+            strategy_type=strategy_type,
+        )
     except Exception as exc:
         from flask import current_app
         current_app.logger.exception("Campaign plan generation failed")

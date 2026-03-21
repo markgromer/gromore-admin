@@ -772,8 +772,15 @@ def list_all_campaigns(db, brand, month: str = ""):
 #  AI CAMPAIGN CREATION
 # ═══════════════════════════════════════════════════════════════════
 
-def generate_campaign_plan(brand, service, location, monthly_budget, platform, notes=""):
-    """Use GPT to generate a complete campaign plan ready for launch."""
+def generate_campaign_plan(brand, service, location, monthly_budget,
+                           platform, notes="", strategy_type=""):
+    """Use GPT to generate a complete campaign plan ready for launch.
+
+    When *strategy_type* is provided (e.g. "meta_omnipresent"), the
+    campaign_templates module builds a strategy-specific prompt that
+    includes the ad-knowledge master prompt.  Otherwise falls back to a
+    generic prompt.
+    """
     import openai
     from flask import current_app
 
@@ -783,6 +790,42 @@ def generate_campaign_plan(brand, service, location, monthly_budget, platform, n
 
     client = openai.OpenAI(api_key=api_key)
 
+    # ── Strategy-based prompt (preferred) ──
+    if strategy_type:
+        from webapp.campaign_templates import build_strategy_prompt
+        result = build_strategy_prompt(
+            strategy_type, brand, service, location, monthly_budget, notes,
+        )
+        if result:
+            system_prompt, user_prompt = result
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=0.3,
+                    max_tokens=3000,
+                )
+                text = response.choices[0].message.content.strip()
+                if text.startswith("```"):
+                    text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+                    if text.endswith("```"):
+                        text = text[:-3]
+                    text = text.strip()
+
+                plan = json.loads(text)
+                plan["platform"] = platform
+                plan["strategy"] = strategy_type
+                return {"success": True, "plan": plan}
+
+            except json.JSONDecodeError:
+                return {"success": False, "error": "AI returned invalid plan format. Please try again."}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
+    # ── Generic fallback (no strategy selected) ──
     industry = brand.get("industry", "home services")
     brand_name = brand.get("display_name", brand.get("name", ""))
 
@@ -1134,6 +1177,7 @@ def launch_google_campaign(db, brand, plan, changed_by):
     _log_change(db, brand["id"], "google", camp_id, plan.get("campaign_name", ""),
                 "campaign_created", {
                     "campaign_name": plan.get("campaign_name"),
+                    "strategy": plan.get("strategy", "custom"),
                     "daily_budget": plan.get("daily_budget"),
                     "ad_groups": created_ad_groups,
                 }, changed_by)
@@ -1182,15 +1226,27 @@ def launch_meta_campaign(db, brand, plan, changed_by):
     daily_cents = str(int(float(plan.get("daily_budget", 50)) * 100))
     created_adsets = []
 
+    # Map objective to optimization goal
+    objective = plan.get("objective", "OUTCOME_LEADS")
+    opt_goal_map = {
+        "OUTCOME_LEADS": "LEAD_GENERATION",
+        "OUTCOME_AWARENESS": "REACH",
+        "OUTCOME_ENGAGEMENT": "POST_ENGAGEMENT",
+        "OUTCOME_TRAFFIC": "LINK_CLICKS",
+        "OUTCOME_SALES": "OFFSITE_CONVERSIONS",
+    }
+    opt_goal = opt_goal_map.get(objective, "LEAD_GENERATION")
+
     for adset_plan in plan.get("ad_sets", []):
         location = plan.get("location_targeting", "")
+        radius = adset_plan.get("radius_miles", 25)
 
         adset_data = {
             "access_token": token,
             "campaign_id": campaign_id,
             "name": adset_plan.get("name", "Ad Set"),
             "billing_event": "IMPRESSIONS",
-            "optimization_goal": "LEAD_GENERATION",
+            "optimization_goal": opt_goal,
             "daily_budget": daily_cents,
             "status": "PAUSED",
             "targeting": json.dumps({
@@ -1200,7 +1256,7 @@ def launch_meta_campaign(db, brand, plan, changed_by):
                     "location_types": ["home"],
                     "custom_locations": [{
                         "address_string": location,
-                        "radius": 25,
+                        "radius": radius,
                         "distance_unit": "mile",
                     }] if location else [],
                 },
@@ -1222,6 +1278,7 @@ def launch_meta_campaign(db, brand, plan, changed_by):
     _log_change(db, brand["id"], "meta", campaign_id, plan.get("campaign_name", ""),
                 "campaign_created", {
                     "campaign_name": plan.get("campaign_name"),
+                    "strategy": plan.get("strategy", "custom"),
                     "daily_budget": plan.get("daily_budget"),
                     "ad_sets": [a["name"] for a in created_adsets],
                 }, changed_by)
