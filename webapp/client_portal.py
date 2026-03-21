@@ -467,6 +467,19 @@ def client_ad_builder_generate():
             flash("AI generation failed. Check that your OpenAI key is configured in Settings.", "error")
             return redirect(url_for("client.client_ad_builder", month=month))
 
+    # Auto-save ad package to Drive
+    try:
+        import json as _json
+        from webapp.google_drive import upload_file as drive_upload
+        ad_data = google_ads if google_ads else facebook_ads
+        if ad_data:
+            ad_json = _json.dumps(ad_data, indent=2, default=str).encode("utf-8")
+            label = "google" if google_ads else "facebook"
+            fname = f"ad_package_{label}_{month}_{datetime.now().strftime('%H%M%S')}.json"
+            drive_upload(db, brand_id, "Ads", fname, ad_json, "application/json")
+    except Exception:
+        pass  # Drive save is best-effort
+
     return render_template(
         "client_ad_builder.html",
         brand=brand,
@@ -1515,13 +1528,28 @@ def client_creative_generate():
         output_name = f"creative_{uuid.uuid4().hex[:8]}.jpg"
         output_path = output_dir / output_name
         bg.save(str(output_path), "JPEG", quality=90)
+
+        # Auto-save to Google Drive if configured
+        drive_link = None
+        try:
+            from webapp.google_drive import upload_file as drive_upload
+            with open(str(output_path), "rb") as df:
+                drive_result = drive_upload(db, brand_id, "Creatives", output_name, df.read(), "image/jpeg")
+            if drive_result:
+                drive_link = drive_result.get("webViewLink")
+        except Exception:
+            pass  # Drive save is best-effort
+
         del bg
 
         rel_path = f"creatives/{brand_id}/{output_name}"
-        return jsonify({
+        resp = {
             "image_url": url_for("client.client_serve_upload", filename=rel_path),
             "filename": output_name,
-        })
+        }
+        if drive_link:
+            resp["drive_link"] = drive_link
+        return jsonify(resp)
 
     except Exception as e:
         import traceback
@@ -2199,8 +2227,59 @@ def client_save_google_drive():
     db.update_brand_text_field(brand_id, "google_drive_folder_id", folder_id)
     db.update_brand_text_field(brand_id, "google_drive_sheet_id", sheet_id)
 
-    flash("Google Drive sync settings saved.", "success")
+    # Auto-create subfolder structure if folder ID was provided
+    if folder_id:
+        from webapp.google_drive import setup_brand_drive
+        result = setup_brand_drive(db, brand_id)
+        if result.get("ok"):
+            flash("Google Drive connected and folders created.", "success")
+        else:
+            flash(f"Folder ID saved but auto-setup failed: {result.get('error', 'Unknown error')}", "warning")
+    else:
+        flash("Google Drive sync settings saved.", "success")
     return redirect(url_for("client.client_settings"))
+
+
+@client_bp.route("/api/drive/files/<subfolder>")
+@client_login_required
+def client_drive_list_files(subfolder):
+    """API: list files in a Drive subfolder."""
+    allowed = {"Creatives", "Ads", "Images", "Reports"}
+    if subfolder not in allowed:
+        return jsonify({"error": "Invalid subfolder"}), 400
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    from webapp.google_drive import list_files
+    files = list_files(db, brand_id, subfolder)
+    return jsonify({"files": files})
+
+
+@client_bp.route("/api/drive/upload", methods=["POST"])
+@client_login_required
+def client_drive_upload():
+    """API: upload a file to a Drive subfolder."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    subfolder = request.form.get("subfolder", "Images")
+    allowed = {"Creatives", "Ads", "Images", "Reports"}
+    if subfolder not in allowed:
+        return jsonify({"error": "Invalid subfolder"}), 400
+
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return jsonify({"error": "No file provided"}), 400
+
+    # Basic safety: limit upload size (10MB)
+    f.seek(0, 2)
+    if f.tell() > 10 * 1024 * 1024:
+        return jsonify({"error": "File too large (max 10MB)"}), 400
+    f.seek(0)
+
+    from webapp.google_drive import upload_file as drive_upload
+    result = drive_upload(db, brand_id, subfolder, f.filename, f.read(), f.content_type or "application/octet-stream")
+    if result:
+        return jsonify({"ok": True, "file": result})
+    return jsonify({"error": "Upload failed. Check your Google Drive connection."}), 500
 
 
 @client_bp.route("/settings/maps-api", methods=["POST"])

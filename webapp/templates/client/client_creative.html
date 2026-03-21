@@ -1,7 +1,8 @@
 {% extends "client_base.html" %}
 {% block title %}Creative Center{% endblock %}
 
-{% block content %}
+{% block head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
 <style>
     .creative-header {
         background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
@@ -25,85 +26,76 @@
     .creative-header h3 { font-weight: 800; font-size: 1.4rem; margin-bottom: .25rem; }
     .creative-header p { opacity: .7; font-size: .9rem; margin: 0; }
 
-    .creative-card {
+    .cc-card {
         background: #fff;
         border-radius: 14px;
         box-shadow: 0 1px 4px rgba(0,0,0,.06);
         margin-bottom: 1.25rem;
         overflow: hidden;
     }
-    .creative-card-header {
-        padding: 1.25rem 1.5rem .75rem;
+    .cc-card-header {
+        padding: 1rem 1.25rem .6rem;
         border-bottom: 1px solid #f1f3f5;
     }
-    .creative-card-header h5 { font-weight: 700; font-size: 1.05rem; color: #1a1d2e; margin: 0; }
-    .creative-card-header .hint { font-size: .82rem; color: #6b7280; margin-top: 2px; }
-    .creative-card-body { padding: 1.25rem 1.5rem 1.5rem; }
+    .cc-card-header h5 { font-weight: 700; font-size: 1rem; color: #1a1d2e; margin: 0; }
+    .cc-card-header .hint { font-size: .8rem; color: #6b7280; margin-top: 2px; }
+    .cc-card-body { padding: 1rem 1.25rem 1.25rem; }
 
-    /* Upload zone */
-    .upload-zone {
-        border: 2.5px dashed #d1d5db;
+    /* Canvas workspace */
+    .canvas-workspace {
+        background: #1e293b;
         border-radius: 14px;
-        padding: 2.5rem 1.5rem;
-        text-align: center;
-        cursor: pointer;
-        transition: all .25s ease;
-        background: #fafbfc;
-        position: relative;
-    }
-    .upload-zone:hover, .upload-zone.dragover {
-        border-color: #6366f1;
-        background: #f5f3ff;
-    }
-    .upload-zone.has-image {
-        padding: 0;
-        border-style: solid;
-        border-color: #6366f1;
-    }
-    .upload-zone .upload-icon {
-        font-size: 2.5rem;
-        color: #9ca3af;
-        margin-bottom: .5rem;
-    }
-    .upload-zone .upload-text { font-size: .92rem; color: #6b7280; }
-    .upload-zone .upload-text strong { color: #6366f1; }
-    .upload-zone img {
-        max-width: 100%;
-        max-height: 350px;
-        border-radius: 11px;
-        display: block;
-    }
-    .upload-zone .remove-btn {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        background: rgba(0,0,0,.6);
-        color: #fff;
-        border: none;
-        border-radius: 50%;
-        width: 28px;
-        height: 28px;
+        padding: 1.5rem;
         display: flex;
         align-items: center;
         justify-content: center;
-        cursor: pointer;
-        font-size: .85rem;
+        min-height: 450px;
+        position: relative;
     }
+    .canvas-workspace canvas { border-radius: 8px; }
+
+    /* Toolbar */
+    .canvas-toolbar {
+        display: flex;
+        gap: .5rem;
+        flex-wrap: wrap;
+        padding: .75rem;
+        background: #f8fafc;
+        border-radius: 12px;
+        margin-bottom: 1rem;
+        border: 1px solid #e5e7eb;
+    }
+    .tool-btn {
+        border: 1.5px solid #e5e7eb;
+        border-radius: 8px;
+        background: #fff;
+        padding: .45rem .75rem;
+        font-size: .82rem;
+        color: #374151;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        transition: all .15s;
+    }
+    .tool-btn:hover { border-color: #6366f1; background: #f5f3ff; color: #4338ca; }
+    .tool-btn.active { border-color: #6366f1; background: #eef2ff; color: #4338ca; font-weight: 600; }
+    .tool-btn i { font-size: .95rem; }
 
     /* Format selector */
     .format-grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: .75rem;
+        gap: .6rem;
     }
     .format-option {
         border: 2px solid #e5e7eb;
         border-radius: 10px;
-        padding: .75rem .6rem;
+        padding: .6rem .5rem;
         text-align: center;
         cursor: pointer;
-        transition: all .2s ease;
-        font-size: .82rem;
+        transition: all .2s;
+        font-size: .78rem;
         color: #4b5563;
     }
     .format-option:hover { border-color: #a5b4fc; background: #f5f3ff; }
@@ -113,652 +105,881 @@
         color: #4338ca;
         font-weight: 600;
     }
-    .format-option .fmt-icon { font-size: 1.3rem; display: block; margin-bottom: 4px; }
-    .format-option .fmt-size { font-size: .7rem; color: #9ca3af; margin-top: 2px; }
+    .format-option .fmt-icon { font-size: 1.1rem; display: block; margin-bottom: 3px; }
+    .format-option .fmt-size { font-size: .68rem; color: #9ca3af; margin-top: 2px; }
 
-    .style-select {
-        width: 100%;
-        border: 1.5px solid #e5e7eb;
-        border-radius: 10px;
-        padding: .6rem .75rem;
-        font-size: .88rem;
-        color: #1f2937;
-        background: #fff;
-    }
-    .style-select:focus {
-        border-color: #6366f1;
-        outline: none;
-        box-shadow: 0 0 0 3px rgba(99,102,241,.12);
-    }
-    .style-field { margin-bottom: .8rem; }
-    .style-field:last-child { margin-bottom: 0; }
-    .style-field label {
-        display: block;
-        font-size: .82rem;
-        font-weight: 600;
-        color: #374151;
-        margin-bottom: .3rem;
-    }
-    .preset-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
+    /* Layers panel */
+    .layer-item {
+        display: flex;
+        align-items: center;
         gap: .5rem;
-        margin-bottom: .8rem;
-    }
-    .preset-btn {
+        padding: .5rem .65rem;
         border: 1.5px solid #e5e7eb;
         border-radius: 8px;
-        background: #fff;
-        font-size: .78rem;
-        padding: .45rem .55rem;
-        text-align: left;
-        color: #374151;
+        margin-bottom: .4rem;
         cursor: pointer;
+        font-size: .82rem;
         transition: all .15s;
     }
-    .preset-btn:hover { border-color: #6366f1; background: #f5f3ff; }
-    .tune-label {
-        display: flex;
-        justify-content: space-between;
-        font-size: .8rem;
-        color: #4b5563;
-        margin-bottom: .25rem;
+    .layer-item:hover { border-color: #a5b4fc; background: #faf5ff; }
+    .layer-item.selected { border-color: #6366f1; background: #eef2ff; }
+    .layer-item .layer-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .layer-item .layer-actions { display: flex; gap: .25rem; }
+    .layer-item .layer-actions button {
+        background: none; border: none; padding: 2px 4px; cursor: pointer; color: #9ca3af; font-size: .85rem;
     }
-    .tune-range { width: 100%; }
+    .layer-item .layer-actions button:hover { color: #ef4444; }
 
-    /* Copy input fields */
-    .copy-field { margin-bottom: 1rem; }
-    .copy-field:last-child { margin-bottom: 0; }
-    .copy-field label {
-        font-weight: 600; font-size: .88rem; color: #1a1d2e; margin-bottom: .35rem; display: block;
+    /* Properties panel */
+    .prop-field { margin-bottom: .7rem; }
+    .prop-field:last-child { margin-bottom: 0; }
+    .prop-field label {
+        display: block;
+        font-size: .78rem;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: .2rem;
     }
-    .copy-field input, .copy-field textarea {
+    .prop-input {
         width: 100%;
         border: 1.5px solid #e5e7eb;
-        border-radius: 10px;
-        padding: .65rem .9rem;
-        font-size: .9rem;
-        transition: border-color .2s;
+        border-radius: 8px;
+        padding: .45rem .65rem;
+        font-size: .85rem;
     }
-    .copy-field input:focus, .copy-field textarea:focus {
-        border-color: #6366f1;
-        outline: none;
-        box-shadow: 0 0 0 3px rgba(99,102,241,.12);
-    }
-    .copy-field .char-count { font-size: .75rem; color: #9ca3af; text-align: right; margin-top: 2px; }
+    .prop-input:focus { border-color: #6366f1; outline: none; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
 
-    /* AI generate button */
-    .btn-ai-generate {
+    /* Asset panel */
+    .asset-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: .5rem;
+    }
+    .asset-thumb {
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        overflow: hidden;
+        cursor: pointer;
+        transition: all .15s;
+        aspect-ratio: 1;
+    }
+    .asset-thumb:hover { border-color: #6366f1; transform: scale(1.03); }
+    .asset-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+    /* Generate buttons */
+    .btn-ai-action {
         background: linear-gradient(135deg, #6366f1, #8b5cf6);
         color: #fff;
         border: none;
         border-radius: 10px;
-        padding: .6rem 1.2rem;
+        padding: .55rem 1rem;
         font-weight: 600;
-        font-size: .88rem;
+        font-size: .85rem;
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        transition: all .2s ease;
+        transition: all .2s;
+        cursor: pointer;
     }
-    .btn-ai-generate:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(99,102,241,.35); color: #fff; }
-    .btn-ai-generate:disabled { opacity: .6; transform: none; box-shadow: none; }
+    .btn-ai-action:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(99,102,241,.35); color: #fff; }
+    .btn-ai-action:disabled { opacity: .6; transform: none; box-shadow: none; }
 
-    /* Generate creative button */
-    .btn-generate-creative {
+    .btn-export {
         background: linear-gradient(135deg, #4338ca, #6366f1);
         color: #fff;
         border: none;
         border-radius: 12px;
-        padding: .85rem 2rem;
+        padding: .75rem 1.5rem;
         font-weight: 700;
-        font-size: 1rem;
+        font-size: .95rem;
         width: 100%;
         display: flex;
         align-items: center;
         justify-content: center;
         gap: 8px;
-        transition: all .25s ease;
+        transition: all .25s;
+        cursor: pointer;
     }
-    .btn-generate-creative:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(67,56,202,.35); color: #fff; }
-    .btn-generate-creative:disabled { opacity: .6; transform: none; box-shadow: none; }
+    .btn-export:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(67,56,202,.35); color: #fff; }
+    .btn-export:disabled { opacity: .6; transform: none; box-shadow: none; }
 
-    /* Preview area */
-    .preview-area {
-        min-height: 200px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #f8fafc;
-        border-radius: 14px;
-        border: 2px dashed #e5e7eb;
-        padding: 2rem;
+    .upload-drop-zone {
+        border: 2.5px dashed #d1d5db;
+        border-radius: 12px;
+        padding: 1.5rem 1rem;
         text-align: center;
-        color: #9ca3af;
+        cursor: pointer;
+        transition: all .2s;
+        background: #fafbfc;
     }
-    .preview-area.has-preview {
-        border: none;
-        padding: .75rem;
-        background: #1e293b;
-    }
-    .preview-area img {
-        max-width: 100%;
-        border-radius: 10px;
-        box-shadow: 0 4px 20px rgba(0,0,0,.15);
-    }
-    .preview-actions {
-        display: flex;
-        gap: .75rem;
-        margin-top: 1rem;
+    .upload-drop-zone:hover, .upload-drop-zone.dragover {
+        border-color: #6366f1;
+        background: #f5f3ff;
     }
 
-    /* Description AI hint */
-    .ai-hint {
-        background: linear-gradient(135deg, #eef2ff, #f5f3ff);
-        border: 1px solid #c7d2fe;
-        border-radius: 10px;
-        padding: .75rem 1rem;
-        font-size: .82rem;
-        color: #4338ca;
-        margin-bottom: 1rem;
+    /* Drive badge */
+    .drive-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: .75rem;
+        padding: .2rem .5rem;
+        border-radius: 6px;
+        background: #dcfce7;
+        color: #166534;
     }
-    .ai-hint i { margin-right: 4px; }
 
     @media (max-width: 768px) {
         .format-grid { grid-template-columns: repeat(2, 1fr); }
+        .asset-grid { grid-template-columns: repeat(2, 1fr); }
     }
 </style>
+{% endblock %}
+
+{% block content %}
 
 <!-- Header -->
 <div class="creative-header">
     <h3><i class="bi bi-palette me-2"></i>Creative Center</h3>
-    <p>Upload an image and turn it into a ready-to-run ad creative with your branding.</p>
+    <p>Design ad creatives with a drag-and-drop canvas. Add images, text, shapes, and your logo.</p>
 </div>
 
-<div class="row g-4">
-    <!-- Left Column - Inputs -->
-    <div class="col-lg-7">
-        <!-- Image Upload -->
-        <div class="creative-card">
-            <div class="creative-card-header">
-                <h5><i class="bi bi-image me-2" style="opacity:.5"></i>Background Image</h5>
-                <div class="hint">Upload a photo to use as the ad background</div>
+<div class="row g-3">
+    <!-- Left Sidebar: Tools + Properties -->
+    <div class="col-lg-3">
+        <!-- Format -->
+        <div class="cc-card">
+            <div class="cc-card-header">
+                <h5><i class="bi bi-aspect-ratio me-2" style="opacity:.5"></i>Canvas Size</h5>
             </div>
-            <div class="creative-card-body">
-                <div class="upload-zone" id="uploadZone" onclick="document.getElementById('imageInput').click()">
-                    <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp" style="display:none">
-                    <div id="uploadPlaceholder">
-                        <div class="upload-icon"><i class="bi bi-cloud-arrow-up"></i></div>
-                        <div class="upload-text"><strong>Click to upload</strong> or drag and drop<br>PNG, JPG, or WebP up to 10MB</div>
+            <div class="cc-card-body">
+                <div class="format-grid">
+                    <div class="format-option selected" data-format="facebook_feed" data-w="1200" data-h="628" onclick="setCanvasSize(this)">
+                        <span class="fmt-icon"><i class="bi bi-facebook"></i></span>
+                        FB Feed
+                        <div class="fmt-size">1200x628</div>
                     </div>
-                    <img id="imagePreview" style="display:none" alt="Preview">
-                    <button type="button" class="remove-btn" id="removeImage" style="display:none" onclick="event.stopPropagation(); removeImage();">
-                        <i class="bi bi-x"></i>
-                    </button>
+                    <div class="format-option" data-format="facebook_story" data-w="1080" data-h="1920" onclick="setCanvasSize(this)">
+                        <span class="fmt-icon"><i class="bi bi-phone"></i></span>
+                        Story
+                        <div class="fmt-size">1080x1920</div>
+                    </div>
+                    <div class="format-option" data-format="instagram_feed" data-w="1080" data-h="1080" onclick="setCanvasSize(this)">
+                        <span class="fmt-icon"><i class="bi bi-instagram"></i></span>
+                        IG Feed
+                        <div class="fmt-size">1080x1080</div>
+                    </div>
+                    <div class="format-option" data-format="instagram_story" data-w="1080" data-h="1920" onclick="setCanvasSize(this)">
+                        <span class="fmt-icon"><i class="bi bi-phone"></i></span>
+                        IG Story
+                        <div class="fmt-size">1080x1920</div>
+                    </div>
+                    <div class="format-option" data-format="google_display_landscape" data-w="1200" data-h="628" onclick="setCanvasSize(this)">
+                        <span class="fmt-icon"><i class="bi bi-google"></i></span>
+                        Display
+                        <div class="fmt-size">1200x628</div>
+                    </div>
+                    <div class="format-option" data-format="google_display_square" data-w="1200" data-h="1200" onclick="setCanvasSize(this)">
+                        <span class="fmt-icon"><i class="bi bi-google"></i></span>
+                        Square
+                        <div class="fmt-size">1200x1200</div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Ad Copy -->
-        <div class="creative-card">
-            <div class="creative-card-header">
-                <h5><i class="bi bi-type me-2" style="opacity:.5"></i>Ad Copy</h5>
-                <div class="hint">Enter text or let AI write it based on your image</div>
+        <!-- Upload Image -->
+        <div class="cc-card">
+            <div class="cc-card-header">
+                <h5><i class="bi bi-image me-2" style="opacity:.5"></i>Add Image</h5>
             </div>
-            <div class="creative-card-body">
-                <div class="ai-hint">
-                    <i class="bi bi-stars"></i>
-                    Describe your image below and click <strong>AI Generate</strong> to create matching ad copy automatically.
+            <div class="cc-card-body">
+                <div class="upload-drop-zone" id="imageDropZone" onclick="document.getElementById('imageFileInput').click()">
+                    <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/webp" style="display:none" multiple>
+                    <i class="bi bi-cloud-arrow-up" style="font-size:1.5rem;color:#9ca3af"></i>
+                    <div style="font-size:.82rem;color:#6b7280;margin-top:.3rem"><strong style="color:#6366f1">Click</strong> or drag images here</div>
                 </div>
+                <button class="btn-ai-action w-100 mt-2" onclick="generateAiImage()" id="btnAiImage">
+                    <i class="bi bi-stars"></i> AI Generate Image
+                </button>
+                <input type="text" id="aiImagePrompt" class="prop-input mt-2" placeholder="Describe the image you want...">
+            </div>
+        </div>
 
-                <div class="copy-field">
-                    <label>Image Description <span style="font-weight:400;color:#9ca3af">(for AI)</span></label>
-                    <textarea id="imageDescription" rows="2" placeholder="e.g. A smiling family standing in front of their newly remodeled kitchen..." maxlength="500"></textarea>
-                    <div class="char-count"><span id="descCount">0</span>/500</div>
-                </div>
-
-                <div class="mb-3 text-end">
-                    <button type="button" class="btn-ai-generate" id="btnAiCopy" onclick="generateAiCopy()">
-                        <i class="bi bi-stars"></i> AI Generate Copy
-                    </button>
-                </div>
-
-                <hr class="my-3" style="border-color:#f1f3f5">
-
-                <div class="copy-field">
-                    <label>Headline</label>
-                    <input type="text" id="headline" placeholder="Your attention-grabbing headline" maxlength="90">
-                    <div class="char-count"><span id="headlineCount">0</span>/90</div>
-                </div>
-                <div class="copy-field">
-                    <label>Body Text</label>
-                    <textarea id="bodyText" rows="2" placeholder="Supporting text with your value proposition" maxlength="150"></textarea>
-                    <div class="char-count"><span id="bodyCount">0</span>/150</div>
-                </div>
-                <div class="copy-field">
-                    <label>CTA Button</label>
-                    <input type="text" id="ctaText" value="Learn More" placeholder="e.g. Get Your Quote, Book Now" maxlength="30">
-                    <div class="char-count"><span id="ctaCount">10</span>/30</div>
-                </div>
+        <!-- Layers -->
+        <div class="cc-card">
+            <div class="cc-card-header">
+                <h5><i class="bi bi-layers me-2" style="opacity:.5"></i>Layers</h5>
+            </div>
+            <div class="cc-card-body" id="layersPanel" style="max-height:250px;overflow-y:auto">
+                <div class="text-muted" style="font-size:.82rem" id="layersEmpty">Add elements to see layers here</div>
             </div>
         </div>
     </div>
 
-    <!-- Right Column - Format + Preview -->
-    <div class="col-lg-5">
-        <!-- Format Selector -->
-        <div class="creative-card">
-            <div class="creative-card-header">
-                <h5><i class="bi bi-aspect-ratio me-2" style="opacity:.5"></i>Ad Format</h5>
-                <div class="hint">Select a format that matches where the ad will run</div>
+    <!-- Center: Canvas -->
+    <div class="col-lg-6">
+        <!-- Toolbar -->
+        <div class="canvas-toolbar">
+            <button class="tool-btn" onclick="addText('headline')" title="Add Headline">
+                <i class="bi bi-type-h1"></i> Headline
+            </button>
+            <button class="tool-btn" onclick="addText('body')" title="Add Body Text">
+                <i class="bi bi-type"></i> Body
+            </button>
+            <button class="tool-btn" onclick="addText('cta')" title="Add CTA Button">
+                <i class="bi bi-cursor"></i> CTA
+            </button>
+            <button class="tool-btn" onclick="addShape('rect')" title="Add Rectangle">
+                <i class="bi bi-square"></i> Box
+            </button>
+            <button class="tool-btn" onclick="addShape('circle')" title="Add Circle">
+                <i class="bi bi-circle"></i> Circle
+            </button>
+            <button class="tool-btn" onclick="addLogo()" title="Add Logo">
+                <i class="bi bi-patch-check"></i> Logo
+            </button>
+            <div style="flex:1"></div>
+            <button class="tool-btn" onclick="deleteSelected()" title="Delete Selected">
+                <i class="bi bi-trash"></i>
+            </button>
+            <button class="tool-btn" onclick="bringForward()" title="Move Up">
+                <i class="bi bi-chevron-up"></i>
+            </button>
+            <button class="tool-btn" onclick="sendBackward()" title="Move Down">
+                <i class="bi bi-chevron-down"></i>
+            </button>
+        </div>
+
+        <!-- Canvas -->
+        <div class="canvas-workspace" id="canvasWorkspace">
+            <canvas id="fabricCanvas"></canvas>
+        </div>
+
+        <!-- Export -->
+        <div class="d-flex gap-2 mt-3">
+            <button class="btn-export flex-fill" onclick="exportCanvas()" id="btnExport">
+                <i class="bi bi-download"></i> Export as PNG
+            </button>
+            <button class="btn-export flex-fill" onclick="serverGenerate()" id="btnServerGen" style="background:linear-gradient(135deg,#059669,#10b981)">
+                <i class="bi bi-magic"></i> Server Generate (Pillow)
+            </button>
+        </div>
+
+        {% if brand.get('google_drive_folder_id') %}
+        <div class="text-center mt-2">
+            <span class="drive-badge"><i class="bi bi-cloud-check"></i> Auto-saves to Google Drive</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Right Sidebar: Properties -->
+    <div class="col-lg-3">
+        <!-- Selection Properties -->
+        <div class="cc-card" id="propsCard">
+            <div class="cc-card-header">
+                <h5><i class="bi bi-sliders me-2" style="opacity:.5"></i>Properties</h5>
             </div>
-            <div class="creative-card-body">
-                <div class="format-grid">
-                    <div class="format-option selected" data-format="facebook_feed" onclick="selectFormat(this)">
-                        <span class="fmt-icon"><i class="bi bi-facebook"></i></span>
-                        FB Feed
-                        <div class="fmt-size">1200 x 628</div>
+            <div class="cc-card-body" id="propsPanel">
+                <div class="text-muted" style="font-size:.82rem">Select an element on the canvas to edit its properties</div>
+            </div>
+        </div>
+
+        <!-- AI Copy Generator -->
+        <div class="cc-card">
+            <div class="cc-card-header">
+                <h5><i class="bi bi-stars me-2" style="opacity:.5"></i>AI Copy</h5>
+                <div class="hint">Generate ad copy to place on your canvas</div>
+            </div>
+            <div class="cc-card-body">
+                <div class="prop-field">
+                    <label>Describe your ad</label>
+                    <textarea id="aiCopyDesc" class="prop-input" rows="2" placeholder="e.g. Promote our spring cleaning special, 20% off" maxlength="500"></textarea>
+                </div>
+                <button class="btn-ai-action w-100" onclick="generateAiCopy()" id="btnAiCopy">
+                    <i class="bi bi-stars"></i> Generate Copy
+                </button>
+                <div id="aiCopyResult" class="mt-2" style="display:none">
+                    <div class="prop-field">
+                        <label>Headline</label>
+                        <div class="d-flex gap-1">
+                            <input type="text" id="aiHeadline" class="prop-input" readonly>
+                            <button class="tool-btn" onclick="placeAiText('headline')" title="Add to canvas"><i class="bi bi-plus-lg"></i></button>
+                        </div>
                     </div>
-                    <div class="format-option" data-format="facebook_story" onclick="selectFormat(this)">
-                        <span class="fmt-icon"><i class="bi bi-phone"></i></span>
-                        FB Story
-                        <div class="fmt-size">1080 x 1920</div>
+                    <div class="prop-field">
+                        <label>Body</label>
+                        <div class="d-flex gap-1">
+                            <input type="text" id="aiBody" class="prop-input" readonly>
+                            <button class="tool-btn" onclick="placeAiText('body')" title="Add to canvas"><i class="bi bi-plus-lg"></i></button>
+                        </div>
                     </div>
-                    <div class="format-option" data-format="instagram_feed" onclick="selectFormat(this)">
-                        <span class="fmt-icon"><i class="bi bi-instagram"></i></span>
-                        IG Feed
-                        <div class="fmt-size">1080 x 1080</div>
-                    </div>
-                    <div class="format-option" data-format="instagram_story" onclick="selectFormat(this)">
-                        <span class="fmt-icon"><i class="bi bi-phone"></i></span>
-                        IG Story
-                        <div class="fmt-size">1080 x 1920</div>
-                    </div>
-                    <div class="format-option" data-format="google_display_landscape" onclick="selectFormat(this)">
-                        <span class="fmt-icon"><i class="bi bi-google"></i></span>
-                        Display Wide
-                        <div class="fmt-size">1200 x 628</div>
-                    </div>
-                    <div class="format-option" data-format="google_display_square" onclick="selectFormat(this)">
-                        <span class="fmt-icon"><i class="bi bi-google"></i></span>
-                        Display Square
-                        <div class="fmt-size">1200 x 1200</div>
+                    <div class="prop-field">
+                        <label>CTA</label>
+                        <div class="d-flex gap-1">
+                            <input type="text" id="aiCta" class="prop-input" readonly>
+                            <button class="tool-btn" onclick="placeAiText('cta')" title="Add to canvas"><i class="bi bi-plus-lg"></i></button>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="creative-card">
-            <div class="creative-card-header">
-                <h5><i class="bi bi-sliders me-2" style="opacity:.5"></i>Style Controls</h5>
-                <div class="hint">Choose text region, overlay template, and font style</div>
+        <!-- Quick Overlay -->
+        <div class="cc-card">
+            <div class="cc-card-header">
+                <h5><i class="bi bi-palette2 me-2" style="opacity:.5"></i>Quick Overlays</h5>
+                <div class="hint">One-click overlay templates</div>
             </div>
-            <div class="creative-card-body">
-                <div class="preset-grid">
-                    <button type="button" class="preset-btn" onclick="applyPreset('bold')"><strong>Bold Promo</strong><br><span style="color:#6b7280">High contrast + centered</span></button>
-                    <button type="button" class="preset-btn" onclick="applyPreset('clean')"><strong>Clean Minimal</strong><br><span style="color:#6b7280">Soft box + subtle tint</span></button>
-                    <button type="button" class="preset-btn" onclick="applyPreset('story')"><strong>Story Social</strong><br><span style="color:#6b7280">Bubbles + playful font</span></button>
-                    <button type="button" class="preset-btn" onclick="applyPreset('luxury')"><strong>Luxury Classic</strong><br><span style="color:#6b7280">Upper third + serif</span></button>
-                </div>
-                <div class="style-field">
-                    <label for="overlayTemplate">Overlay Template</label>
-                    <select id="overlayTemplate" class="style-select">
-                        <option value="lower_third" selected>Lower Third</option>
-                        <option value="full_lower_third">Full Lower Third</option>
-                        <option value="upper_third">Upper Third</option>
-                        <option value="full_overlay">Full Overlay</option>
-                        <option value="soft_box">Soft Text Box</option>
-                        <option value="brand_bar">Brand Bar</option>
-                        <option value="diagonal_band">Diagonal Band</option>
-                        <option value="bubbles">Bubbles</option>
-                        <option value="boxes">Boxes</option>
-                    </select>
-                </div>
-                <div class="style-field">
-                    <label for="backgroundTreatment">Background Treatment</label>
-                    <select id="backgroundTreatment" class="style-select">
-                        <option value="brand_gradient" selected>Brand Gradient</option>
-                        <option value="flat">Flat Overlay</option>
-                        <option value="none">None</option>
-                    </select>
-                </div>
-                <div class="style-field">
-                    <label for="shapeStyle">Shape Style</label>
-                    <select id="shapeStyle" class="style-select">
-                        <option value="rounded" selected>Rounded</option>
-                        <option value="sharp">Sharp</option>
-                        <option value="pill">Pill</option>
-                    </select>
-                </div>
-                <div class="style-field">
-                    <label for="textPlacement">Text Placement</label>
-                    <select id="textPlacement" class="style-select">
-                        <option value="left" selected>Left</option>
-                        <option value="center">Center</option>
-                        <option value="right">Right</option>
-                    </select>
-                </div>
-                <div class="style-field">
-                    <label for="headlineFontFamily">Headline Font</label>
-                    <select id="headlineFontFamily" class="style-select">
-                        <option value="strong" selected>Strong Display</option>
-                        <option value="modern">Modern Sans</option>
-                        <option value="clean">Clean Condensed</option>
-                        <option value="classic">Classic Serif</option>
-                        <option value="elegant">Elegant Serif</option>
-                        <option value="friendly">Friendly Rounded</option>
-                        <option value="mono">Tech Mono</option>
-                        <option value="playful">Playful</option>
-                        <option value="geometric">Geometric Sans</option>
-                        <option value="serif_alt">Serif Alt</option>
-                    </select>
-                </div>
-                <div class="style-field">
-                    <label for="headlineFontWeight">Headline Weight</label>
-                    <select id="headlineFontWeight" class="style-select">
-                        <option value="normal">Normal</option>
-                        <option value="semibold">Semibold</option>
-                        <option value="bold" selected>Bold</option>
-                    </select>
-                </div>
-                <div class="style-field">
-                    <label for="headlineFontColor">Headline Color</label>
-                    <input id="headlineFontColor" type="color" class="style-select" value="#ffffff">
-                </div>
-                <div class="style-field">
-                    <label for="bodyFontFamily">Body Font</label>
-                    <select id="bodyFontFamily" class="style-select">
-                        <option value="modern" selected>Modern Sans</option>
-                        <option value="clean">Clean Condensed</option>
-                        <option value="friendly">Friendly Rounded</option>
-                        <option value="classic">Classic Serif</option>
-                        <option value="elegant">Elegant Serif</option>
-                        <option value="mono">Tech Mono</option>
-                        <option value="playful">Playful</option>
-                        <option value="geometric">Geometric Sans</option>
-                        <option value="serif_alt">Serif Alt</option>
-                    </select>
-                </div>
-                <div class="style-field">
-                    <label for="bodyFontWeight">Body Weight</label>
-                    <select id="bodyFontWeight" class="style-select">
-                        <option value="normal" selected>Normal</option>
-                        <option value="semibold">Semibold</option>
-                        <option value="bold">Bold</option>
-                    </select>
-                </div>
-                <div class="style-field">
-                    <label for="bodyFontColor">Body Color</label>
-                    <input id="bodyFontColor" type="color" class="style-select" value="#dcdcdc">
-                </div>
-                <div class="style-field">
-                    <label for="ctaFontFamily">CTA Font</label>
-                    <select id="ctaFontFamily" class="style-select">
-                        <option value="strong" selected>Strong Display</option>
-                        <option value="modern">Modern Sans</option>
-                        <option value="clean">Clean Condensed</option>
-                        <option value="friendly">Friendly Rounded</option>
-                        <option value="classic">Classic Serif</option>
-                        <option value="elegant">Elegant Serif</option>
-                        <option value="mono">Tech Mono</option>
-                        <option value="playful">Playful</option>
-                        <option value="geometric">Geometric Sans</option>
-                        <option value="serif_alt">Serif Alt</option>
-                    </select>
-                </div>
-                <div class="style-field">
-                    <label for="ctaFontWeight">CTA Weight</label>
-                    <select id="ctaFontWeight" class="style-select">
-                        <option value="normal">Normal</option>
-                        <option value="semibold">Semibold</option>
-                        <option value="bold" selected>Bold</option>
-                    </select>
-                </div>
-                <div class="style-field">
-                    <label for="ctaFontColor">CTA Text Color</label>
-                    <input id="ctaFontColor" type="color" class="style-select" value="#ffffff">
-                </div>
-                <div class="style-field">
-                    <div class="tune-label"><span>Headline Size</span><span id="headlineScaleLabel">100%</span></div>
-                    <input id="headlineScale" class="tune-range" type="range" min="80" max="150" step="5" value="100">
-                </div>
-                <div class="style-field">
-                    <div class="tune-label"><span>Body Size</span><span id="bodyScaleLabel">100%</span></div>
-                    <input id="bodyScale" class="tune-range" type="range" min="80" max="150" step="5" value="100">
-                </div>
-                <div class="style-field">
-                    <div class="tune-label"><span>Overlay Strength</span><span id="overlayOpacityLabel">65%</span></div>
-                    <input id="overlayOpacity" class="tune-range" type="range" min="30" max="95" step="5" value="65">
-                </div>
-                <div class="style-field">
-                    <div class="tune-label"><span>Logo Size</span><span id="logoScaleLabel">100%</span></div>
-                    <input id="logoScale" class="tune-range" type="range" min="50" max="180" step="5" value="100">
-                </div>
-                <div class="style-field">
-                    <label for="logoCorner">Logo Position</label>
-                    <select id="logoCorner" class="style-select">
-                        <option value="top_left" selected>Top Left</option>
-                        <option value="top_right">Top Right</option>
-                        <option value="bottom_left">Bottom Left</option>
-                        <option value="bottom_right">Bottom Right</option>
-                    </select>
-                </div>
-                {% if logo_variants %}
-                <div class="style-field">
-                    <label for="logoVariant">Logo Variant</label>
-                    <select id="logoVariant" class="style-select">
-                        <option value="">Primary</option>
-                        {% for lv in logo_variants %}
-                        <option value="{{ lv.key }}">{{ lv.label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                {% endif %}
-                <div class="style-field">
-                    <label for="logoPositionMode">Logo Placement Mode</label>
-                    <select id="logoPositionMode" class="style-select">
-                        <option value="corner" selected>Corner Snap</option>
-                        <option value="custom">Custom X/Y</option>
-                    </select>
-                </div>
-                <div class="style-field">
-                    <div class="tune-label"><span>Logo X Position</span><span id="logoPosXLabel">50%</span></div>
-                    <input id="logoPosX" class="tune-range" type="range" min="0" max="100" step="1" value="50">
-                </div>
-                <div class="style-field">
-                    <div class="tune-label"><span>Logo Y Position</span><span id="logoPosYLabel">50%</span></div>
-                    <input id="logoPosY" class="tune-range" type="range" min="0" max="100" step="1" value="50">
-                </div>
-                <div class="style-field">
-                    <label style="margin-bottom:.45rem">Footer Info</label>
-                    <div class="d-flex gap-3" style="font-size:.85rem;color:#374151">
-                        <label class="d-flex align-items-center gap-2 mb-0"><input type="checkbox" id="includePhone" checked> Include phone number</label>
-                        <label class="d-flex align-items-center gap-2 mb-0"><input type="checkbox" id="includeWebsite"> Include website</label>
-                    </div>
-                </div>
-                <div class="style-field">
-                    <label for="creativePrompt">AI Creative Direction Prompt</label>
-                    <textarea id="creativePrompt" rows="2" class="style-select" style="resize:vertical" placeholder="Example: Make this feel premium and local, keep text very readable, emphasize trust and fast response."></textarea>
+            <div class="cc-card-body">
+                <div class="d-flex flex-wrap gap-2">
+                    <button class="tool-btn" onclick="applyOverlay('gradient_bottom')">Bottom Fade</button>
+                    <button class="tool-btn" onclick="applyOverlay('gradient_top')">Top Fade</button>
+                    <button class="tool-btn" onclick="applyOverlay('full_tint')">Full Tint</button>
+                    <button class="tool-btn" onclick="applyOverlay('banner_bottom')">Banner</button>
+                    <button class="tool-btn" onclick="applyOverlay('strip_center')">Center Strip</button>
                 </div>
             </div>
         </div>
+
+        <!-- Drive Files -->
+        {% if brand.get('google_drive_folder_id') %}
+        <div class="cc-card">
+            <div class="cc-card-header">
+                <h5><i class="bi bi-google me-2" style="opacity:.5"></i>Drive Images</h5>
+                <div class="hint">Pull images from your Drive</div>
+            </div>
+            <div class="cc-card-body">
+                <div class="asset-grid" id="driveAssetsGrid">
+                    <div class="text-muted" style="font-size:.8rem;grid-column:1/-1">Loading...</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Logo status -->
-        <div class="creative-card">
-            <div class="creative-card-body" style="padding:1rem 1.5rem">
+        <div class="cc-card">
+            <div class="cc-card-body" style="padding:.75rem 1rem">
                 <div class="d-flex align-items-center gap-2">
                     {% if brand.get('logo_path') %}
-                    <img src="{{ url_for('client.client_serve_upload', filename=brand['logo_path']) }}" alt="Logo" style="height:32px;border-radius:6px">
-                    <span style="font-size:.88rem;color:#1a1d2e;font-weight:600">Logo will appear on creative</span>
-                    <span class="badge bg-success" style="font-size:.7rem;margin-left:auto">Active</span>
+                    <img src="{{ url_for('client.client_serve_upload', filename=brand['logo_path']) }}" alt="Logo" style="height:28px;border-radius:6px">
+                    <span style="font-size:.82rem;color:#1a1d2e;font-weight:600">Logo ready</span>
+                    <span class="badge bg-success" style="font-size:.68rem;margin-left:auto">Active</span>
                     {% else %}
-                    <i class="bi bi-image" style="font-size:1.3rem;color:#d1d5db"></i>
-                    <span style="font-size:.88rem;color:#6b7280">No logo uploaded.</span>
-                    <a href="{{ url_for('client.client_my_business') }}" style="font-size:.82rem;margin-left:auto" class="text-decoration-none">Upload in My Business <i class="bi bi-arrow-right"></i></a>
+                    <i class="bi bi-image" style="font-size:1.1rem;color:#d1d5db"></i>
+                    <span style="font-size:.82rem;color:#6b7280">No logo.</span>
+                    <a href="{{ url_for('client.client_my_business') }}" style="font-size:.78rem;margin-left:auto" class="text-decoration-none">Upload <i class="bi bi-arrow-right"></i></a>
                     {% endif %}
                 </div>
             </div>
         </div>
-
-        <!-- Generate Button -->
-        <button type="button" class="btn-generate-creative mb-3" id="btnGenerate" onclick="generateCreative()">
-            <i class="bi bi-magic"></i> Generate Creative
-        </button>
-
-        <!-- Preview -->
-        <div class="creative-card">
-            <div class="creative-card-header">
-                <h5><i class="bi bi-eye me-2" style="opacity:.5"></i>Preview</h5>
-            </div>
-            <div class="creative-card-body">
-                <div class="preview-area" id="previewArea">
-                    <div id="previewPlaceholder">
-                        <i class="bi bi-image" style="font-size:2rem;display:block;margin-bottom:.5rem"></i>
-                        Your generated creative will appear here
-                    </div>
-                    <img id="previewImage" style="display:none" alt="Generated Creative">
-                </div>
-                <div class="preview-actions" id="previewActions" style="display:none">
-                    <a id="downloadLink" href="#" download class="btn btn-sm btn-primary flex-fill text-center" style="border-radius:8px">
-                        <i class="bi bi-download me-1"></i> Download Image
-                    </a>
-                    <button type="button" class="btn btn-sm btn-outline-secondary flex-fill" style="border-radius:8px" onclick="resetCreative()">
-                        <i class="bi bi-arrow-clockwise me-1"></i> Start Over
-                    </button>
-                </div>
-            </div>
-        </div>
     </div>
 </div>
 
+{% endblock %}
+
+{% block scripts %}
 <script>
 (function(){
-    const uploadZone = document.getElementById('uploadZone');
-    const imageInput = document.getElementById('imageInput');
-    const imagePreview = document.getElementById('imagePreview');
-    const uploadPlaceholder = document.getElementById('uploadPlaceholder');
-    const removeBtn = document.getElementById('removeImage');
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
-    let selectedFile = null;
-    let selectedFormat = 'facebook_feed';
+    const logoUrl = {{ (url_for('client.client_serve_upload', filename=brand['logo_path']) if brand.get('logo_path') else '')|tojson }};
 
-    function bindRange(id, labelId, suffix='%') {
-        const input = document.getElementById(id);
-        const label = document.getElementById(labelId);
-        if (!input || !label) return;
-        const sync = () => { label.textContent = `${input.value}${suffix}`; };
-        input.addEventListener('input', sync);
-        sync();
-    }
-    bindRange('headlineScale', 'headlineScaleLabel');
-    bindRange('bodyScale', 'bodyScaleLabel');
-    bindRange('overlayOpacity', 'overlayOpacityLabel');
-    bindRange('logoScale', 'logoScaleLabel');
-    bindRange('logoPosX', 'logoPosXLabel');
-    bindRange('logoPosY', 'logoPosYLabel');
-
-    window.applyPreset = function(name) {
-        const set = (id, val) => { const el = document.getElementById(id); if (el) { el.value = val; el.dispatchEvent(new Event('input')); } };
-        if (name === 'bold') {
-            set('overlayTemplate', 'full_lower_third'); set('backgroundTreatment', 'flat'); set('shapeStyle', 'sharp');
-            set('textPlacement', 'center');
-            set('headlineFontFamily', 'strong'); set('headlineFontWeight', 'bold'); set('headlineFontColor', '#ffffff');
-            set('bodyFontFamily', 'modern'); set('bodyFontWeight', 'semibold'); set('bodyFontColor', '#f5f5f5');
-            set('ctaFontFamily', 'strong'); set('ctaFontWeight', 'bold'); set('ctaFontColor', '#ffffff');
-            set('overlayOpacity', 80); set('headlineScale', 125); set('bodyScale', 105);
-        } else if (name === 'clean') {
-            set('overlayTemplate', 'soft_box'); set('backgroundTreatment', 'brand_gradient'); set('shapeStyle', 'rounded');
-            set('textPlacement', 'left');
-            set('headlineFontFamily', 'clean'); set('headlineFontWeight', 'semibold'); set('headlineFontColor', '#ffffff');
-            set('bodyFontFamily', 'clean'); set('bodyFontWeight', 'normal'); set('bodyFontColor', '#e9e9e9');
-            set('ctaFontFamily', 'clean'); set('ctaFontWeight', 'semibold'); set('ctaFontColor', '#ffffff');
-            set('overlayOpacity', 55); set('headlineScale', 100); set('bodyScale', 95);
-        } else if (name === 'story') {
-            set('overlayTemplate', 'bubbles'); set('backgroundTreatment', 'brand_gradient'); set('shapeStyle', 'pill');
-            set('textPlacement', 'center');
-            set('headlineFontFamily', 'playful'); set('headlineFontWeight', 'bold'); set('headlineFontColor', '#ffffff');
-            set('bodyFontFamily', 'friendly'); set('bodyFontWeight', 'normal'); set('bodyFontColor', '#f3f3f3');
-            set('ctaFontFamily', 'playful'); set('ctaFontWeight', 'bold'); set('ctaFontColor', '#ffffff');
-            set('overlayOpacity', 60); set('headlineScale', 120); set('bodyScale', 100);
-        } else if (name === 'luxury') {
-            set('overlayTemplate', 'upper_third'); set('backgroundTreatment', 'brand_gradient'); set('shapeStyle', 'rounded');
-            set('textPlacement', 'left');
-            set('headlineFontFamily', 'elegant'); set('headlineFontWeight', 'bold'); set('headlineFontColor', '#ffffff');
-            set('bodyFontFamily', 'classic'); set('bodyFontWeight', 'normal'); set('bodyFontColor', '#efefef');
-            set('ctaFontFamily', 'elegant'); set('ctaFontWeight', 'semibold'); set('ctaFontColor', '#ffffff');
-            set('overlayOpacity', 70); set('headlineScale', 110); set('bodyScale', 100);
-        }
+    // Canvas dimensions (display scaled down, export at full res)
+    const FORMAT_SIZES = {
+        facebook_feed: [1200, 628],
+        facebook_story: [1080, 1920],
+        instagram_feed: [1080, 1080],
+        instagram_story: [1080, 1920],
+        google_display_landscape: [1200, 628],
+        google_display_square: [1200, 1200],
     };
 
-    // Drag and drop
-    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
-    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
-    uploadZone.addEventListener('drop', e => {
-        e.preventDefault();
-        uploadZone.classList.remove('dragover');
-        const files = e.dataTransfer.files;
-        if (files.length) handleFile(files[0]);
-    });
+    let currentFormat = 'facebook_feed';
+    let fullW = 1200, fullH = 628;
 
-    imageInput.addEventListener('change', () => {
-        if (imageInput.files.length) handleFile(imageInput.files[0]);
-    });
-
-    function handleFile(file) {
-        const validTypes = ['image/png', 'image/jpeg', 'image/webp'];
-        if (!validTypes.includes(file.type)) {
-            alert('Please upload a PNG, JPG, or WebP image.');
-            return;
-        }
-        if (file.size > 10 * 1024 * 1024) {
-            alert('Image must be under 10MB.');
-            return;
-        }
-        selectedFile = file;
-        const reader = new FileReader();
-        reader.onload = e => {
-            imagePreview.src = e.target.result;
-            imagePreview.style.display = 'block';
-            uploadPlaceholder.style.display = 'none';
-            removeBtn.style.display = 'flex';
-            uploadZone.classList.add('has-image');
-        };
-        reader.readAsDataURL(file);
+    // Compute display scale to fit workspace
+    function displayScale() {
+        const workspace = document.getElementById('canvasWorkspace');
+        const maxW = workspace.clientWidth - 48;
+        const maxH = 500;
+        return Math.min(maxW / fullW, maxH / fullH, 1);
     }
 
-    window.removeImage = function() {
-        selectedFile = null;
-        imageInput.value = '';
-        imagePreview.style.display = 'none';
-        imagePreview.src = '';
-        uploadPlaceholder.style.display = '';
-        removeBtn.style.display = 'none';
-        uploadZone.classList.remove('has-image');
-    };
+    // Init Fabric canvas
+    const scale = displayScale();
+    const canvas = new fabric.Canvas('fabricCanvas', {
+        width: Math.round(fullW * scale),
+        height: Math.round(fullH * scale),
+        backgroundColor: '#ffffff',
+        preserveObjectStacking: true,
+    });
+    // Track the scale for export
+    let viewScale = scale;
 
-    window.selectFormat = function(el) {
+    function resizeCanvas() {
+        const s = displayScale();
+        viewScale = s;
+        canvas.setWidth(Math.round(fullW * s));
+        canvas.setHeight(Math.round(fullH * s));
+        canvas.setZoom(s);
+        canvas.renderAll();
+    }
+
+    window.setCanvasSize = function(el) {
         document.querySelectorAll('.format-option').forEach(o => o.classList.remove('selected'));
         el.classList.add('selected');
-        selectedFormat = el.dataset.format;
+        currentFormat = el.dataset.format;
+        fullW = parseInt(el.dataset.w);
+        fullH = parseInt(el.dataset.h);
+        resizeCanvas();
     };
 
-    // Char counters
-    function counter(inputId, countId) {
-        const inp = document.getElementById(inputId);
-        const cnt = document.getElementById(countId);
-        if (inp && cnt) {
-            inp.addEventListener('input', () => { cnt.textContent = inp.value.length; });
-        }
-    }
-    counter('imageDescription', 'descCount');
-    counter('headline', 'headlineCount');
-    counter('bodyText', 'bodyCount');
-    counter('ctaText', 'ctaCount');
+    window.addEventListener('resize', resizeCanvas);
 
-    // AI Generate Copy
+    // ── Add elements ──
+
+    window.addText = function(type) {
+        let options = {};
+        if (type === 'headline') {
+            options = { text: 'Your Headline', fontSize: 48, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Arial' };
+        } else if (type === 'body') {
+            options = { text: 'Body text goes here', fontSize: 28, fontWeight: 'normal', fill: '#e5e5e5', fontFamily: 'Arial' };
+        } else if (type === 'cta') {
+            options = { text: 'Learn More', fontSize: 24, fontWeight: 'bold', fill: '#ffffff', fontFamily: 'Arial' };
+        }
+
+        const textObj = new fabric.IText(options.text, {
+            left: fullW * 0.05,
+            top: type === 'headline' ? fullH * 0.3 : type === 'body' ? fullH * 0.5 : fullH * 0.7,
+            fontSize: options.fontSize,
+            fontWeight: options.fontWeight,
+            fill: options.fill,
+            fontFamily: options.fontFamily,
+            shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.5)', blur: 4, offsetX: 1, offsetY: 1 }),
+            _customType: type,
+        });
+        canvas.add(textObj);
+        canvas.setActiveObject(textObj);
+        canvas.renderAll();
+        updateLayers();
+    };
+
+    window.addShape = function(type) {
+        let shape;
+        if (type === 'rect') {
+            shape = new fabric.Rect({
+                left: fullW * 0.1, top: fullH * 0.6,
+                width: fullW * 0.8, height: fullH * 0.25,
+                fill: 'rgba(0,0,0,0.55)', rx: 12, ry: 12,
+                _customType: 'shape',
+            });
+        } else if (type === 'circle') {
+            shape = new fabric.Circle({
+                left: fullW * 0.35, top: fullH * 0.25,
+                radius: Math.min(fullW, fullH) * 0.15,
+                fill: 'rgba(99,102,241,0.5)',
+                _customType: 'shape',
+            });
+        }
+        if (shape) {
+            canvas.add(shape);
+            canvas.setActiveObject(shape);
+            canvas.renderAll();
+            updateLayers();
+        }
+    };
+
+    window.addLogo = function() {
+        if (!logoUrl) { alert('Upload a logo in My Business settings first.'); return; }
+        fabric.Image.fromURL(logoUrl, function(img) {
+            const maxSize = Math.min(fullW, fullH) * 0.18;
+            const sc = Math.min(maxSize / img.width, maxSize / img.height);
+            img.set({
+                left: fullW * 0.03,
+                top: fullH * 0.03,
+                scaleX: sc,
+                scaleY: sc,
+                _customType: 'logo',
+            });
+            canvas.add(img);
+            canvas.setActiveObject(img);
+            canvas.renderAll();
+            updateLayers();
+        }, { crossOrigin: 'anonymous' });
+    };
+
+    // ── Image upload ──
+
+    const dropZone = document.getElementById('imageDropZone');
+    const fileInput = document.getElementById('imageFileInput');
+
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        handleImageFiles(e.dataTransfer.files);
+    });
+    fileInput.addEventListener('change', () => { if (fileInput.files.length) handleImageFiles(fileInput.files); });
+
+    function handleImageFiles(files) {
+        Array.from(files).forEach(file => {
+            if (!file.type.startsWith('image/')) return;
+            if (file.size > 10 * 1024 * 1024) { alert('Each image must be under 10MB.'); return; }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                fabric.Image.fromURL(e.target.result, function(img) {
+                    // Scale to fit canvas while keeping proportions
+                    const sc = Math.min(fullW / img.width, fullH / img.height, 1);
+                    img.set({
+                        left: 0, top: 0,
+                        scaleX: sc, scaleY: sc,
+                        _customType: 'image',
+                    });
+                    canvas.add(img);
+                    // If it's the first image, send to back as background
+                    if (canvas.getObjects().length === 1) {
+                        img.set({ left: 0, top: 0, scaleX: fullW / img.width, scaleY: fullH / img.height });
+                        canvas.sendToBack(img);
+                    }
+                    canvas.setActiveObject(img);
+                    canvas.renderAll();
+                    updateLayers();
+                });
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // ── AI Image generation ──
+
+    window.generateAiImage = function() {
+        const prompt = document.getElementById('aiImagePrompt').value.trim();
+        if (!prompt) { alert('Describe the image you want to generate.'); return; }
+        const btn = document.getElementById('btnAiImage');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generating...';
+
+        fetch("{{ url_for('client.client_chat_warren') }}", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({
+                message: `Generate an image: ${prompt}. Use the generate_image tool. Return ONLY the image URL.`,
+                _tool_hint: 'generate_image'
+            }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            const msg = data.response || data.reply || '';
+            const urlMatch = msg.match(/https:\/\/[^\s"'<>]+\.(png|jpg|jpeg|webp)/i);
+            if (urlMatch) {
+                fabric.Image.fromURL(urlMatch[0], function(img) {
+                    const sc = Math.min(fullW / img.width, fullH / img.height, 1);
+                    img.set({ left: 0, top: 0, scaleX: sc, scaleY: sc, _customType: 'ai_image' });
+                    canvas.add(img);
+                    canvas.setActiveObject(img);
+                    canvas.renderAll();
+                    updateLayers();
+                }, { crossOrigin: 'anonymous' });
+            } else {
+                alert('AI generated a response but no image URL was found. Try a different prompt.');
+            }
+        })
+        .catch(() => alert('AI image generation failed. Check your API key settings.'))
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-stars"></i> AI Generate Image';
+        });
+    };
+
+    // ── Quick overlays ──
+
+    window.applyOverlay = function(type) {
+        // Remove any previous overlay
+        canvas.getObjects().forEach(o => { if (o._customType === 'overlay') canvas.remove(o); });
+
+        let overlay;
+        if (type === 'gradient_bottom') {
+            overlay = new fabric.Rect({
+                left: 0, top: fullH * 0.5, width: fullW, height: fullH * 0.5,
+                fill: new fabric.Gradient({
+                    type: 'linear', coords: { x1: 0, y1: 0, x2: 0, y2: fullH * 0.5 },
+                    colorStops: [
+                        { offset: 0, color: 'rgba(0,0,0,0)' },
+                        { offset: 1, color: 'rgba(0,0,0,0.7)' },
+                    ],
+                }),
+                selectable: false, evented: false, _customType: 'overlay',
+            });
+        } else if (type === 'gradient_top') {
+            overlay = new fabric.Rect({
+                left: 0, top: 0, width: fullW, height: fullH * 0.5,
+                fill: new fabric.Gradient({
+                    type: 'linear', coords: { x1: 0, y1: 0, x2: 0, y2: fullH * 0.5 },
+                    colorStops: [
+                        { offset: 0, color: 'rgba(0,0,0,0.7)' },
+                        { offset: 1, color: 'rgba(0,0,0,0)' },
+                    ],
+                }),
+                selectable: false, evented: false, _customType: 'overlay',
+            });
+        } else if (type === 'full_tint') {
+            overlay = new fabric.Rect({
+                left: 0, top: 0, width: fullW, height: fullH,
+                fill: 'rgba(0,0,0,0.45)',
+                selectable: false, evented: false, _customType: 'overlay',
+            });
+        } else if (type === 'banner_bottom') {
+            overlay = new fabric.Rect({
+                left: 0, top: fullH * 0.7, width: fullW, height: fullH * 0.3,
+                fill: 'rgba(0,0,0,0.65)', rx: 0, ry: 0,
+                selectable: false, evented: false, _customType: 'overlay',
+            });
+        } else if (type === 'strip_center') {
+            overlay = new fabric.Rect({
+                left: 0, top: fullH * 0.35, width: fullW, height: fullH * 0.3,
+                fill: 'rgba(0,0,0,0.6)',
+                selectable: false, evented: false, _customType: 'overlay',
+            });
+        }
+
+        if (overlay) {
+            canvas.add(overlay);
+            // Place overlays above images but below text
+            const textObjs = canvas.getObjects().filter(o => o.type === 'i-text' || o.type === 'text');
+            textObjs.forEach(t => canvas.bringToFront(t));
+            canvas.renderAll();
+            updateLayers();
+        }
+    };
+
+    // ── Layer management ──
+
+    function updateLayers() {
+        const panel = document.getElementById('layersPanel');
+        const empty = document.getElementById('layersEmpty');
+        const objects = canvas.getObjects();
+        if (!objects.length) {
+            panel.innerHTML = '';
+            panel.appendChild(empty);
+            empty.style.display = '';
+            return;
+        }
+        if (empty) empty.style.display = 'none';
+
+        const active = canvas.getActiveObject();
+        let html = '';
+        // Show from top to bottom
+        for (let i = objects.length - 1; i >= 0; i--) {
+            const obj = objects[i];
+            const label = obj._customType || obj.type || 'element';
+            const name = obj.text ? obj.text.substring(0, 20) : label;
+            const icon = (obj.type === 'i-text' || obj.type === 'text') ? 'bi-type' :
+                         obj.type === 'image' ? 'bi-image' :
+                         label === 'overlay' ? 'bi-layers-half' :
+                         label === 'logo' ? 'bi-patch-check' : 'bi-square';
+            const sel = (obj === active) ? 'selected' : '';
+            html += `<div class="layer-item ${sel}" data-idx="${i}" onclick="selectLayer(${i})">
+                <i class="bi ${icon}" style="color:#6b7280"></i>
+                <span class="layer-name">${name}</span>
+                <span class="layer-actions"><button onclick="event.stopPropagation(); removeLayer(${i})" title="Delete"><i class="bi bi-x"></i></button></span>
+            </div>`;
+        }
+        panel.innerHTML = html;
+    }
+
+    window.selectLayer = function(idx) {
+        const obj = canvas.item(idx);
+        if (obj) {
+            canvas.setActiveObject(obj);
+            canvas.renderAll();
+            updateLayers();
+        }
+    };
+
+    window.removeLayer = function(idx) {
+        const obj = canvas.item(idx);
+        if (obj) {
+            canvas.remove(obj);
+            canvas.renderAll();
+            updateLayers();
+            showDefaultProps();
+        }
+    };
+
+    window.deleteSelected = function() {
+        const active = canvas.getActiveObject();
+        if (active) {
+            canvas.remove(active);
+            canvas.discardActiveObject();
+            canvas.renderAll();
+            updateLayers();
+            showDefaultProps();
+        }
+    };
+
+    window.bringForward = function() {
+        const active = canvas.getActiveObject();
+        if (active) { canvas.bringForward(active); canvas.renderAll(); updateLayers(); }
+    };
+
+    window.sendBackward = function() {
+        const active = canvas.getActiveObject();
+        if (active) { canvas.sendBackwards(active); canvas.renderAll(); updateLayers(); }
+    };
+
+    // ── Properties panel ──
+
+    function showDefaultProps() {
+        document.getElementById('propsPanel').innerHTML =
+            '<div class="text-muted" style="font-size:.82rem">Select an element on the canvas to edit its properties</div>';
+    }
+
+    function showProperties(obj) {
+        const p = document.getElementById('propsPanel');
+        let html = '';
+
+        if (obj.type === 'i-text' || obj.type === 'text') {
+            html += `
+                <div class="prop-field">
+                    <label>Text</label>
+                    <textarea class="prop-input" rows="2" oninput="updateProp('text', this.value)">${obj.text || ''}</textarea>
+                </div>
+                <div class="prop-field">
+                    <label>Font Size</label>
+                    <input type="number" class="prop-input" value="${obj.fontSize || 32}" min="8" max="200"
+                           oninput="updateProp('fontSize', parseInt(this.value))">
+                </div>
+                <div class="prop-field">
+                    <label>Font Family</label>
+                    <select class="prop-input" onchange="updateProp('fontFamily', this.value)">
+                        <option ${obj.fontFamily==='Arial'?'selected':''}>Arial</option>
+                        <option ${obj.fontFamily==='Helvetica'?'selected':''}>Helvetica</option>
+                        <option ${obj.fontFamily==='Georgia'?'selected':''}>Georgia</option>
+                        <option ${obj.fontFamily==='Times New Roman'?'selected':''}>Times New Roman</option>
+                        <option ${obj.fontFamily==='Verdana'?'selected':''}>Verdana</option>
+                        <option ${obj.fontFamily==='Impact'?'selected':''}>Impact</option>
+                        <option ${obj.fontFamily==='Courier New'?'selected':''}>Courier New</option>
+                    </select>
+                </div>
+                <div class="prop-field">
+                    <label>Weight</label>
+                    <select class="prop-input" onchange="updateProp('fontWeight', this.value)">
+                        <option value="normal" ${obj.fontWeight==='normal'?'selected':''}>Normal</option>
+                        <option value="bold" ${obj.fontWeight==='bold'?'selected':''}>Bold</option>
+                    </select>
+                </div>
+                <div class="prop-field">
+                    <label>Color</label>
+                    <input type="color" class="prop-input" value="${obj.fill || '#ffffff'}" oninput="updateProp('fill', this.value)">
+                </div>
+            `;
+        } else if (obj.type === 'rect' || obj.type === 'circle') {
+            html += `
+                <div class="prop-field">
+                    <label>Fill Color</label>
+                    <input type="color" class="prop-input" value="${obj.fill && obj.fill.charAt && obj.fill.charAt(0) === '#' ? obj.fill : '#000000'}"
+                           oninput="updateProp('fill', this.value)">
+                </div>
+                <div class="prop-field">
+                    <label>Opacity</label>
+                    <input type="range" class="prop-input" min="0" max="100" step="5"
+                           value="${Math.round((obj.opacity || 1) * 100)}"
+                           oninput="updateProp('opacity', this.value / 100)">
+                </div>
+            `;
+            if (obj.type === 'rect') {
+                html += `
+                    <div class="prop-field">
+                        <label>Width</label>
+                        <input type="number" class="prop-input" value="${Math.round(obj.width * (obj.scaleX || 1))}" min="10"
+                               oninput="updatePropDim('width', this.value)">
+                    </div>
+                    <div class="prop-field">
+                        <label>Height</label>
+                        <input type="number" class="prop-input" value="${Math.round(obj.height * (obj.scaleY || 1))}" min="10"
+                               oninput="updatePropDim('height', this.value)">
+                    </div>
+                    <div class="prop-field">
+                        <label>Corner Radius</label>
+                        <input type="number" class="prop-input" value="${obj.rx || 0}" min="0" max="100"
+                               oninput="updateProp('rx', parseInt(this.value)); updateProp('ry', parseInt(this.value))">
+                    </div>
+                `;
+            }
+        } else if (obj.type === 'image') {
+            html += `
+                <div class="prop-field">
+                    <label>Opacity</label>
+                    <input type="range" class="prop-input" min="0" max="100" step="5"
+                           value="${Math.round((obj.opacity || 1) * 100)}"
+                           oninput="updateProp('opacity', this.value / 100)">
+                </div>
+                <div class="prop-field">
+                    <label>Fit to Canvas</label>
+                    <button class="tool-btn w-100" onclick="fitImageToCanvas()"><i class="bi bi-arrows-fullscreen"></i> Fill Canvas</button>
+                </div>
+            `;
+        }
+
+        // Universal position
+        html += `
+            <hr style="border-color:#f1f3f5;margin:.6rem 0">
+            <div class="prop-field">
+                <label>X</label>
+                <input type="number" class="prop-input" value="${Math.round(obj.left || 0)}" oninput="updateProp('left', parseInt(this.value))">
+            </div>
+            <div class="prop-field">
+                <label>Y</label>
+                <input type="number" class="prop-input" value="${Math.round(obj.top || 0)}" oninput="updateProp('top', parseInt(this.value))">
+            </div>
+        `;
+
+        p.innerHTML = html;
+    }
+
+    window.updateProp = function(prop, value) {
+        const active = canvas.getActiveObject();
+        if (!active) return;
+        active.set(prop, value);
+        canvas.renderAll();
+    };
+
+    window.updatePropDim = function(prop, value) {
+        const active = canvas.getActiveObject();
+        if (!active) return;
+        const v = parseInt(value);
+        if (prop === 'width') { active.set('width', v); active.set('scaleX', 1); }
+        if (prop === 'height') { active.set('height', v); active.set('scaleY', 1); }
+        canvas.renderAll();
+    };
+
+    window.fitImageToCanvas = function() {
+        const active = canvas.getActiveObject();
+        if (!active || active.type !== 'image') return;
+        active.set({
+            left: 0, top: 0,
+            scaleX: fullW / active.width,
+            scaleY: fullH / active.height,
+        });
+        canvas.renderAll();
+    };
+
+    // ── Canvas events ──
+
+    canvas.on('selection:created', e => { showProperties(e.selected[0]); updateLayers(); });
+    canvas.on('selection:updated', e => { showProperties(e.selected[0]); updateLayers(); });
+    canvas.on('selection:cleared', () => { showDefaultProps(); updateLayers(); });
+    canvas.on('object:modified', () => {
+        const active = canvas.getActiveObject();
+        if (active) showProperties(active);
+    });
+
+    // ── AI Copy ──
+
     window.generateAiCopy = function() {
-        const desc = document.getElementById('imageDescription').value.trim();
-        if (!desc) { alert('Describe the image first so AI can write matching copy.'); return; }
+        const desc = document.getElementById('aiCopyDesc').value.trim();
+        if (!desc) { alert('Describe your ad first.'); return; }
         const btn = document.getElementById('btnAiCopy');
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Writing...';
@@ -766,166 +987,263 @@
         const fd = new FormData();
         if (csrfToken) fd.append('csrf_token', csrfToken);
         fd.append('description', desc);
-        fd.append('ad_format', selectedFormat);
+        fd.append('ad_format', currentFormat);
 
         fetch("{{ url_for('client.client_creative_ai_copy') }}", {
             method: 'POST',
             body: fd,
             headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {}
         })
-        .then(r => {
-            const ct = r.headers.get('content-type') || '';
-            if (!ct.includes('application/json')) throw new Error('Server error (' + r.status + '). Try again.');
-            return r.json();
-        })
+        .then(r => r.json())
         .then(data => {
             if (data.error) { alert(data.error); return; }
-            if (data.headline) document.getElementById('headline').value = data.headline;
-            if (data.body_text) document.getElementById('bodyText').value = data.body_text;
-            if (data.cta_text) document.getElementById('ctaText').value = data.cta_text;
-            // Update counters
-            ['headline','bodyText','ctaText'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.dispatchEvent(new Event('input'));
-            });
+            document.getElementById('aiHeadline').value = data.headline || '';
+            document.getElementById('aiBody').value = data.body_text || '';
+            document.getElementById('aiCta').value = data.cta_text || '';
+            document.getElementById('aiCopyResult').style.display = '';
         })
-        .catch(e => alert(e.message || 'AI generation failed. Try again.'))
+        .catch(e => alert('AI copy generation failed.'))
         .finally(() => {
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-stars"></i> AI Generate Copy';
+            btn.innerHTML = '<i class="bi bi-stars"></i> Generate Copy';
         });
     };
 
-    // Generate Creative
-    window.generateCreative = function() {
-        if (!selectedFile) { alert('Upload a background image first.'); return; }
-        const headline = document.getElementById('headline').value.trim();
-        if (!headline) { alert('Enter a headline for your ad.'); return; }
+    window.placeAiText = function(type) {
+        let text = '';
+        if (type === 'headline') text = document.getElementById('aiHeadline').value;
+        if (type === 'body') text = document.getElementById('aiBody').value;
+        if (type === 'cta') text = document.getElementById('aiCta').value;
+        if (!text) return;
 
-        const btn = document.getElementById('btnGenerate');
+        const opts = {
+            headline: { fontSize: 48, fontWeight: 'bold', fill: '#ffffff', top: fullH * 0.3 },
+            body: { fontSize: 28, fontWeight: 'normal', fill: '#e5e5e5', top: fullH * 0.5 },
+            cta: { fontSize: 24, fontWeight: 'bold', fill: '#ffffff', top: fullH * 0.7 },
+        }[type];
+
+        const textObj = new fabric.IText(text, {
+            left: fullW * 0.05,
+            top: opts.top,
+            fontSize: opts.fontSize,
+            fontWeight: opts.fontWeight,
+            fill: opts.fill,
+            fontFamily: 'Arial',
+            shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.5)', blur: 4, offsetX: 1, offsetY: 1 }),
+            _customType: type,
+        });
+        canvas.add(textObj);
+        canvas.setActiveObject(textObj);
+        canvas.renderAll();
+        updateLayers();
+    };
+
+    // ── Export ──
+
+    window.exportCanvas = function() {
+        const btn = document.getElementById('btnExport');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Exporting...';
+
+        // Export at full resolution
+        const dataURL = canvas.toDataURL({
+            format: 'png',
+            multiplier: 1 / viewScale,
+        });
+
+        // Download locally
+        const link = document.createElement('a');
+        link.download = `creative_${currentFormat}_${Date.now()}.png`;
+        link.href = dataURL;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Also upload to Drive if connected
+        try {
+            const blobBin = atob(dataURL.split(',')[1]);
+            const arr = new Uint8Array(blobBin.length);
+            for (let i = 0; i < blobBin.length; i++) arr[i] = blobBin.charCodeAt(i);
+            const blob = new Blob([arr], { type: 'image/png' });
+
+            const fd = new FormData();
+            fd.append('file', blob, link.download);
+            fd.append('subfolder', 'Creatives');
+            if (csrfToken) fd.append('csrf_token', csrfToken);
+
+            fetch("{{ url_for('client.client_drive_upload') }}", {
+                method: 'POST',
+                body: fd,
+                headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {}
+            }).then(r => r.json()).then(data => {
+                if (data.ok) {
+                    btn.innerHTML = '<i class="bi bi-check2"></i> Exported + Saved to Drive';
+                    btn.classList.add('btn-success');
+                    setTimeout(() => {
+                        btn.innerHTML = '<i class="bi bi-download"></i> Export as PNG';
+                        btn.classList.remove('btn-success');
+                    }, 3000);
+                }
+            }).catch(() => {});
+        } catch (_) {}
+
+        btn.disabled = false;
+        if (!btn.classList.contains('btn-success')) {
+            btn.innerHTML = '<i class="bi bi-download"></i> Export as PNG';
+        }
+    };
+
+    // ── Server Generate (legacy Pillow path) ──
+
+    window.serverGenerate = function() {
+        // Collect text elements from canvas
+        const objects = canvas.getObjects();
+        let headline = '', bodyText = '', ctaText = '';
+        objects.forEach(o => {
+            if (o._customType === 'headline' && o.text) headline = o.text;
+            if (o._customType === 'body' && o.text) bodyText = o.text;
+            if (o._customType === 'cta' && o.text) ctaText = o.text;
+        });
+
+        // Find background image
+        const bgImg = objects.find(o => o.type === 'image' && canvas.getObjects().indexOf(o) === 0);
+        if (!bgImg) {
+            alert('Add a background image to the canvas first for server generation.');
+            return;
+        }
+
+        const btn = document.getElementById('btnServerGen');
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generating...';
 
+        // Export just the background image as a blob
+        const bgDataURL = bgImg.toDataURL({ format: 'png' });
+        const blobBin = atob(bgDataURL.split(',')[1]);
+        const arr = new Uint8Array(blobBin.length);
+        for (let i = 0; i < blobBin.length; i++) arr[i] = blobBin.charCodeAt(i);
+        const blob = new Blob([arr], { type: 'image/png' });
+
         const fd = new FormData();
         if (csrfToken) fd.append('csrf_token', csrfToken);
-        fd.append('image', selectedFile);
-        fd.append('headline', headline);
-        fd.append('body_text', document.getElementById('bodyText').value.trim());
-        fd.append('cta_text', document.getElementById('ctaText').value.trim());
-        fd.append('ad_format', selectedFormat);
-        fd.append('image_description', document.getElementById('imageDescription').value.trim());
-        fd.append('overlay_template', document.getElementById('overlayTemplate').value);
-        fd.append('background_treatment', document.getElementById('backgroundTreatment').value);
-        fd.append('shape_style', document.getElementById('shapeStyle').value);
-        fd.append('text_placement', document.getElementById('textPlacement').value);
-        fd.append('headline_font_family', document.getElementById('headlineFontFamily').value);
-        fd.append('headline_font_weight', document.getElementById('headlineFontWeight').value);
-        fd.append('headline_font_color', document.getElementById('headlineFontColor').value);
-        fd.append('body_font_family', document.getElementById('bodyFontFamily').value);
-        fd.append('body_font_weight', document.getElementById('bodyFontWeight').value);
-        fd.append('body_font_color', document.getElementById('bodyFontColor').value);
-        fd.append('cta_font_family', document.getElementById('ctaFontFamily').value);
-        fd.append('cta_font_weight', document.getElementById('ctaFontWeight').value);
-        fd.append('cta_font_color', document.getElementById('ctaFontColor').value);
-        fd.append('headline_scale', document.getElementById('headlineScale').value);
-        fd.append('body_scale', document.getElementById('bodyScale').value);
-        fd.append('overlay_opacity', document.getElementById('overlayOpacity').value);
-        fd.append('logo_scale', document.getElementById('logoScale').value);
-        fd.append('logo_corner', document.getElementById('logoCorner').value);
-        const logoVariantEl = document.getElementById('logoVariant');
-        if (logoVariantEl) fd.append('logo_variant', logoVariantEl.value);
-        fd.append('logo_position_mode', document.getElementById('logoPositionMode').value);
-        fd.append('logo_pos_x', document.getElementById('logoPosX').value);
-        fd.append('logo_pos_y', document.getElementById('logoPosY').value);
-        fd.append('include_phone', document.getElementById('includePhone').checked ? '1' : '0');
-        fd.append('include_website', document.getElementById('includeWebsite').checked ? '1' : '0');
-        fd.append('creative_prompt', document.getElementById('creativePrompt').value.trim());
+        fd.append('image', blob, 'canvas_bg.png');
+        fd.append('headline', headline || 'Your Headline');
+        fd.append('body_text', bodyText);
+        fd.append('cta_text', ctaText || 'Learn More');
+        fd.append('ad_format', currentFormat);
+        fd.append('overlay_template', 'lower_third');
+        fd.append('background_treatment', 'brand_gradient');
+        fd.append('shape_style', 'rounded');
+        fd.append('text_placement', 'left');
 
         fetch("{{ url_for('client.client_creative_generate') }}", {
             method: 'POST',
             body: fd,
             headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {}
         })
-        .then(r => {
-            const ct = r.headers.get('content-type') || '';
-            if (!ct.includes('application/json')) throw new Error('Server error (' + r.status + '). Check logs or try a smaller image.');
-            return r.json().then(data => { if (!r.ok) throw new Error(data.error || 'Server error ' + r.status); return data; });
-        })
+        .then(r => r.json())
         .then(data => {
             if (data.error) { alert(data.error); return; }
-            const preview = document.getElementById('previewImage');
-            const area = document.getElementById('previewArea');
-            const placeholder = document.getElementById('previewPlaceholder');
-            preview.src = data.image_url;
-            preview.style.display = 'block';
-            placeholder.style.display = 'none';
-            area.classList.add('has-preview');
-            document.getElementById('previewActions').style.display = 'flex';
-            document.getElementById('downloadLink').href = data.image_url;
-            document.getElementById('downloadLink').download = data.filename || 'creative.png';
+            // Add result image back onto a clean canvas
+            fabric.Image.fromURL(data.image_url, function(img) {
+                img.set({
+                    left: 0, top: 0,
+                    scaleX: fullW / img.width, scaleY: fullH / img.height,
+                    _customType: 'server_result',
+                });
+                canvas.add(img);
+                canvas.setActiveObject(img);
+                canvas.renderAll();
+                updateLayers();
+            }, { crossOrigin: 'anonymous' });
+
+            if (data.drive_link) {
+                btn.innerHTML = '<i class="bi bi-check2"></i> Done + Saved to Drive';
+                setTimeout(() => { btn.innerHTML = '<i class="bi bi-magic"></i> Server Generate (Pillow)'; }, 3000);
+            }
         })
-        .catch(e => alert(e.message || 'Creative generation failed. Try again.'))
+        .catch(e => alert('Server generation failed.'))
         .finally(() => {
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-magic"></i> Generate Creative';
+            if (btn.innerHTML.includes('spinner')) {
+                btn.innerHTML = '<i class="bi bi-magic"></i> Server Generate (Pillow)';
+            }
         });
     };
 
-    window.resetCreative = function() {
-        document.getElementById('previewImage').style.display = 'none';
-        document.getElementById('previewPlaceholder').style.display = '';
-        document.getElementById('previewArea').classList.remove('has-preview');
-        document.getElementById('previewActions').style.display = 'none';
-    };
+    // ── Load Drive images ──
 
-    // Prefill from Ad Builder transfer
+    {% if brand.get('google_drive_folder_id') %}
+    (function loadDriveImages() {
+        fetch("{{ url_for('client.client_drive_list_files', subfolder='Images') }}")
+        .then(r => r.json())
+        .then(data => {
+            const grid = document.getElementById('driveAssetsGrid');
+            if (!data.files || !data.files.length) {
+                grid.innerHTML = '<div class="text-muted" style="font-size:.8rem;grid-column:1/-1">No images in Drive yet</div>';
+                return;
+            }
+            grid.innerHTML = data.files.filter(f => f.mimeType && f.mimeType.startsWith('image/')).slice(0, 12).map(f =>
+                `<div class="asset-thumb" onclick="addDriveImage('${f.id}', '${f.name}')" title="${f.name}">
+                    <img src="${f.thumbnailLink || ''}" alt="${f.name}" onerror="this.parentElement.style.display='none'">
+                </div>`
+            ).join('');
+        })
+        .catch(() => {
+            document.getElementById('driveAssetsGrid').innerHTML = '<div class="text-muted" style="font-size:.8rem;grid-column:1/-1">Could not load Drive images</div>';
+        });
+    })();
+
+    window.addDriveImage = function(fileId, name) {
+        // Use Drive thumbnail as proxy (actual download would need a server route)
+        // We'll use the direct download API endpoint through our server
+        const url = `{{ url_for('client.client_drive_list_files', subfolder='Images') }}`.replace('/files/Images', `/download/${fileId}`);
+        // For now, use the thumbnail link approach - most Drive thumbnails are accessible
+        alert('Adding ' + name + ' - pulling from Drive...');
+    };
+    {% endif %}
+
+    // ── Prefill from Ad Builder ──
+
     try {
         const raw = sessionStorage.getItem('creative_prefill');
         if (raw) {
             const data = JSON.parse(raw);
-            if (data.headline) document.getElementById('headline').value = data.headline;
-            if (data.body_text) document.getElementById('bodyText').value = data.body_text;
-            if (data.cta_text) document.getElementById('ctaText').value = data.cta_text;
-            if (data.image_description) document.getElementById('imageDescription').value = data.image_description;
-            if (data.creative_prompt) document.getElementById('creativePrompt').value = data.creative_prompt;
-
+            if (data.headline) {
+                setTimeout(() => {
+                    addText('headline');
+                    const obj = canvas.getActiveObject();
+                    if (obj) obj.set('text', data.headline);
+                    canvas.renderAll();
+                }, 200);
+            }
+            if (data.body_text) {
+                setTimeout(() => {
+                    addText('body');
+                    const obj = canvas.getActiveObject();
+                    if (obj) obj.set('text', data.body_text);
+                    canvas.renderAll();
+                }, 400);
+            }
+            if (data.cta_text) {
+                setTimeout(() => {
+                    addText('cta');
+                    const obj = canvas.getActiveObject();
+                    if (obj) obj.set('text', data.cta_text);
+                    canvas.renderAll();
+                }, 600);
+            }
             if (data.ad_format) {
                 const target = document.querySelector(`.format-option[data-format="${data.ad_format}"]`);
-                if (target) window.selectFormat(target);
+                if (target) setCanvasSize(target);
             }
-            if (data.overlay_template) document.getElementById('overlayTemplate').value = data.overlay_template;
-            if (data.background_treatment) document.getElementById('backgroundTreatment').value = data.background_treatment;
-            if (data.shape_style) document.getElementById('shapeStyle').value = data.shape_style;
-            if (data.text_placement) document.getElementById('textPlacement').value = data.text_placement;
-            if (data.headline_font_family) document.getElementById('headlineFontFamily').value = data.headline_font_family;
-            if (data.headline_font_weight) document.getElementById('headlineFontWeight').value = data.headline_font_weight;
-            if (data.headline_font_color) document.getElementById('headlineFontColor').value = data.headline_font_color;
-            if (data.body_font_family) document.getElementById('bodyFontFamily').value = data.body_font_family;
-            if (data.body_font_weight) document.getElementById('bodyFontWeight').value = data.body_font_weight;
-            if (data.body_font_color) document.getElementById('bodyFontColor').value = data.body_font_color;
-            if (data.cta_font_family) document.getElementById('ctaFontFamily').value = data.cta_font_family;
-            if (data.cta_font_weight) document.getElementById('ctaFontWeight').value = data.cta_font_weight;
-            if (data.cta_font_color) document.getElementById('ctaFontColor').value = data.cta_font_color;
-            if (data.headline_scale) { document.getElementById('headlineScale').value = data.headline_scale; document.getElementById('headlineScale').dispatchEvent(new Event('input')); }
-            if (data.body_scale) { document.getElementById('bodyScale').value = data.body_scale; document.getElementById('bodyScale').dispatchEvent(new Event('input')); }
-            if (data.overlay_opacity) { document.getElementById('overlayOpacity').value = data.overlay_opacity; document.getElementById('overlayOpacity').dispatchEvent(new Event('input')); }
-            if (data.logo_scale) { document.getElementById('logoScale').value = data.logo_scale; document.getElementById('logoScale').dispatchEvent(new Event('input')); }
-            if (data.logo_corner) document.getElementById('logoCorner').value = data.logo_corner;
-            if (data.logo_variant && document.getElementById('logoVariant')) document.getElementById('logoVariant').value = data.logo_variant;
-            if (data.logo_position_mode) document.getElementById('logoPositionMode').value = data.logo_position_mode;
-            if (typeof data.logo_pos_x !== 'undefined') { document.getElementById('logoPosX').value = data.logo_pos_x; document.getElementById('logoPosX').dispatchEvent(new Event('input')); }
-            if (typeof data.logo_pos_y !== 'undefined') { document.getElementById('logoPosY').value = data.logo_pos_y; document.getElementById('logoPosY').dispatchEvent(new Event('input')); }
-            if (typeof data.include_phone !== 'undefined') document.getElementById('includePhone').checked = !!data.include_phone;
-            if (typeof data.include_website !== 'undefined') document.getElementById('includeWebsite').checked = !!data.include_website;
-
-            ['headline','bodyText','ctaText','imageDescription'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.dispatchEvent(new Event('input'));
-            });
+            if (data.image_description) {
+                document.getElementById('aiCopyDesc').value = data.image_description;
+            }
 
             sessionStorage.removeItem('creative_prefill');
         }
     } catch (_) {}
+
 })();
 </script>
 {% endblock %}
