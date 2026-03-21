@@ -1963,25 +1963,17 @@
 
     {% if brand.get('google_drive_folder_id') %}
     (function loadDriveImages() {
-        // Fetch from root folder + all subfolders, merge and dedupe
-        Promise.all([
-            fetch("{{ url_for('client.client_drive_list_files', subfolder='Root') }}").then(r => r.json()).catch(() => ({files:[]})),
-            fetch("{{ url_for('client.client_drive_list_files', subfolder='Images') }}").then(r => r.json()).catch(() => ({files:[]})),
-            fetch("{{ url_for('client.client_drive_list_files', subfolder='Creatives') }}").then(r => r.json()).catch(() => ({files:[]})),
-            fetch("{{ url_for('client.client_drive_list_files', subfolder='Ads') }}").then(r => r.json()).catch(() => ({files:[]}))
-        ]).then(([rootData, imgData, crData, adsData]) => {
-            const seen = new Set();
-            const allFiles = [...(rootData.files||[]), ...(imgData.files||[]), ...(crData.files||[]), ...(adsData.files||[])].filter(f => {
-                if (seen.has(f.id)) return false;
-                seen.add(f.id);
-                return f.mimeType && f.mimeType.startsWith('image/');
-            });
+        // Single request: fetches images from root + all subfolders automatically
+        fetch("{{ url_for('client.client_drive_all_images') }}")
+        .then(r => r.json())
+        .then(data => {
             const grid = document.getElementById('driveAssetsGrid');
-            if (!allFiles.length) {
+            const files = (data.files || []);
+            if (!files.length) {
                 grid.innerHTML = '<div class="text-muted" style="font-size:.8rem;grid-column:1/-1">No images in Drive yet. Save a creative to get started.</div>';
                 return;
             }
-            grid.innerHTML = allFiles.slice(0, 20).map(f =>
+            grid.innerHTML = files.slice(0, 20).map(f =>
                 `<div class="asset-thumb" onclick="addDriveImage('${f.id}', '${f.name}')" title="${f.name}">
                     <img src="${f.thumbnailLink || ''}" alt="${f.name}" onerror="this.parentElement.style.display='none'">
                 </div>`

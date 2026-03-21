@@ -275,6 +275,49 @@ def list_files(db, brand_id, subfolder_name, max_results=50):
     return resp.json().get("files", [])
 
 
+def list_all_images(db, brand_id, max_results=40):
+    """
+    List image files from the root folder AND all its subfolders (one level deep).
+    Returns a deduplicated list sorted by modifiedTime desc.
+    """
+    brand = db.get_brand(brand_id)
+    root_id = _extract_folder_id(brand.get("google_drive_folder_id") or "")
+    if not root_id:
+        return []
+
+    token = get_valid_access_token(db, brand_id)
+    if not token:
+        return []
+
+    headers = _drive_headers(token)
+    fields = "files(id,name,mimeType,webViewLink,thumbnailLink,modifiedTime,size)"
+
+    # Step 1: find all subfolders in root
+    q_folders = f"'{root_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+    resp = requests.get(f"{DRIVE_API}/files", params={
+        "q": q_folders, "fields": "files(id,name)", "pageSize": 20,
+    }, headers=headers, timeout=15)
+    subfolder_ids = []
+    if resp.status_code == 200:
+        subfolder_ids = [f["id"] for f in resp.json().get("files", [])]
+
+    # Step 2: query root + each subfolder for image files
+    all_folder_ids = [root_id] + subfolder_ids
+    # Build a single OR query: ('id1' in parents or 'id2' in parents ...) and mimeType contains 'image/'
+    parent_clauses = " or ".join(f"'{fid}' in parents" for fid in all_folder_ids)
+    q_images = f"({parent_clauses}) and mimeType contains 'image/' and trashed = false"
+
+    resp = requests.get(f"{DRIVE_API}/files", params={
+        "q": q_images, "fields": fields, "pageSize": max_results,
+        "orderBy": "modifiedTime desc",
+    }, headers=headers, timeout=20)
+
+    if resp.status_code != 200:
+        logger.warning("Drive list_all_images failed (%s): %s", resp.status_code, resp.text[:300])
+        return []
+    return resp.json().get("files", [])
+
+
 def download_file(db, brand_id, file_id):
     """Download file content by ID. Returns (bytes, mime_type) or (None, None)."""
     token = get_valid_access_token(db, brand_id)

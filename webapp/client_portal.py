@@ -2412,6 +2412,17 @@ def client_drive_diagnose():
     return jsonify({"steps": steps})
 
 
+@client_bp.route("/api/drive/all-images")
+@client_login_required
+def client_drive_all_images():
+    """API: list image files from root folder and ALL subfolders."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    from webapp.google_drive import list_all_images
+    files = list_all_images(db, brand_id)
+    return jsonify({"files": files})
+
+
 @client_bp.route("/api/drive/files/<subfolder>")
 @client_login_required
 def client_drive_list_files(subfolder):
