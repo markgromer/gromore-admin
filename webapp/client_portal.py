@@ -2210,6 +2210,94 @@ def client_save_maps_api():
     return redirect(url_for("client.client_settings"))
 
 
+@client_bp.route("/settings/search-place", methods=["POST"])
+@client_login_required
+def client_search_place():
+    """Search for a business via Places API so the user can pick their Place ID."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    api_key = (brand.get("google_maps_api_key") or "").strip()
+    if not api_key:
+        return jsonify(ok=False, error="Save your Google Maps API key first."), 400
+
+    data = request.get_json(silent=True) or {}
+    query = (data.get("query") or "").strip()
+    if not query:
+        return jsonify(ok=False, error="Enter a business name to search."), 400
+
+    import requests as _req
+    lat = float(brand.get("business_lat") or 0)
+    lng = float(brand.get("business_lng") or 0)
+
+    # Try Places API (New) first
+    url_new = "https://places.googleapis.com/v1/places:searchText"
+    headers = {
+        "X-Goog-Api-Key": api_key,
+        "X-Goog-FieldMask": "places.displayName,places.id,places.formattedAddress",
+        "Content-Type": "application/json",
+    }
+    body = {"textQuery": query, "maxResultCount": 5}
+    if lat != 0 or lng != 0:
+        body["locationBias"] = {
+            "circle": {"center": {"latitude": lat, "longitude": lng}, "radius": 50000.0}
+        }
+
+    places = []
+    try:
+        resp = _req.post(url_new, json=body, headers=headers, timeout=15)
+        if resp.status_code == 200:
+            raw = resp.json().get("places", [])
+            for p in raw:
+                places.append({
+                    "place_id": p.get("id", ""),
+                    "name": (p.get("displayName", {}).get("text", "") or ""),
+                    "address": p.get("formattedAddress", ""),
+                })
+    except Exception:
+        pass
+
+    # Fallback: legacy Places Text Search
+    if not places:
+        url_leg = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+        params = {"query": query, "key": api_key}
+        if lat != 0 or lng != 0:
+            params["location"] = f"{lat},{lng}"
+            params["radius"] = 50000
+        try:
+            resp = _req.get(url_leg, params=params, timeout=15)
+            resp.raise_for_status()
+            raw = resp.json().get("results", [])
+            for r in raw[:5]:
+                places.append({
+                    "place_id": r.get("place_id", ""),
+                    "name": r.get("name", ""),
+                    "address": r.get("formatted_address", ""),
+                })
+        except Exception as exc:
+            if not places:
+                return jsonify(ok=False, error="Places API error: " + str(exc)), 500
+
+    return jsonify(ok=True, results=places)
+
+
+@client_bp.route("/settings/save-place-id", methods=["POST"])
+@client_login_required
+def client_save_place_id():
+    """Save the selected Google Place ID."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    data = request.get_json(silent=True) or {}
+    place_id = (data.get("place_id") or "").strip()[:200]
+    if not place_id:
+        return jsonify(ok=False, error="No Place ID provided."), 400
+    db.update_brand_text_field(brand_id, "google_place_id", place_id)
+    return jsonify(ok=True)
+
+
 # ── Context processor ──
 
 @client_bp.context_processor

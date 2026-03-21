@@ -67,8 +67,10 @@ def geocode_address(api_key, address):
 
 
 def _search_places(api_key, keyword, lat, lng, radius_m=2000):
-    """Query Google Places Text Search (New) for a keyword near a point."""
-    url = "https://places.googleapis.com/v1/places:searchText"
+    """Query Google Places Text Search for a keyword near a point.
+    Tries the New API first, falls back to the legacy API."""
+    # --- Try Places API (New) ---
+    url_new = "https://places.googleapis.com/v1/places:searchText"
     headers = {
         "X-Goog-Api-Key": api_key,
         "X-Goog-FieldMask": "places.displayName,places.id,places.formattedAddress",
@@ -85,14 +87,46 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000):
         "maxResultCount": 20,
     }
     try:
-        resp = requests.post(url, json=body, headers=headers, timeout=15)
+        resp = requests.post(url_new, json=body, headers=headers, timeout=15)
+        if resp.status_code == 200:
+            places = resp.json().get("places", [])
+            if places:
+                return places
+            # New API returned empty - fall through to legacy
+        else:
+            log.info("Places API (New) returned %s - trying legacy API. Body: %s",
+                     resp.status_code, resp.text[:300])
+    except Exception as exc:
+        log.warning("Places API (New) error at (%.4f, %.4f): %s", lat, lng, exc)
+
+    # --- Fallback: Legacy Places Text Search ---
+    url_legacy = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+    params = {
+        "query": keyword,
+        "location": f"{lat},{lng}",
+        "radius": int(min(radius_m, 50000)),
+        "key": api_key,
+    }
+    try:
+        resp = requests.get(url_legacy, params=params, timeout=15)
         resp.raise_for_status()
-        places = resp.json().get("places", [])
-        if not places:
-            log.debug("No places returned at (%.4f, %.4f) for '%s'", lat, lng, keyword)
+        data = resp.json()
+        raw = data.get("results", [])
+        if not raw:
+            log.debug("Legacy Places also empty at (%.4f, %.4f) for '%s' - status: %s",
+                      lat, lng, keyword, data.get("status"))
+            return []
+        # Normalize to the same shape as New API output
+        places = []
+        for r in raw:
+            places.append({
+                "displayName": {"text": r.get("name", "")},
+                "id": r.get("place_id", ""),
+                "formattedAddress": r.get("formatted_address", ""),
+            })
         return places
     except Exception as exc:
-        log.warning("Places API error at (%.4f, %.4f): %s", lat, lng, exc)
+        log.warning("Legacy Places API error at (%.4f, %.4f): %s", lat, lng, exc)
         return []
 
 

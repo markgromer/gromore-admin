@@ -412,8 +412,123 @@
             {% endif %}
         </form>
         <div class="mt-3">
-            <small class="text-muted">Get your key at <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a>. Enable "Places API (New)" and "Geocoding API".</small>
+            <small class="text-muted">Get your key at <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a>. Enable these 3 APIs: <strong>Places API (New)</strong>, <strong>Geocoding API</strong>, and <strong>Maps JavaScript API</strong>.</small>
         </div>
     </div>
 </div>
+
+<!-- Google Place ID -->
+<div class="card mb-4" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.06);">
+    <div class="card-body p-4">
+        <div class="d-flex align-items-center gap-2 mb-3">
+            <i class="bi bi-pin-map" style="font-size:1.3rem; color:#4285f4;"></i>
+            <h6 class="mb-0">Google Place ID</h6>
+        </div>
+        <p class="text-muted mb-3" style="font-size:.88rem;">Your Place ID links your heatmap scans to your exact Google Business listing. Search for your business below and select the correct result.</p>
+
+        {% if brand.google_place_id %}
+        <div class="mb-3">
+            <span class="badge bg-success rounded-pill px-3 py-2">
+                <i class="bi bi-check-circle me-1"></i> Place ID: {{ brand.google_place_id[:20] }}...
+            </span>
+        </div>
+        {% endif %}
+
+        <div class="row g-3 align-items-end mb-3">
+            <div class="col-md-8">
+                <label class="form-label fw-medium" style="font-size:.88rem;">Search for your business</label>
+                <input type="text" class="form-control" id="placeSearchInput"
+                       placeholder="e.g. Scoop Doggy Logs Tucson" autocomplete="off">
+            </div>
+            <div class="col-md-4">
+                <button class="btn btn-primary w-100" type="button" id="placeSearchBtn">
+                    <i class="bi bi-search me-1"></i> Search
+                </button>
+            </div>
+        </div>
+        <div id="placeResults" style="display:none;"></div>
+        <div id="placeSaved" style="display:none;" class="mt-2">
+            <span class="badge bg-success rounded-pill px-3 py-2">
+                <i class="bi bi-check-circle me-1"></i> Place ID saved!
+            </span>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    var searchBtn = document.getElementById('placeSearchBtn');
+    var searchInput = document.getElementById('placeSearchInput');
+    var resultsDiv = document.getElementById('placeResults');
+    var savedDiv = document.getElementById('placeSaved');
+
+    searchBtn.addEventListener('click', function() {
+        var q = searchInput.value.trim();
+        if (!q) { alert('Enter your business name'); return; }
+        searchBtn.disabled = true;
+        searchBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Searching...';
+        resultsDiv.style.display = 'none';
+        savedDiv.style.display = 'none';
+
+        fetch('/client/settings/search-place', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+            body: JSON.stringify({query: q})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            searchBtn.disabled = false;
+            searchBtn.innerHTML = '<i class="bi bi-search me-1"></i> Search';
+            if (!data.ok) { alert(data.error || 'Search failed'); return; }
+            if (!data.results.length) {
+                resultsDiv.innerHTML = '<p class="text-muted">No results found. Try a different search.</p>';
+                resultsDiv.style.display = '';
+                return;
+            }
+            var html = '<div class="list-group">';
+            data.results.forEach(function(p) {
+                html += '<button type="button" class="list-group-item list-group-item-action place-pick" data-pid="' + p.place_id + '">' +
+                    '<strong>' + p.name + '</strong><br>' +
+                    '<small class="text-muted">' + p.address + '</small><br>' +
+                    '<small style="color:#888;">ID: ' + p.place_id + '</small>' +
+                    '</button>';
+            });
+            html += '</div>';
+            resultsDiv.innerHTML = html;
+            resultsDiv.style.display = '';
+
+            resultsDiv.querySelectorAll('.place-pick').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var pid = this.getAttribute('data-pid');
+                    fetch('/client/settings/save-place-id', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+                        body: JSON.stringify({place_id: pid})
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(sdata) {
+                        if (sdata.ok) {
+                            resultsDiv.style.display = 'none';
+                            savedDiv.style.display = '';
+                            setTimeout(function() { location.reload(); }, 1000);
+                        } else {
+                            alert(sdata.error || 'Save failed');
+                        }
+                    });
+                });
+            });
+        })
+        .catch(function() {
+            searchBtn.disabled = false;
+            searchBtn.innerHTML = '<i class="bi bi-search me-1"></i> Search';
+            alert('Network error');
+        });
+    });
+
+    searchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); searchBtn.click(); }
+    });
+});
+</script>
 {% endblock %}
