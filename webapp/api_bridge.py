@@ -1097,11 +1097,11 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
     }
 
     # ── Top posts for the period ──
-    post_fields = ("id,message,created_time,type,permalink_url,"
-                   "shares,likes.limit(0).summary(true),"
-                   "comments.limit(0).summary(true),"
-                   "insights.metric(post_impressions,post_engaged_users,"
-                   "post_clicks,post_reactions_by_type_total)")
+    # Request basic post fields first (insights sub-request can cause
+    # the entire call to fail on some page/token configurations)
+    basic_post_fields = ("id,message,created_time,type,permalink_url,"
+                         "shares,likes.limit(0).summary(true),"
+                         "comments.limit(0).summary(true)")
     posts = []
     try:
         # Try /published_posts first (more reliable with page tokens)
@@ -1109,7 +1109,7 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
             f"{base}/published_posts",
             params={
                 "access_token": access_token,
-                "fields": post_fields,
+                "fields": basic_post_fields,
                 "since": since_ts,
                 "until": until_ts,
                 "limit": 50,
@@ -1123,7 +1123,7 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
                 f"{base}/posts",
                 params={
                     "access_token": access_token,
-                    "fields": post_fields,
+                    "fields": basic_post_fields,
                     "since": since_ts,
                     "until": until_ts,
                     "limit": 50,
@@ -1137,23 +1137,43 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
             raw_posts = posts_data.get("data", [])
             log.info("FB posts endpoint returned %d posts for page %s", len(raw_posts), page_id)
             for post in raw_posts:
-                post_insights = {}
-                for ins in (post.get("insights", {}).get("data", [])):
-                    val = ins.get("values", [{}])[0].get("value", 0)
-                    if isinstance(val, dict):
-                        val = sum(val.values())
-                    post_insights[ins.get("name", "")] = val
-
                 likes_count = post.get("likes", {}).get("summary", {}).get("total_count", 0)
                 comments_count = post.get("comments", {}).get("summary", {}).get("total_count", 0)
                 shares_count = (post.get("shares") or {}).get("count", 0)
-                impressions = post_insights.get("post_impressions", 0)
-                engaged = post_insights.get("post_engaged_users", 0)
-                clicks = post_insights.get("post_clicks", 0)
+                total_eng = likes_count + comments_count + shares_count
+
+                # Try to fetch post-level insights (best-effort, don't fail if unavailable)
+                impressions = 0
+                engaged = 0
+                clicks = 0
+                post_id = post.get("id", "")
+                if post_id:
+                    try:
+                        pi_resp = requests.get(
+                            f"https://graph.facebook.com/v21.0/{post_id}/insights",
+                            params={
+                                "access_token": access_token,
+                                "metric": "post_impressions,post_engaged_users,post_clicks",
+                            },
+                            timeout=10,
+                        )
+                        if pi_resp.status_code == 200:
+                            for entry in pi_resp.json().get("data", []):
+                                val = entry.get("values", [{}])[0].get("value", 0)
+                                if isinstance(val, dict):
+                                    val = sum(val.values())
+                                if entry.get("name") == "post_impressions":
+                                    impressions = val
+                                elif entry.get("name") == "post_engaged_users":
+                                    engaged = val
+                                elif entry.get("name") == "post_clicks":
+                                    clicks = val
+                    except Exception:
+                        pass  # Post insights are optional
 
                 engagement_rate = 0
                 if impressions > 0:
-                    engagement_rate = round((likes_count + comments_count + shares_count) / impressions * 100, 2)
+                    engagement_rate = round(total_eng / impressions * 100, 2)
 
                 message = (post.get("message") or "")
                 posts.append({
