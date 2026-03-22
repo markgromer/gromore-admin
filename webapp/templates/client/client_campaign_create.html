@@ -36,6 +36,14 @@
         color: #374151;
     }
     .keyword-badge.negative { background: #fef2f2; color: #dc2626; }
+    .ad-image-preview { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 2px solid #e5e7eb; }
+    .ad-image-slot { display: inline-flex; align-items: center; gap: .5rem; margin-top: .5rem; }
+    .drive-thumb { width: 100px; height: 100px; object-fit: cover; border-radius: 8px; cursor: pointer; border: 2px solid transparent; transition: all .15s; }
+    .drive-thumb:hover { border-color: #3b82f6; transform: scale(1.05); }
+    .drive-thumb.picked { border-color: #10b981; box-shadow: 0 0 0 2px #10b981; }
+    #drivePickerModal .modal-body { max-height: 70vh; overflow-y: auto; }
+    .drive-folder-btn { cursor: pointer; padding: .5rem .75rem; border-radius: 8px; background: #f3f4f6; display: inline-flex; align-items: center; gap: .4rem; font-size: .85rem; }
+    .drive-folder-btn:hover { background: #e5e7eb; }
     #loadingOverlay {
         display: none;
         position: fixed;
@@ -361,6 +369,36 @@
     </div>
 </div>
 
+<!-- Drive Image Picker Modal -->
+<div class="modal fade" id="drivePickerModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-images"></i> Pick an Image from Google Drive</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="driveBreadcrumb" class="mb-3 d-flex align-items-center gap-2 flex-wrap" style="font-size:.85rem;"></div>
+                <div id="driveFolders" class="d-flex flex-wrap gap-2 mb-3"></div>
+                <div id="driveImages" class="d-flex flex-wrap gap-3"></div>
+                <div id="driveEmpty" class="text-center text-muted py-4" style="display:none;">
+                    <i class="bi bi-cloud-slash" style="font-size:2rem;"></i>
+                    <p class="mt-2">No images found. Upload creatives via the Creative Center or directly to Google Drive.</p>
+                </div>
+                <div id="driveLoading" class="text-center py-4" style="display:none;">
+                    <div class="spinner-border spinner-border-sm text-primary"></div> Loading images...
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="drivePickConfirm" disabled onclick="confirmImagePick()">
+                    <i class="bi bi-check-lg"></i> Use Selected Image
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Loading Overlay -->
 <div id="loadingOverlay">
     <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;"></div>
@@ -548,12 +586,27 @@ function renderPlan(plan) {
             // Ad copy variations
             if (adset.ad_copy) {
                 adset.ad_copy.forEach(function(ad, j) {
-                    html += '<div class="border rounded p-3 mb-2" style="border-color: #e5e7eb !important;">';
+                    html += '<div class="border rounded p-3 mb-2" style="border-color: #e5e7eb !important;" id="ad-card-' + i + '-' + j + '">';
                     html += '<div class="fw-semibold" style="font-size: .9rem;">Ad ' + (j+1) + '</div>';
                     if (ad.headline) html += '<div style="font-size: 1rem; font-weight: 600; color: #1a1d2e;">' + escHtml(ad.headline) + '</div>';
                     if (ad.primary_text) html += '<div style="font-size: .85rem; color: #4b5563; margin: .25rem 0;">' + escHtml(ad.primary_text) + '</div>';
                     if (ad.description) html += '<div style="font-size: .8rem; color: #6b7280;">' + escHtml(ad.description) + '</div>';
                     if (ad.call_to_action) html += '<span class="badge bg-primary mt-1">' + escHtml(ad.call_to_action.replace(/_/g, ' ')) + '</span>';
+
+                    // Image slot for Meta ads
+                    if (selectedPlatform === 'meta') {
+                        html += '<div class="ad-image-slot" id="img-slot-' + i + '-' + j + '">';
+                        if (ad.drive_file_id) {
+                            html += '<img src="' + thumbnailUrl(ad.drive_file_id) + '" class="ad-image-preview" alt="Ad image">';
+                            html += '<button class="btn btn-sm btn-outline-secondary" onclick="openImagePicker(' + i + ',' + j + ')"><i class="bi bi-pencil"></i> Change</button>';
+                            html += '<button class="btn btn-sm btn-outline-danger" onclick="removeAdImage(' + i + ',' + j + ')"><i class="bi bi-x"></i></button>';
+                        } else {
+                            html += '<button class="btn btn-sm btn-outline-primary" onclick="openImagePicker(' + i + ',' + j + ')">';
+                            html += '<i class="bi bi-image me-1"></i> Add Image from Drive</button>';
+                        }
+                        html += '</div>';
+                    }
+
                     html += '</div>';
                 });
             }
@@ -696,6 +749,134 @@ function escHtml(str) {
     const div = document.createElement('div');
     div.appendChild(document.createTextNode(str || ''));
     return div.innerHTML;
+}
+
+// ── Drive Image Picker ──
+let pickerAdsetIdx = -1;
+let pickerAdIdx = -1;
+let pickedFileId = '';
+let pickedThumb = '';
+let driveFolderStack = [];  // [{id, name}, ...]
+
+function thumbnailUrl(fileId) {
+    return '{{ url_for("client.client_drive_thumbnail", file_id="__FID__") }}'.replace('__FID__', fileId);
+}
+function downloadUrl(fileId) {
+    return '{{ url_for("client.client_drive_download", file_id="__FID__") }}'.replace('__FID__', fileId);
+}
+
+function openImagePicker(adsetIdx, adIdx) {
+    pickerAdsetIdx = adsetIdx;
+    pickerAdIdx = adIdx;
+    pickedFileId = '';
+    pickedThumb = '';
+    document.getElementById('drivePickConfirm').disabled = true;
+    driveFolderStack = [];
+    loadDriveFolder(null);
+    new bootstrap.Modal(document.getElementById('drivePickerModal')).show();
+}
+
+function loadDriveFolder(folderId) {
+    const imagesEl = document.getElementById('driveImages');
+    const foldersEl = document.getElementById('driveFolders');
+    const emptyEl = document.getElementById('driveEmpty');
+    const loadEl = document.getElementById('driveLoading');
+
+    imagesEl.innerHTML = '';
+    foldersEl.innerHTML = '';
+    emptyEl.style.display = 'none';
+    loadEl.style.display = 'block';
+
+    let url = '{{ url_for("client.client_drive_browse") }}';
+    if (folderId) url += '?folder_id=' + encodeURIComponent(folderId);
+
+    fetch(url)
+    .then(r => r.json())
+    .then(data => {
+        loadEl.style.display = 'none';
+        renderBreadcrumb();
+
+        // Folders
+        if (data.folders && data.folders.length) {
+            data.folders.forEach(f => {
+                const el = document.createElement('span');
+                el.className = 'drive-folder-btn';
+                el.innerHTML = '<i class="bi bi-folder-fill text-warning"></i> ' + escHtml(f.name);
+                el.onclick = function() {
+                    driveFolderStack.push({id: f.id, name: f.name});
+                    loadDriveFolder(f.id);
+                };
+                foldersEl.appendChild(el);
+            });
+        }
+
+        // Images
+        const imageFiles = (data.files || []).filter(f => (f.mimeType || '').startsWith('image/'));
+        if (imageFiles.length === 0 && (!data.folders || !data.folders.length)) {
+            emptyEl.style.display = 'block';
+            return;
+        }
+
+        imageFiles.forEach(f => {
+            const thumb = f.thumbnailLink || thumbnailUrl(f.id);
+            const img = document.createElement('img');
+            img.className = 'drive-thumb';
+            img.src = thumb;
+            img.alt = f.name || '';
+            img.title = f.name || '';
+            img.dataset.fileId = f.id;
+            img.onclick = function() {
+                document.querySelectorAll('.drive-thumb.picked').forEach(t => t.classList.remove('picked'));
+                img.classList.add('picked');
+                pickedFileId = f.id;
+                pickedThumb = thumb;
+                document.getElementById('drivePickConfirm').disabled = false;
+            };
+            imagesEl.appendChild(img);
+        });
+    })
+    .catch(() => {
+        loadEl.style.display = 'none';
+        emptyEl.style.display = 'block';
+    });
+}
+
+function renderBreadcrumb() {
+    const el = document.getElementById('driveBreadcrumb');
+    let html = '<span class="drive-folder-btn" onclick="driveFolderStack=[];loadDriveFolder(null)"><i class="bi bi-house"></i> Root</span>';
+    driveFolderStack.forEach((f, i) => {
+        html += ' <i class="bi bi-chevron-right" style="font-size:.7rem;color:#9ca3af;"></i> ';
+        html += '<span class="drive-folder-btn" onclick="driveFolderStack=driveFolderStack.slice(0,' + (i+1) + ');loadDriveFolder(\'' + f.id + '\')">' + escHtml(f.name) + '</span>';
+    });
+    el.innerHTML = html;
+}
+
+function confirmImagePick() {
+    if (!pickedFileId || pickerAdsetIdx < 0 || pickerAdIdx < 0) return;
+
+    // Update the plan JSON
+    currentPlan.ad_sets[pickerAdsetIdx].ad_copy[pickerAdIdx].drive_file_id = pickedFileId;
+
+    // Update the UI slot
+    const slot = document.getElementById('img-slot-' + pickerAdsetIdx + '-' + pickerAdIdx);
+    if (slot) {
+        slot.innerHTML =
+            '<img src="' + pickedThumb + '" class="ad-image-preview" alt="Ad image">' +
+            '<button class="btn btn-sm btn-outline-secondary" onclick="openImagePicker(' + pickerAdsetIdx + ',' + pickerAdIdx + ')"><i class="bi bi-pencil"></i> Change</button>' +
+            '<button class="btn btn-sm btn-outline-danger" onclick="removeAdImage(' + pickerAdsetIdx + ',' + pickerAdIdx + ')"><i class="bi bi-x"></i></button>';
+    }
+
+    bootstrap.Modal.getInstance(document.getElementById('drivePickerModal')).hide();
+}
+
+function removeAdImage(adsetIdx, adIdx) {
+    delete currentPlan.ad_sets[adsetIdx].ad_copy[adIdx].drive_file_id;
+    const slot = document.getElementById('img-slot-' + adsetIdx + '-' + adIdx);
+    if (slot) {
+        slot.innerHTML =
+            '<button class="btn btn-sm btn-outline-primary" onclick="openImagePicker(' + adsetIdx + ',' + adIdx + ')">' +
+            '<i class="bi bi-image me-1"></i> Add Image from Drive</button>';
+    }
 }
 </script>
 {% endblock %}

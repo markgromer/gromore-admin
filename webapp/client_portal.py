@@ -2711,6 +2711,55 @@ def client_drive_upload():
     return jsonify({"error": "Upload failed. The Google token may lack permission for this folder. Try reconnecting Google With Drive Access."}), 500
 
 
+@client_bp.route("/api/drive/download/<file_id>")
+@client_login_required
+def client_drive_download(file_id):
+    """Proxy: download a file from Drive by ID. Returns the raw image bytes."""
+    if not file_id or not all(c.isalnum() or c in "-_" for c in file_id):
+        abort(400)
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    from webapp.google_drive import download_file
+    data, mime = download_file(db, brand_id, file_id)
+    if data is None:
+        abort(404)
+    from flask import make_response
+    resp = make_response(data)
+    resp.headers["Content-Type"] = mime
+    resp.headers["Cache-Control"] = "private, max-age=3600"
+    return resp
+
+
+@client_bp.route("/api/drive/thumbnail/<file_id>")
+@client_login_required
+def client_drive_thumbnail(file_id):
+    """Return a Drive thumbnail URL as a redirect (or proxy small images)."""
+    if not file_id or not all(c.isalnum() or c in "-_" for c in file_id):
+        abort(400)
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    from webapp.google_drive import get_valid_access_token
+    import requests as _req
+    token = get_valid_access_token(db, brand_id)
+    if not token:
+        abort(401)
+    # Use Drive API to get thumbnailLink
+    resp = _req.get(
+        f"https://www.googleapis.com/drive/v3/files/{file_id}",
+        params={"fields": "thumbnailLink,webContentLink"},
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=10,
+    )
+    if resp.status_code != 200:
+        abort(404)
+    info = resp.json()
+    thumb = info.get("thumbnailLink") or ""
+    if thumb:
+        return redirect(thumb)
+    # Fallback: serve the file directly
+    return redirect(url_for("client.client_drive_download", file_id=file_id))
+
+
 @client_bp.route("/settings/maps-api", methods=["POST"])
 @client_login_required
 def client_save_maps_api():

@@ -1322,6 +1322,45 @@ def launch_google_campaign(db, brand, plan, changed_by):
     }
 
 
+def _upload_image_to_meta(account_id, token, image_bytes):
+    """Upload an image to Meta Ads and return the image_hash, or None on failure."""
+    try:
+        resp = requests.post(
+            f"https://graph.facebook.com/v21.0/act_{account_id}/adimages",
+            files={"filename": ("creative.png", image_bytes, "image/png")},
+            data={"access_token": token},
+            timeout=60,
+        )
+        if resp.status_code != 200:
+            logger.warning("Meta image upload failed (%s): %s", resp.status_code, resp.text[:300])
+            return None
+        # Response: {"images": {"creative.png": {"hash": "abc123..."}}}
+        images = resp.json().get("images", {})
+        for _name, info in images.items():
+            return info.get("hash")
+        return None
+    except Exception as exc:
+        logger.warning("Meta image upload error: %s", exc)
+        return None
+
+
+def _resolve_ad_image(db, brand_id, ad_copy):
+    """
+    If an ad_copy dict includes a drive_file_id, download the image from Drive
+    and return the raw bytes. Returns None if no image assigned or download fails.
+    """
+    drive_file_id = (ad_copy.get("drive_file_id") or "").strip()
+    if not drive_file_id:
+        return None
+    try:
+        from webapp.google_drive import download_file
+        data, _mime = download_file(db, brand_id, drive_file_id)
+        return data
+    except Exception as exc:
+        logger.warning("Failed to download Drive image %s: %s", drive_file_id, exc)
+        return None
+
+
 def launch_meta_campaign(db, brand, plan, changed_by):
     """Create a Meta campaign from an AI-generated plan."""
     account_id = brand.get("meta_ad_account_id", "")
@@ -1416,6 +1455,12 @@ def launch_meta_campaign(db, brand, plan, changed_by):
             for idx, copy in enumerate(adset_plan.get("ad_copy", [])):
                 ad_name = f"{adset_plan.get('name', 'Ad Set')} - Ad {idx + 1}"
 
+                # If this ad has an image from Drive, upload it to Meta
+                image_hash = None
+                img_bytes = _resolve_ad_image(db, brand["id"], copy)
+                if img_bytes:
+                    image_hash = _upload_image_to_meta(account_id, token, img_bytes)
+
                 # Build object_story_spec (required for Meta ads)
                 link_data = {
                     "message": copy.get("primary_text", ""),
@@ -1427,6 +1472,8 @@ def launch_meta_campaign(db, brand, plan, changed_by):
                     },
                     "link": brand.get("website_url", "https://example.com"),
                 }
+                if image_hash:
+                    link_data["image_hash"] = image_hash
 
                 creative_data = {
                     "access_token": token,
