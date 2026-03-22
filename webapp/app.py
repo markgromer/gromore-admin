@@ -1487,6 +1487,18 @@ def create_app():
                 if key:
                     db.save_setting("openai_api_key", key)
                     app.config["OPENAI_API_KEY"] = db.get_setting("openai_api_key", "")
+                # Chat model
+                model_sel = request.form.get("openai_model", "").strip()
+                model_custom = request.form.get("openai_model_custom", "").strip()
+                model_val = model_custom if model_sel == "custom" and model_custom else (model_sel or "gpt-4o-mini")
+                db.save_setting("openai_model", model_val)
+                app.config["OPENAI_MODEL"] = model_val
+                # Competitor analysis model
+                comp_sel = request.form.get("openai_model_competitor", "").strip()
+                comp_custom = request.form.get("openai_model_competitor_custom", "").strip()
+                comp_val = comp_custom if comp_sel == "custom" and comp_custom else comp_sel
+                db.save_setting("openai_model_competitor", comp_val)
+                # System prompt
                 prompt = request.form.get("ai_chat_system_prompt", "").strip()
                 db.save_setting("ai_chat_system_prompt", prompt)
                 app.config["AI_CHAT_SYSTEM_PROMPT"] = prompt
@@ -1516,12 +1528,16 @@ def create_app():
             "agency_website": db.get_setting("agency_website", ""),
             "agency_color": db.get_setting("agency_color", "#2c3e50"),
         }
+        openai_model = db.get_setting("openai_model", "").strip() or app.config.get("OPENAI_MODEL", "gpt-4o-mini")
+        openai_model_competitor = db.get_setting("openai_model_competitor", "").strip()
         return render_template(
             "settings.html",
             wp_settings=wp_settings,
             openai_configured=openai_configured,
             ai_chat_system_prompt=ai_chat_system_prompt,
             branding=branding,
+            openai_model=openai_model,
+            openai_model_competitor=openai_model_competitor,
         )
 
     # ── Settings Test Endpoints ──

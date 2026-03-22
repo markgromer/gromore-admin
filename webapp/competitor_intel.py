@@ -383,6 +383,7 @@ def refresh_competitor_intel(db, brand, competitor, *, force: bool = False):
             model = (
                 (brand.get("openai_model_analysis") or "").strip()
                 or (brand.get("openai_model") or "").strip()
+                or db.get_setting("openai_model_competitor", "").strip()
                 or db.get_setting("openai_model", "").strip()
                 or os.environ.get("OPENAI_MODEL", "").strip()
                 or "gpt-4o-mini"

@@ -216,6 +216,39 @@
                         <small class="text-muted">Leave blank to keep current.</small>
                     </div>
                     <div class="mb-3">
+                        <label class="form-label">Chat Model</label>
+                        <select name="openai_model" class="form-select" id="openai_model_select" onchange="if(this.value==='custom'){document.getElementById('openai_model_custom').classList.remove('d-none')}else{document.getElementById('openai_model_custom').classList.add('d-none')}">
+                            <option value="gpt-4o-mini" {{ 'selected' if openai_model == 'gpt-4o-mini' }}>gpt-4o-mini</option>
+                            <option value="gpt-4o" {{ 'selected' if openai_model == 'gpt-4o' }}>gpt-4o</option>
+                            <option value="gpt-4.1-mini" {{ 'selected' if openai_model == 'gpt-4.1-mini' }}>gpt-4.1-mini</option>
+                            <option value="gpt-4.1" {{ 'selected' if openai_model == 'gpt-4.1' }}>gpt-4.1</option>
+                            <option value="o3-mini" {{ 'selected' if openai_model == 'o3-mini' }}>o3-mini</option>
+                            <option value="custom" {{ 'selected' if openai_model and openai_model not in ['gpt-4o-mini','gpt-4o','gpt-4.1-mini','gpt-4.1','o3-mini'] }}>Custom...</option>
+                        </select>
+                        <input type="text" name="openai_model_custom" id="openai_model_custom"
+                               class="form-control mt-2 {{ 'd-none' if not openai_model or openai_model in ['gpt-4o-mini','gpt-4o','gpt-4.1-mini','gpt-4.1','o3-mini'] }}"
+                               value="{{ openai_model if openai_model and openai_model not in ['gpt-4o-mini','gpt-4o','gpt-4.1-mini','gpt-4.1','o3-mini'] else '' }}"
+                               placeholder="e.g. o1-2024-12-17">
+                        <small class="text-muted">Used for chatbot and general AI calls.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Competitor Analysis Model</label>
+                        <select name="openai_model_competitor" class="form-select" id="openai_model_competitor_select" onchange="if(this.value==='custom'){document.getElementById('openai_model_competitor_custom').classList.remove('d-none')}else{document.getElementById('openai_model_competitor_custom').classList.add('d-none')}">
+                            <option value="">(same as Chat Model)</option>
+                            <option value="gpt-4o-mini" {{ 'selected' if openai_model_competitor == 'gpt-4o-mini' }}>gpt-4o-mini</option>
+                            <option value="gpt-4o" {{ 'selected' if openai_model_competitor == 'gpt-4o' }}>gpt-4o</option>
+                            <option value="gpt-4.1-mini" {{ 'selected' if openai_model_competitor == 'gpt-4.1-mini' }}>gpt-4.1-mini</option>
+                            <option value="gpt-4.1" {{ 'selected' if openai_model_competitor == 'gpt-4.1' }}>gpt-4.1</option>
+                            <option value="o3-mini" {{ 'selected' if openai_model_competitor == 'o3-mini' }}>o3-mini</option>
+                            <option value="custom" {{ 'selected' if openai_model_competitor and openai_model_competitor not in ['gpt-4o-mini','gpt-4o','gpt-4.1-mini','gpt-4.1','o3-mini'] }}>Custom...</option>
+                        </select>
+                        <input type="text" name="openai_model_competitor_custom" id="openai_model_competitor_custom"
+                               class="form-control mt-2 {{ 'd-none' if not openai_model_competitor or openai_model_competitor in ['gpt-4o-mini','gpt-4o','gpt-4.1-mini','gpt-4.1','o3-mini'] }}"
+                               value="{{ openai_model_competitor if openai_model_competitor and openai_model_competitor not in ['gpt-4o-mini','gpt-4o','gpt-4.1-mini','gpt-4.1','o3-mini'] else '' }}"
+                               placeholder="e.g. o1-2024-12-17">
+                        <small class="text-muted">Used specifically for competitor research. Leave as "same" to use the Chat Model.</small>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label">Chatbot System Prompt (Admin-Controlled)</label>
                         <textarea name="ai_chat_system_prompt" class="form-control" rows="6"
                                   placeholder="Core instructions for the chatbot behavior, tone, and constraints.">{{ ai_chat_system_prompt or '' }}</textarea>
