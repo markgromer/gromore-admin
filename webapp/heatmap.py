@@ -130,9 +130,22 @@ def verify_place_id(api_key, place_id):
 
 def _search_places(api_key, keyword, lat, lng, radius_m=2000):
     """Query Google Places APIs for a keyword near a point.
-    Tries: New Text Search -> Legacy Text Search -> Legacy Nearby Search.
+    Tries all available APIs and merges results (de-duplicated by place_id).
+    This is critical because SABs often appear in Legacy/Nearby but not New API.
     Returns (places_list, diag_dict)."""
     diag = {"new_api": None, "legacy_api": None, "nearby_api": None}
+    all_places = []
+    seen_ids = set()
+
+    def _add_places(new_places):
+        """Merge new places into all_places, skipping duplicates by ID."""
+        for p in new_places:
+            pid = p.get("id", "")
+            if pid and pid in seen_ids:
+                continue
+            if pid:
+                seen_ids.add(pid)
+            all_places.append(p)
 
     # --- Try Places API (New) Text Search ---
     url_new = "https://places.googleapis.com/v1/places:searchText"
@@ -157,16 +170,16 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000):
         diag["new_api"] = {"status": resp.status_code, "body": resp_body}
         if resp.status_code == 200:
             places = resp.json().get("places", [])
-            if places:
-                return places, diag
+            _add_places(places)
+            diag["new_api"]["count"] = len(places)
         else:
-            log.info("Places API (New) returned %s - trying legacy. Body: %s",
+            log.info("Places API (New) returned %s. Body: %s",
                      resp.status_code, resp_body)
     except Exception as exc:
         diag["new_api"] = {"error": str(exc)}
         log.warning("Places API (New) error at (%.4f, %.4f): %s", lat, lng, exc)
 
-    # --- Fallback 1: Legacy Text Search ---
+    # --- Always try Legacy Text Search (different ranking, better SAB coverage) ---
     url_legacy = "https://maps.googleapis.com/maps/api/place/textsearch/json"
     params = {
         "query": keyword,
@@ -181,22 +194,20 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000):
         diag["legacy_api"] = {"status": resp.status_code, "gstatus": data.get("status"),
                               "error_message": data.get("error_message", "")}
         raw = data.get("results", [])
-        if raw:
-            places = []
-            for r in raw:
-                places.append({
-                    "displayName": {"text": r.get("name", "")},
-                    "id": r.get("place_id", ""),
-                    "formattedAddress": r.get("formatted_address", ""),
-                })
-            return places, diag
-        log.debug("Legacy Text Search empty at (%.4f, %.4f) for '%s' - status: %s",
-                  lat, lng, keyword, data.get("status"))
+        legacy_places = []
+        for r in raw:
+            legacy_places.append({
+                "displayName": {"text": r.get("name", "")},
+                "id": r.get("place_id", ""),
+                "formattedAddress": r.get("formatted_address", ""),
+            })
+        _add_places(legacy_places)
+        diag["legacy_api"]["count"] = len(legacy_places)
     except Exception as exc:
         diag["legacy_api"] = {"error": str(exc)}
         log.warning("Legacy Text Search error at (%.4f, %.4f): %s", lat, lng, exc)
 
-    # --- Fallback 2: Legacy Nearby Search (keyword-based, better for SABs) ---
+    # --- Always try Nearby Search (keyword-based, often best for SABs) ---
     url_nearby = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
     params_nearby = {
         "keyword": keyword,
@@ -211,22 +222,20 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000):
         diag["nearby_api"] = {"status": resp.status_code, "gstatus": data.get("status"),
                               "error_message": data.get("error_message", "")}
         raw = data.get("results", [])
-        if not raw:
-            log.debug("Nearby Search also empty at (%.4f, %.4f) for '%s' - status: %s",
-                      lat, lng, keyword, data.get("status"))
-            return [], diag
-        places = []
+        nearby_places = []
         for r in raw:
-            places.append({
+            nearby_places.append({
                 "displayName": {"text": r.get("name", "")},
                 "id": r.get("place_id", ""),
                 "formattedAddress": r.get("formatted_address", ""),
             })
-        return places, diag
+        _add_places(nearby_places)
+        diag["nearby_api"]["count"] = len(nearby_places)
     except Exception as exc:
         diag["nearby_api"] = {"error": str(exc)}
         log.warning("Nearby Search error at (%.4f, %.4f): %s", lat, lng, exc)
-        return [], diag
+
+    return all_places, diag
 
 
 def _tokenize(name):
@@ -291,9 +300,9 @@ def scan_grid(api_key, keyword, business_name, grid_points,
     debug_sample = None
     errors = 0
     for seq, (idx, pt) in enumerate(ordered):
-        # Rate limit: delay between API calls to avoid throttling
+        # Rate limit: delay between grid points (3 API calls per point)
         if seq > 0:
-            time.sleep(0.25)
+            time.sleep(0.5)
         try:
             places, api_diag = _search_places(api_key, keyword, pt["lat"], pt["lng"],
                                               radius_m=search_radius_m)

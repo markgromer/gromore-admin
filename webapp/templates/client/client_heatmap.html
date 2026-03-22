@@ -784,37 +784,19 @@ function showDebug(d) {
     // Show API diagnostics when available
     if (d.api_diagnostics) {
         var ad = d.api_diagnostics;
-        var diagHtml = '<br><strong>API Diagnostics (center grid point):</strong>';
-        if (ad.new_api) {
-            if (ad.new_api.error) {
-                diagHtml += '<br>New API: Error - ' + ad.new_api.error;
-            } else {
-                diagHtml += '<br>New API: HTTP ' + ad.new_api.status;
-                if (ad.new_api.body) diagHtml += ' - <code style="word-break:break-all">' + ad.new_api.body.substring(0, 300) + '</code>';
-            }
-        } else {
-            diagHtml += '<br>New API: not attempted';
+        var diagHtml = '<br><strong>API Diagnostics (center grid point - all 3 APIs queried, results merged):</strong>';
+        function apiRow(label, info) {
+            if (!info) return '<br>' + label + ': not attempted';
+            if (info.error) return '<br>' + label + ': <span style="color:#ef4444">Error - ' + info.error + '</span>';
+            var row = '<br>' + label + ': HTTP ' + info.status;
+            if (info.gstatus) row += ' | Google status: ' + info.gstatus;
+            if (info.count !== undefined) row += ' | <strong>' + info.count + ' results</strong>';
+            if (info.error_message) row += ' | ' + info.error_message;
+            return row;
         }
-        if (ad.legacy_api) {
-            if (ad.legacy_api.error) {
-                diagHtml += '<br>Legacy Text Search: Error - ' + ad.legacy_api.error;
-            } else {
-                diagHtml += '<br>Legacy Text Search: HTTP ' + ad.legacy_api.status + ' | Google status: ' + (ad.legacy_api.gstatus || '?');
-                if (ad.legacy_api.error_message) diagHtml += ' | ' + ad.legacy_api.error_message;
-            }
-        } else {
-            diagHtml += '<br>Legacy Text Search: not attempted';
-        }
-        if (ad.nearby_api) {
-            if (ad.nearby_api.error) {
-                diagHtml += '<br>Nearby Search: Error - ' + ad.nearby_api.error;
-            } else {
-                diagHtml += '<br>Nearby Search: HTTP ' + ad.nearby_api.status + ' | Google status: ' + (ad.nearby_api.gstatus || '?');
-                if (ad.nearby_api.error_message) diagHtml += ' | ' + ad.nearby_api.error_message;
-            }
-        } else {
-            diagHtml += '<br>Nearby Search: not needed (earlier API returned results)';
-        }
+        diagHtml += apiRow('New Text Search', ad.new_api);
+        diagHtml += apiRow('Legacy Text Search', ad.legacy_api);
+        diagHtml += apiRow('Nearby Search', ad.nearby_api);
         el.innerHTML += diagHtml;
     }
 
@@ -861,7 +843,7 @@ function showDebug(d) {
 
     // No results guidance
     if (d.places_returned === 0) {
-        el.innerHTML += '<br><span style="color:#f59e0b; font-weight:600;">No places returned from any API. ' +
+        el.innerHTML += '<br><span style="color:#f59e0b; font-weight:600;">No places returned from any of the 3 APIs. ' +
             'Click "Test API Key" below the scan form to diagnose the issue.</span>';
     }
 }
