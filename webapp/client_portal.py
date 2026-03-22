@@ -3761,6 +3761,290 @@ def client_heatmap_clear_scans():
     return jsonify(ok=True)
 
 
+# ── Post Scheduler ──
+
+@client_bp.route("/post-scheduler")
+@client_login_required
+def client_post_scheduler():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    # Check Facebook connection
+    connections = db.get_brand_connections(brand_id)
+    meta_conn = None
+    for c in connections:
+        if c.get("platform") == "meta" and c.get("status") == "connected":
+            meta_conn = c
+            break
+    has_facebook = bool(meta_conn) and bool(brand.get("facebook_page_id"))
+
+    # Check Drive connection
+    google_conn = None
+    for c in connections:
+        if c.get("platform") == "google" and c.get("status") == "connected":
+            google_conn = c
+            break
+    has_drive = bool(google_conn) and "drive" in (google_conn.get("scopes") or "").lower() and bool(brand.get("google_drive_folder_id"))
+
+    posts = db.get_scheduled_posts(brand_id)
+    pending_count = sum(1 for p in posts if p.get("status") in ("pending", "scheduled"))
+
+    return render_template(
+        "client/client_post_scheduler.html",
+        brand=brand,
+        has_facebook=has_facebook,
+        has_drive=has_drive,
+        posts=posts,
+        pending_count=pending_count,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/post-scheduler/schedule", methods=["POST"])
+@client_login_required
+def client_schedule_post():
+    """Schedule a single Facebook post via the Graph API."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    data = request.get_json(silent=True) or {}
+    message = (data.get("message") or "").strip()
+    scheduled_at = (data.get("scheduled_at") or "").strip()
+    link_url = (data.get("link_url") or "").strip()
+    image_url = (data.get("image_url") or "").strip()
+
+    if not message:
+        return jsonify(ok=False, error="Message is required."), 400
+    if not scheduled_at:
+        return jsonify(ok=False, error="Schedule date is required."), 400
+
+    # Validate schedule time (10 min to 75 days in the future)
+    from datetime import datetime, timedelta, timezone
+    try:
+        sched_dt = datetime.fromisoformat(scheduled_at).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return jsonify(ok=False, error="Invalid date format."), 400
+
+    now = datetime.now(timezone.utc)
+    if sched_dt < now + timedelta(minutes=10):
+        return jsonify(ok=False, error="Must be at least 10 minutes in the future."), 400
+    if sched_dt > now + timedelta(days=75):
+        return jsonify(ok=False, error="Cannot schedule more than 75 days ahead."), 400
+
+    page_id = brand.get("facebook_page_id", "")
+    if not page_id:
+        return jsonify(ok=False, error="No Facebook page connected."), 400
+
+    # Get page access token
+    from webapp.api_bridge import _get_meta_token, _get_page_access_token
+    connections = db.get_brand_connections(brand_id)
+    meta_conn = None
+    for c in connections:
+        if c.get("platform") == "meta" and c.get("status") == "connected":
+            meta_conn = c
+            break
+    if not meta_conn:
+        return jsonify(ok=False, error="Meta account not connected. Reconnect in Connections."), 400
+    user_token = _get_meta_token(db, brand_id, meta_conn)
+    if not user_token:
+        return jsonify(ok=False, error="Meta access token expired. Reconnect in Connections."), 400
+    page_token = _get_page_access_token(page_id, user_token)
+    if not page_token:
+        return jsonify(ok=False, error="Could not get page access token. Check page permissions."), 400
+
+    # Build the Graph API request
+    import requests as req_lib
+    unix_ts = int(sched_dt.timestamp())
+
+    if image_url:
+        # Photo post with scheduled time
+        # If it's a local Drive proxy URL, convert to full URL
+        if image_url.startswith("/client/api/drive/download/"):
+            image_url = request.host_url.rstrip("/") + image_url
+
+        fb_url = f"https://graph.facebook.com/v21.0/{page_id}/photos"
+        payload = {
+            "access_token": page_token,
+            "url": image_url,
+            "message": message,
+            "scheduled_publish_time": unix_ts,
+            "published": "false",
+        }
+    else:
+        # Text/link post
+        fb_url = f"https://graph.facebook.com/v21.0/{page_id}/feed"
+        payload = {
+            "access_token": page_token,
+            "message": message,
+            "scheduled_publish_time": unix_ts,
+            "published": "false",
+        }
+        if link_url:
+            payload["link"] = link_url
+
+    try:
+        resp = req_lib.post(fb_url, data=payload, timeout=30)
+        resp_data = resp.json()
+    except Exception as exc:
+        db.save_scheduled_post(brand_id, "facebook", message, scheduled_at,
+                               image_url=image_url, link_url=link_url)
+        db.update_scheduled_post_status(
+            db.get_scheduled_posts(brand_id, status="pending")[-1]["id"],
+            "failed", error_message=str(exc))
+        return jsonify(ok=False, error=f"Facebook API error: {exc}"), 500
+
+    fb_post_id = resp_data.get("id") or resp_data.get("post_id") or ""
+
+    if resp.status_code == 200 and fb_post_id:
+        post_id = db.save_scheduled_post(brand_id, "facebook", message, scheduled_at,
+                                         image_url=image_url, link_url=link_url)
+        db.update_scheduled_post_status(post_id, "scheduled", fb_post_id=fb_post_id)
+        return jsonify(ok=True, post_id=post_id, fb_post_id=fb_post_id)
+    else:
+        error_msg = resp_data.get("error", {}).get("message", resp.text[:300])
+        post_id = db.save_scheduled_post(brand_id, "facebook", message, scheduled_at,
+                                         image_url=image_url, link_url=link_url)
+        db.update_scheduled_post_status(post_id, "failed", error_message=error_msg)
+        return jsonify(ok=False, error=f"Facebook rejected the post: {error_msg}"), 400
+
+
+@client_bp.route("/post-scheduler/schedule-bulk", methods=["POST"])
+@client_login_required
+def client_schedule_posts_bulk():
+    """Schedule multiple posts from CSV upload."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    data = request.get_json(silent=True) or {}
+    posts = data.get("posts", [])
+    if not posts:
+        return jsonify(ok=False, error="No posts to schedule."), 400
+    if len(posts) > 500:
+        return jsonify(ok=False, error="Maximum 500 posts per upload."), 400
+
+    page_id = brand.get("facebook_page_id", "")
+    if not page_id:
+        return jsonify(ok=False, error="No Facebook page connected."), 400
+
+    from webapp.api_bridge import _get_meta_token, _get_page_access_token
+    connections = db.get_brand_connections(brand_id)
+    meta_conn = None
+    for c in connections:
+        if c.get("platform") == "meta" and c.get("status") == "connected":
+            meta_conn = c
+            break
+    if not meta_conn:
+        return jsonify(ok=False, error="Meta account not connected."), 400
+    user_token = _get_meta_token(db, brand_id, meta_conn)
+    if not user_token:
+        return jsonify(ok=False, error="Meta access token expired. Reconnect in Connections."), 400
+    page_token = _get_page_access_token(page_id, user_token)
+    if not page_token:
+        return jsonify(ok=False, error="Could not get page access token."), 400
+
+    from datetime import datetime, timedelta, timezone
+    import requests as req_lib
+    import time
+
+    now = datetime.now(timezone.utc)
+    scheduled = 0
+    errors = 0
+
+    for post in posts:
+        message = (post.get("message") or "").strip()
+        scheduled_at = (post.get("scheduled_at") or "").strip()
+        image_url = (post.get("image_url") or "").strip()
+        link_url = (post.get("link_url") or "").strip()
+
+        if not message or not scheduled_at:
+            errors += 1
+            continue
+
+        try:
+            sched_dt = datetime.fromisoformat(scheduled_at).replace(tzinfo=timezone.utc)
+        except ValueError:
+            errors += 1
+            continue
+
+        if sched_dt < now + timedelta(minutes=10) or sched_dt > now + timedelta(days=75):
+            errors += 1
+            continue
+
+        unix_ts = int(sched_dt.timestamp())
+
+        if image_url:
+            if image_url.startswith("/client/api/drive/download/"):
+                image_url = request.host_url.rstrip("/") + image_url
+            fb_url = f"https://graph.facebook.com/v21.0/{page_id}/photos"
+            payload = {
+                "access_token": page_token,
+                "url": image_url,
+                "message": message,
+                "scheduled_publish_time": unix_ts,
+                "published": "false",
+            }
+        else:
+            fb_url = f"https://graph.facebook.com/v21.0/{page_id}/feed"
+            payload = {
+                "access_token": page_token,
+                "message": message,
+                "scheduled_publish_time": unix_ts,
+                "published": "false",
+            }
+            if link_url:
+                payload["link"] = link_url
+
+        try:
+            resp = req_lib.post(fb_url, data=payload, timeout=30)
+            resp_data = resp.json()
+            fb_post_id = resp_data.get("id") or resp_data.get("post_id") or ""
+
+            post_id = db.save_scheduled_post(brand_id, "facebook", message, scheduled_at,
+                                             image_url=image_url, link_url=link_url)
+            if resp.status_code == 200 and fb_post_id:
+                db.update_scheduled_post_status(post_id, "scheduled", fb_post_id=fb_post_id)
+                scheduled += 1
+            else:
+                error_msg = resp_data.get("error", {}).get("message", "Unknown error")
+                db.update_scheduled_post_status(post_id, "failed", error_message=error_msg)
+                errors += 1
+        except Exception as exc:
+            post_id = db.save_scheduled_post(brand_id, "facebook", message, scheduled_at,
+                                             image_url=image_url, link_url=link_url)
+            db.update_scheduled_post_status(post_id, "failed", error_message=str(exc))
+            errors += 1
+
+        # Rate limit: small delay between API calls
+        time.sleep(0.3)
+
+    result = {"ok": True, "scheduled": scheduled, "errors": errors, "total": len(posts)}
+    if errors and not scheduled:
+        result["ok"] = False
+        result["error"] = f"All {errors} posts failed. Check dates and content."
+    return jsonify(result)
+
+
+@client_bp.route("/post-scheduler/<int:post_id>", methods=["DELETE"])
+@client_login_required
+def client_delete_scheduled_post(post_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    post = db.get_scheduled_post(post_id)
+    if not post or post.get("brand_id") != brand_id:
+        return jsonify(ok=False, error="Post not found"), 404
+    db.delete_scheduled_post(post_id, brand_id)
+    return jsonify(ok=True)
+
+
 # ── Help Center ──
 
 @client_bp.route("/help")

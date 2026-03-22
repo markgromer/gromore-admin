@@ -767,8 +767,8 @@
             <a href="{{ url_for('client.client_gbp') }}" class="{% if request.endpoint == 'client.client_gbp' %}active{% endif %}">
                 <i class="bi bi-google"></i> Google Profile
             </a>
-            <a href="{{ url_for('client.client_heatmap') }}" class="{% if request.endpoint in ('client.client_heatmap', 'client.client_heatmap_scan', 'client.client_heatmap_view_scan') %}active{% endif %}">
-                <i class="bi bi-geo-alt"></i> Rank Heatmap
+            <a href="{{ url_for('client.client_post_scheduler') }}" class="{% if request.endpoint == 'client.client_post_scheduler' %}active{% endif %}">
+                <i class="bi bi-calendar2-week"></i> Post Scheduler
             </a>
             <a href="{{ url_for('client.client_competitors') }}" class="{% if request.endpoint == 'client.client_competitors' %}active{% endif %}">
                 <i class="bi bi-binoculars"></i> Competitor Intel

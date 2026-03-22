@@ -1,0 +1,522 @@
+{% extends "client_base.html" %}
+{% block title %}Post Scheduler{% endblock %}
+
+{% block content %}
+<style>
+    .sched-header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        border-radius: 16px;
+        padding: 2rem 2.25rem;
+        margin-bottom: 1.5rem;
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+    }
+    .sched-header::after {
+        content: '';
+        position: absolute;
+        top: -40%; right: -10%;
+        width: 300px; height: 300px;
+        background: radial-gradient(circle, rgba(59,130,246,.15) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    .sched-header h3 { font-weight: 700; margin: 0; position: relative; z-index: 1; }
+    .sched-header p { color: #94a3b8; margin: .5rem 0 0; position: relative; z-index: 1; }
+
+    .post-card {
+        background: var(--surface); border-radius: var(--radius);
+        box-shadow: var(--shadow-soft); padding: 1.25rem;
+        transition: var(--transition); border: 1px solid var(--line);
+    }
+    .post-card:hover { box-shadow: var(--shadow-hover); }
+    .post-card .post-time { font-size: .82rem; color: var(--text-muted); }
+    .post-card .post-message { font-size: .92rem; line-height: 1.5; margin: .5rem 0; white-space: pre-wrap; }
+    .post-card .post-image { border-radius: 10px; max-height: 200px; object-fit: cover; width: 100%; }
+
+    .status-badge { font-size: .75rem; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+    .status-pending { background: #fef3c7; color: #92400e; }
+    .status-scheduled { background: #dbeafe; color: #1e40af; }
+    .status-published { background: #dcfce7; color: #166534; }
+    .status-failed { background: #fee2e2; color: #991b1b; }
+
+    .upload-zone {
+        border: 2px dashed var(--line); border-radius: 12px; padding: 1.5rem;
+        text-align: center; cursor: pointer; transition: var(--transition);
+        background: var(--surface-soft);
+    }
+    .upload-zone:hover { border-color: var(--primary); background: #eef2ff; }
+    .upload-zone.dragover { border-color: var(--primary); background: #eef2ff; }
+
+    .csv-preview-table { font-size: .85rem; }
+    .csv-preview-table th { background: #f1f5f9; font-weight: 600; }
+
+    .compose-form textarea { min-height: 120px; resize: vertical; }
+
+    .image-picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: .5rem; }
+    .image-picker-item {
+        border-radius: 8px; overflow: hidden; cursor: pointer; position: relative;
+        border: 2px solid transparent; aspect-ratio: 1; transition: var(--transition);
+    }
+    .image-picker-item:hover { border-color: var(--primary); }
+    .image-picker-item.selected { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(79,70,229,.3); }
+    .image-picker-item img { width: 100%; height: 100%; object-fit: cover; }
+    .image-picker-item .check-overlay {
+        position: absolute; top: 4px; right: 4px; background: var(--primary);
+        color: #fff; border-radius: 50%; width: 22px; height: 22px;
+        display: none; align-items: center; justify-content: center; font-size: .75rem;
+    }
+    .image-picker-item.selected .check-overlay { display: flex; }
+
+    .tab-btn {
+        padding: .5rem 1rem; border-radius: 8px; border: 1px solid var(--line);
+        background: var(--surface); font-size: .88rem; font-weight: 500; cursor: pointer;
+        transition: var(--transition);
+    }
+    .tab-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+</style>
+
+<div class="sched-header">
+    <h3><i class="bi bi-calendar2-week me-2"></i>Post Scheduler</h3>
+    <p>Schedule Facebook posts with images from your Google Drive. Upload a CSV or compose posts one at a time.</p>
+</div>
+
+{% if not has_facebook %}
+<div class="card border-0 shadow-sm mb-4" style="border-radius:var(--radius);">
+    <div class="card-body p-4 text-center">
+        <i class="bi bi-facebook" style="font-size:3rem; color:#1877f2;"></i>
+        <h5 class="mt-3 fw-bold">Connect Facebook First</h5>
+        <p class="text-muted mb-3">To schedule posts, connect your Meta account with page publishing permissions.</p>
+        <a href="{{ url_for('client.client_settings') }}" class="btn btn-primary">
+            <i class="bi bi-plug me-1"></i> Go to Connections
+        </a>
+    </div>
+</div>
+{% else %}
+
+<!-- Tabs: Compose / CSV Upload / Scheduled -->
+<div class="d-flex gap-2 mb-3">
+    <button class="tab-btn active" onclick="showTab('compose')">
+        <i class="bi bi-pencil-square me-1"></i> Compose
+    </button>
+    <button class="tab-btn" onclick="showTab('csv')">
+        <i class="bi bi-filetype-csv me-1"></i> CSV Upload
+    </button>
+    <button class="tab-btn" onclick="showTab('scheduled')">
+        <i class="bi bi-clock-history me-1"></i> Scheduled
+        {% if pending_count %}<span class="badge bg-primary ms-1">{{ pending_count }}</span>{% endif %}
+    </button>
+</div>
+
+<!-- ═══════════════════ COMPOSE TAB ═══════════════════ -->
+<div id="tab-compose" class="tab-content">
+<div class="card border-0 shadow-sm mb-4" style="border-radius:var(--radius);">
+    <div class="card-body p-4">
+        <h5 class="fw-bold mb-3">Compose a Post</h5>
+        <form id="composeForm">
+            <div class="mb-3">
+                <label class="form-label fw-medium">Message</label>
+                <textarea class="form-control compose-form" id="composeMessage" placeholder="Write your post..." maxlength="5000"></textarea>
+                <small class="text-muted"><span id="charCount">0</span> / 5,000</small>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-medium">Schedule Date &amp; Time</label>
+                <input type="datetime-local" class="form-control" id="composeSchedule" style="max-width:300px;">
+                <small class="text-muted">Must be 10 min to 75 days in the future (Facebook requirement).</small>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-medium">Link URL <small class="text-muted">(optional)</small></label>
+                <input type="url" class="form-control" id="composeLink" placeholder="https://..." style="max-width:500px;">
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-medium">
+                    Image <small class="text-muted">(optional, from Google Drive)</small>
+                </label>
+                {% if has_drive %}
+                <div id="imagePickerArea">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="pickImageBtn" onclick="loadDriveImages()">
+                        <i class="bi bi-image me-1"></i> Pick from Drive
+                    </button>
+                    <span id="selectedImageName" class="ms-2 text-muted" style="font-size:.88rem;"></span>
+                    <input type="hidden" id="composeImageUrl" value="">
+                </div>
+                <div id="driveImageGrid" class="image-picker-grid mt-2" style="display:none;"></div>
+                {% else %}
+                <div class="text-muted" style="font-size:.88rem;">
+                    <i class="bi bi-info-circle me-1"></i> Connect Google Drive in
+                    <a href="{{ url_for('client.client_settings') }}">Connections</a> to attach images.
+                </div>
+                {% endif %}
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-send me-1"></i> Schedule Post
+            </button>
+            <div id="composeResult" class="mt-2"></div>
+        </form>
+    </div>
+</div>
+</div>
+
+<!-- ═══════════════════ CSV UPLOAD TAB ═══════════════════ -->
+<div id="tab-csv" class="tab-content" style="display:none;">
+<div class="card border-0 shadow-sm mb-4" style="border-radius:var(--radius);">
+    <div class="card-body p-4">
+        <h5 class="fw-bold mb-2">Upload Posts via CSV</h5>
+        <p class="text-muted mb-3" style="font-size:.88rem;">
+            Upload a CSV file with columns: <code>message</code>, <code>scheduled_at</code> (YYYY-MM-DD HH:MM),
+            <code>image_url</code> (optional), <code>link_url</code> (optional).
+        </p>
+
+        <div class="upload-zone mb-3" id="csvDropZone" onclick="document.getElementById('csvFileInput').click()">
+            <i class="bi bi-cloud-arrow-up" style="font-size:2rem; color:var(--primary);"></i>
+            <p class="mb-0 mt-2 fw-medium">Drop CSV here or click to browse</p>
+            <small class="text-muted">Max 500 posts per upload</small>
+            <input type="file" id="csvFileInput" accept=".csv" style="display:none;" onchange="handleCsvFile(this)">
+        </div>
+
+        <div id="csvPreview" style="display:none;">
+            <h6 class="fw-bold mb-2">Preview <span id="csvCount" class="text-muted fw-normal"></span></h6>
+            <div class="table-responsive" style="max-height:400px; overflow-y:auto;">
+                <table class="table table-sm csv-preview-table" id="csvTable">
+                    <thead><tr><th>#</th><th>Message</th><th>Scheduled</th><th>Image</th><th>Link</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div class="mt-3 d-flex gap-2">
+                <button class="btn btn-primary" id="csvScheduleBtn" onclick="submitCsvPosts()">
+                    <i class="bi bi-calendar-plus me-1"></i> Schedule All
+                </button>
+                <button class="btn btn-outline-secondary" onclick="clearCsvPreview()">Cancel</button>
+            </div>
+            <div id="csvResult" class="mt-2"></div>
+        </div>
+
+        <div class="mt-3 p-3" style="background:#f8fafc; border-radius:10px;">
+            <h6 class="fw-bold mb-2" style="font-size:.88rem;">CSV Template</h6>
+            <pre style="font-size:.82rem; margin:0; background:#fff; padding:.75rem; border-radius:8px; border:1px solid var(--line);">message,scheduled_at,image_url,link_url
+"Check out our latest service!",2026-04-01 09:00,,https://example.com
+"Happy Monday from our team!",2026-04-07 10:30,https://drive.google.com/...,
+"Spring special - 20% off!",2026-04-15 12:00,,https://example.com/spring</pre>
+            <button class="btn btn-outline-secondary btn-sm mt-2" onclick="downloadCsvTemplate()">
+                <i class="bi bi-download me-1"></i> Download Template
+            </button>
+        </div>
+    </div>
+</div>
+</div>
+
+<!-- ═══════════════════ SCHEDULED TAB ═══════════════════ -->
+<div id="tab-scheduled" class="tab-content" style="display:none;">
+<div class="card border-0 shadow-sm mb-4" style="border-radius:var(--radius);">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0">Scheduled &amp; Published Posts</h5>
+            <button class="btn btn-outline-secondary btn-sm" onclick="refreshPosts()">
+                <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+            </button>
+        </div>
+
+        {% if not posts %}
+        <div class="text-center py-4 text-muted">
+            <i class="bi bi-calendar-x" style="font-size:2.5rem;"></i>
+            <p class="mt-2 mb-0">No scheduled posts yet. Compose one or upload a CSV.</p>
+        </div>
+        {% else %}
+        <div class="row g-3">
+            {% for post in posts %}
+            <div class="col-md-6 col-lg-4">
+                <div class="post-card">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <span class="status-badge status-{{ post.status }}">{{ post.status|title }}</span>
+                        {% if post.status in ('pending', 'scheduled') %}
+                        <button class="btn btn-link btn-sm text-danger p-0" onclick="deletePost({{ post.id }})" title="Delete">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                    {% if post.image_url %}
+                    <img src="{{ post.image_url }}" class="post-image mb-2" alt="Post image"
+                         onerror="this.style.display='none'">
+                    {% endif %}
+                    <div class="post-message">{{ post.message[:300] }}{% if post.message|length > 300 %}...{% endif %}</div>
+                    {% if post.link_url %}
+                    <a href="{{ post.link_url }}" target="_blank" class="text-primary" style="font-size:.82rem;">
+                        <i class="bi bi-link-45deg"></i> {{ post.link_url[:50] }}{% if post.link_url|length > 50 %}...{% endif %}
+                    </a>
+                    {% endif %}
+                    <div class="post-time mt-2">
+                        <i class="bi bi-clock me-1"></i>
+                        {% if post.status == 'published' and post.published_at %}
+                            Published {{ post.published_at }}
+                        {% else %}
+                            Scheduled for {{ post.scheduled_at }}
+                        {% endif %}
+                    </div>
+                    {% if post.error_message %}
+                    <div class="mt-1" style="font-size:.8rem; color:#991b1b;">
+                        <i class="bi bi-exclamation-circle me-1"></i>{{ post.error_message }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+</div>
+
+{% endif %}
+
+<script>
+var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+// ── Tab switching ──
+function showTab(name) {
+    document.querySelectorAll('.tab-content').forEach(function(el) { el.style.display = 'none'; });
+    document.querySelectorAll('.tab-btn').forEach(function(el) { el.classList.remove('active'); });
+    document.getElementById('tab-' + name).style.display = '';
+    event.target.closest('.tab-btn').classList.add('active');
+}
+
+// ── Compose form ──
+var msgEl = document.getElementById('composeMessage');
+if (msgEl) {
+    msgEl.addEventListener('input', function() {
+        document.getElementById('charCount').textContent = this.value.length;
+    });
+}
+
+var composeForm = document.getElementById('composeForm');
+if (composeForm) {
+    composeForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var msg = document.getElementById('composeMessage').value.trim();
+        var dt = document.getElementById('composeSchedule').value;
+        var link = document.getElementById('composeLink').value.trim();
+        var img = document.getElementById('composeImageUrl') ? document.getElementById('composeImageUrl').value : '';
+
+        if (!msg) { showResult('composeResult', 'error', 'Message is required.'); return; }
+        if (!dt) { showResult('composeResult', 'error', 'Schedule date is required.'); return; }
+
+        var btn = composeForm.querySelector('button[type="submit"]');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Scheduling...';
+
+        fetch('/client/post-scheduler/schedule', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+            body: JSON.stringify({message: msg, scheduled_at: dt, link_url: link, image_url: img})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-send me-1"></i> Schedule Post';
+            if (data.ok) {
+                showResult('composeResult', 'success', 'Post scheduled! It will publish at the scheduled time.');
+                composeForm.reset();
+                document.getElementById('charCount').textContent = '0';
+                if (document.getElementById('selectedImageName')) document.getElementById('selectedImageName').textContent = '';
+                if (document.getElementById('composeImageUrl')) document.getElementById('composeImageUrl').value = '';
+            } else {
+                showResult('composeResult', 'error', data.error || 'Failed to schedule post.');
+            }
+        })
+        .catch(function() {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-send me-1"></i> Schedule Post';
+            showResult('composeResult', 'error', 'Network error.');
+        });
+    });
+}
+
+// ── Drive Image Picker ──
+function loadDriveImages() {
+    var grid = document.getElementById('driveImageGrid');
+    grid.style.display = '';
+    grid.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span> Loading images...</div>';
+
+    fetch('/client/api/drive/files/Images', {headers: {'X-CSRFToken': csrfToken}})
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (!data.ok || !data.files || !data.files.length) {
+            grid.innerHTML = '<div class="text-muted py-2" style="font-size:.88rem;">No images found in your Drive "Images" folder.</div>';
+            return;
+        }
+        var html = '';
+        data.files.forEach(function(f) {
+            if (!f.mimeType || !f.mimeType.startsWith('image/')) return;
+            var thumb = '/client/api/drive/thumbnail/' + f.id;
+            var downloadUrl = '/client/api/drive/download/' + f.id;
+            html += '<div class="image-picker-item" onclick="selectDriveImage(this, \'' + downloadUrl + '\', \'' + (f.name || '').replace(/'/g, "\\'") + '\')">' +
+                '<img src="' + thumb + '" alt="' + (f.name || '') + '" loading="lazy">' +
+                '<div class="check-overlay"><i class="bi bi-check"></i></div></div>';
+        });
+        grid.innerHTML = html || '<div class="text-muted py-2" style="font-size:.88rem;">No image files found.</div>';
+    })
+    .catch(function() {
+        grid.innerHTML = '<div class="text-danger py-2" style="font-size:.88rem;">Failed to load images from Drive.</div>';
+    });
+}
+
+function selectDriveImage(el, url, name) {
+    document.querySelectorAll('.image-picker-item').forEach(function(item) { item.classList.remove('selected'); });
+    el.classList.add('selected');
+    document.getElementById('composeImageUrl').value = url;
+    document.getElementById('selectedImageName').textContent = name;
+}
+
+// ── CSV Upload ──
+var csvParsedRows = [];
+
+function handleCsvFile(input) {
+    var file = input.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        parseCsv(e.target.result);
+    };
+    reader.readAsText(file);
+}
+
+// Drag and drop
+var dropZone = document.getElementById('csvDropZone');
+if (dropZone) {
+    dropZone.addEventListener('dragover', function(e) { e.preventDefault(); this.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', function() { this.classList.remove('dragover'); });
+    dropZone.addEventListener('drop', function(e) {
+        e.preventDefault(); this.classList.remove('dragover');
+        var file = e.dataTransfer.files[0];
+        if (file && file.name.endsWith('.csv')) {
+            var reader = new FileReader();
+            reader.onload = function(ev) { parseCsv(ev.target.result); };
+            reader.readAsText(file);
+        }
+    });
+}
+
+function parseCsv(text) {
+    var lines = text.split('\n').map(function(l) { return l.trim(); }).filter(Boolean);
+    if (lines.length < 2) { showResult('csvResult', 'error', 'CSV needs a header row plus at least 1 data row.'); return; }
+
+    // Simple CSV parser (handles quoted fields)
+    function splitCsvLine(line) {
+        var result = []; var current = ''; var inQuotes = false;
+        for (var i = 0; i < line.length; i++) {
+            var ch = line[i];
+            if (ch === '"') { inQuotes = !inQuotes; }
+            else if (ch === ',' && !inQuotes) { result.push(current.trim()); current = ''; }
+            else { current += ch; }
+        }
+        result.push(current.trim());
+        return result;
+    }
+
+    var headers = splitCsvLine(lines[0]).map(function(h) { return h.toLowerCase().replace(/[^a-z_]/g, ''); });
+    var msgIdx = headers.indexOf('message');
+    var dtIdx = headers.indexOf('scheduled_at');
+    var imgIdx = headers.indexOf('image_url');
+    var linkIdx = headers.indexOf('link_url');
+
+    if (msgIdx < 0 || dtIdx < 0) {
+        showResult('csvResult', 'error', 'CSV must have "message" and "scheduled_at" columns.');
+        return;
+    }
+
+    csvParsedRows = [];
+    var tbody = document.querySelector('#csvTable tbody');
+    tbody.innerHTML = '';
+
+    for (var i = 1; i < Math.min(lines.length, 501); i++) {
+        var cols = splitCsvLine(lines[i]);
+        var row = {
+            message: cols[msgIdx] || '',
+            scheduled_at: cols[dtIdx] || '',
+            image_url: imgIdx >= 0 ? (cols[imgIdx] || '') : '',
+            link_url: linkIdx >= 0 ? (cols[linkIdx] || '') : '',
+        };
+        if (!row.message) continue;
+        csvParsedRows.push(row);
+
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + csvParsedRows.length + '</td>' +
+            '<td>' + row.message.substring(0, 80) + (row.message.length > 80 ? '...' : '') + '</td>' +
+            '<td><code>' + row.scheduled_at + '</code></td>' +
+            '<td>' + (row.image_url ? '<i class="bi bi-image text-success"></i>' : '') + '</td>' +
+            '<td>' + (row.link_url ? '<i class="bi bi-link-45deg text-primary"></i>' : '') + '</td>';
+        tbody.appendChild(tr);
+    }
+
+    document.getElementById('csvCount').textContent = '(' + csvParsedRows.length + ' posts)';
+    document.getElementById('csvPreview').style.display = '';
+}
+
+function submitCsvPosts() {
+    if (!csvParsedRows.length) return;
+    var btn = document.getElementById('csvScheduleBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Scheduling...';
+
+    fetch('/client/post-scheduler/schedule-bulk', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({posts: csvParsedRows})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i> Schedule All';
+        if (data.ok) {
+            showResult('csvResult', 'success', data.scheduled + ' posts scheduled successfully!');
+            csvParsedRows = [];
+        } else {
+            showResult('csvResult', 'error', data.error || 'Failed to schedule posts.');
+        }
+    })
+    .catch(function() {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i> Schedule All';
+        showResult('csvResult', 'error', 'Network error.');
+    });
+}
+
+function clearCsvPreview() {
+    document.getElementById('csvPreview').style.display = 'none';
+    document.querySelector('#csvTable tbody').innerHTML = '';
+    csvParsedRows = [];
+    document.getElementById('csvFileInput').value = '';
+}
+
+function downloadCsvTemplate() {
+    var csv = 'message,scheduled_at,image_url,link_url\n"Your post text here",2026-04-01 09:00,,https://yoursite.com\n';
+    var blob = new Blob([csv], {type: 'text/csv'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'post_schedule_template.csv';
+    a.click();
+}
+
+// ── Post management ──
+function deletePost(postId) {
+    if (!confirm('Delete this scheduled post?')) return;
+    fetch('/client/post-scheduler/' + postId, {
+        method: 'DELETE',
+        headers: {'X-CSRFToken': csrfToken},
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok) location.reload();
+        else alert(data.error || 'Failed to delete.');
+    });
+}
+
+function refreshPosts() { location.reload(); }
+
+// ── Helpers ──
+function showResult(elId, type, msg) {
+    var el = document.getElementById(elId);
+    var cls = type === 'success' ? 'text-success' : 'text-danger';
+    var icon = type === 'success' ? 'bi-check-circle' : 'bi-exclamation-circle';
+    el.innerHTML = '<span class="' + cls + '"><i class="bi ' + icon + ' me-1"></i>' + msg + '</span>';
+}
+</script>
+{% endblock %}

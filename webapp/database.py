@@ -373,6 +373,26 @@ class WebDB:
             );
         """)
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS scheduled_posts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                platform TEXT NOT NULL DEFAULT 'facebook',
+                message TEXT NOT NULL DEFAULT '',
+                image_url TEXT DEFAULT '',
+                link_url TEXT DEFAULT '',
+                scheduled_at TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                fb_post_id TEXT DEFAULT '',
+                error_message TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                published_at TEXT DEFAULT NULL,
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_scheduled_posts_brand
+            ON scheduled_posts(brand_id, scheduled_at);
+        """)
+
         conn.commit()
         brand_columns = {r[1] for r in conn.execute("PRAGMA table_info(brands)").fetchall()}
         new_brand_cols = [
@@ -1819,3 +1839,83 @@ class WebDB:
                 self.init()
                 return self.get_all_competitor_intel(brand_id)
             raise
+
+    # ── Scheduled Posts ─────────────────────────────────────────────
+
+    def save_scheduled_post(self, brand_id, platform, message, scheduled_at,
+                            image_url="", link_url=""):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO scheduled_posts
+               (brand_id, platform, message, image_url, link_url, scheduled_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (brand_id, platform, message, image_url, link_url, scheduled_at),
+        )
+        conn.commit()
+        row_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.close()
+        return row_id
+
+    def save_scheduled_posts_bulk(self, posts):
+        """Insert multiple posts. Each item: dict with brand_id, platform,
+        message, scheduled_at, image_url, link_url."""
+        conn = self._conn()
+        for p in posts:
+            conn.execute(
+                """INSERT INTO scheduled_posts
+                   (brand_id, platform, message, image_url, link_url, scheduled_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (p["brand_id"], p.get("platform", "facebook"), p["message"],
+                 p.get("image_url", ""), p.get("link_url", ""), p["scheduled_at"]),
+            )
+        conn.commit()
+        conn.close()
+
+    def get_scheduled_posts(self, brand_id, status=None, limit=100):
+        conn = self._conn()
+        if status:
+            rows = conn.execute(
+                "SELECT * FROM scheduled_posts WHERE brand_id = ? AND status = ? ORDER BY scheduled_at",
+                (brand_id, status),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM scheduled_posts WHERE brand_id = ? ORDER BY scheduled_at DESC LIMIT ?",
+                (brand_id, limit),
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_scheduled_post(self, post_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM scheduled_posts WHERE id = ?", (post_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def update_scheduled_post_status(self, post_id, status, fb_post_id="", error_message=""):
+        conn = self._conn()
+        if status == "published":
+            conn.execute(
+                """UPDATE scheduled_posts SET status = ?, fb_post_id = ?,
+                   published_at = datetime('now') WHERE id = ?""",
+                (status, fb_post_id, post_id),
+            )
+        elif status == "failed":
+            conn.execute(
+                "UPDATE scheduled_posts SET status = ?, error_message = ? WHERE id = ?",
+                (status, error_message, post_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE scheduled_posts SET status = ? WHERE id = ?",
+                (status, post_id),
+            )
+        conn.commit()
+        conn.close()
+
+    def delete_scheduled_post(self, post_id, brand_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM scheduled_posts WHERE id = ? AND brand_id = ?",
+                     (post_id, brand_id))
+        conn.commit()
+        conn.close()
