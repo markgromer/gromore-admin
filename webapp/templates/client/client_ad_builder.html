@@ -227,7 +227,19 @@
         justify-content: center;
         color: #8a8d91;
         font-size: 14px;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
     }
+    .fb-preview .fb-image-placeholder:hover { background: #e4e6eb; }
+    .fb-preview .fb-image-placeholder img { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; }
+    .drive-thumb-ab { width: 100px; height: 100px; object-fit: cover; border-radius: 8px; cursor: pointer; border: 2px solid transparent; transition: all .15s; }
+    .drive-thumb-ab:hover { border-color: #3b82f6; transform: scale(1.05); }
+    .drive-thumb-ab.picked { border-color: #10b981; box-shadow: 0 0 0 2px #10b981; }
+    .drive-folder-btn-ab { cursor: pointer; padding: .4rem .7rem; border-radius: 8px; background: #f3f4f6; display: inline-flex; align-items: center; gap: .4rem; font-size: .85rem; }
+    .drive-folder-btn-ab:hover { background: #e5e7eb; }
+    .ad-creative-slot { margin-top: .75rem; display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+    .ad-creative-slot img { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 2px solid #e5e7eb; }
     .fb-preview .fb-link-area {
         background: #f0f2f5;
         padding: 12px 16px;
@@ -308,6 +320,36 @@
 {% endblock %}
 
 {% block content %}
+
+<!-- Drive Image Picker Modal -->
+<div class="modal fade" id="drivePickerModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-images"></i> Pick an Image from Google Drive</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                <div id="abDriveBreadcrumb" class="mb-3 d-flex align-items-center gap-2 flex-wrap" style="font-size:.85rem;"></div>
+                <div id="abDriveFolders" class="d-flex flex-wrap gap-2 mb-3"></div>
+                <div id="abDriveImages" class="d-flex flex-wrap gap-3"></div>
+                <div id="abDriveEmpty" class="text-center text-muted py-4" style="display:none;">
+                    <i class="bi bi-cloud-slash" style="font-size:2rem;"></i>
+                    <p class="mt-2">No images found. Upload creatives via the Creative Center or Google Drive.</p>
+                </div>
+                <div id="abDriveLoading" class="text-center py-4" style="display:none;">
+                    <div class="spinner-border spinner-border-sm text-primary"></div> Loading...
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="abDrivePickConfirm" disabled onclick="abConfirmPick()">
+                    <i class="bi bi-check-lg"></i> Use Selected Image
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <div class="loading-overlay" id="loadingOverlay">
     <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status"></div>
@@ -417,18 +459,8 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="mb-0"><i class="bi bi-google" style="color: #4285f4;"></i> Google Ad Package</h5>
     <div class="d-flex gap-2">
-        <button class="btn btn-sm btn-primary" onclick='sendToCreative({
-            headline: {{ ((google_ads.headlines or [google_ads.long_headline])|select|list|first or "")|tojson }},
-            body_text: {{ ((google_ads.descriptions or [])|first or "")|tojson }},
-            cta_text: {{ (google_ads.cta_button or "Learn More")|replace("_", " ")|tojson }},
-            image_description: {{ (google_ads.image_guidance.primary if google_ads.image_guidance and google_ads.image_guidance.primary else "")|tojson }},
-            ad_format: "google_display_landscape",
-            overlay_template: "brand_bar",
-            shape_style: "rounded",
-            text_placement: "left",
-            font_family: "modern"
-        })'>
-            <i class="bi bi-palette"></i> Send to Creative
+        <button class="btn btn-sm btn-primary" onclick="abOpenPicker('google', 0)">
+            <i class="bi bi-image"></i> Add Creative
         </button>
         <a href="{{ url_for('client.client_ad_builder', month=month) }}" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> Build Another
@@ -902,10 +934,10 @@
                 <i class="bi bi-three-dots" style="color: #65676b;"></i>
             </div>
             <div class="fb-body">{{ variation.primary_text }}</div>
-            <div class="fb-image-placeholder">
-                <div class="text-center">
+            <div class="fb-image-placeholder" id="fbImgSlot{{ loop.index0 }}" onclick="abOpenPicker('facebook', {{ loop.index0 }})" title="Click to add an image from Google Drive">
+                <div class="text-center" id="fbImgPlaceholder{{ loop.index0 }}">
                     <i class="bi bi-image" style="font-size: 2rem;"></i>
-                    <div class="mt-1">Your ad image here</div>
+                    <div class="mt-1">Click to add image from Drive</div>
                     {% if facebook_ads.image_guidance and facebook_ads.image_guidance.primary %}
                     <div style="font-size: 12px; max-width: 300px; margin-top: 4px;">{{ facebook_ads.image_guidance.primary[:80] }}...</div>
                     {% endif %}
@@ -944,18 +976,8 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h6 class="mb-0">{{ variation.name or 'Variation ' ~ loop.index }}</h6>
         <div class="d-flex align-items-center gap-2">
-            <button class="btn btn-sm btn-primary" onclick='sendToCreative({
-                headline: {{ (variation.headline or "")|tojson }},
-                body_text: {{ (variation.primary_text or "")|tojson }},
-                cta_text: {{ (facebook_ads.cta_button or "Learn More")|replace("_", " ")|tojson }},
-                image_description: {{ (facebook_ads.image_guidance.primary if facebook_ads.image_guidance and facebook_ads.image_guidance.primary else "")|tojson }},
-                ad_format: "instagram_feed",
-                overlay_template: "lower_third",
-                shape_style: "rounded",
-                text_placement: "left",
-                font_family: "modern"
-            })'>
-                <i class="bi bi-palette"></i> Send to Creative
+            <button class="btn btn-sm btn-primary" onclick="abOpenPicker('facebook', {{ loop.index0 }})">
+                <i class="bi bi-image"></i> Add Creative
             </button>
             {% if variation.angle %}
             <span class="badge bg-light text-dark" style="font-size: .75rem;">{{ variation.angle }}</span>
@@ -1124,6 +1146,133 @@ function sendToCreative(payload) {
         sessionStorage.setItem('creative_prefill', JSON.stringify(payload || {}));
     } catch (_) {}
     window.location.href = "{{ url_for('client.client_creative') }}";
+}
+
+/* ── Drive Image Picker for Ad Builder ── */
+var _abPickerCtx = { platform: null, idx: 0 };
+var _abPickedFile = null;
+var _abBreadcrumb = [];
+var _abPickerModal = null;
+
+function abOpenPicker(platform, idx) {
+    _abPickerCtx = { platform: platform, idx: idx };
+    _abPickedFile = null;
+    document.getElementById('abDrivePickConfirm').disabled = true;
+    if (!_abPickerModal) _abPickerModal = new bootstrap.Modal(document.getElementById('drivePickerModal'));
+    _abPickerModal.show();
+    _abBreadcrumb = [{ id: 'root', name: 'My Drive' }];
+    abLoadFolder('root');
+}
+
+function abLoadFolder(folderId) {
+    var foldersEl = document.getElementById('abDriveFolders');
+    var imagesEl = document.getElementById('abDriveImages');
+    var emptyEl = document.getElementById('abDriveEmpty');
+    var loadingEl = document.getElementById('abDriveLoading');
+    foldersEl.innerHTML = '';
+    imagesEl.innerHTML = '';
+    emptyEl.style.display = 'none';
+    loadingEl.style.display = '';
+
+    abRenderBreadcrumb();
+
+    var url = folderId === 'root'
+        ? "{{ url_for('client.drive_all_images') }}"
+        : "{{ url_for('client.drive_browse') }}?folder_id=" + encodeURIComponent(folderId);
+
+    fetch(url).then(r => r.json()).then(data => {
+        loadingEl.style.display = 'none';
+        var files = data.files || data.images || [];
+        var folders = (data.folders || []);
+
+        folders.forEach(f => {
+            var btn = document.createElement('div');
+            btn.className = 'drive-folder-btn-ab';
+            btn.innerHTML = '<i class="bi bi-folder-fill text-warning"></i> ' + (f.name || f.id);
+            btn.onclick = function() {
+                _abBreadcrumb.push({ id: f.id, name: f.name });
+                abLoadFolder(f.id);
+            };
+            foldersEl.appendChild(btn);
+        });
+
+        files.forEach(f => {
+            var thumb = "{{ url_for('client.drive_thumbnail', file_id='__FID__') }}".replace('__FID__', f.id || f.file_id);
+            var img = document.createElement('img');
+            img.className = 'drive-thumb-ab';
+            img.src = thumb;
+            img.alt = f.name || '';
+            img.title = f.name || '';
+            img.dataset.fileId = f.id || f.file_id;
+            img.dataset.fileName = f.name || '';
+            img.onclick = function() {
+                document.querySelectorAll('.drive-thumb-ab.picked').forEach(el => el.classList.remove('picked'));
+                img.classList.add('picked');
+                _abPickedFile = { id: img.dataset.fileId, name: img.dataset.fileName };
+                document.getElementById('abDrivePickConfirm').disabled = false;
+            };
+            imagesEl.appendChild(img);
+        });
+
+        if (!folders.length && !files.length) emptyEl.style.display = '';
+    }).catch(() => { loadingEl.style.display = 'none'; emptyEl.style.display = ''; });
+}
+
+function abRenderBreadcrumb() {
+    var el = document.getElementById('abDriveBreadcrumb');
+    el.innerHTML = '';
+    _abBreadcrumb.forEach(function(crumb, i) {
+        if (i > 0) { var sep = document.createElement('span'); sep.textContent = '/'; el.appendChild(sep); }
+        var a = document.createElement('a');
+        a.href = '#';
+        a.textContent = crumb.name;
+        a.style.textDecoration = i === _abBreadcrumb.length - 1 ? 'none' : 'underline';
+        a.style.fontWeight = i === _abBreadcrumb.length - 1 ? '600' : '400';
+        a.onclick = function(e) {
+            e.preventDefault();
+            _abBreadcrumb = _abBreadcrumb.slice(0, i + 1);
+            abLoadFolder(crumb.id);
+        };
+        el.appendChild(a);
+    });
+}
+
+function abConfirmPick() {
+    if (!_abPickedFile) return;
+    var downloadUrl = "{{ url_for('client.drive_download', file_id='__FID__') }}".replace('__FID__', _abPickedFile.id);
+    var ctx = _abPickerCtx;
+
+    if (ctx.platform === 'facebook') {
+        var slot = document.getElementById('fbImgSlot' + ctx.idx);
+        if (slot) {
+            var placeholder = document.getElementById('fbImgPlaceholder' + ctx.idx);
+            if (placeholder) placeholder.style.display = 'none';
+            var existing = slot.querySelector('img');
+            if (existing) existing.remove();
+            var img = document.createElement('img');
+            img.src = downloadUrl;
+            img.alt = _abPickedFile.name;
+            slot.appendChild(img);
+        }
+    } else if (ctx.platform === 'google') {
+        var card = document.querySelector('#googleResults .builder-card');
+        if (card) {
+            var slotEl = card.querySelector('.ad-creative-slot');
+            if (!slotEl) {
+                slotEl = document.createElement('div');
+                slotEl.className = 'ad-creative-slot';
+                slotEl.innerHTML = '<small class="text-muted w-100">Attached Creative:</small>';
+                card.querySelector('.d-flex').after(slotEl);
+            }
+            var img = document.createElement('img');
+            img.src = downloadUrl;
+            img.alt = _abPickedFile.name;
+            img.title = _abPickedFile.name;
+            slotEl.appendChild(img);
+        }
+    }
+
+    _abPickerModal.hide();
 }
 
 /* ── Preview helpers ── */
