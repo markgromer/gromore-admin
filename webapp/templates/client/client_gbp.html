@@ -35,8 +35,7 @@
         font-size: .85rem;
     }
     .status-verified { background: rgba(16,185,129,.15); color: #10b981; }
-    .status-pending { background: rgba(245,158,11,.15); color: #f59e0b; }
-    .status-unverified { background: rgba(239,68,68,.15); color: #ef4444; }
+    .status-closed { background: rgba(245,158,11,.15); color: #f59e0b; }
     .status-unknown { background: rgba(100,116,139,.15); color: #64748b; }
 
     .completeness-ring {
@@ -59,172 +58,176 @@
     .field-check .done { color: #10b981; }
     .field-check .missing { color: #ef4444; }
 
-    .verification-method {
+    .loc-info-row { display: flex; align-items: flex-start; gap: .5rem; padding: .4rem 0; font-size: .9rem; }
+    .loc-info-row i { color: #6366f1; margin-top: 2px; }
+    .loc-info-row .label { color: #64748b; min-width: 80px; }
+
+    .review-card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem; margin-bottom: .75rem; }
+    .review-card .stars { color: #f59e0b; }
+    .review-card .author { font-weight: 600; font-size: .9rem; }
+    .review-card .time { color: #94a3b8; font-size: .8rem; }
+    .review-card .text { font-size: .88rem; color: #475569; margin-top: .35rem; }
+
+    .rating-big { font-size: 2.5rem; font-weight: 800; color: #1e293b; line-height: 1; }
+    .rating-stars { color: #f59e0b; font-size: 1.3rem; }
+
+    .guidance-card {
         border: 1px solid #e2e8f0;
         border-radius: 12px;
         padding: 1.25rem;
         margin-bottom: 1rem;
-        transition: border-color .2s;
     }
-    .verification-method:hover { border-color: #6366f1; }
-    .verification-method h6 { font-weight: 700; margin-bottom: .75rem; }
-    .verification-method ol { padding-left: 1.25rem; margin-bottom: 0; }
-    .verification-method ol li { margin-bottom: .35rem; font-size: .9rem; color: #475569; }
-
-    .loc-info-row { display: flex; align-items: flex-start; gap: .5rem; padding: .4rem 0; font-size: .9rem; }
-    .loc-info-row i { color: #6366f1; margin-top: 2px; }
-    .loc-info-row .label { color: #64748b; min-width: 80px; }
+    .guidance-card:hover { border-color: #6366f1; }
+    .guidance-card h6 { font-weight: 700; margin-bottom: .75rem; }
+    .guidance-card ol { padding-left: 1.25rem; margin-bottom: 0; }
+    .guidance-card ol li { margin-bottom: .35rem; font-size: .9rem; color: #475569; }
 </style>
 
 <div class="gbp-header">
     <div class="d-flex justify-content-between align-items-start">
         <div>
             <h3><i class="bi bi-google"></i> Google Business Profile</h3>
-            <p>Verification status, profile completeness, and what to do next</p>
+            <p>Your listing's status, profile completeness, reviews, and what to do next</p>
         </div>
-        {% if gmb and gmb.connected and gmb.verification %}
-            {% set vs = gmb.verification.status %}
-            {% if vs in ('COMPLETED', 'VERIFIED') %}
-                <span class="status-badge status-verified"><i class="bi bi-patch-check-fill"></i> Verified</span>
-            {% elif vs == 'PENDING' %}
-                <span class="status-badge status-pending"><i class="bi bi-hourglass-split"></i> Pending</span>
-            {% elif vs == 'UNVERIFIED' %}
-                <span class="status-badge status-unverified"><i class="bi bi-exclamation-triangle-fill"></i> Not Verified</span>
+        {% if gbp and not gbp.error %}
+            {% if gbp.status == 'VERIFIED' %}
+                <span class="status-badge status-verified"><i class="bi bi-patch-check-fill"></i> Live on Google</span>
+            {% elif 'CLOSED' in gbp.status %}
+                <span class="status-badge status-closed"><i class="bi bi-exclamation-triangle-fill"></i> {{ gbp.status|replace('_', ' ')|title }}</span>
             {% else %}
-                <span class="status-badge status-unknown"><i class="bi bi-question-circle"></i> {{ vs }}</span>
+                <span class="status-badge status-unknown"><i class="bi bi-question-circle"></i> {{ gbp.status }}</span>
             {% endif %}
         {% endif %}
     </div>
 </div>
 
-{% if not gmb %}
-<!-- No Google connection -->
+{% if not gbp or gbp.error == 'MISSING_CONFIG' %}
+<!-- Missing Place ID or API key -->
 <div class="card border-0 shadow-sm">
     <div class="card-body text-center py-5">
-        <i class="bi bi-google" style="font-size: 3rem; color: #4285f4;"></i>
-        <h5 class="mt-3 fw-bold">Connect Your Google Account</h5>
-        <p class="text-muted mb-4">
-            To see your Google Business Profile verification status and profile details,
-            connect your Google account first.
+        <i class="bi bi-geo-alt" style="font-size: 3rem; color: #6366f1;"></i>
+        <h5 class="mt-3 fw-bold">Set Up Your Google Business Profile Connection</h5>
+        <p class="text-muted mb-3">
+            To see your profile details, you need a Google Place ID and a Google Maps API key configured in your business settings.
         </p>
-        <a href="{{ url_for('client.client_settings') }}" class="btn btn-primary">
-            <i class="bi bi-plug"></i> Go to Connections
+        <div class="alert alert-info text-start mx-auto" style="max-width: 550px;">
+            <strong>Quick setup:</strong>
+            <ol class="mb-0 mt-2">
+                <li>Find your Place ID at <a href="https://developers.google.com/maps/documentation/places/web-service/place-id" target="_blank" rel="noopener">Google's Place ID Finder</a></li>
+                <li>Your Maps API key should already be set up. If not, create one in <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a></li>
+                <li>Make sure the <strong>Places API (New)</strong> is enabled in your Google Cloud project</li>
+                <li>Enter both values in your business settings</li>
+            </ol>
+        </div>
+        <a href="{{ url_for('client.client_my_business') }}" class="btn btn-primary mt-2">
+            <i class="bi bi-building"></i> Go to My Business
         </a>
     </div>
 </div>
 
-{% elif gmb.error %}
-<!-- Error state -->
+{% elif gbp.error == 'API_FAILED' %}
 <div class="card border-0 shadow-sm">
     <div class="card-body text-center py-5">
-        {% if gmb.error == 'API_NOT_ENABLED' %}
-        <i class="bi bi-key" style="font-size: 3rem; color: #6366f1;"></i>
-        <h5 class="mt-3 fw-bold">Google Business Profile API Access Required</h5>
-        <p class="text-muted mb-3">
-            Google restricts access to the Business Profile APIs. You need to apply for access before this feature works.
-        </p>
-        <div class="alert alert-info text-start mx-auto" style="max-width: 600px;">
-            <strong>How to get access (one-time setup):</strong>
-            <ol class="mb-0 mt-2">
-                <li>Go to the <a href="https://developers.google.com/my-business/content/prereqs" target="_blank" rel="noopener">GBP API prerequisites page</a></li>
-                <li>Fill out the access request form with your Google Cloud project number</li>
-                <li>Wait for Google to approve (a few days to a couple weeks)</li>
-                <li>Once approved, enable these APIs in your <a href="https://console.cloud.google.com/apis/library" target="_blank" rel="noopener">Google Cloud Console</a>:
-                    <ul>
-                        <li>My Business Account Management API</li>
-                        <li>My Business Business Information API</li>
-                        <li>My Business Verifications API</li>
-                    </ul>
-                </li>
-                <li>Add the <code>business.manage</code> scope to your OAuth consent screen</li>
-                <li>Reconnect Google in <a href="{{ url_for('client.client_settings') }}">Connections</a> to grant the new scope</li>
-            </ol>
-        </div>
-        {% else %}
         <i class="bi bi-exclamation-triangle" style="font-size: 3rem; color: #f59e0b;"></i>
-        <h5 class="mt-3 fw-bold">Something Went Wrong</h5>
-        <p class="text-muted mb-3">{{ gmb.error }}</p>
-        {% if 'No Google Business Profile accounts' in gmb.error %}
-        <div class="alert alert-info text-start mx-auto" style="max-width: 500px;">
-            <strong>What this means:</strong>
+        <h5 class="mt-3 fw-bold">Could Not Load Profile Data</h5>
+        <p class="text-muted mb-3">
+            The Google Places API returned an error. This usually means the Place ID is incorrect or the
+            Places API (New) is not enabled in your Google Cloud project.
+        </p>
+        <div class="alert alert-warning text-start mx-auto" style="max-width: 550px;">
+            <strong>Check these things:</strong>
             <ul class="mb-0 mt-2">
-                <li>Your Google account may not have a Business Profile yet.</li>
-                <li>Go to <a href="https://business.google.com" target="_blank" rel="noopener">business.google.com</a> to create or claim your business listing.</li>
-                <li>After setting up your profile, come back here and refresh.</li>
+                <li>Is the <strong>Places API (New)</strong> enabled in your <a href="https://console.cloud.google.com/apis/library" target="_blank" rel="noopener">Google Cloud Console</a>?</li>
+                <li>Is your Place ID correct? Test it at <a href="https://developers.google.com/maps/documentation/places/web-service/place-id" target="_blank" rel="noopener">Google's Place ID Finder</a></li>
+                <li>Does your API key have the Places API (New) allowed?</li>
             </ul>
         </div>
-        {% endif %}
         <a href="{{ url_for('client.client_gbp') }}" class="btn btn-outline-primary mt-2">
-            <i class="bi bi-arrow-clockwise"></i> Refresh
+            <i class="bi bi-arrow-clockwise"></i> Try Again
         </a>
-        {% endif %}
     </div>
 </div>
 
 {% else %}
-<!-- Connected with data -->
+<!-- Profile data loaded -->
 <div class="row g-4">
 
-    <!-- Left column: Location details + completeness -->
+    <!-- Left column: Business details + completeness -->
     <div class="col-lg-7">
-        {% if gmb.selected_location %}
-        {% set loc = gmb.selected_location %}
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white border-0 pt-3 pb-0">
-                <h5 class="fw-bold mb-0"><i class="bi bi-building"></i> {{ loc.title or 'Your Business' }}</h5>
+                <h5 class="fw-bold mb-0"><i class="bi bi-building"></i> {{ gbp.business_name or 'Your Business' }}</h5>
             </div>
             <div class="card-body">
-                {% set addr = loc.get('storefrontAddress', {}) %}
-                {% if addr %}
+                {% if gbp.address %}
                 <div class="loc-info-row">
                     <i class="bi bi-geo-alt-fill"></i>
                     <span class="label">Address</span>
-                    <span>
-                        {{ (addr.get('addressLines', [])|join(', ')) }}{% if addr.get('locality') %}, {{ addr.locality }}{% endif %}{% if addr.get('administrativeArea') %}, {{ addr.administrativeArea }}{% endif %} {{ addr.get('postalCode', '') }}
-                    </span>
+                    <span>{{ gbp.address }}</span>
                 </div>
                 {% endif %}
 
-                {% set phones = loc.get('phoneNumbers', {}) %}
-                {% if phones.get('primaryPhone') %}
+                {% if gbp.phone %}
                 <div class="loc-info-row">
                     <i class="bi bi-telephone-fill"></i>
                     <span class="label">Phone</span>
-                    <span>{{ phones.primaryPhone }}</span>
+                    <span>{{ gbp.phone }}</span>
                 </div>
                 {% endif %}
 
-                {% if loc.get('websiteUri') %}
+                {% if gbp.website %}
                 <div class="loc-info-row">
                     <i class="bi bi-globe"></i>
                     <span class="label">Website</span>
-                    <span><a href="{{ loc.websiteUri }}" target="_blank" rel="noopener">{{ loc.websiteUri|truncate(50) }}</a></span>
+                    <span><a href="{{ gbp.website }}" target="_blank" rel="noopener">{{ gbp.website|truncate(50) }}</a></span>
                 </div>
                 {% endif %}
 
-                {% set cats = loc.get('categories', {}) %}
-                {% if cats.get('primaryCategory') %}
+                {% if gbp.category %}
                 <div class="loc-info-row">
                     <i class="bi bi-tag-fill"></i>
                     <span class="label">Category</span>
-                    <span>{{ cats.primaryCategory.get('displayName', '') }}</span>
+                    <span>{{ gbp.category }}</span>
                 </div>
                 {% endif %}
 
-                {% if loc.get('regularHours') %}
+                {% if gbp.hours %}
                 <div class="loc-info-row">
                     <i class="bi bi-clock-fill"></i>
                     <span class="label">Hours</span>
                     <span class="text-success">Business hours set</span>
                 </div>
                 {% endif %}
+
+                {% if gbp.photo_count %}
+                <div class="loc-info-row">
+                    <i class="bi bi-camera-fill"></i>
+                    <span class="label">Photos</span>
+                    <span>{{ gbp.photo_count }} photo{{ 's' if gbp.photo_count != 1 }}</span>
+                </div>
+                {% endif %}
+
+                {% if gbp.description %}
+                <div class="loc-info-row">
+                    <i class="bi bi-card-text"></i>
+                    <span class="label">About</span>
+                    <span>{{ gbp.description }}</span>
+                </div>
+                {% endif %}
+
+                {% if gbp.maps_url %}
+                <div class="mt-3">
+                    <a href="{{ gbp.maps_url }}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-map"></i> View on Google Maps
+                    </a>
+                </div>
+                {% endif %}
             </div>
         </div>
-        {% endif %}
 
         <!-- Profile Completeness -->
-        {% if gmb.completeness %}
-        {% set comp = gmb.completeness %}
+        {% if gbp.completeness %}
+        {% set comp = gbp.completeness %}
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-white border-0 pt-3 pb-0 d-flex justify-content-between align-items-center">
                 <h5 class="fw-bold mb-0"><i class="bi bi-clipboard-check"></i> Profile Completeness</h5>
@@ -263,128 +266,76 @@
             </div>
         </div>
         {% endif %}
-
-        <!-- Multiple locations notice -->
-        {% if gmb.locations|length > 1 %}
-        <div class="card border-0 shadow-sm">
-            <div class="card-body">
-                <h6 class="fw-bold"><i class="bi bi-buildings"></i> {{ gmb.locations|length }} Locations Found</h6>
-                <p class="text-muted small mb-2">Showing details for your primary location. All locations on this account:</p>
-                <ul class="list-unstyled mb-0">
-                {% for loc in gmb.locations %}
-                    <li class="py-1">
-                        <i class="bi bi-pin-map"></i>
-                        <strong>{{ loc.title or 'Unnamed' }}</strong>
-                        {% set a = loc.get('storefrontAddress', {}) %}
-                        {% if a.get('locality') %} - {{ a.locality }}{% endif %}
-                    </li>
-                {% endfor %}
-                </ul>
-            </div>
-        </div>
-        {% endif %}
     </div>
 
-    <!-- Right column: Verification status + guidance -->
+    <!-- Right column: Rating, reviews, guidance -->
     <div class="col-lg-5">
-        {% if gmb.verification %}
-        {% set v = gmb.verification %}
+        <!-- Rating summary -->
+        {% if gbp.rating %}
         <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header bg-white border-0 pt-3 pb-0">
-                <h5 class="fw-bold mb-0"><i class="bi bi-shield-check"></i> Verification Status</h5>
-            </div>
-            <div class="card-body">
-                {% if v.status in ('COMPLETED', 'VERIFIED') %}
-                    <div class="text-center py-3">
-                        <i class="bi bi-patch-check-fill" style="font-size: 3rem; color: #10b981;"></i>
-                        <h5 class="fw-bold mt-2 text-success">Verified</h5>
-                        <p class="text-muted small mb-0">
-                            Your business is verified on Google.
-                            {% if v.method %} Method: {{ v.method|lower|replace('_', ' ') }}.{% endif %}
-                        </p>
-                    </div>
-                    <div class="alert alert-success small mt-3 mb-0">
-                        <i class="bi bi-check-circle"></i>
-                        You're all set. Your business can appear in Google Maps, local search results, and the local pack.
-                        Keep your profile updated with current hours, photos, and posts.
-                    </div>
-
-                {% elif v.status == 'PENDING' %}
-                    <div class="text-center py-3">
-                        <i class="bi bi-hourglass-split" style="font-size: 3rem; color: #f59e0b;"></i>
-                        <h5 class="fw-bold mt-2" style="color: #f59e0b;">Verification Pending</h5>
-                        <p class="text-muted small mb-0">
-                            Verification is in progress.
-                            {% if v.method %} Method: {{ v.method|lower|replace('_', ' ') }}.{% endif %}
-                        </p>
-                    </div>
-                    <div class="alert alert-warning small mt-3 mb-0">
-                        <i class="bi bi-info-circle"></i>
-                        <strong>While you wait:</strong>
-                        <ul class="mb-0 mt-1">
-                            <li>Do NOT change your business name or address.</li>
-                            <li>If you chose postcard, it can take 5-14 days.</li>
-                            <li>Check your mail, email, or phone for a verification code.</li>
-                            <li>Enter the code at <a href="https://business.google.com" target="_blank" rel="noopener">business.google.com</a>.</li>
-                        </ul>
-                    </div>
-
-                {% else %}
-                    <div class="text-center py-3">
-                        <i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem; color: #ef4444;"></i>
-                        <h5 class="fw-bold mt-2 text-danger">Not Verified</h5>
-                        <p class="text-muted small mb-0">
-                            Your business has not been verified yet. Verification is required to
-                            appear in Google Maps and local search results.
-                        </p>
-                    </div>
-                {% endif %}
-            </div>
-        </div>
-
-        <!-- Verification options / guidance -->
-        {% if v.status not in ('COMPLETED', 'VERIFIED') %}
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header bg-white border-0 pt-3 pb-0">
-                <h5 class="fw-bold mb-0"><i class="bi bi-signpost-split"></i> How to Get Verified</h5>
-            </div>
-            <div class="card-body">
-                {% if gmb.verification_options %}
-                    <p class="text-muted small mb-3">Google is offering these verification methods for your location:</p>
-                    {% for opt in gmb.verification_options %}
-                        {% set method = opt.get('verificationMethod', 'UNKNOWN') %}
-                        {% set guide = verification_guidance.get(method, {}) %}
-                        <div class="verification-method">
-                            <h6>
-                                <i class="bi {{ guide.get('icon', 'bi-question-circle') }}"></i>
-                                {{ guide.get('title', method|replace('_', ' ')|title) }}
-                            </h6>
-                            {% if guide.get('steps') %}
-                            <ol>
-                                {% for step in guide.steps %}
-                                <li>{{ step }}</li>
-                                {% endfor %}
-                            </ol>
-                            {% endif %}
-                        </div>
+            <div class="card-body text-center">
+                <span class="rating-big">{{ gbp.rating }}</span>
+                <div class="rating-stars mt-1">
+                    {% for i in range(5) %}
+                        {% if gbp.rating >= i + 0.75 %}
+                            <i class="bi bi-star-fill"></i>
+                        {% elif gbp.rating >= i + 0.25 %}
+                            <i class="bi bi-star-half"></i>
+                        {% else %}
+                            <i class="bi bi-star"></i>
+                        {% endif %}
                     {% endfor %}
-                {% else %}
-                    <p class="text-muted small">Could not load verification options from Google. Go to
-                    <a href="https://business.google.com" target="_blank" rel="noopener">business.google.com</a>
-                    to start or check on your verification.</p>
-                {% endif %}
-
-                <div class="alert alert-info small mt-3 mb-0">
-                    <i class="bi bi-lightbulb"></i>
-                    <strong>Pro tip:</strong> Make sure your business name, address, and phone number
-                    are 100% accurate before starting verification. Mismatches are the #1 reason
-                    for verification failures.
                 </div>
+                <p class="text-muted small mt-1 mb-0">{{ gbp.review_count }} review{{ 's' if gbp.review_count != 1 }} on Google</p>
             </div>
         </div>
         {% endif %}
 
+        <!-- Recent reviews -->
+        {% if gbp.reviews %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 pt-3 pb-0">
+                <h5 class="fw-bold mb-0"><i class="bi bi-chat-quote"></i> Recent Reviews</h5>
+            </div>
+            <div class="card-body">
+                {% for r in gbp.reviews %}
+                <div class="review-card">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="author">{{ r.author }}</span>
+                        <span class="time">{{ r.time }}</span>
+                    </div>
+                    <div class="stars mb-1">
+                        {% for i in range(5) %}
+                            {% if r.rating > i %}<i class="bi bi-star-fill"></i>{% else %}<i class="bi bi-star"></i>{% endif %}
+                        {% endfor %}
+                    </div>
+                    {% if r.text %}
+                    <div class="text">{{ r.text|truncate(200) }}</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
         {% endif %}
+
+        <!-- Next steps / guidance -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 pt-3 pb-0">
+                <h5 class="fw-bold mb-0"><i class="bi bi-signpost-split"></i> Next Steps</h5>
+            </div>
+            <div class="card-body">
+                {% for key, guide in guidance.items() %}
+                <div class="guidance-card">
+                    <h6><i class="bi {{ guide.icon }}"></i> {{ guide.title }}</h6>
+                    <ol>
+                        {% for step in guide.steps %}
+                        <li>{{ step }}</li>
+                        {% endfor %}
+                    </ol>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
 
         <!-- Quick actions -->
         <div class="card border-0 shadow-sm">
@@ -394,6 +345,11 @@
                     <a href="https://business.google.com" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">
                         <i class="bi bi-box-arrow-up-right"></i> Open Google Business Profile
                     </a>
+                    {% if gbp.maps_url %}
+                    <a href="{{ gbp.maps_url }}" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-map"></i> View on Google Maps
+                    </a>
+                    {% endif %}
                     <a href="{{ url_for('client.client_gbp') }}" class="btn btn-outline-secondary btn-sm">
                         <i class="bi bi-arrow-clockwise"></i> Refresh Status
                     </a>

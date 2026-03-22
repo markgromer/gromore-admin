@@ -2761,20 +2761,20 @@ def client_gbp():
     if not brand:
         abort(404)
 
-    gmb = None
-    verification_guidance = {}
+    gbp = None
+    guidance = {}
     try:
-        from webapp.google_business import build_gmb_context, VERIFICATION_GUIDANCE
-        gmb = build_gmb_context(db, brand_id)
-        verification_guidance = VERIFICATION_GUIDANCE
+        from webapp.google_business import build_gbp_context, VERIFICATION_GUIDANCE
+        gbp = build_gbp_context(db, brand_id)
+        guidance = VERIFICATION_GUIDANCE
     except Exception:
         pass
 
     return render_template(
         "client_gbp.html",
         brand=brand,
-        gmb=gmb,
-        verification_guidance=verification_guidance,
+        gbp=gbp,
+        guidance=guidance,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
 
