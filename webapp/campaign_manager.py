@@ -821,6 +821,74 @@ def _brand_context_block(brand):
     return "\n".join(lines)
 
 
+def _proofread_campaign_plan(plan, brand):
+    """Run a second AI pass that reviews ad copy as a skeptical target customer.
+
+    Rewrites anything that sounds generic, forced, or off-putting, then
+    returns the cleaned plan. Failures silently return the original plan.
+    """
+    import openai
+
+    api_key = _get_brand_api_key(brand)
+    if not api_key:
+        return plan
+
+    model = _get_brand_model(brand, "ads")
+    client = openai.OpenAI(api_key=api_key)
+
+    industry = brand.get("industry", "home services")
+    audience = brand.get("target_audience", "local homeowners")
+
+    review_prompt = f"""You are a proofreader for ad copy. You are NOT the advertiser.
+You are the TARGET CUSTOMER: a real person in the {industry} market ({audience}).
+
+Review every piece of ad copy in this campaign plan and ask yourself:
+- Would I actually click this, or does it sound like every other ad?
+- Does anything feel fake, exaggerated, or like obvious marketing-speak?
+- Is the language natural, like something a friend would say?
+- Are there cliches that would make me scroll past? ("Transform your...", "Don't miss out!", "Act now!", etc.)
+- Would I trust this business based on this copy, or does it try too hard?
+
+RULES for rewriting:
+- Keep headlines under 40 characters (Meta) or 30 characters (Google).
+- Keep descriptions under 90 characters.
+- Primary text should be 2-4 sentences max, conversational.
+- Be specific over generic. Actual numbers beat vague claims.
+- Do NOT use: "Transform", "Unlock", "Elevate", "Don't miss out", "Act now",
+  "Say goodbye to", "Game-changer", or exclamation marks in every line.
+- Sound like a confident local business, not a marketing agency.
+- Preserve the strategic intent and call to action of each ad.
+- Keep campaign_name, objective, budget, targeting, and structure untouched.
+
+Return the FULL JSON plan with only the ad copy improved. No commentary, no markdown fences, just valid JSON."""
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": review_prompt},
+                {"role": "user", "content": json.dumps(plan)},
+            ],
+            temperature=0.4,
+            max_tokens=3000,
+        )
+        text = response.choices[0].message.content.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+
+        reviewed = json.loads(text)
+        # Preserve fields the proofreader shouldn't touch
+        reviewed["platform"] = plan.get("platform", "")
+        reviewed["strategy"] = plan.get("strategy", "")
+        return reviewed
+    except Exception:
+        logger.info("Proofreader pass failed, using original plan")
+        return plan
+
+
 def generate_campaign_plan(brand, service, location, monthly_budget,
                            platform, notes="", strategy_type=""):
     """Use GPT to generate a complete campaign plan ready for launch.
@@ -867,6 +935,7 @@ def generate_campaign_plan(brand, service, location, monthly_budget,
                 plan = json.loads(text)
                 plan["platform"] = platform
                 plan["strategy"] = strategy_type
+                plan = _proofread_campaign_plan(plan, brand)
                 return {"success": True, "plan": plan}
 
             except json.JSONDecodeError:
@@ -998,6 +1067,7 @@ Requirements:
 
         plan = json.loads(text)
         plan["platform"] = platform
+        plan = _proofread_campaign_plan(plan, brand)
         return {"success": True, "plan": plan}
 
     except json.JSONDecodeError:
@@ -1265,6 +1335,10 @@ def launch_meta_campaign(db, brand, plan, changed_by):
             missing.append("Meta OAuth connection")
         return {"success": False, "error": f"Missing Meta Ads configuration: {', '.join(missing)}. Use Save as Draft to keep this plan."}
 
+    page_id = (brand.get("facebook_page_id") or "").strip()
+    if not page_id:
+        return {"success": False, "error": "No Facebook Page linked. Go to Connections and connect your Facebook Page before launching Meta ads."}
+
     # Step 1: Create campaign
     camp_resp = requests.post(
         f"https://graph.facebook.com/v21.0/act_{account_id}/campaigns",
@@ -1336,6 +1410,57 @@ def launch_meta_campaign(db, brand, plan, changed_by):
                 "id": adset_id,
                 "name": adset_plan.get("name", "Ad Set"),
             })
+
+            # Step 3: Create ad creative + ad for each ad copy variation
+            page_id = (brand.get("facebook_page_id") or "").strip()
+            for idx, copy in enumerate(adset_plan.get("ad_copy", [])):
+                ad_name = f"{adset_plan.get('name', 'Ad Set')} - Ad {idx + 1}"
+
+                # Build object_story_spec (required for Meta ads)
+                link_data = {
+                    "message": copy.get("primary_text", ""),
+                    "name": copy.get("headline", ""),
+                    "description": copy.get("description", ""),
+                    "call_to_action": {
+                        "type": copy.get("call_to_action", "LEARN_MORE"),
+                        "value": {"link": brand.get("website_url", "https://example.com")},
+                    },
+                    "link": brand.get("website_url", "https://example.com"),
+                }
+
+                creative_data = {
+                    "access_token": token,
+                    "name": ad_name,
+                    "object_story_spec": json.dumps({
+                        "page_id": page_id,
+                        "link_data": link_data,
+                    }),
+                }
+
+                creative_resp = requests.post(
+                    f"https://graph.facebook.com/v21.0/act_{account_id}/adcreatives",
+                    data=creative_data, timeout=30,
+                )
+                if creative_resp.status_code != 200:
+                    logger.warning("Failed to create ad creative: %s", creative_resp.text[:300])
+                    continue
+
+                creative_id = creative_resp.json().get("id", "")
+
+                # Create the ad linking creative to ad set
+                ad_data = {
+                    "access_token": token,
+                    "name": ad_name,
+                    "adset_id": adset_id,
+                    "creative": json.dumps({"creative_id": creative_id}),
+                    "status": "PAUSED",
+                }
+                ad_resp = requests.post(
+                    f"https://graph.facebook.com/v21.0/act_{account_id}/ads",
+                    data=ad_data, timeout=30,
+                )
+                if ad_resp.status_code != 200:
+                    logger.warning("Failed to create ad: %s", ad_resp.text[:300])
 
     _log_change(db, brand["id"], "meta", campaign_id, plan.get("campaign_name", ""),
                 "campaign_created", {
