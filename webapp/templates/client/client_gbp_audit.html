@@ -1,0 +1,462 @@
+{% extends "client_base.html" %}
+{% block title %}Google Profile Audit{% endblock %}
+
+{% block content %}
+<style>
+    .audit-header {
+        background: linear-gradient(135deg, #1e3a5f 0%, #1a4731 50%, #065f46 100%);
+        border-radius: 16px;
+        padding: 2rem 2.25rem;
+        margin-bottom: 1.5rem;
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+    }
+    .audit-header::after {
+        content: '';
+        position: absolute;
+        top: -40%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(99,102,241,.15) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    .audit-header h3 { font-weight: 800; font-size: 1.4rem; margin-bottom: .25rem; }
+    .audit-header p { opacity: .8; font-size: .9rem; margin-bottom: 0; }
+
+    .grade-circle {
+        width: 110px;
+        height: 110px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        font-weight: 800;
+        font-size: 2.2rem;
+        line-height: 1;
+        border: 4px solid rgba(255,255,255,.3);
+        flex-shrink: 0;
+    }
+    .grade-circle .sub { font-size: .75rem; font-weight: 600; opacity: .8; margin-top: 2px; }
+    .grade-a { background: rgba(16,185,129,.2); color: #10b981; }
+    .grade-b { background: rgba(59,130,246,.2); color: #60a5fa; }
+    .grade-c { background: rgba(245,158,11,.2); color: #f59e0b; }
+    .grade-d { background: rgba(249,115,22,.2); color: #f97316; }
+    .grade-f { background: rgba(239,68,68,.2); color: #ef4444; }
+
+    .section-bar { height: 8px; border-radius: 4px; background: #e2e8f0; overflow: hidden; flex: 1; }
+    .section-bar .fill { height: 100%; border-radius: 4px; transition: width .5s ease; }
+    .fill-pass { background: #10b981; }
+    .fill-warn { background: #f59e0b; }
+    .fill-fail { background: #ef4444; }
+
+    .audit-section {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        padding: .65rem 0;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    .audit-section:last-child { border-bottom: none; }
+    .audit-section .label { min-width: 120px; font-weight: 600; font-size: .9rem; }
+    .audit-section .detail { font-size: .82rem; color: #64748b; margin-left: .5rem; }
+    .audit-section .score-badge {
+        min-width: 42px;
+        text-align: center;
+        padding: .2rem .5rem;
+        border-radius: 6px;
+        font-weight: 700;
+        font-size: .8rem;
+    }
+    .badge-pass { background: #dcfce7; color: #16a34a; }
+    .badge-warn { background: #fef3c7; color: #d97706; }
+    .badge-fail { background: #fee2e2; color: #dc2626; }
+
+    .action-card {
+        border-left: 4px solid;
+        border-radius: 8px;
+        padding: 1rem 1.25rem;
+        margin-bottom: .75rem;
+        background: #fff;
+    }
+    .action-high { border-left-color: #ef4444; background: #fef2f2; }
+    .action-medium { border-left-color: #f59e0b; background: #fffbeb; }
+    .action-card .priority { font-size: .7rem; text-transform: uppercase; font-weight: 700; letter-spacing: .5px; }
+    .action-card .priority-high { color: #dc2626; }
+    .action-card .priority-medium { color: #d97706; }
+
+    .ai-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+    }
+    .ai-card h6 { font-weight: 700; margin-bottom: .75rem; }
+    .ai-card .copy-box {
+        background: #f8fafc;
+        border: 1px dashed #cbd5e1;
+        border-radius: 8px;
+        padding: .85rem 1rem;
+        font-size: .88rem;
+        position: relative;
+        cursor: pointer;
+    }
+    .ai-card .copy-box:hover { border-color: #6366f1; }
+    .ai-card .copy-box::after {
+        content: 'Click to copy';
+        position: absolute;
+        top: .35rem;
+        right: .5rem;
+        font-size: .7rem;
+        color: #94a3b8;
+        font-weight: 600;
+    }
+
+    .trouble-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        margin-bottom: .75rem;
+        overflow: hidden;
+    }
+    .trouble-header {
+        padding: .85rem 1.15rem;
+        background: #f8fafc;
+        font-weight: 600;
+        font-size: .9rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        border: none;
+        width: 100%;
+        text-align: left;
+    }
+    .trouble-header:hover { background: #f1f5f9; }
+    .trouble-header .chevron { transition: transform .2s; margin-left: auto; }
+    .trouble-header.active .chevron { transform: rotate(180deg); }
+    .trouble-body { padding: 0 1.15rem; max-height: 0; overflow: hidden; transition: max-height .3s ease, padding .3s; }
+    .trouble-body.open { max-height: 600px; padding: .75rem 1.15rem 1rem; }
+    .trouble-body ol { padding-left: 1.25rem; margin-bottom: 0; }
+    .trouble-body ol li { margin-bottom: .4rem; font-size: .88rem; color: #475569; }
+
+    .ai-action-list { padding-left: 0; list-style: none; counter-reset: action-counter; }
+    .ai-action-list li {
+        counter-increment: action-counter;
+        padding: .6rem .75rem .6rem 2.5rem;
+        position: relative;
+        font-size: .9rem;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    .ai-action-list li:last-child { border-bottom: none; }
+    .ai-action-list li::before {
+        content: counter(action-counter);
+        position: absolute;
+        left: .5rem;
+        top: .6rem;
+        width: 1.5rem;
+        height: 1.5rem;
+        background: #6366f1;
+        color: #fff;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: .75rem;
+        font-weight: 700;
+    }
+</style>
+
+<!-- Header -->
+<div class="audit-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h3><i class="bi bi-clipboard2-pulse"></i> Google Profile Audit</h3>
+            <p>A full checkup of your Google Business Profile with personalized recommendations</p>
+        </div>
+        {% if audit %}
+        <div class="grade-circle grade-{{ audit.overall_grade|lower }}">
+            {{ audit.overall_grade }}
+            <span class="sub">{{ audit.overall_score }}/100</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Back nav -->
+<div class="mb-3">
+    <a href="{{ url_for('client.client_gbp') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Back to Google Profile
+    </a>
+</div>
+
+{% if not gbp or gbp.error == 'MISSING_CONFIG' %}
+<!-- Missing Place ID or API key -->
+<div class="card border-0 shadow-sm">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-geo-alt" style="font-size: 3rem; color: #6366f1;"></i>
+        <h5 class="mt-3 fw-bold">Connect Your Google Profile First</h5>
+        <p class="text-muted mb-3">
+            To run an audit, you need a Google Place ID and Maps API key set up in your business settings.
+        </p>
+        <a href="{{ url_for('client.client_my_business') }}" class="btn btn-primary">
+            <i class="bi bi-building"></i> Go to My Business
+        </a>
+    </div>
+</div>
+
+{% elif gbp.error == 'API_FAILED' %}
+<div class="card border-0 shadow-sm">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-exclamation-triangle" style="font-size: 3rem; color: #f59e0b;"></i>
+        <h5 class="mt-3 fw-bold">Could Not Load Profile Data</h5>
+        <p class="text-muted mb-3">
+            The Google Places API returned an error. Check your Place ID and API key in settings.
+        </p>
+        <a href="{{ url_for('client.client_gbp_audit') }}" class="btn btn-outline-primary mt-2">
+            <i class="bi bi-arrow-clockwise"></i> Try Again
+        </a>
+    </div>
+</div>
+
+{% elif audit %}
+<div class="row g-4">
+
+    <!-- LEFT COLUMN: Scores + Actions -->
+    <div class="col-lg-7">
+
+        <!-- Score Breakdown -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 pt-3 pb-0">
+                <h5 class="fw-bold mb-0"><i class="bi bi-bar-chart-line"></i> Score Breakdown</h5>
+            </div>
+            <div class="card-body">
+                {% for s in audit.sections %}
+                <div class="audit-section">
+                    <span class="label">{{ s.label }}</span>
+                    <div class="section-bar">
+                        <div class="fill fill-{{ s.grade }}" style="width: {{ s.score }}%"></div>
+                    </div>
+                    <span class="score-badge badge-{{ s.grade }}">{{ s.score }}</span>
+                </div>
+                <div style="padding: 0 0 .3rem 0;">
+                    <span class="detail">{{ s.detail }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Action Items -->
+        {% if audit.action_items %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 pt-3 pb-0">
+                <h5 class="fw-bold mb-0"><i class="bi bi-list-check"></i> Fix These to Improve Your Score</h5>
+            </div>
+            <div class="card-body">
+                {% for item in audit.action_items %}
+                <div class="action-card action-{{ item.priority }}">
+                    <span class="priority priority-{{ item.priority }}">{{ item.priority }} priority</span>
+                    <div class="mt-1 fw-semibold">{{ item.label }}</div>
+                    <div class="text-muted small mt-1">{{ item.detail }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-trophy" style="font-size: 2.5rem; color: #10b981;"></i>
+                <h5 class="mt-2 fw-bold">Profile looks great!</h5>
+                <p class="text-muted mb-0">No major issues found. Keep collecting reviews and adding fresh photos.</p>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- AI Recommendations -->
+        {% if ai_tips %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 pt-3 pb-0 d-flex align-items-center gap-2">
+                <h5 class="fw-bold mb-0"><i class="bi bi-stars"></i> AI Recommendations</h5>
+                <span class="badge bg-primary-subtle text-primary" style="font-size:.7rem">Personalized</span>
+            </div>
+            <div class="card-body">
+
+                <!-- Summary -->
+                {% if ai_tips.summary %}
+                <div class="ai-card">
+                    <h6><i class="bi bi-chat-left-text"></i> Summary</h6>
+                    <p class="mb-0" style="font-size:.9rem; color:#475569;">{{ ai_tips.summary }}</p>
+                </div>
+                {% endif %}
+
+                <!-- Optimized Description -->
+                {% if ai_tips.optimized_description %}
+                <div class="ai-card">
+                    <h6><i class="bi bi-pencil-square"></i> Optimized Business Description</h6>
+                    <p class="text-muted small mb-2">Copy this and paste it into your Google Business Profile description field.</p>
+                    <div class="copy-box" onclick="navigator.clipboard.writeText(this.innerText.replace('Click to copy','').trim()); this.style.borderColor='#10b981'; setTimeout(()=>this.style.borderColor='', 1500);">{{ ai_tips.optimized_description }}</div>
+                </div>
+                {% endif %}
+
+                <!-- Action Plan -->
+                {% if ai_tips.action_plan %}
+                <div class="ai-card">
+                    <h6><i class="bi bi-signpost-split"></i> Your Action Plan</h6>
+                    <ol class="ai-action-list mb-0">
+                        {% for step in ai_tips.action_plan %}
+                        <li>{{ step }}</li>
+                        {% endfor %}
+                    </ol>
+                </div>
+                {% endif %}
+
+                <!-- Verification Help -->
+                {% if ai_tips.verification_help %}
+                <div class="ai-card" style="border-color: #fbbf24;">
+                    <h6><i class="bi bi-shield-check"></i> Verification Help</h6>
+                    <ul class="mb-0" style="padding-left: 1.25rem;">
+                        {% for step in ai_tips.verification_help %}
+                        <li style="margin-bottom: .35rem; font-size:.9rem; color:#475569;">{{ step }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                <!-- Review Request Template -->
+                {% if ai_tips.review_request_template %}
+                <div class="ai-card">
+                    <h6><i class="bi bi-star"></i> Review Request Template</h6>
+                    <p class="text-muted small mb-2">Text or email this to customers after finishing a job.</p>
+                    <div class="copy-box" onclick="navigator.clipboard.writeText(this.innerText.replace('Click to copy','').trim()); this.style.borderColor='#10b981'; setTimeout(()=>this.style.borderColor='', 1500);">{{ ai_tips.review_request_template }}</div>
+                </div>
+                {% endif %}
+
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- RIGHT COLUMN: Verification Troubleshooter + Quick Links -->
+    <div class="col-lg-5">
+
+        <!-- Current Status -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body text-center py-3">
+                {% if gbp.status == 'VERIFIED' %}
+                    <i class="bi bi-patch-check-fill" style="font-size: 2rem; color: #10b981;"></i>
+                    <h6 class="fw-bold mt-2 mb-1">Profile is Live</h6>
+                    <p class="text-muted small mb-0">Your business is verified and appearing on Google.</p>
+                {% elif 'CLOSED' in gbp.status %}
+                    <i class="bi bi-exclamation-triangle-fill" style="font-size: 2rem; color: #f59e0b;"></i>
+                    <h6 class="fw-bold mt-2 mb-1">{{ gbp.status|replace('_', ' ')|title }}</h6>
+                    <p class="text-muted small mb-0">Update your status at business.google.com</p>
+                {% else %}
+                    <i class="bi bi-question-circle" style="font-size: 2rem; color: #94a3b8;"></i>
+                    <h6 class="fw-bold mt-2 mb-1">Verification Unknown</h6>
+                    <p class="text-muted small mb-0">Your listing may not be claimed yet. See the troubleshooter below.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Verification Troubleshooter -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 pt-3 pb-0">
+                <h5 class="fw-bold mb-0"><i class="bi bi-wrench-adjustable"></i> Verification Troubleshooter</h5>
+                <p class="text-muted small mt-1 mb-0">Having trouble getting approved? Find your issue below.</p>
+            </div>
+            <div class="card-body">
+                {% for vi in verification_issues %}
+                <div class="trouble-card">
+                    <button class="trouble-header" onclick="toggleTrouble(this)">
+                        <i class="bi {{ vi.icon }}"></i>
+                        {{ vi.issue }}
+                        <i class="bi bi-chevron-down chevron"></i>
+                    </button>
+                    <div class="trouble-body">
+                        <ol>
+                            {% for step in vi.steps %}
+                            <li>{{ step }}</li>
+                            {% endfor %}
+                        </ol>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Google Review Link Generator -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 pt-3 pb-0">
+                <h5 class="fw-bold mb-0"><i class="bi bi-link-45deg"></i> Your Google Review Link</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">Share this link with customers so they can leave a review directly.</p>
+                {% set place_id = brand.get('google_place_id', '') %}
+                {% if place_id %}
+                <div class="input-group">
+                    <input type="text" class="form-control form-control-sm" id="reviewLink"
+                           value="https://search.google.com/local/writereview?placeid={{ place_id }}" readonly>
+                    <button class="btn btn-outline-primary btn-sm" onclick="copyReviewLink()">
+                        <i class="bi bi-clipboard"></i> Copy
+                    </button>
+                </div>
+                <div id="reviewLinkCopied" class="text-success small mt-1" style="display:none;">Copied!</div>
+                {% else %}
+                <div class="alert alert-info small mb-0">
+                    Set up your Google Place ID in settings to generate a review link.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Quick Links -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3"><i class="bi bi-lightning-charge"></i> Quick Actions</h6>
+                <div class="d-grid gap-2">
+                    <a href="https://business.google.com" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-box-arrow-up-right"></i> Open Google Business Profile
+                    </a>
+                    {% if gbp.maps_url %}
+                    <a href="{{ gbp.maps_url }}" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-map"></i> View on Google Maps
+                    </a>
+                    {% endif %}
+                    <a href="{{ url_for('client.client_gbp_audit') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-arrow-clockwise"></i> Re-run Audit
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endif %}
+
+<script>
+function toggleTrouble(btn) {
+    var body = btn.nextElementSibling;
+    var isOpen = body.classList.contains('open');
+    // Close all
+    document.querySelectorAll('.trouble-body.open').forEach(function(el) {
+        el.classList.remove('open');
+        el.previousElementSibling.classList.remove('active');
+    });
+    if (!isOpen) {
+        body.classList.add('open');
+        btn.classList.add('active');
+    }
+}
+
+function copyReviewLink() {
+    var input = document.getElementById('reviewLink');
+    if (input) {
+        navigator.clipboard.writeText(input.value);
+        var msg = document.getElementById('reviewLinkCopied');
+        msg.style.display = 'block';
+        setTimeout(function() { msg.style.display = 'none'; }, 2000);
+    }
+}
+</script>
+{% endblock %}

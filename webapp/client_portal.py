@@ -14,7 +14,7 @@ from datetime import datetime
 
 from flask import (
     Blueprint, render_template, request, redirect,
-    url_for, flash, session, abort, jsonify,
+    url_for, flash, session, abort, jsonify, current_app,
 )
 
 client_bp = Blueprint(
@@ -2811,6 +2811,50 @@ def client_gbp():
         brand=brand,
         gbp=gbp,
         guidance=guidance,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/google-business-profile/audit")
+@client_login_required
+def client_gbp_audit():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    gbp = None
+    audit = None
+    ai_tips = None
+    verification_issues = []
+
+    try:
+        from webapp.google_business import (
+            build_gbp_context, run_gbp_audit, run_ai_audit,
+            VERIFICATION_ISSUES,
+        )
+        gbp = build_gbp_context(db, brand_id)
+        verification_issues = VERIFICATION_ISSUES
+
+        if gbp and not gbp.get("error"):
+            audit = run_gbp_audit(gbp)
+
+            # AI-powered recommendations
+            api_key = _get_openai_api_key(brand)
+            model = _pick_ai_model(brand, "analysis")
+            if api_key:
+                ai_tips = run_ai_audit(gbp, audit, brand, api_key, model)
+    except Exception:
+        current_app.logger.exception("GBP audit error")
+
+    return render_template(
+        "client_gbp_audit.html",
+        brand=brand,
+        gbp=gbp,
+        audit=audit,
+        ai_tips=ai_tips,
+        verification_issues=verification_issues,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
 
