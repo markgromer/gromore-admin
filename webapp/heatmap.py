@@ -42,8 +42,8 @@ def generate_grid(center_lat, center_lng, radius_miles, grid_size=6):
 def calc_search_radius_m(radius_miles, grid_size):
     """Calculate the per-point search radius based on grid spacing."""
     step_km = (2 * radius_miles * MILES_TO_KM) / max(grid_size - 1, 1)
-    # Use half the grid spacing as search radius, with a floor of 2km
-    return max(step_km * 1000 / 2, 2000)
+    # Use full grid spacing as search radius so adjacent points overlap, floor of 5km
+    return max(step_km * 1000, 5000)
 
 
 def geocode_address(api_key, address):
@@ -261,6 +261,12 @@ def scan_grid(api_key, keyword, business_name, grid_points,
     results = []
     debug_sample = None
     errors = 0
+    grid_size = int(math.sqrt(len(grid_points))) if grid_points else 0
+    center_idx = None
+    if grid_size > 0:
+        center_r = grid_size // 2
+        center_idx = center_r * grid_size + center_r
+
     for idx, pt in enumerate(grid_points):
         # Rate limit: small delay between API calls to avoid throttling
         if idx > 0:
@@ -274,13 +280,14 @@ def scan_grid(api_key, keyword, business_name, grid_points,
             places, api_diag = [], {"error": str(exc)}
             errors += 1
         rank = _match_business(places, business_name, place_id)
-        # Capture first point's raw results for diagnostics
-        if debug_sample is None:
+        # Capture center point's results for diagnostics (most representative)
+        if idx == center_idx or (debug_sample is None and idx == len(grid_points) - 1):
             debug_sample = {
                 "business_name_used": business_name,
                 "place_id_used": place_id,
                 "search_radius_m": search_radius_m,
                 "places_returned": len(places),
+                "debug_point": f"center ({pt['lat']:.4f}, {pt['lng']:.4f})",
                 "top_results": [
                     {
                         "name": (p.get("displayName", {}).get("text", "") or ""),
@@ -290,7 +297,7 @@ def scan_grid(api_key, keyword, business_name, grid_points,
                 ],
                 "api_diagnostics": api_diag,
             }
-            log.info("Heatmap debug - matching '%s' (place_id=%s) | "
+            log.info("Heatmap debug (center) - matching '%s' (place_id=%s) | "
                      "top results: %s | api_diag: %s",
                      business_name, place_id,
                      [r["name"] for r in debug_sample["top_results"]], api_diag)

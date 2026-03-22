@@ -772,9 +772,10 @@ function showDebug(d) {
     el.innerHTML =
         '<strong>Debug:</strong> Matching business name: <code>' + (d.business_name_used || 'none') + '</code>' +
         ' | Place ID: <code>' + (d.place_id_used || 'none') + '</code>' +
-        ' | Search radius: ' + d.search_radius_m + 'm' +
+        ' | Search radius: ' + Math.round(d.search_radius_m) + 'm' +
         ' | Places returned: ' + d.places_returned +
-        '<br><strong>Google Places results (first grid point):</strong> ' +
+        (d.debug_point ? ' | Sample point: ' + d.debug_point : '') +
+        '<br><strong>Google Places results (center grid point):</strong> ' +
         (d.top_results && d.top_results.length ? d.top_results.map(function(r, i) {
             var match = d.place_id_used && r.id === d.place_id_used ? ' <span style="color:#22c55e; font-weight:600;">MATCH</span>' : '';
             return '<br>' + (i+1) + '. ' + r.name + ' <small style="color:#9ca3af;">(' + r.id.substring(0, 20) + '...)</small>' + match;
@@ -783,7 +784,7 @@ function showDebug(d) {
     // Show API diagnostics when available
     if (d.api_diagnostics) {
         var ad = d.api_diagnostics;
-        var diagHtml = '<br><strong>API Diagnostics (first grid point):</strong>';
+        var diagHtml = '<br><strong>API Diagnostics (center grid point):</strong>';
         if (ad.new_api) {
             if (ad.new_api.error) {
                 diagHtml += '<br>New API: Error - ' + ad.new_api.error;
@@ -830,6 +831,12 @@ function showDebug(d) {
             }
         }
         el.innerHTML += pvHtml;
+    }
+
+    // Keyword warning
+    if (d.keyword_warning) {
+        el.innerHTML = '<div style="background:#fef3c7; border:1px solid #f59e0b; border-radius:8px; padding:10px; margin-bottom:10px; color:#92400e; font-weight:500;">' +
+            '<i class="bi bi-exclamation-triangle me-1"></i> ' + d.keyword_warning + '</div>' + el.innerHTML;
     }
 
     // API error count

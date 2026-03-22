@@ -3565,6 +3565,20 @@ def client_heatmap_scan():
     if debug_info and place_verification:
         debug_info["place_id_verification"] = place_verification
 
+    # Detect if keyword looks like the business name (common user mistake)
+    keyword_warning = None
+    kw_lower = keyword.lower().strip()
+    bn_lower = business_name.lower().strip()
+    if bn_lower and (kw_lower == bn_lower or kw_lower in bn_lower or bn_lower in kw_lower):
+        keyword_warning = (
+            "You searched your business name. The heatmap is designed for "
+            "service keywords, the terms customers use to find businesses like yours. "
+            "Try keywords like \"pooper scooper near me\", \"dog poop cleanup\", etc. "
+            "That shows where you rank vs. competitors when people search for your service."
+        )
+    if debug_info and keyword_warning:
+        debug_info["keyword_warning"] = keyword_warning
+
     ranked = [r for r in results if r["rank"] > 0]
     avg_rank = round(sum(r["rank"] for r in ranked) / len(ranked), 1) if ranked else 0
 
