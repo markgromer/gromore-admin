@@ -321,36 +321,6 @@
 
 {% block content %}
 
-<!-- Drive Image Picker Modal -->
-<div class="modal fade" id="drivePickerModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-images"></i> Pick an Image from Google Drive</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
-                <div id="abDriveBreadcrumb" class="mb-3 d-flex align-items-center gap-2 flex-wrap" style="font-size:.85rem;"></div>
-                <div id="abDriveFolders" class="d-flex flex-wrap gap-2 mb-3"></div>
-                <div id="abDriveImages" class="d-flex flex-wrap gap-3"></div>
-                <div id="abDriveEmpty" class="text-center text-muted py-4" style="display:none;">
-                    <i class="bi bi-cloud-slash" style="font-size:2rem;"></i>
-                    <p class="mt-2">No images found. Upload creatives via the Creative Center or Google Drive.</p>
-                </div>
-                <div id="abDriveLoading" class="text-center py-4" style="display:none;">
-                    <div class="spinner-border spinner-border-sm text-primary"></div> Loading...
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="abDrivePickConfirm" disabled onclick="abConfirmPick()">
-                    <i class="bi bi-check-lg"></i> Use Selected Image
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <div class="loading-overlay" id="loadingOverlay">
     <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status"></div>
     <h5 class="text-muted">Your AI is building ad copy from your account data...</h5>
@@ -1154,7 +1124,37 @@ var _abPickedFile = null;
 var _abBreadcrumb = [];
 var _abPickerModal = null;
 
+function _ensurePickerModal() {
+    if (document.getElementById('drivePickerModal')) return;
+    var html = '<div class="modal fade" id="drivePickerModal" tabindex="-1">'
+        + '<div class="modal-dialog modal-lg">'
+        + '<div class="modal-content">'
+        + '<div class="modal-header">'
+        + '<h5 class="modal-title"><i class="bi bi-images"></i> Pick an Image from Google Drive</h5>'
+        + '<button type="button" class="btn-close" data-bs-dismiss="modal"></button>'
+        + '</div>'
+        + '<div class="modal-body" style="max-height:70vh;overflow-y:auto;">'
+        + '<div id="abDriveBreadcrumb" class="mb-3 d-flex align-items-center gap-2 flex-wrap" style="font-size:.85rem;"></div>'
+        + '<div id="abDriveFolders" class="d-flex flex-wrap gap-2 mb-3"></div>'
+        + '<div id="abDriveImages" class="d-flex flex-wrap gap-3"></div>'
+        + '<div id="abDriveEmpty" class="text-center text-muted py-4" style="display:none;">'
+        + '<i class="bi bi-cloud-slash" style="font-size:2rem;"></i>'
+        + '<p class="mt-2">No images found. Upload creatives via the Creative Center or Google Drive.</p>'
+        + '</div>'
+        + '<div id="abDriveLoading" class="text-center py-4" style="display:none;">'
+        + '<div class="spinner-border spinner-border-sm text-primary"></div> Loading...'
+        + '</div>'
+        + '</div>'
+        + '<div class="modal-footer">'
+        + '<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>'
+        + '<button type="button" class="btn btn-primary" id="abDrivePickConfirm" disabled onclick="abConfirmPick()">'
+        + '<i class="bi bi-check-lg"></i> Use Selected Image</button>'
+        + '</div></div></div></div>';
+    document.body.insertAdjacentHTML('beforeend', html);
+}
+
 function abOpenPicker(platform, idx) {
+    _ensurePickerModal();
     _abPickerCtx = { platform: platform, idx: idx };
     _abPickedFile = null;
     document.getElementById('abDrivePickConfirm').disabled = true;
