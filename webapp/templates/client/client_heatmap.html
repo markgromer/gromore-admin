@@ -186,6 +186,7 @@
 {% endif %}
 
 <!-- Scan Form -->
+{% if has_location %}
 <div class="card mb-4" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
     <div class="card-body p-3 p-md-4">
         <div class="row g-3 align-items-end">
@@ -235,6 +236,15 @@
         {% endif %}
     </div>
 </div>
+
+<!-- API Diagnostics -->
+<div class="mb-3">
+    <button class="btn btn-sm btn-outline-secondary" type="button" id="testApiBtn">
+        <i class="bi bi-tools me-1"></i> Test API Key
+    </button>
+    <span id="apiTestResult" class="ms-2" style="font-size:.85rem;"></span>
+</div>
+{% endif %}{# end has_location #}
 
 <!-- Location change form (hidden by default when location exists) -->
 <div class="card mb-4 {% if has_location %}d-none{% endif %}" id="locationChangeCard"
@@ -633,7 +643,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
                 body: JSON.stringify({keyword: keyword, radius_miles: parseFloat(radius), grid_size: gridSize})
             })
-            .then(function(r) { return r.json(); })
+            .then(function(r) {
+                if (!r.ok && r.headers.get('content-type')?.indexOf('json') === -1) {
+                    throw new Error('Server returned ' + r.status);
+                }
+                return r.json();
+            })
             .then(function(data) {
                 scanBtn.disabled = false;
                 document.getElementById('scanSpinner').classList.remove('active');
@@ -648,11 +663,48 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.debug) showDebug(data.debug);
                 plotMapMarkers(data.results);
             })
-            .catch(function() {
+            .catch(function(err) {
                 scanBtn.disabled = false;
                 document.getElementById('scanSpinner').classList.remove('active');
                 document.getElementById('scanIcon').style.display = '';
                 alert('Network error. Check your connection and try again.');
+            });
+        });
+    }
+
+    // API Test handler
+    var testApiBtn = document.getElementById('testApiBtn');
+    if (testApiBtn) {
+        testApiBtn.addEventListener('click', function() {
+            var resultEl = document.getElementById('apiTestResult');
+            testApiBtn.disabled = true;
+            resultEl.innerHTML = '<span class="text-primary"><i class="bi bi-hourglass-split"></i> Testing...</span>';
+            fetch('/client/heatmap/test-api', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+                body: '{}'
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                testApiBtn.disabled = false;
+                if (!data.ok) {
+                    resultEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> ' + (data.error || 'Test failed') + '</span>';
+                    return;
+                }
+                var html = '';
+                var c = data.checks;
+                function icon(ok) { return ok ? '<i class="bi bi-check-circle text-success"></i>' : '<i class="bi bi-x-circle text-danger"></i>'; }
+                html += icon(c.places_new.ok) + ' Places API (New): ' + c.places_new.detail + '<br>';
+                html += icon(c.places_legacy.ok) + ' Places API (Legacy): ' + c.places_legacy.detail + '<br>';
+                html += icon(c.geocoding.ok) + ' Geocoding API: ' + c.geocoding.detail;
+                if (!data.any_places) {
+                    html += '<br><span class="text-danger fw-bold">Neither Places API is working. Check that your API key has no HTTP referrer restrictions (server-side calls need IP restrictions or none) and that Places API is enabled in Google Cloud Console.</span>';
+                }
+                resultEl.innerHTML = html;
+            })
+            .catch(function() {
+                testApiBtn.disabled = false;
+                resultEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> Network error</span>';
             });
         });
     }
@@ -761,6 +813,19 @@ function showDebug(d) {
             }
         }
         el.innerHTML += pvHtml;
+    }
+
+    // API error count
+    if (d.api_errors) {
+        el.innerHTML += '<br><span style="color:#ef4444; font-weight:600;">API errors: ' +
+            d.api_errors + ' / ' + d.total_points + ' grid points failed. ' +
+            'This usually means rate limiting or API key restrictions. Try a smaller grid or check your API key.</span>';
+    }
+
+    // No results guidance
+    if (d.places_returned === 0) {
+        el.innerHTML += '<br><span style="color:#f59e0b; font-weight:600;">No places returned from any API. ' +
+            'Click "Test API Key" below the scan form to diagnose the issue.</span>';
     }
 }
 

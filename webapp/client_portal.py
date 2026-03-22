@@ -3554,8 +3554,13 @@ def client_heatmap_scan():
     if place_id:
         place_verification = verify_place_id(api_key, place_id)
 
-    results, debug_info = scan_grid(api_key, keyword, business_name, grid_points,
-                                    place_id=place_id, search_radius_m=search_radius)
+    try:
+        results, debug_info = scan_grid(api_key, keyword, business_name, grid_points,
+                                        place_id=place_id, search_radius_m=search_radius)
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        return jsonify(ok=False, error=f"Scan failed: {exc}"), 500
 
     if debug_info and place_verification:
         debug_info["place_id_verification"] = place_verification
@@ -3570,6 +3575,78 @@ def client_heatmap_scan():
     return jsonify(ok=True, results=results, avg_rank=avg_rank,
                    found=len(ranked), total=len(results),
                    debug=debug_info)
+
+
+@client_bp.route("/heatmap/test-api", methods=["POST"])
+@client_login_required
+def client_heatmap_test_api():
+    """Quick API key validation: tries a simple Places API call from the server."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    api_key = (brand.get("google_maps_api_key") or "").strip()
+    if not api_key:
+        return jsonify(ok=False, error="No API key configured."), 400
+
+    import requests as _req
+    checks = {}
+
+    # Test 1: Places API (New) Text Search
+    try:
+        resp = _req.post(
+            "https://places.googleapis.com/v1/places:searchText",
+            json={"textQuery": "coffee", "maxResultCount": 1},
+            headers={
+                "X-Goog-Api-Key": api_key,
+                "X-Goog-FieldMask": "places.displayName",
+                "Content-Type": "application/json",
+            },
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            checks["places_new"] = {"ok": True, "detail": "Working"}
+        else:
+            body = resp.text[:300]
+            checks["places_new"] = {"ok": False, "detail": f"HTTP {resp.status_code}: {body}"}
+    except Exception as exc:
+        checks["places_new"] = {"ok": False, "detail": str(exc)}
+
+    # Test 2: Geocoding API
+    try:
+        resp = _req.get(
+            "https://maps.googleapis.com/maps/api/geocode/json",
+            params={"address": "New York", "key": api_key},
+            timeout=10,
+        )
+        data = resp.json()
+        if data.get("status") == "OK":
+            checks["geocoding"] = {"ok": True, "detail": "Working"}
+        else:
+            checks["geocoding"] = {"ok": False, "detail": data.get("error_message") or data.get("status", "Unknown")}
+    except Exception as exc:
+        checks["geocoding"] = {"ok": False, "detail": str(exc)}
+
+    # Test 3: Legacy Places Text Search
+    try:
+        resp = _req.get(
+            "https://maps.googleapis.com/maps/api/place/textsearch/json",
+            params={"query": "coffee", "key": api_key},
+            timeout=10,
+        )
+        data = resp.json()
+        if data.get("status") == "OK":
+            checks["places_legacy"] = {"ok": True, "detail": "Working"}
+        else:
+            checks["places_legacy"] = {"ok": False, "detail": data.get("error_message") or data.get("status", "Unknown")}
+    except Exception as exc:
+        checks["places_legacy"] = {"ok": False, "detail": str(exc)}
+
+    all_ok = all(c["ok"] for c in checks.values())
+    any_places = checks.get("places_new", {}).get("ok") or checks.get("places_legacy", {}).get("ok")
+    return jsonify(ok=True, all_ok=all_ok, any_places=any_places, checks=checks)
 
 
 @client_bp.route("/heatmap/save-location", methods=["POST"])

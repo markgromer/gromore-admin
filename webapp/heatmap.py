@@ -9,6 +9,7 @@ for a keyword at each point.
 import math
 import logging
 import re
+import time
 import requests
 
 log = logging.getLogger(__name__)
@@ -219,7 +220,8 @@ def _tokenize(name):
 
 def _match_business(places, business_name, place_id=None):
     """Find the rank (1-based) of a business in Places results.
-    Matches by place_id first, then exact substring, then word overlap."""
+    Matches by place_id first, then exact substring, then word overlap,
+    then fuzzy single-word match."""
     bname = (business_name or "").lower().strip()
     btokens = _tokenize(business_name)
     stop_words = {'the', 'and', 'of', 'in', 'at', 'for', 'a', 'an', 'llc', 'inc', 'co'}
@@ -238,10 +240,16 @@ def _match_business(places, business_name, place_id=None):
             return i
 
         # Word overlap match: if 2+ significant words match, count it
+        ptokens = _tokenize(pname) - stop_words
         if len(btokens_clean) >= 2:
-            ptokens = _tokenize(pname) - stop_words
             overlap = btokens_clean & ptokens
             if len(overlap) >= 2 and len(overlap) >= len(btokens_clean) * 0.5:
+                return i
+
+        # Single-word or short name: check if the core word appears in the result
+        if len(btokens_clean) == 1:
+            core = list(btokens_clean)[0]
+            if len(core) >= 3 and any(core in pt for pt in ptokens):
                 return i
 
     return 0  # not found
@@ -252,9 +260,19 @@ def scan_grid(api_key, keyword, business_name, grid_points,
     """Run a full grid scan. Returns list of point dicts with 'rank' added."""
     results = []
     debug_sample = None
-    for pt in grid_points:
-        places, api_diag = _search_places(api_key, keyword, pt["lat"], pt["lng"],
-                                          radius_m=search_radius_m)
+    errors = 0
+    for idx, pt in enumerate(grid_points):
+        # Rate limit: small delay between API calls to avoid throttling
+        if idx > 0:
+            time.sleep(0.15)
+        try:
+            places, api_diag = _search_places(api_key, keyword, pt["lat"], pt["lng"],
+                                              radius_m=search_radius_m)
+        except Exception as exc:
+            log.warning("scan_grid: API error at point %d (%.4f, %.4f): %s",
+                        idx, pt["lat"], pt["lng"], exc)
+            places, api_diag = [], {"error": str(exc)}
+            errors += 1
         rank = _match_business(places, business_name, place_id)
         # Capture first point's raw results for diagnostics
         if debug_sample is None:
@@ -280,4 +298,9 @@ def scan_grid(api_key, keyword, business_name, grid_points,
             "lng": pt["lng"],
             "rank": rank,
         })
+    if errors:
+        if debug_sample is None:
+            debug_sample = {}
+        debug_sample["api_errors"] = errors
+        debug_sample["total_points"] = len(grid_points)
     return results, debug_sample
