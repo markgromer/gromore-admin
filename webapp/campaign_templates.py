@@ -22,15 +22,24 @@ CAMPAIGN_STRATEGIES = {
         "color": "#8b5cf6",
         "tagline": "Be everywhere your audience looks",
         "description": (
-            "Run low-cost ads across every Meta placement so your brand stays "
-            "top-of-mind. Three audience tiers (warm retarget, lookalike, cold "
-            "interest-based) each get their own ad set with different creative "
-            "angles. Small daily spend per audience, maximum visibility."
+            "Run low-cost awareness ads across every Meta placement so your brand "
+            "stays top-of-mind. One ad set with 12 different creative angles "
+            "(social proof, education, behind-the-scenes, testimonials, etc.) "
+            "lets Meta's algorithm rotate and optimize. Small daily spend, "
+            "maximum visibility."
         ),
         "best_for": "Brand awareness, staying top-of-mind, nurturing "
                      "prospects who aren't ready to buy yet",
         "recommended_min": 300,
         "objective": "OUTCOME_AWARENESS",
+        "blueprint": (
+            "1 Campaign (Awareness objective)\n"
+            "  1 Ad Set - broad interest targeting, 25-mile radius\n"
+            "    12 Ads - each with a unique creative angle:\n"
+            "      social proof, before/after, educational tip, meet the team,\n"
+            "      seasonal, FAQ/myth-bust, testimonial, speed/reliability,\n"
+            "      local community, value comparison, problem awareness, credentials"
+        ),
     },
 
     "meta_lead_gen": {
@@ -49,6 +58,14 @@ CAMPAIGN_STRATEGIES = {
                      "booked appointments",
         "recommended_min": 300,
         "objective": "OUTCOME_LEADS",
+        "blueprint": (
+            "1 Campaign (Leads objective)\n"
+            "  3 Ad Sets:\n"
+            "    1. High Intent - Service Seekers (15mi) - 3 ads\n"
+            "    2. Local Homeowners (20mi) - 2 ads\n"
+            "    3. Broad Discovery (25mi) - 2 ads\n"
+            "  7 total ads across sets, each with different hooks"
+        ),
     },
 
     "meta_hyper_local": {
@@ -67,6 +84,13 @@ CAMPAIGN_STRATEGIES = {
                      "anyone targeting a specific area",
         "recommended_min": 200,
         "objective": "OUTCOME_LEADS",
+        "blueprint": (
+            "1 Campaign (Leads objective)\n"
+            "  2 Ad Sets:\n"
+            "    1. Hot Zone - Inner Ring (5mi, 60% budget) - 3 ads\n"
+            "    2. Service Area - Outer Ring (15mi, 40% budget) - 2 ads\n"
+            "  5 total ads, hyper-local copy with city/area names"
+        ),
     },
 
     "meta_retargeting": {
@@ -84,6 +108,13 @@ CAMPAIGN_STRATEGIES = {
                      "second-chance conversions",
         "recommended_min": 150,
         "objective": "OUTCOME_LEADS",
+        "blueprint": (
+            "1 Campaign (Leads objective)\n"
+            "  2 Ad Sets:\n"
+            "    1. Website Visitors (30mi, 55% budget) - 2 ads\n"
+            "    2. Social Engagers (30mi, 45% budget) - 2 ads\n"
+            "  4 total ads, urgency + offer focused for warm audiences"
+        ),
     },
 
     # ── Google Ads ───────────────────────────────────────────────
@@ -102,6 +133,14 @@ CAMPAIGN_STRATEGIES = {
         "best_for": "Immediate lead flow from people searching for "
                      "your services right now",
         "recommended_min": 300,
+        "blueprint": (
+            "1 Campaign (Search)\n"
+            "  3 Ad Groups:\n"
+            "    1. Core Service Keywords (10-12 kw, 15 headlines, 4 desc)\n"
+            "    2. Problem-Based Keywords (8-10 kw, 15 headlines, 4 desc)\n"
+            "    3. Comparison/Research Keywords (6-8 kw, 15 headlines, 4 desc)\n"
+            "  RSAs with negative keyword lists per group + campaign level"
+        ),
     },
 
     "google_local_domination": {
@@ -119,6 +158,14 @@ CAMPAIGN_STRATEGIES = {
         "best_for": "Local businesses competing for 'near me' and "
                      "city-specific searches",
         "recommended_min": 200,
+        "blueprint": (
+            "1 Campaign (Search)\n"
+            "  3 Ad Groups:\n"
+            "    1. Near Me Searches (8-10 kw, city name in headlines)\n"
+            "    2. City/Area Specific (10-12 kw, neighborhood names)\n"
+            "    3. Urgent/Emergency (6-8 kw, immediacy messaging)\n"
+            "  Location-heavy copy, 15 headlines + 4 descriptions per group"
+        ),
     },
 
     "google_competitor_conquest": {
@@ -135,6 +182,14 @@ CAMPAIGN_STRATEGIES = {
         "best_for": "Stealing market share from known competitors "
                      "in your area",
         "recommended_min": 300,
+        "blueprint": (
+            "1 Campaign (Search)\n"
+            "  2 Ad Groups:\n"
+            "    1. Competitor Brand Names (6-8 kw, differentiation copy)\n"
+            "    2. Alternative/Comparison Searches (6-8 kw, reviews focus)\n"
+            "  Never use competitor names in ad copy (Google policy)\n"
+            "  15 headlines + 4 descriptions per group"
+        ),
     },
 }
 
@@ -286,31 +341,37 @@ Goal: Maximum brand visibility across all Meta placements. Stay in front
 of every potential customer so when they need this service, you're the
 first name they think of.
 
-Create a campaign with exactly 3 ad sets:
+STRUCTURE: 1 ad set containing 12 ads. Objective is AWARENESS.
+The single ad set uses broad targeting (interest-based homeowners in the
+service area). All 12 ads run inside that one ad set so Meta's algorithm
+can rotate and optimize delivery across placements.
 
-1. "Warm Audience - Retargeting" (radius_miles: 15)
-   - Targets people who've visited the website or engaged with social posts
-   - Copy angle: social proof and trust (reviews, years in business)
-   - 2 ad variations
+Create a campaign with exactly 1 ad set:
 
-2. "Lookalike - Similar Customers" (radius_miles: 25)
-   - Targets people similar to existing customers
-   - Copy angle: authority and expertise (before/after, credentials)
-   - 2 ad variations
-
-3. "Cold Audience - Interest Based" (radius_miles: 25)
-   - Targets homeowners or relevant interest groups
-   - Copy angle: value and education (tips, common problems, free info)
-   - 2 ad variations
-
-Split the daily budget roughly evenly: allocate 35% to warm, 35% to
-lookalike, 30% to cold. Reflect this in a budget_note field per ad set.
+1. "Omnipresent - All Placements" (radius_miles: 25)
+   - Broad audience: homeowners and relevant interest groups in the area
+   - age_min: 25, age_max: 65
+   - 12 ad variations, each with a DIFFERENT creative angle:
+     a. Social proof (reviews, star ratings, customer count)
+     b. Before/after transformation
+     c. Educational tip related to the service
+     d. Meet the team / behind the scenes
+     e. Seasonal relevance (why now matters)
+     f. FAQ / myth-busting
+     g. Customer testimonial quote
+     h. Speed / reliability promise
+     i. Local community connection
+     j. Value comparison (what you get vs. the cost)
+     k. Problem awareness (signs you need this service)
+     l. Authority / credentials (licenses, certifications, years)
 
 Ad copy requirements:
 - Headlines under 40 characters, benefit-focused
 - Primary text: 2-4 sentences, conversational tone, no hard sell
-- Different creative angle per ad set (do NOT repeat the same message)
-- CTAs: LEARN_MORE for cold, CONTACT_US for warm, GET_QUOTE for lookalike
+- Every ad must have a genuinely different angle (do NOT repeat themes)
+- Variety of CTAs across the 12 ads: mix of LEARN_MORE, CONTACT_US,
+  GET_QUOTE, and SEND_MESSAGE
+- Budget_note: "100% of daily budget to this single ad set"
 
 {fmt}"""
 

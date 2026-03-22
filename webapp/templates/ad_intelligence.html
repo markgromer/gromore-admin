@@ -524,6 +524,11 @@
                                 <textarea name="description" class="form-control" rows="3" placeholder="What this strategy does and how it works..."></textarea>
                             </div>
                             <div class="mb-3">
+                                <label class="form-label">Campaign Blueprint</label>
+                                <textarea name="blueprint" class="form-control font-monospace" rows="5" placeholder="1 Campaign (Awareness objective)&#10;  1 Ad Set - broad targeting&#10;    12 Ads - unique angles each"></textarea>
+                                <div class="form-text">Structure of the campaign: how many ad sets, how many ads, targeting approach. Shown to clients before launch.</div>
+                            </div>
+                            <div class="mb-3">
                                 <label class="form-label">Best For</label>
                                 <input type="text" name="best_for" class="form-control" placeholder="Phone calls, form fills, quote requests">
                             </div>
@@ -578,6 +583,7 @@
                             <br>
                             <small class="text-muted">{{ s.tagline }}</small>
                             {% if s.best_for %}<br><small class="text-muted">Best for: {{ s.best_for }}</small>{% endif %}
+                            {% if s.blueprint %}<br><pre class="mb-0 mt-1 p-2 bg-light rounded small" style="white-space: pre-wrap;">{{ s.blueprint }}</pre>{% endif %}
                         </div>
                         <form method="POST" action="{{ url_for('ad_intel_delete_strategy', strategy_id=s.id) }}" class="d-inline">
                             <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this strategy?')">

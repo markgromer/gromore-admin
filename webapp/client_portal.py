@@ -2750,6 +2750,35 @@ def inject_client_globals():
     }
 
 
+# ── Google Business Profile ──
+
+@client_bp.route("/google-business-profile")
+@client_login_required
+def client_gbp():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    gmb = None
+    verification_guidance = {}
+    try:
+        from webapp.google_business import build_gmb_context, VERIFICATION_GUIDANCE
+        gmb = build_gmb_context(db, brand_id)
+        verification_guidance = VERIFICATION_GUIDANCE
+    except Exception:
+        pass
+
+    return render_template(
+        "client_gbp.html",
+        brand=brand,
+        gmb=gmb,
+        verification_guidance=verification_guidance,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
 # ── Local Rank Heatmap ──
 
 @client_bp.route("/heatmap")

@@ -585,6 +585,7 @@ def seed_campaign_strategies(db):
             recommended_min=s.get("recommended_min", 200),
             objective=s.get("objective", ""),
             sort_order=i,
+            blueprint=s.get("blueprint", ""),
         )
     log.info("Seeded %d campaign strategies", len(CAMPAIGN_STRATEGIES))
 

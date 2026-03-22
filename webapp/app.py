@@ -1361,6 +1361,7 @@ def create_app():
             recommended_min=int(request.form.get("recommended_min", 200)),
             objective=request.form.get("objective", "").strip(),
             sort_order=int(request.form.get("sort_order", 0)),
+            blueprint=request.form.get("blueprint", "").strip(),
         )
         flash(f"Strategy '{name}' saved.", "success")
         return redirect(url_for("ad_intelligence") + "#tab-strategies")

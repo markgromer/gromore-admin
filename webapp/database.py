@@ -396,6 +396,16 @@ class WebDB:
                 conn.execute(f"ALTER TABLE brands ADD COLUMN {col_name} {col_def}")
         conn.commit()
 
+        # ── campaign_strategies migrations ──
+        cs_columns = {r[1] for r in conn.execute("PRAGMA table_info(campaign_strategies)").fetchall()}
+        new_cs_cols = [
+            ("blueprint", "TEXT DEFAULT ''"),
+        ]
+        for col_name, col_def in new_cs_cols:
+            if col_name not in cs_columns:
+                conn.execute(f"ALTER TABLE campaign_strategies ADD COLUMN {col_name} {col_def}")
+        conn.commit()
+
         conn.close()
 
     # ── Users ──
@@ -1499,7 +1509,7 @@ class WebDB:
                                 icon="bi-megaphone-fill", color="#6366f1",
                                 tagline="", description="", best_for="",
                                 recommended_min=200, objective="",
-                                is_active=1, sort_order=0):
+                                is_active=1, sort_order=0, blueprint=""):
         conn = self._conn()
         existing = conn.execute(
             "SELECT id FROM campaign_strategies WHERE strategy_key = ?",
@@ -1510,23 +1520,23 @@ class WebDB:
                 """UPDATE campaign_strategies
                    SET platform=?, name=?, icon=?, color=?, tagline=?,
                        description=?, best_for=?, recommended_min=?,
-                       objective=?, is_active=?, sort_order=?,
+                       objective=?, is_active=?, sort_order=?, blueprint=?,
                        updated_at=datetime('now')
                    WHERE id=?""",
                 (platform, name, icon, color, tagline, description,
                  best_for, recommended_min, objective, is_active,
-                 sort_order, existing["id"]),
+                 sort_order, blueprint, existing["id"]),
             )
         else:
             conn.execute(
                 """INSERT INTO campaign_strategies
                    (strategy_key, platform, name, icon, color, tagline,
                     description, best_for, recommended_min, objective,
-                    is_active, sort_order)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    is_active, sort_order, blueprint)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (strategy_key, platform, name, icon, color, tagline,
                  description, best_for, recommended_min, objective,
-                 is_active, sort_order),
+                 is_active, sort_order, blueprint),
             )
         conn.commit()
         conn.close()

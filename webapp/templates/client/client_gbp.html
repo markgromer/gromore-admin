@@ -1,0 +1,382 @@
+{% extends "client_base.html" %}
+{% block title %}Google Business Profile{% endblock %}
+
+{% block content %}
+<style>
+    .gbp-header {
+        background: linear-gradient(135deg, #1a4731 0%, #065f46 100%);
+        border-radius: 16px;
+        padding: 2rem 2.25rem;
+        margin-bottom: 1.5rem;
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+    }
+    .gbp-header::after {
+        content: '';
+        position: absolute;
+        top: -40%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(16,185,129,.15) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    .gbp-header h3 { font-weight: 800; font-size: 1.4rem; margin-bottom: .25rem; }
+    .gbp-header p { opacity: .8; font-size: .9rem; margin-bottom: 0; }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .35rem .85rem;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: .85rem;
+    }
+    .status-verified { background: rgba(16,185,129,.15); color: #10b981; }
+    .status-pending { background: rgba(245,158,11,.15); color: #f59e0b; }
+    .status-unverified { background: rgba(239,68,68,.15); color: #ef4444; }
+    .status-unknown { background: rgba(100,116,139,.15); color: #64748b; }
+
+    .completeness-ring {
+        width: 100px;
+        height: 100px;
+        position: relative;
+    }
+    .completeness-ring svg { transform: rotate(-90deg); }
+    .completeness-ring .ring-text {
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        font-weight: 800;
+        font-size: 1.3rem;
+        color: #1e293b;
+    }
+
+    .field-check { display: flex; align-items: center; gap: .5rem; padding: .35rem 0; }
+    .field-check i { font-size: 1rem; }
+    .field-check .done { color: #10b981; }
+    .field-check .missing { color: #ef4444; }
+
+    .verification-method {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        transition: border-color .2s;
+    }
+    .verification-method:hover { border-color: #6366f1; }
+    .verification-method h6 { font-weight: 700; margin-bottom: .75rem; }
+    .verification-method ol { padding-left: 1.25rem; margin-bottom: 0; }
+    .verification-method ol li { margin-bottom: .35rem; font-size: .9rem; color: #475569; }
+
+    .loc-info-row { display: flex; align-items: flex-start; gap: .5rem; padding: .4rem 0; font-size: .9rem; }
+    .loc-info-row i { color: #6366f1; margin-top: 2px; }
+    .loc-info-row .label { color: #64748b; min-width: 80px; }
+</style>
+
+<div class="gbp-header">
+    <div class="d-flex justify-content-between align-items-start">
+        <div>
+            <h3><i class="bi bi-google"></i> Google Business Profile</h3>
+            <p>Verification status, profile completeness, and what to do next</p>
+        </div>
+        {% if gmb and gmb.connected and gmb.verification %}
+            {% set vs = gmb.verification.status %}
+            {% if vs in ('COMPLETED', 'VERIFIED') %}
+                <span class="status-badge status-verified"><i class="bi bi-patch-check-fill"></i> Verified</span>
+            {% elif vs == 'PENDING' %}
+                <span class="status-badge status-pending"><i class="bi bi-hourglass-split"></i> Pending</span>
+            {% elif vs == 'UNVERIFIED' %}
+                <span class="status-badge status-unverified"><i class="bi bi-exclamation-triangle-fill"></i> Not Verified</span>
+            {% else %}
+                <span class="status-badge status-unknown"><i class="bi bi-question-circle"></i> {{ vs }}</span>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+
+{% if not gmb %}
+<!-- No Google connection -->
+<div class="card border-0 shadow-sm">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-google" style="font-size: 3rem; color: #4285f4;"></i>
+        <h5 class="mt-3 fw-bold">Connect Your Google Account</h5>
+        <p class="text-muted mb-4">
+            To see your Google Business Profile verification status and profile details,
+            connect your Google account first.
+        </p>
+        <a href="{{ url_for('client.client_settings') }}" class="btn btn-primary">
+            <i class="bi bi-plug"></i> Go to Connections
+        </a>
+    </div>
+</div>
+
+{% elif gmb.error %}
+<!-- Error state -->
+<div class="card border-0 shadow-sm">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-exclamation-triangle" style="font-size: 3rem; color: #f59e0b;"></i>
+        <h5 class="mt-3 fw-bold">Something Went Wrong</h5>
+        <p class="text-muted mb-3">{{ gmb.error }}</p>
+        {% if 'No Google Business Profile accounts' in gmb.error %}
+        <div class="alert alert-info text-start mx-auto" style="max-width: 500px;">
+            <strong>What this means:</strong>
+            <ul class="mb-0 mt-2">
+                <li>Your Google account may not have a Business Profile yet.</li>
+                <li>Go to <a href="https://business.google.com" target="_blank" rel="noopener">business.google.com</a> to create or claim your business listing.</li>
+                <li>After setting up your profile, come back here and refresh.</li>
+            </ul>
+        </div>
+        {% endif %}
+        <a href="{{ url_for('client.client_gbp') }}" class="btn btn-outline-primary mt-2">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+        </a>
+    </div>
+</div>
+
+{% else %}
+<!-- Connected with data -->
+<div class="row g-4">
+
+    <!-- Left column: Location details + completeness -->
+    <div class="col-lg-7">
+        {% if gmb.selected_location %}
+        {% set loc = gmb.selected_location %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 pt-3 pb-0">
+                <h5 class="fw-bold mb-0"><i class="bi bi-building"></i> {{ loc.title or 'Your Business' }}</h5>
+            </div>
+            <div class="card-body">
+                {% set addr = loc.get('storefrontAddress', {}) %}
+                {% if addr %}
+                <div class="loc-info-row">
+                    <i class="bi bi-geo-alt-fill"></i>
+                    <span class="label">Address</span>
+                    <span>
+                        {{ (addr.get('addressLines', [])|join(', ')) }}{% if addr.get('locality') %}, {{ addr.locality }}{% endif %}{% if addr.get('administrativeArea') %}, {{ addr.administrativeArea }}{% endif %} {{ addr.get('postalCode', '') }}
+                    </span>
+                </div>
+                {% endif %}
+
+                {% set phones = loc.get('phoneNumbers', {}) %}
+                {% if phones.get('primaryPhone') %}
+                <div class="loc-info-row">
+                    <i class="bi bi-telephone-fill"></i>
+                    <span class="label">Phone</span>
+                    <span>{{ phones.primaryPhone }}</span>
+                </div>
+                {% endif %}
+
+                {% if loc.get('websiteUri') %}
+                <div class="loc-info-row">
+                    <i class="bi bi-globe"></i>
+                    <span class="label">Website</span>
+                    <span><a href="{{ loc.websiteUri }}" target="_blank" rel="noopener">{{ loc.websiteUri|truncate(50) }}</a></span>
+                </div>
+                {% endif %}
+
+                {% set cats = loc.get('categories', {}) %}
+                {% if cats.get('primaryCategory') %}
+                <div class="loc-info-row">
+                    <i class="bi bi-tag-fill"></i>
+                    <span class="label">Category</span>
+                    <span>{{ cats.primaryCategory.get('displayName', '') }}</span>
+                </div>
+                {% endif %}
+
+                {% if loc.get('regularHours') %}
+                <div class="loc-info-row">
+                    <i class="bi bi-clock-fill"></i>
+                    <span class="label">Hours</span>
+                    <span class="text-success">Business hours set</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Profile Completeness -->
+        {% if gmb.completeness %}
+        {% set comp = gmb.completeness %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 pt-3 pb-0 d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0"><i class="bi bi-clipboard-check"></i> Profile Completeness</h5>
+                <div class="completeness-ring">
+                    <svg width="100" height="100" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="42" fill="none" stroke="#e2e8f0" stroke-width="8"/>
+                        <circle cx="50" cy="50" r="42" fill="none"
+                            stroke="{% if comp.score >= 80 %}#10b981{% elif comp.score >= 50 %}#f59e0b{% else %}#ef4444{% endif %}"
+                            stroke-width="8"
+                            stroke-dasharray="{{ (comp.score / 100 * 264)|round }} 264"
+                            stroke-linecap="round"/>
+                    </svg>
+                    <span class="ring-text">{{ comp.score }}%</span>
+                </div>
+            </div>
+            <div class="card-body">
+                {% for field, ok in comp.details.items() %}
+                <div class="field-check">
+                    {% if ok %}
+                        <i class="bi bi-check-circle-fill done"></i>
+                    {% else %}
+                        <i class="bi bi-x-circle-fill missing"></i>
+                    {% endif %}
+                    <span>{{ field }}</span>
+                </div>
+                {% endfor %}
+
+                {% if comp.score < 100 %}
+                <div class="alert alert-warning mt-3 mb-0 small">
+                    <i class="bi bi-lightbulb"></i>
+                    <strong>Tip:</strong> A complete profile ranks higher in local search and builds more trust with customers.
+                    Fill in the missing fields at
+                    <a href="https://business.google.com" target="_blank" rel="noopener">business.google.com</a>.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Multiple locations notice -->
+        {% if gmb.locations|length > 1 %}
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h6 class="fw-bold"><i class="bi bi-buildings"></i> {{ gmb.locations|length }} Locations Found</h6>
+                <p class="text-muted small mb-2">Showing details for your primary location. All locations on this account:</p>
+                <ul class="list-unstyled mb-0">
+                {% for loc in gmb.locations %}
+                    <li class="py-1">
+                        <i class="bi bi-pin-map"></i>
+                        <strong>{{ loc.title or 'Unnamed' }}</strong>
+                        {% set a = loc.get('storefrontAddress', {}) %}
+                        {% if a.get('locality') %} - {{ a.locality }}{% endif %}
+                    </li>
+                {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Right column: Verification status + guidance -->
+    <div class="col-lg-5">
+        {% if gmb.verification %}
+        {% set v = gmb.verification %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 pt-3 pb-0">
+                <h5 class="fw-bold mb-0"><i class="bi bi-shield-check"></i> Verification Status</h5>
+            </div>
+            <div class="card-body">
+                {% if v.status in ('COMPLETED', 'VERIFIED') %}
+                    <div class="text-center py-3">
+                        <i class="bi bi-patch-check-fill" style="font-size: 3rem; color: #10b981;"></i>
+                        <h5 class="fw-bold mt-2 text-success">Verified</h5>
+                        <p class="text-muted small mb-0">
+                            Your business is verified on Google.
+                            {% if v.method %} Method: {{ v.method|lower|replace('_', ' ') }}.{% endif %}
+                        </p>
+                    </div>
+                    <div class="alert alert-success small mt-3 mb-0">
+                        <i class="bi bi-check-circle"></i>
+                        You're all set. Your business can appear in Google Maps, local search results, and the local pack.
+                        Keep your profile updated with current hours, photos, and posts.
+                    </div>
+
+                {% elif v.status == 'PENDING' %}
+                    <div class="text-center py-3">
+                        <i class="bi bi-hourglass-split" style="font-size: 3rem; color: #f59e0b;"></i>
+                        <h5 class="fw-bold mt-2" style="color: #f59e0b;">Verification Pending</h5>
+                        <p class="text-muted small mb-0">
+                            Verification is in progress.
+                            {% if v.method %} Method: {{ v.method|lower|replace('_', ' ') }}.{% endif %}
+                        </p>
+                    </div>
+                    <div class="alert alert-warning small mt-3 mb-0">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>While you wait:</strong>
+                        <ul class="mb-0 mt-1">
+                            <li>Do NOT change your business name or address.</li>
+                            <li>If you chose postcard, it can take 5-14 days.</li>
+                            <li>Check your mail, email, or phone for a verification code.</li>
+                            <li>Enter the code at <a href="https://business.google.com" target="_blank" rel="noopener">business.google.com</a>.</li>
+                        </ul>
+                    </div>
+
+                {% else %}
+                    <div class="text-center py-3">
+                        <i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem; color: #ef4444;"></i>
+                        <h5 class="fw-bold mt-2 text-danger">Not Verified</h5>
+                        <p class="text-muted small mb-0">
+                            Your business has not been verified yet. Verification is required to
+                            appear in Google Maps and local search results.
+                        </p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Verification options / guidance -->
+        {% if v.status not in ('COMPLETED', 'VERIFIED') %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 pt-3 pb-0">
+                <h5 class="fw-bold mb-0"><i class="bi bi-signpost-split"></i> How to Get Verified</h5>
+            </div>
+            <div class="card-body">
+                {% if gmb.verification_options %}
+                    <p class="text-muted small mb-3">Google is offering these verification methods for your location:</p>
+                    {% for opt in gmb.verification_options %}
+                        {% set method = opt.get('verificationMethod', 'UNKNOWN') %}
+                        {% set guide = verification_guidance.get(method, {}) %}
+                        <div class="verification-method">
+                            <h6>
+                                <i class="bi {{ guide.get('icon', 'bi-question-circle') }}"></i>
+                                {{ guide.get('title', method|replace('_', ' ')|title) }}
+                            </h6>
+                            {% if guide.get('steps') %}
+                            <ol>
+                                {% for step in guide.steps %}
+                                <li>{{ step }}</li>
+                                {% endfor %}
+                            </ol>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted small">Could not load verification options from Google. Go to
+                    <a href="https://business.google.com" target="_blank" rel="noopener">business.google.com</a>
+                    to start or check on your verification.</p>
+                {% endif %}
+
+                <div class="alert alert-info small mt-3 mb-0">
+                    <i class="bi bi-lightbulb"></i>
+                    <strong>Pro tip:</strong> Make sure your business name, address, and phone number
+                    are 100% accurate before starting verification. Mismatches are the #1 reason
+                    for verification failures.
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% endif %}
+
+        <!-- Quick actions -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3"><i class="bi bi-lightning-charge"></i> Quick Actions</h6>
+                <div class="d-grid gap-2">
+                    <a href="https://business.google.com" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-box-arrow-up-right"></i> Open Google Business Profile
+                    </a>
+                    <a href="{{ url_for('client.client_gbp') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh Status
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
