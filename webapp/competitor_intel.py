@@ -273,9 +273,6 @@ def _generate_competitor_research(*, api_key: str, model: str, brand: dict, comp
         ],
         "response_format": {"type": "json_object"},
     }
-    # o-series models only support temperature=1 (the default)
-    if not model.startswith(("o1", "o3")):
-        body["temperature"] = 0.2
 
     resp = requests.post(
         "https://api.openai.com/v1/chat/completions",
