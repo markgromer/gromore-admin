@@ -423,6 +423,47 @@ class WebDB:
                 conn.execute(f"ALTER TABLE campaign_strategies ADD COLUMN {col_name} {col_def}")
         conn.commit()
 
+        # ── Legacy migration: brands.competitors (text) -> competitors table ──
+        # Older deployments stored competitor names in a free-form text field.
+        # The client portal uses the structured competitors table.
+        try:
+            tables = {
+                r[0]
+                for r in conn.execute(
+                    "select name from sqlite_master where type='table'"
+                ).fetchall()
+            }
+            if "competitors" in tables and "brands" in tables:
+                import re
+
+                brand_rows = conn.execute(
+                    "select id, competitors from brands"
+                ).fetchall()
+                for b in brand_rows:
+                    brand_id = b["id"]
+                    legacy = (b["competitors"] or "").strip()
+                    if not legacy:
+                        continue
+
+                    has_any = conn.execute(
+                        "select 1 from competitors where brand_id = ? limit 1",
+                        (brand_id,),
+                    ).fetchone()
+                    if has_any:
+                        continue
+
+                    # Split on newlines/commas; keep it permissive.
+                    parts = [p.strip() for p in re.split(r"[\n,]+", legacy) if p.strip()]
+                    for name in parts:
+                        conn.execute(
+                            "insert into competitors (brand_id, name) values (?, ?)",
+                            (brand_id, name),
+                        )
+                conn.commit()
+        except Exception:
+            # Best-effort migration; never block app startup.
+            pass
+
         conn.close()
 
     # ── Users ──
@@ -1569,37 +1610,64 @@ class WebDB:
     def add_competitor(self, brand_id, name, website="", facebook_url="",
                        google_maps_url="", yelp_url="", instagram_url="",
                        notes=""):
-        conn = self._conn()
-        cur = conn.execute(
-            """INSERT INTO competitors
-               (brand_id, name, website, facebook_url, google_maps_url,
-                yelp_url, instagram_url, notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (brand_id, name, website, facebook_url, google_maps_url,
-             yelp_url, instagram_url, notes),
-        )
-        conn.commit()
-        new_id = cur.lastrowid
-        conn.close()
-        return new_id
+        try:
+            conn = self._conn()
+            cur = conn.execute(
+                """INSERT INTO competitors
+                   (brand_id, name, website, facebook_url, google_maps_url,
+                    yelp_url, instagram_url, notes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (brand_id, name, website, facebook_url, google_maps_url,
+                 yelp_url, instagram_url, notes),
+            )
+            conn.commit()
+            new_id = cur.lastrowid
+            conn.close()
+            return new_id
+        except sqlite3.OperationalError as exc:
+            if "no such table: competitors" in str(exc).lower():
+                self.init()
+                return self.add_competitor(
+                    brand_id,
+                    name,
+                    website=website,
+                    facebook_url=facebook_url,
+                    google_maps_url=google_maps_url,
+                    yelp_url=yelp_url,
+                    instagram_url=instagram_url,
+                    notes=notes,
+                )
+            raise
 
     def get_competitors(self, brand_id):
-        conn = self._conn()
-        rows = conn.execute(
-            "SELECT * FROM competitors WHERE brand_id = ? ORDER BY name",
-            (brand_id,),
-        ).fetchall()
-        conn.close()
-        return [dict(r) for r in rows]
+        try:
+            conn = self._conn()
+            rows = conn.execute(
+                "SELECT * FROM competitors WHERE brand_id = ? ORDER BY name",
+                (brand_id,),
+            ).fetchall()
+            conn.close()
+            return [dict(r) for r in rows]
+        except sqlite3.OperationalError as exc:
+            if "no such table: competitors" in str(exc).lower():
+                self.init()
+                return self.get_competitors(brand_id)
+            raise
 
     def get_competitor(self, competitor_id, brand_id):
-        conn = self._conn()
-        row = conn.execute(
-            "SELECT * FROM competitors WHERE id = ? AND brand_id = ?",
-            (competitor_id, brand_id),
-        ).fetchone()
-        conn.close()
-        return dict(row) if row else None
+        try:
+            conn = self._conn()
+            row = conn.execute(
+                "SELECT * FROM competitors WHERE id = ? AND brand_id = ?",
+                (competitor_id, brand_id),
+            ).fetchone()
+            conn.close()
+            return dict(row) if row else None
+        except sqlite3.OperationalError as exc:
+            if "no such table: competitors" in str(exc).lower():
+                self.init()
+                return self.get_competitor(competitor_id, brand_id)
+            raise
 
     def update_competitor(self, competitor_id, brand_id, **kwargs):
         allowed = {"name", "website", "facebook_url", "google_maps_url",
@@ -1622,60 +1690,84 @@ class WebDB:
         conn.close()
 
     def delete_competitor(self, competitor_id, brand_id):
-        conn = self._conn()
-        conn.execute(
-            "DELETE FROM competitors WHERE id = ? AND brand_id = ?",
-            (competitor_id, brand_id),
-        )
-        conn.commit()
-        conn.close()
+        try:
+            conn = self._conn()
+            conn.execute(
+                "DELETE FROM competitors WHERE id = ? AND brand_id = ?",
+                (competitor_id, brand_id),
+            )
+            conn.commit()
+            conn.close()
+        except sqlite3.OperationalError as exc:
+            if "no such table: competitors" in str(exc).lower():
+                self.init()
+                return self.delete_competitor(competitor_id, brand_id)
+            raise
 
     # ── Competitor Intel (cached reports) ────────────────────────
 
     def upsert_competitor_intel(self, competitor_id, brand_id, intel_type, data_json):
-        conn = self._conn()
-        existing = conn.execute(
-            "SELECT id FROM competitor_intel WHERE competitor_id = ? AND intel_type = ?",
-            (competitor_id, intel_type),
-        ).fetchone()
-        if existing:
-            conn.execute(
-                """UPDATE competitor_intel
-                   SET data_json = ?, fetched_at = datetime('now')
-                   WHERE id = ?""",
-                (data_json, existing["id"]),
-            )
-        else:
-            conn.execute(
-                """INSERT INTO competitor_intel
-                   (competitor_id, brand_id, intel_type, data_json)
-                   VALUES (?, ?, ?, ?)""",
-                (competitor_id, brand_id, intel_type, data_json),
-            )
-        conn.commit()
-        conn.close()
-
-    def get_competitor_intel(self, competitor_id, intel_type=None):
-        conn = self._conn()
-        if intel_type:
-            row = conn.execute(
-                "SELECT * FROM competitor_intel WHERE competitor_id = ? AND intel_type = ?",
+        try:
+            conn = self._conn()
+            existing = conn.execute(
+                "SELECT id FROM competitor_intel WHERE competitor_id = ? AND intel_type = ?",
                 (competitor_id, intel_type),
             ).fetchone()
+            if existing:
+                conn.execute(
+                    """UPDATE competitor_intel
+                       SET data_json = ?, fetched_at = datetime('now')
+                       WHERE id = ?""",
+                    (data_json, existing["id"]),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO competitor_intel
+                       (competitor_id, brand_id, intel_type, data_json)
+                       VALUES (?, ?, ?, ?)""",
+                    (competitor_id, brand_id, intel_type, data_json),
+                )
+            conn.commit()
             conn.close()
-            return dict(row) if row else None
-        rows = conn.execute(
-            "SELECT * FROM competitor_intel WHERE competitor_id = ? ORDER BY intel_type",
-            (competitor_id,),
-        ).fetchall()
-        conn.close()
-        return [dict(r) for r in rows]
+        except sqlite3.OperationalError as exc:
+            if "no such table: competitor_intel" in str(exc).lower():
+                self.init()
+                return self.upsert_competitor_intel(competitor_id, brand_id, intel_type, data_json)
+            raise
+
+    def get_competitor_intel(self, competitor_id, intel_type=None):
+        try:
+            conn = self._conn()
+            if intel_type:
+                row = conn.execute(
+                    "SELECT * FROM competitor_intel WHERE competitor_id = ? AND intel_type = ?",
+                    (competitor_id, intel_type),
+                ).fetchone()
+                conn.close()
+                return dict(row) if row else None
+            rows = conn.execute(
+                "SELECT * FROM competitor_intel WHERE competitor_id = ? ORDER BY intel_type",
+                (competitor_id,),
+            ).fetchall()
+            conn.close()
+            return [dict(r) for r in rows]
+        except sqlite3.OperationalError as exc:
+            if "no such table: competitor_intel" in str(exc).lower():
+                self.init()
+                return self.get_competitor_intel(competitor_id, intel_type=intel_type)
+            raise
 
     def get_all_competitor_intel(self, brand_id):
-        conn = self._conn()
-        rows = conn.execute(
-            "SELECT * FROM competitor_intel WHERE brand_id = ? ORDER BY competitor_id, intel_type",
-            (brand_id,),
-        ).fetchall()
-        conn.close()
-        return [dict(r) for r in rows]
+        try:
+            conn = self._conn()
+            rows = conn.execute(
+                "SELECT * FROM competitor_intel WHERE brand_id = ? ORDER BY competitor_id, intel_type",
+                (brand_id,),
+            ).fetchall()
+            conn.close()
+            return [dict(r) for r in rows]
+        except sqlite3.OperationalError as exc:
+            if "no such table: competitor_intel" in str(exc).lower():
+                self.init()
+                return self.get_all_competitor_intel(brand_id)
+            raise
