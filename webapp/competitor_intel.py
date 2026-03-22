@@ -319,16 +319,20 @@ def refresh_competitor_intel(db, brand, competitor, *, force: bool = False):
     """Refresh all intel for a single competitor.
 
     When force=True, bypass the stale window (used for manual "Scan").
-    Returns dict of results.
+    Returns dict of results.  The special key '_errors' is a list of
+    human-readable error strings so the caller can surface them in the UI.
     """
     brand_id = brand["id"]
     comp_id = competitor["id"]
     results = {}
+    errors = []
 
     # Google Places
     existing = db.get_competitor_intel(comp_id, "google_places")
     if force or (not existing) or _is_stale(existing.get("fetched_at")):
         api_key = (brand.get("google_maps_api_key") or "").strip()
+        if not api_key:
+            errors.append("Google Places skipped: no Google Maps API key on this brand.")
         places_data = _scrape_google_places(competitor, api_key)
         if places_data:
             db.upsert_competitor_intel(comp_id, brand_id, "google_places", json.dumps(places_data))
@@ -394,22 +398,26 @@ def refresh_competitor_intel(db, brand, competitor, *, force: bool = False):
                 results["research"] = research_data
             except Exception as exc:
                 log.warning("Competitor research generation failed for %s: %s", competitor.get("name"), exc)
+                errors.append(f"AI research failed: {exc}")
                 if existing:
                     try:
                         results["research"] = json.loads(existing.get("data_json", "{}"))
                     except Exception:
                         pass
-        elif existing:
-            try:
-                results["research"] = json.loads(existing.get("data_json", "{}"))
-            except Exception:
-                pass
+        else:
+            errors.append("AI research skipped: no OpenAI API key configured.")
+            if existing:
+                try:
+                    results["research"] = json.loads(existing.get("data_json", "{}"))
+                except Exception:
+                    pass
     elif existing:
         try:
             results["research"] = json.loads(existing.get("data_json", "{}"))
         except Exception:
             pass
 
+    results["_errors"] = errors
     return results
 
 

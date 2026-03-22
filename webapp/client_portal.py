@@ -1087,6 +1087,31 @@ def client_delete_competitor(competitor_id):
     return redirect(url_for("client.client_my_business"))
 
 
+@client_bp.route("/competitors/<int:competitor_id>/edit", methods=["POST"])
+@client_login_required
+def client_edit_competitor(competitor_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    comp = db.get_competitor(competitor_id, brand_id)
+    if not comp:
+        abort(404)
+
+    db.update_competitor(
+        competitor_id,
+        brand_id,
+        name=request.form.get("name", "").strip()[:200] or comp["name"],
+        website=request.form.get("website", "").strip()[:500],
+        facebook_url=request.form.get("facebook_url", "").strip()[:500],
+        google_maps_url=request.form.get("google_maps_url", "").strip()[:500],
+        yelp_url=request.form.get("yelp_url", "").strip()[:500],
+        instagram_url=request.form.get("instagram_url", "").strip()[:500],
+        notes=request.form.get("notes", "").strip()[:500],
+    )
+    _sync_competitors_text(db, brand_id)
+    flash(f"Competitor '{comp['name']}' updated.", "success")
+    return redirect(url_for("client.client_my_business"))
+
+
 # ── Competitor Intel ──
 
 @client_bp.route("/competitors")
@@ -1122,8 +1147,12 @@ def client_competitor_refresh(competitor_id):
         abort(404)
 
     from webapp.competitor_intel import refresh_competitor_intel
-    refresh_competitor_intel(db, brand, comp, force=True)
-    flash(f"Intel refreshed for '{comp['name']}'.", "success")
+    result = refresh_competitor_intel(db, brand, comp, force=True)
+    scan_errors = result.get("_errors") or []
+    if scan_errors:
+        flash(f"Intel refreshed for '{comp['name']}' with issues: {'; '.join(scan_errors[:3])}", "warning")
+    else:
+        flash(f"Intel refreshed for '{comp['name']}'.", "success")
     return redirect(url_for("client.client_competitors"))
 
 

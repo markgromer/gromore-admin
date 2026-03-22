@@ -76,6 +76,23 @@ def create_app():
     print(f"[startup] REPORTS_DIR   = {app.config['REPORTS_DIR']}")
     print(f"[startup] on_render     = {on_render}")
 
+    # Competitor tables diagnostic (helps debug "no research" on Render)
+    try:
+        _diag_conn = db._conn()
+        _tables = {r[0] for r in _diag_conn.execute("select name from sqlite_master where type='table'").fetchall()}
+        _has_comp = "competitors" in _tables
+        _has_intel = "competitor_intel" in _tables
+        _comp_count = _diag_conn.execute("select count(1) from competitors").fetchone()[0] if _has_comp else 0
+        _intel_count = _diag_conn.execute("select count(1) from competitor_intel").fetchone()[0] if _has_intel else 0
+        _research_count = _diag_conn.execute("select count(1) from competitor_intel where intel_type='research'").fetchone()[0] if _has_intel else 0
+        _has_oai = bool((db.get_setting("openai_api_key", "") or "").strip())
+        _diag_conn.close()
+        print(f"[startup] competitors_table={_has_comp} intel_table={_has_intel} "
+              f"competitors={_comp_count} intel_rows={_intel_count} research_rows={_research_count} "
+              f"openai_key={'SET' if _has_oai else 'MISSING'}")
+    except Exception as _diag_err:
+        print(f"[startup] competitor diagnostic failed: {_diag_err}")
+
     # Stabilize SECRET_KEY across restarts in local/dev (unless provided via env)
     if not env_secret_key:
         persisted = db.get_setting("secret_key", "")
