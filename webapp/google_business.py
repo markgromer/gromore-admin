@@ -9,8 +9,6 @@ import json
 import logging
 import requests
 
-import openai
-
 logger = logging.getLogger(__name__)
 
 PLACES_BASE = "https://places.googleapis.com/v1"
@@ -170,181 +168,367 @@ VERIFICATION_GUIDANCE = {
 
 
 # ---------------------------------------------------------------------------
-# GBP Approval & Optimization Audit
+# GBP Approval & Optimization Audit  -  Quest / Micro-Win System
 # ---------------------------------------------------------------------------
 
-# Scoring weights (out of 100 total)
-_AUDIT_WEIGHTS = {
-    "business_name":   5,
-    "address":         10,
-    "phone":           8,
-    "website":         8,
-    "category":        8,
-    "hours":           8,
-    "photos":          12,
-    "description":     10,
-    "reviews":         15,
-    "rating":          8,
-    "verification":    8,
+# Each quest: xp it's worth, icon, what the user is learning, and micro-steps
+_QUEST_META = {
+    "verification": {
+        "xp": 200,
+        "icon": "bi-shield-check",
+        "quest_name": "Get on the Map",
+        "skill": "Google Verification",
+        "learning": "You're proving to Google that your business is real. "
+                    "This is the #1 thing that decides whether customers can find you.",
+    },
+    "address": {
+        "xp": 150,
+        "icon": "bi-geo-alt-fill",
+        "quest_name": "Pin Your Location",
+        "skill": "Local SEO Basics",
+        "learning": "Google matches your address against postal records. "
+                    "An exact match helps verification and shows you in local searches for your area.",
+    },
+    "phone": {
+        "xp": 100,
+        "icon": "bi-telephone-fill",
+        "quest_name": "Open the Phone Line",
+        "skill": "Trust Signals",
+        "learning": "A local phone number tells Google (and customers) you're a real, "
+                    "reachable business, not a fly-by-night operation.",
+    },
+    "website": {
+        "xp": 100,
+        "icon": "bi-globe",
+        "quest_name": "Link Your Website",
+        "skill": "Online Presence",
+        "learning": "Your website is your digital storefront. Linking it connects "
+                    "your Google profile to your brand and gives customers a next step.",
+    },
+    "business_name": {
+        "xp": 80,
+        "icon": "bi-fonts",
+        "quest_name": "Claim Your Name",
+        "skill": "Brand Identity",
+        "learning": "Your business name on Google should match your legal name exactly. "
+                    "Adding keywords or location to it can get you suspended.",
+    },
+    "category": {
+        "xp": 120,
+        "icon": "bi-tag-fill",
+        "quest_name": "Pick Your Category",
+        "skill": "Search Relevance",
+        "learning": "Your primary category is how Google decides which searches to show you for. "
+                    "Picking the right one is more important than most people realize.",
+    },
+    "hours": {
+        "xp": 100,
+        "icon": "bi-clock-fill",
+        "quest_name": "Set Your Hours",
+        "skill": "Customer Experience",
+        "learning": "Customers check hours before they call or drive over. "
+                    "Missing hours = missed visits. Google also favors profiles with hours set.",
+    },
+    "description": {
+        "xp": 120,
+        "icon": "bi-pencil-fill",
+        "quest_name": "Tell Your Story",
+        "skill": "Copywriting",
+        "learning": "Your description is your 750-character pitch. It helps Google "
+                    "understand what you do and helps customers choose you over competitors.",
+    },
+    "photos": {
+        "xp": 150,
+        "icon": "bi-camera-fill",
+        "quest_name": "Show Your Work",
+        "skill": "Visual Marketing",
+        "learning": "Listings with photos get 42% more direction requests. "
+                    "Real photos of your work, team, and space build trust faster than any ad.",
+    },
+    "reviews": {
+        "xp": 200,
+        "icon": "bi-chat-quote-fill",
+        "quest_name": "Collect Social Proof",
+        "skill": "Reputation Building",
+        "learning": "Reviews are the #1 factor in local search ranking. "
+                    "Every new review is another customer vouching for you publicly.",
+    },
+    "rating": {
+        "xp": 100,
+        "icon": "bi-star-fill",
+        "quest_name": "Earn Your Stars",
+        "skill": "Service Quality",
+        "learning": "Most people filter for 4+ stars when searching. "
+                    "Your rating is the first thing customers see, and it directly affects clicks.",
+    },
 }
+
+# XP level thresholds and titles
+_LEVELS = [
+    (0,    1, "Newcomer",         "Just getting started"),
+    (200,  2, "Starter",          "You're on the board"),
+    (400,  3, "Contender",        "Building momentum"),
+    (600,  4, "Competitor",       "You're in the game"),
+    (800,  5, "Rising Star",      "Customers are noticing"),
+    (1000, 6, "Local Favorite",   "Standing out in your area"),
+    (1200, 7, "Neighborhood Pro",  "The go-to in your neighborhood"),
+    (1400, 8, "Local Legend",      "Dominating local search"),
+]
 
 
 def _score_field(field, gbp_ctx):
-    """Return (score 0-100, grade, detail_text) for one audit dimension."""
+    """Return (score 0-100, grade, detail, micro_steps[]) for one audit dimension."""
+    micro = []
+
     if field == "business_name":
         name = gbp_ctx.get("business_name", "")
         if not name:
-            return 0, "fail", "No business name found."
+            micro = [
+                {"step": "Go to business.google.com and sign in.", "done": False},
+                {"step": "Enter your exact legal business name.", "done": False},
+            ]
+            return 0, "fail", "No business name found.", micro
         if len(name) > 80:
-            return 60, "warn", "Name is very long (%d chars). Keep it under 80 characters to avoid truncation." % len(name)
-        return 100, "pass", "Business name is set: %s" % name
+            micro = [{"step": "Shorten your name to under 80 characters (currently %d)." % len(name), "done": False}]
+            return 60, "warn", "Name is long (%d chars)." % len(name), micro
+        return 100, "pass", name, micro
 
     if field == "address":
         addr = gbp_ctx.get("address", "")
         if not addr:
-            return 0, "fail", "No address on file. Google requires a valid street address or service area for verification."
-        return 100, "pass", "Address is set."
+            micro = [
+                {"step": "Open business.google.com and go to your profile info.", "done": False},
+                {"step": "Enter your street address exactly as it appears on mail.", "done": False},
+                {"step": "If you go to customers (no storefront), choose 'service area' instead.", "done": False},
+            ]
+            return 0, "fail", "No address on file.", micro
+        return 100, "pass", "Address is set.", micro
 
     if field == "phone":
         phone = gbp_ctx.get("phone", "")
         if not phone:
-            return 0, "fail", "No phone number. A local phone number (not toll-free) helps verification and local ranking."
-        return 100, "pass", "Phone number is set."
+            micro = [
+                {"step": "Add a local phone number (not toll-free) to your profile.", "done": False},
+                {"step": "Make sure the number matches what's on your website.", "done": False},
+            ]
+            return 0, "fail", "No phone number.", micro
+        return 100, "pass", "Phone is set.", micro
 
     if field == "website":
         url = gbp_ctx.get("website", "")
         if not url:
-            return 0, "fail", "No website link. A live website matching your business name and address strengthens verification."
-        return 100, "pass", "Website URL is linked."
+            micro = [
+                {"step": "Add your website URL to your Google Business Profile.", "done": False},
+                {"step": "Make sure the site loads and shows your business name and address.", "done": False},
+            ]
+            return 0, "fail", "No website link.", micro
+        return 100, "pass", "Website linked.", micro
 
     if field == "category":
         cat = gbp_ctx.get("category", "")
         if not cat:
-            return 0, "fail", "No business category selected. Choose the category that best describes your primary service."
-        return 100, "pass", "Primary category: %s" % cat
+            micro = [
+                {"step": "Go to your profile at business.google.com.", "done": False},
+                {"step": "Click 'Edit profile' and find the category field.", "done": False},
+                {"step": "Search for the category that best describes your main service.", "done": False},
+            ]
+            return 0, "fail", "No category selected.", micro
+        return 100, "pass", cat, micro
 
     if field == "hours":
         hours = gbp_ctx.get("hours") or {}
         periods = hours.get("periods") or []
         if not periods:
-            return 0, "fail", "No business hours set. Set hours so customers know when you are open."
+            micro = [
+                {"step": "Open your profile at business.google.com.", "done": False},
+                {"step": "Click 'Edit profile', then 'Hours'.", "done": False},
+                {"step": "Add your hours for each day you're available.", "done": False},
+            ]
+            return 0, "fail", "No business hours set.", micro
         weekdays_covered = set()
         for p in periods:
             od = p.get("open", {}).get("day")
             if od is not None:
                 weekdays_covered.add(od)
         if len(weekdays_covered) < 5:
-            return 60, "warn", "Only %d days have hours. Most businesses should show hours for at least 5 days." % len(weekdays_covered)
-        return 100, "pass", "Hours are set for %d days." % len(weekdays_covered)
+            micro = [{"step": "Add hours for the remaining days (%d of 7 covered)." % len(weekdays_covered), "done": False}]
+            return 60, "warn", "%d days covered." % len(weekdays_covered), micro
+        return 100, "pass", "%d days covered." % len(weekdays_covered), micro
 
     if field == "photos":
         count = gbp_ctx.get("photo_count", 0)
         if count == 0:
-            return 0, "fail", "No photos. Listings with photos get 42%% more direction requests and 35%% more website clicks."
+            micro = [
+                {"step": "Take 3 photos of your best recent work.", "done": False},
+                {"step": "Take 1 photo of your team or yourself.", "done": False},
+                {"step": "Take 1 photo of your shop/office/van (whatever represents you).", "done": False},
+                {"step": "Upload all 5 at business.google.com under 'Photos'.", "done": False},
+            ]
+            return 0, "fail", "No photos.", micro
         if count < 5:
-            return 40, "warn", "%d photo(s). Google recommends at least 5-10 high-quality photos (interior, exterior, team, work examples)." % count
+            needed = 5 - count
+            micro = [{"step": "Upload %d more photo(s) to reach 5 total." % needed, "done": False}]
+            return 40, "warn", "%d photo(s) uploaded." % count, micro
         if count < 10:
-            return 70, "warn", "%d photos - good start. Top-performing listings average 10-25 photos. Add more variety." % count
-        return 100, "pass", "%d photos uploaded." % count
+            micro = [{"step": "Add variety: interior shots, team photos, before/after of your work.", "done": False}]
+            return 70, "warn", "%d photos." % count, micro
+        return 100, "pass", "%d photos uploaded." % count, micro
 
     if field == "description":
         desc = gbp_ctx.get("description", "")
         if not desc:
-            return 0, "fail", "No business description. Write 250-750 characters describing your services, area, and what sets you apart."
+            micro = [
+                {"step": "Open 'Edit profile' at business.google.com.", "done": False},
+                {"step": "Write 2-3 sentences: what you do, where you serve, what makes you different.", "done": False},
+                {"step": "Aim for 250-750 characters. Our AI wrote one for you below - feel free to use it.", "done": False},
+            ]
+            return 0, "fail", "No description.", micro
         length = len(desc)
         if length < 100:
-            return 40, "warn", "Description is very short (%d chars). Aim for 250-750 characters with your services and service area." % length
+            micro = [{"step": "Expand to at least 250 characters. You're at %d." % length, "done": False}]
+            return 40, "warn", "%d characters (short)." % length, micro
         if length < 250:
-            return 70, "warn", "Description could be longer (%d chars). Google allows up to 750 characters - use them." % length
-        return 100, "pass", "Description is %d characters." % length
+            micro = [{"step": "Add a bit more detail to reach 250+ characters (%d now)." % length, "done": False}]
+            return 70, "warn", "%d characters." % length, micro
+        return 100, "pass", "%d characters." % length, micro
 
     if field == "reviews":
         count = gbp_ctx.get("review_count", 0)
         if count == 0:
-            return 0, "fail", "No reviews yet. Reviews are the #1 factor in local pack ranking. Start asking every customer."
+            micro = [
+                {"step": "Copy your review link from this page (below).", "done": False},
+                {"step": "Text it to your 3 most recent happy customers.", "done": False},
+                {"step": "Ask in person at the end of your next job.", "done": False},
+            ]
+            return 0, "fail", "No reviews yet.", micro
         if count < 5:
-            return 30, "warn", "%d review(s). You need at least 5 to display a star rating in search results." % count
+            micro = [{"step": "Send your review link to %d more customers. You need 5 total to show stars." % (5 - count), "done": False}]
+            return 30, "warn", "%d review(s)." % count, micro
         if count < 20:
-            return 60, "warn", "%d reviews. Competitive businesses typically have 20+. Keep building." % count
+            micro = [{"step": "Keep asking. Add your review link to invoices and email signatures." , "done": False}]
+            return 60, "warn", "%d reviews." % count, micro
         if count < 50:
-            return 80, "pass", "%d reviews - solid. The top local businesses in most markets have 50+." % count
-        return 100, "pass", "%d reviews - strong review profile." % count
+            return 80, "pass", "%d reviews." % count, micro
+        return 100, "pass", "%d reviews." % count, micro
 
     if field == "rating":
         rating = gbp_ctx.get("rating", 0)
         count = gbp_ctx.get("review_count", 0)
         if count == 0:
-            return 0, "fail", "No rating yet (no reviews)."
+            micro = [{"step": "Get your first review. Your rating starts once you have reviews.", "done": False}]
+            return 0, "fail", "No reviews yet.", micro
         if rating < 3.5:
-            return 20, "fail", "%.1f star rating. Below 3.5 stars hurts click-through significantly. Focus on service quality and responding to negative reviews." % rating
+            micro = [
+                {"step": "Reply to every negative review professionally and offer to fix the issue.", "done": False},
+                {"step": "Ask your happiest customers to leave reviews to balance the score.", "done": False},
+            ]
+            return 20, "fail", "%.1f stars." % rating, micro
         if rating < 4.0:
-            return 50, "warn", "%.1f stars. Good but not competitive. Most customers filter for 4.0+ stars." % rating
+            micro = [{"step": "Respond to all reviews (even positive ones). Keep asking happy customers.", "done": False}]
+            return 50, "warn", "%.1f stars." % rating, micro
         if rating < 4.5:
-            return 75, "pass", "%.1f stars. Solid rating." % rating
-        return 100, "pass", "%.1f stars - excellent." % rating
+            return 75, "pass", "%.1f stars." % rating, micro
+        return 100, "pass", "%.1f stars." % rating, micro
 
     if field == "verification":
         status = gbp_ctx.get("status", "UNKNOWN")
         if status == "VERIFIED":
-            return 100, "pass", "Profile is live and verified on Google."
+            return 100, "pass", "Verified and live on Google.", micro
         if "CLOSED" in (status or ""):
-            return 30, "fail", "Profile is marked as %s. Update status at business.google.com." % status.replace("_", " ").title()
-        return 0, "fail", "Profile verification status is unknown. The listing may not be claimed or verified yet."
+            micro = [
+                {"step": "Log in at business.google.com.", "done": False},
+                {"step": "Mark your business as 'Open' to reactivate it.", "done": False},
+            ]
+            return 30, "fail", "Marked as %s." % status.replace("_", " ").lower(), micro
+        micro = [
+            {"step": "Go to business.google.com and search for your business.", "done": False},
+            {"step": "Click 'Claim this business' or 'Own this business?'.", "done": False},
+            {"step": "Follow the verification steps Google gives you.", "done": False},
+            {"step": "Check the troubleshooter on this page if you hit a wall.", "done": False},
+        ]
+        return 0, "fail", "Not verified.", micro
 
-    return 0, "fail", "Unknown field."
+    return 0, "fail", "Unknown.", micro
 
 
 def run_gbp_audit(gbp_ctx):
     """
-    Run a full GBP audit scoring each dimension.
-    Returns {overall_score, overall_grade, sections[], action_items[]}.
+    Run a gamified GBP audit with quests, XP, levels, and achievements.
     """
-    sections = []
-    action_items = []
-    weighted_total = 0
+    quests = []
+    achievements = []
+    total_xp = 0
+    max_xp = 0
 
-    for field, weight in _AUDIT_WEIGHTS.items():
-        score, grade, detail = _score_field(field, gbp_ctx)
-        label = field.replace("_", " ").title()
-        sections.append({
+    for field, meta in _QUEST_META.items():
+        score, grade, detail, micro_steps = _score_field(field, gbp_ctx)
+        xp_earned = round(meta["xp"] * score / 100)
+        total_xp += xp_earned
+        max_xp += meta["xp"]
+
+        quest = {
             "field": field,
-            "label": label,
+            "quest_name": meta["quest_name"],
+            "icon": meta["icon"],
+            "skill": meta["skill"],
+            "learning": meta["learning"],
+            "xp_possible": meta["xp"],
+            "xp_earned": xp_earned,
             "score": score,
             "grade": grade,
-            "weight": weight,
             "detail": detail,
-        })
-        weighted_total += score * weight / 100
+            "micro_steps": micro_steps,
+            "complete": grade == "pass" and score >= 75,
+        }
+        quests.append(quest)
 
-        if grade != "pass":
-            priority = "high" if grade == "fail" else "medium"
-            action_items.append({
-                "field": field,
-                "label": label,
-                "priority": priority,
-                "detail": detail,
+        if quest["complete"]:
+            achievements.append({
+                "quest_name": meta["quest_name"],
+                "icon": meta["icon"],
+                "skill": meta["skill"],
+                "xp": xp_earned,
             })
 
-    overall = round(weighted_total)
-    if overall >= 85:
-        overall_grade = "A"
-    elif overall >= 70:
-        overall_grade = "B"
-    elif overall >= 50:
-        overall_grade = "C"
-    elif overall >= 30:
-        overall_grade = "D"
+    # Determine level
+    level_num = 1
+    level_name = "Newcomer"
+    level_desc = "Just getting started"
+    next_level_xp = _LEVELS[1][0] if len(_LEVELS) > 1 else max_xp
+    for threshold, num, name, desc in _LEVELS:
+        if total_xp >= threshold:
+            level_num = num
+            level_name = name
+            level_desc = desc
+    # Find next level threshold
+    for threshold, num, name, desc in _LEVELS:
+        if threshold > total_xp:
+            next_level_xp = threshold
+            break
     else:
-        overall_grade = "F"
+        next_level_xp = max_xp
 
-    # Sort action items: high priority first
-    action_items.sort(key=lambda a: 0 if a["priority"] == "high" else 1)
+    # Sort: incomplete quests first (highest XP potential first), then completed
+    incomplete = [q for q in quests if not q["complete"]]
+    complete = [q for q in quests if q["complete"]]
+    incomplete.sort(key=lambda q: -q["xp_possible"])
+    quests_sorted = incomplete + complete
+
+    # Overall score for backward compat
+    overall_pct = round(total_xp / max_xp * 100) if max_xp else 0
 
     return {
-        "overall_score": overall,
-        "overall_grade": overall_grade,
-        "sections": sections,
-        "action_items": action_items,
+        "total_xp": total_xp,
+        "max_xp": max_xp,
+        "overall_score": overall_pct,
+        "level_num": level_num,
+        "level_name": level_name,
+        "level_desc": level_desc,
+        "next_level_xp": next_level_xp,
+        "quests": quests_sorted,
+        "achievements": achievements,
+        "quests_complete": len(complete),
+        "quests_total": len(quests),
     }
 
 
@@ -353,32 +537,36 @@ def run_gbp_audit(gbp_ctx):
 # ---------------------------------------------------------------------------
 
 _AUDIT_SYSTEM_PROMPT = """\
-You are a Google Business Profile optimization expert. A business owner needs \
-help getting their GBP approved, verified, and ranking well in local search.
+You are a friendly Google Business Profile coach helping a business owner \
+level up their Google presence. They've just run an audit and you can see \
+their scores. Talk to them like a supportive mentor, not a textbook.
 
-You will receive their current profile data and audit scores. Provide:
-1. A plain-English summary of where they stand (2-3 sentences, no fluff).
+You will receive their profile data and quest scores. Provide:
+1. A 2-3 sentence pep talk: acknowledge what they've done well, then point \
+   to their biggest opportunity. Be specific to their business, not generic.
 2. An optimized business description they can copy-paste (250-600 chars). \
-   Include their services, service area, and a differentiator. No keyword stuffing.
-3. A prioritized action plan - the 3-5 most impactful things to do next, in order. \
-   Each item should be one concrete step, not vague advice.
-4. If they have verification issues, provide specific troubleshooting steps \
-   for the most common rejection reasons (address mismatch, category issues, \
-   duplicate listings, suspended profiles).
-5. A short review request message they can text/email to customers (under 160 chars).
+   Include their services, service area, and something that makes them stand \
+   out. Write it in a natural tone. No keyword stuffing.
+3. Exactly 3 "quick wins" - things they can do in the next 10 minutes each. \
+   Each must be a single concrete action, not vague advice. Format each as: \
+   {"action": "what to do", "time": "X min", "why": "one sentence on why it matters"}.
+4. If they have verification issues, provide 2-3 specific troubleshooting steps \
+   (not generic - based on their actual situation).
+5. A casual review request message they can text to a customer (under 140 chars, \
+   conversational tone, not corporate).
 
-Write for a non-technical business owner. Keep it direct and practical.
+Write for someone who might be intimidated by tech. Keep it warm and direct.
 Do NOT use em dashes. Use regular dashes, commas, or periods instead.
-Return valid JSON with these keys: summary, optimized_description, action_plan (array of strings), \
-verification_help (array of strings, empty if verified), review_request_template.\
+Return valid JSON with these keys: pep_talk, optimized_description, \
+quick_wins (array of {action, time, why}), verification_help (array of strings, \
+empty array if verified), review_request_template.\
 """
 
 
 def run_ai_audit(gbp_ctx, audit_result, brand, api_key, model):
     """
-    Call the LLM to generate personalized audit recommendations.
-    Returns dict with summary, optimized_description, action_plan, etc.
-    Falls back to None on error.
+    Call the LLM to generate personalized, gamified audit recommendations.
+    Returns dict with pep_talk, quick_wins, etc.  Falls back to None on error.
     """
     if not api_key:
         return None
@@ -395,9 +583,15 @@ def run_ai_audit(gbp_ctx, audit_result, brand, api_key, model):
         "photo_count": gbp_ctx.get("photo_count", 0),
         "status": gbp_ctx.get("status", "UNKNOWN"),
         "has_hours": bool(gbp_ctx.get("hours")),
-        "overall_score": audit_result["overall_score"],
-        "overall_grade": audit_result["overall_grade"],
-        "failing_items": [a["detail"] for a in audit_result["action_items"]],
+        "total_xp": audit_result["total_xp"],
+        "max_xp": audit_result["max_xp"],
+        "level": audit_result["level_name"],
+        "quests_complete": audit_result["quests_complete"],
+        "quests_total": audit_result["quests_total"],
+        "incomplete_quests": [
+            q["quest_name"] for q in audit_result["quests"]
+            if not q["complete"]
+        ],
     }
 
     brand_info = ""
@@ -419,6 +613,7 @@ def run_ai_audit(gbp_ctx, audit_result, brand, api_key, model):
         user_prompt += "Additional business info:\n%s\n" % brand_info
 
     try:
+        import openai
         client = openai.OpenAI(api_key=api_key)
         resp = client.chat.completions.create(
             model=model or "gpt-4o-mini",
