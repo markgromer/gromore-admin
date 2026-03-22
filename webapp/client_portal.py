@@ -3543,11 +3543,14 @@ def client_heatmap_scan():
     if lat == 0 and lng == 0:
         return jsonify(ok=False, error="Business location not set. Set your address on the heatmap page first."), 400
 
-    from webapp.heatmap import generate_grid, scan_grid, calc_search_radius_m, verify_place_id
+    from webapp.heatmap import generate_grid, scan_grid, calc_search_radius_m, verify_place_id, clean_keyword
     grid_points = generate_grid(lat, lng, radius, grid_size)
     search_radius = calc_search_radius_m(radius, grid_size)
     business_name = brand.get("display_name", "")
     place_id = brand.get("google_place_id") or None
+
+    # Strip "near me" / "nearby" etc - the API already gets lat/lng + radius
+    keyword, keyword_was_cleaned = clean_keyword(keyword)
 
     # Verify the Place ID resolves correctly
     place_verification = None
@@ -3587,11 +3590,22 @@ def client_heatmap_scan():
         keyword_warning = (
             "You searched your business name. The heatmap is designed for "
             "service keywords, the terms customers use to find businesses like yours. "
-            "Try keywords like \"pooper scooper near me\", \"dog poop cleanup\", etc. "
+            "Try keywords like \"pooper scooper\", \"dog poop cleanup\", etc. "
             "That shows where you rank vs. competitors when people search for your service."
         )
     if debug_info and keyword_warning:
         debug_info["keyword_warning"] = keyword_warning
+    # Warn (but still scan) if we stripped "near me" from the keyword
+    if keyword_was_cleaned and debug_info:
+        near_me_note = (
+            'Stripped "near me" from your keyword (the API already receives your '
+            'exact coordinates and search radius, so "near me" is redundant and '
+            'can reduce result count).'
+        )
+        if debug_info.get("keyword_warning"):
+            debug_info["keyword_warning"] += " " + near_me_note
+        else:
+            debug_info["keyword_warning"] = near_me_note
 
     ranked = [r for r in results if r["rank"] > 0]
     avg_rank = round(sum(r["rank"] for r in ranked) / len(ranked), 1) if ranked else 0

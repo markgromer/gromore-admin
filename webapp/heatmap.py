@@ -17,6 +17,21 @@ log = logging.getLogger(__name__)
 MILES_TO_KM = 1.60934
 KM_PER_DEG_LAT = 111.32
 
+# Phrases that are redundant when we already pass lat/lng + radius to the API
+_LOCATION_NOISE = re.compile(
+    r'\b(near\s+me|nearby|close\s+to\s+me|around\s+me|in\s+my\s+area)\b',
+    re.IGNORECASE,
+)
+
+
+def clean_keyword(raw):
+    """Strip location-relative phrases that confuse the API (we already send lat/lng).
+    Returns (cleaned_keyword, was_modified)."""
+    cleaned = _LOCATION_NOISE.sub('', raw).strip()
+    # Collapse extra whitespace
+    cleaned = re.sub(r'\s{2,}', ' ', cleaned).strip()
+    return cleaned, cleaned.lower() != raw.lower().strip()
+
 
 def generate_grid(center_lat, center_lng, radius_miles, grid_size=6):
     """Return a list of dicts with row, col, lat, lng for an NxN grid."""
