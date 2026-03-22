@@ -177,10 +177,54 @@ def client_dashboard_data():
     try:
         from webapp.report_runner import build_analysis_and_suggestions_for_brand
         from webapp.client_advisor import build_client_dashboard
+        from webapp.campaign_manager import list_all_campaigns
 
         analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
+        campaigns_data = {}
+        try:
+            campaigns_data = list_all_campaigns(db, brand, month)
+        except Exception as exc:
+            current_app.logger.exception("Campaign listing failed: %s", exc)
+
         if analysis:
             dashboard_data = build_client_dashboard(analysis, suggestions, brand)
+            dashboard_data["campaigns"] = {
+                "google": [
+                    {
+                        "id": c.get("id", ""),
+                        "name": c.get("name", ""),
+                        "status": c.get("status", ""),
+                        "daily_budget": c.get("daily_budget", 0),
+                        "spend": c.get("spend", 0),
+                        "clicks": c.get("clicks", 0),
+                        "ctr": c.get("ctr", 0),
+                        "conversions": c.get("conversions", 0),
+                        "cpa": c.get("cpa", 0),
+                        "channel_type": c.get("channel_type", ""),
+                    }
+                    for c in (campaigns_data.get("google") or [])
+                ],
+                "meta": [
+                    {
+                        "id": c.get("id", ""),
+                        "name": c.get("name", ""),
+                        "status": c.get("status", ""),
+                        "daily_budget": c.get("daily_budget", 0),
+                        "spend": c.get("spend", 0),
+                        "clicks": c.get("clicks", 0),
+                        "ctr": c.get("ctr", 0),
+                        "conversions": c.get("conversions", 0),
+                        "cpa": c.get("cpa", 0),
+                        "objective": c.get("objective", ""),
+                    }
+                    for c in (campaigns_data.get("meta") or [])
+                ],
+            }
+            # KPI target for verdict computation
+            try:
+                dashboard_data["target_cpa"] = float(brand.get("kpi_target_cpa") or 0)
+            except (ValueError, TypeError):
+                dashboard_data["target_cpa"] = 0.0
             return jsonify({"dashboard": dashboard_data, "error": ""})
         else:
             return jsonify({"dashboard": None, "error": "No data available for this month."})
@@ -982,6 +1026,15 @@ def client_campaign_create():
 
     from webapp.campaign_templates import get_active_strategies
 
+    # Compute safe daily budget default in Python (avoids Jinja math on bad data)
+    try:
+        daily_budget_default = round(float(brand.get("monthly_budget") or 500) / 30)
+    except (ValueError, TypeError):
+        daily_budget_default = 17
+
+    draft_id = request.args.get("draft_id", type=int)
+    draft = db.get_campaign_draft(draft_id, brand_id) if draft_id else None
+
     return render_template(
         "client_campaign_create.html",
         brand=brand,
@@ -989,6 +1042,8 @@ def client_campaign_create():
         has_meta=has_meta,
         strategies=get_active_strategies(),
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+        draft=draft,
+        daily_budget_default=daily_budget_default,
     )
 
 
@@ -1089,6 +1144,18 @@ def client_campaign_save_draft():
     campaign_name = plan.get("campaign_name", "Untitled Campaign")
     created_by = session.get("client_name", "client")
 
+    # Update existing draft or create new one
+    existing_draft_id = request.form.get("draft_id", type=int)
+    if existing_draft_id:
+        draft = db.get_campaign_draft(existing_draft_id, brand_id)
+        if draft:
+            db.update_campaign_draft(existing_draft_id, brand_id, platform, campaign_name, plan_json)
+            return jsonify({
+                "success": True,
+                "draft_id": existing_draft_id,
+                "message": "Draft updated.",
+            })
+
     draft_id = db.save_campaign_draft(
         brand_id, platform, campaign_name, plan_json, created_by,
     )
@@ -1148,6 +1215,97 @@ def client_campaign_delete_draft(draft_id):
     brand_id = session["client_brand_id"]
     db.delete_campaign_draft(draft_id, brand_id)
     return jsonify({"success": True, "message": "Draft deleted."})
+
+
+@client_bp.route("/campaigns/new/preflight", methods=["POST"])
+@client_login_required
+def client_campaign_preflight():
+    """Warren pre-flight check before campaign launch."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"success": False, "error": "Brand not found"})
+
+    plan_json = request.form.get("plan", "")
+    if not plan_json:
+        return jsonify({"success": False, "error": "No campaign plan provided"})
+
+    try:
+        plan = json.loads(plan_json)
+    except json.JSONDecodeError:
+        return jsonify({"success": False, "error": "Invalid plan data"})
+
+    checks = []
+    platform = plan.get("platform", "")
+
+    # Check 1: Platform config
+    has_google, has_meta = _get_ad_connection_status(db, brand)
+    if platform == "google" and not has_google:
+        checks.append({"status": "fail", "label": "Google Ads Connection", "detail": "Google Ads account not connected or missing credentials."})
+    elif platform == "meta" and not has_meta:
+        checks.append({"status": "fail", "label": "Meta Ads Connection", "detail": "Meta Ads account not connected or missing credentials."})
+    else:
+        checks.append({"status": "pass", "label": f"{platform.title()} Connection", "detail": "Account connected and ready."})
+
+    # Check 2: Campaign name
+    cname = plan.get("campaign_name", "").strip()
+    if not cname or cname == "Untitled Campaign":
+        checks.append({"status": "warn", "label": "Campaign Name", "detail": "Using a generic name. Consider something descriptive."})
+    else:
+        checks.append({"status": "pass", "label": "Campaign Name", "detail": f'"{cname}"'})
+
+    # Check 3: Budget
+    daily_budget = plan.get("daily_budget", 0)
+    try:
+        daily_budget = float(daily_budget)
+    except (ValueError, TypeError):
+        daily_budget = 0
+    if daily_budget < 3:
+        checks.append({"status": "fail", "label": "Daily Budget", "detail": f"${daily_budget}/day is too low. Minimum $3/day."})
+    elif daily_budget < 10:
+        checks.append({"status": "warn", "label": "Daily Budget", "detail": f"${daily_budget}/day is low. Consider $10+ for better results."})
+    else:
+        checks.append({"status": "pass", "label": "Daily Budget", "detail": f"${daily_budget}/day (${round(daily_budget * 30)}/mo)"})
+
+    # Check 4: Ad groups / ad sets
+    groups_key = "ad_groups" if platform == "google" else "ad_sets"
+    groups = plan.get(groups_key, [])
+    if not groups:
+        checks.append({"status": "fail", "label": "Ad Groups" if platform == "google" else "Ad Sets", "detail": "No ad groups defined. Add at least one."})
+    else:
+        checks.append({"status": "pass", "label": f"{len(groups)} {'Ad Group' if platform == 'google' else 'Ad Set'}{'s' if len(groups) != 1 else ''}", "detail": "Structure looks good."})
+
+    # Check 5: Ads in each group
+    total_ads = 0
+    empty_groups = 0
+    for g in groups:
+        ads = g.get("ads", [])
+        total_ads += len(ads)
+        if not ads:
+            empty_groups += 1
+    if empty_groups > 0:
+        checks.append({"status": "warn", "label": "Ad Coverage", "detail": f"{empty_groups} group(s) have no ads. Consider adding at least one ad per group."})
+    elif total_ads > 0:
+        checks.append({"status": "pass", "label": "Ad Coverage", "detail": f"{total_ads} ad(s) across all groups."})
+
+    # Check 6: Location
+    location = plan.get("location_targeting", "").strip()
+    if not location:
+        checks.append({"status": "warn", "label": "Location Targeting", "detail": "No location set. Campaign will target broadly."})
+    else:
+        checks.append({"status": "pass", "label": "Location Targeting", "detail": location})
+
+    # Determine overall verdict
+    statuses = [c["status"] for c in checks]
+    if "fail" in statuses:
+        verdict = "BLOCKED"
+    elif "warn" in statuses:
+        verdict = "WARNINGS"
+    else:
+        verdict = "READY"
+
+    return jsonify({"success": True, "checks": checks, "verdict": verdict})
 
 
 @client_bp.route("/campaigns/check-config")

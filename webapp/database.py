@@ -1073,6 +1073,16 @@ class WebDB:
         conn.commit()
         conn.close()
 
+    def update_campaign_draft(self, draft_id, brand_id, platform, campaign_name, plan_json):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE campaign_drafts SET platform = ?, campaign_name = ?, plan_json = ?, "
+            "updated_at = CURRENT_TIMESTAMP WHERE id = ? AND brand_id = ?",
+            (platform, campaign_name, plan_json, draft_id, brand_id),
+        )
+        conn.commit()
+        conn.close()
+
     # ── Creative Templates ──
 
     def save_creative_template(self, brand_id, name, ad_format, canvas_json, thumbnail, canvas_width, canvas_height, created_by):

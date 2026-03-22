@@ -20,12 +20,23 @@
 
 <!-- AI Recommendations -->
 {% if recommendations %}
-<div class="card mb-4">
+<div class="card mb-4" style="border:none; box-shadow: 0 4px 12px rgba(15,23,42,.08);">
     <div class="card-body">
-        <h6 class="mb-3"><i class="bi bi-lightbulb text-warning"></i> AI Recommendations</h6>
+        <h6 class="mb-3"><i class="bi bi-lightning-charge text-warning"></i> Warren's Verdict</h6>
         {% for rec in recommendations %}
         <div class="d-flex align-items-start mb-3 {% if not loop.last %}border-bottom pb-3{% endif %}">
+            {% set v = rec.verdict|default('')|lower %}
+            {% if v == 'kill' %}
+            <span class="verdict-badge verdict-kill me-2 mt-1">&#128308; Kill</span>
+            {% elif v == 'fix' %}
+            <span class="verdict-badge verdict-fix me-2 mt-1">&#128993; Fix</span>
+            {% elif v == 'scale' %}
+            <span class="verdict-badge verdict-scale me-2 mt-1">&#128994; Scale</span>
+            {% elif v == 'test' %}
+            <span class="verdict-badge verdict-test me-2 mt-1">&#128309; Test</span>
+            {% else %}
             <span class="badge bg-{{ 'danger' if rec.priority == 'high' else 'warning' if rec.priority == 'medium' else 'secondary' }} me-2 mt-1" style="font-size: .7rem;">{{ rec.priority }}</span>
+            {% endif %}
             <div>
                 <div class="fw-semibold" style="font-size: .9rem;">{{ rec.campaign }}</div>
                 <div style="font-size: .85rem; color: #4b5563;">{{ rec.issue }}</div>
@@ -38,6 +49,15 @@
 </div>
 {% endif %}
 
+<!-- Verdict badge styles -->
+<style>
+    .verdict-badge { display: inline-flex; align-items: center; gap: .35rem; padding: .25rem .6rem; border-radius: 6px; font-size: .78rem; font-weight: 700; white-space: nowrap; }
+    .verdict-kill { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .verdict-fix { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+    .verdict-scale { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .verdict-test { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+</style>
+
 <!-- Google Ads Campaigns -->
 {% if campaigns.google %}
 <div class="channel-section">
@@ -48,6 +68,7 @@
                 <tr>
                     <th style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Campaign</th>
                     <th style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Status</th>
+                    <th style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Verdict</th>
                     <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Budget/Day</th>
                     <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Spend ({{ month }})</th>
                     <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Clicks</th>
@@ -59,6 +80,7 @@
             </thead>
             <tbody>
                 {% for c in campaigns.google %}
+                {% set target_cpa = (brand.kpi_target_cpa or brand.get('kpi_target_cpa', 0)) | float %}
                 <tr>
                     <td>
                         <a href="{{ url_for('client.client_campaign_detail', platform='google', campaign_id=c.id, month=month) }}" class="text-decoration-none fw-semibold">
@@ -70,6 +92,25 @@
                         <span class="badge bg-{{ 'success' if c.status == 'ENABLED' else 'secondary' if c.status == 'PAUSED' else 'warning' }}">
                             {{ c.status }}
                         </span>
+                    </td>
+                    <td>
+                        {% if c.status == 'PAUSED' %}
+                            <span class="verdict-badge verdict-test">&#128309; Paused</span>
+                        {% elif c.spend > 50 and c.conversions == 0 %}
+                            <span class="verdict-badge verdict-kill">&#128308; Kill</span>
+                        {% elif c.conversions > 0 and target_cpa > 0 and c.cpa > target_cpa * 1.5 %}
+                            <span class="verdict-badge verdict-kill">&#128308; Kill</span>
+                        {% elif c.conversions > 0 and target_cpa > 0 and c.cpa > target_cpa %}
+                            <span class="verdict-badge verdict-fix">&#128993; Fix</span>
+                        {% elif c.spend > 0 and c.conversions == 0 and c.spend <= 50 %}
+                            <span class="verdict-badge verdict-test">&#128309; Test</span>
+                        {% elif c.conversions > 0 and (target_cpa == 0 or c.cpa <= target_cpa) %}
+                            <span class="verdict-badge verdict-scale">&#128994; Scale</span>
+                        {% elif c.clicks < 50 %}
+                            <span class="verdict-badge verdict-test">&#128309; Test</span>
+                        {% else %}
+                            <span class="verdict-badge verdict-fix">&#128993; Fix</span>
+                        {% endif %}
                     </td>
                     <td class="text-end">${{ "%.2f"|format(c.daily_budget) }}</td>
                     <td class="text-end">${{ "%.2f"|format(c.spend) }}</td>
@@ -100,6 +141,7 @@
                 <tr>
                     <th style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Campaign</th>
                     <th style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Status</th>
+                    <th style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Verdict</th>
                     <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Budget/Day</th>
                     <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Spend ({{ month }})</th>
                     <th class="text-end" style="font-size: .8rem; font-weight: 600; color: #6b7280; text-transform: uppercase;">Clicks</th>
@@ -111,6 +153,7 @@
             </thead>
             <tbody>
                 {% for c in campaigns.meta %}
+                {% set target_cpa = (brand.kpi_target_cpa or brand.get('kpi_target_cpa', 0)) | float %}
                 <tr>
                     <td>
                         <a href="{{ url_for('client.client_campaign_detail', platform='meta', campaign_id=c.id, month=month) }}" class="text-decoration-none fw-semibold">
@@ -122,6 +165,25 @@
                         <span class="badge bg-{{ 'success' if c.status == 'ACTIVE' else 'secondary' if c.status == 'PAUSED' else 'warning' }}">
                             {{ c.status }}
                         </span>
+                    </td>
+                    <td>
+                        {% if c.status == 'PAUSED' %}
+                            <span class="verdict-badge verdict-test">&#128309; Paused</span>
+                        {% elif c.spend > 50 and c.conversions == 0 %}
+                            <span class="verdict-badge verdict-kill">&#128308; Kill</span>
+                        {% elif c.conversions > 0 and target_cpa > 0 and c.cpa > target_cpa * 1.5 %}
+                            <span class="verdict-badge verdict-kill">&#128308; Kill</span>
+                        {% elif c.conversions > 0 and target_cpa > 0 and c.cpa > target_cpa %}
+                            <span class="verdict-badge verdict-fix">&#128993; Fix</span>
+                        {% elif c.spend > 0 and c.conversions == 0 and c.spend <= 50 %}
+                            <span class="verdict-badge verdict-test">&#128309; Test</span>
+                        {% elif c.conversions > 0 and (target_cpa == 0 or c.cpa <= target_cpa) %}
+                            <span class="verdict-badge verdict-scale">&#128994; Scale</span>
+                        {% elif c.clicks < 50 %}
+                            <span class="verdict-badge verdict-test">&#128309; Test</span>
+                        {% else %}
+                            <span class="verdict-badge verdict-fix">&#128993; Fix</span>
+                        {% endif %}
                     </td>
                     <td class="text-end">{{ "$%.2f"|format(c.daily_budget) if c.daily_budget > 0 else '-' }}</td>
                     <td class="text-end">${{ "%.2f"|format(c.spend) }}</td>

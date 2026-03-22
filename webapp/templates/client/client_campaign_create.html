@@ -1,6 +1,6 @@
 {% extends "client/client_base.html" %}
 
-{% block title %}Create Campaign{% endblock %}
+{% block title %}{{ 'Edit Draft' if draft else 'Create Campaign' }}{% endblock %}
 
 {% block head %}
 <style>
@@ -18,24 +18,91 @@
     .platform-card.selected { border-color: #3b82f6; background: #eff6ff; }
     .platform-card.disabled { opacity: .4; cursor: not-allowed; }
     .platform-card i { font-size: 2rem; margin-bottom: .5rem; }
-    .plan-section {
+
+    /* Builder panels */
+    .builder-panel {
         background: #fff;
+        border: 1px solid #e5e7eb;
         border-radius: 12px;
-        padding: 1.25rem;
         margin-bottom: 1rem;
-        box-shadow: 0 1px 3px rgba(0,0,0,.05);
+        overflow: hidden;
     }
-    .plan-section h6 { color: #1a1d2e; margin-bottom: .75rem; }
+    .builder-panel-header {
+        padding: .85rem 1.25rem;
+        background: #f8fafc;
+        border-bottom: 1px solid #e5e7eb;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        user-select: none;
+    }
+    .builder-panel-header:hover { background: #f1f5f9; }
+    .builder-panel-header h6 { margin: 0; font-size: .95rem; }
+    .builder-panel-body { padding: 1.25rem; }
+    .builder-panel-body.collapsed { display: none; }
+
+    /* Ad Set / Ad Group cards */
+    .adset-card {
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        margin-bottom: .75rem;
+        transition: border-color .2s;
+    }
+    .adset-card:hover { border-color: #cbd5e1; }
+    .adset-header {
+        padding: .75rem 1rem;
+        background: #fafbfc;
+        border-bottom: 1px solid #e5e7eb;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        border-radius: 10px 10px 0 0;
+    }
+    .adset-header .badge { font-size: .7rem; }
+    .adset-body { padding: 1rem; }
+    .adset-body.collapsed { display: none; }
+
+    /* Ad cards within ad sets */
+    .ad-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: .85rem;
+        margin-bottom: .5rem;
+        background: #fff;
+    }
+    .ad-card:hover { background: #fafbfc; }
+    .ad-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: .5rem;
+        cursor: pointer;
+    }
+
+    /* Keyword badges */
     .keyword-badge {
-        display: inline-block;
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
         background: #f3f4f6;
         border-radius: 6px;
-        padding: .25rem .6rem;
+        padding: .2rem .55rem;
         margin: .15rem;
         font-size: .82rem;
         color: #374151;
     }
     .keyword-badge.negative { background: #fef2f2; color: #dc2626; }
+    .keyword-badge .remove-kw {
+        cursor: pointer;
+        font-size: .7rem;
+        opacity: .5;
+        margin-left: .2rem;
+    }
+    .keyword-badge .remove-kw:hover { opacity: 1; }
+
+    /* Image handling */
     .ad-image-preview { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 2px solid #e5e7eb; }
     .ad-image-slot { display: inline-flex; align-items: center; gap: .5rem; margin-top: .5rem; }
     .drive-thumb { width: 100px; height: 100px; object-fit: cover; border-radius: 8px; cursor: pointer; border: 2px solid transparent; transition: all .15s; }
@@ -44,6 +111,8 @@
     #drivePickerModal .modal-body { max-height: 70vh; overflow-y: auto; }
     .drive-folder-btn { cursor: pointer; padding: .5rem .75rem; border-radius: 8px; background: #f3f4f6; display: inline-flex; align-items: center; gap: .4rem; font-size: .85rem; }
     .drive-folder-btn:hover { background: #e5e7eb; }
+
+    /* Loading overlay */
     #loadingOverlay {
         display: none;
         position: fixed;
@@ -55,6 +124,8 @@
         flex-direction: column;
     }
     #loadingOverlay.show { display: flex; }
+
+    /* Strategy cards */
     .strategy-card {
         cursor: pointer;
         border: 2px solid #e5e7eb;
@@ -72,6 +143,49 @@
         font-size: 1.3rem; flex-shrink: 0;
     }
     .strategy-card-wrap.hidden { display: none; }
+
+    /* Add buttons */
+    .add-btn {
+        border: 2px dashed #d1d5db;
+        border-radius: 10px;
+        padding: .75rem;
+        text-align: center;
+        cursor: pointer;
+        color: #6b7280;
+        transition: all .2s;
+        background: transparent;
+        width: 100%;
+    }
+    .add-btn:hover { border-color: #3b82f6; color: #3b82f6; background: #f0f7ff; }
+
+    /* Pre-flight results */
+    .preflight-item {
+        padding: .5rem .75rem;
+        border-radius: 8px;
+        margin-bottom: .5rem;
+        font-size: .88rem;
+        display: flex;
+        align-items: flex-start;
+        gap: .5rem;
+    }
+    .preflight-pass { background: #f0fdf4; color: #166534; }
+    .preflight-warn { background: #fffbeb; color: #92400e; }
+    .preflight-fail { background: #fef2f2; color: #991b1b; }
+
+    /* Bottom action bar */
+    .builder-actions {
+        position: sticky;
+        bottom: 0;
+        background: #fff;
+        border-top: 1px solid #e5e7eb;
+        padding: .75rem 1.25rem;
+        margin: 0 -1rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        z-index: 50;
+        box-shadow: 0 -2px 8px rgba(0,0,0,.06);
+    }
 </style>
 {% endblock %}
 
@@ -79,24 +193,21 @@
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb" style="font-size: .85rem;">
         <li class="breadcrumb-item"><a href="{{ url_for('client.client_campaigns') }}">Campaigns</a></li>
-        <li class="breadcrumb-item active">Create Campaign</li>
+        <li class="breadcrumb-item active">{{ 'Edit Draft' if draft else 'Create Campaign' }}</li>
     </ol>
 </nav>
 
-<h4 class="mb-1">Create a New Campaign</h4>
-<div class="d-flex align-items-center gap-3 mb-4">
-    <span class="text-muted" style="font-size:.88rem;">Advanced builder with full control.</span>
-    <a href="{{ url_for('client.client_quick_launch') }}" style="font-size:.85rem;">
-        <i class="bi bi-magic me-1"></i> Want the simple version?
-    </a>
-</div>
+<h4 class="mb-1">{{ 'Edit Draft' if draft else 'Build a Campaign' }}</h4>
+<p class="text-muted mb-4" style="font-size:.88rem;">
+    Build your campaign structure, then publish when ready. Warren will check everything before it goes live.
+</p>
 
-<!-- Step 1: Choose Platform -->
+<!-- ═══════ Step 1: Platform ═══════ -->
 <div class="wizard-step active" id="step1">
     <div class="card border-0 shadow-sm" style="border-radius: 12px;">
         <div class="card-body">
-            <h5 class="mb-1">Step 1: Choose Your Platform</h5>
-            <p class="text-muted mb-4">Where do you want to run your ads?</p>
+            <h5 class="mb-1">Choose Your Platform</h5>
+            <p class="text-muted mb-4">Where do you want to run this campaign?</p>
 
             <div class="row g-3">
                 <div class="col-md-6">
@@ -104,12 +215,12 @@
                         <i class="bi bi-google text-primary"></i>
                         <h6>Google Ads</h6>
                         <p style="font-size: .85rem; color: #6b7280; margin: 0;">
-                            Show up when people search for your services on Google.
-                            Best for capturing people who are ready to buy right now.
+                            Search ads, shown when people search for your services.
                         </p>
                         {% if not has_google %}
                         <div class="mt-2" style="font-size: .8rem;">
-                            <span class="text-danger fw-semibold">Not connected</span>
+                            <span class="text-danger fw-semibold">Not connected</span> -
+                            <a href="{{ url_for('client.client_settings') }}">Set up in Settings</a>
                         </div>
                         {% endif %}
                     </div>
@@ -119,241 +230,145 @@
                         <i class="bi bi-meta text-primary"></i>
                         <h6>Facebook & Instagram</h6>
                         <p style="font-size: .85rem; color: #6b7280; margin: 0;">
-                            Reach potential customers in your area while they browse social media.
-                            Great for building awareness and generating leads.
+                            Social ads for awareness and lead generation.
                         </p>
                         {% if not has_meta %}
                         <div class="mt-2" style="font-size: .8rem;">
-                            <span class="text-danger fw-semibold">Not connected</span>
+                            <span class="text-danger fw-semibold">Not connected</span> -
+                            <a href="{{ url_for('client.client_settings') }}">Set up in Settings</a>
                         </div>
                         {% endif %}
                     </div>
                 </div>
             </div>
 
-            {% if not has_google and not has_meta %}
-            <div class="card mt-4 border-0" style="background: #fffbeb; border-radius: 10px;">
-                <div class="card-body">
-                    <h6 class="mb-2"><i class="bi bi-lightbulb text-warning"></i> Need to connect your ad accounts first?</h6>
-                    <p style="font-size: .88rem; color: #4b5563; margin-bottom: .75rem;">Before you can launch campaigns, you need to connect at least one ad platform. Here's how:</p>
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <div class="p-3" style="background: #fff; border-radius: 8px;">
-                                <strong style="font-size: .9rem;"><i class="bi bi-google text-primary"></i> Google Ads Setup</strong>
-                                <ol style="font-size: .84rem; color: #374151; margin-bottom: .5rem; padding-left: 1.2rem;">
-                                    <li>Go to <a href="{{ url_for('client.client_settings') }}">Settings</a> and click <strong>Connect Google Account</strong></li>
-                                    <li>Sign in and grant access to Google Ads</li>
-                                    <li>Enter your <strong>Google Ads Customer ID</strong> (found at the top of your <a href="https://ads.google.com" target="_blank">Google Ads dashboard</a>, format: 123-456-7890)</li>
-                                </ol>
-                                <a href="{{ url_for('client.client_settings') }}" class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-gear me-1"></i> Go to Settings
-                                </a>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="p-3" style="background: #fff; border-radius: 8px;">
-                                <strong style="font-size: .9rem;"><i class="bi bi-meta" style="color:#0081fb;"></i> Meta Ads Setup</strong>
-                                <ol style="font-size: .84rem; color: #374151; margin-bottom: .5rem; padding-left: 1.2rem;">
-                                    <li>Go to <a href="{{ url_for('client.client_settings') }}">Settings</a> and click <strong>Connect Meta Account</strong></li>
-                                    <li>Sign in with Facebook and select your ad account</li>
-                                    <li>Your account ID will be saved automatically</li>
-                                </ol>
-                                <a href="{{ url_for('client.client_settings') }}" class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-gear me-1"></i> Go to Settings
-                                </a>
-                            </div>
-                        </div>
-                    </div>
+            <div class="mt-4 d-flex justify-content-between align-items-center">
+                <div>
+                    <a href="{{ url_for('client.client_quick_launch') }}" style="font-size:.85rem;">
+                        <i class="bi bi-magic me-1"></i> Want AI to build the whole thing?
+                    </a>
                 </div>
-            </div>
-            {% elif not has_google or not has_meta %}
-            <div class="mt-3" style="font-size: .85rem; color: #6b7280;">
-                <i class="bi bi-info-circle"></i>
-                {% if not has_google %}Google Ads not connected yet.{% endif %}
-                {% if not has_meta %}Meta Ads not connected yet.{% endif %}
-                <a href="{{ url_for('client.client_settings') }}">Connect in Settings</a>
-            </div>
-            {% endif %}
-
-            <div class="mt-4 text-end">
                 <button class="btn btn-primary" id="step1Next" disabled onclick="goToStep(2)">
-                    Next <i class="bi bi-arrow-right"></i>
+                    Start Building <i class="bi bi-arrow-right"></i>
                 </button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Step 2: Choose Strategy -->
+<!-- ═══════ Step 2: Campaign Builder ═══════ -->
 <div class="wizard-step" id="step2">
-    <div class="card border-0 shadow-sm" style="border-radius: 12px;">
-        <div class="card-body">
-            <h5 class="mb-1">Step 2: What's your goal?</h5>
-            <p class="text-muted mb-4">Pick the outcome you want. We'll set up the right campaign structure automatically.</p>
 
-            {% set goal_labels = {
-                'meta_omnipresent': 'Get my name out there',
-                'meta_lead_gen': 'Get phone calls and leads',
-                'meta_hyper_local': 'Dominate my neighborhood',
-                'meta_retargeting': 'Bring back people who visited my website',
-                'google_lead_gen': 'Get phone calls and leads',
-                'google_local_domination': 'Dominate local search',
-                'google_competitor_conquest': 'Show up when people search my competitors',
-            } %}
-            <div class="row g-3" id="strategyCards">
-                {% for key, s in strategies.items() %}
-                <div class="col-md-6 strategy-card-wrap" data-platform="{{ s.platform }}">
-                    <div class="strategy-card" data-strategy="{{ key }}" onclick="selectStrategy(this, '{{ key }}')">
-                        <div class="d-flex align-items-start gap-3">
-                            <div class="strategy-icon" style="background: {{ s.color }}15; color: {{ s.color }};">
-                                <i class="bi {{ s.icon }}"></i>
-                            </div>
-                            <div style="flex: 1;">
-                                <h6 class="mb-0">{{ goal_labels.get(key, s.name) }}</h6>
-                                <div style="font-size: .78rem; color: {{ s.color }}; font-weight: 600; margin-bottom: .25rem;">{{ s.tagline }}</div>
-                                <p style="font-size: .82rem; color: #6b7280; margin-bottom: .5rem;">{{ s.description }}</p>
-                                <div style="font-size: .78rem; color: #9ca3af;">
-                                    <i class="bi bi-cash-stack"></i> Recommended min: ${{ s.recommended_min }}/mo
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-
-                <!-- Custom strategy option -->
-                <div class="col-md-6 strategy-card-wrap" data-platform="google meta">
-                    <div class="strategy-card" data-strategy="custom" onclick="selectStrategy(this, 'custom')">
-                        <div class="d-flex align-items-start gap-3">
-                            <div class="strategy-icon" style="background: #6b728015; color: #6b7280;">
-                                <i class="bi bi-sliders"></i>
-                            </div>
-                            <div style="flex: 1;">
-                                <h6 class="mb-0">Custom Campaign</h6>
-                                <div style="font-size: .78rem; color: #6b7280; font-weight: 600; margin-bottom: .25rem;">Build from scratch</div>
-                                <p style="font-size: .82rem; color: #6b7280; margin-bottom: .5rem;">
-                                    Tell the AI what you need and it will create a campaign plan
-                                    tailored to your specific requirements. No preset structure.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="mt-4 d-flex justify-content-between">
-                <button class="btn btn-outline-secondary" onclick="goToStep(1)">
-                    <i class="bi bi-arrow-left"></i> Back
-                </button>
-                <button class="btn btn-primary" id="step2Next" disabled onclick="goToStep(3)">
-                    Next <i class="bi bi-arrow-right"></i>
-                </button>
-            </div>
+    <!-- Campaign Settings -->
+    <div class="builder-panel" id="campaignSettingsPanel">
+        <div class="builder-panel-header" onclick="togglePanel('campaignSettingsBody')">
+            <h6><i class="bi bi-megaphone me-2"></i> Campaign Settings</h6>
+            <i class="bi bi-chevron-down" id="campaignSettingsBody-chevron"></i>
         </div>
-    </div>
-</div>
-
-<!-- Step 3: Campaign Details -->
-<div class="wizard-step" id="step3">
-    <div class="card border-0 shadow-sm" style="border-radius: 12px;">
-        <div class="card-body">
-            <h5 class="mb-1">Step 3: Tell Us About Your Campaign</h5>
-            <p class="text-muted mb-4">Our AI will build a complete campaign plan based on your answers.</p>
-
+        <div class="builder-panel-body" id="campaignSettingsBody">
             <div class="row g-3">
                 <div class="col-md-6">
-                    <label class="form-label fw-semibold">What service do you want to promote?</label>
-                    <input type="text" id="serviceInput" class="form-control"
-                           placeholder="e.g., Emergency Plumbing, Kitchen Remodeling, Lawn Care">
-                    <div class="form-text">Be specific - the more detail, the better your campaign will be.</div>
+                    <label class="form-label fw-semibold">Campaign Name</label>
+                    <input type="text" id="campaignName" class="form-control"
+                           placeholder="e.g., Emergency Plumbing - Austin">
                 </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold">Target location / service area?</label>
-                    <input type="text" id="locationInput" class="form-control"
-                           placeholder="e.g., Austin, TX within 25 miles"
-                           value="{{ brand.service_area or '' }}">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold">Monthly budget?</label>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Daily Budget</label>
                     <div class="input-group">
                         <span class="input-group-text">$</span>
-                        <input type="number" id="budgetInput" class="form-control" min="100" step="50"
-                               value="{{ brand.monthly_budget or 500 }}" placeholder="500">
-                        <span class="input-group-text">/month</span>
+                        <input type="number" id="dailyBudget" class="form-control" min="3" step="1"
+                               value="{{ daily_budget_default }}" placeholder="17">
+                        <span class="input-group-text">/day</span>
                     </div>
-                    <div class="form-text">Minimum $100/month. AI will optimize your daily spending.</div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Location</label>
+                    <input type="text" id="locationTarget" class="form-control"
+                           value="{{ brand.service_area or '' }}" placeholder="Austin, TX 25mi">
+                </div>
+                <div class="col-md-6 meta-only" style="display:none;">
+                    <label class="form-label fw-semibold">Objective</label>
+                    <select id="campaignObjective" class="form-select">
+                        <option value="OUTCOME_LEADS">Lead Generation</option>
+                        <option value="OUTCOME_TRAFFIC">Website Traffic</option>
+                        <option value="OUTCOME_AWARENESS">Brand Awareness</option>
+                        <option value="OUTCOME_ENGAGEMENT">Engagement</option>
+                    </select>
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label fw-semibold">Anything else we should know?</label>
-                    <input type="text" id="notesInput" class="form-control"
-                           placeholder="e.g., Only weekdays, Spanish-speaking, specific offers...">
-                </div>
-            </div>
-
-            <div class="mt-4 d-flex justify-content-between">
-                <button class="btn btn-outline-secondary" onclick="goToStep(2)">
-                    <i class="bi bi-arrow-left"></i> Back
-                </button>
-                <button class="btn btn-primary" id="generateBtn" onclick="generatePlan()">
-                    <i class="bi bi-magic"></i> Generate Campaign Plan
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Step 4: Review Plan -->
-<div class="wizard-step" id="step4">
-    <div class="card border-0 shadow-sm mb-3" style="border-radius: 12px;">
-        <div class="card-body">
-            <h5 class="mb-1">Step 4: Review Your Campaign Plan</h5>
-            <p class="text-muted mb-3">Our AI built this plan for you. Review it, then launch when ready.</p>
-        </div>
-    </div>
-
-    <div id="planContent"></div>
-
-    <div class="d-flex justify-content-between mt-4">
-        <div class="d-flex gap-2">
-            <button class="btn btn-outline-secondary" onclick="goToStep(3)">
-                <i class="bi bi-arrow-left"></i> Back & Edit
-            </button>
-            <button class="btn btn-outline-primary" onclick="generatePlan()">
-                <i class="bi bi-arrow-repeat"></i> Regenerate Plan
-            </button>
-        </div>
-        <div class="d-flex gap-2">
-            <button class="btn btn-outline-success" id="saveDraftBtn" onclick="saveDraft()">
-                <i class="bi bi-save"></i> Save as Draft
-            </button>
-            <button class="btn btn-success btn-lg" id="launchBtn" onclick="launchCampaign()">
-                <i class="bi bi-rocket-takeoff"></i> Launch Campaign (Paused)
-            </button>
-        </div>
-    </div>
-
-    <div id="configWarning" class="alert alert-warning mt-3" style="display: none; font-size: .85rem;">
-        <div class="d-flex align-items-start gap-2">
-            <i class="bi bi-exclamation-triangle mt-1" style="font-size: 1.1rem;"></i>
-            <div style="flex: 1;">
-                <strong>Not ready to launch yet.</strong> A few things need to be set up first:
-                <div id="configSteps" class="mt-2"></div>
-                <div class="mt-2">
-                    You can <strong>Save as Draft</strong> now and come back to launch once everything is connected.
+                    <label class="form-label fw-semibold">Strategy Notes <span class="text-muted fw-normal">(optional)</span></label>
+                    <input type="text" id="strategyNotes" class="form-control"
+                           placeholder="e.g., Focus on emergency calls, weekdays only">
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="alert alert-info mt-3" style="font-size: .85rem;">
-        <i class="bi bi-info-circle"></i>
-        Your campaign will be created in a <strong>paused</strong> state for safety.
-        You can review it in your campaign list and enable it when you're ready to start spending.
+    <!-- Ad Sets / Ad Groups Container -->
+    <div id="adSetsContainer"></div>
+
+    <!-- Add Ad Set / Ad Group Button -->
+    <button class="add-btn mb-3" id="addAdSetBtn" onclick="addAdSet()">
+        <i class="bi bi-plus-circle me-1"></i>
+        <span id="addAdSetLabel">Add Ad Group</span>
+    </button>
+
+    <!-- AI Assist Panel -->
+    <div class="builder-panel">
+        <div class="builder-panel-header" onclick="togglePanel('aiAssistBody')">
+            <h6><i class="bi bi-magic me-2"></i> AI Assist</h6>
+            <i class="bi bi-chevron-down" id="aiAssistBody-chevron"></i>
+        </div>
+        <div class="builder-panel-body collapsed" id="aiAssistBody">
+            <p class="text-muted mb-3" style="font-size:.88rem;">
+                Let AI generate a complete campaign plan. You can edit everything after.
+            </p>
+            <div class="row g-3 mb-3">
+                <div class="col-md-5">
+                    <label class="form-label fw-semibold">Service to promote</label>
+                    <input type="text" id="aiService" class="form-control"
+                           placeholder="e.g., Emergency Plumbing, Kitchen Remodeling">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Strategy</label>
+                    <select id="aiStrategy" class="form-select">
+                        <option value="">Auto (let AI decide)</option>
+                        {% for key, s in strategies.items() %}
+                        <option value="{{ key }}" data-platform="{{ s.platform }}">{{ s.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button class="btn btn-primary w-100" onclick="aiGenerate()">
+                        <i class="bi bi-magic me-1"></i> Generate Plan
+                    </button>
+                </div>
+            </div>
+            <div class="form-text"><i class="bi bi-info-circle"></i> This replaces your current builder content with AI-generated content.</div>
+        </div>
+    </div>
+
+    <!-- Bottom Action Bar -->
+    <div class="builder-actions">
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary" onclick="goToStep(1)">
+                <i class="bi bi-arrow-left"></i> Platform
+            </button>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <span class="text-muted" style="font-size:.8rem;" id="saveStatus"></span>
+            <button class="btn btn-outline-primary" onclick="saveDraft()">
+                <i class="bi bi-save me-1"></i> Save Draft
+            </button>
+            <button class="btn btn-success" onclick="publishCampaign()">
+                <i class="bi bi-rocket-takeoff me-1"></i> Publish Campaign
+            </button>
+        </div>
     </div>
 </div>
 
-<!-- Step 5: Success -->
-<div class="wizard-step" id="step5">
+<!-- ═══════ Step 3: Success ═══════ -->
+<div class="wizard-step" id="step3">
     <div class="text-center py-5">
         <div style="font-size: 4rem; color: #10b981;"><i class="bi bi-check-circle-fill"></i></div>
         <h4 class="mt-3">Campaign Created!</h4>
@@ -362,14 +377,41 @@
             <a href="{{ url_for('client.client_campaigns') }}" class="btn btn-primary">
                 <i class="bi bi-list-ul"></i> View Campaigns
             </a>
-            <button class="btn btn-outline-primary" onclick="resetWizard()">
+            <button class="btn btn-outline-primary" onclick="location.href='{{ url_for('client.client_campaign_create') }}'">
                 <i class="bi bi-plus-lg"></i> Create Another
             </button>
         </div>
     </div>
 </div>
 
-<!-- Drive Image Picker Modal -->
+<!-- ═══════ Pre-flight Modal ═══════ -->
+<div class="modal fade" id="preflightModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" style="background:#f8fafc;">
+                <h5 class="modal-title"><i class="bi bi-shield-check me-2"></i> Warren's Pre-Flight Check</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="preflightBody">
+                <div class="text-center py-4" id="preflightLoading">
+                    <div class="spinner-border text-primary mb-3"></div>
+                    <p class="text-muted">Warren is reviewing your campaign...</p>
+                </div>
+                <div id="preflightResults" style="display:none;"></div>
+            </div>
+            <div class="modal-footer" id="preflightFooter" style="display:none;">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    Go Back & Fix
+                </button>
+                <button type="button" class="btn btn-success" id="preflightLaunchBtn" onclick="confirmLaunch()">
+                    <i class="bi bi-rocket-takeoff me-1"></i> Launch Anyway
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════ Drive Image Picker Modal ═══════ -->
 <div class="modal fade" id="drivePickerModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -402,18 +444,40 @@
 <!-- Loading Overlay -->
 <div id="loadingOverlay">
     <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;"></div>
-    <h5 id="loadingText">Generating your campaign plan...</h5>
-    <p class="text-muted">Our AI is building a custom strategy for your business.</p>
+    <h5 id="loadingText">Working...</h5>
+    <p class="text-muted" id="loadingSub"></p>
 </div>
 
 {% endblock %}
 
 {% block scripts %}
 <script>
+/* ══════════════════════════════════════════════
+   Campaign Builder - State & Config
+   ══════════════════════════════════════════════ */
 let selectedPlatform = '';
-let selectedStrategy = '';
-let currentPlan = null;
+let draftId = {{ draft.id if draft else 'null' }};
+let adSetCounter = 0;      // for unique DOM ids
 const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+// The campaign plan mirrors the existing JSON structures so launch works unchanged
+// Google: { platform, campaign_name, daily_budget, location_targeting, rationale, ad_groups: [...], campaign_negative_keywords }
+// Meta:   { platform, campaign_name, objective, daily_budget, location_targeting, rationale, ad_sets: [...] }
+
+function escHtml(str) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(str || ''));
+    return div.innerHTML;
+}
+
+/* ══════════════════════════════════════════════
+   Navigation
+   ══════════════════════════════════════════════ */
+function goToStep(step) {
+    document.querySelectorAll('.wizard-step').forEach(s => s.classList.remove('active'));
+    document.getElementById('step' + step).classList.add('active');
+    window.scrollTo(0, 0);
+}
 
 function selectPlatform(el, platform) {
     if (el.classList.contains('disabled')) return;
@@ -422,352 +486,373 @@ function selectPlatform(el, platform) {
     selectedPlatform = platform;
     document.getElementById('step1Next').disabled = false;
 
-    // Reset strategy if platform changed
-    selectedStrategy = '';
-    document.querySelectorAll('.strategy-card').forEach(c => c.classList.remove('selected'));
-    document.getElementById('step2Next').disabled = true;
+    // Update labels based on platform
+    const isGoogle = platform === 'google';
+    document.getElementById('addAdSetLabel').textContent = isGoogle ? 'Add Ad Group' : 'Add Ad Set';
 
-    // Show/hide strategy cards based on platform
-    document.querySelectorAll('.strategy-card-wrap').forEach(function(wrap) {
-        const plat = wrap.getAttribute('data-platform');
-        if (plat === platform || plat.includes(platform)) {
-            wrap.classList.remove('hidden');
-        } else {
-            wrap.classList.add('hidden');
-        }
+    // Show/hide meta-only fields
+    document.querySelectorAll('.meta-only').forEach(el => {
+        el.style.display = isGoogle ? 'none' : '';
     });
+
+    // Filter AI strategy dropdown
+    const sel = document.getElementById('aiStrategy');
+    Array.from(sel.options).forEach(opt => {
+        if (!opt.value) { opt.style.display = ''; return; }
+        const p = opt.getAttribute('data-platform') || '';
+        opt.style.display = (p === platform) ? '' : 'none';
+    });
+    sel.value = '';
 }
 
-function selectStrategy(el, strategy) {
-    document.querySelectorAll('.strategy-card').forEach(c => c.classList.remove('selected'));
-    el.classList.add('selected');
-    selectedStrategy = strategy;
-    document.getElementById('step2Next').disabled = false;
+function togglePanel(bodyId) {
+    const body = document.getElementById(bodyId);
+    const chev = document.getElementById(bodyId + '-chevron');
+    body.classList.toggle('collapsed');
+    if (chev) chev.className = body.classList.contains('collapsed') ? 'bi bi-chevron-right' : 'bi bi-chevron-down';
 }
 
-function goToStep(step) {
-    document.querySelectorAll('.wizard-step').forEach(s => s.classList.remove('active'));
-    document.getElementById('step' + step).classList.add('active');
-    window.scrollTo(0, 0);
-}
-
-function showLoading(text) {
+function showLoading(text, sub) {
     document.getElementById('loadingText').textContent = text;
+    document.getElementById('loadingSub').textContent = sub || '';
     document.getElementById('loadingOverlay').classList.add('show');
 }
-
 function hideLoading() {
     document.getElementById('loadingOverlay').classList.remove('show');
 }
 
-function generatePlan() {
-    const service = document.getElementById('serviceInput').value.trim();
-    const location = document.getElementById('locationInput').value.trim();
-    const budget = document.getElementById('budgetInput').value.trim();
-    const notes = document.getElementById('notesInput').value.trim();
+/* ══════════════════════════════════════════════
+   Build Plan JSON from Builder
+   ══════════════════════════════════════════════ */
+function buildPlanFromUI() {
+    const plan = {
+        platform: selectedPlatform,
+        campaign_name: document.getElementById('campaignName').value.trim() || 'Untitled Campaign',
+        daily_budget: parseFloat(document.getElementById('dailyBudget').value) || 17,
+        location_targeting: document.getElementById('locationTarget').value.trim(),
+        rationale: document.getElementById('strategyNotes').value.trim(),
+    };
 
-    if (!service) { alert('Please enter the service you want to promote.'); return; }
-    if (!location) { alert('Please enter your target location.'); return; }
-    if (!budget || parseFloat(budget) < 100) { alert('Minimum monthly budget is $100.'); return; }
+    if (selectedPlatform === 'meta') {
+        plan.objective = document.getElementById('campaignObjective').value;
+        plan.ad_sets = [];
+    } else {
+        plan.ad_groups = [];
+        plan.campaign_negative_keywords = [];
+    }
 
-    showLoading('Generating your campaign plan...');
+    // Iterate through ad set/ad group panels
+    document.querySelectorAll('.adset-card').forEach(card => {
+        const idx = card.dataset.idx;
 
-    const formData = new FormData();
-    formData.append('csrf_token', csrfToken);
-    formData.append('service', service);
-    formData.append('location', location);
-    formData.append('monthly_budget', budget);
-    formData.append('platform', selectedPlatform);
-    formData.append('strategy_type', selectedStrategy === 'custom' ? '' : selectedStrategy);
-    formData.append('notes', notes);
-
-    fetch('{{ url_for("client.client_campaign_generate") }}', {
-        method: 'POST',
-        body: formData,
-    })
-    .then(r => r.json())
-    .then(data => {
-        hideLoading();
-        if (data.success) {
-            currentPlan = data.plan;
-            renderPlan(data.plan);
-            goToStep(4);
-            checkConfig();
+        if (selectedPlatform === 'google') {
+            const ag = {
+                name: card.querySelector('.adset-name').value.trim() || 'Ad Group',
+                keywords: getTagsFromContainer(card.querySelector('.kw-container')),
+                negative_keywords: getTagsFromContainer(card.querySelector('.neg-kw-container')),
+                headlines: [],
+                descriptions: [],
+            };
+            // Collect ads (each ad's headlines/descriptions get merged into the ad group for Google RSA)
+            card.querySelectorAll('.ad-card').forEach(adCard => {
+                const headlines = [];
+                adCard.querySelectorAll('.headline-input').forEach(inp => {
+                    const v = inp.value.trim();
+                    if (v) headlines.push(v);
+                });
+                const descriptions = [];
+                adCard.querySelectorAll('.desc-input').forEach(inp => {
+                    const v = inp.value.trim();
+                    if (v) descriptions.push(v);
+                });
+                // For Google, merge headlines/descriptions into the ad group
+                ag.headlines = ag.headlines.concat(headlines);
+                ag.descriptions = ag.descriptions.concat(descriptions);
+            });
+            plan.ad_groups.push(ag);
         } else {
-            alert('Error: ' + (data.error || 'Failed to generate plan. Please try again.'));
+            const adset = {
+                name: card.querySelector('.adset-name').value.trim() || 'Ad Set',
+                targeting_description: card.querySelector('.targeting-desc') ? card.querySelector('.targeting-desc').value.trim() : '',
+                age_min: parseInt(card.querySelector('.age-min') ? card.querySelector('.age-min').value : '25') || 25,
+                age_max: parseInt(card.querySelector('.age-max') ? card.querySelector('.age-max').value : '65') || 65,
+                ad_copy: [],
+            };
+            card.querySelectorAll('.ad-card').forEach(adCard => {
+                const ad = {
+                    headline: (adCard.querySelector('.meta-headline') || {}).value || '',
+                    primary_text: (adCard.querySelector('.meta-primary') || {}).value || '',
+                    description: (adCard.querySelector('.meta-desc') || {}).value || '',
+                    call_to_action: (adCard.querySelector('.meta-cta') || {}).value || 'LEARN_MORE',
+                };
+                const fileId = adCard.dataset.driveFileId;
+                if (fileId) ad.drive_file_id = fileId;
+                adset.ad_copy.push(ad);
+            });
+            plan.ad_sets.push(adset);
         }
-    })
-    .catch(err => {
-        hideLoading();
-        alert('Network error. Please try again.');
     });
+
+    return plan;
 }
 
-function renderPlan(plan) {
-    let html = '';
+function getTagsFromContainer(container) {
+    if (!container) return [];
+    const tags = [];
+    container.querySelectorAll('.keyword-badge').forEach(badge => {
+        const text = badge.dataset.keyword;
+        if (text) tags.push(text);
+    });
+    return tags;
+}
 
-    // Campaign overview
-    html += '<div class="plan-section">';
-    html += '<h6><i class="bi bi-megaphone"></i> ' + escHtml(plan.campaign_name) + '</h6>';
-    html += '<div class="row g-3">';
-    html += '<div class="col-md-4"><div class="metric-label">Platform</div><div class="fw-semibold">' + (plan.platform === 'google' ? 'Google Ads' : 'Facebook & Instagram') + '</div></div>';
-    html += '<div class="col-md-4"><div class="metric-label">Daily Budget</div><div class="fw-semibold">$' + parseFloat(plan.daily_budget).toFixed(2) + '/day</div></div>';
-    html += '<div class="col-md-4"><div class="metric-label">Location</div><div class="fw-semibold">' + escHtml(plan.location_targeting || '') + '</div></div>';
+/* ══════════════════════════════════════════════
+   Ad Set / Ad Group Panel Rendering
+   ══════════════════════════════════════════════ */
+function addAdSet(data) {
+    const idx = adSetCounter++;
+    const isGoogle = selectedPlatform === 'google';
+    const label = isGoogle ? 'Ad Group' : 'Ad Set';
+    const name = (data && (data.name || '')) || '';
+
+    let html = '<div class="adset-card" data-idx="' + idx + '" id="adset-' + idx + '">';
+    html += '<div class="adset-header" onclick="toggleAdSet(' + idx + ')">';
+    html += '<div class="d-flex align-items-center gap-2">';
+    html += '<i class="bi ' + (isGoogle ? 'bi-collection' : 'bi-people') + '"></i>';
+    html += '<strong style="font-size:.9rem;">' + label + ': </strong>';
+    html += '<input type="text" class="form-control form-control-sm adset-name" value="' + escHtml(name) + '" placeholder="' + label + ' name" style="width:220px;" onclick="event.stopPropagation();">';
     html += '</div>';
-    if (plan.rationale) {
-        html += '<div class="mt-3" style="font-size: .9rem; color: #4b5563;"><strong>Strategy:</strong> ' + escHtml(plan.rationale) + '</div>';
+    html += '<div class="d-flex align-items-center gap-2">';
+    html += '<span class="badge bg-light text-dark" id="adset-count-' + idx + '">0 ads</span>';
+    html += '<button class="btn btn-sm btn-outline-danger" onclick="event.stopPropagation();removeAdSet(' + idx + ')" title="Remove"><i class="bi bi-trash"></i></button>';
+    html += '<i class="bi bi-chevron-down" id="adset-chev-' + idx + '"></i>';
+    html += '</div></div>';
+
+    html += '<div class="adset-body" id="adset-body-' + idx + '">';
+
+    if (isGoogle) {
+        // Keywords
+        html += '<div class="mb-3">';
+        html += '<label class="form-label fw-semibold" style="font-size:.85rem;">Keywords</label>';
+        html += '<div class="kw-container d-flex flex-wrap align-items-center gap-1 mb-1" id="kw-' + idx + '">';
+        if (data && data.keywords) {
+            data.keywords.forEach(kw => { html += keywordBadgeHtml(kw, idx, false); });
+        }
+        html += '</div>';
+        html += '<div class="input-group input-group-sm" style="max-width:350px;">';
+        html += '<input type="text" class="form-control kw-input" placeholder="Add keyword, press Enter" onkeydown="addKeyword(event,' + idx + ',false)">';
+        html += '<button class="btn btn-outline-secondary" type="button" onclick="addKeywordBtn(' + idx + ',false)"><i class="bi bi-plus"></i></button>';
+        html += '</div>';
+        html += '<div class="form-text">Use [brackets] for exact match, "quotes" for phrase match, or plain for broad</div>';
+        html += '</div>';
+
+        // Negative keywords
+        html += '<div class="mb-3">';
+        html += '<label class="form-label fw-semibold" style="font-size:.85rem;">Negative Keywords</label>';
+        html += '<div class="neg-kw-container d-flex flex-wrap align-items-center gap-1 mb-1" id="neg-kw-' + idx + '">';
+        if (data && data.negative_keywords) {
+            data.negative_keywords.forEach(kw => { html += keywordBadgeHtml(kw, idx, true); });
+        }
+        html += '</div>';
+        html += '<div class="input-group input-group-sm" style="max-width:350px;">';
+        html += '<input type="text" class="form-control neg-kw-input" placeholder="Add negative keyword" onkeydown="addKeyword(event,' + idx + ',true)">';
+        html += '<button class="btn btn-outline-secondary" type="button" onclick="addKeywordBtn(' + idx + ',true)"><i class="bi bi-plus"></i></button>';
+        html += '</div></div>';
+
+    } else {
+        // Meta: targeting
+        html += '<div class="row g-3 mb-3">';
+        html += '<div class="col-md-6">';
+        html += '<label class="form-label fw-semibold" style="font-size:.85rem;">Targeting Description</label>';
+        html += '<input type="text" class="form-control form-control-sm targeting-desc" value="' + escHtml((data && data.targeting_description) || '') + '" placeholder="e.g., Homeowners 30-55 within 15mi">';
+        html += '</div>';
+        html += '<div class="col-md-3">';
+        html += '<label class="form-label fw-semibold" style="font-size:.85rem;">Age Range</label>';
+        html += '<div class="d-flex align-items-center gap-1">';
+        html += '<input type="number" class="form-control form-control-sm age-min" value="' + ((data && data.age_min) || 25) + '" min="18" max="65" style="width:70px;">';
+        html += '<span>-</span>';
+        html += '<input type="number" class="form-control form-control-sm age-max" value="' + ((data && data.age_max) || 65) + '" min="18" max="65" style="width:70px;">';
+        html += '</div></div></div>';
     }
+
+    // Ads container
+    html += '<div class="ads-container" id="ads-' + idx + '"></div>';
+    html += '<button class="add-btn" style="font-size:.85rem;" onclick="addAd(' + idx + ')">';
+    html += '<i class="bi bi-plus-circle me-1"></i> Add Ad</button>';
+
+    html += '</div></div>';
+
+    document.getElementById('adSetsContainer').insertAdjacentHTML('beforeend', html);
+
+    // Add default ads from data, or one empty ad
+    if (isGoogle && data && (data.headlines || data.descriptions)) {
+        addAd(idx, { headlines: data.headlines || [], descriptions: data.descriptions || [] });
+    } else if (!isGoogle && data && data.ad_copy && data.ad_copy.length) {
+        data.ad_copy.forEach(ad => addAd(idx, ad));
+    } else {
+        addAd(idx);
+    }
+
+    updateAdSetCount(idx);
+}
+
+function removeAdSet(idx) {
+    const el = document.getElementById('adset-' + idx);
+    if (el) el.remove();
+}
+
+function toggleAdSet(idx) {
+    const body = document.getElementById('adset-body-' + idx);
+    const chev = document.getElementById('adset-chev-' + idx);
+    body.classList.toggle('collapsed');
+    chev.className = body.classList.contains('collapsed') ? 'bi bi-chevron-right' : 'bi bi-chevron-down';
+}
+
+function updateAdSetCount(idx) {
+    const container = document.getElementById('ads-' + idx);
+    const count = container ? container.querySelectorAll('.ad-card').length : 0;
+    const el = document.getElementById('adset-count-' + idx);
+    if (el) el.textContent = count + ' ad' + (count !== 1 ? 's' : '');
+}
+
+/* ══════════════════════════════════════════════
+   Keyword Tag Input
+   ══════════════════════════════════════════════ */
+function keywordBadgeHtml(keyword, adSetIdx, isNegative) {
+    const cls = isNegative ? 'keyword-badge negative' : 'keyword-badge';
+    return '<span class="' + cls + '" data-keyword="' + escHtml(keyword) + '">' +
+        (isNegative ? '-' : '') + escHtml(keyword) +
+        ' <i class="bi bi-x remove-kw" onclick="this.parentElement.remove()"></i></span>';
+}
+
+function addKeyword(e, adSetIdx, isNegative) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const input = e.target;
+    const val = input.value.trim();
+    if (!val) return;
+    const containerId = (isNegative ? 'neg-kw-' : 'kw-') + adSetIdx;
+    const container = document.getElementById(containerId);
+    container.insertAdjacentHTML('beforeend', keywordBadgeHtml(val, adSetIdx, isNegative));
+    input.value = '';
+}
+
+function addKeywordBtn(adSetIdx, isNegative) {
+    const card = document.getElementById('adset-' + adSetIdx);
+    const input = card.querySelector(isNegative ? '.neg-kw-input' : '.kw-input');
+    const val = input.value.trim();
+    if (!val) return;
+    const containerId = (isNegative ? 'neg-kw-' : 'kw-') + adSetIdx;
+    const container = document.getElementById(containerId);
+    container.insertAdjacentHTML('beforeend', keywordBadgeHtml(val, adSetIdx, isNegative));
+    input.value = '';
+}
+
+/* ══════════════════════════════════════════════
+   Ad Cards within Ad Sets/Groups
+   ══════════════════════════════════════════════ */
+function addAd(adSetIdx, data) {
+    const container = document.getElementById('ads-' + adSetIdx);
+    const adNum = container.querySelectorAll('.ad-card').length + 1;
+    const isGoogle = selectedPlatform === 'google';
+
+    let html = '<div class="ad-card" data-drive-file-id="' + ((data && data.drive_file_id) || '') + '">';
+    html += '<div class="ad-card-header" onclick="this.nextElementSibling.classList.toggle(\'collapsed\')">';
+    html += '<span style="font-size:.88rem;font-weight:600;"><i class="bi bi-file-earmark-text me-1"></i> Ad ' + adNum + '</span>';
+    html += '<button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="event.stopPropagation();this.closest(\'.ad-card\').remove();updateAdSetCount(' + adSetIdx + ')" title="Remove ad"><i class="bi bi-x"></i></button>';
     html += '</div>';
+    html += '<div class="ad-card-body">';
 
-    // Google: Ad groups
-    if (plan.ad_groups) {
-        plan.ad_groups.forEach(function(ag, i) {
-            html += '<div class="plan-section">';
-            html += '<h6><i class="bi bi-collection"></i> Ad Group: ' + escHtml(ag.name) + '</h6>';
-
-            // Keywords
-            html += '<div class="mb-3"><strong style="font-size: .85rem;">Keywords:</strong><div class="mt-1">';
-            (ag.keywords || []).forEach(function(kw) {
-                html += '<span class="keyword-badge">' + escHtml(kw) + '</span>';
-            });
-            html += '</div></div>';
-
-            // Negative keywords
-            if (ag.negative_keywords && ag.negative_keywords.length) {
-                html += '<div class="mb-3"><strong style="font-size: .85rem;">Negative Keywords:</strong><div class="mt-1">';
-                ag.negative_keywords.forEach(function(nk) {
-                    html += '<span class="keyword-badge negative">-' + escHtml(nk) + '</span>';
-                });
-                html += '</div></div>';
-            }
-
-            // Ad copy
-            if (ag.headlines) {
-                html += '<div class="mb-2"><strong style="font-size: .85rem;">Ad Headlines:</strong></div>';
-                html += '<ul style="font-size: .85rem; margin-bottom: .5rem;">';
-                ag.headlines.forEach(function(h) { html += '<li>' + escHtml(h) + '</li>'; });
-                html += '</ul>';
-            }
-            if (ag.descriptions) {
-                html += '<div class="mb-2"><strong style="font-size: .85rem;">Ad Descriptions:</strong></div>';
-                ag.descriptions.forEach(function(d) {
-                    html += '<div style="font-size: .85rem; color: #4b5563; padding: .25rem 0;">' + escHtml(d) + '</div>';
-                });
-            }
-
-            html += '</div>';
+    if (isGoogle) {
+        // Headlines
+        html += '<div class="mb-2"><label class="form-label" style="font-size:.82rem;font-weight:600;">Headlines <span class="text-muted fw-normal">(max 30 chars each)</span></label>';
+        const headlines = (data && data.headlines) || ['', '', ''];
+        headlines.forEach((h, i) => {
+            html += '<input type="text" class="form-control form-control-sm mb-1 headline-input" value="' + escHtml(h) + '" placeholder="Headline ' + (i+1) + '" maxlength="30">';
         });
+        html += '<button class="btn btn-sm btn-link p-0" style="font-size:.8rem;" onclick="addHeadlineInput(this)"><i class="bi bi-plus"></i> Add headline</button>';
+        html += '</div>';
 
-        // Campaign-level negatives
-        if (plan.campaign_negative_keywords && plan.campaign_negative_keywords.length) {
-            html += '<div class="plan-section">';
-            html += '<h6><i class="bi bi-dash-circle"></i> Campaign Negative Keywords</h6>';
-            plan.campaign_negative_keywords.forEach(function(nk) {
-                html += '<span class="keyword-badge negative">-' + escHtml(nk) + '</span>';
-            });
-            html += '</div>';
+        // Descriptions
+        html += '<div><label class="form-label" style="font-size:.82rem;font-weight:600;">Descriptions <span class="text-muted fw-normal">(max 90 chars each)</span></label>';
+        const descs = (data && data.descriptions) || ['', ''];
+        descs.forEach((d, i) => {
+            html += '<textarea class="form-control form-control-sm mb-1 desc-input" placeholder="Description ' + (i+1) + '" maxlength="90" rows="2">' + escHtml(d) + '</textarea>';
+        });
+        html += '<button class="btn btn-sm btn-link p-0" style="font-size:.8rem;" onclick="addDescInput(this)"><i class="bi bi-plus"></i> Add description</button>';
+        html += '</div>';
+
+    } else {
+        // Meta ad: headline, primary text, description, CTA, image
+        html += '<div class="row g-2 mb-2">';
+        html += '<div class="col-md-6">';
+        html += '<label class="form-label" style="font-size:.82rem;font-weight:600;">Headline</label>';
+        html += '<input type="text" class="form-control form-control-sm meta-headline" value="' + escHtml((data && data.headline) || '') + '" placeholder="Short attention-grabbing headline" maxlength="40">';
+        html += '</div>';
+        html += '<div class="col-md-6">';
+        html += '<label class="form-label" style="font-size:.82rem;font-weight:600;">Call to Action</label>';
+        html += '<select class="form-select form-select-sm meta-cta">';
+        const ctas = ['LEARN_MORE','GET_QUOTE','CONTACT_US','SIGN_UP','BOOK_NOW','CALL_NOW','SHOP_NOW'];
+        const selectedCta = (data && data.call_to_action) || 'LEARN_MORE';
+        ctas.forEach(c => {
+            html += '<option value="' + c + '"' + (c === selectedCta ? ' selected' : '') + '>' + c.replace(/_/g, ' ') + '</option>';
+        });
+        html += '</select></div></div>';
+
+        html += '<div class="mb-2">';
+        html += '<label class="form-label" style="font-size:.82rem;font-weight:600;">Primary Text</label>';
+        html += '<textarea class="form-control form-control-sm meta-primary" rows="2" placeholder="Main body text for the ad">' + escHtml((data && data.primary_text) || '') + '</textarea>';
+        html += '</div>';
+
+        html += '<div class="mb-2">';
+        html += '<label class="form-label" style="font-size:.82rem;font-weight:600;">Description <span class="text-muted fw-normal">(optional)</span></label>';
+        html += '<input type="text" class="form-control form-control-sm meta-desc" value="' + escHtml((data && data.description) || '') + '" placeholder="Short supporting text">';
+        html += '</div>';
+
+        // Image from Drive
+        html += '<div class="ad-image-slot">';
+        if (data && data.drive_file_id) {
+            html += '<img src="' + thumbnailUrl(data.drive_file_id) + '" class="ad-image-preview" alt="Ad image">';
+            html += '<button class="btn btn-sm btn-outline-secondary" onclick="pickImageForAd(this)"><i class="bi bi-pencil"></i> Change</button>';
+            html += '<button class="btn btn-sm btn-outline-danger" onclick="clearAdImage(this)"><i class="bi bi-x"></i></button>';
+        } else {
+            html += '<button class="btn btn-sm btn-outline-primary" onclick="pickImageForAd(this)"><i class="bi bi-image me-1"></i> Add Image from Drive</button>';
         }
+        html += '</div>';
     }
 
-    // Meta: Ad sets
-    if (plan.ad_sets) {
-        plan.ad_sets.forEach(function(adset, i) {
-            html += '<div class="plan-section">';
-            html += '<h6><i class="bi bi-people"></i> Ad Set: ' + escHtml(adset.name) + '</h6>';
+    html += '</div></div>';
 
-            if (adset.targeting_description) {
-                html += '<div style="font-size: .85rem; color: #6b7280; margin-bottom: .75rem;">' + escHtml(adset.targeting_description) + '</div>';
-            }
-
-            html += '<div class="row g-2 mb-3">';
-            html += '<div class="col-auto"><span class="badge bg-light text-dark">Ages ' + (adset.age_min || 25) + '-' + (adset.age_max || 65) + '</span></div>';
-            html += '</div>';
-
-            // Ad copy variations
-            if (adset.ad_copy) {
-                adset.ad_copy.forEach(function(ad, j) {
-                    html += '<div class="border rounded p-3 mb-2" style="border-color: #e5e7eb !important;" id="ad-card-' + i + '-' + j + '">';
-                    html += '<div class="fw-semibold" style="font-size: .9rem;">Ad ' + (j+1) + '</div>';
-                    if (ad.headline) html += '<div style="font-size: 1rem; font-weight: 600; color: #1a1d2e;">' + escHtml(ad.headline) + '</div>';
-                    if (ad.primary_text) html += '<div style="font-size: .85rem; color: #4b5563; margin: .25rem 0;">' + escHtml(ad.primary_text) + '</div>';
-                    if (ad.description) html += '<div style="font-size: .8rem; color: #6b7280;">' + escHtml(ad.description) + '</div>';
-                    if (ad.call_to_action) html += '<span class="badge bg-primary mt-1">' + escHtml(ad.call_to_action.replace(/_/g, ' ')) + '</span>';
-
-                    // Image slot for Meta ads
-                    if (selectedPlatform === 'meta') {
-                        html += '<div class="ad-image-slot" id="img-slot-' + i + '-' + j + '">';
-                        if (ad.drive_file_id) {
-                            html += '<img src="' + thumbnailUrl(ad.drive_file_id) + '" class="ad-image-preview" alt="Ad image">';
-                            html += '<button class="btn btn-sm btn-outline-secondary" onclick="openImagePicker(' + i + ',' + j + ')"><i class="bi bi-pencil"></i> Change</button>';
-                            html += '<button class="btn btn-sm btn-outline-danger" onclick="removeAdImage(' + i + ',' + j + ')"><i class="bi bi-x"></i></button>';
-                        } else {
-                            html += '<button class="btn btn-sm btn-outline-primary" onclick="openImagePicker(' + i + ',' + j + ')">';
-                            html += '<i class="bi bi-image me-1"></i> Add Image from Drive</button>';
-                        }
-                        html += '</div>';
-                    }
-
-                    html += '</div>';
-                });
-            }
-
-            html += '</div>';
-        });
-    }
-
-    document.getElementById('planContent').innerHTML = html;
+    container.insertAdjacentHTML('beforeend', html);
+    updateAdSetCount(adSetIdx);
 }
 
-function launchCampaign() {
-    if (!currentPlan) { alert('No plan to launch.'); return; }
-    if (!confirm('Launch this campaign? It will be created in a PAUSED state. You can enable it when ready.')) return;
-
-    showLoading('Creating your campaign...');
-
-    const formData = new FormData();
-    formData.append('csrf_token', csrfToken);
-    formData.append('plan', JSON.stringify(currentPlan));
-
-    fetch('{{ url_for("client.client_campaign_launch") }}', {
-        method: 'POST',
-        body: formData,
-    })
-    .then(r => r.json())
-    .then(data => {
-        hideLoading();
-        if (data.success) {
-            document.getElementById('successMessage').textContent = data.message || 'Campaign created successfully!';
-            goToStep(5);
-        } else {
-            if ((data.error || '').includes('Save as Draft')) {
-                if (confirm(data.error + '\n\nWould you like to save this plan as a draft instead?')) {
-                    saveDraft();
-                }
-            } else {
-                alert('Error: ' + (data.error || 'Failed to create campaign. Please try again.'));
-            }
-        }
-    })
-    .catch(err => {
-        hideLoading();
-        alert('Network error. Please try again.');
-    });
+function addHeadlineInput(btn) {
+    const num = btn.parentElement.querySelectorAll('.headline-input').length + 1;
+    btn.insertAdjacentHTML('beforebegin',
+        '<input type="text" class="form-control form-control-sm mb-1 headline-input" placeholder="Headline ' + num + '" maxlength="30">');
 }
 
-function saveDraft() {
-    if (!currentPlan) { alert('No plan to save.'); return; }
-
-    showLoading('Saving draft...');
-
-    const formData = new FormData();
-    formData.append('csrf_token', csrfToken);
-    formData.append('plan', JSON.stringify(currentPlan));
-
-    fetch('{{ url_for("client.client_campaign_save_draft") }}', {
-        method: 'POST',
-        body: formData,
-    })
-    .then(r => r.json())
-    .then(data => {
-        hideLoading();
-        if (data.success) {
-            document.getElementById('successMessage').innerHTML =
-                '<i class="bi bi-save me-1"></i> ' + escHtml(data.message) +
-                '<br><small class="text-muted">You can launch it from the Campaigns page once your ad account is connected.</small>';
-            goToStep(5);
-        } else {
-            alert('Error: ' + (data.error || 'Failed to save draft.'));
-        }
-    })
-    .catch(err => {
-        hideLoading();
-        alert('Network error. Please try again.');
-    });
+function addDescInput(btn) {
+    const num = btn.parentElement.querySelectorAll('.desc-input').length + 1;
+    btn.insertAdjacentHTML('beforebegin',
+        '<textarea class="form-control form-control-sm mb-1 desc-input" placeholder="Description ' + num + '" maxlength="90" rows="2"></textarea>');
 }
 
-function checkConfig() {
-    fetch('{{ url_for("client.client_campaign_check_config") }}')
-    .then(r => r.json())
-    .then(data => {
-        if (!selectedPlatform) return;
-        const config = data[selectedPlatform];
-        const warningEl = document.getElementById('configWarning');
-        const stepsEl = document.getElementById('configSteps');
-        if (config && !config.ready) {
-            let html = '<ol style="margin: 0; padding-left: 1.2rem;">';
-            const settingsUrl = '{{ url_for("client.client_settings") }}';
-            config.missing.forEach(function(item) {
-                if (item.includes('OAuth')) {
-                    html += '<li><a href="' + settingsUrl + '"><strong>Connect your ' +
-                        (selectedPlatform === 'google' ? 'Google' : 'Meta') +
-                        ' account</strong></a> in Settings</li>';
-                } else if (item.includes('Customer ID')) {
-                    html += '<li><strong>Enter your Google Ads Customer ID</strong> ' +
-                        '(find it at the top-right of <a href="https://ads.google.com" target="_blank">ads.google.com</a>, ' +
-                        'format: 123-456-7890) then save it in <a href="' + settingsUrl + '">Settings</a></li>';
-                } else if (item.includes('Ad Account ID')) {
-                    html += '<li><strong>Enter your Meta Ad Account ID</strong> ' +
-                        '(find it in <a href="https://business.facebook.com/settings" target="_blank">Meta Business Settings</a>) ' +
-                        'then save it in <a href="' + settingsUrl + '">Settings</a></li>';
-                } else if (item.includes('Developer Token')) {
-                    html += '<li><strong>Developer Token needed</strong> - your agency admin sets this in the admin panel under Settings > Google Ads API. ' +
-                        'Contact your account manager if you see this.</li>';
-                } else {
-                    html += '<li>' + escHtml(item) + '</li>';
-                }
-            });
-            html += '</ol>';
-            stepsEl.innerHTML = html;
-            warningEl.style.display = 'block';
-            document.getElementById('launchBtn').classList.add('disabled');
-            document.getElementById('launchBtn').setAttribute('title', 'Missing configuration - see setup steps below');
-        } else {
-            warningEl.style.display = 'none';
-            stepsEl.innerHTML = '';
-            document.getElementById('launchBtn').classList.remove('disabled');
-            document.getElementById('launchBtn').removeAttribute('title');
-        }
-    })
-    .catch(() => {});
-}
-
-function resetWizard() {
-    selectedPlatform = '';
-    selectedStrategy = '';
-    currentPlan = null;
-    document.querySelectorAll('.platform-card').forEach(c => c.classList.remove('selected'));
-    document.querySelectorAll('.strategy-card').forEach(c => c.classList.remove('selected'));
-    document.getElementById('step1Next').disabled = true;
-    document.getElementById('step2Next').disabled = true;
-    document.getElementById('serviceInput').value = '';
-    document.getElementById('notesInput').value = '';
-    document.getElementById('planContent').innerHTML = '';
-    goToStep(1);
-}
-
-function escHtml(str) {
-    const div = document.createElement('div');
-    div.appendChild(document.createTextNode(str || ''));
-    return div.innerHTML;
-}
-
-// ── Drive Image Picker ──
-let pickerAdsetIdx = -1;
-let pickerAdIdx = -1;
+/* ══════════════════════════════════════════════
+   Drive Image Picker (reused from original)
+   ══════════════════════════════════════════════ */
+let activeImageSlot = null;
 let pickedFileId = '';
 let pickedThumb = '';
-let driveFolderStack = [];  // [{id, name}, ...]
+let driveFolderStack = [];
 
 function thumbnailUrl(fileId) {
     return '{{ url_for("client.client_drive_thumbnail", file_id="__FID__") }}'.replace('__FID__', fileId);
 }
-function downloadUrl(fileId) {
-    return '{{ url_for("client.client_drive_download", file_id="__FID__") }}'.replace('__FID__', fileId);
-}
 
-function openImagePicker(adsetIdx, adIdx) {
-    pickerAdsetIdx = adsetIdx;
-    pickerAdIdx = adIdx;
+function pickImageForAd(btn) {
+    activeImageSlot = btn.closest('.ad-image-slot');
     pickedFileId = '';
     pickedThumb = '';
     document.getElementById('drivePickConfirm').disabled = true;
@@ -776,12 +861,29 @@ function openImagePicker(adsetIdx, adIdx) {
     new bootstrap.Modal(document.getElementById('drivePickerModal')).show();
 }
 
+function clearAdImage(btn) {
+    const slot = btn.closest('.ad-image-slot');
+    const adCard = slot.closest('.ad-card');
+    adCard.dataset.driveFileId = '';
+    slot.innerHTML = '<button class="btn btn-sm btn-outline-primary" onclick="pickImageForAd(this)"><i class="bi bi-image me-1"></i> Add Image from Drive</button>';
+}
+
+function confirmImagePick() {
+    if (!pickedFileId || !activeImageSlot) return;
+    const adCard = activeImageSlot.closest('.ad-card');
+    adCard.dataset.driveFileId = pickedFileId;
+    activeImageSlot.innerHTML =
+        '<img src="' + pickedThumb + '" class="ad-image-preview" alt="Ad image">' +
+        '<button class="btn btn-sm btn-outline-secondary" onclick="pickImageForAd(this)"><i class="bi bi-pencil"></i> Change</button>' +
+        '<button class="btn btn-sm btn-outline-danger" onclick="clearAdImage(this)"><i class="bi bi-x"></i></button>';
+    bootstrap.Modal.getInstance(document.getElementById('drivePickerModal')).hide();
+}
+
 function loadDriveFolder(folderId) {
     const imagesEl = document.getElementById('driveImages');
     const foldersEl = document.getElementById('driveFolders');
     const emptyEl = document.getElementById('driveEmpty');
     const loadEl = document.getElementById('driveLoading');
-
     imagesEl.innerHTML = '';
     foldersEl.innerHTML = '';
     emptyEl.style.display = 'none';
@@ -795,8 +897,6 @@ function loadDriveFolder(folderId) {
     .then(data => {
         loadEl.style.display = 'none';
         renderBreadcrumb();
-
-        // Folders
         if (data.folders && data.folders.length) {
             data.folders.forEach(f => {
                 const el = document.createElement('span');
@@ -809,14 +909,11 @@ function loadDriveFolder(folderId) {
                 foldersEl.appendChild(el);
             });
         }
-
-        // Images
         const imageFiles = (data.files || []).filter(f => (f.mimeType || '').startsWith('image/'));
         if (imageFiles.length === 0 && (!data.folders || !data.folders.length)) {
             emptyEl.style.display = 'block';
             return;
         }
-
         imageFiles.forEach(f => {
             const thumb = f.thumbnailLink || thumbnailUrl(f.id);
             const img = document.createElement('img');
@@ -835,10 +932,7 @@ function loadDriveFolder(folderId) {
             imagesEl.appendChild(img);
         });
     })
-    .catch(() => {
-        loadEl.style.display = 'none';
-        emptyEl.style.display = 'block';
-    });
+    .catch(() => { loadEl.style.display = 'none'; emptyEl.style.display = 'block'; });
 }
 
 function renderBreadcrumb() {
@@ -851,35 +945,220 @@ function renderBreadcrumb() {
     el.innerHTML = html;
 }
 
-function confirmImagePick() {
-    if (!pickedFileId || pickerAdsetIdx < 0 || pickerAdIdx < 0) return;
+/* ══════════════════════════════════════════════
+   AI Generate (fills builder from AI plan)
+   ══════════════════════════════════════════════ */
+function aiGenerate() {
+    const service = document.getElementById('aiService').value.trim();
+    if (!service) { alert('Enter a service to promote.'); return; }
 
-    // Update the plan JSON
-    currentPlan.ad_sets[pickerAdsetIdx].ad_copy[pickerAdIdx].drive_file_id = pickedFileId;
+    const budget = parseFloat(document.getElementById('dailyBudget').value) || 17;
+    const location = document.getElementById('locationTarget').value.trim();
+    const strategy = document.getElementById('aiStrategy').value;
 
-    // Update the UI slot
-    const slot = document.getElementById('img-slot-' + pickerAdsetIdx + '-' + pickerAdIdx);
-    if (slot) {
-        slot.innerHTML =
-            '<img src="' + pickedThumb + '" class="ad-image-preview" alt="Ad image">' +
-            '<button class="btn btn-sm btn-outline-secondary" onclick="openImagePicker(' + pickerAdsetIdx + ',' + pickerAdIdx + ')"><i class="bi bi-pencil"></i> Change</button>' +
-            '<button class="btn btn-sm btn-outline-danger" onclick="removeAdImage(' + pickerAdsetIdx + ',' + pickerAdIdx + ')"><i class="bi bi-x"></i></button>';
-    }
+    showLoading('Generating campaign plan...', 'AI is building a custom strategy for your business.');
 
-    bootstrap.Modal.getInstance(document.getElementById('drivePickerModal')).hide();
+    const formData = new FormData();
+    formData.append('csrf_token', csrfToken);
+    formData.append('service', service);
+    formData.append('location', location || 'Not specified');
+    formData.append('monthly_budget', Math.round(budget * 30));
+    formData.append('platform', selectedPlatform);
+    formData.append('strategy_type', strategy);
+    formData.append('notes', document.getElementById('strategyNotes').value.trim());
+
+    fetch('{{ url_for("client.client_campaign_generate") }}', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(data => {
+        hideLoading();
+        if (data.success) {
+            loadPlanIntoBuilder(data.plan);
+        } else {
+            alert('Error: ' + (data.error || 'Failed to generate plan.'));
+        }
+    })
+    .catch(() => { hideLoading(); alert('Network error.'); });
 }
 
-function removeAdImage(adsetIdx, adIdx) {
-    delete currentPlan.ad_sets[adsetIdx].ad_copy[adIdx].drive_file_id;
-    const slot = document.getElementById('img-slot-' + adsetIdx + '-' + adIdx);
-    if (slot) {
-        slot.innerHTML =
-            '<button class="btn btn-sm btn-outline-primary" onclick="openImagePicker(' + adsetIdx + ',' + adIdx + ')">' +
-            '<i class="bi bi-image me-1"></i> Add Image from Drive</button>';
+function loadPlanIntoBuilder(plan) {
+    // Fill campaign settings
+    document.getElementById('campaignName').value = plan.campaign_name || '';
+    document.getElementById('dailyBudget').value = plan.daily_budget || 17;
+    document.getElementById('locationTarget').value = plan.location_targeting || '';
+    document.getElementById('strategyNotes').value = plan.rationale || '';
+
+    if (selectedPlatform === 'meta' && plan.objective) {
+        document.getElementById('campaignObjective').value = plan.objective;
     }
+
+    // Clear existing ad sets
+    document.getElementById('adSetsContainer').innerHTML = '';
+    adSetCounter = 0;
+
+    // Populate ad groups / ad sets
+    if (plan.ad_groups) {
+        plan.ad_groups.forEach(ag => addAdSet(ag));
+    } else if (plan.ad_sets) {
+        plan.ad_sets.forEach(as => addAdSet(as));
+    }
+
+    // Scroll to top of builder
+    document.getElementById('campaignSettingsPanel').scrollIntoView({ behavior: 'smooth' });
 }
 
-/* ── Pre-fill from Ad Builder ── */
+/* ══════════════════════════════════════════════
+   Save Draft
+   ══════════════════════════════════════════════ */
+function saveDraft() {
+    const plan = buildPlanFromUI();
+    if (!plan.campaign_name && !document.querySelectorAll('.adset-card').length) {
+        alert('Add some content before saving.');
+        return;
+    }
+
+    showLoading('Saving draft...', '');
+
+    const formData = new FormData();
+    formData.append('csrf_token', csrfToken);
+    formData.append('plan', JSON.stringify(plan));
+    if (draftId) formData.append('draft_id', draftId);
+
+    fetch('{{ url_for("client.client_campaign_save_draft") }}', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(data => {
+        hideLoading();
+        if (data.success) {
+            draftId = data.draft_id;
+            document.getElementById('saveStatus').textContent = 'Saved just now';
+            setTimeout(() => { document.getElementById('saveStatus').textContent = ''; }, 3000);
+        } else {
+            alert('Error: ' + (data.error || 'Failed to save.'));
+        }
+    })
+    .catch(() => { hideLoading(); alert('Network error.'); });
+}
+
+/* ══════════════════════════════════════════════
+   Publish: Pre-flight Check → Launch
+   ══════════════════════════════════════════════ */
+function publishCampaign() {
+    const plan = buildPlanFromUI();
+    const adSetCount = selectedPlatform === 'google'
+        ? (plan.ad_groups || []).length
+        : (plan.ad_sets || []).length;
+
+    if (!adSetCount) {
+        alert('Add at least one ' + (selectedPlatform === 'google' ? 'Ad Group' : 'Ad Set') + ' before publishing.');
+        return;
+    }
+
+    // Open pre-flight modal
+    const modal = new bootstrap.Modal(document.getElementById('preflightModal'));
+    document.getElementById('preflightLoading').style.display = '';
+    document.getElementById('preflightResults').style.display = 'none';
+    document.getElementById('preflightFooter').style.display = 'none';
+    modal.show();
+
+    // Call Warren pre-flight check
+    const formData = new FormData();
+    formData.append('csrf_token', csrfToken);
+    formData.append('plan', JSON.stringify(plan));
+
+    fetch('{{ url_for("client.client_campaign_preflight") }}', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('preflightLoading').style.display = 'none';
+        document.getElementById('preflightResults').style.display = '';
+        document.getElementById('preflightFooter').style.display = '';
+
+        if (data.success) {
+            renderPreflightResults(data.checks, data.verdict);
+        } else {
+            document.getElementById('preflightResults').innerHTML =
+                '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-1"></i> ' +
+                escHtml(data.error || 'Pre-flight check failed.') + '</div>';
+        }
+    })
+    .catch(() => {
+        document.getElementById('preflightLoading').style.display = 'none';
+        document.getElementById('preflightResults').style.display = '';
+        document.getElementById('preflightResults').innerHTML =
+            '<div class="alert alert-danger">Network error during pre-flight check.</div>';
+        document.getElementById('preflightFooter').style.display = '';
+    });
+}
+
+function renderPreflightResults(checks, verdict) {
+    let html = '';
+
+    // Overall verdict
+    const verdictColor = verdict === 'READY' ? '#10b981' : verdict === 'WARNINGS' ? '#f59e0b' : '#ef4444';
+    const verdictIcon = verdict === 'READY' ? 'bi-check-circle-fill' : verdict === 'WARNINGS' ? 'bi-exclamation-triangle-fill' : 'bi-x-circle-fill';
+    const verdictLabel = verdict === 'READY' ? 'Ready to Launch' : verdict === 'WARNINGS' ? 'Proceed with Caution' : 'Issues Found';
+
+    html += '<div class="text-center mb-3">';
+    html += '<i class="bi ' + verdictIcon + '" style="font-size:2rem;color:' + verdictColor + ';"></i>';
+    html += '<h5 class="mt-2" style="color:' + verdictColor + ';">' + verdictLabel + '</h5>';
+    html += '</div>';
+
+    // Individual checks
+    checks.forEach(c => {
+        const cls = c.status === 'pass' ? 'preflight-pass' : c.status === 'warn' ? 'preflight-warn' : 'preflight-fail';
+        const icon = c.status === 'pass' ? 'bi-check-circle' : c.status === 'warn' ? 'bi-exclamation-triangle' : 'bi-x-circle';
+        html += '<div class="preflight-item ' + cls + '">';
+        html += '<i class="bi ' + icon + '" style="margin-top:2px;"></i>';
+        html += '<div><strong>' + escHtml(c.label) + '</strong><br><span style="font-size:.82rem;">' + escHtml(c.detail) + '</span></div>';
+        html += '</div>';
+    });
+
+    // Update launch button based on verdict
+    const launchBtn = document.getElementById('preflightLaunchBtn');
+    if (verdict === 'BLOCKED') {
+        launchBtn.disabled = true;
+        launchBtn.textContent = 'Cannot Launch - Fix Issues First';
+    } else {
+        launchBtn.disabled = false;
+        launchBtn.innerHTML = '<i class="bi bi-rocket-takeoff me-1"></i> ' +
+            (verdict === 'READY' ? 'Launch Campaign (Paused)' : 'Launch Anyway (Paused)');
+    }
+
+    document.getElementById('preflightResults').innerHTML = html;
+}
+
+function confirmLaunch() {
+    bootstrap.Modal.getInstance(document.getElementById('preflightModal')).hide();
+    const plan = buildPlanFromUI();
+
+    showLoading('Creating your campaign...', 'Setting up everything on ' + (selectedPlatform === 'google' ? 'Google Ads' : 'Meta Ads'));
+
+    const formData = new FormData();
+    formData.append('csrf_token', csrfToken);
+    formData.append('plan', JSON.stringify(plan));
+
+    fetch('{{ url_for("client.client_campaign_launch") }}', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(data => {
+        hideLoading();
+        if (data.success) {
+            // Delete the draft if we had one
+            if (draftId) {
+                fetch('{{ url_for("client.client_campaign_delete_draft", draft_id=0) }}'.replace('/0/', '/' + draftId + '/'), {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': csrfToken},
+                });
+            }
+            document.getElementById('successMessage').textContent = data.message || 'Campaign created and paused.';
+            goToStep(3);
+        } else {
+            alert('Launch error: ' + (data.error || 'Failed to create campaign.'));
+        }
+    })
+    .catch(() => { hideLoading(); alert('Network error.'); });
+}
+
+/* ══════════════════════════════════════════════
+   Pre-fill from Ad Builder (sessionStorage)
+   ══════════════════════════════════════════════ */
 (function() {
     try {
         var raw = sessionStorage.getItem('ad_builder_plan');
@@ -888,20 +1167,58 @@ function removeAdImage(adsetIdx, adIdx) {
         var plan = JSON.parse(raw);
         if (!plan || !plan.platform) return;
 
-        currentPlan = plan;
         selectedPlatform = plan.platform === 'meta' ? 'meta' : 'google';
 
-        renderPlan(plan);
-        goToStep(4);
-        checkConfig();
+        // Simulate platform selection
+        document.querySelectorAll('.platform-card').forEach(c => {
+            if (c.getAttribute('data-platform') === selectedPlatform && !c.classList.contains('disabled')) {
+                c.classList.add('selected');
+            }
+        });
+        document.getElementById('step1Next').disabled = false;
 
+        // Update labels
+        const isGoogle = selectedPlatform === 'google';
+        document.getElementById('addAdSetLabel').textContent = isGoogle ? 'Add Ad Group' : 'Add Ad Set';
+        document.querySelectorAll('.meta-only').forEach(el => { el.style.display = isGoogle ? 'none' : ''; });
+
+        // Jump to builder and load plan
+        goToStep(2);
+        loadPlanIntoBuilder(plan);
+
+        // Show banner
         var banner = document.createElement('div');
         banner.className = 'alert alert-success py-2 mb-3';
         banner.style.fontSize = '.9rem';
-        banner.innerHTML = '<i class="bi bi-brush me-1"></i> <strong>Pre-filled from Ad Builder.</strong> Review the plan below, adjust budget and location, then launch or save as draft.';
-        var planContent = document.getElementById('planContent');
-        if (planContent) planContent.parentNode.insertBefore(banner, planContent);
+        banner.innerHTML = '<i class="bi bi-brush me-1"></i> <strong>Pre-filled from Ad Builder.</strong> Edit anything below, then save or publish.';
+        document.getElementById('campaignSettingsPanel').parentNode.insertBefore(banner, document.getElementById('campaignSettingsPanel'));
     } catch (_) {}
 })();
+
+/* ══════════════════════════════════════════════
+   Load Draft (if editing existing)
+   ══════════════════════════════════════════════ */
+{% if draft %}
+(function() {
+    try {
+        var plan = {{ draft.plan_json|safe }};
+        selectedPlatform = plan.platform || '{{ draft.platform }}';
+
+        document.querySelectorAll('.platform-card').forEach(c => {
+            if (c.getAttribute('data-platform') === selectedPlatform && !c.classList.contains('disabled')) {
+                c.classList.add('selected');
+            }
+        });
+        document.getElementById('step1Next').disabled = false;
+
+        var isGoogle = selectedPlatform === 'google';
+        document.getElementById('addAdSetLabel').textContent = isGoogle ? 'Add Ad Group' : 'Add Ad Set';
+        document.querySelectorAll('.meta-only').forEach(el => { el.style.display = isGoogle ? 'none' : ''; });
+
+        goToStep(2);
+        loadPlanIntoBuilder(plan);
+    } catch (e) { console.error('Draft load error:', e); }
+})();
+{% endif %}
 </script>
 {% endblock %}
