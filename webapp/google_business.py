@@ -19,6 +19,11 @@ def _headers(access_token):
     return {"Authorization": f"Bearer {access_token}"}
 
 
+class GBPAccessError(Exception):
+    """Raised when the Business Profile API is not enabled or access is denied."""
+    pass
+
+
 def get_accounts(access_token):
     """List all GBP accounts the authenticated user has access to."""
     resp = requests.get(
@@ -26,6 +31,12 @@ def get_accounts(access_token):
         headers=_headers(access_token),
         timeout=15,
     )
+    if resp.status_code == 403:
+        body = resp.text[:500]
+        if "not been used" in body or "is disabled" in body or "ACCESS_TOKEN_SCOPE_INSUFFICIENT" in body or "PERMISSION_DENIED" in body:
+            raise GBPAccessError(body)
+        logger.warning("GBP accounts 403: %s", body)
+        return []
     if resp.status_code != 200:
         logger.warning("GBP accounts list failed (%s): %s", resp.status_code, resp.text[:300])
         return []
@@ -149,6 +160,12 @@ def build_gmb_context(db, brand_id):
         if not accounts:
             result["error"] = "No Google Business Profile accounts found for this Google account."
             return result
+
+    except GBPAccessError:
+        result["error"] = "API_NOT_ENABLED"
+        return result
+
+    try:
 
         # Gather all locations across all accounts
         all_locations = []
