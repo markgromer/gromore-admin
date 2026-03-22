@@ -880,7 +880,24 @@ def create_app():
                 db.update_brand_text_field(brand_id, "brand_voice", request.form.get("brand_voice", ""))
                 db.update_brand_text_field(brand_id, "active_offers", request.form.get("active_offers", ""))
                 db.update_brand_text_field(brand_id, "target_audience", request.form.get("target_audience", ""))
-                db.update_brand_text_field(brand_id, "competitors", request.form.get("competitors", ""))
+                competitors_raw = request.form.get("competitors", "")
+                db.update_brand_text_field(brand_id, "competitors", competitors_raw)
+
+                # Also sync into the structured competitors table used by the client portal.
+                import re
+
+                comps = []
+                for part in re.split(r"[\n,]+", competitors_raw or ""):
+                    part = (part or "").strip()
+                    if not part:
+                        continue
+                    if "|" in part:
+                        name, website = part.split("|", 1)
+                        comps.append({"name": name.strip(), "website": website.strip()})
+                    else:
+                        comps.append({"name": part.strip()})
+                db.replace_competitors_for_brand(brand_id, comps)
+
                 db.update_brand_text_field(brand_id, "reporting_notes", request.form.get("reporting_notes", ""))
                 flash("Brand voice and context saved", "success")
             elif section == "kpis":

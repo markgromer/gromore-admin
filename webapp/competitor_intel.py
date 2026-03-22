@@ -211,13 +211,15 @@ def _generate_competitor_research(*, api_key: str, model: str, brand: dict, comp
     # Keep payload compact.
     payload = {
         "brand": {
-            "name": brand.get("name"),
+            "name": brand.get("display_name") or brand.get("name"),
             "industry": brand.get("industry"),
             "website": brand.get("website"),
             "service_area": brand.get("service_area"),
             "primary_services": brand.get("primary_services"),
             "active_offers": brand.get("active_offers"),
             "brand_voice": brand.get("brand_voice"),
+            "target_audience": brand.get("target_audience"),
+            "reporting_notes": brand.get("reporting_notes"),
         },
         "competitor": {
             "name": competitor.get("name"),
@@ -254,9 +256,12 @@ def _generate_competitor_research(*, api_key: str, model: str, brand: dict, comp
 
     system = (
         "You are a senior paid media + conversion strategist. "
-        "Your job is to produce competitor research and counter-moves that can be acted on. "
-        "CRITICAL RULE: Do not invent facts about the competitor. Only use what is explicitly in the input. "
-        "If the input does not contain enough evidence, leave arrays empty and add a note to data_gaps. "
+        "Your job is to produce competitor research and counter-moves that can be acted on immediately. "
+        "CRITICAL RULE: Do not invent facts about the competitor. Only use what is explicitly in the input intel. "
+        "If a field is unknown, do not guess; add a short note to data_gaps. "
+        "You MAY still propose counter-moves that are generally effective in this industry/service area, but you must phrase them as proactive moves for the brand (not as claims about the competitor). "
+        "Make the output specific and concrete: prefer steps, hooks, and landing page sections over generic advice. "
+        "Aim for 6-8 counter_moves when possible. "
         "Return ONLY valid JSON matching the output_schema. No markdown. No extra keys."
     )
 

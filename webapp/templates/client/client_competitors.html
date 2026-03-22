@@ -258,9 +258,17 @@
                 <div class="intel-stat"><span class="label">Angles</span><span class="value" style="font-size:.82rem; text-align:right; max-width:65%;">{{ rr.messaging_angles[:3] | join(' | ') }}</span></div>
                 {% endif %}
 
+                {% if rr.observed_services %}
+                <div class="intel-stat"><span class="label">Services</span><span class="value" style="font-size:.82rem; text-align:right; max-width:65%;">{{ rr.observed_services[:3] | join(' | ') }}</span></div>
+                {% endif %}
+
+                {% if rr.observed_offers %}
+                <div class="intel-stat"><span class="label">Offers</span><span class="value" style="font-size:.82rem; text-align:right; max-width:65%;">{{ rr.observed_offers[:3] | join(' | ') }}</span></div>
+                {% endif %}
+
                 {% if rr.counter_moves %}
                 <div style="margin-top:.6rem;">
-                    {% for cm in rr.counter_moves[:3] %}
+                    {% for cm in rr.counter_moves[:6] %}
                     <div class="ad-sample" style="margin-bottom:.55rem;">
                         {% if cm.move %}<div class="ad-title">{{ cm.move }}</div>{% endif %}
                         {% if cm.why %}<div style="color:#4b5563;">Why: {{ cm.why }}</div>{% endif %}

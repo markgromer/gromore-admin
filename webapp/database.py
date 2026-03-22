@@ -1704,6 +1704,31 @@ class WebDB:
                 return self.delete_competitor(competitor_id, brand_id)
             raise
 
+    def replace_competitors_for_brand(self, brand_id, competitors):
+        """Replace a brand's structured competitors list.
+
+        competitors: list of dicts with keys: name (required), website (optional)
+        """
+        try:
+            conn = self._conn()
+            conn.execute("DELETE FROM competitors WHERE brand_id = ?", (brand_id,))
+            for c in competitors or []:
+                name = (c.get("name") or "").strip()
+                if not name:
+                    continue
+                website = (c.get("website") or "").strip()
+                conn.execute(
+                    "INSERT INTO competitors (brand_id, name, website) VALUES (?, ?, ?)",
+                    (brand_id, name, website),
+                )
+            conn.commit()
+            conn.close()
+        except sqlite3.OperationalError as exc:
+            if "no such table: competitors" in str(exc).lower():
+                self.init()
+                return self.replace_competitors_for_brand(brand_id, competitors)
+            raise
+
     # ── Competitor Intel (cached reports) ────────────────────────
 
     def upsert_competitor_intel(self, competitor_id, brand_id, intel_type, data_json):
