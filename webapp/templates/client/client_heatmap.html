@@ -821,13 +821,26 @@ function showDebug(d) {
     // Place ID verification
     if (d.place_id_verification) {
         var pv = d.place_id_verification;
-        var pvHtml = '<br><strong>Place ID resolves to:</strong> ';
+        var pvHtml = '<br><strong>Place ID (<code>' + (d.place_id_used || '?') + '</code>) resolves to:</strong> ';
         if (pv.error) {
             pvHtml += '<span style="color:red">ERROR - ' + pv.error + (pv.message ? ': ' + pv.message : '') + '</span>';
         } else {
-            pvHtml += '"' + (pv.name || '?') + '" at ' + (pv.address || '?');
+            pvHtml += '"' + (pv.name || '?') + '"';
+            if (pv.address) pvHtml += ' - ' + pv.address;
             if (pv.lat && pv.lng) {
                 pvHtml += ' (' + pv.lat.toFixed(4) + ', ' + pv.lng.toFixed(4) + ')';
+            }
+            if (pv.types && pv.types.length) {
+                pvHtml += ' | Types: ' + pv.types.join(', ');
+            }
+            if (pv.business_status) {
+                pvHtml += ' | Status: ' + pv.business_status;
+            }
+            if (pv.distance_from_center_km !== undefined) {
+                pvHtml += ' | ' + pv.distance_from_center_km + 'km from stored location';
+            }
+            if (pv.location_warning) {
+                pvHtml += '<br><span style="color:#ef4444; font-weight:600;">' + pv.location_warning + '</span>';
             }
         }
         el.innerHTML += pvHtml;

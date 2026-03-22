@@ -76,17 +76,26 @@ def verify_place_id(api_key, place_id):
     url = f"https://places.googleapis.com/v1/places/{place_id}"
     headers = {
         "X-Goog-Api-Key": api_key,
-        "X-Goog-FieldMask": "displayName,formattedAddress,location",
+        "X-Goog-FieldMask": "displayName,formattedAddress,location,types,businessStatus",
     }
     try:
         resp = requests.get(url, headers=headers, timeout=10)
         if resp.status_code == 200:
             d = resp.json()
+            addr = d.get("formattedAddress", "")
+            lat = d.get("location", {}).get("latitude")
+            lng = d.get("location", {}).get("longitude")
+            types = d.get("types", [])
+            status = d.get("businessStatus", "")
+            is_sab = not addr and lat is not None  # SABs have location but no public address
             return {
                 "name": d.get("displayName", {}).get("text", ""),
-                "address": d.get("formattedAddress", ""),
-                "lat": d.get("location", {}).get("latitude"),
-                "lng": d.get("location", {}).get("longitude"),
+                "address": addr if addr else ("Service-area business (no public address)" if is_sab else ""),
+                "lat": lat,
+                "lng": lng,
+                "types": types[:3] if types else [],
+                "business_status": status,
+                "source": "new_api",
             }
         # Fallback to legacy
     except Exception:
@@ -95,18 +104,25 @@ def verify_place_id(api_key, place_id):
     url2 = "https://maps.googleapis.com/maps/api/place/details/json"
     try:
         resp = requests.get(url2, params={
-            "place_id": place_id, "fields": "name,formatted_address,geometry",
+            "place_id": place_id, "fields": "name,formatted_address,geometry,type,business_status",
             "key": api_key,
         }, timeout=10)
         data = resp.json()
         if data.get("status") == "OK" and data.get("result"):
             r = data["result"]
             loc = r.get("geometry", {}).get("location", {})
+            addr = r.get("formatted_address", "")
+            lat = loc.get("lat")
+            lng = loc.get("lng")
+            is_sab = not addr and lat is not None
             return {
                 "name": r.get("name", ""),
-                "address": r.get("formatted_address", ""),
-                "lat": loc.get("lat"),
-                "lng": loc.get("lng"),
+                "address": addr if addr else ("Service-area business (no public address)" if is_sab else ""),
+                "lat": lat,
+                "lng": lng,
+                "types": r.get("types", [])[:3],
+                "business_status": r.get("business_status", ""),
+                "source": "legacy_api",
             }
         return {"error": data.get("status", "UNKNOWN"), "message": data.get("error_message", "")}
     except Exception as exc:
@@ -257,20 +273,27 @@ def _match_business(places, business_name, place_id=None):
 
 def scan_grid(api_key, keyword, business_name, grid_points,
               place_id=None, search_radius_m=2000):
-    """Run a full grid scan. Returns list of point dicts with 'rank' added."""
-    results = []
+    """Run a full grid scan. Returns list of point dicts with 'rank' added.
+    Queries the center point first for reliable diagnostics."""
+    grid_size = int(math.sqrt(len(grid_points))) if grid_points else 0
+    center_r = grid_size // 2 if grid_size else 0
+    center_idx = center_r * grid_size + center_r if grid_size else 0
+
+    # Re-order to process center point first (before any throttling kicks in)
+    ordered = []
+    if grid_points:
+        ordered.append((center_idx, grid_points[center_idx]))
+        for idx, pt in enumerate(grid_points):
+            if idx != center_idx:
+                ordered.append((idx, pt))
+
+    results = [None] * len(grid_points)
     debug_sample = None
     errors = 0
-    grid_size = int(math.sqrt(len(grid_points))) if grid_points else 0
-    center_idx = None
-    if grid_size > 0:
-        center_r = grid_size // 2
-        center_idx = center_r * grid_size + center_r
-
-    for idx, pt in enumerate(grid_points):
-        # Rate limit: small delay between API calls to avoid throttling
-        if idx > 0:
-            time.sleep(0.15)
+    for seq, (idx, pt) in enumerate(ordered):
+        # Rate limit: delay between API calls to avoid throttling
+        if seq > 0:
+            time.sleep(0.25)
         try:
             places, api_diag = _search_places(api_key, keyword, pt["lat"], pt["lng"],
                                               radius_m=search_radius_m)
@@ -280,8 +303,8 @@ def scan_grid(api_key, keyword, business_name, grid_points,
             places, api_diag = [], {"error": str(exc)}
             errors += 1
         rank = _match_business(places, business_name, place_id)
-        # Capture center point's results for diagnostics (most representative)
-        if idx == center_idx or (debug_sample is None and idx == len(grid_points) - 1):
+        # Capture center point's results for diagnostics (first in our ordering)
+        if seq == 0:
             debug_sample = {
                 "business_name_used": business_name,
                 "place_id_used": place_id,
@@ -301,13 +324,13 @@ def scan_grid(api_key, keyword, business_name, grid_points,
                      "top results: %s | api_diag: %s",
                      business_name, place_id,
                      [r["name"] for r in debug_sample["top_results"]], api_diag)
-        results.append({
+        results[idx] = {
             "row": pt["row"],
             "col": pt["col"],
             "lat": pt["lat"],
             "lng": pt["lng"],
             "rank": rank,
-        })
+        }
     if errors:
         if debug_sample is None:
             debug_sample = {}

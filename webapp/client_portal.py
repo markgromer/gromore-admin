@@ -3564,6 +3564,20 @@ def client_heatmap_scan():
 
     if debug_info and place_verification:
         debug_info["place_id_verification"] = place_verification
+        # Check if Place ID location matches stored business location
+        pv_lat = place_verification.get("lat")
+        pv_lng = place_verification.get("lng")
+        if pv_lat is not None and pv_lng is not None:
+            import math as _math
+            dlat = abs(pv_lat - lat)
+            dlng = abs(pv_lng - lng)
+            dist_km = _math.sqrt(dlat**2 + dlng**2) * 111.32
+            place_verification["distance_from_center_km"] = round(dist_km, 1)
+            if dist_km > 50:
+                place_verification["location_warning"] = (
+                    f"Place ID location is {round(dist_km)}km from your stored business location. "
+                    "This may be the wrong listing. Try re-searching your Place ID."
+                )
 
     # Detect if keyword looks like the business name (common user mistake)
     keyword_warning = None
