@@ -633,57 +633,136 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None):
 
 
 def _fallback_steps(suggestion):
-    """Build actionable steps from the suggestion when AI generation fails.
+    """Build detailed, click-by-click steps a fifth grader could follow.
 
-    Instead of just splitting the detail into sentences, produce concrete
-    steps with platform links so the user knows WHERE to go.
+    These are used when the AI prompt fails or no API key is set. Each step
+    tells the user exactly where to click, what to look for, and what to do.
     """
-    steps = []
-    detail = suggestion.get("detail", "")
     title = suggestion.get("title", "")
     category = suggestion.get("category", "")
     data_point = suggestion.get("data_point", "")
-
-    _platform_urls = {
-        "paid_advertising": ("ads.google.com", "Google Ads"),
-        "budget": ("ads.google.com", "Google Ads"),
-        "creative": ("business.facebook.com/adsmanager", "Ads Manager"),
-        "seo": ("search.google.com/search-console", "Google Search Console"),
-        "website": ("analytics.google.com", "Google Analytics"),
-        "organic_social": ("business.facebook.com", "Meta Business Suite"),
-    }
-
+    detail = suggestion.get("detail", "")
     title_lower = title.lower()
 
-    # Detect correct platform from title keywords
+    dp = data_point  # short alias
+
+    # --- Google Ads: CPC / Cost related ---
+    if any(w in title_lower for w in ("cost per click", "cpc", "lower cost")):
+        return [
+            f"Go to ads.google.com. Click \"Campaigns\" in the left sidebar. Click \"Keywords\" then \"Search terms\" at the top.{f' Your CPC right now is {dp}.' if dp else ''}",
+            "Sort the list by \"Cost\" (highest first). Find search terms that have spent money but show 0 conversions. Check the box next to each one.",
+            "Click the blue \"Add as negative keyword\" button at the top. Choose \"Account level\" so they're blocked everywhere.",
+            "Now click \"Keywords\" (not search terms). Sort by \"Cost/conv.\" highest first. Any keyword over 2x your target CPA, click the green dot and change it to \"Paused.\"",
+            "Click on your highest-spending campaign. Click \"Settings.\" Lower the daily budget by 10-15% and move that money to your best-converting campaign instead.",
+        ]
+
+    # --- Google Ads: general campaign optimization ---
+    if category == "paid_advertising" and any(w in title_lower for w in ("google", "campaign", "search ad")):
+        return [
+            f"Go to ads.google.com. Click \"Campaigns\" on the left side.{f' Data point: {dp}.' if dp else ''} Sort by \"Cost\" to see which campaign spends the most.",
+            "Click the campaign name that's spending the most. Click \"Ad groups\" to see all ad groups inside it. Look for any with a high cost but 0 conversions.",
+            "For ad groups with 0 conversions: click the green dot next to it and choose \"Paused.\" This stops wasting money on ads that don't work.",
+            "Go back to the campaign. Click \"Keywords\" then \"Search terms.\" Add anything irrelevant as a negative keyword (check the box, then click \"Add as negative keyword\").",
+            "Click \"Ads & assets.\" If any ad has a CTR below 2%, click the pencil icon and rewrite the headline to include your main service + city name.",
+        ]
+
+    # --- Facebook / Meta Ads ---
+    if any(w in title_lower for w in ("facebook", "meta", "instagram", "roas")):
+        return [
+            f"Go to business.facebook.com/adsmanager. Click \"Campaigns\" at the top.{f' Current metric: {dp}.' if dp else ''} Sort by \"Cost per result\" (click the column header).",
+            "Find any campaign where the cost per result is more than double your goal. Click the toggle switch on the left side to turn it OFF.",
+            "For campaigns that ARE working: click the campaign name, then click into the ad set level. Click \"Edit.\" Under \"Budget,\" increase the daily budget by $5-10.",
+            "Still in the ad set, scroll down to \"Placements.\" Switch to \"Manual placements\" and uncheck anything except Facebook Feed, Instagram Feed, and Instagram Stories.",
+            "Click \"Ads\" at the top. Look at each ad's \"CTR (link).\" If any ad has under 1% CTR, click the pencil icon and change the image or headline.",
+        ]
+
+    # --- SEO / Search Console ---
+    if category == "seo" or any(w in title_lower for w in ("seo", "ranking", "organic", "search console")):
+        return [
+            f"Go to search.google.com/search-console. Click \"Performance\" on the left side.{f' Current data: {dp}.' if dp else ''} Make sure \"Average position\" is checked at the top.",
+            "Click the \"Pages\" tab. Sort by \"Impressions\" (highest first). Find pages with lots of impressions but very few clicks - those need better titles.",
+            "Click on a page with high impressions but low clicks. Go to your website editor and change that page's title tag to include the exact keyword people searched.",
+            "Now click the \"Queries\" tab in Search Console. Look for keywords in positions 8-20 (page 1-2 of Google). These are close to ranking. Write a new section on your page about that exact topic.",
+            "Go to your website. Make sure every service page has at least 500 words, your city name in the title, and a clear \"Call Now\" or \"Get a Quote\" button at the top.",
+        ]
+
+    # --- Website / Analytics ---
+    if category == "website" or any(w in title_lower for w in ("website", "landing page", "conversion", "bounce", "analytics")):
+        return [
+            f"Go to analytics.google.com. Click \"Reports\" on the left, then \"Pages and screens.\"{f' Current metric: {dp}.' if dp else ''} Sort by \"Views\" to see your most visited pages.",
+            "Look at the \"Bounce rate\" column. Find any page with a bounce rate over 70%. That means most people leave without doing anything. Those pages need fixing first.",
+            "Open your website in a new tab. Go to each high-bounce page. Ask yourself: is there a phone number or form visible without scrolling? If not, add one at the very top.",
+            "Check if your pages load in under 3 seconds. Go to pagespeed.web.dev, paste each page URL, and click \"Analyze.\" Fix anything it flags as red.",
+            "On every page, add a clear button that says exactly what you want them to do: \"Call Now,\" \"Get a Free Quote,\" or \"Book Online.\" Put it above the fold (visible without scrolling).",
+        ]
+
+    # --- Budget / Spend efficiency ---
+    if category == "budget":
+        return [
+            f"Go to ads.google.com. Click \"Campaigns\" on the left.{f' Budget data: {dp}.' if dp else ''} Write down how much each campaign spent this month and how many leads it got.",
+            "Divide each campaign's spend by its leads. The one with the LOWEST cost per lead is your best campaign. The one with the HIGHEST cost per lead (or 0 leads) is your worst.",
+            "Click on your worst campaign (highest cost per lead). Click \"Settings.\" Lower the daily budget by 20%. Write down the dollar amount you saved.",
+            "Now click on your best campaign (lowest cost per lead). Click \"Settings.\" Add the money you just saved to this campaign's daily budget.",
+            "Set a calendar reminder for 7 days from now to check again. Look at the same numbers. If the change helped, keep it. If not, reverse it.",
+        ]
+
+    # --- Creative / Ad copy ---
+    if category == "creative":
+        return [
+            f"Go to your ads platform (ads.google.com or business.facebook.com/adsmanager).{f' Creative data: {dp}.' if dp else ''} Click into your top-spending campaign, then click \"Ads\" or \"Ads & assets.\"",
+            "Look at each ad's CTR (Click-Through Rate). Find the ad with the HIGHEST CTR. That's your winning style. Write down what its headline and image look like.",
+            "Find ads with the LOWEST CTR. Click the pencil/edit icon. Rewrite the headline to match the style of your winning ad, but test a different angle (urgency, price, guarantee).",
+            "For image ads: make sure the image shows your actual work, team, or a real before/after. Remove any ad that uses a generic stock photo. Replace with a real photo from your phone.",
+            "Duplicate your best-performing ad. Change ONLY the headline (keep the image). This lets you test which words get more clicks without losing what already works.",
+        ]
+
+    # --- Organic social ---
+    if category == "organic_social":
+        return [
+            f"Go to business.facebook.com. Click your page name, then \"Insights\" on the left side.{f' Data point: {dp}.' if dp else ''} Click \"Posts\" and sort by \"Reach\" (highest first).",
+            "Look at your top 3 posts by reach. Write down what they have in common: was it a photo, video, question, or tip? That type of post is what your audience likes.",
+            "Open your phone. Take a photo or short video (under 60 seconds) of your work, your team, or a customer result. Something real, NOT a stock image or graphic.",
+            "Write a post using this exact format: Start with a question or bold statement. Then 2-3 short sentences. End with a call to action (\"Comment below\" or \"DM us\").",
+            "Post it NOW. Don't overthink it. Then set a reminder to post again in 3 days. Consistency beats perfection.",
+        ]
+
+    # --- Catch-all with platform detection ---
     if any(w in title_lower for w in ("facebook", "meta", "instagram")):
-        url, label = "business.facebook.com/adsmanager", "Ads Manager"
-    elif any(w in title_lower for w in ("google ads", "cpc", "cost per click", "ppc")):
-        url, label = "ads.google.com", "Google Ads"
+        url = "business.facebook.com/adsmanager"
+        label = "Ads Manager"
+    elif any(w in title_lower for w in ("google ads", "cpc", "ppc")):
+        url = "ads.google.com"
+        label = "Google Ads"
     elif any(w in title_lower for w in ("seo", "ranking", "search console")):
-        url, label = "search.google.com/search-console", "Google Search Console"
+        url = "search.google.com/search-console"
+        label = "Search Console"
     elif "analytic" in title_lower:
-        url, label = "analytics.google.com", "Google Analytics"
+        url = "analytics.google.com"
+        label = "Google Analytics"
     else:
-        url, label = _platform_urls.get(category, ("", ""))
+        url, label = {
+            "paid_advertising": ("ads.google.com", "Google Ads"),
+            "budget": ("ads.google.com", "Google Ads"),
+            "creative": ("business.facebook.com/adsmanager", "Ads Manager"),
+            "seo": ("search.google.com/search-console", "Search Console"),
+            "website": ("analytics.google.com", "Google Analytics"),
+            "organic_social": ("business.facebook.com", "Meta Business Suite"),
+        }.get(category, ("", ""))
 
+    steps = []
     if url:
-        steps.append(f"Go to {url} and log in to your {label} account.")
+        steps.append(f"Go to {url}. Log in and find the section related to \"{title}.\"{f' Your current number is {dp}.' if dp else ''}")
 
-    if data_point:
-        steps.append(f"Your current number: {data_point}. Look for this in your dashboard to confirm.")
-
-    # Extract actionable info from detail
     if detail:
-        sentences = [s.strip() for s in detail.replace(". ", ".\n").split("\n") if s.strip()]
-        # Take first sentence that looks actionable (contains a verb-like word)
-        for s in sentences[:3]:
+        sentences = [s.strip() for s in detail.replace(". ", ".\n").split("\n") if s.strip() and len(s.strip()) > 15]
+        for s in sentences[:2]:
             if not s.endswith("."):
                 s += "."
             steps.append(s)
 
-    if len(steps) < 2:
-        steps.append(f"Take action on: {title}.")
+    steps.append(f"Make one specific change today. Write down what you changed and what the number was before, so you can check if it helped next week.")
+    if url:
+        steps.append(f"Set a reminder for 7 days from now. Go back to {url} and compare the numbers to see if your change made a difference.")
 
     return steps[:5]
 
@@ -819,8 +898,12 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
         "You have completed a deep-dive analysis of this account. "
         "Now produce MISSIONS the business owner can execute right now.\n\n"
 
-        "These are for a BUSINESS OWNER, not a marketer. They do not know industry terms. "
-        "Every step must be like a GPS direction: go here, click this, type this, done.\n\n"
+        "AUDIENCE: A business owner who has NEVER been inside Google Ads before. "
+        "Write every step so a literal fifth grader could follow it. "
+        "Name every button, every menu, every tab. "
+        "If you say 'click', say exactly what words are on the button. "
+        "If you say 'change', say the exact old value and exact new value. "
+        "NEVER assume they know where anything is.\n\n"
 
         "OUTPUT FORMAT (JSON only):\n"
         "{\"actions\": [\n"
@@ -841,35 +924,39 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
         "\"Fix Your Broken Landing Page\", \"Launch a High-Converting Ad\"\n"
         "- BAD: \"Optimize Campaign Performance\", \"Improve Your SEO\", \"Tune Underperforming Campaigns\"\n\n"
 
-        "MICRO-STEP FORMAT - CRITICAL:\n"
-        "Each step MUST follow this exact pattern:\n"
-        "  [Action verb] at [platform URL or path]. [Exactly what to do]. [One data point why.]\n\n"
-        "3-5 steps per mission. Each step = ONE click-level action done in 2-3 minutes.\n\n"
+        "MICRO-STEP RULES - THIS IS THE MOST IMPORTANT PART:\n"
+        "Write 4-6 steps per mission. Each step = ONE specific action.\n\n"
 
-        "STEP LINK RULES (MANDATORY):\n"
-        "- Google Ads steps: start with 'Go to ads.google.com >'\n"
-        "- Facebook/Meta steps: start with 'Go to business.facebook.com/adsmanager >'\n"
-        "- Google Analytics steps: start with 'Go to analytics.google.com >'\n"
-        "- Search Console steps: start with 'Go to search.google.com/search-console >'\n"
-        "- Google Business Profile steps: start with 'Go to business.google.com >'\n"
-        "- Website edits: tell them exactly which page URL to edit and what to change\n"
-        "- NEVER write a step without telling them WHERE to go first\n\n"
+        "Each step MUST include ALL of these:\n"
+        "1. The exact URL to go to (ads.google.com, business.facebook.com/adsmanager, etc.)\n"
+        "2. The exact menu/tab/button to click, using the exact words shown on screen\n"
+        "3. The exact thing to type, change, pause, or enable\n"
+        "4. WHY this specific thing (reference a campaign name, keyword, dollar amount, or metric from the data)\n\n"
 
-        "WHAT MAKES A BAD STEP (NEVER do this):\n"
-        "- 'Review your campaigns and pause underperformers' (WHICH campaigns?)\n"
-        "- 'Add negative keywords to reduce waste' (WHICH keywords?)\n"
-        "- 'Reallocate spend toward top converters' (move how much from where to where?)\n"
-        "- 'Optimize your landing pages' (WHICH page? change WHAT?)\n"
-        "- 'Tighten targeting' (change what setting to what value?)\n"
-        "- 'These campaigns are under target' (that's a FACT, not a STEP)\n"
-        "- 'Consider testing new ad copy' (WRITE the actual copy for them)\n"
-        "- Any sentence that DESCRIBES a problem instead of SOLVING it\n\n"
+        "STEP EXAMPLES THAT ARE CORRECT:\n"
+        "- 'Go to ads.google.com. Click \"Keywords\" in the left sidebar, then click \"Search terms\" at the top. Sort the list by \"Cost\" (click the column header). Find any search term that spent over $20 but has 0 conversions. Check the box next to it, then click \"Add as negative keyword\" and choose \"Account level.\"'\n"
+        "- 'Go to ads.google.com. Click \"Campaigns\" on the left. Find \"SDL Search Campaign\" (it spent $340 and got 0 leads). Click the green dot under \"Status\" and change it to \"Paused.\"'\n"
+        "- 'Go to business.facebook.com/adsmanager. Click on your active campaign. Click \"Ad sets\" at the top. Click \"Edit\" on the ad set. Scroll down to \"Budget.\" Change the daily budget from $15 to $25 because this ad set has the lowest cost per lead at $12.'\n"
+        "- 'Go to search.google.com/search-console. Click \"Performance\" on the left. Click the \"Queries\" tab. Find \"plumber near me\" - you are at position 14 with 800 impressions. Go to your website and add a new page titled \"Plumber Near Me in [Your City]\" with at least 500 words about that service.'\n\n"
 
-        "WHAT MAKES A GOOD STEP (ALWAYS do this):\n"
-        "- 'Go to ads.google.com > Campaigns > \"SDL Search Campaign\". Click budget. Change daily budget from $50 to $35. This campaign is spending $7.84/click with no leads.'\n"
-        "- 'Go to ads.google.com > Tools > Negative Keywords. Add these words: \"DIY\", \"how to\", \"free\", \"salary\". They appeared 89 times and wasted about $120.'\n"
-        "- 'Go to business.facebook.com/adsmanager. Click Create. Choose Lead Generation. Set budget to $10/day. Use this headline: \"Same-Day AC Repair - Free Estimates | Licensed & Insured\".'\n"
-        "- 'Go to search.google.com/search-console > Performance. Find \"water heater installation Phoenix\". You have 1,200 impressions at position 18. Create a new page on your site targeting that exact phrase.'\n\n"
+        "STEP EXAMPLES THAT ARE WRONG (NEVER WRITE THESE):\n"
+        "- 'Go to ads.google.com and log in to your Google Ads account.' (FILLER. They know how to log in.)\n"
+        "- 'Your current number: CPC: $7.84. Look for this in your dashboard to confirm.' (That's just restating data. It's not a step.)\n"
+        "- 'Add negative keywords weekly, improve Quality Score, and split high-cost broad groups into tighter exact and phrase match groups.' (Three vague actions crammed into one sentence. No specifics on WHICH keywords, WHICH groups.)\n"
+        "- 'Review your campaigns and pause underperformers' (WHICH campaigns? Name them.)\n"
+        "- 'Reallocate spend toward top converters' (Move how much? From which campaign to which?)\n"
+        "- 'Optimize your landing pages' (WHICH page? Change what text to what?)\n"
+        "- 'Consider testing new ad copy' (Don't suggest it - WRITE the actual headline for them.)\n"
+        "- 'Tighten targeting' (Change what setting? To what value?)\n"
+        "- 'These campaigns are under target: SDL Search Campaign' (That's a fact, not a step.)\n"
+        "- 'Average CPC is $7.84, above benchmark.' (That's data, not an action.)\n"
+        "- Any step that starts with 'Review', 'Consider', 'Look into', 'Assess', or 'Evaluate'\n\n"
+
+        "USE THE DATA: You have relevant_data attached to each action item. "
+        "Use actual campaign names, actual keyword names, actual dollar amounts, actual search terms from the data. "
+        "If data says campaign X spent $Y with Z conversions, reference those exact numbers. "
+        "If search_terms data shows wasted terms, name those exact terms. "
+        "NEVER write a generic step when you have specific data available.\n\n"
 
         "WHY field: One sentence using a specific dollar amount or lead count. "
         "Example: \"You burned $340 last month on clicks that never turned into a phone call.\"\n\n"
@@ -882,8 +969,11 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
 
         "TIME: '5 minutes', '10 minutes', '15 minutes', '30 minutes'. Not 'varies'.\n\n"
 
-        "If relevant_data for an action item is empty, still give concrete steps using the detail and data_point, "
-        "always including the platform URL. Never use filler like 'consider', 'you might want to', or 'look into'."
+        "FINAL CHECK before returning: Read each step out loud. "
+        "If a step does not tell the user EXACTLY which button to click and EXACTLY what to type or change, rewrite it. "
+        "If a step just restates a metric or describes a problem, delete it and replace it with an action. "
+        "No filler steps like 'log in to your account' or 'check your dashboard.' "
+        "Every step must CHANGE something or CREATE something."
     )
 
     headers = {
