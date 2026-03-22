@@ -1087,6 +1087,46 @@ def client_delete_competitor(competitor_id):
     return redirect(url_for("client.client_my_business"))
 
 
+# ── Competitor Intel ──
+
+@client_bp.route("/competitors")
+@client_login_required
+def client_competitors():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    competitors = db.get_competitors(brand_id)
+    reports = []
+    for comp in competitors:
+        from webapp.competitor_intel import get_competitor_report
+        reports.append(get_competitor_report(db, brand, comp))
+
+    return render_template(
+        "client_competitors.html",
+        competitors=competitors,
+        reports=reports,
+    )
+
+
+@client_bp.route("/competitors/<int:competitor_id>/refresh", methods=["POST"])
+@client_login_required
+def client_competitor_refresh(competitor_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    comp = db.get_competitor(competitor_id, brand_id)
+    if not comp or not brand:
+        abort(404)
+
+    from webapp.competitor_intel import refresh_competitor_intel
+    refresh_competitor_intel(db, brand, comp)
+    flash(f"Intel refreshed for '{comp['name']}'.", "success")
+    return redirect(url_for("client.client_competitors"))
+
+
 # ── Logo Upload ──
 
 @client_bp.route("/upload-logo", methods=["POST"])

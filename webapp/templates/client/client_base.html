@@ -12,7 +12,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --nav-height: 60px;
+            --sidebar-width: 230px;
+            --sidebar-collapsed: 60px;
+            --topbar-height: 48px;
             --page-bg: #f1f5f9;
             --surface: #ffffff;
             --surface-soft: #f8fafc;
@@ -30,68 +32,153 @@
         body {
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
             background: var(--page-bg);
-            padding-top: var(--nav-height);
+            padding-left: var(--sidebar-width);
+            padding-top: var(--topbar-height);
             color: var(--text-strong);
             font-feature-settings: "cv02", "cv03", "cv04", "cv11";
             line-height: 1.6;
         }
 
-        /* ── Navigation ── */
-        .client-nav {
+        /* ── Sidebar Navigation ── */
+        .client-sidebar {
             position: fixed;
             top: 0;
             left: 0;
+            bottom: 0;
+            width: var(--sidebar-width);
+            background: #fff;
+            border-right: 1px solid rgba(226, 232, 240, .6);
+            z-index: 1010;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: width var(--transition);
+        }
+        .client-sidebar .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+            padding: .85rem 1rem;
+            border-bottom: 1px solid var(--line);
+            min-height: var(--topbar-height);
+        }
+        .client-sidebar .sidebar-brand .brand-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+            border-radius: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: .9rem;
+            flex-shrink: 0;
+        }
+        .client-sidebar .sidebar-brand .brand-text {
+            font-weight: 800;
+            font-size: .95rem;
+            color: var(--text-strong);
+            letter-spacing: -.02em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .client-sidebar .nav-links {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: .5rem .6rem;
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e1 transparent;
+        }
+        .client-sidebar .nav-links::-webkit-scrollbar { width: 4px; }
+        .client-sidebar .nav-links::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .client-sidebar .nav-section-label {
+            font-size: .65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: var(--text-muted);
+            padding: .7rem .55rem .3rem;
+        }
+        .client-sidebar .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            padding: .45rem .55rem;
+            border-radius: 8px;
+            font-size: .83rem;
+            font-weight: 500;
+            transition: color var(--transition), background var(--transition);
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: .55rem;
+            position: relative;
+        }
+        .client-sidebar .nav-links a i {
+            font-size: .95rem;
+            width: 20px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        .client-sidebar .nav-links a:hover {
+            color: var(--text-strong);
+            background: #f1f5f9;
+        }
+        .client-sidebar .nav-links a.active {
+            color: var(--primary-strong);
+            background: #eef2ff;
+            font-weight: 600;
+        }
+        .client-sidebar .sidebar-footer {
+            border-top: 1px solid var(--line);
+            padding: .6rem .75rem;
+            display: flex;
+            flex-direction: column;
+            gap: .35rem;
+        }
+        .client-sidebar .sidebar-footer .user-name {
+            font-size: .78rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding: 0 .3rem;
+        }
+        .client-sidebar .sidebar-footer .btn {
+            font-size: .78rem;
+            padding: .3rem .55rem;
+        }
+
+        /* ── Top bar (mobile toggle, assistant toggle) ── */
+        .client-topbar {
+            position: fixed;
+            top: 0;
+            left: var(--sidebar-width);
             right: 0;
-            height: var(--nav-height);
-            background: rgba(255,255,255,.92);
+            height: var(--topbar-height);
+            background: rgba(255,255,255,.85);
             backdrop-filter: blur(12px) saturate(1.4);
             -webkit-backdrop-filter: blur(12px) saturate(1.4);
             border-bottom: 1px solid rgba(226, 232, 240, .6);
             z-index: 1000;
             display: flex;
             align-items: center;
-            padding: 0 1.25rem;
-        }
-        .client-nav .brand-name {
-            font-weight: 800;
-            font-size: 1.05rem;
-            color: var(--text-strong);
-            margin-right: 1.5rem;
-            letter-spacing: -.02em;
-        }
-        .client-nav .brand-name i { color: var(--primary); }
-        .client-nav .nav-links { display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none; }
-        .client-nav .nav-links::-webkit-scrollbar { display: none; }
-        .client-nav .nav-links a {
-            color: var(--text-muted);
-            text-decoration: none;
-            padding: .42rem .7rem;
-            border-radius: 8px;
-            font-size: .82rem;
-            font-weight: 500;
-            transition: color var(--transition), background var(--transition);
-            white-space: nowrap;
-            position: relative;
-        }
-        .client-nav .nav-links a:hover {
-            color: var(--text-strong);
-            background: #f1f5f9;
-        }
-        .client-nav .nav-links a.active {
-            color: var(--primary-strong);
-            background: #eef2ff;
-            font-weight: 600;
-        }
-        .client-nav .nav-right {
-            margin-left: auto;
-            display: flex;
-            align-items: center;
+            justify-content: flex-end;
+            padding: 0 1rem;
             gap: .6rem;
+            transition: left var(--transition);
         }
-        .client-nav .nav-right .user-name {
-            font-size: .82rem;
+        .client-topbar .sidebar-toggle {
+            display: none;
+            border: none;
+            background: none;
+            font-size: 1.15rem;
             color: var(--text-muted);
-            font-weight: 500;
+            cursor: pointer;
+            padding: .25rem;
+            margin-right: auto;
         }
 
         /* ── Content ── */
@@ -229,7 +316,7 @@
         }
         .assistant-shell {
             position: fixed;
-            top: var(--nav-height);
+            top: var(--topbar-height);
             right: 0;
             bottom: 0;
             width: 400px;
@@ -368,7 +455,7 @@
         .assistant-collapsed {
             height: 56px;
             bottom: auto;
-            top: var(--nav-height);
+            top: var(--topbar-height);
             overflow: hidden;
         }
         .metric-card {
@@ -553,18 +640,16 @@
             opacity: 1;
             pointer-events: auto;
         }
-        .client-nav .nav-links a.nav-loading {
+        .client-sidebar .nav-links a.nav-loading {
             color: #6366f1;
             position: relative;
         }
-        .client-nav .nav-links a.nav-loading::after {
+        .client-sidebar .nav-links a.nav-loading::after {
             content: '';
             position: absolute;
-            bottom: 4px;
-            left: 50%;
+            right: 8px;
             width: 16px;
             height: 2px;
-            margin-left: -8px;
             background: #6366f1;
             border-radius: 1px;
             animation: navDot .6s ease-in-out infinite;
@@ -579,7 +664,7 @@
                 padding-right: 400px;
             }
             body.has-assistant .content-wrap {
-                max-width: calc(100vw - 440px);
+                max-width: calc(100vw - var(--sidebar-width) - 440px);
                 margin: 0;
             }
         }
@@ -599,11 +684,39 @@
             }
         }
 
+        @media (max-width: 991px) {
+            body {
+                padding-left: 0;
+                padding-top: var(--topbar-height);
+            }
+            .client-sidebar {
+                transform: translateX(-100%);
+                transition: transform .25s cubic-bezier(.4, 0, .2, 1);
+                z-index: 1020;
+            }
+            .client-sidebar.open {
+                transform: translateX(0);
+            }
+            .sidebar-backdrop {
+                display: none;
+                position: fixed;
+                inset: 0;
+                background: rgba(15,23,42,.25);
+                z-index: 1015;
+            }
+            .sidebar-backdrop.show {
+                display: block;
+            }
+            .client-topbar {
+                left: 0;
+            }
+            .client-topbar .sidebar-toggle {
+                display: block;
+            }
+        }
+
         @media (max-width: 768px) {
             .content-wrap { padding: 1rem .75rem; }
-            .client-nav { padding: 0 .75rem; }
-            .client-nav .nav-links { display: none; }
-            .client-nav .brand-name { font-size: .95rem; margin-right: .75rem; }
         }
     </style>
     {% block head %}{% endblock %}
@@ -611,12 +724,15 @@
 <body>
     <div class="nav-progress" id="navProgress"></div>
     <div class="page-fade" id="pageFade"></div>
-    <nav class="client-nav">
-        <span class="brand-name">
-            <i class="bi bi-bar-chart-line"></i>
-            {{ client_brand or 'Dashboard' }}
-        </span>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+    <nav class="client-sidebar" id="clientSidebar">
+        <div class="sidebar-brand">
+            <div class="brand-icon"><i class="bi bi-bar-chart-line"></i></div>
+            <span class="brand-text">{{ client_brand or 'Dashboard' }}</span>
+        </div>
         <div class="nav-links">
+            <div class="nav-section-label">Main</div>
             <a href="{{ url_for('client.client_dashboard') }}" class="{% if request.endpoint == 'client.client_dashboard' %}active{% endif %}">
                 <i class="bi bi-speedometer2"></i> Overview
             </a>
@@ -627,14 +743,18 @@
                 <i class="bi bi-rocket-takeoff"></i> Quick Launch
             </a>
             <a href="{{ url_for('client.client_actions') }}" class="{% if request.endpoint == 'client.client_actions' %}active{% endif %}">
-                <i class="bi bi-rocket-takeoff"></i> Missions
+                <i class="bi bi-clipboard2-check"></i> Missions
             </a>
+
+            <div class="nav-section-label">Create</div>
             <a href="{{ url_for('client.client_ad_builder') }}" class="{% if request.endpoint in ('client.client_ad_builder', 'client.client_ad_builder_generate') %}active{% endif %}">
                 <i class="bi bi-brush"></i> Ad Builder
             </a>
             <a href="{{ url_for('client.client_creative') }}" class="{% if request.endpoint in ('client.client_creative', 'client.client_creative_generate') %}active{% endif %}">
                 <i class="bi bi-palette"></i> Creative
             </a>
+
+            <div class="nav-section-label">Business</div>
             <a href="{{ url_for('client.client_my_business') }}" class="{% if request.endpoint == 'client.client_my_business' %}active{% endif %}">
                 <i class="bi bi-building"></i> My Business
             </a>
@@ -644,6 +764,11 @@
             <a href="{{ url_for('client.client_heatmap') }}" class="{% if request.endpoint in ('client.client_heatmap', 'client.client_heatmap_scan', 'client.client_heatmap_view_scan') %}active{% endif %}">
                 <i class="bi bi-geo-alt"></i> Rank Heatmap
             </a>
+            <a href="{{ url_for('client.client_competitors') }}" class="{% if request.endpoint == 'client.client_competitors' %}active{% endif %}">
+                <i class="bi bi-binoculars"></i> Competitor Intel
+            </a>
+
+            <div class="nav-section-label">Settings</div>
             <a href="{{ url_for('client.client_settings') }}" class="{% if request.endpoint == 'client.client_settings' %}active{% endif %}">
                 <i class="bi bi-plug"></i> Connections
             </a>
@@ -651,16 +776,22 @@
                 <i class="bi bi-question-circle"></i> Help
             </a>
         </div>
-        <div class="nav-right">
-            <button type="button" class="btn btn-sm btn-outline-secondary assistant-toggle-mobile" id="assistantMobileToggle">
-                <i class="bi bi-chat-dots"></i>
-            </button>
-            <span class="user-name">{{ client_user or '' }}</span>
+        <div class="sidebar-footer">
+            <span class="user-name"><i class="bi bi-person-circle"></i> {{ client_user or '' }}</span>
             <a href="{{ url_for('client.client_logout') }}" class="btn btn-sm btn-outline-secondary">
                 <i class="bi bi-box-arrow-left"></i> Logout
             </a>
         </div>
     </nav>
+
+    <header class="client-topbar" id="clientTopbar">
+        <button type="button" class="sidebar-toggle" id="sidebarToggle">
+            <i class="bi bi-list"></i>
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary assistant-toggle-mobile" id="assistantMobileToggle">
+            <i class="bi bi-chat-dots"></i>
+        </button>
+    </header>
 
     <aside class="assistant-shell" id="globalAssistantShell">
         <div class="assistant-header">
@@ -720,7 +851,7 @@
     <script>
     (function() {
         document.body.classList.add('has-assistant');
-        var links = document.querySelectorAll('.nav-links a');
+        var links = document.querySelectorAll('.client-sidebar .nav-links a');
         links.forEach(function(link) {
             if (link.classList.contains('active')) return;
             link.addEventListener('click', function(e) {
@@ -733,6 +864,23 @@
                 setTimeout(function() { window.location.href = href; }, 80);
             });
         });
+
+        // Sidebar mobile toggle
+        var sidebar = document.getElementById('clientSidebar');
+        var sidebarToggle = document.getElementById('sidebarToggle');
+        var backdrop = document.getElementById('sidebarBackdrop');
+        if (sidebarToggle && sidebar) {
+            sidebarToggle.addEventListener('click', function() {
+                sidebar.classList.toggle('open');
+                backdrop.classList.toggle('show');
+            });
+        }
+        if (backdrop) {
+            backdrop.addEventListener('click', function() {
+                sidebar.classList.remove('open');
+                backdrop.classList.remove('show');
+            });
+        }
 
         var shell = document.getElementById('globalAssistantShell');
         var collapseBtn = document.getElementById('assistantCollapseBtn');

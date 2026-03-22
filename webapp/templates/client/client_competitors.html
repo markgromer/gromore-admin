@@ -1,0 +1,250 @@
+{% extends "client_base.html" %}
+{% block title %}Competitor Intel{% endblock %}
+
+{% block head %}
+<style>
+    .intel-header {
+        background: linear-gradient(135deg, #1a1d2e 0%, #1e3a5f 100%);
+        border-radius: 16px;
+        padding: 2rem 2rem;
+        color: #fff;
+        margin-bottom: 1.5rem;
+        position: relative;
+        overflow: hidden;
+    }
+    .intel-header::before {
+        content: '';
+        position: absolute;
+        top: -40%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(99,102,241,.2), transparent 70%);
+        pointer-events: none;
+    }
+    .intel-header h3 { font-weight: 700; margin-bottom: .3rem; }
+    .intel-header p { color: rgba(255,255,255,.65); margin: 0; font-size: .9rem; }
+
+    .comp-card {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-soft);
+        margin-bottom: 1.25rem;
+        overflow: hidden;
+        transition: box-shadow var(--transition);
+    }
+    .comp-card:hover { box-shadow: var(--shadow-hover); }
+    .comp-card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--line);
+        background: var(--surface-soft);
+    }
+    .comp-card-head h5 {
+        margin: 0;
+        font-weight: 700;
+        font-size: 1rem;
+        color: var(--text-strong);
+    }
+    .comp-card-head .comp-links a {
+        color: var(--text-muted);
+        font-size: .85rem;
+        text-decoration: none;
+        margin-left: .6rem;
+    }
+    .comp-card-head .comp-links a:hover { color: var(--primary); }
+    .comp-card-body {
+        padding: 1rem 1.25rem;
+    }
+    .intel-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+    }
+    .intel-panel {
+        background: var(--surface-soft);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: .9rem 1rem;
+    }
+    .intel-panel h6 {
+        font-size: .78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--text-muted);
+        margin-bottom: .6rem;
+    }
+    .intel-panel h6 i { margin-right: .3rem; }
+    .intel-stat {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        padding: .2rem 0;
+        font-size: .88rem;
+    }
+    .intel-stat .label { color: var(--text-muted); }
+    .intel-stat .value { font-weight: 700; color: var(--text-strong); }
+    .intel-rating {
+        font-size: 1.4rem;
+        font-weight: 800;
+        color: var(--text-strong);
+    }
+    .intel-rating .stars { color: #f59e0b; font-size: 1rem; }
+    .ad-sample {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: .65rem .8rem;
+        margin-bottom: .5rem;
+        font-size: .84rem;
+        line-height: 1.45;
+        color: #374151;
+    }
+    .ad-sample .ad-title { font-weight: 600; color: var(--text-strong); margin-bottom: .15rem; }
+    .ad-sample .ad-platforms { font-size: .72rem; color: var(--text-muted); margin-top: .25rem; }
+    .intel-stale {
+        font-size: .72rem;
+        color: var(--text-muted);
+        margin-top: .5rem;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1.5rem;
+        color: var(--text-muted);
+    }
+    .empty-state i { font-size: 2.5rem; color: #cbd5e1; margin-bottom: .75rem; display: block; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="intel-header">
+    <h3><i class="bi bi-binoculars"></i> Competitor Intel</h3>
+    <p>Automated reports on your competitors, refreshed weekly. Add competitors from <a href="{{ url_for('client.client_my_business') }}" style="color:#93c5fd;">My Business</a>.</p>
+</div>
+
+{% if not competitors %}
+<div class="empty-state">
+    <i class="bi bi-binoculars"></i>
+    <h5>No competitors added yet</h5>
+    <p>Add competitors on the <a href="{{ url_for('client.client_my_business') }}">My Business</a> page to start gathering intel.</p>
+</div>
+{% endif %}
+
+{% for report in reports %}
+{% set comp = report.competitor %}
+<div class="comp-card">
+    <div class="comp-card-head">
+        <div>
+            <h5>{{ comp.name }}</h5>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="comp-links">
+                {% if comp.website %}<a href="{{ comp.website }}" target="_blank" rel="noopener" title="Website"><i class="bi bi-globe"></i></a>{% endif %}
+                {% if comp.facebook_url %}<a href="{{ comp.facebook_url }}" target="_blank" rel="noopener" title="Facebook"><i class="bi bi-facebook"></i></a>{% endif %}
+                {% if comp.google_maps_url %}<a href="{{ comp.google_maps_url }}" target="_blank" rel="noopener" title="Google Maps"><i class="bi bi-geo-alt"></i></a>{% endif %}
+                {% if comp.instagram_url %}<a href="{{ comp.instagram_url }}" target="_blank" rel="noopener" title="Instagram"><i class="bi bi-instagram"></i></a>{% endif %}
+                {% if comp.yelp_url %}<a href="{{ comp.yelp_url }}" target="_blank" rel="noopener" title="Yelp"><i class="bi bi-star"></i></a>{% endif %}
+            </span>
+            <form method="post" action="{{ url_for('client.client_competitor_refresh', competitor_id=comp.id) }}" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-outline-primary" title="Refresh intel">
+                    <i class="bi bi-arrow-clockwise"></i> Scan
+                </button>
+            </form>
+        </div>
+    </div>
+    <div class="comp-card-body">
+        {% if not report.get('google_places') and not report.get('meta_ads') and not report.get('website') %}
+        <p class="text-muted" style="font-size:.88rem;">No intel collected yet. Click <strong>Scan</strong> to fetch data.</p>
+        {% else %}
+        <div class="intel-grid">
+
+            {# Google Places panel #}
+            {% if report.get('google_places') %}
+            {% set gp = report.google_places %}
+            <div class="intel-panel">
+                <h6><i class="bi bi-google"></i> Google Places</h6>
+                {% if gp.rating %}
+                <div class="intel-rating">
+                    {{ gp.rating }}
+                    <span class="stars">
+                        {% for i in range(gp.rating | int) %}<i class="bi bi-star-fill"></i>{% endfor %}
+                        {% if gp.rating - (gp.rating | int) >= 0.5 %}<i class="bi bi-star-half"></i>{% endif %}
+                    </span>
+                    {% if gp.review_count %}<span style="font-size:.78rem; font-weight:500; color:var(--text-muted);"> ({{ gp.review_count }} reviews)</span>{% endif %}
+                </div>
+                {% endif %}
+                {% if gp.address %}
+                <div class="intel-stat"><span class="label">Address</span><span class="value" style="font-size:.82rem; text-align:right; max-width:60%;">{{ gp.address }}</span></div>
+                {% endif %}
+                {% if gp.types %}
+                <div class="intel-stat"><span class="label">Categories</span><span class="value" style="font-size:.82rem;">{{ gp.types[:3] | join(', ') | replace('_', ' ') }}</span></div>
+                {% endif %}
+                {% if gp.maps_url %}
+                <a href="{{ gp.maps_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary mt-2" style="font-size:.78rem;"><i class="bi bi-box-arrow-up-right"></i> View on Maps</a>
+                {% endif %}
+                {% if report.get('google_places_fetched') %}
+                <div class="intel-stale">Last updated: {{ report.google_places_fetched[:10] }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {# Meta Ads panel #}
+            {% if report.get('meta_ads') %}
+            {% set ma = report.meta_ads %}
+            <div class="intel-panel">
+                <h6><i class="bi bi-meta"></i> Active Ads</h6>
+                <div class="intel-rating" style="font-size:1.2rem;">
+                    {{ ma.active_ad_count or 0 }} <span style="font-size:.82rem; font-weight:500; color:var(--text-muted);">active ads found</span>
+                </div>
+                {% if ma.sample_ads %}
+                <div style="margin-top:.6rem;">
+                    {% for ad in ma.sample_ads[:5] %}
+                    <div class="ad-sample">
+                        {% if ad.titles %}<div class="ad-title">{{ ad.titles[0] }}</div>{% endif %}
+                        {% if ad.bodies %}<div>{{ ad.bodies[0][:150] }}{% if ad.bodies[0]|length > 150 %}...{% endif %}</div>{% endif %}
+                        {% if ad.platforms %}<div class="ad-platforms">{{ ad.platforms | join(', ') }}</div>{% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if report.get('meta_ads_fetched') %}
+                <div class="intel-stale">Last updated: {{ report.meta_ads_fetched[:10] }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {# Website panel #}
+            {% if report.get('website') %}
+            {% set ws = report.website %}
+            <div class="intel-panel">
+                <h6><i class="bi bi-globe"></i> Website</h6>
+                {% if ws.title %}
+                <div class="intel-stat"><span class="label">Title</span><span class="value" style="font-size:.82rem; text-align:right; max-width:65%;">{{ ws.title[:80] }}</span></div>
+                {% endif %}
+                {% if ws.description %}
+                <div style="font-size:.84rem; color:#4b5563; line-height:1.45; margin:.4rem 0;">{{ ws.description[:200] }}{% if ws.description|length > 200 %}...{% endif %}</div>
+                {% endif %}
+                {% if ws.url %}
+                <a href="{{ ws.url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary mt-2" style="font-size:.78rem;"><i class="bi bi-box-arrow-up-right"></i> Visit Site</a>
+                {% endif %}
+                {% if ws.error %}
+                <div class="text-danger" style="font-size:.82rem; margin-top:.3rem;">{{ ws.error[:100] }}</div>
+                {% endif %}
+                {% if report.get('website_fetched') %}
+                <div class="intel-stale">Last updated: {{ report.website_fetched[:10] }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+
+{% endblock %}

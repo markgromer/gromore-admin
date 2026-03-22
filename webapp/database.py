@@ -337,6 +337,23 @@ class WebDB:
         """)
 
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS competitor_intel (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                competitor_id INTEGER NOT NULL,
+                brand_id INTEGER NOT NULL,
+                intel_type TEXT NOT NULL,
+                data_json TEXT DEFAULT '{}',
+                fetched_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (competitor_id) REFERENCES competitors(id) ON DELETE CASCADE,
+                FOREIGN KEY (brand_id) REFERENCES brands(id)
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_competitor_intel_lookup
+            ON competitor_intel(competitor_id, intel_type);
+        """)
+
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS campaign_strategies (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 strategy_key TEXT NOT NULL UNIQUE,
@@ -1612,3 +1629,53 @@ class WebDB:
         )
         conn.commit()
         conn.close()
+
+    # ── Competitor Intel (cached reports) ────────────────────────
+
+    def upsert_competitor_intel(self, competitor_id, brand_id, intel_type, data_json):
+        conn = self._conn()
+        existing = conn.execute(
+            "SELECT id FROM competitor_intel WHERE competitor_id = ? AND intel_type = ?",
+            (competitor_id, intel_type),
+        ).fetchone()
+        if existing:
+            conn.execute(
+                """UPDATE competitor_intel
+                   SET data_json = ?, fetched_at = datetime('now')
+                   WHERE id = ?""",
+                (data_json, existing["id"]),
+            )
+        else:
+            conn.execute(
+                """INSERT INTO competitor_intel
+                   (competitor_id, brand_id, intel_type, data_json)
+                   VALUES (?, ?, ?, ?)""",
+                (competitor_id, brand_id, intel_type, data_json),
+            )
+        conn.commit()
+        conn.close()
+
+    def get_competitor_intel(self, competitor_id, intel_type=None):
+        conn = self._conn()
+        if intel_type:
+            row = conn.execute(
+                "SELECT * FROM competitor_intel WHERE competitor_id = ? AND intel_type = ?",
+                (competitor_id, intel_type),
+            ).fetchone()
+            conn.close()
+            return dict(row) if row else None
+        rows = conn.execute(
+            "SELECT * FROM competitor_intel WHERE competitor_id = ? ORDER BY intel_type",
+            (competitor_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_all_competitor_intel(self, brand_id):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM competitor_intel WHERE brand_id = ? ORDER BY competitor_id, intel_type",
+            (brand_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
