@@ -225,6 +225,24 @@ def client_dashboard_data():
                 dashboard_data["target_cpa"] = float(brand.get("kpi_target_cpa") or 0)
             except (ValueError, TypeError):
                 dashboard_data["target_cpa"] = 0.0
+
+            # Campaign drafts for the dashboard
+            try:
+                drafts_raw = db.get_campaign_drafts(brand_id) or []
+                dashboard_data["drafts"] = [
+                    {
+                        "id": dr["id"],
+                        "platform": dr.get("platform", ""),
+                        "campaign_name": dr.get("campaign_name", "Untitled"),
+                        "status": dr.get("status", "draft"),
+                        "created_by": dr.get("created_by", ""),
+                        "updated_at": dr.get("updated_at", dr.get("created_at", "")),
+                    }
+                    for dr in drafts_raw
+                ]
+            except Exception:
+                dashboard_data["drafts"] = []
+
             return jsonify({"dashboard": dashboard_data, "error": ""})
         else:
             return jsonify({"dashboard": None, "error": "No data available for this month."})
