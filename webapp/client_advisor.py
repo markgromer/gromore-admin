@@ -297,14 +297,17 @@ def _explain_facebook_organic(fb_organic):
     })
 
     organic_impressions = metrics.get("organic_impressions") or 0
-    if organic_impressions > 0 or followers > 0:
-        reach_pct = round((organic_impressions / followers) * 100, 1) if followers > 0 else 0
+    total_reach = metrics.get("reach") or organic_impressions
+    display_reach = organic_impressions if organic_impressions > 0 else total_reach
+    if display_reach > 0 or followers > 0:
+        reach_pct = round((display_reach / followers) * 100, 1) if followers > 0 else 0
+        reach_label = "organically" if organic_impressions > 0 else "in total"
         cards.append({
             "metric": "Organic Reach",
-            "value": f"{organic_impressions:,}",
+            "value": f"{display_reach:,}",
             "status": "good" if reach_pct > 30 else ("warning" if reach_pct < 15 else "neutral"),
             "explanation": (
-                f"Your posts were seen {organic_impressions:,} times organically (without paying). "
+                f"Your posts were seen {display_reach:,} times {reach_label} (without paying). "
                 + (f"That's {reach_pct}% of your followers."
                    if followers > 0 else "")
                 + (" Great reach - your content is getting shared and picked up by the algorithm."

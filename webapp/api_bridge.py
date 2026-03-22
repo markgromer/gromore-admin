@@ -992,6 +992,7 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
     metrics = [
         "page_impressions",
         "page_impressions_organic",
+        "page_impressions_unique",
         "page_engaged_users",
         "page_post_engagements",
         "page_fan_adds",
@@ -1079,7 +1080,8 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
         "fans": page_info.get("fans", 0),
         "page_name": page_info.get("name", ""),
         "impressions": insights_data.get("page_impressions", 0),
-        "organic_impressions": insights_data.get("page_impressions_organic", 0),
+        "organic_impressions": insights_data.get("page_impressions_organic", 0) or insights_data.get("page_impressions", 0),
+        "reach": insights_data.get("page_impressions_unique", 0),
         "engaged_users": insights_data.get("page_engaged_users", 0),
         "post_engagements": insights_data.get("page_post_engagements", 0),
         "new_fans": insights_data.get("page_fan_adds", 0),
@@ -1095,23 +1097,39 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
     }
 
     # ── Top posts for the period ──
+    post_fields = ("id,message,created_time,type,permalink_url,"
+                   "shares,likes.limit(0).summary(true),"
+                   "comments.limit(0).summary(true),"
+                   "insights.metric(post_impressions,post_engaged_users,"
+                   "post_clicks,post_reactions_by_type_total)")
     posts = []
     try:
+        # Try /published_posts first (more reliable with page tokens)
         posts_resp = requests.get(
-            f"{base}/posts",
+            f"{base}/published_posts",
             params={
                 "access_token": access_token,
-                "fields": "id,message,created_time,type,permalink_url,"
-                          "shares,likes.limit(0).summary(true),"
-                          "comments.limit(0).summary(true),"
-                          "insights.metric(post_impressions,post_engaged_users,"
-                          "post_clicks,post_reactions_by_type_total)",
+                "fields": post_fields,
                 "since": since_ts,
                 "until": until_ts,
                 "limit": 50,
             },
             timeout=30,
         )
+        # If published_posts fails, fall back to /posts
+        if posts_resp.status_code != 200:
+            log.info("FB /published_posts returned %s, falling back to /posts", posts_resp.status_code)
+            posts_resp = requests.get(
+                f"{base}/posts",
+                params={
+                    "access_token": access_token,
+                    "fields": post_fields,
+                    "since": since_ts,
+                    "until": until_ts,
+                    "limit": 50,
+                },
+                timeout=30,
+            )
         if posts_resp.status_code == 200:
             posts_data = posts_resp.json()
             if "error" in posts_data:
@@ -1155,61 +1173,65 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
     except Exception as e:
         log.warning("FB posts exception: %s", e)
 
-    # Fallback: if /posts returned nothing, try /feed (works with some token configs)
+    # Fallback: if date-filtered endpoints returned nothing, try without date filter
+    # and manually filter by created_time
     if not posts:
-        try:
-            feed_resp = requests.get(
-                f"{base}/feed",
-                params={
-                    "access_token": access_token,
-                    "fields": "id,message,created_time,type,permalink_url,"
-                              "shares,likes.limit(0).summary(true),"
-                              "comments.limit(0).summary(true)",
-                    "since": since_ts,
-                    "until": until_ts,
-                    "limit": 50,
-                },
-                timeout=30,
-            )
-            if feed_resp.status_code == 200:
-                feed_data = feed_resp.json().get("data", [])
-                log.info("FB /feed fallback returned %d posts for page %s", len(feed_data), page_id)
-                for post in feed_data:
-                    # Feed includes visitor posts; filter to page's own posts
-                    post_from = post.get("from", {}).get("id", "")
-                    if post_from and post_from != page_id:
-                        continue
-                    likes_count = post.get("likes", {}).get("summary", {}).get("total_count", 0)
-                    comments_count = post.get("comments", {}).get("summary", {}).get("total_count", 0)
-                    shares_count = (post.get("shares") or {}).get("count", 0)
-                    message = (post.get("message") or "")
-                    posts.append({
-                        "id": post.get("id", ""),
-                        "message": message[:150] + ("..." if len(message) > 150 else ""),
-                        "created_time": post.get("created_time", ""),
-                        "type": post.get("type", "status"),
-                        "permalink": post.get("permalink_url", ""),
-                        "likes": likes_count,
-                        "comments": comments_count,
-                        "shares": shares_count,
-                        "impressions": 0,
-                        "engaged_users": 0,
-                        "clicks": 0,
-                        "engagement_rate": 0,
-                    })
-            else:
-                log.warning("FB /feed fallback HTTP %s: %s", feed_resp.status_code, feed_resp.text[:200])
-        except Exception as e:
-            log.warning("FB /feed fallback exception: %s", e)
+        log.info("No posts from date-filtered endpoints, trying without date filter for page %s", page_id)
+        for endpoint in [f"{base}/published_posts", f"{base}/posts", f"{base}/feed"]:
+            try:
+                nodate_resp = requests.get(
+                    endpoint,
+                    params={
+                        "access_token": access_token,
+                        "fields": "id,message,created_time,type,permalink_url,"
+                                  "shares,likes.limit(0).summary(true),"
+                                  "comments.limit(0).summary(true)",
+                        "limit": 100,
+                    },
+                    timeout=30,
+                )
+                if nodate_resp.status_code == 200:
+                    all_posts = nodate_resp.json().get("data", [])
+                    log.info("FB %s (no date filter) returned %d posts", endpoint.split("/")[-1], len(all_posts))
+                    for post in all_posts:
+                        ct = post.get("created_time", "")
+                        # Filter to posts within our date range
+                        if ct and ct[:10] >= start_date and ct[:10] <= end_date:
+                            likes_count = post.get("likes", {}).get("summary", {}).get("total_count", 0)
+                            comments_count = post.get("comments", {}).get("summary", {}).get("total_count", 0)
+                            shares_count = (post.get("shares") or {}).get("count", 0)
+                            message = (post.get("message") or "")
+                            posts.append({
+                                "id": post.get("id", ""),
+                                "message": message[:150] + ("..." if len(message) > 150 else ""),
+                                "created_time": ct,
+                                "type": post.get("type", "status"),
+                                "permalink": post.get("permalink_url", ""),
+                                "likes": likes_count,
+                                "comments": comments_count,
+                                "shares": shares_count,
+                                "impressions": 0,
+                                "engaged_users": 0,
+                                "clicks": 0,
+                                "engagement_rate": 0,
+                            })
+                    if posts:
+                        log.info("Found %d posts in date range via no-date fallback", len(posts))
+                        break
+                else:
+                    log.info("FB %s (no date filter) returned %s", endpoint.split("/")[-1], nodate_resp.status_code)
+            except Exception as e:
+                log.warning("FB no-date fallback %s exception: %s", endpoint.split("/")[-1], e)
 
     # Sort by engagement
     posts.sort(key=lambda x: (x.get("likes", 0) + x.get("comments", 0) + x.get("shares", 0)), reverse=True)
 
     # Calculate engagement rate for the period
     total_engagement_rate = 0
-    if page_metrics["organic_impressions"] > 0:
+    reach_for_rate = page_metrics["organic_impressions"] or page_metrics.get("impressions", 0)
+    if reach_for_rate > 0:
         total_engagement_rate = round(
-            page_metrics["post_engagements"] / page_metrics["organic_impressions"] * 100, 2
+            page_metrics["post_engagements"] / reach_for_rate * 100, 2
         )
 
     page_metrics["engagement_rate"] = total_engagement_rate
