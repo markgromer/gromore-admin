@@ -429,6 +429,9 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="mb-0"><i class="bi bi-google" style="color: #4285f4;"></i> Google Ad Package</h5>
     <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-success" onclick="launchAdAsCampaign('google')">
+            <i class="bi bi-rocket-takeoff"></i> Launch as Campaign
+        </button>
         <button class="btn btn-sm btn-primary" onclick="abOpenPicker('google', 0)">
             <i class="bi bi-image"></i> Add Creative
         </button>
@@ -852,9 +855,14 @@
 {% if facebook_ads %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="mb-0"><i class="bi bi-meta" style="color: #0668e1;"></i> Facebook & Instagram Ad Package</h5>
-    <a href="{{ url_for('client.client_ad_builder', month=month) }}" class="btn btn-sm btn-outline-secondary">
-        <i class="bi bi-arrow-left"></i> Build Another
-    </a>
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-success" onclick="launchAdAsCampaign('facebook')">
+            <i class="bi bi-rocket-takeoff"></i> Launch as Campaign
+        </button>
+        <a href="{{ url_for('client.client_ad_builder', month=month) }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Build Another
+        </a>
+    </div>
 </div>
 
 {% if facebook_ads.strategy or facebook_ads.rationale or facebook_ads.data_used %}
@@ -1116,6 +1124,75 @@ function sendToCreative(payload) {
         sessionStorage.setItem('creative_prefill', JSON.stringify(payload || {}));
     } catch (_) {}
     window.location.href = "{{ url_for('client.client_creative') }}";
+}
+
+/* ── Launch as Campaign ── */
+{% if google_ads %}
+var _googleAdsData = {{ google_ads | tojson }};
+{% endif %}
+{% if facebook_ads %}
+var _facebookAdsData = {{ facebook_ads | tojson }};
+{% endif %}
+
+function launchAdAsCampaign(platform) {
+    var plan;
+    if (platform === 'google' && typeof _googleAdsData !== 'undefined') {
+        var g = _googleAdsData;
+        var adGroup = {
+            name: g.campaign_target || 'Ad Group 1',
+            keywords: (g.keywords_to_target || []).slice(),
+            negative_keywords: (g.negative_keywords || []).slice(),
+            headlines: (g.headlines || []).slice(),
+            descriptions: (g.descriptions || []).slice()
+        };
+        plan = {
+            campaign_name: (g.campaign_target || 'Google Search Campaign').substring(0, 60),
+            platform: 'google',
+            daily_budget: 25,
+            location_targeting: '',
+            rationale: g.rationale || '',
+            ad_groups: [adGroup],
+            campaign_negative_keywords: (g.negative_keywords || []).slice()
+        };
+    } else if (platform === 'facebook' && typeof _facebookAdsData !== 'undefined') {
+        var fb = _facebookAdsData;
+        var objectiveMap = { awareness: 'OUTCOME_AWARENESS', engagement: 'OUTCOME_ENGAGEMENT', leads: 'OUTCOME_LEADS', sales: 'OUTCOME_SALES' };
+        var adCopies = (fb.ad_variations || []).map(function(v) {
+            return {
+                headline: v.headline || '',
+                primary_text: v.primary_text || '',
+                description: v.description || '',
+                call_to_action: (fb.cta_button || 'LEARN_MORE').toUpperCase().replace(/ /g, '_')
+            };
+        });
+        var audience = fb.audience_suggestions || {};
+        plan = {
+            campaign_name: (fb.campaign_target || 'Facebook Ad Campaign').substring(0, 60),
+            platform: 'meta',
+            objective: objectiveMap[(fb.strategy || 'leads').toLowerCase()] || 'OUTCOME_LEADS',
+            daily_budget: 25,
+            location_targeting: audience.location || '',
+            rationale: fb.rationale || '',
+            ad_sets: [{
+                name: 'Ad Set 1',
+                age_min: parseInt(audience.age_range) || 25,
+                age_max: 65,
+                radius_miles: 25,
+                ad_copy: adCopies
+            }]
+        };
+    } else {
+        alert('No ad data found.');
+        return;
+    }
+
+    try {
+        sessionStorage.setItem('ad_builder_plan', JSON.stringify(plan));
+    } catch (_) {
+        alert('Could not save plan data. Try again.');
+        return;
+    }
+    window.location.href = "{{ url_for('client.client_campaign_create') }}";
 }
 
 /* ── Drive Image Picker for Ad Builder ── */

@@ -878,5 +878,30 @@ function removeAdImage(adsetIdx, adIdx) {
             '<i class="bi bi-image me-1"></i> Add Image from Drive</button>';
     }
 }
+
+/* ── Pre-fill from Ad Builder ── */
+(function() {
+    try {
+        var raw = sessionStorage.getItem('ad_builder_plan');
+        if (!raw) return;
+        sessionStorage.removeItem('ad_builder_plan');
+        var plan = JSON.parse(raw);
+        if (!plan || !plan.platform) return;
+
+        currentPlan = plan;
+        selectedPlatform = plan.platform === 'meta' ? 'meta' : 'google';
+
+        renderPlan(plan);
+        goToStep(4);
+        checkConfig();
+
+        var banner = document.createElement('div');
+        banner.className = 'alert alert-success py-2 mb-3';
+        banner.style.fontSize = '.9rem';
+        banner.innerHTML = '<i class="bi bi-brush me-1"></i> <strong>Pre-filled from Ad Builder.</strong> Review the plan below, adjust budget and location, then launch or save as draft.';
+        var planContent = document.getElementById('planContent');
+        if (planContent) planContent.parentNode.insertBefore(banner, planContent);
+    } catch (_) {}
+})();
 </script>
 {% endblock %}
