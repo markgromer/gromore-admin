@@ -1477,6 +1477,18 @@
                 <label>Y</label>
                 <input type="number" class="prop-input" value="${Math.round(obj.top || 0)}" oninput="updateProp('top', parseInt(this.value))">
             </div>
+            <div class="prop-field">
+                <label>Rotation</label>
+                <input type="number" class="prop-input" value="${Math.round(obj.angle || 0)}" min="-360" max="360"
+                       oninput="updateProp('angle', parseInt(this.value))">
+            </div>
+            <div class="prop-field">
+                <label>Flip</label>
+                <div class="font-style-group">
+                    <button class="${obj.flipX ? 'active' : ''}" onclick="toggleFlip('flipX')" title="Flip horizontal"><i class="bi bi-symmetry-vertical"></i></button>
+                    <button class="${obj.flipY ? 'active' : ''}" onclick="toggleFlip('flipY')" title="Flip vertical"><i class="bi bi-symmetry-horizontal"></i></button>
+                </div>
+            </div>
         `;
 
         p.innerHTML = html;
@@ -1487,6 +1499,14 @@
         if (!active) return;
         active.set(prop, value);
         canvas.renderAll();
+    };
+
+    window.toggleFlip = function(axis) {
+        const active = canvas.getActiveObject();
+        if (!active) return;
+        active.set(axis, !active[axis]);
+        canvas.renderAll();
+        showProperties(active);
     };
 
     window.updatePropDim = function(prop, value) {
