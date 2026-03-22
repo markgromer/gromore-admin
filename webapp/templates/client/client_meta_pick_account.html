@@ -14,19 +14,14 @@
             {% for acct in ad_accounts %}
             <form method="POST" action="{{ url_for('client_meta_oauth.select_account') }}"
                   class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="account_id" value="{{ acct.account_id }}">
                 <input type="hidden" name="account_name" value="{{ acct.name }}">
                 <div>
                     <div class="fw-medium">{{ acct.name or acct.account_id }}</div>
                     <small class="text-muted">
                         Account ID: {{ acct.account_id }}
-                        {% if acct.account_status == 1 %}
-                        <span class="badge bg-success ms-1">Active</span>
-                        {% elif acct.account_status == 2 %}
-                        <span class="badge bg-warning ms-1">Disabled</span>
-                        {% else %}
-                        <span class="badge bg-secondary ms-1">Status: {{ acct.account_status }}</span>
-                        {% endif %}
+                        <span class="badge bg-{{ acct._status_class or 'secondary' }} ms-1">{{ acct._status_label or 'Unknown' }}</span>
                     </small>
                 </div>
                 <button type="submit" class="btn btn-sm btn-primary">Select</button>

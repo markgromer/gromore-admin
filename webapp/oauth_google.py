@@ -214,9 +214,10 @@ def select_properties():
     ga4_property_id = request.form.get("ga4_property_id", "").strip()
     gsc_site_url = request.form.get("gsc_site_url", "").strip()
 
-    if ga4_property_id:
+    # Sentinel "none" means user explicitly skipped
+    if ga4_property_id and ga4_property_id != "none":
         db.update_brand_api_field(brand_id, "ga4_property_id", ga4_property_id)
-    if gsc_site_url:
+    if gsc_site_url and gsc_site_url != "none":
         db.update_brand_api_field(brand_id, "gsc_site_url", gsc_site_url)
 
     flash("Google account connected and properties selected", "success")

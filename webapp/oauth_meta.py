@@ -175,7 +175,7 @@ def callback():
         return render_template(
             "client/client_meta_pick_account.html",
             brand=brand,
-            ad_accounts=ad_accounts,
+            ad_accounts=_enrich_ad_accounts(ad_accounts),
             # client_base.html expects these from the client_bp context processor,
             # but this route lives in meta_bp so we supply them manually.
             client_brand=session.get("client_brand_name", brand.get("display_name", "")),
@@ -202,8 +202,29 @@ def callback():
     return render_template(
         "oauth/meta_pick_account.html",
         brand=brand,
-        ad_accounts=ad_accounts,
+        ad_accounts=_enrich_ad_accounts(ad_accounts),
     )
+
+
+def _enrich_ad_accounts(ad_accounts):
+    """Add human-readable _status_label and _status_class to each account dict."""
+    status_map = {
+        1: ("Active", "success"),
+        2: ("Disabled", "warning"),
+        3: ("Unsettled", "danger"),
+        7: ("Pending Review", "info"),
+        8: ("Pending Closure", "warning"),
+        9: ("In Grace Period", "info"),
+        100: ("Pending Settlement", "info"),
+        101: ("Active (Limited)", "warning"),
+        201: ("Any Closed", "secondary"),
+    }
+    for acct in ad_accounts:
+        code = acct.get("account_status")
+        label, cls = status_map.get(code, (f"Unknown ({code})", "secondary"))
+        acct["_status_label"] = label
+        acct["_status_class"] = cls
+    return ad_accounts
 
 
 @meta_bp.route("/select-account", methods=["POST"])

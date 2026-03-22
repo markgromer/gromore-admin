@@ -13,6 +13,7 @@
         </div>
 
         <form method="POST" action="{{ url_for('google_oauth.select_properties') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <!-- GA4 Property -->
             <div class="mb-4">
                 <h6><i class="bi bi-graph-up"></i> GA4 Property</h6>
@@ -33,7 +34,7 @@
                     </label>
                     {% endfor %}
                     <label class="list-group-item d-flex align-items-center">
-                        <input class="form-check-input me-3" type="radio" name="ga4_property_id" value="">
+                        <input class="form-check-input me-3" type="radio" name="ga4_property_id" value="none">
                         <div class="text-muted">Skip - don't connect GA4 for this brand</div>
                     </label>
                 </div>
@@ -41,7 +42,7 @@
                 <div class="alert alert-info mb-0">
                     <i class="bi bi-info-circle"></i> No GA4 properties found. You can add a Property ID manually on the brand page later.
                 </div>
-                <input type="hidden" name="ga4_property_id" value="">
+                <input type="hidden" name="ga4_property_id" value="none">
                 {% endif %}
             </div>
 
@@ -62,7 +63,7 @@
                     </label>
                     {% endfor %}
                     <label class="list-group-item d-flex align-items-center">
-                        <input class="form-check-input me-3" type="radio" name="gsc_site_url" value="">
+                        <input class="form-check-input me-3" type="radio" name="gsc_site_url" value="none">
                         <div class="text-muted">Skip - don't connect Search Console for this brand</div>
                     </label>
                 </div>
@@ -70,7 +71,7 @@
                 <div class="alert alert-info mb-0">
                     <i class="bi bi-info-circle"></i> No Search Console sites found. You can add a site URL manually on the brand page later.
                 </div>
-                <input type="hidden" name="gsc_site_url" value="">
+                <input type="hidden" name="gsc_site_url" value="none">
                 {% endif %}
             </div>
 
