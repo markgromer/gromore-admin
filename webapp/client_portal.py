@@ -478,13 +478,19 @@ def client_coaching_start():
         topic_prompts = {
             "general": (
                 "Run a coaching check-in. Scan every data point available. "
+                "For each campaign or area you flag, use the structured format: STATUS (Winning/Underperforming/Neutral), "
+                "WHY (root cause), ACTION (Cut/Scale/Fix/Test/Hold), PRIORITY (High/Medium/Low). "
+                "Score each campaign: Kill/Fix/Scale/Test. "
                 "Identify the top 2-3 things that need attention and explain why clearly. "
+                "Connect every point to cost per lead or revenue impact. "
                 "Then ask what the user is struggling with or what they want to focus on. "
                 "Be direct, not generic."
             ),
             "budget": (
                 "Focus on budget and spend efficiency. Look at CPA, ROAS, daily budget, "
                 "and spend distribution across campaigns. Identify waste or underspend. "
+                "Score each campaign: Kill (wasting money)/Fix (fixable)/Scale (earning)/Test (needs data). "
+                "Frame every finding in dollar terms: how much is being wasted, how much could be saved. "
                 "Then ask about their budget goals or constraints."
             ),
             "creative": (
@@ -500,6 +506,8 @@ def client_coaching_start():
             "troubleshoot": (
                 "The user needs help diagnosing a problem. Scan all metrics for red flags: "
                 "declining trends, off-track KPIs, high CPAs, low CTR, wasted spend. "
+                "For each problem, state: STATUS, WHY it's happening, ACTION to fix it, PRIORITY level. "
+                "Estimate the dollar impact of each issue when possible. "
                 "Present your findings clearly and ask what symptoms they are seeing."
             ),
         }
