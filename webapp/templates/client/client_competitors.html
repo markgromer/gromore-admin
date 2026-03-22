@@ -229,6 +229,9 @@
                 {% if ws.description %}
                 <div style="font-size:.84rem; color:#4b5563; line-height:1.45; margin:.4rem 0;">{{ ws.description[:200] }}{% if ws.description|length > 200 %}...{% endif %}</div>
                 {% endif %}
+                {% if ws.h1 and ws.h1|length %}
+                <div class="intel-stat"><span class="label">H1</span><span class="value" style="font-size:.82rem; text-align:right; max-width:65%;">{{ ws.h1[0][:80] }}</span></div>
+                {% endif %}
                 {% if ws.url %}
                 <a href="{{ ws.url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary mt-2" style="font-size:.78rem;"><i class="bi bi-box-arrow-up-right"></i> Visit Site</a>
                 {% endif %}
@@ -237,6 +240,42 @@
                 {% endif %}
                 {% if report.get('website_fetched') %}
                 <div class="intel-stale">Last updated: {{ report.website_fetched[:10] }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {# Research panel (AI-generated from fetched intel) #}
+            {% if report.get('research') %}
+            {% set rr = report.research %}
+            <div class="intel-panel">
+                <h6><i class="bi bi-lightbulb"></i> Research + Counter Moves</h6>
+
+                {% if rr.positioning_summary %}
+                <div style="font-size:.86rem; color:#374151; line-height:1.5; margin-bottom:.5rem;">{{ rr.positioning_summary }}</div>
+                {% endif %}
+
+                {% if rr.messaging_angles %}
+                <div class="intel-stat"><span class="label">Angles</span><span class="value" style="font-size:.82rem; text-align:right; max-width:65%;">{{ rr.messaging_angles[:3] | join(' | ') }}</span></div>
+                {% endif %}
+
+                {% if rr.counter_moves %}
+                <div style="margin-top:.6rem;">
+                    {% for cm in rr.counter_moves[:3] %}
+                    <div class="ad-sample" style="margin-bottom:.55rem;">
+                        {% if cm.move %}<div class="ad-title">{{ cm.move }}</div>{% endif %}
+                        {% if cm.why %}<div style="color:#4b5563;">Why: {{ cm.why }}</div>{% endif %}
+                        {% if cm.how %}<div style="color:#4b5563;">How: {{ cm.how }}</div>{% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if rr.data_gaps %}
+                <div class="intel-stale">Data gaps: {{ rr.data_gaps[:3] | join(' | ') }}</div>
+                {% endif %}
+
+                {% if report.get('research_fetched') %}
+                <div class="intel-stale">Last updated: {{ report.research_fetched[:10] }}</div>
                 {% endif %}
             </div>
             {% endif %}

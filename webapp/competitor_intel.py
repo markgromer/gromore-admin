@@ -5,6 +5,7 @@ All results are cached in the competitor_intel table with a 7-day refresh window
 
 import json
 import logging
+import os
 from datetime import datetime, timedelta
 
 import requests
@@ -135,11 +136,21 @@ def _scrape_website(competitor):
         title = ""
         description = ""
 
+        def _clean_text(value: str, max_len: int) -> str:
+            import re
+            import html as _html
+
+            value = _html.unescape(value or "")
+            # Strip common invisible directional marks that sometimes appear in SEO meta.
+            value = value.replace("\u200e", "").replace("\u200f", "")
+            value = re.sub(r"\s+", " ", value).strip()
+            return value[:max_len]
+
         # Extract <title>
         import re
         title_match = re.search(r"<title[^>]*>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
         if title_match:
-            title = title_match.group(1).strip()[:200]
+            title = _clean_text(title_match.group(1), 200)
 
         # Extract meta description
         desc_match = re.search(
@@ -152,16 +163,143 @@ def _scrape_website(competitor):
                 html, re.IGNORECASE | re.DOTALL,
             )
         if desc_match:
-            description = desc_match.group(1).strip()[:500]
+            description = _clean_text(desc_match.group(1), 500)
+
+        # Extract a few headings for higher-signal positioning clues.
+        h1s = []
+        for m in re.finditer(r"<h1[^>]*>(.*?)</h1>", html, re.IGNORECASE | re.DOTALL):
+            txt = _clean_text(re.sub(r"<[^>]+>", " ", m.group(1)), 120)
+            if txt:
+                h1s.append(txt)
+            if len(h1s) >= 3:
+                break
+
+        h2s = []
+        for m in re.finditer(r"<h2[^>]*>(.*?)</h2>", html, re.IGNORECASE | re.DOTALL):
+            txt = _clean_text(re.sub(r"<[^>]+>", " ", m.group(1)), 120)
+            if txt:
+                h2s.append(txt)
+            if len(h2s) >= 5:
+                break
 
         return {
             "url": resp.url,
             "status": resp.status_code,
             "title": title,
             "description": description,
+            "h1": h1s,
+            "h2": h2s,
         }
     except Exception as exc:
         return {"url": website, "error": str(exc)[:200]}
+
+
+def _generate_competitor_research(*, api_key: str, model: str, brand: dict, competitor: dict, intel: dict) -> dict:
+    """Generate a structured research + counter-moves brief from already-fetched intel.
+
+    This must not invent competitor claims. It should base observations on the provided intel.
+    """
+    if not api_key:
+        raise ValueError("OpenAI API key not configured")
+
+    # Keep payload compact.
+    payload = {
+        "brand": {
+            "name": brand.get("name"),
+            "industry": brand.get("industry"),
+            "website": brand.get("website"),
+            "service_area": brand.get("service_area"),
+            "primary_services": brand.get("primary_services"),
+            "active_offers": brand.get("active_offers"),
+            "brand_voice": brand.get("brand_voice"),
+        },
+        "competitor": {
+            "name": competitor.get("name"),
+            "website": competitor.get("website"),
+            "google_maps_url": competitor.get("google_maps_url"),
+            "facebook_url": competitor.get("facebook_url"),
+            "instagram_url": competitor.get("instagram_url"),
+            "yelp_url": competitor.get("yelp_url"),
+            "notes": competitor.get("notes"),
+        },
+        "intel": {
+            "google_places": intel.get("google_places") or {},
+            "meta_ads": intel.get("meta_ads") or {},
+            "website": intel.get("website") or {},
+        },
+        "output_schema": {
+            "positioning_summary": "string, 2-4 sentences. Must cite only provided intel.",
+            "observed_offers": ["string"],
+            "observed_services": ["string"],
+            "messaging_angles": ["string"],
+            "proof_points": ["string"],
+            "counter_moves": [
+                {
+                    "move": "string",
+                    "why": "string",
+                    "how": "string",
+                }
+            ],
+            "conquest_campaign_notes": ["string"],
+            "landing_page_opportunities": ["string"],
+            "data_gaps": ["string"],
+        },
+    }
+
+    system = (
+        "You are a senior paid media + conversion strategist. "
+        "Your job is to produce competitor research and counter-moves that can be acted on. "
+        "CRITICAL RULE: Do not invent facts about the competitor. Only use what is explicitly in the input. "
+        "If the input does not contain enough evidence, leave arrays empty and add a note to data_gaps. "
+        "Return ONLY valid JSON matching the output_schema. No markdown. No extra keys."
+    )
+
+    resp = requests.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model,
+            "temperature": 0.2,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": json.dumps(payload)},
+            ],
+            "response_format": {"type": "json_object"},
+        },
+        timeout=60,
+    )
+
+    if resp.status_code != 200:
+        raise ValueError(f"OpenAI request failed ({resp.status_code}): {resp.text}")
+
+    content = (((resp.json().get("choices") or [{}])[0]).get("message") or {}).get("content") or ""
+    content = (content or "").strip()
+    if not content:
+        raise ValueError("Empty AI response")
+
+    try:
+        out = json.loads(content)
+    except Exception:
+        # Fallback: try to find the first JSON object.
+        import re
+        m = re.search(r"\{[\s\S]*\}", content)
+        if not m:
+            raise
+        out = json.loads(m.group(0))
+
+    # Normalize keys we expect.
+    out.setdefault("observed_offers", [])
+    out.setdefault("observed_services", [])
+    out.setdefault("messaging_angles", [])
+    out.setdefault("proof_points", [])
+    out.setdefault("counter_moves", [])
+    out.setdefault("conquest_campaign_notes", [])
+    out.setdefault("landing_page_opportunities", [])
+    out.setdefault("data_gaps", [])
+    return out
 
 
 # ── Public API: refresh competitor intel ─────────────────────────
@@ -214,6 +352,48 @@ def refresh_competitor_intel(db, brand, competitor):
             results["website"] = json.loads(existing.get("data_json", "{}"))
     elif existing:
         results["website"] = json.loads(existing.get("data_json", "{}"))
+
+    # AI research + counter moves (optional)
+    existing = db.get_competitor_intel(comp_id, "research")
+    should_generate = (not existing) or _is_stale(existing.get("fetched_at"))
+    if should_generate:
+        # Brand-level key/model first, then app-level settings/env.
+        api_key = ((brand.get("openai_api_key") or "").strip() or db.get_setting("openai_api_key", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip())
+        if api_key:
+            model = (
+                (brand.get("openai_model_analysis") or "").strip()
+                or (brand.get("openai_model") or "").strip()
+                or db.get_setting("openai_model", "").strip()
+                or os.environ.get("OPENAI_MODEL", "").strip()
+                or "gpt-4o-mini"
+            )
+            try:
+                research_data = _generate_competitor_research(
+                    api_key=api_key,
+                    model=model,
+                    brand=brand,
+                    competitor=competitor,
+                    intel=results,
+                )
+                db.upsert_competitor_intel(comp_id, brand_id, "research", json.dumps(research_data))
+                results["research"] = research_data
+            except Exception as exc:
+                log.warning("Competitor research generation failed for %s: %s", competitor.get("name"), exc)
+                if existing:
+                    try:
+                        results["research"] = json.loads(existing.get("data_json", "{}"))
+                    except Exception:
+                        pass
+        elif existing:
+            try:
+                results["research"] = json.loads(existing.get("data_json", "{}"))
+            except Exception:
+                pass
+    elif existing:
+        try:
+            results["research"] = json.loads(existing.get("data_json", "{}"))
+        except Exception:
+            pass
 
     return results
 
