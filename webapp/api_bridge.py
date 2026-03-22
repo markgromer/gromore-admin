@@ -306,6 +306,7 @@ def _get_page_access_token(page_id, user_access_token):
     Page Insights and post-level insights require the page token."""
     import requests
     try:
+        # Method 1: Get page token from /me/accounts
         resp = requests.get(
             "https://graph.facebook.com/v21.0/me/accounts",
             params={
@@ -322,9 +323,32 @@ def _get_page_access_token(page_id, user_access_token):
                 if page.get("id") == page_id:
                     log.info("  -> Matched! Using page token.")
                     return page.get("access_token", user_access_token)
+            # If page_id not found by exact match, try first page if only one exists
+            if len(pages) == 1:
+                log.info("  -> Only one page found, using it despite ID mismatch (stored=%s, found=%s)", page_id, pages[0].get("id"))
+                return pages[0].get("access_token", user_access_token)
             log.warning("Page %s not found in me/accounts (%d pages). Token may lack pages_show_list permission.", page_id, len(pages))
         else:
             log.warning("me/accounts HTTP %s: %s", resp.status_code, resp.text[:200])
+
+        # Method 2: Try getting page token directly via /{page_id}?fields=access_token
+        try:
+            direct_resp = requests.get(
+                f"https://graph.facebook.com/v21.0/{page_id}",
+                params={
+                    "access_token": user_access_token,
+                    "fields": "access_token",
+                },
+                timeout=15,
+            )
+            if direct_resp.status_code == 200:
+                page_token = direct_resp.json().get("access_token")
+                if page_token and page_token != user_access_token:
+                    log.info("Got page token via direct /%s request", page_id)
+                    return page_token
+        except Exception as e2:
+            log.warning("Direct page token request failed: %s", e2)
+
     except Exception as e:
         log.warning("me/accounts exception: %s", e)
     # Fall back to user token if we can't get a page token
@@ -976,6 +1000,7 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
     ]
 
     insights_data = {}
+    insights_status = "not_attempted"
     try:
         insights_resp = requests.get(
             f"{base}/insights",
@@ -992,7 +1017,9 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
             resp_data = insights_resp.json()
             if "error" in resp_data:
                 log.warning("FB page insights error: %s", resp_data["error"].get("message", resp_data["error"]))
-            for entry in resp_data.get("data", []):
+            data_entries = resp_data.get("data", [])
+            log.info("FB insights returned %d metric entries", len(data_entries))
+            for entry in data_entries:
                 metric_name = entry.get("name", "")
                 # Sum all daily values for the period
                 total = 0
@@ -1003,7 +1030,14 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
                     elif isinstance(v, (int, float)):
                         total += v
                 insights_data[metric_name] = total
+                log.info("  %s = %s", metric_name, total)
+            if not data_entries:
+                log.warning("FB insights returned 200 but empty data array. Token may lack read_insights permission or page has no data for this period.")
+                insights_status = "empty_response"
+            else:
+                insights_status = "ok"
         else:
+            insights_status = f"http_{insights_resp.status_code}"
             log.warning(
                 "FB page insights HTTP %s: %s",
                 insights_resp.status_code,
@@ -1055,6 +1089,7 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
         "reactions": insights_data.get("page_actions_post_reactions_total", 0),
         "_debug": {
             "insights_metrics_found": list(insights_data.keys()),
+            "insights_status": insights_status,
             "page_token_type": "page" if page_info.get("name") else "unknown",
         },
     }
@@ -1081,7 +1116,9 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
             posts_data = posts_resp.json()
             if "error" in posts_data:
                 log.warning("FB posts error: %s", posts_data["error"].get("message", posts_data["error"]))
-            for post in posts_data.get("data", []):
+            raw_posts = posts_data.get("data", [])
+            log.info("FB posts endpoint returned %d posts for page %s", len(raw_posts), page_id)
+            for post in raw_posts:
                 post_insights = {}
                 for ins in (post.get("insights", {}).get("data", [])):
                     val = ins.get("values", [{}])[0].get("value", 0)
@@ -1117,6 +1154,53 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
                 })
     except Exception as e:
         log.warning("FB posts exception: %s", e)
+
+    # Fallback: if /posts returned nothing, try /feed (works with some token configs)
+    if not posts:
+        try:
+            feed_resp = requests.get(
+                f"{base}/feed",
+                params={
+                    "access_token": access_token,
+                    "fields": "id,message,created_time,type,permalink_url,"
+                              "shares,likes.limit(0).summary(true),"
+                              "comments.limit(0).summary(true)",
+                    "since": since_ts,
+                    "until": until_ts,
+                    "limit": 50,
+                },
+                timeout=30,
+            )
+            if feed_resp.status_code == 200:
+                feed_data = feed_resp.json().get("data", [])
+                log.info("FB /feed fallback returned %d posts for page %s", len(feed_data), page_id)
+                for post in feed_data:
+                    # Feed includes visitor posts; filter to page's own posts
+                    post_from = post.get("from", {}).get("id", "")
+                    if post_from and post_from != page_id:
+                        continue
+                    likes_count = post.get("likes", {}).get("summary", {}).get("total_count", 0)
+                    comments_count = post.get("comments", {}).get("summary", {}).get("total_count", 0)
+                    shares_count = (post.get("shares") or {}).get("count", 0)
+                    message = (post.get("message") or "")
+                    posts.append({
+                        "id": post.get("id", ""),
+                        "message": message[:150] + ("..." if len(message) > 150 else ""),
+                        "created_time": post.get("created_time", ""),
+                        "type": post.get("type", "status"),
+                        "permalink": post.get("permalink_url", ""),
+                        "likes": likes_count,
+                        "comments": comments_count,
+                        "shares": shares_count,
+                        "impressions": 0,
+                        "engaged_users": 0,
+                        "clicks": 0,
+                        "engagement_rate": 0,
+                    })
+            else:
+                log.warning("FB /feed fallback HTTP %s: %s", feed_resp.status_code, feed_resp.text[:200])
+        except Exception as e:
+            log.warning("FB /feed fallback exception: %s", e)
 
     # Sort by engagement
     posts.sort(key=lambda x: (x.get("likes", 0) + x.get("comments", 0) + x.get("shares", 0)), reverse=True)

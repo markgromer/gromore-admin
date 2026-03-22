@@ -273,6 +273,7 @@ def _explain_facebook_organic(fb_organic):
     metrics = fb_organic.get("metrics") or {}
     top_posts = fb_organic.get("top_posts") or []
     post_count = fb_organic.get("post_count", 0)
+    debug = metrics.get("_debug") or {}
 
     cards = []
 
@@ -378,6 +379,36 @@ def _explain_facebook_organic(fb_organic):
             ),
         })
 
+    # Diagnostic card: if we have followers but all insights are zero, likely a permissions issue
+    organic_impressions = metrics.get("organic_impressions") or 0
+    post_engagements = metrics.get("post_engagements") or 0
+    insights_found = debug.get("insights_metrics_found", [])
+    insights_status = debug.get("insights_status", "unknown")
+    if followers > 0 and organic_impressions == 0 and post_engagements == 0 and post_count == 0:
+        if insights_status in ("empty_response", "not_attempted") or insights_status.startswith("http_"):
+            hint = (
+                "We can see your page info but could not pull engagement data. "
+                "This usually means Facebook permissions need updating. "
+                "Go to Connections, disconnect Meta, then reconnect and make sure you approve ALL permissions "
+                "(pages_read_engagement, read_insights, pages_show_list). "
+                "Also confirm your Meta app has Advanced Access for these permissions in the App Dashboard."
+            )
+        else:
+            hint = (
+                "Your page had no organic reach, engagement, or posts this period. "
+                "If you have been posting, check that the correct Facebook Page is linked in your brand settings."
+            )
+        if insights_found:
+            hint += f" (Metrics returned by API: {', '.join(insights_found)})"
+        elif insights_status and insights_status != "unknown":
+            hint += f" (Insights API status: {insights_status})"
+        cards.append({
+            "metric": "Data Status",
+            "value": "Limited",
+            "status": "bad",
+            "explanation": hint,
+        })
+
     return {"title": "Facebook Organic", "icon": "bi-facebook", "cards": cards}
 
 
@@ -388,8 +419,8 @@ def _explain_google_ads(google_ads):
     cards = []
 
     spend = metrics.get("spend", 0)
-    conversions = metrics.get("conversions", 0)
-    cpa = metrics.get("cpa", 0)
+    conversions = metrics.get("results", 0)
+    cpa = metrics.get("cost_per_result", 0)
 
     cards.append({
         "metric": "Ad Spend",
@@ -397,7 +428,7 @@ def _explain_google_ads(google_ads):
         "status": "neutral",
         "explanation": (
             f"You spent ${spend:,.2f} on Google Ads this month"
-            + (f" and got {conversions:,} leads at ${cpa:.2f} each."
+            + (f" and got {int(conversions):,} leads at ${cpa:.2f} each."
                if conversions > 0
                else ". No conversions tracked yet - check that your conversion tracking is working.")
         ),
@@ -433,7 +464,7 @@ def _explain_google_ads(google_ads):
         cards.append({
             "metric": "Cost Per Lead",
             "value": f"${cpa:.2f}",
-            "status": _score_to_status(scores.get("cpa", "no_data")),
+            "status": _score_to_status(scores.get("cost_per_result", "no_data")),
             "explanation": (
                 f"Each lead from Google Ads costs ${cpa:.2f}. "
                 + ("This is higher than ideal. Check which keywords are eating budget "

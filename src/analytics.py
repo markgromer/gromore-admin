@@ -454,6 +454,7 @@ def analyze_google_ads(google_ads_data, prev_google_ads_data, benchmarks_ads, in
     metrics_config = {
         "impressions": {"higher_is_better": True, "benchmark_key": None},
         "clicks": {"higher_is_better": True, "benchmark_key": None},
+        "spend": {"higher_is_better": None, "benchmark_key": None},
         "ctr": {"higher_is_better": True, "benchmark_key": "ctr"},
         "cpc": {"higher_is_better": False, "benchmark_key": "cpc"},
         "results": {"higher_is_better": True, "benchmark_key": None},
