@@ -265,21 +265,25 @@ def _generate_competitor_research(*, api_key: str, model: str, brand: dict, comp
         "Return ONLY valid JSON matching the output_schema. No markdown. No extra keys."
     )
 
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": json.dumps(payload)},
+        ],
+        "response_format": {"type": "json_object"},
+    }
+    # o-series models only support temperature=1 (the default)
+    if not model.startswith(("o1", "o3")):
+        body["temperature"] = 0.2
+
     resp = requests.post(
         "https://api.openai.com/v1/chat/completions",
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
-        json={
-            "model": model,
-            "temperature": 0.2,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": json.dumps(payload)},
-            ],
-            "response_format": {"type": "json_object"},
-        },
+        json=body,
         timeout=60,
     )
 
