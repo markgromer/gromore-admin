@@ -146,6 +146,7 @@ This is an agency operating system that bridges analytics, reporting, creative g
   - Implements launch flows that create new campaigns from generated plans
   - Safety default: create campaigns paused by default
   - Writes audit logs for traceability
+  - Google Ads: direct REST calls to googleads.googleapis.com (not the google-ads SDK); Meta: via facebook-business SDK
 - AI layer
   - Used to generate briefs, plans, and creative copy in a structured workflow
   - Includes a memory/embedding-backed store for assistant context
