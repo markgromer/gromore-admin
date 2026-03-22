@@ -548,6 +548,9 @@
             <a href="{{ url_for('client.client_campaigns') }}" class="{% if request.endpoint in ('client.client_campaigns', 'client.client_campaign_detail', 'client.client_campaign_create', 'client.client_campaign_generate', 'client.client_campaign_launch') %}active{% endif %}">
                 <i class="bi bi-megaphone"></i> Campaigns
             </a>
+            <a href="{{ url_for('client.client_quick_launch') }}" class="{% if request.endpoint == 'client.client_quick_launch' %}active{% endif %}" style="color:#4f46e5; font-weight:600;">
+                <i class="bi bi-rocket-takeoff"></i> Quick Launch
+            </a>
             <a href="{{ url_for('client.client_actions') }}" class="{% if request.endpoint == 'client.client_actions' %}active{% endif %}">
                 <i class="bi bi-lightning-charge"></i> Action Plan
             </a>

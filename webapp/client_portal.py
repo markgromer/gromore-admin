@@ -78,6 +78,17 @@ def _assistant_month():
     return datetime.now().strftime("%Y-%m")
 
 
+def _get_ad_connection_status(db, brand):
+    """Return (has_google, has_meta) for a brand's ad platform connections."""
+    brand_id = brand["id"] if isinstance(brand, dict) else brand
+    connections = db.get_brand_connections(brand_id)
+    has_google = bool(connections.get("google", {}).get("status") == "connected"
+                     and (brand if isinstance(brand, dict) else {}).get("google_ads_customer_id"))
+    has_meta = bool(connections.get("meta", {}).get("status") == "connected"
+                    and (brand if isinstance(brand, dict) else {}).get("meta_ad_account_id"))
+    return has_google, has_meta
+
+
 def client_login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -131,6 +142,10 @@ def client_dashboard():
 
     month = request.args.get("month") or datetime.now().strftime("%Y-%m")
 
+    # Detect first-run state: no ad accounts connected yet
+    has_google, has_meta = _get_ad_connection_status(db, brand)
+    first_run = not has_google and not has_meta
+
     # Dashboard renders instantly; data is fetched async via /dashboard/data
     return render_template(
         "client_dashboard.html",
@@ -139,6 +154,9 @@ def client_dashboard():
         dashboard=None,
         error="",
         async_load=True,
+        first_run=first_run,
+        has_google=has_google,
+        has_meta=has_meta,
         client_name=session.get("client_name", ""),
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
@@ -697,6 +715,28 @@ def client_add_negative_keyword(campaign_id):
     return redirect(url_for("client.client_campaign_detail", platform="google", campaign_id=campaign_id))
 
 
+# ── Quick Launch (simplified campaign creator for beginners) ──
+
+@client_bp.route("/quick-launch")
+@client_login_required
+def client_quick_launch():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    has_google, has_meta = _get_ad_connection_status(db, brand)
+
+    return render_template(
+        "client_quick_launch.html",
+        brand=brand,
+        has_google=has_google,
+        has_meta=has_meta,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
 # ── Campaign Creator ──
 
 @client_bp.route("/campaigns/new")
@@ -708,11 +748,7 @@ def client_campaign_create():
     if not brand:
         abort(404)
 
-    connections = db.get_brand_connections(brand_id)
-    has_google = (connections.get("google", {}).get("status") == "connected"
-                  and brand.get("google_ads_customer_id"))
-    has_meta = (connections.get("meta", {}).get("status") == "connected"
-                and brand.get("meta_ad_account_id"))
+    has_google, has_meta = _get_ad_connection_status(db, brand)
 
     from webapp.campaign_templates import get_active_strategies
 

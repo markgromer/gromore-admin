@@ -75,7 +75,13 @@
     </ol>
 </nav>
 
-<h4 class="mb-4">Create a New Campaign</h4>
+<h4 class="mb-1">Create a New Campaign</h4>
+<div class="d-flex align-items-center gap-3 mb-4">
+    <span class="text-muted" style="font-size:.88rem;">Advanced builder with full control.</span>
+    <a href="{{ url_for('client.client_quick_launch') }}" style="font-size:.85rem;">
+        <i class="bi bi-magic me-1"></i> Want the simple version?
+    </a>
+</div>
 
 <!-- Step 1: Choose Platform -->
 <div class="wizard-step active" id="step1">
@@ -174,9 +180,18 @@
 <div class="wizard-step" id="step2">
     <div class="card border-0 shadow-sm" style="border-radius: 12px;">
         <div class="card-body">
-            <h5 class="mb-1">Step 2: Choose Your Campaign Strategy</h5>
-            <p class="text-muted mb-4">Each strategy is built on proven ad architectures and best practices.</p>
+            <h5 class="mb-1">Step 2: What's your goal?</h5>
+            <p class="text-muted mb-4">Pick the outcome you want. We'll set up the right campaign structure automatically.</p>
 
+            {% set goal_labels = {
+                'meta_omnipresent': 'Get my name out there',
+                'meta_lead_gen': 'Get phone calls and leads',
+                'meta_hyper_local': 'Dominate my neighborhood',
+                'meta_retargeting': 'Bring back people who visited my website',
+                'google_lead_gen': 'Get phone calls and leads',
+                'google_local_domination': 'Dominate local search',
+                'google_competitor_conquest': 'Show up when people search my competitors',
+            } %}
             <div class="row g-3" id="strategyCards">
                 {% for key, s in strategies.items() %}
                 <div class="col-md-6 strategy-card-wrap" data-platform="{{ s.platform }}">
@@ -186,12 +201,9 @@
                                 <i class="bi {{ s.icon }}"></i>
                             </div>
                             <div style="flex: 1;">
-                                <h6 class="mb-0">{{ s.name }}</h6>
+                                <h6 class="mb-0">{{ goal_labels.get(key, s.name) }}</h6>
                                 <div style="font-size: .78rem; color: {{ s.color }}; font-weight: 600; margin-bottom: .25rem;">{{ s.tagline }}</div>
                                 <p style="font-size: .82rem; color: #6b7280; margin-bottom: .5rem;">{{ s.description }}</p>
-                                <div style="font-size: .78rem; color: #9ca3af;">
-                                    <i class="bi bi-check-circle"></i> Best for: {{ s.best_for }}
-                                </div>
                                 <div style="font-size: .78rem; color: #9ca3af;">
                                     <i class="bi bi-cash-stack"></i> Recommended min: ${{ s.recommended_min }}/mo
                                 </div>

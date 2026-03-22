@@ -209,6 +209,79 @@
     }
     .dash-content { display: none; }
     .dash-content.visible { display: block; }
+
+    /* ── First-Run Welcome ── */
+    .welcome-wrap {
+        max-width: 720px;
+        margin: 1.5rem auto 0;
+        text-align: center;
+    }
+    .welcome-hero {
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4f46e5 100%);
+        border-radius: 18px;
+        padding: 2.5rem 2rem;
+        color: #fff;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 12px 36px rgba(30,27,75,.3);
+    }
+    .welcome-hero h3 { font-weight: 800; font-size: 1.6rem; margin-bottom: .5rem; }
+    .welcome-hero p { color: rgba(255,255,255,.75); font-size: 1rem; margin: 0; }
+    .welcome-steps {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        text-align: left;
+    }
+    .welcome-step {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 1.25rem;
+        box-shadow: 0 4px 12px rgba(15,23,42,.05);
+        position: relative;
+    }
+    .welcome-step.done { opacity: .55; }
+    .welcome-step .ws-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px; height: 28px;
+        border-radius: 50%;
+        background: #eef2ff;
+        color: #4f46e5;
+        font-weight: 800;
+        font-size: .82rem;
+        margin-bottom: .5rem;
+    }
+    .welcome-step.done .ws-num { background: #d1fae5; color: #10b981; }
+    .welcome-step h6 { font-weight: 700; font-size: .95rem; margin-bottom: .25rem; }
+    .welcome-step p { font-size: .84rem; color: #64748b; margin-bottom: .75rem; }
+
+    /* ── What Should I Do button ── */
+    .wsid-btn {
+        background: linear-gradient(135deg, #4f46e5, #7c3aed);
+        border: none;
+        color: #fff;
+        font-weight: 700;
+        font-size: .9rem;
+        padding: .6rem 1.25rem;
+        border-radius: 12px;
+        box-shadow: 0 6px 18px rgba(79,70,229,.3);
+        cursor: pointer;
+        transition: all .15s;
+    }
+    .wsid-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(79,70,229,.4); }
+    .wsid-response {
+        display: none;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 1.25rem;
+        margin-top: 1rem;
+        text-align: left;
+        box-shadow: 0 4px 12px rgba(15,23,42,.05);
+    }
+    .wsid-response.visible { display: block; }
 </style>
 
 <div class="page-head">
@@ -222,6 +295,46 @@
         </form>
     </div>
 </div>
+
+{% if first_run %}
+<!-- ── First-Run Welcome ── -->
+<div class="welcome-wrap">
+    <div class="welcome-hero">
+        <h3>Welcome{% if client_name %}, {{ client_name }}{% endif %}! Let's get your first ad running.</h3>
+        <p>Three steps, five minutes, no experience needed.</p>
+    </div>
+
+    <div class="welcome-steps">
+        <div class="welcome-step {{ 'done' if has_google or has_meta else '' }}">
+            <div class="ws-num">{{ '&#10003;' if has_google or has_meta else '1' }}</div>
+            <h6>Connect an ad account</h6>
+            <p>Link your Google or Facebook ad account so we can run ads for you.</p>
+            {% if not has_google and not has_meta %}
+            <a href="{{ url_for('client.client_settings') }}" class="btn btn-sm btn-primary">
+                <i class="bi bi-plug me-1"></i> Connect Now
+            </a>
+            {% else %}
+            <span style="font-size:.82rem; color:#10b981; font-weight:600;"><i class="bi bi-check-circle me-1"></i> Connected</span>
+            {% endif %}
+        </div>
+
+        <div class="welcome-step">
+            <div class="ws-num">2</div>
+            <h6>Tell us what to promote</h6>
+            <p>Pick your service and goal. Our AI handles the rest.</p>
+            <a href="{{ url_for('client.client_quick_launch') }}" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-rocket-takeoff me-1"></i> Quick Launch
+            </a>
+        </div>
+
+        <div class="welcome-step">
+            <div class="ws-num">3</div>
+            <h6>Watch leads roll in</h6>
+            <p>Your dashboard will light up with real results once your ads are live.</p>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- Loading Animation -->
 <div id="dashLoader" class="dash-loader">
@@ -256,6 +369,19 @@
     <!-- Populated by JS -->
 </div>
 
+<!-- "What Should I Do?" Button (visible after data loads) -->
+<div id="wsidSection" style="display:none; margin-bottom:1.5rem;">
+    <div class="d-flex align-items-center gap-3">
+        <button class="wsid-btn" id="wsidBtn" onclick="askWhatShouldIDo()">
+            <i class="bi bi-lightbulb me-2"></i> What should I do right now?
+        </button>
+        <span id="wsidLoading" style="display:none; font-size:.85rem; color:#64748b;">
+            <span class="spinner-border spinner-border-sm me-1"></span> Thinking...
+        </span>
+    </div>
+    <div class="wsid-response" id="wsidResponse"></div>
+</div>
+
 <!-- Error state -->
 <div id="dashError" style="display:none;">
     <div class="alert alert-warning">
@@ -264,8 +390,26 @@
     </div>
 </div>
 
+{% set _grade_labels = {
+    'A+': 'Excellent. Your campaigns are firing on all cylinders.',
+    'A':  'Very strong performance. Just minor tuning needed.',
+    'B+': 'Good results. A few tweaks could push you higher.',
+    'B':  'Solid baseline. You have clear opportunities to improve.',
+    'C+': 'Decent start, but there is room for meaningful gains.',
+    'C':  'Average. Focused changes will make a noticeable difference.',
+    'D':  'Below average. Let us fix the key issues this month.',
+    'F':  'Needs attention. Follow the action plan to turn things around.',
+    'N/A': 'Not enough data yet. Results will show up once your ads have been running.',
+} %}
 {% if async_load %}
 <script>
+function esc(s) {
+    if (!s) return '';
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(String(s)));
+    return d.innerHTML;
+}
+var __gradeLabels = {{ _grade_labels | tojson }};
 (function() {
     const steps = ['step-connect', 'step-google', 'step-meta', 'step-analyze', 'step-build'];
     let currentStep = 0;
@@ -319,6 +463,9 @@
 
             if (data.dashboard) {
                 renderDashboard(data.dashboard);
+
+                // Show "What Should I Do?" button after data loads
+                document.getElementById('wsidSection').style.display = '';
             }
         }, 600);
     })
@@ -339,6 +486,10 @@
         html += '<div class="cockpit-title"><i class="bi bi-speedometer2 me-2"></i>Performance Cockpit</div>';
         html += '<div class="cockpit-grade cg-' + gradeClean + '">' + esc(d.health.grade) + '</div>';
         html += '</div>';
+
+        // Plain-English grade summary (shared with Jinja block below)
+        var gradeLabel = (__gradeLabels || {})[d.health.grade] || 'Not enough data yet. Results will show up once your ads have been running.';
+        html += '<div style="font-size:.88rem;color:rgba(255,255,255,.7);margin-bottom:1rem;">' + esc(gradeLabel) + '</div>';
 
         // KPI Gauges
         if (d.kpi_status && d.kpi_status.length) {
@@ -461,13 +612,53 @@
         container.classList.add('visible');
     }
 
-    function esc(s) {
-        if (!s) return '';
-        var d = document.createElement('div');
-        d.appendChild(document.createTextNode(String(s)));
-        return d.innerHTML;
-    }
 })();
+
+/* "What should I do?" sends a focused prompt to the AI assistant */
+function askWhatShouldIDo() {
+    var btn = document.getElementById('wsidBtn');
+    var loading = document.getElementById('wsidLoading');
+    var resp = document.getElementById('wsidResponse');
+
+    btn.disabled = true;
+    loading.style.display = '';
+    resp.classList.remove('visible');
+
+    var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+    fetch('{{ url_for("client.client_assistant_chat") }}', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({
+            message: 'Look at my current ad performance data and give me the single most impactful thing I should do RIGHT NOW to improve my results. Be specific - tell me exactly what to do, not general advice. If there is a page in this tool where I can take that action, tell me which one. Keep it to 2-3 sentences max.',
+            month: '{{ month }}',
+            page_path: '/client/dashboard',
+            page_title: 'Dashboard',
+            page_endpoint: 'client.client_dashboard',
+            page_hint: 'User clicked the What Should I Do button on the dashboard. Give one clear, specific, actionable recommendation.',
+        }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        loading.style.display = 'none';
+        if (data.reply) {
+            resp.innerHTML = '<div style="font-size:.92rem;color:#0f172a;line-height:1.6;"><i class="bi bi-lightbulb text-warning me-2"></i>' +
+                esc(data.reply).replace(/\n/g, '<br>') + '</div>';
+            resp.classList.add('visible');
+        } else if (data.error) {
+            resp.innerHTML = '<div style="font-size:.88rem;color:#dc2626;"><i class="bi bi-exclamation-circle me-1"></i> ' +
+                esc(data.error) + '</div>';
+            resp.classList.add('visible');
+        }
+    })
+    .catch(function() {
+        btn.disabled = false;
+        loading.style.display = 'none';
+    });
+}
+
 </script>
 {% else %}
 
@@ -487,6 +678,10 @@
         <div class="cockpit-grade cg-{{ dashboard.health.grade | replace('/', '') | default('NA') }}">
             {{ dashboard.health.grade }}
         </div>
+    </div>
+
+    <div style="font-size:.88rem;color:rgba(255,255,255,.7);margin-bottom:1rem;">
+        {{ _grade_labels.get(dashboard.health.grade, _grade_labels['N/A']) }}
     </div>
 
     {% if dashboard.kpi_status %}
@@ -598,9 +793,12 @@
 {% else %}
 {% if not error %}
 <div class="text-center py-5">
-    <i class="bi bi-bar-chart-line" style="font-size: 3rem; color: #d1d5db;"></i>
-    <h5 class="mt-3 text-muted">No data for {{ month }}</h5>
-    <p class="text-muted">Your performance data will appear here once reports are generated.</p>
+    <div style="font-size: 3rem; color: #a5b4fc;"><i class="bi bi-rocket-takeoff"></i></div>
+    <h5 class="mt-3">No performance data for {{ month }} yet</h5>
+    <p class="text-muted" style="max-width:420px; margin:0 auto .75rem;">Once your ads are running and reports are generated, this dashboard will fill up with your real results.</p>
+    <a href="{{ url_for('client.client_quick_launch') }}" class="btn btn-primary btn-sm">
+        <i class="bi bi-magic me-1"></i> Launch Your First Ad
+    </a>
 </div>
 {% endif %}
 {% endif %}

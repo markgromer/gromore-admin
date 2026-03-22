@@ -1,0 +1,578 @@
+{% extends "client/client_base.html" %}
+
+{% block title %}Launch Your First Ad{% endblock %}
+
+{% block head %}
+<style>
+    .ql-wrap {
+        max-width: 680px;
+        margin: 0 auto;
+        padding-top: 1rem;
+    }
+    .ql-hero {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .ql-hero h3 {
+        font-weight: 800;
+        font-size: 1.6rem;
+        margin-bottom: .5rem;
+    }
+    .ql-hero p {
+        color: #64748b;
+        font-size: 1rem;
+        max-width: 480px;
+        margin: 0 auto;
+    }
+    .ql-card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 2rem;
+        box-shadow: 0 10px 28px rgba(15,23,42,.06);
+    }
+    .ql-field { margin-bottom: 1.5rem; }
+    .ql-field label {
+        font-weight: 700;
+        font-size: .95rem;
+        margin-bottom: .4rem;
+        display: block;
+        color: #0f172a;
+    }
+    .ql-field .hint {
+        font-size: .82rem;
+        color: #94a3b8;
+        margin-top: .3rem;
+    }
+    .budget-slider-wrap {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    .budget-slider-wrap input[type="range"] {
+        flex: 1;
+        accent-color: #4f46e5;
+        height: 8px;
+    }
+    .budget-display {
+        font-size: 1.3rem;
+        font-weight: 800;
+        color: #4f46e5;
+        min-width: 90px;
+        text-align: right;
+    }
+    .budget-context {
+        font-size: .82rem;
+        color: #64748b;
+        margin-top: .35rem;
+    }
+    .goal-cards {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: .75rem;
+    }
+    .goal-card {
+        cursor: pointer;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1rem;
+        text-align: center;
+        transition: all .15s;
+        background: #fff;
+    }
+    .goal-card:hover { border-color: #a5b4fc; background: #f8faff; }
+    .goal-card.selected { border-color: #4f46e5; background: #eef2ff; }
+    .goal-card i { font-size: 1.4rem; display: block; margin-bottom: .4rem; }
+    .goal-card .gc-title { font-weight: 700; font-size: .88rem; color: #0f172a; }
+    .goal-card .gc-desc { font-size: .78rem; color: #64748b; margin-top: .2rem; }
+    .ql-launch-btn {
+        width: 100%;
+        padding: .85rem;
+        font-size: 1.05rem;
+        font-weight: 700;
+        border-radius: 12px;
+        margin-top: .5rem;
+    }
+    .ql-bottom-link {
+        text-align: center;
+        margin-top: 1rem;
+        font-size: .85rem;
+    }
+    .ql-bottom-link a { color: #64748b; }
+    .ql-bottom-link a:hover { color: #4f46e5; }
+
+    /* Platform toggle */
+    .platform-toggle {
+        display: flex;
+        gap: .5rem;
+        margin-bottom: .25rem;
+    }
+    .platform-toggle label {
+        flex: 1;
+        cursor: pointer;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        padding: .65rem .75rem;
+        text-align: center;
+        font-weight: 600;
+        font-size: .88rem;
+        color: #64748b;
+        transition: all .15s;
+    }
+    .platform-toggle input { display: none; }
+    .platform-toggle input:checked + span {
+        /* handled via JS class on label */
+    }
+    .platform-toggle label.selected {
+        border-color: #4f46e5;
+        background: #eef2ff;
+        color: #4f46e5;
+    }
+    .platform-toggle label.disabled {
+        opacity: .4;
+        cursor: not-allowed;
+    }
+
+    /* Review panel */
+    .ql-review {
+        display: none;
+        margin-top: 1.5rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid #e2e8f0;
+    }
+    .ql-review.visible { display: block; }
+    .ql-review-header { font-weight: 700; font-size: 1rem; margin-bottom: 1rem; }
+    .ql-plan-card {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-bottom: .75rem;
+        font-size: .88rem;
+    }
+    .ql-plan-card h6 { font-weight: 700; font-size: .9rem; margin-bottom: .5rem; }
+    .ql-plan-kw { display: inline-block; background: #eef2ff; border-radius: 6px; padding: 2px 8px; margin: 2px; font-size: .8rem; color: #4338ca; }
+    .ql-plan-ad { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: .75rem; margin-top: .5rem; }
+    .ql-plan-ad .headline { font-weight: 700; color: #1a0dab; font-size: .9rem; }
+    .ql-plan-ad .desc { font-size: .82rem; color: #4b5563; margin-top: .15rem; }
+
+    /* Loading state */
+    #qlLoading {
+        display: none;
+        text-align: center;
+        padding: 2rem 0;
+    }
+    #qlLoading.show { display: block; }
+    .ql-spinner { width: 48px; height: 48px; border: 4px solid #e2e8f0; border-top-color: #4f46e5; border-radius: 50%; animation: qlSpin .8s linear infinite; margin: 0 auto .75rem; }
+    @keyframes qlSpin { to { transform: rotate(360deg); } }
+
+    /* Success state */
+    .ql-success { display: none; text-align: center; padding: 2rem 0; }
+    .ql-success.show { display: block; }
+    .ql-success i { font-size: 3rem; color: #10b981; }
+
+    @media (max-width: 576px) {
+        .goal-cards { grid-template-columns: 1fr; }
+        .ql-card { padding: 1.25rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ql-wrap">
+    <div class="ql-hero">
+        <h3>Get your first ad live in 5 minutes</h3>
+        <p>Answer three simple questions and our AI builds your entire campaign. No experience needed.</p>
+    </div>
+
+    <div class="ql-card" id="qlForm">
+        <!-- 1) What do you want to promote? -->
+        <div class="ql-field">
+            <label><span style="background:#eef2ff;border-radius:8px;padding:2px 10px;margin-right:.4rem;font-size:.8rem;color:#4f46e5;">1</span> What service do you want to promote?</label>
+            <input type="text" id="qlService" class="form-control form-control-lg"
+                   placeholder="e.g., Drain cleaning, Kitchen remodel, Lawn care"
+                   {% if brand.primary_services %}value="{{ brand.primary_services.split(',') | first | trim }}"{% endif %}>
+            <div class="hint">Be specific. "Emergency drain cleaning" works better than just "plumbing".</div>
+        </div>
+
+        <!-- 2) What's your goal? -->
+        <div class="ql-field">
+            <label><span style="background:#eef2ff;border-radius:8px;padding:2px 10px;margin-right:.4rem;font-size:.8rem;color:#4f46e5;">2</span> What's your goal?</label>
+            <div class="goal-cards">
+                <div class="goal-card" data-goal="calls_leads" onclick="selectGoal(this, 'calls_leads')">
+                    <i class="bi bi-telephone-inbound text-success"></i>
+                    <div class="gc-title">Get phone calls and leads</div>
+                    <div class="gc-desc">People searching for your service right now</div>
+                </div>
+                <div class="goal-card" data-goal="awareness" onclick="selectGoal(this, 'awareness')">
+                    <i class="bi bi-eye text-primary"></i>
+                    <div class="gc-title">Get my name out there</div>
+                    <div class="gc-desc">Make sure everyone in your area knows you</div>
+                </div>
+                <div class="goal-card" data-goal="local" onclick="selectGoal(this, 'local')">
+                    <i class="bi bi-geo-alt text-warning"></i>
+                    <div class="gc-title">Dominate my neighborhood</div>
+                    <div class="gc-desc">Be the #1 result in your immediate area</div>
+                </div>
+                <div class="goal-card" data-goal="beat_competitors" onclick="selectGoal(this, 'beat_competitors')">
+                    <i class="bi bi-trophy text-danger"></i>
+                    <div class="gc-title">Show up when people search my competitors</div>
+                    <div class="gc-desc">Win customers who are comparing options</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3) Daily budget slider -->
+        <div class="ql-field">
+            <label><span style="background:#eef2ff;border-radius:8px;padding:2px 10px;margin-right:.4rem;font-size:.8rem;color:#4f46e5;">3</span> How much can you spend per day?</label>
+            <div class="budget-slider-wrap">
+                <input type="range" id="qlBudget" min="10" max="150" step="5" value="30"
+                       oninput="updateBudget(this.value)">
+                <div class="budget-display" id="qlBudgetDisplay">$30/day</div>
+            </div>
+            <div class="budget-context" id="qlBudgetContext">That's about $900/month. Most {{ brand.industry or 'local service' }} businesses spend $20-$50/day.</div>
+        </div>
+
+        <!-- Platform (auto-selected, but toggleable) -->
+        <div class="ql-field">
+            <label style="font-size:.85rem; font-weight:600; color:#64748b;">Where should your ads run?</label>
+            <div class="platform-toggle" role="radiogroup" aria-label="Ad platform">
+                <input type="radio" name="ql_platform" id="qlPlatRadioGoogle" value="google" class="visually-hidden"
+                       {{ 'checked' if has_google and not has_meta else '' }} {{ 'disabled' if not has_google else '' }}>
+                <label id="platGoogle" for="qlPlatRadioGoogle"
+                       class="{{ 'disabled' if not has_google else '' }} {{ 'selected' if has_google and not has_meta else '' }}"
+                       role="radio" aria-checked="{{ 'true' if has_google and not has_meta else 'false' }}"
+                       onclick="selectPlatform('google')">
+                    <i class="bi bi-google"></i> Google Search
+                </label>
+                <input type="radio" name="ql_platform" id="qlPlatRadioMeta" value="meta" class="visually-hidden"
+                       {{ 'checked' if has_meta and not has_google else '' }} {{ 'disabled' if not has_meta else '' }}>
+                <label id="platMeta" for="qlPlatRadioMeta"
+                       class="{{ 'disabled' if not has_meta else '' }} {{ 'selected' if has_meta and not has_google else '' }}"
+                       role="radio" aria-checked="{{ 'true' if has_meta and not has_google else 'false' }}"
+                       onclick="selectPlatform('meta')">
+                    <i class="bi bi-meta"></i> Facebook & Instagram
+                </label>
+            </div>
+            {% if not has_google and not has_meta %}
+            <div class="hint" style="color: #dc2626;">
+                <i class="bi bi-exclamation-circle"></i> You need to connect an ad account first.
+                <a href="{{ url_for('client.client_settings') }}">Go to Connections</a>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Location (pre-filled, collapsible) -->
+        <div class="ql-field" style="margin-bottom: 1rem;">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-geo-alt text-muted"></i>
+                <span style="font-size:.88rem; color:#64748b;">Targeting:
+                    <strong id="qlLocationDisplay">{{ brand.service_area or 'your service area' }}</strong>
+                </span>
+                <button type="button" class="btn btn-sm btn-link p-0" style="font-size:.8rem;" onclick="document.getElementById('qlLocationWrap').classList.toggle('d-none')">change</button>
+            </div>
+            <div id="qlLocationWrap" class="d-none mt-2">
+                <input type="text" id="qlLocation" class="form-control" value="{{ brand.service_area or '' }}"
+                       placeholder="e.g., Dallas, TX within 25 miles"
+                       oninput="document.getElementById('qlLocationDisplay').textContent = this.value || 'your service area'">
+            </div>
+        </div>
+
+        <button class="btn btn-primary ql-launch-btn" id="qlGenerateBtn" onclick="quickGenerate()"
+                {{ 'disabled' if not has_google and not has_meta else '' }}>
+            <i class="bi bi-magic me-2"></i> Build My Campaign
+        </button>
+
+        <!-- Loading -->
+        <div id="qlLoading">
+            <div class="ql-spinner"></div>
+            <div style="font-weight:600; font-size:1rem; color:#0f172a;">Building your campaign...</div>
+            <div style="font-size:.88rem; color:#64748b; margin-top:.25rem;">Our AI is picking the best keywords and writing your ads.</div>
+        </div>
+
+        <!-- Review Plan -->
+        <div class="ql-review" id="qlReview">
+            <div class="ql-review-header"><i class="bi bi-check-circle text-success me-2"></i> Here's your campaign plan</div>
+            <div id="qlPlanContent"></div>
+            <div class="d-flex gap-2 mt-3">
+                <button class="btn btn-success flex-fill" id="qlLaunchBtn" onclick="quickLaunch()" style="font-weight:700;">
+                    <i class="bi bi-rocket-takeoff me-1"></i> Launch (Paused)
+                </button>
+                <button class="btn btn-outline-secondary" onclick="quickReset()" style="font-weight:600;">
+                    <i class="bi bi-arrow-counterclockwise"></i> Start Over
+                </button>
+            </div>
+            <div style="font-size:.82rem; color:#64748b; margin-top:.5rem; text-align:center;">
+                Your campaign starts <strong>paused</strong>. You flip it on when you're ready.
+            </div>
+        </div>
+
+        <!-- Success -->
+        <div class="ql-success" id="qlSuccess">
+            <i class="bi bi-check-circle-fill"></i>
+            <h5 class="mt-2">Your campaign is live (paused)!</h5>
+            <p style="color:#64748b;" id="qlSuccessMsg">Head to Campaigns to review it and turn it on when you're ready.</p>
+            <div class="d-flex gap-2 justify-content-center mt-3">
+                <a href="{{ url_for('client.client_campaigns') }}" class="btn btn-primary"><i class="bi bi-list-ul me-1"></i> View My Campaigns</a>
+                <button class="btn btn-outline-primary" onclick="quickFullReset()"><i class="bi bi-plus-lg me-1"></i> Create Another</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="ql-bottom-link">
+        <a href="{{ url_for('client.client_campaign_create') }}"><i class="bi bi-sliders me-1"></i> Want more control? Use the advanced campaign builder</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+let selectedGoal = '';
+let selectedPlatformQL = {{ ("google" if has_google else ("meta" if has_meta else "")) | tojson }};
+let currentPlanQL = null;
+
+const GOAL_TO_STRATEGY = {
+    google: {
+        calls_leads: 'google_lead_gen',
+        awareness: 'google_local_domination',
+        local: 'google_local_domination',
+        beat_competitors: 'google_competitor_conquest',
+    },
+    meta: {
+        calls_leads: 'meta_lead_gen',
+        awareness: 'meta_omnipresent',
+        local: 'meta_hyper_local',
+        beat_competitors: 'meta_lead_gen',
+    }
+};
+
+function selectGoal(el, goal) {
+    document.querySelectorAll('.goal-card').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedGoal = goal;
+}
+
+function selectPlatform(plat) {
+    const gEl = document.getElementById('platGoogle');
+    const mEl = document.getElementById('platMeta');
+    if (plat === 'google' && gEl.classList.contains('disabled')) return;
+    if (plat === 'meta' && mEl.classList.contains('disabled')) return;
+    gEl.classList.remove('selected');
+    mEl.classList.remove('selected');
+    gEl.setAttribute('aria-checked', 'false');
+    mEl.setAttribute('aria-checked', 'false');
+    var activeEl = document.getElementById(plat === 'google' ? 'platGoogle' : 'platMeta');
+    activeEl.classList.add('selected');
+    activeEl.setAttribute('aria-checked', 'true');
+    document.getElementById(plat === 'google' ? 'qlPlatRadioGoogle' : 'qlPlatRadioMeta').checked = true;
+    selectedPlatformQL = plat;
+}
+
+function updateBudget(val) {
+    val = parseInt(val);
+    document.getElementById('qlBudgetDisplay').textContent = '$' + val + '/day';
+    var monthly = val * 30;
+    document.getElementById('qlBudgetContext').textContent =
+        "That's about $" + monthly.toLocaleString() + '/month. Most {{ brand.industry or "local service" }} businesses spend $20-$50/day.';
+}
+
+function quickGenerate() {
+    var service = document.getElementById('qlService').value.trim();
+    if (!service) { alert('Tell us what service you want to promote.'); return; }
+    if (!selectedGoal) { alert('Pick a goal for your ads.'); return; }
+    if (!selectedPlatformQL) { alert('Select where your ads should run.'); return; }
+
+    var location = (document.getElementById('qlLocation') ? document.getElementById('qlLocation').value.trim() : '') || '{{ brand.service_area or "" }}';
+    var dailyBudget = parseInt(document.getElementById('qlBudget').value);
+    var monthlyBudget = dailyBudget * 30;
+    var strategy = GOAL_TO_STRATEGY[selectedPlatformQL][selectedGoal] || '';
+
+    // Show loading
+    document.getElementById('qlGenerateBtn').style.display = 'none';
+    document.getElementById('qlLoading').classList.add('show');
+    document.getElementById('qlReview').classList.remove('visible');
+
+    var formData = new FormData();
+    formData.append('csrf_token', csrfToken);
+    formData.append('service', service);
+    formData.append('location', location);
+    formData.append('monthly_budget', monthlyBudget);
+    formData.append('platform', selectedPlatformQL);
+    formData.append('strategy_type', strategy);
+    formData.append('notes', '');
+
+    fetch('{{ url_for("client.client_campaign_generate") }}', {
+        method: 'POST',
+        body: formData,
+    })
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('qlLoading').classList.remove('show');
+        if (data.success) {
+            currentPlanQL = data.plan;
+            renderQuickPlan(data.plan);
+            document.getElementById('qlReview').classList.add('visible');
+        } else {
+            document.getElementById('qlGenerateBtn').style.display = '';
+            alert('Error: ' + (data.error || 'Something went wrong. Please try again.'));
+        }
+    })
+    .catch(() => {
+        document.getElementById('qlLoading').classList.remove('show');
+        document.getElementById('qlGenerateBtn').style.display = '';
+        alert('Network error. Please try again.');
+    });
+}
+
+function renderQuickPlan(plan) {
+    var html = '';
+    html += '<div class="ql-plan-card">';
+    html += '<h6><i class="bi bi-megaphone me-1"></i> ' + esc(plan.campaign_name) + '</h6>';
+    html += '<div style="font-size:.85rem;color:#64748b;">$' + parseFloat(plan.daily_budget).toFixed(0) + '/day on ' +
+            (plan.platform === 'google' ? 'Google Search' : 'Facebook & Instagram') + '</div>';
+    if (plan.rationale) {
+        html += '<div style="font-size:.85rem;color:#4b5563;margin-top:.5rem;">' + esc(plan.rationale) + '</div>';
+    }
+    html += '</div>';
+
+    // Google ad groups
+    if (plan.ad_groups) {
+        plan.ad_groups.forEach(function(ag) {
+            html += '<div class="ql-plan-card">';
+            html += '<h6>' + esc(ag.name) + '</h6>';
+            if (ag.keywords && ag.keywords.length) {
+                html += '<div style="margin-bottom:.5rem;">';
+                ag.keywords.slice(0, 8).forEach(function(kw) {
+                    html += '<span class="ql-plan-kw">' + esc(kw) + '</span>';
+                });
+                if (ag.keywords.length > 8) html += '<span class="ql-plan-kw">+' + (ag.keywords.length - 8) + ' more</span>';
+                html += '</div>';
+            }
+            if (ag.headlines && ag.headlines.length) {
+                html += '<div class="ql-plan-ad">';
+                html += '<div class="headline">' + esc(ag.headlines[0]) + '</div>';
+                if (ag.descriptions && ag.descriptions[0]) html += '<div class="desc">' + esc(ag.descriptions[0]) + '</div>';
+                html += '</div>';
+            }
+            html += '</div>';
+        });
+    }
+
+    // Meta ad sets
+    if (plan.ad_sets) {
+        plan.ad_sets.forEach(function(adset) {
+            html += '<div class="ql-plan-card">';
+            html += '<h6>' + esc(adset.name) + '</h6>';
+            if (adset.targeting_description) {
+                html += '<div style="font-size:.85rem;color:#64748b;margin-bottom:.5rem;">' + esc(adset.targeting_description) + '</div>';
+            }
+            if (adset.ad_copy && adset.ad_copy.length) {
+                var ad = adset.ad_copy[0];
+                html += '<div class="ql-plan-ad">';
+                if (ad.headline) html += '<div class="headline">' + esc(ad.headline) + '</div>';
+                if (ad.primary_text) html += '<div class="desc">' + esc(ad.primary_text) + '</div>';
+                html += '</div>';
+            }
+            html += '</div>';
+        });
+    }
+
+    document.getElementById('qlPlanContent').innerHTML = html;
+}
+
+function quickLaunch() {
+    if (!currentPlanQL) return;
+    if (!confirm('Launch this campaign? It starts PAUSED, so nothing will spend until you turn it on.')) return;
+
+    document.getElementById('qlLaunchBtn').disabled = true;
+    document.getElementById('qlLaunchBtn').innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Creating...';
+
+    var formData = new FormData();
+    formData.append('csrf_token', csrfToken);
+    formData.append('plan', JSON.stringify(currentPlanQL));
+
+    fetch('{{ url_for("client.client_campaign_launch") }}', {
+        method: 'POST',
+        body: formData,
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('qlForm').querySelector('.ql-field, .platform-toggle, .ql-review, .ql-launch-btn, .ql-field').forEach ? void 0 : void 0;
+            document.getElementById('qlReview').classList.remove('visible');
+            document.getElementById('qlSuccess').classList.add('show');
+            document.getElementById('qlSuccessMsg').textContent = data.message || 'Head to Campaigns to review it and turn it on.';
+            // Hide the form fields
+            document.querySelectorAll('#qlForm > .ql-field').forEach(function(el) { el.style.display = 'none'; });
+            document.getElementById('qlGenerateBtn').style.display = 'none';
+        } else {
+            document.getElementById('qlLaunchBtn').disabled = false;
+            document.getElementById('qlLaunchBtn').innerHTML = '<i class="bi bi-rocket-takeoff me-1"></i> Launch (Paused)';
+            if ((data.error || '').includes('Save as Draft') || (data.error || '').toLowerCase().includes('not connected')) {
+                if (confirm(data.error + '\n\nSave this plan as a draft instead? You can launch it after connecting your ad account.')) {
+                    quickSaveDraft();
+                }
+            } else {
+                alert('Error: ' + (data.error || 'Something went wrong.'));
+            }
+        }
+    })
+    .catch(() => {
+        document.getElementById('qlLaunchBtn').disabled = false;
+        document.getElementById('qlLaunchBtn').innerHTML = '<i class="bi bi-rocket-takeoff me-1"></i> Launch (Paused)';
+        alert('Network error. Please try again.');
+    });
+}
+
+function quickSaveDraft() {
+    var formData = new FormData();
+    formData.append('csrf_token', csrfToken);
+    formData.append('plan', JSON.stringify(currentPlanQL));
+
+    fetch('{{ url_for("client.client_campaign_save_draft") }}', {
+        method: 'POST',
+        body: formData,
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('qlReview').classList.remove('visible');
+            document.getElementById('qlSuccess').classList.add('show');
+            document.getElementById('qlSuccessMsg').textContent = 'Saved as a draft. You can launch it from the Campaigns page once your account is connected.';
+            document.querySelectorAll('#qlForm > .ql-field').forEach(function(el) { el.style.display = 'none'; });
+            document.getElementById('qlGenerateBtn').style.display = 'none';
+        } else {
+            alert('Error: ' + (data.error || 'Could not save draft.'));
+        }
+    })
+    .catch(() => { alert('Network error.'); });
+}
+
+function quickReset() {
+    currentPlanQL = null;
+    document.getElementById('qlReview').classList.remove('visible');
+    document.getElementById('qlGenerateBtn').style.display = '';
+}
+
+function quickFullReset() {
+    currentPlanQL = null;
+    document.getElementById('qlReview').classList.remove('visible');
+    document.getElementById('qlSuccess').classList.remove('show');
+    document.getElementById('qlGenerateBtn').style.display = '';
+    document.querySelectorAll('#qlForm > .ql-field').forEach(function(el) { el.style.display = ''; });
+    document.querySelectorAll('.goal-card').forEach(function(el) { el.classList.remove('selected'); });
+    selectedGoal = '';
+    document.getElementById('qlService').value = '';
+    document.getElementById('qlBudget').value = 30;
+    updateBudget(30);
+}
+
+function esc(s) {
+    if (!s) return '';
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(String(s)));
+    return d.innerHTML;
+}
+</script>
+{% endblock %}
