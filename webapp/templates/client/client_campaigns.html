@@ -22,7 +22,7 @@
 {% if recommendations %}
 <div class="card mb-4" style="border:none; box-shadow: 0 4px 12px rgba(15,23,42,.08);">
     <div class="card-body">
-        <h6 class="mb-3"><i class="bi bi-lightning-charge text-warning"></i> Warren's Verdict</h6>
+        <h6 class="mb-3"><i class="bi bi-lightning-charge text-warning"></i> W.A.R.R.E.N.'s Verdict</h6>
         {% for rec in recommendations %}
         <div class="d-flex align-items-start mb-3 {% if not loop.last %}border-bottom pb-3{% endif %}">
             {% set v = rec.verdict|default('')|lower %}
@@ -231,7 +231,7 @@
                                 <i class="bi bi-{{ 'google' if draft.platform == 'google' else 'meta' }}"></i>
                                 {{ 'Google Ads' if draft.platform == 'google' else 'Meta Ads' }}
                             </span>
-                            <h6 class="mb-0">{{ draft.campaign_name }}</h6>
+                            <h6 class="mb-0"><a href="{{ url_for('client.client_campaign_create', draft_id=draft.id) }}" class="text-decoration-none text-dark">{{ draft.campaign_name }}</a></h6>
                         </div>
                         <span class="badge bg-warning text-dark">Draft</span>
                     </div>
@@ -239,6 +239,9 @@
                         Saved {{ draft.created_at[:16] }} by {{ draft.created_by }}
                     </div>
                     <div class="d-flex gap-2 mt-3">
+                        <a href="{{ url_for('client.client_campaign_create', draft_id=draft.id) }}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-pencil"></i> Edit
+                        </a>
                         <button class="btn btn-sm btn-success" onclick="launchDraft({{ draft.id }}, '{{ draft.campaign_name | e }}')">
                             <i class="bi bi-rocket-takeoff"></i> Launch
                         </button>

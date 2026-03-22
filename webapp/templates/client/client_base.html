@@ -736,6 +736,9 @@
             <a href="{{ url_for('client.client_dashboard') }}" class="{% if request.endpoint == 'client.client_dashboard' %}active{% endif %}">
                 <i class="bi bi-speedometer2"></i> Overview
             </a>
+            <a href="{{ url_for('client.client_kpis') }}" class="{% if request.endpoint == 'client.client_kpis' %}active{% endif %}">
+                <i class="bi bi-bullseye"></i> KPIs
+            </a>
             <a href="{{ url_for('client.client_campaigns') }}" class="{% if request.endpoint in ('client.client_campaigns', 'client.client_campaign_detail', 'client.client_campaign_create', 'client.client_campaign_generate', 'client.client_campaign_launch') %}active{% endif %}">
                 <i class="bi bi-megaphone"></i> Campaigns
             </a>
@@ -800,7 +803,7 @@
         <div class="assistant-header">
             <i class="bi bi-stars text-primary"></i>
             <div style="flex:1; min-width:0;">
-                <div style="font-size:.88rem; font-weight:600; color:#0f172a;">Warren</div>
+                <div style="font-size:.88rem; font-weight:600; color:#0f172a;">W.A.R.R.E.N.</div>
                 <div class="assistant-meta text-muted" style="font-size:.72rem;">Your AI marketing strategist</div>
             </div>
             <button class="btn btn-sm btn-outline-secondary" type="button" id="assistantClearBtn" title="Clear conversation" style="font-size:.72rem; padding:2px 8px;">
@@ -821,7 +824,7 @@
                 </select>
             </div>
             <div class="input-group input-group-sm">
-                <textarea class="form-control" id="assistantInput" placeholder="Message Warren..." rows="1" style="resize:none; max-height:100px; overflow-y:auto;" {% if not assistant_enabled %}disabled{% endif %}></textarea>
+                <textarea class="form-control" id="assistantInput" placeholder="Message W.A.R.R.E.N..." rows="1" style="resize:none; max-height:100px; overflow-y:auto;" {% if not assistant_enabled %}disabled{% endif %}></textarea>
                 <button class="btn btn-primary" id="assistantSend" type="button" {% if not assistant_enabled %}disabled{% endif %}><i class="bi bi-send-fill"></i></button>
             </div>
             <div class="text-muted text-center" style="font-size:.68rem; margin-top:4px;">Enter to send, Shift+Enter for new line</div>
@@ -970,7 +973,7 @@
             if (!log) return;
             log.innerHTML = '';
             if (!initialMessages || !initialMessages.length) {
-                addBubble('assistant', "I'm Warren. Ask me where your money should go, and I'll give you one clear answer.", true);
+                addBubble('assistant', "I'm W.A.R.R.E.N. - your AI marketing strategist. Ask me where your money should go, and I'll give you one clear answer.", true);
                 return;
             }
             initialMessages.forEach(function(m) { addBubble(m.role, m.content, true); });

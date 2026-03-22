@@ -1305,6 +1305,55 @@ def launch_google_campaign(db, brand, plan, changed_by):
             json={"operations": camp_neg_ops}, headers=headers, timeout=30,
         )
 
+    # Location targeting - resolve location name to geo target constant
+    location_text = plan.get("location_targeting", "").strip()
+    if location_text:
+        # Search for geo target constant using Google Ads API
+        geo_search_body = {
+            "query": f"""
+                SELECT geo_target_constant.resource_name,
+                       geo_target_constant.name,
+                       geo_target_constant.canonical_name,
+                       geo_target_constant.target_type
+                FROM geo_target_constant
+                WHERE geo_target_constant.name LIKE '%{location_text.replace("'", "")}%'
+                LIMIT 5
+            """
+        }
+        geo_resp = requests.post(
+            f"https://googleads.googleapis.com/{GOOGLE_ADS_API_VERSION}/customers/{customer_id}/googleAds:searchStream",
+            json=geo_search_body, headers=headers, timeout=15,
+        )
+        if geo_resp.status_code == 200:
+            geo_results = geo_resp.json()
+            # Extract first matching geo target constant
+            geo_resource = None
+            for batch in geo_results if isinstance(geo_results, list) else [geo_results]:
+                for result in batch.get("results", []):
+                    geo_resource = result.get("geoTargetConstant", {}).get("resourceName")
+                    if geo_resource:
+                        break
+                if geo_resource:
+                    break
+
+            if geo_resource:
+                loc_body = {
+                    "operations": [{
+                        "create": {
+                            "campaign": camp_resource,
+                            "location": {"geoTargetConstant": geo_resource},
+                        }
+                    }]
+                }
+                loc_resp = requests.post(
+                    f"{base_url}/campaignCriteria:mutate",
+                    json=loc_body, headers=headers, timeout=30,
+                )
+                if loc_resp.status_code != 200:
+                    logger.warning("Failed to set location targeting: %s", loc_resp.text[:300])
+        else:
+            logger.warning("Failed to search geo targets for '%s': %s", location_text, geo_resp.text[:300])
+
     _log_change(db, brand["id"], "google", camp_id, plan.get("campaign_name", ""),
                 "campaign_created", {
                     "campaign_name": plan.get("campaign_name"),
@@ -1416,6 +1465,75 @@ def launch_meta_campaign(db, brand, plan, changed_by):
         location = plan.get("location_targeting", "")
         radius = adset_plan.get("radius_miles", 25)
 
+        # Build targeting spec
+        targeting = {
+            "age_min": adset_plan.get("age_min", 25),
+            "age_max": adset_plan.get("age_max", 65),
+            "geo_locations": {
+                "location_types": ["home"],
+                "custom_locations": [{
+                    "address_string": location,
+                    "radius": radius,
+                    "distance_unit": "mile",
+                }] if location else [],
+            },
+        }
+
+        # Gender targeting: 1=male, 2=female, omit for all
+        gender = adset_plan.get("gender", "")
+        if gender == "male":
+            targeting["genders"] = [1]
+        elif gender == "female":
+            targeting["genders"] = [2]
+
+        # Interest/detailed targeting
+        interests = adset_plan.get("interests", [])
+        if interests:
+            # Interests need {id, name} pairs - use search API to resolve names to IDs
+            resolved_interests = []
+            for interest_name in interests:
+                search_resp = requests.get(
+                    "https://graph.facebook.com/v21.0/search",
+                    params={
+                        "access_token": token,
+                        "type": "adinterest",
+                        "q": interest_name,
+                        "limit": 1,
+                    },
+                    timeout=15,
+                )
+                if search_resp.status_code == 200:
+                    data = search_resp.json().get("data", [])
+                    if data:
+                        resolved_interests.append({"id": data[0]["id"], "name": data[0]["name"]})
+            if resolved_interests:
+                targeting["flexible_spec"] = [{"interests": resolved_interests}]
+
+        # Placement targeting
+        placements = adset_plan.get("placements", [])
+        if placements:
+            publisher_platforms = set()
+            fb_positions = []
+            ig_positions = []
+            for p in placements:
+                if p.startswith("facebook_"):
+                    publisher_platforms.add("facebook")
+                    pos = p.replace("facebook_", "")
+                    fb_positions.append(pos)
+                elif p.startswith("instagram_"):
+                    publisher_platforms.add("instagram")
+                    pos = p.replace("instagram_", "")
+                    ig_positions.append(pos)
+                elif p == "audience_network":
+                    publisher_platforms.add("audience_network")
+                elif p == "messenger":
+                    publisher_platforms.add("messenger")
+            targeting["publisher_platforms"] = list(publisher_platforms)
+            if fb_positions:
+                targeting["facebook_positions"] = fb_positions
+            if ig_positions:
+                targeting["instagram_positions"] = ig_positions
+
         adset_data = {
             "access_token": token,
             "campaign_id": campaign_id,
@@ -1424,19 +1542,13 @@ def launch_meta_campaign(db, brand, plan, changed_by):
             "optimization_goal": opt_goal,
             "daily_budget": daily_cents,
             "status": "PAUSED",
-            "targeting": json.dumps({
-                "age_min": adset_plan.get("age_min", 25),
-                "age_max": adset_plan.get("age_max", 65),
-                "geo_locations": {
-                    "location_types": ["home"],
-                    "custom_locations": [{
-                        "address_string": location,
-                        "radius": radius,
-                        "distance_unit": "mile",
-                    }] if location else [],
-                },
-            }),
+            "targeting": json.dumps(targeting),
         }
+
+        # Pixel / conversion tracking
+        pixel_id = plan.get("pixel_id", "")
+        if pixel_id and objective in ("OUTCOME_SALES", "OUTCOME_LEADS"):
+            adset_data["promoted_object"] = json.dumps({"pixel_id": pixel_id, "custom_event_type": "LEAD" if objective == "OUTCOME_LEADS" else "PURCHASE"})
 
         adset_resp = requests.post(
             f"https://graph.facebook.com/v21.0/act_{account_id}/adsets",
@@ -1458,6 +1570,19 @@ def launch_meta_campaign(db, brand, plan, changed_by):
                 # If this ad has an image from Drive, upload it to Meta
                 image_hash = None
                 img_bytes = _resolve_ad_image(db, brand["id"], copy)
+
+                # Also check for directly uploaded image
+                if not img_bytes:
+                    uploaded_url = copy.get("uploaded_image_url", "")
+                    if uploaded_url:
+                        import os
+                        # uploaded_url is a relative static path like /static/uploads/campaign_images/xxx.jpg
+                        static_root = os.path.join(os.path.dirname(os.path.dirname(__file__)), "webapp", "static")
+                        local_path = os.path.join(static_root, uploaded_url.lstrip("/static/"))
+                        if os.path.exists(local_path):
+                            with open(local_path, "rb") as f:
+                                img_bytes = f.read()
+
                 if img_bytes:
                     image_hash = _upload_image_to_meta(account_id, token, img_bytes)
 

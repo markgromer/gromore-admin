@@ -199,7 +199,7 @@
 
 <h4 class="mb-1">{{ 'Edit Draft' if draft else 'Build a Campaign' }}</h4>
 <p class="text-muted mb-4" style="font-size:.88rem;">
-    Build your campaign structure, then publish when ready. Warren will check everything before it goes live.
+    Build your campaign structure, then publish when ready. W.A.R.R.E.N. will check everything before it goes live.
 </p>
 
 <!-- ═══════ Step 1: Platform ═══════ -->
@@ -295,6 +295,18 @@
                         <option value="OUTCOME_ENGAGEMENT">Engagement</option>
                     </select>
                 </div>
+                <div class="col-md-6 meta-only" style="display:none;">
+                    <label class="form-label fw-semibold">Meta Pixel <span class="text-muted fw-normal">(for conversion tracking)</span></label>
+                    <select id="metaPixelId" class="form-select">
+                        <option value="">No pixel selected</option>
+                        {% if meta_pixels %}
+                        {% for px in meta_pixels %}
+                        <option value="{{ px.id }}">{{ px.name }} ({{ px.id }})</option>
+                        {% endfor %}
+                        {% endif %}
+                    </select>
+                    <div class="form-text">Attach a pixel to track conversions from your ads.</div>
+                </div>
                 <div class="col-md-6">
                     <label class="form-label fw-semibold">Strategy Notes <span class="text-muted fw-normal">(optional)</span></label>
                     <input type="text" id="strategyNotes" class="form-control"
@@ -389,13 +401,13 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header" style="background:#f8fafc;">
-                <h5 class="modal-title"><i class="bi bi-shield-check me-2"></i> Warren's Pre-Flight Check</h5>
+                <h5 class="modal-title"><i class="bi bi-shield-check me-2"></i> W.A.R.R.E.N.'s Pre-Flight Check</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="preflightBody">
                 <div class="text-center py-4" id="preflightLoading">
                     <div class="spinner-border text-primary mb-3"></div>
-                    <p class="text-muted">Warren is reviewing your campaign...</p>
+                    <p class="text-muted">W.A.R.R.E.N. is reviewing your campaign...</p>
                 </div>
                 <div id="preflightResults" style="display:none;"></div>
             </div>
@@ -535,6 +547,8 @@ function buildPlanFromUI() {
 
     if (selectedPlatform === 'meta') {
         plan.objective = document.getElementById('campaignObjective').value;
+        var pixelEl = document.getElementById('metaPixelId');
+        if (pixelEl && pixelEl.value) plan.pixel_id = pixelEl.value;
         plan.ad_sets = [];
     } else {
         plan.ad_groups = [];
@@ -576,8 +590,25 @@ function buildPlanFromUI() {
                 targeting_description: card.querySelector('.targeting-desc') ? card.querySelector('.targeting-desc').value.trim() : '',
                 age_min: parseInt(card.querySelector('.age-min') ? card.querySelector('.age-min').value : '25') || 25,
                 age_max: parseInt(card.querySelector('.age-max') ? card.querySelector('.age-max').value : '65') || 65,
+                gender: card.querySelector('.gender-select') ? card.querySelector('.gender-select').value : 'all',
+                interests: [],
+                placements: [],
                 ad_copy: [],
             };
+
+            // Collect interests
+            var interestContainer = card.querySelector('.interest-tags');
+            if (interestContainer) {
+                interestContainer.querySelectorAll('[data-interest]').forEach(function(tag) {
+                    adset.interests.push(tag.dataset.interest);
+                });
+            }
+
+            // Collect placements
+            card.querySelectorAll('.placement-check:checked').forEach(function(cb) {
+                adset.placements.push(cb.value);
+            });
+
             card.querySelectorAll('.ad-card').forEach(adCard => {
                 const ad = {
                     headline: (adCard.querySelector('.meta-headline') || {}).value || '',
@@ -587,6 +618,8 @@ function buildPlanFromUI() {
                 };
                 const fileId = adCard.dataset.driveFileId;
                 if (fileId) ad.drive_file_id = fileId;
+                var uploadedUrl = adCard.dataset.uploadedImageUrl;
+                if (uploadedUrl) ad.uploaded_image_url = uploadedUrl;
                 adset.ad_copy.push(ad);
             });
             plan.ad_sets.push(adset);
@@ -672,7 +705,61 @@ function addAdSet(data) {
         html += '<input type="number" class="form-control form-control-sm age-min" value="' + ((data && data.age_min) || 25) + '" min="18" max="65" style="width:70px;">';
         html += '<span>-</span>';
         html += '<input type="number" class="form-control form-control-sm age-max" value="' + ((data && data.age_max) || 65) + '" min="18" max="65" style="width:70px;">';
-        html += '</div></div></div>';
+        html += '</div></div>';
+
+        // Gender targeting
+        var genderVal = (data && data.gender) || 'all';
+        html += '<div class="col-md-3">';
+        html += '<label class="form-label fw-semibold" style="font-size:.85rem;">Gender</label>';
+        html += '<select class="form-select form-select-sm gender-select">';
+        html += '<option value="all"' + (genderVal === 'all' ? ' selected' : '') + '>All</option>';
+        html += '<option value="male"' + (genderVal === 'male' ? ' selected' : '') + '>Male</option>';
+        html += '<option value="female"' + (genderVal === 'female' ? ' selected' : '') + '>Female</option>';
+        html += '</select></div>';
+
+        html += '</div>';
+
+        // Interests / Detailed Targeting
+        html += '<div class="mb-3">';
+        html += '<label class="form-label fw-semibold" style="font-size:.85rem;">Interests / Detailed Targeting <span class="text-muted fw-normal">(optional)</span></label>';
+        html += '<div class="interest-tags d-flex flex-wrap align-items-center gap-1 mb-1" id="interests-' + idx + '">';
+        if (data && data.interests) {
+            data.interests.forEach(function(int_val) {
+                html += '<span class="badge bg-primary-subtle text-primary-emphasis" data-interest="' + escHtml(int_val) + '">' + escHtml(int_val) + ' <i class="bi bi-x remove-kw" style="cursor:pointer;" onclick="this.parentElement.remove()"></i></span>';
+            });
+        }
+        html += '</div>';
+        html += '<div class="input-group input-group-sm" style="max-width:400px;">';
+        html += '<input type="text" class="form-control interest-input" placeholder="e.g., Home improvement, Real estate" onkeydown="addInterest(event,' + idx + ')">';
+        html += '<button class="btn btn-outline-secondary" type="button" onclick="addInterestBtn(' + idx + ')"><i class="bi bi-plus"></i></button>';
+        html += '</div>';
+        html += '<div class="form-text">Add interest keywords for detailed targeting. Press Enter after each one.</div>';
+        html += '</div>';
+
+        // Placements
+        html += '<div class="mb-3">';
+        html += '<label class="form-label fw-semibold" style="font-size:.85rem;">Placements</label>';
+        var placements = (data && data.placements) || ['facebook_feed', 'instagram_feed', 'instagram_stories', 'facebook_stories'];
+        html += '<div class="d-flex flex-wrap gap-2">';
+        var allPlacements = [
+            {val: 'facebook_feed', label: 'Facebook Feed', size: '1080x1080'},
+            {val: 'instagram_feed', label: 'Instagram Feed', size: '1080x1080'},
+            {val: 'instagram_stories', label: 'Instagram Stories', size: '1080x1920'},
+            {val: 'facebook_stories', label: 'Facebook Stories', size: '1080x1920'},
+            {val: 'instagram_reels', label: 'Instagram Reels', size: '1080x1920'},
+            {val: 'facebook_reels', label: 'Facebook Reels', size: '1080x1920'},
+            {val: 'audience_network', label: 'Audience Network', size: '1200x628'},
+            {val: 'messenger', label: 'Messenger', size: '1080x1080'},
+        ];
+        allPlacements.forEach(function(p) {
+            var checked = placements.indexOf(p.val) >= 0 ? ' checked' : '';
+            html += '<label class="form-check form-check-inline" style="font-size:.82rem;">';
+            html += '<input type="checkbox" class="form-check-input placement-check" value="' + p.val + '"' + checked + '>';
+            html += ' ' + p.label + ' <span class="text-muted">(' + p.size + ')</span></label>';
+        });
+        html += '</div>';
+        html += '<div class="form-text">Image dimensions shown in parentheses. Feed = 1080x1080 square, Stories/Reels = 1080x1920 vertical.</div>';
+        html += '</div>';
     }
 
     // Ads container
@@ -748,6 +835,67 @@ function addKeywordBtn(adSetIdx, isNegative) {
     input.value = '';
 }
 
+/* Interest tag input for Meta targeting */
+function addInterest(e, adSetIdx) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    var val = e.target.value.trim();
+    if (!val) return;
+    var container = document.getElementById('interests-' + adSetIdx);
+    container.insertAdjacentHTML('beforeend',
+        '<span class="badge bg-primary-subtle text-primary-emphasis" data-interest="' + escHtml(val) + '">' + escHtml(val) + ' <i class="bi bi-x remove-kw" style="cursor:pointer;" onclick="this.parentElement.remove()"></i></span>');
+    e.target.value = '';
+}
+
+function addInterestBtn(adSetIdx) {
+    var card = document.getElementById('adset-' + adSetIdx);
+    var input = card.querySelector('.interest-input');
+    var val = input.value.trim();
+    if (!val) return;
+    var container = document.getElementById('interests-' + adSetIdx);
+    container.insertAdjacentHTML('beforeend',
+        '<span class="badge bg-primary-subtle text-primary-emphasis" data-interest="' + escHtml(val) + '">' + escHtml(val) + ' <i class="bi bi-x remove-kw" style="cursor:pointer;" onclick="this.parentElement.remove()"></i></span>');
+    input.value = '';
+}
+
+/* Direct image upload for Meta ads */
+function handleAdImageUpload(input) {
+    var file = input.files && input.files[0];
+    if (!file) return;
+    var adCard = input.closest('.ad-card');
+    var slot = input.closest('.ad-image-slot');
+    var formData = new FormData();
+    formData.append('image', file);
+    formData.append('csrf_token', csrfToken);
+
+    slot.innerHTML = '<div class="text-muted" style="font-size:.82rem;"><i class="bi bi-arrow-repeat spin"></i> Uploading...</div>';
+
+    fetch('{{ url_for("client.client_campaign_upload_image") }}', {
+        method: 'POST',
+        body: formData,
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            adCard.dataset.uploadedImageUrl = data.url;
+            adCard.dataset.driveFileId = '';
+            slot.innerHTML = '<img src="' + escHtml(data.url) + '" class="ad-image-preview" alt="Ad image">' +
+                '<button class="btn btn-sm btn-outline-danger" onclick="clearAdImage(this)"><i class="bi bi-x"></i> Remove</button>';
+        } else {
+            slot.innerHTML = '<div class="text-danger" style="font-size:.82rem;">Upload failed: ' + escHtml(data.error || 'Unknown error') + '</div>' +
+                '<div class="d-flex gap-2 flex-wrap mt-1">' +
+                '<button class="btn btn-sm btn-outline-primary" onclick="pickImageForAd(this)"><i class="bi bi-google me-1"></i> From Google Drive</button>' +
+                '<label class="btn btn-sm btn-outline-secondary mb-0"><i class="bi bi-upload me-1"></i> Upload Image<input type="file" class="d-none ad-image-upload" accept="image/*" onchange="handleAdImageUpload(this)"></label></div>';
+        }
+    })
+    .catch(function() {
+        slot.innerHTML = '<div class="text-danger" style="font-size:.82rem;">Upload failed.</div>' +
+            '<div class="d-flex gap-2 flex-wrap mt-1">' +
+            '<button class="btn btn-sm btn-outline-primary" onclick="pickImageForAd(this)"><i class="bi bi-google me-1"></i> From Google Drive</button>' +
+            '<label class="btn btn-sm btn-outline-secondary mb-0"><i class="bi bi-upload me-1"></i> Upload Image<input type="file" class="d-none ad-image-upload" accept="image/*" onchange="handleAdImageUpload(this)"></label></div>';
+    });
+}
+
 /* ══════════════════════════════════════════════
    Ad Cards within Ad Sets/Groups
    ══════════════════════════════════════════════ */
@@ -809,14 +957,21 @@ function addAd(adSetIdx, data) {
         html += '<input type="text" class="form-control form-control-sm meta-desc" value="' + escHtml((data && data.description) || '') + '" placeholder="Short supporting text">';
         html += '</div>';
 
-        // Image from Drive
+        // Image from Drive or Upload
         html += '<div class="ad-image-slot">';
+        html += '<div class="mb-1" style="font-size:.78rem;color:#64748b;font-weight:600;">Ad Image <span class="fw-normal">(Recommended: 1080x1080 for Feed, 1080x1920 for Stories/Reels)</span></div>';
         if (data && data.drive_file_id) {
             html += '<img src="' + thumbnailUrl(data.drive_file_id) + '" class="ad-image-preview" alt="Ad image">';
             html += '<button class="btn btn-sm btn-outline-secondary" onclick="pickImageForAd(this)"><i class="bi bi-pencil"></i> Change</button>';
             html += '<button class="btn btn-sm btn-outline-danger" onclick="clearAdImage(this)"><i class="bi bi-x"></i></button>';
+        } else if (data && data.uploaded_image_url) {
+            html += '<img src="' + escHtml(data.uploaded_image_url) + '" class="ad-image-preview" alt="Ad image">';
+            html += '<button class="btn btn-sm btn-outline-danger" onclick="clearAdImage(this)"><i class="bi bi-x"></i> Remove</button>';
         } else {
-            html += '<button class="btn btn-sm btn-outline-primary" onclick="pickImageForAd(this)"><i class="bi bi-image me-1"></i> Add Image from Drive</button>';
+            html += '<div class="d-flex gap-2 flex-wrap">';
+            html += '<button class="btn btn-sm btn-outline-primary" onclick="pickImageForAd(this)"><i class="bi bi-google me-1"></i> From Google Drive</button>';
+            html += '<label class="btn btn-sm btn-outline-secondary mb-0"><i class="bi bi-upload me-1"></i> Upload Image<input type="file" class="d-none ad-image-upload" accept="image/*" onchange="handleAdImageUpload(this)"></label>';
+            html += '</div>';
         }
         html += '</div>';
     }

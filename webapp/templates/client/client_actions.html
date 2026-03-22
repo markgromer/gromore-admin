@@ -432,7 +432,7 @@
     </div>
     <div class="card-body">
         {% for action in active_actions %}
-        <div class="mission-card" id="mission-{{ loop.index }}">
+        <div class="mission-card" id="mission-{{ loop.index }}" data-action-key="{{ action.key }}">
             <button class="mission-header" onclick="toggleMission(this)">
                 <div class="mission-icon" style="background: {{ action.icon_color }};">
                     <i class="bi {{ action.icon }}"></i>
@@ -479,7 +479,7 @@
                 </div>
                 {% for step in action.steps %}
                 <div class="micro-step">
-                    <div class="step-bullet" onclick="toggleStep(this)" role="checkbox" tabindex="0">
+                    <div class="step-bullet" onclick="toggleStep(this)" data-step-index="{{ loop.index0 }}" role="checkbox" tabindex="0">
                         <i class="bi bi-check" style="font-size:.75rem; visibility:hidden;"></i>
                     </div>
                     <span>{{ step }}</span>
@@ -564,6 +564,16 @@ function toggleStep(el) {
         el.style.transform = 'scale(1.2)';
         setTimeout(function() { el.style.transform = ''; }, 200);
     }
+    // Persist to localStorage
+    var card = el.closest('.mission-card');
+    if (card && card.dataset.actionKey) {
+        var key = 'step_' + card.dataset.actionKey + '_' + el.dataset.stepIndex;
+        if (isChecked) {
+            localStorage.setItem(key, '1');
+        } else {
+            localStorage.removeItem(key);
+        }
+    }
 }
 
 function showXpPopup(xp) {
@@ -574,12 +584,32 @@ function showXpPopup(xp) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Restore persisted micro-step checkmarks
+    document.querySelectorAll('.mission-card').forEach(function(card) {
+        var actionKey = card.dataset.actionKey;
+        if (!actionKey) return;
+        card.querySelectorAll('.step-bullet').forEach(function(bullet) {
+            var sKey = 'step_' + actionKey + '_' + bullet.dataset.stepIndex;
+            if (localStorage.getItem(sKey) === '1') {
+                bullet.classList.add('checked');
+                var icon = bullet.querySelector('i');
+                if (icon) icon.style.visibility = 'visible';
+            }
+        });
+    });
+
+    // Clear micro-step localStorage when a mission is completed
     document.querySelectorAll('.done-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var key = this.dataset.actionKey;
             var month = this.dataset.month;
             var xp = this.dataset.xp;
             var card = this.closest('.mission-card');
+
+            // Clean up localStorage for this mission's steps
+            card.querySelectorAll('.step-bullet').forEach(function(bullet) {
+                localStorage.removeItem('step_' + key + '_' + bullet.dataset.stepIndex);
+            });
 
             showXpPopup(xp);
             card.style.opacity = '0.3';

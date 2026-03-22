@@ -1,0 +1,225 @@
+{% extends "client/client_base.html" %}
+
+{% block title %}KPI Deep Dive{% endblock %}
+
+{% block content %}
+<style>
+    .kpi-hero {
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #3730a3 100%);
+        border-radius: 16px;
+        padding: 1.75rem 2rem;
+        margin-bottom: 1.5rem;
+        color: #fff;
+        box-shadow: 0 8px 32px rgba(30, 27, 75, .25);
+    }
+    .kpi-hero h3 {
+        font-size: 1.4rem;
+        font-weight: 800;
+        color: #fff !important;
+        margin-bottom: .25rem;
+    }
+    .kpi-hero p {
+        color: rgba(255,255,255,.7);
+        font-size: .9rem;
+        margin: 0;
+    }
+    .kpi-deep-card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 8px rgba(15,23,42,.04);
+        transition: box-shadow .2s;
+    }
+    .kpi-deep-card:hover {
+        box-shadow: 0 4px 16px rgba(15,23,42,.1);
+    }
+    .kpi-deep-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1rem;
+    }
+    .kpi-deep-label {
+        font-size: .75rem;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: #64748b;
+        font-weight: 600;
+    }
+    .kpi-deep-value {
+        font-size: 2.2rem;
+        font-weight: 800;
+        color: #0f172a;
+        line-height: 1.1;
+    }
+    .kpi-deep-target {
+        font-size: .88rem;
+        color: #94a3b8;
+        margin-top: .25rem;
+    }
+    .kpi-verdict-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .35rem .85rem;
+        border-radius: 20px;
+        font-size: .8rem;
+        font-weight: 600;
+    }
+    .kpi-verdict-pill.beating { background: #dcfce7; color: #16a34a; }
+    .kpi-verdict-pill.close { background: #fef9c3; color: #ca8a04; }
+    .kpi-verdict-pill.off { background: #fee2e2; color: #dc2626; }
+    .kpi-explanation {
+        font-size: .9rem;
+        color: #475569;
+        line-height: 1.6;
+        padding: .75rem 1rem;
+        background: #f8fafc;
+        border-radius: 10px;
+        border-left: 3px solid #6366f1;
+    }
+    .channel-section {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    .channel-section h6 {
+        font-weight: 700;
+        font-size: .9rem;
+        margin-bottom: 1rem;
+    }
+    .metric-mini {
+        padding: .75rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #f8fafc;
+    }
+    .metric-mini-label {
+        font-size: .7rem;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: #94a3b8;
+        font-weight: 600;
+    }
+    .metric-mini-value {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #0f172a;
+    }
+    .metric-mini-note {
+        font-size: .78rem;
+        color: #64748b;
+    }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h4 class="fw-bold mb-0">KPI Deep Dive</h4>
+        <p class="text-muted mb-0" style="font-size:.88rem;">How your key metrics are tracking against targets</p>
+    </div>
+    <form method="GET" class="d-flex gap-2 align-items-center">
+        <input type="month" name="month" class="form-control form-control-sm" value="{{ month }}" onchange="this.form.submit()" style="max-width:160px;">
+    </form>
+</div>
+
+<div class="kpi-hero">
+    <h3><i class="bi bi-bullseye me-2"></i>W.A.R.R.E.N.'s KPI Analysis</h3>
+    <p>
+        {% if kpi_data %}
+            {% set off_track = kpi_data | selectattr('on_track', 'false') | list %}
+            {% if off_track %}
+                {{ off_track | length }} of {{ kpi_data | length }} KPIs need attention this month.
+            {% else %}
+                All {{ kpi_data | length }} KPIs are on track. You're doing great.
+            {% endif %}
+        {% else %}
+            No KPI data available for {{ month }} yet.
+        {% endif %}
+    </p>
+</div>
+
+{% if error %}
+<div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle me-1"></i> {{ error }}
+</div>
+{% endif %}
+
+{% if kpi_data %}
+<div class="row g-3 mb-4">
+    {% for kpi in kpi_data %}
+    <div class="col-md-6 col-lg-4">
+        <div class="kpi-deep-card">
+            <div class="kpi-deep-header">
+                <div>
+                    <div class="kpi-deep-label">{{ kpi.label }}</div>
+                    <div class="kpi-deep-value">{{ kpi.actual }}</div>
+                    <div class="kpi-deep-target">Target: {{ kpi.target }}</div>
+                </div>
+                <div>
+                    {% if kpi.on_track %}
+                    <span class="kpi-verdict-pill beating"><i class="bi bi-check-circle-fill"></i> On Track</span>
+                    {% else %}
+                    {% set actual_num = kpi.actual | replace('$','') | replace(',','') | replace('x','') | float %}
+                    {% set target_num = kpi.target | replace('$','') | replace(',','') | replace('x','') | float %}
+                    {% if target_num > 0 %}
+                        {% set label_lower = kpi.label | lower %}
+                        {% if 'cpa' in label_lower or 'cost' in label_lower or 'cpl' in label_lower %}
+                            {% set pct_off = ((actual_num - target_num) / target_num * 100) %}
+                        {% else %}
+                            {% set pct_off = ((target_num - actual_num) / target_num * 100) %}
+                        {% endif %}
+                        {% if pct_off <= 15 %}
+                        <span class="kpi-verdict-pill close"><i class="bi bi-dash-circle-fill"></i> Close</span>
+                        {% else %}
+                        <span class="kpi-verdict-pill off"><i class="bi bi-exclamation-circle-fill"></i> Off Track</span>
+                        {% endif %}
+                    {% else %}
+                    <span class="kpi-verdict-pill off"><i class="bi bi-exclamation-circle-fill"></i> Off Track</span>
+                    {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+            {% if kpi.explanation %}
+            <div class="kpi-explanation">
+                <i class="bi bi-stars text-primary me-1"></i> {{ kpi.explanation }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5">
+    <i class="bi bi-bullseye" style="font-size:3rem; color:#d1d5db;"></i>
+    <h5 class="mt-3 text-muted">No KPI data for {{ month }}</h5>
+    <p class="text-muted">KPI tracking starts once your ad accounts are connected and generating data.</p>
+</div>
+{% endif %}
+
+{% if channels %}
+<h5 class="fw-bold mb-3" style="font-size:.95rem;">Channel Breakdown</h5>
+{% for key, ch in channels.items() %}
+<div class="channel-section">
+    <h6><i class="{{ ch.icon or 'bi bi-bar-chart' }} me-1"></i> {{ ch.title }}</h6>
+    <div class="row g-2">
+        {% if ch.cards %}
+        {% for card in ch.cards %}
+        <div class="col-md-6 col-lg-3">
+            <div class="metric-mini">
+                <div class="metric-mini-label">{{ card.metric }}</div>
+                <div class="metric-mini-value">{{ card.value }}</div>
+                <div class="metric-mini-note">{{ card.explanation }}</div>
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+{% endif %}
+
+{% endblock %}

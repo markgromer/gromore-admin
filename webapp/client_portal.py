@@ -250,6 +250,45 @@ def client_dashboard_data():
         return jsonify({"dashboard": None, "error": str(e)})
 
 
+# ── KPI Deep Dive ──
+
+@client_bp.route("/kpis")
+@client_login_required
+def client_kpis():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return redirect(url_for("client.client_login"))
+
+    month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+
+    kpi_data = None
+    channels = {}
+    error = None
+    try:
+        from webapp.report_runner import build_analysis_and_suggestions_for_brand
+        from webapp.client_advisor import build_client_dashboard
+
+        analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
+        if analysis:
+            dashboard = build_client_dashboard(analysis, suggestions, brand)
+            kpi_data = dashboard.get("kpi_status", [])
+            channels = dashboard.get("channels", {})
+    except Exception as exc:
+        current_app.logger.exception("KPI page data error: %s", exc)
+        error = str(exc)
+
+    return render_template(
+        "client/client_kpis.html",
+        month=month,
+        kpi_data=kpi_data,
+        channels=channels,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+        error=error,
+    )
+
+
 # ── Actions Detail ──
 
 @client_bp.route("/actions")
@@ -1053,6 +1092,29 @@ def client_campaign_create():
     draft_id = request.args.get("draft_id", type=int)
     draft = db.get_campaign_draft(draft_id, brand_id) if draft_id else None
 
+    # Load Meta Pixels if connected
+    meta_pixels = []
+    if has_meta:
+        try:
+            connections = db.get_brand_connections(brand_id)
+            meta_conn = next((c for c in connections if c.get("platform") == "meta"), None)
+            if meta_conn:
+                from webapp.api_bridge import _get_meta_token
+                token = _get_meta_token(db, brand_id, meta_conn)
+                ad_account_id = meta_conn.get("meta_ad_account_id", "")
+                if token and ad_account_id:
+                    import requests as _req
+                    act_id = ad_account_id if ad_account_id.startswith("act_") else f"act_{ad_account_id}"
+                    px_resp = _req.get(
+                        f"https://graph.facebook.com/v21.0/{act_id}/adspixels",
+                        params={"access_token": token, "fields": "id,name"},
+                        timeout=10,
+                    )
+                    if px_resp.status_code == 200:
+                        meta_pixels = px_resp.json().get("data", [])
+        except Exception as exc:
+            current_app.logger.warning("Failed to load Meta Pixels: %s", exc)
+
     return render_template(
         "client_campaign_create.html",
         brand=brand,
@@ -1062,6 +1124,7 @@ def client_campaign_create():
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
         draft=draft,
         daily_budget_default=daily_budget_default,
+        meta_pixels=meta_pixels,
     )
 
 
@@ -1141,6 +1204,43 @@ def client_campaign_launch():
         result = {"success": False, "error": f"Launch error: {exc}"}
 
     return jsonify(result)
+
+
+@client_bp.route("/campaigns/upload-image", methods=["POST"])
+@client_login_required
+def client_campaign_upload_image():
+    """Handle direct image upload for campaign ads."""
+    import os
+    import uuid
+    from werkzeug.utils import secure_filename
+
+    if "image" not in request.files:
+        return jsonify({"success": False, "error": "No image file provided"})
+
+    file = request.files["image"]
+    if not file.filename:
+        return jsonify({"success": False, "error": "Empty filename"})
+
+    allowed_ext = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in allowed_ext:
+        return jsonify({"success": False, "error": f"File type {ext} not allowed. Use JPG, PNG, GIF, or WebP."})
+
+    # Limit file size (10MB)
+    file.seek(0, 2)
+    size = file.tell()
+    file.seek(0)
+    if size > 10 * 1024 * 1024:
+        return jsonify({"success": False, "error": "Image too large. Max 10MB."})
+
+    safe_name = secure_filename(f"{uuid.uuid4().hex}{ext}")
+    upload_dir = os.path.join(current_app.static_folder or "static", "uploads", "campaign_images")
+    os.makedirs(upload_dir, exist_ok=True)
+    save_path = os.path.join(upload_dir, safe_name)
+    file.save(save_path)
+
+    url = url_for("static", filename=f"uploads/campaign_images/{safe_name}")
+    return jsonify({"success": True, "url": url, "filename": safe_name})
 
 
 @client_bp.route("/campaigns/new/save-draft", methods=["POST"])
