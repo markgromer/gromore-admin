@@ -18,6 +18,40 @@ import requests as _requests
 
 log = logging.getLogger(__name__)
 
+# ── Mission metadata for gamified action plan ──
+
+_CATEGORY_META = {
+    "paid_advertising": {"icon": "bi-megaphone-fill", "color": "#6366f1", "skill": "Ad Optimization"},
+    "seo":              {"icon": "bi-search",         "color": "#059669", "skill": "Search Visibility"},
+    "website":          {"icon": "bi-globe2",         "color": "#2563eb", "skill": "Website Performance"},
+    "strategy":         {"icon": "bi-compass-fill",   "color": "#7c3aed", "skill": "Growth Strategy"},
+    "creative":         {"icon": "bi-palette-fill",   "color": "#db2777", "skill": "Creative Impact"},
+    "budget":           {"icon": "bi-piggy-bank-fill","color": "#d97706", "skill": "Budget Strategy"},
+    "organic_social":   {"icon": "bi-people-fill",    "color": "#0891b2", "skill": "Social Engagement"},
+}
+
+MONTH_LEVELS = [
+    (0,    1, "Rookie",          "Just getting started"),
+    (200,  2, "Apprentice",      "Finding your stride"),
+    (400,  3, "Strategist",      "Thinking like a marketer"),
+    (700,  4, "Optimizer",       "Squeezing more from every dollar"),
+    (1000, 5, "Growth Hacker",   "Your competitors should worry"),
+    (1400, 6, "Marketing Pro",   "Running a tight ship"),
+    (1800, 7, "Marketing Legend", "Nothing gets past you"),
+]
+
+
+def _parse_difficulty(time_str):
+    """Return 1-3 star difficulty from a time estimate string."""
+    if not time_str:
+        return 2
+    t = time_str.lower()
+    if any(w in t for w in ("1 hour", "2 hour", "1-2", "3 hour")):
+        return 3
+    if any(w in t for w in ("30", "45")):
+        return 2
+    return 1
+
 
 def build_client_dashboard(analysis, suggestions, brand, ai_model=None, include_deep_analysis=False):
     """
@@ -518,6 +552,12 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None):
     # Build basic card structure first
     actions = []
     for s in selected:
+        cat_key = s.get("category", "")
+        cat_meta = _CATEGORY_META.get(
+            cat_key,
+            {"icon": "bi-star-fill", "color": "#6b7280", "skill": "Marketing"},
+        )
+        xp = 150 if s["priority"] == "high" else (100 if s["priority"] == "medium" else 75)
         card = {
             "title": _client_friendly_title(s["title"]),
             "priority": "Do This Now" if s["priority"] == "high" else "Worth Doing Soon",
@@ -528,6 +568,15 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None):
             "impact": "",
             "time": "",
             "data_point": s.get("data_point", ""),
+            # Mission metadata
+            "mission_name": "",
+            "why": "",
+            "reward": "",
+            "icon": cat_meta["icon"],
+            "icon_color": cat_meta["color"],
+            "skill": cat_meta["skill"],
+            "xp": xp,
+            "difficulty": 0,
         }
         actions.append(card)
 
@@ -540,6 +589,9 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None):
                 card["steps"] = ai.get("steps", [])
                 card["impact"] = ai.get("impact", "")
                 card["time"] = ai.get("time", "")
+                card["mission_name"] = ai.get("mission_name", "")
+                card["why"] = ai.get("why", "")
+                card["reward"] = ai.get("reward", "")
 
     # Fallback: if AI didn't return steps, generate basic ones from the suggestion data
     for i, card in enumerate(actions):
@@ -548,6 +600,11 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None):
             card["steps"] = _fallback_steps(s)
             if not card["time"]:
                 card["time"] = "15-30 minutes"
+        # Fallback mission name
+        if not card["mission_name"]:
+            card["mission_name"] = card["title"]
+        # Calculate difficulty from time
+        card["difficulty"] = _parse_difficulty(card["time"])
 
     return actions
 
@@ -705,27 +762,52 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
 
     system = (
         "You are the senior paid-media and SEO strategist inside GroMore. "
-        "You have already completed a deep-dive analysis of this account. "
-        "Now produce the EXACT steps the business owner should execute.\n\n"
+        "You have completed a deep-dive analysis of this account. "
+        "Now produce MISSIONS the business owner can knock out.\n\n"
 
-        "CRITICAL: These steps are for a business owner, not a marketing professional. "
-        "Every step must tell them exactly what to DO, not what 'should happen' or what to 'consider'. "
-        "Write like you are sitting next to them, pointing at their screen, walking them through it click by click.\n\n"
+        "Each mission is a small, concrete task they can finish in one sitting. "
+        "Write like you are sitting next to them, pointing at their screen.\n\n"
 
         "OUTPUT FORMAT (JSON only):\n"
-        "{\"actions\": [{\"steps\": [...], \"impact\": \"...\", \"time\": \"...\"}, ...]}\n"
+        "{\"actions\": [\n"
+        "  {\n"
+        "    \"mission_name\": \"3-6 word action-oriented name\",\n"
+        "    \"micro_steps\": [\"step 1\", \"step 2\", ...],\n"
+        "    \"why\": \"one sentence connecting this to their money or leads\",\n"
+        "    \"reward\": \"one sentence: what changes when they finish\",\n"
+        "    \"impact\": \"one sentence with specific projected numbers\",\n"
+        "    \"time\": \"15 minutes\"\n"
+        "  }\n"
+        "]}\n"
         "One object per action_item, same order as input.\n\n"
 
-        "STEP REQUIREMENTS:\n"
-        "- 4-8 steps per action item. More steps = more specific = better.\n"
-        "- Every step starts with a verb: Log in, Open, Click, Type, Navigate, Download, Copy, Paste, Call, Write, Create, Search, Check, Compare\n"
-        "- Every step MUST reference specific data from the relevant_data attached to that action item: "
-        "name the campaign, the keyword, the search term, the ad, the page URL, the query, the dollar amount, the metric value\n"
-        "- Include WHERE to go: 'Log into Google Ads > Campaigns > [campaign name]' or 'Open your Facebook Ads Manager and click on [specific ad set]'\n"
-        "- Steps should be the actual work product: the exact keywords to add/pause/negate, "
-        "the exact ad copy to test (write the headlines and descriptions), "
-        "the exact budget numbers to change, the exact pages to optimize and for which queries\n"
-        "- Each step: 2-3 sentences max. First sentence = exactly what to do and where. Remaining = why, using a specific number from the data.\n\n"
+        "MISSION NAME RULES:\n"
+        "- 3-6 words, starts with a verb. Active, punchy, specific to their situation.\n"
+        "- GOOD: \"Kill the $340 Money Drain\", \"Double Your Click Rate\", \"Unlock Page-1 Rankings\", "
+        "\"Stop Paying for Junk Clicks\", \"Launch a Lead Magnet Ad\"\n"
+        "- BAD: \"Optimize Campaign Performance\", \"Improve Your SEO\", \"Review Analytics Data\"\n\n"
+
+        "MICRO-STEP RULES:\n"
+        "- 3-5 steps per mission. Each step is ONE small action, done in 2-3 minutes.\n"
+        "- Every step starts with a verb: Log in, Open, Click, Type, Navigate, Pause, Add, Create, Copy, Paste\n"
+        "- Every step MUST reference specific data from relevant_data: "
+        "name the campaign, keyword, search term, ad, page URL, query, dollar amount, metric\n"
+        "- Include WHERE to go: 'Log into Google Ads > Campaigns > [campaign name]'\n"
+        "- Steps should be concrete work: exact keywords to pause, exact ad copy to test "
+        "(write the headlines), exact budget numbers, exact pages to optimize\n"
+        "- Each step: 1-2 sentences max. What to do and where, with a number from the data.\n\n"
+
+        "WHY field: One sentence connecting this mission to their revenue, leads, or wasted spend. "
+        "Use a specific dollar amount or lead count. "
+        "Example: \"You're burning $340/month on a keyword that never converts, enough for 8 more leads elsewhere.\"\n\n"
+
+        "REWARD field: One sentence describing the concrete result they'll see after completing. "
+        "Example: \"Your ad budget shifts to keywords that actually bring in phone calls.\"\n\n"
+
+        "IMPACT: One sentence with specific projected numbers from the data. "
+        "Example: 'Moving $200/month could generate about 5 more leads based on the $38 CPA.'\n\n"
+
+        "TIME: Be specific. '10 minutes', '15 minutes', '30 minutes', '1 hour'. Not 'varies' or 'ongoing'.\n\n"
 
         "WHAT MAKES A BAD STEP (never do this):\n"
         "- 'Review your campaigns and pause underperformers' (which campaigns? what metric?)\n"
@@ -733,20 +815,12 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
         "- 'Optimize your landing pages' (which pages? for what?)\n"
         "- 'Consider testing new ad copy' (write the actual copy)\n"
         "- 'Monitor performance and adjust' (adjust what? to what number?)\n"
-        "- 'You should look into...' (do not suggest looking into things, tell them what to do)\n"
-        "- 'It would be beneficial to...' (never use this phrase)\n\n"
+        "- 'You should look into...' (tell them what to do, not what to look into)\n\n"
 
         "WHAT MAKES A GOOD STEP (do this):\n"
-        "- 'Log into Google Ads, go to Keywords, sort by Cost (high to low). Pause the \"emergency plumber near me\" keyword. It spent $340 this month with 0 conversions while your \"water heater repair\" keyword converted at $42/lead.'\n"
-        "- 'In Google Ads, go to Search Terms report. Add these as negative keywords: \"DIY\", \"how to\", \"salary\", \"jobs\". These search terms appeared 89 times and burned about $120 with no conversions.'\n"
-        "- 'Go to your top campaign and click Ads & Extensions. Create a new responsive search ad with this headline: \"Same-Day AC Repair - Licensed & Insured | Free Estimates\". Your current CTR is 2.1% vs 4-5% benchmark for HVAC.'\n"
-        "- 'Open Google Ads > Campaigns. Click on \"Brand Awareness\" campaign. Lower the daily budget from its current level by $7/day. Then open \"Emergency Services\" campaign and increase its budget by $7/day. The Emergency campaign converts at $38/lead vs Brand Awareness at $0.'\n"
-        "- 'Open Google Search Console. Search for \"water heater installation [city]\". You have 1,200 impressions but rank position 18. Create a new dedicated page on your website targeting this exact keyword.'\n\n"
-
-        "IMPACT: One sentence with a specific projected result using numbers from the data. "
-        "Example: 'Moving $200/month could generate about 5 more leads based on the Emergency Services campaign current $38 CPA.'\n\n"
-
-        "TIME: Be specific. '15 minutes', '30 minutes', '1-2 hours'. Not 'varies' or 'ongoing'.\n\n"
+        "- 'Log into Google Ads > Keywords. Sort by Cost (high to low). Pause \"emergency plumber near me\" - it spent $340 with 0 conversions.'\n"
+        "- 'Go to Search Terms report. Add these as negative keywords: \"DIY\", \"how to\", \"salary\", \"jobs\" - they burned $120 with no conversions.'\n"
+        "- 'Create a new responsive search ad: \"Same-Day AC Repair - Licensed & Insured | Free Estimates\". Current CTR is 2.1% vs 4-5% benchmark.'\n\n"
 
         "If relevant_data for an action item is empty, build the best steps you can from the detail and data_point fields, "
         "but still be specific and never use filler phrases like 'consider', 'you might want to', or 'it could be beneficial'."
@@ -799,14 +873,19 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
         if not isinstance(actions_list, list):
             return []
 
-        # Each item should be {"steps": [...], "impact": "...", "time": "..."}
+        # Each item should be {"mission_name": "...", "micro_steps": [...], "why": "...", "reward": "...", "impact": "...", "time": "..."}
         result = []
         for item in actions_list:
             if isinstance(item, dict):
+                # Accept both "micro_steps" (new) and "steps" (old) keys
+                steps = item.get("micro_steps") or item.get("steps") or []
                 result.append({
-                    "steps": [str(s) for s in item.get("steps", []) if s],
+                    "steps": [str(s) for s in steps if s],
                     "impact": str(item.get("impact", "")),
                     "time": str(item.get("time", "")),
+                    "mission_name": str(item.get("mission_name", "")),
+                    "why": str(item.get("why", "")),
+                    "reward": str(item.get("reward", "")),
                 })
             elif isinstance(item, list):
                 # Fallback: plain list of strings (old format)

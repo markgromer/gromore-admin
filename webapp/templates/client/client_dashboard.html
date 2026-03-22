@@ -704,9 +704,9 @@ function askWhatShouldIDo() {
 
     {% if dashboard.actions %}
     <div class="cockpit-action">
-        <div class="cockpit-action-icon"><i class="bi bi-lightning-charge-fill"></i></div>
-        <div class="cockpit-action-text"><strong>#1 Move:</strong> {{ dashboard.actions[0].title }}{% if dashboard.actions[0].what %} - {{ dashboard.actions[0].what }}{% endif %}</div>
-        <div class="cockpit-action-link"><a href="{{ url_for('client.client_actions', month=month) }}">See Plan <i class="bi bi-arrow-right"></i></a></div>
+        <div class="cockpit-action-icon"><i class="bi bi-rocket-takeoff-fill"></i></div>
+        <div class="cockpit-action-text"><strong>#1 Mission:</strong> {{ dashboard.actions[0].mission_name or dashboard.actions[0].title }}</div>
+        <div class="cockpit-action-link"><a href="{{ url_for('client.client_actions', month=month) }}">Go <i class="bi bi-arrow-right"></i></a></div>
     </div>
     {% endif %}
 </div>
@@ -767,25 +767,24 @@ function askWhatShouldIDo() {
 <!-- Top Actions Preview -->
 {% if dashboard.actions %}
 <div class="d-flex justify-content-between align-items-center mb-3 mt-4">
-    <h5 class="mb-0"><i class="bi bi-lightning-charge"></i> This Month's Action Plan</h5>
+    <h5 class="mb-0"><i class="bi bi-rocket-takeoff-fill" style="color:#6366f1;"></i> Active Missions</h5>
     <a href="{{ url_for('client.client_actions', month=month) }}" class="btn btn-sm btn-outline-primary">
-        View All <i class="bi bi-arrow-right"></i>
+        Mission Control <i class="bi bi-arrow-right"></i>
     </a>
 </div>
 
 {% for action in dashboard.actions[:3] %}
-<div class="action-card priority-{{ action.priority_class }}">
+<div class="action-card" style="border-left:3px solid {{ action.icon_color|default('#6366f1') }}; border-radius:12px; padding:1rem 1.15rem; margin-bottom:.75rem; border:1px solid #e2e8f0; border-left:3px solid {{ action.icon_color|default('#6366f1') }};">
     <div class="d-flex justify-content-between align-items-start">
-        <div class="action-title">{{ action.title }}</div>
-        <span class="badge bg-{{ action.priority_class }}">{{ action.priority }}</span>
+        <div class="d-flex align-items-center gap-2">
+            <span style="width:32px; height:32px; border-radius:8px; background:{{ action.icon_color|default('#6366f1') }}; color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:.9rem;"><i class="bi {{ action.icon|default('bi-star-fill') }}"></i></span>
+            <div>
+                <div class="action-title" style="font-weight:700; font-size:.95rem;">{{ action.mission_name or action.title }}</div>
+                <div style="font-size:.78rem; color:#64748b;">{{ action.category }}{% if action.data_point %} &middot; {{ action.data_point }}{% endif %}</div>
+            </div>
+        </div>
+        <span style="background:#eef2ff; color:#4338ca; font-weight:800; font-size:.78rem; padding:.2rem .5rem; border-radius:6px;">+{{ action.xp|default(100) }} XP</span>
     </div>
-    <div class="d-flex gap-2 mt-1 mb-2">
-        <span class="badge bg-light text-dark" style="font-size: .75rem;">{{ action.category }}</span>
-        {% if action.data_point %}
-        <span class="badge bg-light text-dark" style="font-size: .75rem;">{{ action.data_point }}</span>
-        {% endif %}
-    </div>
-    <div class="action-what">{{ action.what }}</div>
 </div>
 {% endfor %}
 {% endif %}

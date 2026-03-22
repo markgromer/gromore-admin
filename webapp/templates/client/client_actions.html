@@ -1,273 +1,572 @@
 {% extends "client/client_base.html" %}
 
-{% block title %}Action Plan{% endblock %}
+{% block title %}Mission Control{% endblock %}
 
 {% block content %}
 <style>
-    .steps-walkthrough {
-        background: #f8fafc;
-        border: 1px solid #e5e7eb;
-        border-radius: 10px;
-        padding: 1rem 1.25rem;
-    }
-    .walkthrough-step {
-        padding: .6rem 0;
-        border-bottom: 1px solid #f3f4f6;
-    }
-    .walkthrough-step:last-child { border-bottom: none; }
-    .step-check-row {
-        display: flex;
-        align-items: flex-start;
-        gap: .75rem;
-    }
-    .step-num {
-        flex-shrink: 0;
-        width: 26px;
-        height: 26px;
-        border-radius: 50%;
-        background: #6366f1;
+    /* ── Header & XP ── */
+    .mc-header {
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
+        border-radius: 16px;
+        padding: 2rem 2.25rem 1.5rem;
+        margin-bottom: 1.5rem;
         color: #fff;
+        position: relative;
+        overflow: hidden;
+    }
+    .mc-header::before {
+        content: '';
+        position: absolute;
+        top: -30%;
+        right: -5%;
+        width: 250px;
+        height: 250px;
+        background: radial-gradient(circle, rgba(129,140,248,.2) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    .mc-header h3 { font-weight: 800; font-size: 1.35rem; margin-bottom: .15rem; }
+    .mc-header .tagline { opacity: .7; font-size: .85rem; }
+
+    .level-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        background: rgba(255,255,255,.12);
+        border: 1px solid rgba(255,255,255,.2);
+        border-radius: 20px;
+        padding: .3rem .9rem;
+        font-weight: 700;
+        font-size: .85rem;
+    }
+    .level-badge .lvl-num {
+        background: rgba(251,191,36,.9);
+        color: #1e1b4b;
+        width: 24px; height: 24px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: .75rem;
+        font-weight: 800;
+    }
+    .stat-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        background: rgba(255,255,255,.1);
+        border-radius: 8px;
+        padding: .3rem .7rem;
+        font-size: .8rem;
+        font-weight: 600;
+    }
+    .xp-track {
+        background: rgba(255,255,255,.15);
+        border-radius: 8px;
+        height: 14px;
+        margin-top: 1rem;
+        overflow: hidden;
+    }
+    .xp-fill {
+        height: 100%;
+        border-radius: 8px;
+        background: linear-gradient(90deg, #fbbf24, #f59e0b);
+        transition: width 1s ease;
+        position: relative;
+    }
+    .xp-fill::after {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.3) 50%, transparent 100%);
+        animation: xpShimmer 2s infinite;
+    }
+    @keyframes xpShimmer {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(100%); }
+    }
+    .xp-labels {
+        display: flex;
+        justify-content: space-between;
+        margin-top: .35rem;
+        font-size: .75rem;
+        opacity: .7;
+    }
+
+    /* ── Mission Cards ── */
+    .mission-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        margin-bottom: .85rem;
+        overflow: hidden;
+        transition: border-color .2s, box-shadow .2s;
+    }
+    .mission-card:hover { border-color: #818cf8; box-shadow: 0 2px 12px rgba(99,102,241,.1); }
+
+    .mission-header {
+        padding: .85rem 1.15rem;
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        cursor: pointer;
+        border: none;
+        width: 100%;
+        text-align: left;
+        background: transparent;
+    }
+    .mission-icon {
+        width: 42px; height: 42px;
+        border-radius: 11px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: .78rem;
-        font-weight: 700;
-        margin-top: 1px;
+        font-size: 1.15rem;
+        flex-shrink: 0;
+        color: #fff;
     }
-    .step-text {
+    .mission-info { flex: 1; min-width: 0; }
+    .mission-name { font-weight: 700; font-size: .95rem; color: #1e293b; }
+    .mission-sub {
+        font-size: .78rem;
+        color: #64748b;
+        margin-top: 2px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .4rem;
+    }
+    .mission-sub .sep { opacity: .4; }
+    .mission-xp {
+        font-weight: 800;
+        font-size: .8rem;
+        padding: .2rem .6rem;
+        border-radius: 6px;
+        white-space: nowrap;
+        background: #eef2ff;
+        color: #4338ca;
+    }
+    .mission-chevron { color: #94a3b8; transition: transform .2s; font-size: .9rem; }
+    .mission-header.active .mission-chevron { transform: rotate(180deg); }
+
+    .mission-body {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height .4s ease, padding .2s;
+        padding: 0 1.15rem;
+    }
+    .mission-body.open {
+        max-height: 800px;
+        padding: .25rem 1.15rem 1.15rem;
+    }
+
+    .why-box {
+        background: linear-gradient(135deg, #fef3c7, #fde68a);
+        border-radius: 10px;
+        padding: .85rem 1rem;
+        margin-bottom: .85rem;
+        font-size: .85rem;
+        color: #92400e;
+        display: flex;
+        gap: .6rem;
+        align-items: flex-start;
+    }
+    .why-box i { font-size: 1.1rem; margin-top: 1px; flex-shrink: 0; }
+
+    .skill-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        background: #eef2ff;
+        color: #4338ca;
+        border-radius: 6px;
+        padding: .25rem .6rem;
+        font-size: .75rem;
+        font-weight: 600;
+        margin-bottom: .75rem;
+    }
+
+    .micro-step {
+        display: flex;
+        align-items: flex-start;
+        gap: .6rem;
+        padding: .55rem 0;
+        border-bottom: 1px solid #f1f5f9;
+        font-size: .88rem;
+        color: #334155;
+        line-height: 1.5;
+    }
+    .micro-step:last-child { border-bottom: none; }
+    .step-bullet {
+        width: 22px; height: 22px;
+        border-radius: 50%;
+        border: 2px solid #cbd5e1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        margin-top: 2px;
+        cursor: pointer;
+        transition: all .2s;
+    }
+    .step-bullet:hover { border-color: #818cf8; }
+    .step-bullet.checked { background: #10b981; border-color: #10b981; color: #fff; }
+
+    .reward-box {
+        background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+        border-radius: 10px;
+        padding: .75rem 1rem;
+        margin-top: .75rem;
+        font-size: .85rem;
+        color: #166534;
+        display: flex;
+        gap: .5rem;
+        align-items: flex-start;
+    }
+    .reward-box i { font-size: 1rem; margin-top: 1px; flex-shrink: 0; }
+
+    .complete-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: .5rem;
+        width: 100%;
+        padding: .65rem;
+        border-radius: 10px;
+        border: 2px solid #10b981;
+        background: #f0fdf4;
+        color: #166534;
+        font-weight: 700;
         font-size: .9rem;
-        color: #374151;
-        line-height: 1.55;
+        cursor: pointer;
+        margin-top: 1rem;
+        transition: all .2s;
+    }
+    .complete-btn:hover { background: #10b981; color: #fff; }
+
+    .difficulty-stars { font-size: .7rem; color: #f59e0b; letter-spacing: 1px; }
+
+    /* ── Completed Missions ── */
+    .done-mission {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        background: linear-gradient(135deg, #fef3c7, #fde68a);
+        border: 1px solid #f59e0b;
+        border-radius: 10px;
+        padding: .45rem .8rem;
+        font-size: .78rem;
+        font-weight: 600;
+        color: #92400e;
+        animation: badgePop .4s ease;
+    }
+    .done-mission i { font-size: .9rem; }
+    @keyframes badgePop {
+        0% { transform: scale(0.8); opacity: 0; }
+        60% { transform: scale(1.05); }
+        100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* ── XP Popup ── */
+    .xp-popup {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0);
+        background: linear-gradient(135deg, #1e1b4b, #4338ca);
+        color: #fbbf24;
+        font-size: 2.5rem;
+        font-weight: 900;
+        padding: 1.5rem 2.5rem;
+        border-radius: 20px;
+        z-index: 9999;
+        pointer-events: none;
+        opacity: 0;
+        transition: all .4s cubic-bezier(.175,.885,.32,1.275);
+    }
+    .xp-popup.show {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+
+    /* ── Settings area ── */
+    .settings-bar {
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: .75rem 1rem;
+        margin-bottom: 1rem;
     }
 </style>
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h4 class="mb-1">This Month's Action Plan</h4>
-        <p class="text-muted mb-0">Your AI analyzed the data and ranked the highest-impact moves. Start at the top.</p>
-    </div>
-    <div class="month-selector">
-        <form method="GET" class="d-flex align-items-center gap-2">
-            <input type="month" name="month" value="{{ month }}" class="form-control form-control-sm" style="width: 160px;" onchange="this.form.submit()">
-            <input type="hidden" name="ai_model" value="{{ ai_model or '' }}">
-            {% if run_analysis %}<input type="hidden" name="run_analysis" value="1">{% endif %}
-        </form>
-    </div>
-</div>
 
-<div class="card mb-4" style="border:none; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
-    <div class="card-body p-3 p-md-4">
-        <div class="d-flex flex-wrap align-items-end gap-3">
-            <form method="GET" class="d-flex flex-wrap align-items-end gap-2">
-                <input type="hidden" name="month" value="{{ month }}">
-                <div>
-                    <label class="form-label mb-1" style="font-size:.85rem;">AI Model</label>
-                    <select name="ai_model" class="form-select form-select-sm" style="width:220px;">
-                        <option value="gpt-4o-mini" {{ 'selected' if ai_model == 'gpt-4o-mini' or not ai_model }}>GPT-4o Mini</option>
-                        <option value="gpt-4o" {{ 'selected' if ai_model == 'gpt-4o' }}>GPT-4o</option>
-                        <option value="gpt-4-turbo" {{ 'selected' if ai_model == 'gpt-4-turbo' }}>GPT-4 Turbo</option>
-                        <option value="gpt-4.1-mini" {{ 'selected' if ai_model == 'gpt-4.1-mini' }}>GPT-4.1 Mini</option>
-                        <option value="gpt-4.1" {{ 'selected' if ai_model == 'gpt-4.1' }}>GPT-4.1</option>
-                        <option value="o3-mini" {{ 'selected' if ai_model == 'o3-mini' }}>o3-mini</option>
-                        <option value="o4-mini" {{ 'selected' if ai_model == 'o4-mini' }}>o4-mini</option>
-                    </select>
-                </div>
-                <button class="btn btn-outline-secondary btn-sm" type="submit">Apply Model</button>
-            </form>
-
-            <form method="GET" class="d-flex align-items-end gap-2">
-                <input type="hidden" name="month" value="{{ month }}">
+<!-- ═══════ HEADER: Level + XP Bar ═══════ -->
+<div class="mc-header">
+    <div class="d-flex justify-content-between align-items-start mb-2">
+        <div>
+            <h3><i class="bi bi-rocket-takeoff-fill"></i> Mission Control</h3>
+            <span class="tagline">Complete missions. Earn XP. Level up your marketing.</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <div class="level-badge">
+                <span class="lvl-num">{{ level_num }}</span>
+                {{ level_name }}
+            </div>
+            <form method="GET" class="d-flex" style="margin:0;">
+                <input type="month" name="month" value="{{ month }}" class="form-control form-control-sm"
+                       style="width:140px; background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.2); color:#fff; font-size:.78rem;"
+                       onchange="this.form.submit()">
                 <input type="hidden" name="ai_model" value="{{ ai_model or '' }}">
-                <input type="hidden" name="run_analysis" value="1">
-                <button class="btn btn-primary btn-sm" type="submit">
-                    <i class="bi bi-stars me-1"></i> Run Deep AI Analysis
-                </button>
             </form>
         </div>
+    </div>
 
-        {% if ai_analysis %}
-        <div class="mt-3 p-3" style="background:#f8fafc; border-radius:10px; border:1px solid #e5e7eb;">
-            <div class="fw-semibold mb-2"><i class="bi bi-cpu me-1"></i> AI Analysis</div>
-            <div style="white-space: pre-wrap; font-size:.92rem; color:#334155;">{{ ai_analysis }}</div>
-        </div>
+    <div class="d-flex align-items-center gap-3 mt-3">
+        <div class="stat-pill"><i class="bi bi-lightning-charge-fill" style="color:#fbbf24"></i> {{ total_xp }} XP</div>
+        <div class="stat-pill"><i class="bi bi-check-circle-fill" style="color:#4ade80"></i> {{ completed_count }} / {{ monthly_cap }} missions</div>
+    </div>
+    <div class="xp-track">
+        {% set xp_pct = ((total_xp / next_level_xp * 100) | round | int) if next_level_xp > 0 else 100 %}
+        <div class="xp-fill" style="width: {{ [xp_pct, 100] | min }}%"></div>
+    </div>
+    <div class="xp-labels">
+        <span>Level {{ level_num }}: {{ level_name }}</span>
+        {% if total_xp < next_level_xp %}
+        <span>{{ next_level_xp - total_xp }} XP to {{ level_name }} &rarr; next level</span>
+        {% else %}
+        <span>Max level reached!</span>
         {% endif %}
     </div>
 </div>
 
+<!-- Model selector + Deep Analysis (collapsed) -->
+<div class="settings-bar">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <form method="GET" class="d-flex align-items-center gap-2">
+            <input type="hidden" name="month" value="{{ month }}">
+            <label class="form-label mb-0" style="font-size:.8rem; font-weight:600; color:#64748b;">AI Model</label>
+            <select name="ai_model" class="form-select form-select-sm" style="width:150px; font-size:.8rem;">
+                <option value="gpt-4o-mini" {{ 'selected' if ai_model == 'gpt-4o-mini' or not ai_model }}>GPT-4o Mini</option>
+                <option value="gpt-4o" {{ 'selected' if ai_model == 'gpt-4o' }}>GPT-4o</option>
+                <option value="gpt-4-turbo" {{ 'selected' if ai_model == 'gpt-4-turbo' }}>GPT-4 Turbo</option>
+                <option value="gpt-4.1-mini" {{ 'selected' if ai_model == 'gpt-4.1-mini' }}>GPT-4.1 Mini</option>
+                <option value="gpt-4.1" {{ 'selected' if ai_model == 'gpt-4.1' }}>GPT-4.1</option>
+                <option value="o3-mini" {{ 'selected' if ai_model == 'o3-mini' }}>o3-mini</option>
+                <option value="o4-mini" {{ 'selected' if ai_model == 'o4-mini' }}>o4-mini</option>
+            </select>
+            <button class="btn btn-outline-secondary btn-sm" type="submit" style="font-size:.78rem;">Apply</button>
+        </form>
+        <form method="GET">
+            <input type="hidden" name="month" value="{{ month }}">
+            <input type="hidden" name="ai_model" value="{{ ai_model or '' }}">
+            <input type="hidden" name="run_analysis" value="1">
+            <button class="btn btn-primary btn-sm" type="submit" style="font-size:.78rem;">
+                <i class="bi bi-stars me-1"></i> Regenerate Missions
+            </button>
+        </form>
+    </div>
+
+    {% if ai_analysis %}
+    <div class="mt-2 p-2" style="background:#fff; border-radius:8px; border:1px solid #e5e7eb;">
+        <div class="fw-semibold mb-1" style="font-size:.82rem;"><i class="bi bi-cpu me-1"></i> AI Analysis</div>
+        <div style="white-space: pre-wrap; font-size:.85rem; color:#334155;">{{ ai_analysis }}</div>
+    </div>
+    {% endif %}
+</div>
+
 {% if error %}
 <div class="alert alert-warning">
-    <i class="bi bi-exclamation-triangle"></i>
-    No data available for {{ month }}.
+    <i class="bi bi-exclamation-triangle"></i> No data available for {{ month }}.
 </div>
 {% endif %}
 
 {% if actions %}
 
-<!-- Monthly progress bar -->
-<div class="card mb-4" style="border:none; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.05); overflow:hidden;">
-    <div class="card-body p-3 p-md-4">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <span class="fw-semibold" style="font-size:.95rem;">Monthly Progress</span>
-            <span style="font-size:.85rem; color:#6b7280;">{{ completed_count }} of {{ monthly_cap }} completed</span>
-        </div>
-        <div style="height:8px; background:#f3f4f6; border-radius:4px; overflow:hidden;">
-            <div style="height:100%; background: linear-gradient(90deg, #6366f1, #8b5cf6); border-radius:4px; transition: width .4s; width:{{ ((completed_count / monthly_cap) * 100) | round | int }}%;"></div>
-        </div>
-        <div class="mt-2" style="font-size:.82rem; color:#9ca3af;">
-            Complete tasks to unlock more. Up to {{ monthly_cap }} action items per month.
-        </div>
+<!-- ═══════ COMPLETED MISSIONS (Achievement Shelf) ═══════ -->
+{% if done_actions %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white border-0 pt-3 pb-0">
+        <h5 class="fw-bold mb-0"><i class="bi bi-trophy-fill" style="color:#f59e0b;"></i> Completed Missions</h5>
     </div>
-</div>
-
-{% if active_actions %}
-<div class="mb-3">
-    <small class="text-muted">
-        {{ active_actions | length }} action{{ 's' if active_actions | length != 1 else '' }} ready to do.
-    </small>
-</div>
-
-{% for action in active_actions %}
-<div class="action-card priority-{{ action.priority_class }}" id="action-{{ loop.index }}" style="transition: opacity .3s, max-height .4s; overflow:hidden;">
-    <div class="d-flex justify-content-between align-items-start mb-2">
-        <div class="d-flex align-items-center gap-2">
-            <button class="btn btn-sm btn-outline-success done-btn" type="button"
-                    title="Mark as done"
-                    data-action-key="{{ action.key }}" data-month="{{ month }}"
-                    style="width:32px; height:32px; border-radius:50%; padding:0; display:flex; align-items:center; justify-content:center;">
-                <i class="bi bi-check-lg"></i>
-            </button>
-            <div class="action-title" style="font-size: 1.1rem;">{{ action.title }}</div>
-        </div>
-        <span class="badge bg-{{ action.priority_class }}">{{ action.priority }}</span>
-    </div>
-
-    <div class="d-flex gap-2 mb-2">
-        <span class="badge bg-light text-dark" style="font-size: .75rem;">{{ action.category }}</span>
-        {% if action.data_point %}
-        <span class="badge bg-light text-dark" style="font-size: .75rem;">{{ action.data_point }}</span>
-        {% endif %}
-    </div>
-
-    <div class="action-what">{{ action.what }}</div>
-
-    {% if action.impact or action.time %}
-    <div class="d-flex gap-3 mt-2 mb-1">
-        {% if action.impact %}
-        <span style="font-size: .85rem; color: #059669; font-weight: 500;"><i class="bi bi-graph-up-arrow"></i> {{ action.impact }}</span>
-        {% endif %}
-        {% if action.time %}
-        <span style="font-size: .85rem; color: #6b7280;"><i class="bi bi-clock"></i> {{ action.time }}</span>
-        {% endif %}
-    </div>
-    {% endif %}
-
-    {% if action.steps %}
-    <div class="mt-3">
-        <div class="steps-walkthrough">
-            <div class="fw-semibold mb-2" style="font-size:.9rem; color:#4338ca;">
-                <i class="bi bi-list-check me-1"></i> Step-by-Step Walkthrough
+    <div class="card-body">
+        <div class="d-flex flex-wrap gap-2">
+            {% for action in done_actions %}
+            <div class="done-mission">
+                <i class="bi bi-check-circle-fill" style="color:#f59e0b;"></i>
+                {{ action.mission_name or action.title }}
+                <span style="opacity:.6; font-size:.7rem;">+{{ action.xp }}XP</span>
+                <button class="btn btn-sm p-0 ms-1 restore-btn" type="button"
+                        title="Undo"
+                        data-action-key="{{ action.key }}" data-month="{{ month }}"
+                        style="border:none; background:none; color:#92400e; opacity:.5; font-size:.7rem;">
+                    <i class="bi bi-arrow-counterclockwise"></i>
+                </button>
             </div>
-            <ol class="step-by-step-list" style="list-style:none; padding-left:0; margin:0; counter-reset:walkthrough;">
-                {% for step in action.steps %}
-                <li class="walkthrough-step">
-                    <div class="step-check-row">
-                        <span class="step-num">{{ loop.index }}</span>
-                        <span class="step-text">{{ step }}</span>
-                    </div>
-                </li>
-                {% endfor %}
-            </ol>
+            {% endfor %}
         </div>
     </div>
-    {% endif %}
-</div>
-{% endfor %}
-{% else %}
-<div class="text-center py-4 mb-3">
-    {% if completed_count >= monthly_cap %}
-    <i class="bi bi-trophy" style="font-size: 2.5rem; color: #6366f1;"></i>
-    <h5 class="mt-2" style="color: #6366f1;">Month complete!</h5>
-    <p class="text-muted mb-0">You've completed all {{ monthly_cap }} action items for {{ month }}. Great work.</p>
-    {% else %}
-    <i class="bi bi-check-circle" style="font-size: 2.5rem; color: #10b981;"></i>
-    <h5 class="mt-2" style="color: #10b981;">All caught up!</h5>
-    <p class="text-muted mb-0">You've completed all available action items for {{ month }}.</p>
-    {% endif %}
 </div>
 {% endif %}
 
-{% if done_actions %}
-<div class="mt-4 mb-3">
-    <button class="btn btn-sm btn-outline-secondary" type="button"
-            data-bs-toggle="collapse" data-bs-target="#completedSection">
-        <i class="bi bi-check-circle me-1"></i> Completed ({{ done_actions | length }})
-    </button>
-    <div class="collapse mt-2" id="completedSection">
-        {% for action in done_actions %}
-        <div class="action-card" style="opacity:.5; border-left: 3px solid #10b981;">
-            <div class="d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-center gap-2">
-                    <button class="btn btn-sm btn-outline-secondary restore-btn" type="button"
-                            title="Restore"
-                            data-action-key="{{ action.key }}" data-month="{{ month }}"
-                            style="width:28px; height:28px; border-radius:50%; padding:0; display:flex; align-items:center; justify-content:center; font-size:.75rem;">
-                        <i class="bi bi-arrow-counterclockwise"></i>
-                    </button>
-                    <span style="text-decoration: line-through; color: #9ca3af;">{{ action.title }}</span>
+<!-- ═══════ ACTIVE MISSIONS ═══════ -->
+{% if active_actions %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white border-0 pt-3 pb-0">
+        <h5 class="fw-bold mb-0"><i class="bi bi-map-fill" style="color:#6366f1;"></i> Active Missions</h5>
+        <p class="text-muted small mt-1 mb-0">Tap a mission to see the steps. Each one earns XP and makes your marketing stronger.</p>
+    </div>
+    <div class="card-body">
+        {% for action in active_actions %}
+        <div class="mission-card" id="mission-{{ loop.index }}">
+            <button class="mission-header" onclick="toggleMission(this)">
+                <div class="mission-icon" style="background: {{ action.icon_color }};">
+                    <i class="bi {{ action.icon }}"></i>
                 </div>
-                <span class="badge bg-success" style="font-size:.7rem;">Done</span>
+                <div class="mission-info">
+                    <div class="mission-name">{{ action.mission_name or action.title }}</div>
+                    <div class="mission-sub">
+                        <span>{{ action.category }}</span>
+                        {% if action.data_point %}<span class="sep">&middot;</span><span>{{ action.data_point }}</span>{% endif %}
+                        {% if action.time %}<span class="sep">&middot;</span><span><i class="bi bi-clock"></i> {{ action.time }}</span>{% endif %}
+                        {% if action.difficulty %}
+                        <span class="sep">&middot;</span>
+                        <span class="difficulty-stars">{{ '&#9733;' * action.difficulty }}{{ '&#9734;' * (3 - action.difficulty) }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <span class="mission-xp">+{{ action.xp }} XP</span>
+                <i class="bi bi-chevron-down mission-chevron"></i>
+            </button>
+            <div class="mission-body">
+
+                <!-- Why this matters -->
+                {% if action.why %}
+                <div class="why-box">
+                    <i class="bi bi-currency-dollar"></i>
+                    <div><strong>Why this matters:</strong> {{ action.why }}</div>
+                </div>
+                {% endif %}
+
+                <!-- Skill tag -->
+                <div class="skill-tag"><i class="bi bi-lightbulb-fill"></i> {{ action.skill }}</div>
+
+                <!-- Micro-steps -->
+                {% if action.steps %}
+                <div class="mb-1" style="font-size:.78rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.5px;">
+                    Micro-steps
+                </div>
+                {% for step in action.steps %}
+                <div class="micro-step">
+                    <div class="step-bullet" onclick="toggleStep(this)" role="checkbox" tabindex="0">
+                        <i class="bi bi-check" style="font-size:.75rem; visibility:hidden;"></i>
+                    </div>
+                    <span>{{ step }}</span>
+                </div>
+                {% endfor %}
+                {% endif %}
+
+                <!-- Reward -->
+                {% if action.reward %}
+                <div class="reward-box">
+                    <i class="bi bi-gift-fill"></i>
+                    <div><strong>When you're done:</strong> {{ action.reward }}</div>
+                </div>
+                {% elif action.impact %}
+                <div class="reward-box">
+                    <i class="bi bi-graph-up-arrow"></i>
+                    <div>{{ action.impact }}</div>
+                </div>
+                {% endif %}
+
+                <!-- Complete Mission button -->
+                <button class="complete-btn done-btn" type="button"
+                        data-action-key="{{ action.key }}" data-month="{{ month }}" data-xp="{{ action.xp }}">
+                    <i class="bi bi-check-circle-fill"></i> Complete Mission &middot; +{{ action.xp }} XP
+                </button>
             </div>
         </div>
         {% endfor %}
     </div>
 </div>
-{% endif %}
 
-<div class="metric-card mt-4 mb-3">
-    <h6><i class="bi bi-cpu"></i> How Your Action Plan Works</h6>
-    <ul class="mb-0" style="font-size: .9rem; color: #4b5563;">
-        <li>Your AI reads every connected platform and ranks actions by expected ROI</li>
-        <li>Each action includes a step-by-step walkthrough you can follow immediately</li>
-        <li>When you complete a task, more will appear - up to {{ monthly_cap }} per month</li>
-        <li>Impact estimates are based on your actual spend, traffic, and conversion data</li>
-        <li>Changes take 1-2 weeks to fully reflect in your numbers</li>
-    </ul>
+{% else %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body text-center py-5">
+        {% if completed_count >= monthly_cap %}
+        <span style="font-size:3rem;">&#127942;</span>
+        <h5 class="mt-2 fw-bold" style="color:#6366f1;">Month Complete!</h5>
+        <p class="text-muted mb-0">You knocked out all {{ monthly_cap }} missions for {{ month }}. Legend status.</p>
+        {% else %}
+        <span style="font-size:3rem;">&#127881;</span>
+        <h5 class="mt-2 fw-bold" style="color:#10b981;">All Caught Up!</h5>
+        <p class="text-muted mb-0">You've completed all available missions for {{ month }}.</p>
+        {% endif %}
+    </div>
 </div>
+{% endif %}
 
 {% else %}
 {% if not error %}
 <div class="text-center py-5">
-    <i class="bi bi-list-check" style="font-size: 3rem; color: #d1d5db;"></i>
-    <h5 class="mt-3 text-muted">No actions for {{ month }}</h5>
-    <p class="text-muted">Priority actions appear once your performance data is available.</p>
+    <i class="bi bi-rocket-takeoff" style="font-size: 3rem; color: #d1d5db;"></i>
+    <h5 class="mt-3 text-muted">No missions for {{ month }}</h5>
+    <p class="text-muted">Missions appear once your performance data is available.</p>
 </div>
 {% endif %}
 {% endif %}
 
+<!-- XP popup element -->
+<div class="xp-popup" id="xpPopup"></div>
+
 <script>
 var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+function toggleMission(btn) {
+    var body = btn.nextElementSibling;
+    var isOpen = body.classList.contains('open');
+    document.querySelectorAll('.mission-body.open').forEach(function(el) {
+        el.classList.remove('open');
+        el.previousElementSibling.classList.remove('active');
+    });
+    if (!isOpen) {
+        body.classList.add('open');
+        btn.classList.add('active');
+    }
+}
+
+function toggleStep(el) {
+    var isChecked = el.classList.toggle('checked');
+    var icon = el.querySelector('i');
+    icon.style.visibility = isChecked ? 'visible' : 'hidden';
+    if (isChecked) {
+        el.style.transform = 'scale(1.2)';
+        setTimeout(function() { el.style.transform = ''; }, 200);
+    }
+}
+
+function showXpPopup(xp) {
+    var popup = document.getElementById('xpPopup');
+    popup.textContent = '+' + xp + ' XP';
+    popup.classList.add('show');
+    setTimeout(function() { popup.classList.remove('show'); }, 1200);
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.done-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var key = this.dataset.actionKey;
             var month = this.dataset.month;
-            var card = this.closest('.action-card');
+            var xp = this.dataset.xp;
+            var card = this.closest('.mission-card');
+
+            showXpPopup(xp);
             card.style.opacity = '0.3';
             card.style.pointerEvents = 'none';
+
             fetch('/client/actions/dismiss', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
                 body: JSON.stringify({action_key: key, month: month})
             }).then(function(r) {
                 if (r.ok) {
-                    card.style.maxHeight = card.scrollHeight + 'px';
-                    requestAnimationFrame(function() {
-                        card.style.maxHeight = '0';
-                        card.style.marginBottom = '0';
-                        card.style.paddingTop = '0';
-                        card.style.paddingBottom = '0';
-                    });
-                    setTimeout(function() { location.reload(); }, 400);
+                    setTimeout(function() { location.reload(); }, 800);
                 } else {
                     card.style.opacity = '1';
                     card.style.pointerEvents = '';
@@ -280,15 +579,15 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.addEventListener('click', function() {
             var key = this.dataset.actionKey;
             var month = this.dataset.month;
-            var card = this.closest('.action-card');
-            card.style.opacity = '0.2';
+            var badge = this.closest('.done-mission');
+            badge.style.opacity = '0.3';
             fetch('/client/actions/restore', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
                 body: JSON.stringify({action_key: key, month: month})
             }).then(function(r) {
                 if (r.ok) location.reload();
-                else card.style.opacity = '0.5';
+                else badge.style.opacity = '1';
             });
         });
     });

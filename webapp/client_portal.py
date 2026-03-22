@@ -247,6 +247,27 @@ def client_actions():
     active_actions = [a for a in actions if a["key"] not in dismissed][:visible_slots]
     done_actions = [a for a in actions if a["key"] in dismissed]
 
+    # ── XP & Level ──
+    total_xp = sum(a.get("xp", 100) for a in done_actions)
+    max_month_xp = monthly_cap * 150  # theoretical max if all high priority
+
+    from webapp.client_advisor import MONTH_LEVELS
+    level_num = 1
+    level_name = "Rookie"
+    level_desc = "Just getting started"
+    next_level_xp = 200
+    for threshold, num, name, desc in MONTH_LEVELS:
+        if total_xp >= threshold:
+            level_num = num
+            level_name = name
+            level_desc = desc
+    # Find next level threshold
+    next_idx = level_num  # MONTH_LEVELS is 0-indexed, level_num is 1-based
+    if next_idx < len(MONTH_LEVELS):
+        next_level_xp = MONTH_LEVELS[next_idx][0]
+    else:
+        next_level_xp = total_xp
+
     return render_template(
         "client_actions.html",
         brand=brand,
@@ -260,6 +281,12 @@ def client_actions():
         dismissed=dismissed,
         monthly_cap=monthly_cap,
         completed_count=completed_count,
+        total_xp=total_xp,
+        max_month_xp=max_month_xp,
+        level_num=level_num,
+        level_name=level_name,
+        level_desc=level_desc,
+        next_level_xp=next_level_xp,
         error=error,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
