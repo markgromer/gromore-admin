@@ -1255,6 +1255,19 @@ class WebDB:
         conn.close()
         return dict(row) if row else None
 
+    def delete_heatmap_scan(self, scan_id, brand_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM heatmap_scans WHERE id = ? AND brand_id = ?",
+                     (scan_id, brand_id))
+        conn.commit()
+        conn.close()
+
+    def delete_all_heatmap_scans(self, brand_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM heatmap_scans WHERE brand_id = ?", (brand_id,))
+        conn.commit()
+        conn.close()
+
     # ── Warren Memories ──
 
     def add_warren_memory(self, brand_id, category, title, content, embedding=None):

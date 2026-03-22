@@ -195,6 +195,7 @@
                 <input type="text" class="form-control" id="keywordInput"
                        placeholder="e.g. plumber near me" autocomplete="off"
                        {% if active_scan %}value="{{ active_scan.keyword }}"{% endif %}>
+                <small class="text-muted" style="font-size:.78rem;">Use service keywords (what customers search), not your business name.</small>
             </div>
             <div class="col-md-2">
                 <label class="form-label fw-medium mb-1" style="font-size:.88rem;">Radius (miles)</label>
@@ -333,19 +334,34 @@
         <div class="card" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
             <div class="card-body p-3 p-md-4">
                 <h6 class="mb-3"><i class="bi bi-clock-history me-1"></i> Scan History</h6>
+                {% if scans %}
+                <div class="mb-2 text-end">
+                    <button class="btn btn-sm btn-outline-danger" type="button" id="clearAllScansBtn" title="Delete all scans">
+                        <i class="bi bi-trash3 me-1"></i> Clear All
+                    </button>
+                </div>
+                {% endif %}
                 <div id="scanHistory">
                     {% if scans %}
                     {% for scan in scans %}
                     <div class="scan-history-item mb-2 {% if loop.first %}active{% endif %}"
-                         data-scan-id="{{ scan.id }}" onclick="loadScan({{ scan.id }})">
-                        <div class="fw-semibold" style="font-size:.9rem;">{{ scan.keyword }}</div>
-                        <div class="d-flex justify-content-between align-items-center mt-1">
-                            <small class="text-muted">{{ scan.radius_miles }}mi | {{ scan.grid_size }}x{{ scan.grid_size }}</small>
-                            <small class="text-muted">
-                                {% if scan.avg_rank > 0 %}Avg #{{ scan.avg_rank }}{% else %}Not found{% endif %}
-                            </small>
+                         data-scan-id="{{ scan.id }}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div style="cursor:pointer; flex:1;" onclick="loadScan({{ scan.id }})">
+                                <div class="fw-semibold" style="font-size:.9rem;">{{ scan.keyword }}</div>
+                                <div class="d-flex justify-content-between align-items-center mt-1">
+                                    <small class="text-muted">{{ scan.radius_miles }}mi | {{ scan.grid_size }}x{{ scan.grid_size }}</small>
+                                    <small class="text-muted">
+                                        {% if scan.avg_rank > 0 %}Avg #{{ scan.avg_rank }}{% else %}Not found{% endif %}
+                                    </small>
+                                </div>
+                                <small class="text-muted" style="font-size:.75rem;">{{ scan.scanned_at[:16] }}</small>
+                            </div>
+                            <button class="btn btn-sm btn-link text-danger p-0 ms-2 delete-scan-btn" type="button"
+                                    data-scan-id="{{ scan.id }}" title="Delete this scan" style="font-size:.85rem; line-height:1;">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
                         </div>
-                        <small class="text-muted" style="font-size:.75rem;">{{ scan.scanned_at[:16] }}</small>
                     </div>
                     {% endfor %}
                     {% else %}
@@ -758,9 +774,10 @@ function showDebug(d) {
         ' | Place ID: <code>' + (d.place_id_used || 'none') + '</code>' +
         ' | Search radius: ' + d.search_radius_m + 'm' +
         ' | Places returned: ' + d.places_returned +
-        '<br><strong>Top 5 Google results (first grid point):</strong> ' +
-        (d.top_5_names && d.top_5_names.length ? d.top_5_names.map(function(n, i) {
-            return '<br>' + (i+1) + '. ' + n;
+        '<br><strong>Google Places results (first grid point):</strong> ' +
+        (d.top_results && d.top_results.length ? d.top_results.map(function(r, i) {
+            var match = d.place_id_used && r.id === d.place_id_used ? ' <span style="color:#22c55e; font-weight:600;">MATCH</span>' : '';
+            return '<br>' + (i+1) + '. ' + r.name + ' <small style="color:#9ca3af;">(' + r.id.substring(0, 20) + '...)</small>' + match;
         }).join('') : '<em>none returned</em>');
 
     // Show API diagnostics when available
@@ -849,5 +866,57 @@ function loadScan(scanId) {
         plotMapMarkers(scan.results);
     });
 }
+
+function deleteScan(scanId, el) {
+    if (!confirm('Delete this scan?')) return;
+    fetch('/client/heatmap/scan/' + scanId, {
+        method: 'DELETE',
+        headers: {'X-CSRFToken': csrfToken},
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok) {
+            var item = el.closest('.scan-history-item');
+            if (item) item.remove();
+            // If no scans left, show empty message
+            var remaining = document.querySelectorAll('.scan-history-item');
+            if (remaining.length === 0) {
+                document.getElementById('scanHistory').innerHTML =
+                    '<div class="text-center py-3"><small class="text-muted">No scans yet. Run your first scan above.</small></div>';
+                var clearBtn = document.getElementById('clearAllScansBtn');
+                if (clearBtn) clearBtn.style.display = 'none';
+            }
+        }
+    });
+}
+
+function clearAllScans() {
+    if (!confirm('Delete ALL scan history?')) return;
+    fetch('/client/heatmap/scans', {
+        method: 'DELETE',
+        headers: {'X-CSRFToken': csrfToken},
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok) {
+            document.getElementById('scanHistory').innerHTML =
+                '<div class="text-center py-3"><small class="text-muted">No scans yet. Run your first scan above.</small></div>';
+            var clearBtn = document.getElementById('clearAllScansBtn');
+            if (clearBtn) clearBtn.style.display = 'none';
+        }
+    });
+}
+
+// Bind delete buttons
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.delete-scan-btn').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            deleteScan(this.getAttribute('data-scan-id'), this);
+        });
+    });
+    var clearBtn = document.getElementById('clearAllScansBtn');
+    if (clearBtn) clearBtn.addEventListener('click', clearAllScans);
+});
 </script>
 {% endblock %}

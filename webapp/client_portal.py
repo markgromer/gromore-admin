@@ -3698,6 +3698,27 @@ def client_heatmap_view_scan(scan_id):
     return jsonify(ok=True, scan=scan)
 
 
+@client_bp.route("/heatmap/scan/<int:scan_id>", methods=["DELETE"])
+@client_login_required
+def client_heatmap_delete_scan(scan_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    scan = db.get_heatmap_scan(scan_id)
+    if not scan or scan["brand_id"] != brand_id:
+        return jsonify(ok=False, error="Scan not found"), 404
+    db.delete_heatmap_scan(scan_id, brand_id)
+    return jsonify(ok=True)
+
+
+@client_bp.route("/heatmap/scans", methods=["DELETE"])
+@client_login_required
+def client_heatmap_clear_scans():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    db.delete_all_heatmap_scans(brand_id)
+    return jsonify(ok=True)
+
+
 # ── Help Center ──
 
 @client_bp.route("/help")

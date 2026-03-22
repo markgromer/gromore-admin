@@ -281,16 +281,19 @@ def scan_grid(api_key, keyword, business_name, grid_points,
                 "place_id_used": place_id,
                 "search_radius_m": search_radius_m,
                 "places_returned": len(places),
-                "top_5_names": [
-                    (p.get("displayName", {}).get("text", "") or "")
-                    for p in places[:5]
+                "top_results": [
+                    {
+                        "name": (p.get("displayName", {}).get("text", "") or ""),
+                        "id": p.get("id", ""),
+                    }
+                    for p in places[:10]
                 ],
                 "api_diagnostics": api_diag,
             }
             log.info("Heatmap debug - matching '%s' (place_id=%s) | "
                      "top results: %s | api_diag: %s",
                      business_name, place_id,
-                     debug_sample["top_5_names"], api_diag)
+                     [r["name"] for r in debug_sample["top_results"]], api_diag)
         results.append({
             "row": pt["row"],
             "col": pt["col"],
