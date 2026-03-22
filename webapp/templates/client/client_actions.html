@@ -242,7 +242,25 @@
     }
     .complete-btn:hover { background: #10b981; color: #fff; }
 
-    .difficulty-stars { font-size: .7rem; color: #f59e0b; letter-spacing: 1px; }
+    .difficulty-stars { font-size: .75rem; color: #f59e0b; letter-spacing: 1px; }
+
+    .platform-link {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        font-size: .82rem;
+        font-weight: 600;
+        color: #4338ca;
+        text-decoration: none;
+        padding: .4rem .75rem;
+        border-radius: 8px;
+        background: #eef2ff;
+        border: 1px solid #c7d2fe;
+        transition: all .15s;
+        margin-bottom: .75rem;
+    }
+    .platform-link:hover { background: #4338ca; color: #fff; border-color: #4338ca; }
+    .platform-link i { font-size: .9rem; }
 
     /* ── Completed Missions ── */
     .done-mission {
@@ -427,7 +445,7 @@
                         {% if action.time %}<span class="sep">&middot;</span><span><i class="bi bi-clock"></i> {{ action.time }}</span>{% endif %}
                         {% if action.difficulty %}
                         <span class="sep">&middot;</span>
-                        <span class="difficulty-stars">{{ '&#9733;' * action.difficulty }}{{ '&#9734;' * (3 - action.difficulty) }}</span>
+                        <span class="difficulty-stars">{{ ('★' * action.difficulty ~ '☆' * (3 - action.difficulty)) }}</span>
                         {% endif %}
                     </div>
                 </div>
@@ -444,8 +462,15 @@
                 </div>
                 {% endif %}
 
-                <!-- Skill tag -->
-                <div class="skill-tag"><i class="bi bi-lightbulb-fill"></i> {{ action.skill }}</div>
+                <!-- Skill tag + Platform link -->
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                    <div class="skill-tag mb-0"><i class="bi bi-lightbulb-fill"></i> {{ action.skill }}</div>
+                    {% if action.platform_url %}
+                    <a href="{{ action.platform_url }}" target="_blank" rel="noopener" class="platform-link mb-0">
+                        <i class="bi bi-box-arrow-up-right"></i> {{ action.platform_label }}
+                    </a>
+                    {% endif %}
+                </div>
 
                 <!-- Micro-steps -->
                 {% if action.steps %}

@@ -21,13 +21,20 @@ log = logging.getLogger(__name__)
 # ── Mission metadata for gamified action plan ──
 
 _CATEGORY_META = {
-    "paid_advertising": {"icon": "bi-megaphone-fill", "color": "#6366f1", "skill": "Ad Optimization"},
-    "seo":              {"icon": "bi-search",         "color": "#059669", "skill": "Search Visibility"},
-    "website":          {"icon": "bi-globe2",         "color": "#2563eb", "skill": "Website Performance"},
-    "strategy":         {"icon": "bi-compass-fill",   "color": "#7c3aed", "skill": "Growth Strategy"},
-    "creative":         {"icon": "bi-palette-fill",   "color": "#db2777", "skill": "Creative Impact"},
-    "budget":           {"icon": "bi-piggy-bank-fill","color": "#d97706", "skill": "Budget Strategy"},
-    "organic_social":   {"icon": "bi-people-fill",    "color": "#0891b2", "skill": "Social Engagement"},
+    "paid_advertising": {"icon": "bi-megaphone-fill", "color": "#6366f1", "skill": "Ad Optimization",
+                         "platform_url": "https://ads.google.com", "platform_label": "Open Google Ads"},
+    "seo":              {"icon": "bi-search",         "color": "#059669", "skill": "Search Visibility",
+                         "platform_url": "https://search.google.com/search-console", "platform_label": "Open Search Console"},
+    "website":          {"icon": "bi-globe2",         "color": "#2563eb", "skill": "Website Performance",
+                         "platform_url": "https://analytics.google.com", "platform_label": "Open Google Analytics"},
+    "strategy":         {"icon": "bi-compass-fill",   "color": "#7c3aed", "skill": "Growth Strategy",
+                         "platform_url": "", "platform_label": ""},
+    "creative":         {"icon": "bi-palette-fill",   "color": "#db2777", "skill": "Creative Impact",
+                         "platform_url": "https://business.facebook.com/adsmanager", "platform_label": "Open Ads Manager"},
+    "budget":           {"icon": "bi-piggy-bank-fill","color": "#d97706", "skill": "Budget Strategy",
+                         "platform_url": "https://ads.google.com", "platform_label": "Open Google Ads"},
+    "organic_social":   {"icon": "bi-people-fill",    "color": "#0891b2", "skill": "Social Engagement",
+                         "platform_url": "https://business.facebook.com", "platform_label": "Open Meta Business Suite"},
 }
 
 MONTH_LEVELS = [
@@ -555,9 +562,23 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None):
         cat_key = s.get("category", "")
         cat_meta = _CATEGORY_META.get(
             cat_key,
-            {"icon": "bi-star-fill", "color": "#6b7280", "skill": "Marketing"},
+            {"icon": "bi-star-fill", "color": "#6b7280", "skill": "Marketing",
+             "platform_url": "", "platform_label": ""},
         )
         xp = 150 if s["priority"] == "high" else (100 if s["priority"] == "medium" else 75)
+
+        # Detect platform from title when category is ambiguous
+        title_lower = s["title"].lower()
+        platform_url = cat_meta.get("platform_url", "")
+        platform_label = cat_meta.get("platform_label", "")
+        if cat_key in ("paid_advertising", "budget", "creative"):
+            if any(w in title_lower for w in ("facebook", "meta", "instagram")):
+                platform_url = "https://business.facebook.com/adsmanager"
+                platform_label = "Open Ads Manager"
+            elif any(w in title_lower for w in ("google", "search", "cpc", "ppc")):
+                platform_url = "https://ads.google.com"
+                platform_label = "Open Google Ads"
+
         card = {
             "title": _client_friendly_title(s["title"]),
             "priority": "Do This Now" if s["priority"] == "high" else "Worth Doing Soon",
@@ -575,6 +596,8 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None):
             "icon": cat_meta["icon"],
             "icon_color": cat_meta["color"],
             "skill": cat_meta["skill"],
+            "platform_url": platform_url,
+            "platform_label": platform_label,
             "xp": xp,
             "difficulty": 0,
         }
@@ -610,28 +633,59 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None):
 
 
 def _fallback_steps(suggestion):
-    """Build basic actionable steps from the suggestion when AI generation fails."""
+    """Build actionable steps from the suggestion when AI generation fails.
+
+    Instead of just splitting the detail into sentences, produce concrete
+    steps with platform links so the user knows WHERE to go.
+    """
     steps = []
     detail = suggestion.get("detail", "")
     title = suggestion.get("title", "")
     category = suggestion.get("category", "")
     data_point = suggestion.get("data_point", "")
 
+    _platform_urls = {
+        "paid_advertising": ("ads.google.com", "Google Ads"),
+        "budget": ("ads.google.com", "Google Ads"),
+        "creative": ("business.facebook.com/adsmanager", "Ads Manager"),
+        "seo": ("search.google.com/search-console", "Google Search Console"),
+        "website": ("analytics.google.com", "Google Analytics"),
+        "organic_social": ("business.facebook.com", "Meta Business Suite"),
+    }
+
+    title_lower = title.lower()
+
+    # Detect correct platform from title keywords
+    if any(w in title_lower for w in ("facebook", "meta", "instagram")):
+        url, label = "business.facebook.com/adsmanager", "Ads Manager"
+    elif any(w in title_lower for w in ("google ads", "cpc", "cost per click", "ppc")):
+        url, label = "ads.google.com", "Google Ads"
+    elif any(w in title_lower for w in ("seo", "ranking", "search console")):
+        url, label = "search.google.com/search-console", "Google Search Console"
+    elif "analytic" in title_lower:
+        url, label = "analytics.google.com", "Google Analytics"
+    else:
+        url, label = _platform_urls.get(category, ("", ""))
+
+    if url:
+        steps.append(f"Go to {url} and log in to your {label} account.")
+
+    if data_point:
+        steps.append(f"Your current number: {data_point}. Look for this in your dashboard to confirm.")
+
+    # Extract actionable info from detail
     if detail:
-        # Split detail into sentences and use each as a step
         sentences = [s.strip() for s in detail.replace(". ", ".\n").split("\n") if s.strip()]
-        for s in sentences[:4]:
+        # Take first sentence that looks actionable (contains a verb-like word)
+        for s in sentences[:3]:
             if not s.endswith("."):
                 s += "."
             steps.append(s)
 
-    if not steps:
-        steps.append(f"Review your {category} performance data for this month.")
-        if data_point:
-            steps.append(f"Focus on the key metric: {data_point}.")
+    if len(steps) < 2:
         steps.append(f"Take action on: {title}.")
 
-    return steps
+    return steps[:5]
 
 
 def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
@@ -763,18 +817,18 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
     system = (
         "You are the senior paid-media and SEO strategist inside GroMore. "
         "You have completed a deep-dive analysis of this account. "
-        "Now produce MISSIONS the business owner can knock out.\n\n"
+        "Now produce MISSIONS the business owner can execute right now.\n\n"
 
-        "Each mission is a small, concrete task they can finish in one sitting. "
-        "Write like you are sitting next to them, pointing at their screen.\n\n"
+        "These are for a BUSINESS OWNER, not a marketer. They do not know industry terms. "
+        "Every step must be like a GPS direction: go here, click this, type this, done.\n\n"
 
         "OUTPUT FORMAT (JSON only):\n"
         "{\"actions\": [\n"
         "  {\n"
-        "    \"mission_name\": \"3-6 word action-oriented name\",\n"
+        "    \"mission_name\": \"3-6 word punchy verb phrase\",\n"
         "    \"micro_steps\": [\"step 1\", \"step 2\", ...],\n"
-        "    \"why\": \"one sentence connecting this to their money or leads\",\n"
-        "    \"reward\": \"one sentence: what changes when they finish\",\n"
+        "    \"why\": \"one sentence: how this is costing them money or losing them leads\",\n"
+        "    \"reward\": \"one sentence: what improves when they finish\",\n"
         "    \"impact\": \"one sentence with specific projected numbers\",\n"
         "    \"time\": \"15 minutes\"\n"
         "  }\n"
@@ -782,48 +836,54 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
         "One object per action_item, same order as input.\n\n"
 
         "MISSION NAME RULES:\n"
-        "- 3-6 words, starts with a verb. Active, punchy, specific to their situation.\n"
-        "- GOOD: \"Kill the $340 Money Drain\", \"Double Your Click Rate\", \"Unlock Page-1 Rankings\", "
-        "\"Stop Paying for Junk Clicks\", \"Launch a Lead Magnet Ad\"\n"
-        "- BAD: \"Optimize Campaign Performance\", \"Improve Your SEO\", \"Review Analytics Data\"\n\n"
+        "- 3-6 words, starts with a verb. Punchy and specific.\n"
+        "- GOOD: \"Kill the $340 Money Drain\", \"Stop Paying for Junk Clicks\", "
+        "\"Fix Your Broken Landing Page\", \"Launch a High-Converting Ad\"\n"
+        "- BAD: \"Optimize Campaign Performance\", \"Improve Your SEO\", \"Tune Underperforming Campaigns\"\n\n"
 
-        "MICRO-STEP RULES:\n"
-        "- 3-5 steps per mission. Each step is ONE small action, done in 2-3 minutes.\n"
-        "- Every step starts with a verb: Log in, Open, Click, Type, Navigate, Pause, Add, Create, Copy, Paste\n"
-        "- Every step MUST reference specific data from relevant_data: "
-        "name the campaign, keyword, search term, ad, page URL, query, dollar amount, metric\n"
-        "- Include WHERE to go: 'Log into Google Ads > Campaigns > [campaign name]'\n"
-        "- Steps should be concrete work: exact keywords to pause, exact ad copy to test "
-        "(write the headlines), exact budget numbers, exact pages to optimize\n"
-        "- Each step: 1-2 sentences max. What to do and where, with a number from the data.\n\n"
+        "MICRO-STEP FORMAT - CRITICAL:\n"
+        "Each step MUST follow this exact pattern:\n"
+        "  [Action verb] at [platform URL or path]. [Exactly what to do]. [One data point why.]\n\n"
+        "3-5 steps per mission. Each step = ONE click-level action done in 2-3 minutes.\n\n"
 
-        "WHY field: One sentence connecting this mission to their revenue, leads, or wasted spend. "
-        "Use a specific dollar amount or lead count. "
-        "Example: \"You're burning $340/month on a keyword that never converts, enough for 8 more leads elsewhere.\"\n\n"
+        "STEP LINK RULES (MANDATORY):\n"
+        "- Google Ads steps: start with 'Go to ads.google.com >'\n"
+        "- Facebook/Meta steps: start with 'Go to business.facebook.com/adsmanager >'\n"
+        "- Google Analytics steps: start with 'Go to analytics.google.com >'\n"
+        "- Search Console steps: start with 'Go to search.google.com/search-console >'\n"
+        "- Google Business Profile steps: start with 'Go to business.google.com >'\n"
+        "- Website edits: tell them exactly which page URL to edit and what to change\n"
+        "- NEVER write a step without telling them WHERE to go first\n\n"
 
-        "REWARD field: One sentence describing the concrete result they'll see after completing. "
-        "Example: \"Your ad budget shifts to keywords that actually bring in phone calls.\"\n\n"
+        "WHAT MAKES A BAD STEP (NEVER do this):\n"
+        "- 'Review your campaigns and pause underperformers' (WHICH campaigns?)\n"
+        "- 'Add negative keywords to reduce waste' (WHICH keywords?)\n"
+        "- 'Reallocate spend toward top converters' (move how much from where to where?)\n"
+        "- 'Optimize your landing pages' (WHICH page? change WHAT?)\n"
+        "- 'Tighten targeting' (change what setting to what value?)\n"
+        "- 'These campaigns are under target' (that's a FACT, not a STEP)\n"
+        "- 'Consider testing new ad copy' (WRITE the actual copy for them)\n"
+        "- Any sentence that DESCRIBES a problem instead of SOLVING it\n\n"
 
-        "IMPACT: One sentence with specific projected numbers from the data. "
-        "Example: 'Moving $200/month could generate about 5 more leads based on the $38 CPA.'\n\n"
+        "WHAT MAKES A GOOD STEP (ALWAYS do this):\n"
+        "- 'Go to ads.google.com > Campaigns > \"SDL Search Campaign\". Click budget. Change daily budget from $50 to $35. This campaign is spending $7.84/click with no leads.'\n"
+        "- 'Go to ads.google.com > Tools > Negative Keywords. Add these words: \"DIY\", \"how to\", \"free\", \"salary\". They appeared 89 times and wasted about $120.'\n"
+        "- 'Go to business.facebook.com/adsmanager. Click Create. Choose Lead Generation. Set budget to $10/day. Use this headline: \"Same-Day AC Repair - Free Estimates | Licensed & Insured\".'\n"
+        "- 'Go to search.google.com/search-console > Performance. Find \"water heater installation Phoenix\". You have 1,200 impressions at position 18. Create a new page on your site targeting that exact phrase.'\n\n"
 
-        "TIME: Be specific. '10 minutes', '15 minutes', '30 minutes', '1 hour'. Not 'varies' or 'ongoing'.\n\n"
+        "WHY field: One sentence using a specific dollar amount or lead count. "
+        "Example: \"You burned $340 last month on clicks that never turned into a phone call.\"\n\n"
 
-        "WHAT MAKES A BAD STEP (never do this):\n"
-        "- 'Review your campaigns and pause underperformers' (which campaigns? what metric?)\n"
-        "- 'Add negative keywords to reduce waste' (which negative keywords?)\n"
-        "- 'Optimize your landing pages' (which pages? for what?)\n"
-        "- 'Consider testing new ad copy' (write the actual copy)\n"
-        "- 'Monitor performance and adjust' (adjust what? to what number?)\n"
-        "- 'You should look into...' (tell them what to do, not what to look into)\n\n"
+        "REWARD field: Concrete result, not vague improvement. "
+        "Example: \"$340/month gets redirected to keywords that actually generate calls.\"\n\n"
 
-        "WHAT MAKES A GOOD STEP (do this):\n"
-        "- 'Log into Google Ads > Keywords. Sort by Cost (high to low). Pause \"emergency plumber near me\" - it spent $340 with 0 conversions.'\n"
-        "- 'Go to Search Terms report. Add these as negative keywords: \"DIY\", \"how to\", \"salary\", \"jobs\" - they burned $120 with no conversions.'\n"
-        "- 'Create a new responsive search ad: \"Same-Day AC Repair - Licensed & Insured | Free Estimates\". Current CTR is 2.1% vs 4-5% benchmark.'\n\n"
+        "IMPACT: Specific projected numbers. "
+        "Example: 'Could save $340/month and generate about 5 more leads at $38 each.'\n\n"
 
-        "If relevant_data for an action item is empty, build the best steps you can from the detail and data_point fields, "
-        "but still be specific and never use filler phrases like 'consider', 'you might want to', or 'it could be beneficial'."
+        "TIME: '5 minutes', '10 minutes', '15 minutes', '30 minutes'. Not 'varies'.\n\n"
+
+        "If relevant_data for an action item is empty, still give concrete steps using the detail and data_point, "
+        "always including the platform URL. Never use filler like 'consider', 'you might want to', or 'look into'."
     )
 
     headers = {
