@@ -466,6 +466,40 @@ var __gradeLabels = {{ _grade_labels | tojson }};
 
                 // Show "What Should I Do?" button after data loads
                 document.getElementById('wsidSection').style.display = '';
+
+                // Proactive Warren greeting (once per session)
+                if (!sessionStorage.getItem('warren_greeted')) {
+                    sessionStorage.setItem('warren_greeted', '1');
+                    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+                    var csrfVal = csrfMeta ? csrfMeta.getAttribute('content') : '';
+                    fetch('{{ url_for("client.client_assistant_proactive") }}', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfVal },
+                        body: JSON.stringify({ hint: '' }),
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(pData) {
+                        if (pData.greeting) {
+                            // Show in the Warren assistant panel
+                            var logEl = document.getElementById('assistantLog');
+                            if (logEl) {
+                                var div = document.createElement('div');
+                                div.className = 'assistant-bubble assistant';
+                                div.innerHTML = (window.marked ? marked.parse(pData.greeting) : pData.greeting);
+                                logEl.appendChild(div);
+                                logEl.scrollTop = logEl.scrollHeight;
+                                // Expand assistant if collapsed
+                                var shell = document.getElementById('globalAssistantShell');
+                                if (shell && shell.classList.contains('assistant-collapsed')) {
+                                    shell.classList.remove('assistant-collapsed');
+                                    localStorage.setItem('clientAssistantCollapsed', '0');
+                                }
+                            }
+                        }
+                    })
+                    .catch(function() {});
+                }
             }
         }, 600);
     })

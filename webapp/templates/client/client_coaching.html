@@ -1,0 +1,314 @@
+{% extends "client/client_base.html" %}
+
+{% block title %}Coaching{% endblock %}
+
+{% block head %}
+<style>
+    .coaching-hero {
+        background: linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%);
+        border-radius: 16px;
+        padding: 2rem 2.5rem;
+        color: #fff;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 8px 32px rgba(6, 78, 59, .25);
+    }
+    .coaching-hero h4 { font-weight: 700; margin-bottom: .5rem; }
+    .coaching-hero p { color: rgba(255,255,255,.75); font-size: .92rem; margin-bottom: 0; }
+
+    .topic-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    .topic-card {
+        background: #fff;
+        border: 2px solid #e5e7eb;
+        border-radius: 14px;
+        padding: 1.25rem;
+        cursor: pointer;
+        transition: all .2s;
+        text-align: center;
+    }
+    .topic-card:hover { border-color: #059669; box-shadow: 0 4px 16px rgba(5,150,105,.12); transform: translateY(-2px); }
+    .topic-card.selected { border-color: #059669; background: #ecfdf5; }
+    .topic-card .topic-icon { font-size: 1.75rem; margin-bottom: .5rem; display: block; }
+    .topic-card .topic-name { font-weight: 600; font-size: .95rem; color: #0f172a; }
+    .topic-card .topic-desc { font-size: .8rem; color: #64748b; margin-top: .25rem; }
+
+    .coaching-chat {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        min-height: 300px;
+        max-height: 60vh;
+        overflow-y: auto;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+    }
+    .coaching-bubble {
+        max-width: 85%;
+        padding: .75rem 1rem;
+        border-radius: 12px;
+        margin-bottom: .75rem;
+        font-size: .92rem;
+        line-height: 1.6;
+    }
+    .coaching-bubble.warren {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        margin-right: auto;
+    }
+    .coaching-bubble.warren p { margin-bottom: .5rem; }
+    .coaching-bubble.warren p:last-child { margin-bottom: 0; }
+    .coaching-bubble.user {
+        background: #059669;
+        color: #fff;
+        margin-left: auto;
+    }
+    .coaching-input-area {
+        display: flex;
+        gap: .5rem;
+    }
+    .coaching-input-area textarea {
+        resize: none;
+        border-radius: 12px;
+        max-height: 100px;
+    }
+    .coaching-typing {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: .5rem 1rem;
+        color: #64748b;
+        font-size: .85rem;
+    }
+    .coaching-typing .dot {
+        width: 6px; height: 6px;
+        background: #94a3b8;
+        border-radius: 50%;
+        animation: coachDot .8s ease-in-out infinite;
+    }
+    .coaching-typing .dot:nth-child(2) { animation-delay: .15s; }
+    .coaching-typing .dot:nth-child(3) { animation-delay: .3s; }
+    @keyframes coachDot {
+        0%, 80%, 100% { transform: scale(1); opacity: .5; }
+        40% { transform: scale(1.3); opacity: 1; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="coaching-hero">
+    <h4><i class="bi bi-mortarboard me-2"></i>Warren Coaching</h4>
+    <p>Pick a topic. Warren will analyze your account, surface what matters, and coach you through it.</p>
+</div>
+
+<div id="topicSelection">
+    <h6 class="mb-3" style="color: #374151;">What do you want to work on?</h6>
+    <div class="topic-grid">
+        <div class="topic-card" onclick="selectTopic(this, 'general')">
+            <span class="topic-icon"><i class="bi bi-clipboard-data" style="color: #059669;"></i></span>
+            <div class="topic-name">Full Check-In</div>
+            <div class="topic-desc">Scan everything, surface what matters most</div>
+        </div>
+        <div class="topic-card" onclick="selectTopic(this, 'budget')">
+            <span class="topic-icon"><i class="bi bi-cash-stack" style="color: #d97706;"></i></span>
+            <div class="topic-name">Budget & Spend</div>
+            <div class="topic-desc">CPA, ROAS, waste, and budget allocation</div>
+        </div>
+        <div class="topic-card" onclick="selectTopic(this, 'creative')">
+            <span class="topic-icon"><i class="bi bi-brush" style="color: #7c3aed;"></i></span>
+            <div class="topic-name">Creative & Messaging</div>
+            <div class="topic-desc">What copy and angles are working (or not)</div>
+        </div>
+        <div class="topic-card" onclick="selectTopic(this, 'growth')">
+            <span class="topic-icon"><i class="bi bi-graph-up-arrow" style="color: #2563eb;"></i></span>
+            <div class="topic-name">Growth Opportunities</div>
+            <div class="topic-desc">Untapped keywords, audiences, or new angles</div>
+        </div>
+        <div class="topic-card" onclick="selectTopic(this, 'troubleshoot')">
+            <span class="topic-icon"><i class="bi bi-wrench" style="color: #dc2626;"></i></span>
+            <div class="topic-name">Troubleshoot</div>
+            <div class="topic-desc">Something is off - help me find and fix it</div>
+        </div>
+    </div>
+    <button class="btn btn-success btn-lg px-4" id="startCoachingBtn" disabled onclick="startCoaching()">
+        <i class="bi bi-play-circle me-2"></i>Start Session
+    </button>
+</div>
+
+<div id="coachingSession" style="display:none;">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0" id="sessionTopicLabel"><i class="bi bi-mortarboard me-1"></i> Coaching Session</h6>
+        <button class="btn btn-sm btn-outline-secondary" onclick="endSession()"><i class="bi bi-arrow-left me-1"></i>New Session</button>
+    </div>
+    <div class="coaching-chat" id="coachingChat"></div>
+    <div class="coaching-input-area">
+        <textarea class="form-control" id="coachingInput" placeholder="Reply to Warren..." rows="2"></textarea>
+        <button class="btn btn-success" id="coachingSend" onclick="sendCoachingMessage()">
+            <i class="bi bi-send-fill"></i>
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var selectedTopic = '';
+var coachingMessages = [];
+var csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+function selectTopic(el, topic) {
+    document.querySelectorAll('.topic-card').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedTopic = topic;
+    document.getElementById('startCoachingBtn').disabled = false;
+}
+
+function startCoaching() {
+    if (!selectedTopic) return;
+
+    var topicLabels = {
+        general: 'Full Check-In',
+        budget: 'Budget & Spend',
+        creative: 'Creative & Messaging',
+        growth: 'Growth Opportunities',
+        troubleshoot: 'Troubleshoot',
+    };
+
+    document.getElementById('topicSelection').style.display = 'none';
+    document.getElementById('coachingSession').style.display = '';
+    document.getElementById('sessionTopicLabel').innerHTML =
+        '<i class="bi bi-mortarboard me-1"></i> Coaching: ' + (topicLabels[selectedTopic] || selectedTopic);
+
+    var chat = document.getElementById('coachingChat');
+    chat.innerHTML = '';
+    coachingMessages = [];
+
+    showCoachingTyping();
+    disableCoachingInput(true);
+
+    fetch('{{ url_for("client.client_coaching_start") }}', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+        body: JSON.stringify({ month: '{{ month }}', topic: selectedTopic }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        hideCoachingTyping();
+        disableCoachingInput(false);
+        if (data.error) {
+            addCoachingBubble('warren', 'Error: ' + data.error);
+        } else if (data.reply) {
+            coachingMessages.push({ role: 'assistant', content: data.reply });
+            addCoachingBubble('warren', data.reply);
+        }
+    })
+    .catch(() => {
+        hideCoachingTyping();
+        disableCoachingInput(false);
+        addCoachingBubble('warren', 'Connection error. Please try again.');
+    });
+}
+
+function sendCoachingMessage() {
+    var input = document.getElementById('coachingInput');
+    var msg = (input.value || '').trim();
+    if (!msg) return;
+
+    addCoachingBubble('user', msg);
+    coachingMessages.push({ role: 'user', content: msg });
+    input.value = '';
+
+    showCoachingTyping();
+    disableCoachingInput(true);
+
+    fetch('{{ url_for("client.client_assistant_chat") }}', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+        body: JSON.stringify({
+            message: msg,
+            month: '{{ month }}',
+            page_path: '/client/coaching',
+            page_title: 'Coaching Session',
+            page_endpoint: 'client.client_coaching',
+            page_hint: 'Active coaching session. Stay in coaching mode - be direct, ask follow-up questions, give specific advice grounded in data. Topic: ' + selectedTopic,
+        }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        hideCoachingTyping();
+        disableCoachingInput(false);
+        if (data.error) {
+            addCoachingBubble('warren', 'Error: ' + data.error);
+        } else if (data.reply) {
+            coachingMessages.push({ role: 'assistant', content: data.reply });
+            addCoachingBubble('warren', data.reply);
+        }
+    })
+    .catch(() => {
+        hideCoachingTyping();
+        disableCoachingInput(false);
+        addCoachingBubble('warren', 'Connection error. Please try again.');
+    });
+}
+
+function addCoachingBubble(role, text) {
+    var chat = document.getElementById('coachingChat');
+    var div = document.createElement('div');
+    div.className = 'coaching-bubble ' + (role === 'user' ? 'user' : 'warren');
+
+    if (role === 'user') {
+        div.textContent = text;
+    } else {
+        if (window.marked) {
+            try { div.innerHTML = marked.parse(text); } catch(e) { div.textContent = text; }
+        } else {
+            div.textContent = text;
+        }
+    }
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+function showCoachingTyping() {
+    var chat = document.getElementById('coachingChat');
+    var el = document.createElement('div');
+    el.id = 'coachingTyping';
+    el.className = 'coaching-typing';
+    el.innerHTML = '<div class="dot"></div><div class="dot"></div><div class="dot"></div><span style="margin-left:4px;">Warren is thinking...</span>';
+    chat.appendChild(el);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+function hideCoachingTyping() {
+    var el = document.getElementById('coachingTyping');
+    if (el) el.remove();
+}
+
+function disableCoachingInput(disabled) {
+    document.getElementById('coachingInput').disabled = disabled;
+    document.getElementById('coachingSend').disabled = disabled;
+    if (!disabled) document.getElementById('coachingInput').focus();
+}
+
+function endSession() {
+    document.getElementById('coachingSession').style.display = 'none';
+    document.getElementById('topicSelection').style.display = '';
+    selectedTopic = '';
+    document.querySelectorAll('.topic-card').forEach(c => c.classList.remove('selected'));
+    document.getElementById('startCoachingBtn').disabled = true;
+}
+
+// Enter to send
+document.getElementById('coachingInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendCoachingMessage();
+    }
+});
+</script>
+{% endblock %}

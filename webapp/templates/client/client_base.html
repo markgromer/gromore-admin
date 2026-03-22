@@ -745,6 +745,9 @@
             <a href="{{ url_for('client.client_actions') }}" class="{% if request.endpoint == 'client.client_actions' %}active{% endif %}">
                 <i class="bi bi-clipboard2-check"></i> Missions
             </a>
+            <a href="{{ url_for('client.client_coaching') }}" class="{% if request.endpoint == 'client.client_coaching' %}active{% endif %}" style="color:#059669; font-weight:600;">
+                <i class="bi bi-mortarboard"></i> Coaching
+            </a>
 
             <div class="nav-section-label">Create</div>
             <a href="{{ url_for('client.client_ad_builder') }}" class="{% if request.endpoint in ('client.client_ad_builder', 'client.client_ad_builder_generate') %}active{% endif %}">

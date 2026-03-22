@@ -356,6 +356,201 @@ def client_assistant_clear():
     return jsonify({"success": True})
 
 
+@client_bp.route("/assistant/proactive", methods=["POST"])
+@client_login_required
+def client_assistant_proactive():
+    """Generate a proactive check-in message from Warren on login/dashboard load."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"greeting": ""}), 200
+
+    api_key = _get_openai_api_key(brand)
+    if not api_key:
+        return jsonify({"greeting": ""}), 200
+
+    month = _assistant_month()
+    hint = (request.get_json(silent=True) or {}).get("hint", "")
+
+    try:
+        from webapp.report_runner import build_analysis_and_suggestions_for_brand
+        from webapp.ai_assistant import chat_with_warren, summarize_analysis_for_ai, DEFAULT_CHAT_SYSTEM_PROMPT
+
+        analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
+        summary = summarize_analysis_for_ai(analysis) if isinstance(analysis, dict) else None
+
+        has_google, has_meta = _get_ad_connection_status(db, brand)
+
+        proactive_prompt = (
+            "You are greeting the user as they open their dashboard. "
+            "Be brief (2-4 sentences). Do NOT repeat their name or say 'Welcome back'. "
+            "Scan the data and lead with the single most important thing they need to know right now. "
+            "If something is off-track, flag it directly. If things are going well, say so and suggest a next move. "
+            "If no data is available, suggest connecting accounts or generating their first report. "
+            "End with a question or nudge that invites a response."
+        )
+        if not has_google and not has_meta:
+            proactive_prompt += " NOTE: No ad accounts are connected yet. Guide them to the Connections page."
+
+        if hint:
+            proactive_prompt += " Additional context: " + hint[:200]
+
+        context = {
+            "client_mode": True,
+            "brand": {
+                "name": brand.get("display_name"),
+                "industry": brand.get("industry"),
+                "service_area": brand.get("service_area"),
+                "primary_services": brand.get("primary_services"),
+                "monthly_budget": brand.get("monthly_budget"),
+                "website": brand.get("website"),
+                "goals": brand.get("goals"),
+            },
+            "month": month,
+            "page_context": {"path": "/client/dashboard", "title": "Dashboard", "endpoint": "client.client_dashboard", "hint": "proactive greeting on load"},
+            "analysis": summary,
+            "suggestions": suggestions,
+        }
+
+        reply = chat_with_warren(
+            api_key=api_key,
+            model=_pick_ai_model(brand, "chat"),
+            context=context,
+            messages=[{"role": "user", "content": proactive_prompt}],
+            admin_system_prompt=db.get_setting("ai_chat_system_prompt", "").strip() or DEFAULT_CHAT_SYSTEM_PROMPT,
+            timeout=30,
+            db=db,
+            brand_id=brand_id,
+        )
+        reply = (reply or "").strip()
+        if reply:
+            db.add_ai_chat_message(brand_id, month, "assistant", reply)
+        return jsonify({"greeting": reply})
+    except Exception as e:
+        log.warning("Proactive greeting failed: %s", e)
+        return jsonify({"greeting": ""}), 200
+
+
+@client_bp.route("/coaching")
+@client_login_required
+def client_coaching():
+    """Warren Coaching - structured strategy session."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        flash("Brand not found.", "error")
+        return redirect(url_for("client.client_dashboard"))
+
+    month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+    return render_template(
+        "client/client_coaching.html",
+        brand=brand,
+        month=month,
+    )
+
+
+@client_bp.route("/coaching/start", methods=["POST"])
+@client_login_required
+def client_coaching_start():
+    """Start a coaching session - Warren analyzes the account and opens the conversation."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"error": "Brand not found"}), 404
+
+    api_key = _get_openai_api_key(brand)
+    if not api_key:
+        return jsonify({"error": "No OpenAI API key configured. Add one in Connections."}), 400
+
+    month = (request.get_json(silent=True) or {}).get("month") or _assistant_month()
+    topic = (request.get_json(silent=True) or {}).get("topic", "general")
+
+    try:
+        from webapp.report_runner import build_analysis_and_suggestions_for_brand
+        from webapp.ai_assistant import chat_with_warren, summarize_analysis_for_ai, DEFAULT_CHAT_SYSTEM_PROMPT
+
+        analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
+        summary = summarize_analysis_for_ai(analysis) if isinstance(analysis, dict) else None
+
+        topic_prompts = {
+            "general": (
+                "Run a coaching check-in. Scan every data point available. "
+                "Identify the top 2-3 things that need attention and explain why clearly. "
+                "Then ask what the user is struggling with or what they want to focus on. "
+                "Be direct, not generic."
+            ),
+            "budget": (
+                "Focus on budget and spend efficiency. Look at CPA, ROAS, daily budget, "
+                "and spend distribution across campaigns. Identify waste or underspend. "
+                "Then ask about their budget goals or constraints."
+            ),
+            "creative": (
+                "Focus on ad creative and messaging. Look at CTR, engagement rates, "
+                "top-performing ads vs underperformers. Identify patterns in what works. "
+                "Then ask what messaging angles they want to explore."
+            ),
+            "growth": (
+                "Focus on growth opportunities. Look at search terms, keyword opportunities, "
+                "audience signals, and competitor gaps. Identify untapped potential. "
+                "Then ask about their growth priorities for the next 30 days."
+            ),
+            "troubleshoot": (
+                "The user needs help diagnosing a problem. Scan all metrics for red flags: "
+                "declining trends, off-track KPIs, high CPAs, low CTR, wasted spend. "
+                "Present your findings clearly and ask what symptoms they are seeing."
+            ),
+        }
+
+        coaching_prompt = topic_prompts.get(topic, topic_prompts["general"])
+        coaching_prompt = (
+            "You are starting a focused coaching session. "
+            + coaching_prompt
+            + " Keep your opening to 3-5 sentences. Use specific numbers from the data. "
+            "End with 1-2 targeted questions to understand their situation better."
+        )
+
+        context = {
+            "client_mode": True,
+            "brand": {
+                "name": brand.get("display_name"),
+                "industry": brand.get("industry"),
+                "service_area": brand.get("service_area"),
+                "primary_services": brand.get("primary_services"),
+                "monthly_budget": brand.get("monthly_budget"),
+                "website": brand.get("website"),
+                "goals": brand.get("goals"),
+                "kpi_target_cpa": brand.get("kpi_target_cpa"),
+                "kpi_target_leads": brand.get("kpi_target_leads"),
+                "kpi_target_roas": brand.get("kpi_target_roas"),
+                "competitors": brand.get("competitors"),
+            },
+            "month": month,
+            "page_context": {"path": "/client/coaching", "title": "Coaching Session", "endpoint": "client.client_coaching", "hint": "coaching session, topic: " + topic},
+            "analysis": summary,
+            "suggestions": suggestions,
+        }
+
+        reply = chat_with_warren(
+            api_key=api_key,
+            model=_pick_ai_model(brand, "chat"),
+            context=context,
+            messages=[{"role": "user", "content": coaching_prompt}],
+            admin_system_prompt=db.get_setting("ai_chat_system_prompt", "").strip() or DEFAULT_CHAT_SYSTEM_PROMPT,
+            timeout=60,
+            db=db,
+            brand_id=brand_id,
+        )
+        reply = (reply or "").strip()
+        if reply:
+            db.add_ai_chat_message(brand_id, month, "assistant", reply)
+        return jsonify({"reply": reply})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 def _client_assistant_chat_handler(payload):
     db = _get_db()
     brand_id = session["client_brand_id"]
