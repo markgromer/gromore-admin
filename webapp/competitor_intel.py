@@ -140,7 +140,13 @@ def _scrape_website(competitor):
             import re
             import html as _html
 
-            value = _html.unescape(value or "")
+            value = value or ""
+            # Some sites double-escape entities (e.g. &amp;#x200f;). Unescape a few times.
+            for _ in range(3):
+                unescaped = _html.unescape(value)
+                if unescaped == value:
+                    break
+                value = unescaped
             # Strip common invisible directional marks that sometimes appear in SEO meta.
             value = value.replace("\u200e", "").replace("\u200f", "")
             value = re.sub(r"\s+", " ", value).strip()
@@ -304,15 +310,19 @@ def _generate_competitor_research(*, api_key: str, model: str, brand: dict, comp
 
 # ── Public API: refresh competitor intel ─────────────────────────
 
-def refresh_competitor_intel(db, brand, competitor):
-    """Refresh all intel for a single competitor. Returns dict of results."""
+def refresh_competitor_intel(db, brand, competitor, *, force: bool = False):
+    """Refresh all intel for a single competitor.
+
+    When force=True, bypass the stale window (used for manual "Scan").
+    Returns dict of results.
+    """
     brand_id = brand["id"]
     comp_id = competitor["id"]
     results = {}
 
     # Google Places
     existing = db.get_competitor_intel(comp_id, "google_places")
-    if not existing or _is_stale(existing.get("fetched_at")):
+    if force or (not existing) or _is_stale(existing.get("fetched_at")):
         api_key = (brand.get("google_maps_api_key") or "").strip()
         places_data = _scrape_google_places(competitor, api_key)
         if places_data:
@@ -325,7 +335,7 @@ def refresh_competitor_intel(db, brand, competitor):
 
     # Meta Ad Library
     existing = db.get_competitor_intel(comp_id, "meta_ads")
-    if not existing or _is_stale(existing.get("fetched_at")):
+    if force or (not existing) or _is_stale(existing.get("fetched_at")):
         from webapp.api_bridge import _get_meta_token
         connections = db.get_brand_connections(brand_id)
         meta_conn = connections.get("meta")
@@ -343,7 +353,7 @@ def refresh_competitor_intel(db, brand, competitor):
 
     # Website
     existing = db.get_competitor_intel(comp_id, "website")
-    if not existing or _is_stale(existing.get("fetched_at")):
+    if force or (not existing) or _is_stale(existing.get("fetched_at")):
         site_data = _scrape_website(competitor)
         if site_data:
             db.upsert_competitor_intel(comp_id, brand_id, "website", json.dumps(site_data))
@@ -355,7 +365,7 @@ def refresh_competitor_intel(db, brand, competitor):
 
     # AI research + counter moves (optional)
     existing = db.get_competitor_intel(comp_id, "research")
-    should_generate = (not existing) or _is_stale(existing.get("fetched_at"))
+    should_generate = force or (not existing) or _is_stale(existing.get("fetched_at"))
     if should_generate:
         # Brand-level key/model first, then app-level settings/env.
         api_key = ((brand.get("openai_api_key") or "").strip() or db.get_setting("openai_api_key", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip())
@@ -409,4 +419,31 @@ def get_competitor_report(db, brand, competitor):
         except (json.JSONDecodeError, TypeError):
             report[row["intel_type"]] = {}
         report[row["intel_type"] + "_fetched"] = row.get("fetched_at", "")
+
+    # Defensive cleanup for older cached website blobs that may contain HTML entities.
+    website = report.get("website")
+    if isinstance(website, dict):
+        import re
+        import html as _html
+
+        def _clean_cached_text(value: str, max_len: int) -> str:
+            value = value or ""
+            for _ in range(3):
+                unescaped = _html.unescape(value)
+                if unescaped == value:
+                    break
+                value = unescaped
+            value = value.replace("\u200e", "").replace("\u200f", "")
+            value = re.sub(r"\s+", " ", value).strip()
+            return value[:max_len]
+
+        if website.get("title"):
+            website["title"] = _clean_cached_text(str(website.get("title")), 200)
+        if website.get("description"):
+            website["description"] = _clean_cached_text(str(website.get("description")), 500)
+        if isinstance(website.get("h1"), list):
+            website["h1"] = [_clean_cached_text(str(x), 120) for x in website.get("h1") if x]
+        if isinstance(website.get("h2"), list):
+            website["h2"] = [_clean_cached_text(str(x), 120) for x in website.get("h2") if x][:10]
+
     return report

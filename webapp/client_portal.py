@@ -1122,7 +1122,7 @@ def client_competitor_refresh(competitor_id):
         abort(404)
 
     from webapp.competitor_intel import refresh_competitor_intel
-    refresh_competitor_intel(db, brand, comp)
+    refresh_competitor_intel(db, brand, comp, force=True)
     flash(f"Intel refreshed for '{comp['name']}'.", "success")
     return redirect(url_for("client.client_competitors"))
 
