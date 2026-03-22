@@ -1177,8 +1177,8 @@ function abLoadFolder(folderId) {
     abRenderBreadcrumb();
 
     var url = folderId === 'root'
-        ? "{{ url_for('client.drive_all_images') }}"
-        : "{{ url_for('client.drive_browse') }}?folder_id=" + encodeURIComponent(folderId);
+        ? "{{ url_for('client.client_drive_all_images') }}"
+        : "{{ url_for('client.client_drive_browse') }}?folder_id=" + encodeURIComponent(folderId);
 
     fetch(url).then(r => r.json()).then(data => {
         loadingEl.style.display = 'none';
@@ -1197,7 +1197,7 @@ function abLoadFolder(folderId) {
         });
 
         files.forEach(f => {
-            var thumb = "{{ url_for('client.drive_thumbnail', file_id='__FID__') }}".replace('__FID__', f.id || f.file_id);
+            var thumb = "{{ url_for('client.client_drive_thumbnail', file_id='__FID__') }}".replace('__FID__', f.id || f.file_id);
             var img = document.createElement('img');
             img.className = 'drive-thumb-ab';
             img.src = thumb;
@@ -1239,7 +1239,7 @@ function abRenderBreadcrumb() {
 
 function abConfirmPick() {
     if (!_abPickedFile) return;
-    var downloadUrl = "{{ url_for('client.drive_download', file_id='__FID__') }}".replace('__FID__', _abPickedFile.id);
+    var downloadUrl = "{{ url_for('client.client_drive_download', file_id='__FID__') }}".replace('__FID__', _abPickedFile.id);
     var ctx = _abPickerCtx;
 
     if (ctx.platform === 'facebook') {
