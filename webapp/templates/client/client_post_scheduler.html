@@ -335,15 +335,16 @@ function loadDriveImages() {
     grid.style.display = '';
     grid.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span> Loading images...</div>';
 
-    fetch('/client/api/drive/files/Images', {headers: {'X-CSRFToken': csrfToken}})
+    fetch('/client/api/drive/all-images', {headers: {'X-CSRFToken': csrfToken}})
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        if (!data.ok || !data.files || !data.files.length) {
-            grid.innerHTML = '<div class="text-muted py-2" style="font-size:.88rem;">No images found in your Drive "Images" folder.</div>';
+        var files = data.files || [];
+        if (!files.length) {
+            grid.innerHTML = '<div class="text-muted py-2" style="font-size:.88rem;">No images found in your Google Drive folder.</div>';
             return;
         }
         var html = '';
-        data.files.forEach(function(f) {
+        files.forEach(function(f) {
             if (!f.mimeType || !f.mimeType.startsWith('image/')) return;
             var thumb = '/client/api/drive/thumbnail/' + f.id;
             var downloadUrl = '/client/api/drive/download/' + f.id;
