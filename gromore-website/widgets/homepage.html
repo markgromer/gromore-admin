@@ -675,21 +675,26 @@
 
 /* ═══════════════ TOGGLE PANEL ═══════════════ */
 .gm-panel {
-    position: fixed;
-    bottom: 1.5rem;
-    right: 1.5rem;
-    display: flex;
+    position: fixed !important;
+    bottom: 1.5rem !important;
+    right: 1.5rem !important;
+    display: flex !important;
     align-items: center;
     gap: 2px;
-    background: rgba(15,23,42,.92);
+    background: rgba(15,23,42,.92) !important;
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border-radius: 14px;
     padding: 5px;
-    z-index: 9999;
+    z-index: 2147483647 !important;
     box-shadow: 0 8px 32px rgba(0,0,0,.3);
     border: 1px solid rgba(255,255,255,.08);
     font-family: 'Inter', sans-serif;
+    pointer-events: auto !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    transform: none !important;
+    overflow: visible !important;
 }
 .gm-panel-group {
     display: flex;
@@ -1060,9 +1065,7 @@
 }
 </style>
 
-<div class="gm" data-theme="light" data-layout="modern">
-
-<!-- Toggle Panel -->
+<!-- Toggle Panel (outside .gm so fixed positioning works in any container) -->
 <div class="gm-panel" id="gmPanel">
     <span class="gm-panel-label">Layout</span>
     <div class="gm-panel-group">
@@ -1076,6 +1079,8 @@
         <button class="gm-panel-btn" data-set-theme="dark" title="Dark mode">&#9790;</button>
     </div>
 </div>
+
+<div class="gm" data-theme="light" data-layout="modern">
 
 <!-- Nav -->
 <nav class="gm-nav" id="gmNav">
