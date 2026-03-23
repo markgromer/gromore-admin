@@ -3766,16 +3766,6 @@ def client_heatmap_clear_scans():
 @client_bp.route("/post-scheduler")
 @client_login_required
 def client_post_scheduler():
-    import traceback as _tb
-    try:
-        return _client_post_scheduler_inner()
-    except Exception as exc:
-        import logging
-        logging.getLogger(__name__).error("Post scheduler error: %s\n%s", exc, _tb.format_exc())
-        return f"<h3>Post Scheduler Error</h3><pre>{_tb.format_exc()}</pre>", 500
-
-
-def _client_post_scheduler_inner():
     db = _get_db()
     brand_id = session["client_brand_id"]
     brand = db.get_brand(brand_id)
@@ -3784,19 +3774,15 @@ def _client_post_scheduler_inner():
 
     # Check Facebook connection
     connections = db.get_brand_connections(brand_id)
-    meta_conn = None
-    for c in connections:
-        if c.get("platform") == "meta" and c.get("status") == "connected":
-            meta_conn = c
-            break
+    meta_conn = connections.get("meta")
+    if meta_conn and meta_conn.get("status") != "connected":
+        meta_conn = None
     has_facebook = bool(meta_conn) and bool(brand.get("facebook_page_id"))
 
     # Check Drive connection
-    google_conn = None
-    for c in connections:
-        if c.get("platform") == "google" and c.get("status") == "connected":
-            google_conn = c
-            break
+    google_conn = connections.get("google")
+    if google_conn and google_conn.get("status") != "connected":
+        google_conn = None
     has_drive = bool(google_conn) and "drive" in (google_conn.get("scopes") or "").lower() and bool(brand.get("google_drive_folder_id"))
 
     posts = db.get_scheduled_posts(brand_id)
@@ -3854,12 +3840,8 @@ def client_schedule_post():
     # Get page access token
     from webapp.api_bridge import _get_meta_token, _get_page_access_token
     connections = db.get_brand_connections(brand_id)
-    meta_conn = None
-    for c in connections:
-        if c.get("platform") == "meta" and c.get("status") == "connected":
-            meta_conn = c
-            break
-    if not meta_conn:
+    meta_conn = connections.get("meta")
+    if not meta_conn or meta_conn.get("status") != "connected":
         return jsonify(ok=False, error="Meta account not connected. Reconnect in Connections."), 400
     user_token = _get_meta_token(db, brand_id, meta_conn)
     if not user_token:
@@ -3947,12 +3929,8 @@ def client_schedule_posts_bulk():
 
     from webapp.api_bridge import _get_meta_token, _get_page_access_token
     connections = db.get_brand_connections(brand_id)
-    meta_conn = None
-    for c in connections:
-        if c.get("platform") == "meta" and c.get("status") == "connected":
-            meta_conn = c
-            break
-    if not meta_conn:
+    meta_conn = connections.get("meta")
+    if not meta_conn or meta_conn.get("status") != "connected":
         return jsonify(ok=False, error="Meta account not connected."), 400
     user_token = _get_meta_token(db, brand_id, meta_conn)
     if not user_token:
