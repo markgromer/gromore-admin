@@ -1102,25 +1102,22 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
     basic_post_fields = ("id,message,created_time,type,permalink_url,"
                          "shares,likes.limit(0).summary(true),"
                          "comments.limit(0).summary(true)")
+    # Simpler fallback field set without engagement sub-requests (some tokens lack permission)
+    simple_post_fields = "id,message,created_time,type,permalink_url"
     posts = []
-    try:
-        # Try /published_posts first (more reliable with page tokens)
-        posts_resp = requests.get(
-            f"{base}/published_posts",
-            params={
-                "access_token": access_token,
-                "fields": basic_post_fields,
-                "since": since_ts,
-                "until": until_ts,
-                "limit": 50,
-            },
-            timeout=30,
-        )
-        # If published_posts fails, fall back to /posts
-        if posts_resp.status_code != 200:
-            log.info("FB /published_posts returned %s, falling back to /posts", posts_resp.status_code)
+    raw_posts = []
+
+    # Try each endpoint in order until one returns posts
+    date_endpoints = [
+        f"{base}/published_posts",
+        f"{base}/posts",
+        f"{base}/feed",
+    ]
+    for ep in date_endpoints:
+        ep_name = ep.split("/")[-1]
+        try:
             posts_resp = requests.get(
-                f"{base}/posts",
+                ep,
                 params={
                     "access_token": access_token,
                     "fields": basic_post_fields,
@@ -1130,68 +1127,95 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
                 },
                 timeout=30,
             )
-        if posts_resp.status_code == 200:
-            posts_data = posts_resp.json()
-            if "error" in posts_data:
-                log.warning("FB posts error: %s", posts_data["error"].get("message", posts_data["error"]))
-            raw_posts = posts_data.get("data", [])
-            log.info("FB posts endpoint returned %d posts for page %s", len(raw_posts), page_id)
-            for post in raw_posts:
-                likes_count = post.get("likes", {}).get("summary", {}).get("total_count", 0)
-                comments_count = post.get("comments", {}).get("summary", {}).get("total_count", 0)
-                shares_count = (post.get("shares") or {}).get("count", 0)
-                total_eng = likes_count + comments_count + shares_count
+            if posts_resp.status_code == 200:
+                posts_data = posts_resp.json()
+                if "error" in posts_data:
+                    log.warning("FB %s (date-filtered) error: %s", ep_name, posts_data["error"].get("message", posts_data["error"]))
+                    continue
+                raw_posts = posts_data.get("data", [])
+                log.info("FB %s (date-filtered) returned %d posts for page %s", ep_name, len(raw_posts), page_id)
+                if raw_posts:
+                    break
+            else:
+                log.info("FB %s (date-filtered) HTTP %s", ep_name, posts_resp.status_code)
+                # Try with simpler fields in case engagement sub-requests caused the failure
+                posts_resp2 = requests.get(
+                    ep,
+                    params={
+                        "access_token": access_token,
+                        "fields": simple_post_fields,
+                        "since": since_ts,
+                        "until": until_ts,
+                        "limit": 50,
+                    },
+                    timeout=30,
+                )
+                if posts_resp2.status_code == 200:
+                    posts_data2 = posts_resp2.json()
+                    if "error" not in posts_data2:
+                        raw_posts = posts_data2.get("data", [])
+                        log.info("FB %s (date-filtered, simple fields) returned %d posts", ep_name, len(raw_posts))
+                        if raw_posts:
+                            break
+        except Exception as exc:
+            log.warning("FB %s (date-filtered) exception: %s", ep_name, exc)
 
-                # Try to fetch post-level insights (best-effort, don't fail if unavailable)
-                impressions = 0
-                engaged = 0
-                clicks = 0
-                post_id = post.get("id", "")
-                if post_id:
-                    try:
-                        pi_resp = requests.get(
-                            f"https://graph.facebook.com/v21.0/{post_id}/insights",
-                            params={
-                                "access_token": access_token,
-                                "metric": "post_impressions,post_engaged_users,post_clicks",
-                            },
-                            timeout=10,
-                        )
-                        if pi_resp.status_code == 200:
-                            for entry in pi_resp.json().get("data", []):
-                                val = entry.get("values", [{}])[0].get("value", 0)
-                                if isinstance(val, dict):
-                                    val = sum(val.values())
-                                if entry.get("name") == "post_impressions":
-                                    impressions = val
-                                elif entry.get("name") == "post_engaged_users":
-                                    engaged = val
-                                elif entry.get("name") == "post_clicks":
-                                    clicks = val
-                    except Exception:
-                        pass  # Post insights are optional
+    if raw_posts:
+        log.info("FB posts endpoint returned %d posts for page %s", len(raw_posts), page_id)
+        for post in raw_posts:
+            likes_count = post.get("likes", {}).get("summary", {}).get("total_count", 0)
+            comments_count = post.get("comments", {}).get("summary", {}).get("total_count", 0)
+            shares_count = (post.get("shares") or {}).get("count", 0)
+            total_eng = likes_count + comments_count + shares_count
 
-                engagement_rate = 0
-                if impressions > 0:
-                    engagement_rate = round(total_eng / impressions * 100, 2)
+            # Try to fetch post-level insights (best-effort, don't fail if unavailable)
+            impressions = 0
+            engaged = 0
+            clicks = 0
+            post_id = post.get("id", "")
+            if post_id:
+                try:
+                    pi_resp = requests.get(
+                        f"https://graph.facebook.com/v21.0/{post_id}/insights",
+                        params={
+                            "access_token": access_token,
+                            "metric": "post_impressions,post_engaged_users,post_clicks",
+                        },
+                        timeout=10,
+                    )
+                    if pi_resp.status_code == 200:
+                        for entry in pi_resp.json().get("data", []):
+                            val = entry.get("values", [{}])[0].get("value", 0)
+                            if isinstance(val, dict):
+                                val = sum(val.values())
+                            if entry.get("name") == "post_impressions":
+                                impressions = val
+                            elif entry.get("name") == "post_engaged_users":
+                                engaged = val
+                            elif entry.get("name") == "post_clicks":
+                                clicks = val
+                except Exception:
+                    pass  # Post insights are optional
 
-                message = (post.get("message") or "")
-                posts.append({
-                    "id": post.get("id", ""),
-                    "message": message[:150] + ("..." if len(message) > 150 else ""),
-                    "created_time": post.get("created_time", ""),
-                    "type": post.get("type", "status"),
-                    "permalink": post.get("permalink_url", ""),
-                    "likes": likes_count,
-                    "comments": comments_count,
-                    "shares": shares_count,
-                    "impressions": impressions,
-                    "engaged_users": engaged,
-                    "clicks": clicks,
-                    "engagement_rate": engagement_rate,
-                })
-    except Exception as e:
-        log.warning("FB posts exception: %s", e)
+            engagement_rate = 0
+            if impressions > 0:
+                engagement_rate = round(total_eng / impressions * 100, 2)
+
+            message = (post.get("message") or "")
+            posts.append({
+                "id": post.get("id", ""),
+                "message": message[:150] + ("..." if len(message) > 150 else ""),
+                "created_time": post.get("created_time", ""),
+                "type": post.get("type", "status"),
+                "permalink": post.get("permalink_url", ""),
+                "likes": likes_count,
+                "comments": comments_count,
+                "shares": shares_count,
+                "impressions": impressions,
+                "engaged_users": engaged,
+                "clicks": clicks,
+                "engagement_rate": engagement_rate,
+            })
 
     # Fallback: if date-filtered endpoints returned nothing, try without date filter
     # and manually filter by created_time

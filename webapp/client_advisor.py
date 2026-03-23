@@ -145,7 +145,7 @@ def _explain_website(ga):
         ),
     })
 
-    bounce = metrics.get("bounce_rate", 0)
+    bounce = round(float(metrics.get("bounce_rate", 0)), 1)
     cards.append({
         "metric": "Bounce Rate",
         "value": f"{bounce}%",
@@ -175,7 +175,7 @@ def _explain_website(ga):
         ),
     })
 
-    conv_rate = metrics.get("conversion_rate", 0)
+    conv_rate = round(float(metrics.get("conversion_rate", 0)), 1)
     conversions = metrics.get("conversions", 0)
     if conv_rate > 0 or conversions > 0:
         cards.append({
@@ -219,7 +219,7 @@ def _explain_meta(meta):
         ),
     })
 
-    ctr = metrics.get("ctr", 0)
+    ctr = round(float(metrics.get("ctr", 0)), 1)
     cards.append({
         "metric": "Click Rate",
         "value": f"{ctr}%",
@@ -437,7 +437,7 @@ def _explain_google_ads(google_ads):
         ),
     })
 
-    ctr = metrics.get("ctr", 0)
+    ctr = round(float(metrics.get("ctr", 0)), 1)
     cards.append({
         "metric": "Click Rate",
         "value": f"{ctr}%",
