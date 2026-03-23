@@ -3766,6 +3766,16 @@ def client_heatmap_clear_scans():
 @client_bp.route("/post-scheduler")
 @client_login_required
 def client_post_scheduler():
+    import traceback as _tb
+    try:
+        return _client_post_scheduler_inner()
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).error("Post scheduler error: %s\n%s", exc, _tb.format_exc())
+        return f"<h3>Post Scheduler Error</h3><pre>{_tb.format_exc()}</pre>", 500
+
+
+def _client_post_scheduler_inner():
     db = _get_db()
     brand_id = session["client_brand_id"]
     brand = db.get_brand(brand_id)
