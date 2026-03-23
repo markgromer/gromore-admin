@@ -1,0 +1,351 @@
+<!--
+  GroMore Contact Page Widget - Paste into Elementor HTML widget
+-->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
+
+.gm *, .gm *::before, .gm *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.gm {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: #334155; line-height: 1.65; font-size: 16px;
+    -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+.gm a { color: #2563eb; text-decoration: none; transition: color .2s ease; }
+.gm a:hover { color: #1d4ed8; }
+.gm h1, .gm h2, .gm h3, .gm h4 {
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+    color: #0f172a; line-height: 1.2; font-weight: 700;
+}
+.gm h1 { font-size: clamp(2.2rem, 5vw, 3.5rem); letter-spacing: -.03em; }
+.gm h2 { font-size: clamp(1.75rem, 4vw, 2.75rem); letter-spacing: -.02em; }
+.gm h3 { font-size: clamp(1.15rem, 2.5vw, 1.4rem); }
+.gm p { margin-bottom: 1rem; }
+.gm ul { list-style: none; }
+.gm-wrap { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem; }
+
+.gm-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+    padding: .85rem 2rem; border-radius: 12px; font-weight: 600; font-size: 1rem;
+    border: none; cursor: pointer; transition: all .25s ease; text-decoration: none;
+    font-family: 'Inter', sans-serif;
+}
+.gm-btn-primary { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff !important; box-shadow: 0 4px 14px rgba(37,99,235,.4); }
+.gm-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(37,99,235,.45); color: #fff !important; }
+.gm-btn-lg { padding: 1rem 2.5rem; font-size: 1.05rem; }
+
+.gm-label { display: inline-flex; align-items: center; gap: .4rem; font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #2563eb; margin-bottom: .75rem; }
+.gm-label::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #2563eb; }
+
+.gm-section { padding: 5rem 0; }
+.gm-section-alt { background: #f8fafc; }
+
+/* Page header */
+.gm-page-header {
+    padding: 5rem 0 4rem;
+    background: linear-gradient(150deg, #f8faff 0%, #eef2ff 30%, #e0e7ff 60%, #f0f4ff 100%);
+    text-align: center; position: relative; overflow: hidden;
+}
+.gm-page-header::before { content: ''; position: absolute; top: -150px; right: -150px; width: 500px; height: 500px; background: radial-gradient(circle, rgba(37,99,235,.08) 0%, transparent 60%); border-radius: 50%; }
+.gm-page-header h1 { margin-bottom: .75rem; position: relative; z-index: 1; }
+.gm-page-header p { color: #64748b; font-size: 1.1rem; max-width: 620px; margin: 0 auto; position: relative; z-index: 1; }
+
+/* Contact layout */
+.gm-contact-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 3rem;
+    align-items: start;
+}
+@media (min-width: 768px) { .gm-contact-grid { grid-template-columns: 1.4fr 1fr; } }
+
+/* Form */
+.gm-form-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    padding: 2.5rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,.04);
+}
+.gm-form-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    margin-bottom: 1.25rem;
+}
+@media (min-width: 500px) { .gm-form-row.half { grid-template-columns: 1fr 1fr; } }
+.gm-form-group { display: flex; flex-direction: column; }
+.gm-form-group label {
+    font-size: .85rem;
+    font-weight: 600;
+    color: #334155;
+    margin-bottom: .4rem;
+}
+.gm-form-group label span { color: #dc2626; }
+.gm-form-group input,
+.gm-form-group select,
+.gm-form-group textarea {
+    padding: .75rem 1rem;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    font-family: 'Inter', sans-serif;
+    font-size: .95rem;
+    color: #0f172a;
+    background: #fff;
+    transition: border-color .2s, box-shadow .2s;
+    outline: none;
+    width: 100%;
+}
+.gm-form-group input:focus,
+.gm-form-group select:focus,
+.gm-form-group textarea:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+}
+.gm-form-group textarea { resize: vertical; min-height: 140px; }
+.gm-form-group select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' fill='none' stroke='%2394a3b8' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 1rem center; padding-right: 2.5rem; }
+
+/* Info cards */
+.gm-info-stack { display: flex; flex-direction: column; gap: 1.25rem; }
+.gm-info-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 1.75rem;
+    transition: all .3s ease;
+    position: relative;
+    overflow: hidden;
+}
+.gm-info-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #2563eb, #7c3aed); opacity: 0; transition: opacity .3s ease; }
+.gm-info-card:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(0,0,0,.07); border-color: transparent; }
+.gm-info-card:hover::before { opacity: 1; }
+.gm-info-card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    margin-bottom: 1rem;
+}
+.gm-info-card-icon.blue { background: linear-gradient(135deg, #dbeafe, #bfdbfe); }
+.gm-info-card-icon.green { background: linear-gradient(135deg, #d1fae5, #a7f3d0); }
+.gm-info-card-icon.purple { background: linear-gradient(135deg, #ede9fe, #ddd6fe); }
+.gm-info-card h4 {
+    font-size: .95rem;
+    margin-bottom: .35rem;
+}
+.gm-info-card p {
+    color: #64748b;
+    font-size: .88rem;
+    margin: 0;
+}
+.gm-info-card a { font-weight: 600; }
+
+/* Success state */
+.gm-form-success {
+    display: none;
+    text-align: center;
+    padding: 3rem 1.5rem;
+}
+.gm-form-success.show { display: block; }
+.gm-form-success .gm-success-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    margin: 0 auto 1.5rem;
+}
+.gm-form-success h3 {
+    font-size: 1.3rem;
+    margin-bottom: .5rem;
+}
+.gm-form-success p {
+    color: #64748b;
+}
+
+/* Nav */
+.gm-nav { position: sticky; top: 0; background: rgba(255,255,255,.95); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid #e2e8f0; z-index: 1000; padding: 0 1.5rem; }
+.gm-nav-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 68px; }
+.gm-nav-logo { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.5rem; font-weight: 800; color: #0f172a !important; }
+.gm-nav-logo span { color: #2563eb !important; }
+.gm-nav-links { display: none; list-style: none; gap: 2rem; align-items: center; }
+.gm-nav-links a { color: #334155 !important; font-size: .9rem; font-weight: 500; }
+.gm-nav-links a:hover, .gm-nav-links a.active { color: #2563eb !important; }
+.gm-nav-cta { padding: .5rem 1.25rem; background: linear-gradient(135deg, #2563eb, #1d4ed8) !important; color: #fff !important; border-radius: 8px; font-weight: 600; font-size: .85rem; box-shadow: 0 2px 8px rgba(37,99,235,.3); }
+.gm-nav-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,.4); color: #fff !important; }
+.gm-nav-toggle { display: flex; flex-direction: column; gap: 5px; background: none; border: none; cursor: pointer; padding: 4px; }
+.gm-nav-toggle span { display: block; width: 22px; height: 2px; background: #0f172a; border-radius: 2px; transition: .2s ease; }
+.gm-nav-mobile { display: none; position: fixed; top: 68px; left: 0; right: 0; bottom: 0; background: #fff; padding: 1.5rem; z-index: 999; }
+.gm-nav-mobile.open { display: block; }
+.gm-nav-mobile a { display: block; padding: .75rem 0; font-size: 1.05rem; font-weight: 500; color: #334155 !important; border-bottom: 1px solid #f1f5f9; }
+.gm-nav-mobile a:hover { color: #2563eb !important; }
+@media (min-width: 768px) { .gm-nav-links { display: flex; } .gm-nav-toggle { display: none; } }
+
+/* Footer */
+.gm-footer { background: #0f172a; color: #94a3b8; padding: 4rem 0 2rem; }
+.gm-footer-grid { display: grid; grid-template-columns: 1fr; gap: 2rem; margin-bottom: 3rem; }
+@media (min-width: 600px) { .gm-footer-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 900px) { .gm-footer-grid { grid-template-columns: 2fr 1fr 1fr 1fr; } }
+.gm-footer-brand p { font-size: .88rem; max-width: 280px; margin-top: .75rem; }
+.gm-footer h4 { color: #fff; font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 1rem; font-family: 'Plus Jakarta Sans', sans-serif; }
+.gm-footer li { margin-bottom: .5rem; }
+.gm-footer a { color: #94a3b8 !important; font-size: .88rem; }
+.gm-footer a:hover { color: #fff !important; }
+.gm-footer-logo { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.5rem; font-weight: 800; color: #fff !important; }
+.gm-footer-logo span { color: #3b82f6 !important; }
+.gm-footer-bottom { border-top: 1px solid rgba(255,255,255,.08); padding-top: 1.5rem; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; font-size: .8rem; }
+</style>
+
+<div class="gm">
+
+<!-- Nav -->
+<nav class="gm-nav" id="gmNav"><div class="gm-nav-inner">
+    <a href="/" class="gm-nav-logo">Gro<span>More</span></a>
+    <ul class="gm-nav-links">
+        <li><a href="/platform">Platform</a></li>
+        <li><a href="/pricing">Pricing</a></li>
+        <li><a href="/about">About</a></li>
+        <li><a href="/faq">FAQ</a></li>
+        <li><a href="/contact" class="active">Contact</a></li>
+        <li><a href="https://gromore-admin.onrender.com/client/login" class="gm-nav-cta">Launch Portal &rarr;</a></li>
+    </ul>
+    <button class="gm-nav-toggle" id="gmNavToggle" aria-label="Menu"><span></span><span></span><span></span></button>
+</div></nav>
+<div class="gm-nav-mobile" id="gmNavMobile">
+    <a href="/platform">Platform</a><a href="/pricing">Pricing</a><a href="/about">About</a>
+    <a href="/faq">FAQ</a><a href="/contact">Contact</a>
+    <a href="https://gromore-admin.onrender.com/client/login">Launch Portal &rarr;</a>
+</div>
+
+<!-- Page Header -->
+<section class="gm-page-header">
+    <div class="gm-wrap">
+        <div class="gm-label">Contact</div>
+        <h1>Get in Touch</h1>
+        <p>Ready to get started, or just have a question? Fill out the form and we will get back to you within one business day.</p>
+    </div>
+</section>
+
+<!-- Contact Form + Info -->
+<section class="gm-section">
+    <div class="gm-wrap">
+        <div class="gm-contact-grid">
+
+            <!-- Form -->
+            <div class="gm-form-card">
+                <form id="gmContactForm">
+                    <div class="gm-form-row half">
+                        <div class="gm-form-group">
+                            <label for="gmFirstName">First Name <span>*</span></label>
+                            <input type="text" id="gmFirstName" name="firstName" required placeholder="John">
+                        </div>
+                        <div class="gm-form-group">
+                            <label for="gmLastName">Last Name <span>*</span></label>
+                            <input type="text" id="gmLastName" name="lastName" required placeholder="Smith">
+                        </div>
+                    </div>
+                    <div class="gm-form-row half">
+                        <div class="gm-form-group">
+                            <label for="gmEmail">Email <span>*</span></label>
+                            <input type="email" id="gmEmail" name="email" required placeholder="john@company.com">
+                        </div>
+                        <div class="gm-form-group">
+                            <label for="gmPhone">Phone</label>
+                            <input type="tel" id="gmPhone" name="phone" placeholder="(555) 123-4567">
+                        </div>
+                    </div>
+                    <div class="gm-form-row">
+                        <div class="gm-form-group">
+                            <label for="gmBusiness">Business Name</label>
+                            <input type="text" id="gmBusiness" name="business" placeholder="Smith Roofing LLC">
+                        </div>
+                    </div>
+                    <div class="gm-form-row">
+                        <div class="gm-form-group">
+                            <label for="gmSubject">Subject <span>*</span></label>
+                            <select id="gmSubject" name="subject" required>
+                                <option value="" disabled selected>Select a topic...</option>
+                                <option value="getting-started">Getting Started</option>
+                                <option value="demo">Request a Demo</option>
+                                <option value="pricing">Pricing Question</option>
+                                <option value="support">Technical Support</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="gm-form-row">
+                        <div class="gm-form-group">
+                            <label for="gmMessage">Message <span>*</span></label>
+                            <textarea id="gmMessage" name="message" required placeholder="Tell us about your business and what you are looking for..."></textarea>
+                        </div>
+                    </div>
+                    <button type="submit" class="gm-btn gm-btn-primary gm-btn-lg" style="width:100%;">Send Message &rarr;</button>
+                </form>
+
+                <div class="gm-form-success" id="gmFormSuccess">
+                    <div class="gm-success-icon">&#10003;</div>
+                    <h3>Message Sent</h3>
+                    <p>We received your message and will get back to you within one business day.</p>
+                </div>
+            </div>
+
+            <!-- Info Sidebar -->
+            <div class="gm-info-stack">
+                <div class="gm-info-card">
+                    <div class="gm-info-card-icon blue">&#9993;</div>
+                    <h4>Email</h4>
+                    <p><a href="mailto:hello@gromore.media">hello@gromore.media</a></p>
+                </div>
+                <div class="gm-info-card">
+                    <div class="gm-info-card-icon green">&#128337;</div>
+                    <h4>Response Time</h4>
+                    <p>Within one business day, Mon - Fri</p>
+                </div>
+                <div class="gm-info-card">
+                    <div class="gm-info-card-icon purple">&#128218;</div>
+                    <h4>Quick Answers</h4>
+                    <p>Check the <a href="/faq">FAQ page</a> for answers to common questions about setup, features, and pricing.</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer class="gm-footer"><div class="gm-wrap">
+    <div class="gm-footer-grid">
+        <div class="gm-footer-brand"><a href="/" class="gm-footer-logo">Gro<span>More</span></a><p>AI-powered ad management built for local service businesses. More leads, lower costs, total transparency.</p></div>
+        <div><h4>Platform</h4><ul><li><a href="/platform">Features</a></li><li><a href="/platform#reporting">Reporting</a></li><li><a href="/platform#campaigns">Campaign Manager</a></li><li><a href="/platform#scheduler">Post Scheduler</a></li></ul></div>
+        <div><h4>Company</h4><ul><li><a href="/about">About</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/faq">FAQ</a></li><li><a href="/contact">Contact</a></li></ul></div>
+        <div><h4>Contact</h4><ul><li><a href="mailto:hello@gromore.media">hello@gromore.media</a></li><li>Mon - Fri, 8am - 6pm CT</li></ul></div>
+    </div>
+    <div class="gm-footer-bottom"><div>&copy; 2026 GroMore Media. All rights reserved.</div><div><a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a></div></div>
+</div></footer>
+
+</div>
+
+<script>
+(function(){
+    // Mobile nav
+    var t=document.getElementById('gmNavToggle'),m=document.getElementById('gmNavMobile');
+    if(t&&m){t.addEventListener('click',function(){m.classList.toggle('open');});
+    m.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(){m.classList.remove('open');});});}
+
+    // Contact form - show success state
+    var form=document.getElementById('gmContactForm'), success=document.getElementById('gmFormSuccess');
+    if(form&&success){
+        form.addEventListener('submit',function(e){
+            e.preventDefault();
+            form.style.display='none';
+            success.classList.add('show');
+            // In production: send form data to your backend or email service here
+        });
+    }
+})();
+</script>

@@ -1,0 +1,324 @@
+<!--
+  GroMore FAQ Page Widget - Paste into Elementor HTML widget
+  Includes FAQPage schema markup for Google rich snippets
+-->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
+
+.gm *, .gm *::before, .gm *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.gm {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: #334155; line-height: 1.65; font-size: 16px;
+    -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+.gm a { color: #2563eb; text-decoration: none; transition: color .2s ease; }
+.gm a:hover { color: #1d4ed8; }
+.gm h1, .gm h2, .gm h3, .gm h4 {
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+    color: #0f172a; line-height: 1.2; font-weight: 700;
+}
+.gm h1 { font-size: clamp(2.2rem, 5vw, 3.5rem); letter-spacing: -.03em; }
+.gm h2 { font-size: clamp(1.75rem, 4vw, 2.75rem); letter-spacing: -.02em; }
+.gm h3 { font-size: clamp(1.15rem, 2.5vw, 1.4rem); }
+.gm p { margin-bottom: 1rem; }
+.gm ul { list-style: none; }
+.gm-wrap { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem; }
+
+.gm-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+    padding: .85rem 2rem; border-radius: 12px; font-weight: 600; font-size: 1rem;
+    border: none; cursor: pointer; transition: all .25s ease; text-decoration: none;
+    font-family: 'Inter', sans-serif;
+}
+.gm-btn-primary { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff !important; box-shadow: 0 4px 14px rgba(37,99,235,.4); }
+.gm-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(37,99,235,.45); color: #fff !important; }
+.gm-btn-white { background: #fff; color: #2563eb !important; box-shadow: 0 4px 14px rgba(0,0,0,.15); }
+.gm-btn-white:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,.2); color: #1d4ed8 !important; }
+.gm-btn-lg { padding: 1rem 2.5rem; font-size: 1.05rem; }
+
+.gm-label { display: inline-flex; align-items: center; gap: .4rem; font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #2563eb; margin-bottom: .75rem; }
+.gm-label::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #2563eb; }
+
+.gm-section { padding: 5rem 0; }
+.gm-section-alt { background: #f8fafc; }
+
+/* Page header */
+.gm-page-header {
+    padding: 5rem 0 4rem;
+    background: linear-gradient(150deg, #f8faff 0%, #eef2ff 30%, #e0e7ff 60%, #f0f4ff 100%);
+    text-align: center; position: relative; overflow: hidden;
+}
+.gm-page-header::before { content: ''; position: absolute; top: -150px; right: -150px; width: 500px; height: 500px; background: radial-gradient(circle, rgba(37,99,235,.08) 0%, transparent 60%); border-radius: 50%; }
+.gm-page-header h1 { margin-bottom: .75rem; position: relative; z-index: 1; }
+.gm-page-header p { color: #64748b; font-size: 1.1rem; max-width: 620px; margin: 0 auto; position: relative; z-index: 1; }
+
+/* FAQ layout */
+.gm-faq-layout {
+    max-width: 800px;
+    margin: 0 auto;
+}
+.gm-faq-category {
+    margin-bottom: 3rem;
+}
+.gm-faq-category h3 {
+    font-size: 1.15rem;
+    color: #0f172a;
+    margin-bottom: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+}
+.gm-faq-category h3 .gm-cat-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.gm-cat-dot.blue { background: #2563eb; }
+.gm-cat-dot.green { background: #059669; }
+.gm-cat-dot.purple { background: #7c3aed; }
+.gm-cat-dot.amber { background: #d97706; }
+
+.gm-faq-item { border-bottom: 1px solid #e2e8f0; }
+.gm-faq-q {
+    width: 100%; background: none; border: none; text-align: left;
+    padding: 1.25rem 0; font-size: 1rem; font-weight: 600; color: #0f172a;
+    cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+    gap: 1rem; font-family: 'Inter', sans-serif; transition: color .2s;
+}
+.gm-faq-q:hover { color: #2563eb; }
+.gm-faq-icon { font-size: 1.4rem; font-weight: 300; color: #94a3b8; transition: transform .3s; flex-shrink: 0; }
+.gm-faq-item.open .gm-faq-icon { transform: rotate(45deg); }
+.gm-faq-a { max-height: 0; overflow: hidden; transition: max-height .3s ease, padding .3s ease; }
+.gm-faq-item.open .gm-faq-a { max-height: 500px; padding-bottom: 1.25rem; }
+.gm-faq-a p { font-size: .94rem; color: #64748b; line-height: 1.7; margin: 0; }
+
+/* CTA */
+.gm-cta { background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #172554 100%); border-radius: 20px; padding: 4rem 2.5rem; text-align: center; position: relative; overflow: hidden; }
+.gm-cta::before { content: ''; position: absolute; top: -60%; right: -20%; width: 500px; height: 500px; background: radial-gradient(circle, rgba(37,99,235,.25) 0%, transparent 60%); border-radius: 50%; }
+.gm-cta h2 { color: #fff; margin-bottom: .75rem; position: relative; z-index: 1; }
+.gm-cta p { color: #94a3b8; margin-bottom: 2rem; position: relative; z-index: 1; max-width: 500px; margin-left: auto; margin-right: auto; }
+.gm-cta .gm-btn { position: relative; z-index: 1; }
+
+/* Nav */
+.gm-nav { position: sticky; top: 0; background: rgba(255,255,255,.95); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid #e2e8f0; z-index: 1000; padding: 0 1.5rem; }
+.gm-nav-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 68px; }
+.gm-nav-logo { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.5rem; font-weight: 800; color: #0f172a !important; }
+.gm-nav-logo span { color: #2563eb !important; }
+.gm-nav-links { display: none; list-style: none; gap: 2rem; align-items: center; }
+.gm-nav-links a { color: #334155 !important; font-size: .9rem; font-weight: 500; }
+.gm-nav-links a:hover, .gm-nav-links a.active { color: #2563eb !important; }
+.gm-nav-cta { padding: .5rem 1.25rem; background: linear-gradient(135deg, #2563eb, #1d4ed8) !important; color: #fff !important; border-radius: 8px; font-weight: 600; font-size: .85rem; box-shadow: 0 2px 8px rgba(37,99,235,.3); }
+.gm-nav-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,.4); color: #fff !important; }
+.gm-nav-toggle { display: flex; flex-direction: column; gap: 5px; background: none; border: none; cursor: pointer; padding: 4px; }
+.gm-nav-toggle span { display: block; width: 22px; height: 2px; background: #0f172a; border-radius: 2px; transition: .2s ease; }
+.gm-nav-mobile { display: none; position: fixed; top: 68px; left: 0; right: 0; bottom: 0; background: #fff; padding: 1.5rem; z-index: 999; }
+.gm-nav-mobile.open { display: block; }
+.gm-nav-mobile a { display: block; padding: .75rem 0; font-size: 1.05rem; font-weight: 500; color: #334155 !important; border-bottom: 1px solid #f1f5f9; }
+.gm-nav-mobile a:hover { color: #2563eb !important; }
+@media (min-width: 768px) { .gm-nav-links { display: flex; } .gm-nav-toggle { display: none; } }
+
+/* Footer */
+.gm-footer { background: #0f172a; color: #94a3b8; padding: 4rem 0 2rem; }
+.gm-footer-grid { display: grid; grid-template-columns: 1fr; gap: 2rem; margin-bottom: 3rem; }
+@media (min-width: 600px) { .gm-footer-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 900px) { .gm-footer-grid { grid-template-columns: 2fr 1fr 1fr 1fr; } }
+.gm-footer-brand p { font-size: .88rem; max-width: 280px; margin-top: .75rem; }
+.gm-footer h4 { color: #fff; font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 1rem; font-family: 'Plus Jakarta Sans', sans-serif; }
+.gm-footer li { margin-bottom: .5rem; }
+.gm-footer a { color: #94a3b8 !important; font-size: .88rem; }
+.gm-footer a:hover { color: #fff !important; }
+.gm-footer-logo { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.5rem; font-weight: 800; color: #fff !important; }
+.gm-footer-logo span { color: #3b82f6 !important; }
+.gm-footer-bottom { border-top: 1px solid rgba(255,255,255,.08); padding-top: 1.5rem; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; font-size: .8rem; }
+</style>
+
+<!-- FAQPage Schema for Google Rich Snippets -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type":"Question","name":"What is GroMore?","acceptedAnswer":{"@type":"Answer","text":"GroMore is an AI-powered ad management platform built for local service businesses. It connects to your Google Ads, Facebook Ads, GA4, and Search Console accounts. From one dashboard you get automated reporting, AI recommendations, campaign tools, a Facebook post scheduler, and a full audit trail."}},
+    {"@type":"Question","name":"Who is GroMore for?","acceptedAnswer":{"@type":"Answer","text":"Local service businesses that run Google Ads or Facebook Ads. Roofing, HVAC, plumbing, electrical, cleaning, landscaping, and similar trades. If you are paying for digital ads and want better visibility into what is working, GroMore is designed for you."}},
+    {"@type":"Question","name":"Do I need marketing experience to use GroMore?","acceptedAnswer":{"@type":"Answer","text":"No. GroMore generates plain-language recommendations and reports. You do not need to know how to build campaigns from scratch, the platform walks you through it with niche-specific templates."}},
+    {"@type":"Question","name":"Does GroMore replace my agency?","acceptedAnswer":{"@type":"Answer","text":"It can. GroMore gives you many of the same capabilities: campaign management, reporting, optimization recommendations, and creative scheduling. The difference is you own the process and pay a fraction of the cost."}},
+    {"@type":"Question","name":"How long does setup take?","acceptedAnswer":{"@type":"Answer","text":"Most businesses are fully connected in under 15 minutes. You authorize your Google and Facebook accounts through secure OAuth, and GroMore pulls in your data automatically."}},
+    {"@type":"Question","name":"Do you need access to my ad accounts?","acceptedAnswer":{"@type":"Answer","text":"GroMore connects via OAuth, Google and Facebook's official authorization method. You grant specific permissions and can revoke them at any time. We never see or store your passwords."}},
+    {"@type":"Question","name":"What happens to my campaigns if I cancel?","acceptedAnswer":{"@type":"Answer","text":"Nothing. Your campaigns, keywords, ads, and budgets live in your Google Ads and Facebook Ads accounts. GroMore connects to those accounts but does not own them. If you cancel, everything stays exactly as it is."}},
+    {"@type":"Question","name":"Is my data secure?","acceptedAnswer":{"@type":"Answer","text":"Yes. All connections use OAuth with encrypted tokens. Your ad account credentials are never stored on our servers. Data is transmitted over HTTPS and access is scoped to only the permissions needed."}},
+    {"@type":"Question","name":"What ad platforms does GroMore support?","acceptedAnswer":{"@type":"Answer","text":"Google Ads, Facebook/Meta Ads, Google Analytics 4, Google Search Console, Facebook Pages, and Google Drive for creative assets."}},
+    {"@type":"Question","name":"Can GroMore create campaigns for me?","acceptedAnswer":{"@type":"Answer","text":"Yes. GroMore generates campaign plans based on niche-specific templates. You review the plan, make any adjustments, and launch. New campaigns always launch paused by default so you can review before anything goes live."}},
+    {"@type":"Question","name":"Does the AI make changes to my ads automatically?","acceptedAnswer":{"@type":"Answer","text":"No. GroMore generates recommendations and suggestions. You decide whether to act on them. Campaigns launch paused, budget changes require your confirmation, and every action is logged in the audit trail."}},
+    {"@type":"Question","name":"What kind of reports do I get?","acceptedAnswer":{"@type":"Answer","text":"Month-over-month performance reports covering ad spend, clicks, impressions, CPC, conversions, and cost per lead. Each report includes an AI-generated summary explaining what changed and what to focus on next."}},
+    {"@type":"Question","name":"How much does GroMore cost?","acceptedAnswer":{"@type":"Answer","text":"$449 per month. One plan, everything included. No setup fees, no per-feature charges, no contracts."}},
+    {"@type":"Question","name":"Is there a setup fee?","acceptedAnswer":{"@type":"Answer","text":"No. There is no setup fee, onboarding fee, or any hidden charges. $449/month covers the full platform."}},
+    {"@type":"Question","name":"Are there contracts or minimum commitments?","acceptedAnswer":{"@type":"Answer","text":"No. GroMore is month-to-month. Cancel anytime with no penalties or fees."}},
+    {"@type":"Question","name":"Does the price include my ad spend budget?","acceptedAnswer":{"@type":"Answer","text":"No. The $449 monthly fee covers platform access and management tools. Your ad spend goes directly to Google and Facebook through your own accounts. GroMore never handles or marks up your ad budget."}}
+  ]
+}
+</script>
+
+<div class="gm">
+
+<!-- Nav -->
+<nav class="gm-nav" id="gmNav"><div class="gm-nav-inner">
+    <a href="/" class="gm-nav-logo">Gro<span>More</span></a>
+    <ul class="gm-nav-links">
+        <li><a href="/platform">Platform</a></li>
+        <li><a href="/pricing">Pricing</a></li>
+        <li><a href="/about">About</a></li>
+        <li><a href="/faq" class="active">FAQ</a></li>
+        <li><a href="/contact">Contact</a></li>
+        <li><a href="https://gromore-admin.onrender.com/client/login" class="gm-nav-cta">Launch Portal &rarr;</a></li>
+    </ul>
+    <button class="gm-nav-toggle" id="gmNavToggle" aria-label="Menu"><span></span><span></span><span></span></button>
+</div></nav>
+<div class="gm-nav-mobile" id="gmNavMobile">
+    <a href="/platform">Platform</a><a href="/pricing">Pricing</a><a href="/about">About</a>
+    <a href="/faq">FAQ</a><a href="/contact">Contact</a>
+    <a href="https://gromore-admin.onrender.com/client/login">Launch Portal &rarr;</a>
+</div>
+
+<!-- Page Header -->
+<section class="gm-page-header">
+    <div class="gm-wrap">
+        <div class="gm-label">FAQ</div>
+        <h1>Frequently Asked Questions</h1>
+        <p>Answers to the questions we hear most. If something is not covered here, reach out on the <a href="/contact">contact page</a>.</p>
+    </div>
+</section>
+
+<!-- FAQ Sections -->
+<section class="gm-section">
+    <div class="gm-wrap">
+        <div class="gm-faq-layout">
+
+            <!-- General -->
+            <div class="gm-faq-category">
+                <h3><span class="gm-cat-dot blue"></span> General</h3>
+                <div class="gm-faq-item">
+                    <button class="gm-faq-q">What is GroMore?<span class="gm-faq-icon">+</span></button>
+                    <div class="gm-faq-a"><p>GroMore is an AI-powered ad management platform built for local service businesses. It connects to your Google Ads, Facebook Ads, GA4, and Search Console accounts. From one dashboard you get automated reporting, AI recommendations, campaign tools, a Facebook post scheduler, and a full audit trail.</p></div>
+                </div>
+                <div class="gm-faq-item">
+                    <button class="gm-faq-q">Who is GroMore for?<span class="gm-faq-icon">+</span></button>
+                    <div class="gm-faq-a"><p>Local service businesses that run Google Ads or Facebook Ads. Roofing, HVAC, plumbing, electrical, cleaning, landscaping, and similar trades. If you are paying for digital ads and want better visibility into what is working, GroMore is designed for you.</p></div>
+                </div>
+                <div class="gm-faq-item">
+                    <button class="gm-faq-q">Do I need marketing experience to use GroMore?<span class="gm-faq-icon">+</span></button>
+                    <div class="gm-faq-a"><p>No. GroMore generates plain-language recommendations and reports. You do not need to know how to build campaigns from scratch, the platform walks you through it with niche-specific templates.</p></div>
+                </div>
+                <div class="gm-faq-item">
+                    <button class="gm-faq-q">Does GroMore replace my agency?<span class="gm-faq-icon">+</span></button>
+                    <div class="gm-faq-a"><p>It can. GroMore gives you many of the same capabilities: campaign management, reporting, optimization recommendations, and creative scheduling. The difference is you own the process and pay a fraction of the cost.</p></div>
+                </div>
+            </div>
+
+            <!-- Setup & Security -->
+            <div class="gm-faq-category">
+                <h3><span class="gm-cat-dot green"></span> Setup &amp; Security</h3>
+                <div class="gm-faq-item">
+                    <button class="gm-faq-q">How long does setup take?<span class="gm-faq-icon">+</span></button>
+                    <div class="gm-faq-a"><p>Most businesses are fully connected in under 15 minutes. You authorize your Google and Facebook accounts through secure OAuth, and GroMore pulls in your data automatically.</p></div>
+                </div>
+                <div class="gm-faq-item">
+                    <button class="gm-faq-q">Do you need access to my ad accounts?<span class="gm-faq-icon">+</span></button>
+                    <div class="gm-faq-a"><p>GroMore connects via OAuth, Google and Facebook's official authorization method. You grant specific permissions and can revoke them at any time. We never see or store your passwords.</p></div>
+                </div>
+                <div class="gm-faq-item">
+                    <button class="gm-faq-q">What happens to my campaigns if I cancel?<span class="gm-faq-icon">+</span></button>
+                    <div class="gm-faq-a"><p>Nothing. Your campaigns, keywords, ads, and budgets live in your Google Ads and Facebook Ads accounts. GroMore connects to those accounts but does not own them. If you cancel, everything stays exactly as it is.</p></div>
+                </div>
+                <div class="gm-faq-item">
+                    <button class="gm-faq-q">Is my data secure?<span class="gm-faq-icon">+</span></button>
+                    <div class="gm-faq-a"><p>Yes. All connections use OAuth with encrypted tokens. Your ad account credentials are never stored on our servers. Data is transmitted over HTTPS and access is scoped to only the permissions needed.</p></div>
+                </div>
+            </div>
+
+            <!-- Features -->
+            <div class="gm-faq-category">
+                <h3><span class="gm-cat-dot purple"></span> Features</h3>
+                <div class="gm-faq-item">
+                    <button class="gm-faq-q">What ad platforms does GroMore support?<span class="gm-faq-icon">+</span></button>
+                    <div class="gm-faq-a"><p>Google Ads, Facebook/Meta Ads, Google Analytics 4, Google Search Console, Facebook Pages, and Google Drive for creative assets.</p></div>
+                </div>
+                <div class="gm-faq-item">
+                    <button class="gm-faq-q">Can GroMore create campaigns for me?<span class="gm-faq-icon">+</span></button>
+                    <div class="gm-faq-a"><p>Yes. GroMore generates campaign plans based on niche-specific templates. You review the plan, make any adjustments, and launch. New campaigns always launch paused by default so you can review before anything goes live.</p></div>
+                </div>
+                <div class="gm-faq-item">
+                    <button class="gm-faq-q">Does the AI make changes to my ads automatically?<span class="gm-faq-icon">+</span></button>
+                    <div class="gm-faq-a"><p>No. GroMore generates recommendations and suggestions. You decide whether to act on them. Campaigns launch paused, budget changes require your confirmation, and every action is logged in the audit trail.</p></div>
+                </div>
+                <div class="gm-faq-item">
+                    <button class="gm-faq-q">What kind of reports do I get?<span class="gm-faq-icon">+</span></button>
+                    <div class="gm-faq-a"><p>Month-over-month performance reports covering ad spend, clicks, impressions, CPC, conversions, and cost per lead. Each report includes an AI-generated summary explaining what changed and what to focus on next.</p></div>
+                </div>
+            </div>
+
+            <!-- Pricing -->
+            <div class="gm-faq-category">
+                <h3><span class="gm-cat-dot amber"></span> Pricing</h3>
+                <div class="gm-faq-item">
+                    <button class="gm-faq-q">How much does GroMore cost?<span class="gm-faq-icon">+</span></button>
+                    <div class="gm-faq-a"><p>$449 per month. One plan, everything included. No setup fees, no per-feature charges, no contracts.</p></div>
+                </div>
+                <div class="gm-faq-item">
+                    <button class="gm-faq-q">Is there a setup fee?<span class="gm-faq-icon">+</span></button>
+                    <div class="gm-faq-a"><p>No. There is no setup fee, onboarding fee, or any hidden charges. $449/month covers the full platform.</p></div>
+                </div>
+                <div class="gm-faq-item">
+                    <button class="gm-faq-q">Are there contracts or minimum commitments?<span class="gm-faq-icon">+</span></button>
+                    <div class="gm-faq-a"><p>No. GroMore is month-to-month. Cancel anytime with no penalties or fees.</p></div>
+                </div>
+                <div class="gm-faq-item">
+                    <button class="gm-faq-q">Does the price include my ad spend budget?<span class="gm-faq-icon">+</span></button>
+                    <div class="gm-faq-a"><p>No. The $449 monthly fee covers platform access and management tools. Your ad spend goes directly to Google and Facebook through your own accounts. GroMore never handles or marks up your ad budget.</p></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+<!-- CTA -->
+<section class="gm-section gm-section-alt">
+    <div class="gm-wrap">
+        <div class="gm-cta">
+            <h2>Still Have Questions?</h2>
+            <p>Drop us a message and we will get back to you within one business day.</p>
+            <a href="/contact" class="gm-btn gm-btn-white gm-btn-lg">Contact Us &rarr;</a>
+        </div>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer class="gm-footer"><div class="gm-wrap">
+    <div class="gm-footer-grid">
+        <div class="gm-footer-brand"><a href="/" class="gm-footer-logo">Gro<span>More</span></a><p>AI-powered ad management built for local service businesses. More leads, lower costs, total transparency.</p></div>
+        <div><h4>Platform</h4><ul><li><a href="/platform">Features</a></li><li><a href="/platform#reporting">Reporting</a></li><li><a href="/platform#campaigns">Campaign Manager</a></li><li><a href="/platform#scheduler">Post Scheduler</a></li></ul></div>
+        <div><h4>Company</h4><ul><li><a href="/about">About</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/faq">FAQ</a></li><li><a href="/contact">Contact</a></li></ul></div>
+        <div><h4>Contact</h4><ul><li><a href="mailto:hello@gromore.media">hello@gromore.media</a></li><li>Mon - Fri, 8am - 6pm CT</li></ul></div>
+    </div>
+    <div class="gm-footer-bottom"><div>&copy; 2026 GroMore Media. All rights reserved.</div><div><a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a></div></div>
+</div></footer>
+
+</div>
+
+<script>
+(function(){
+    // Mobile nav
+    var t=document.getElementById('gmNavToggle'),m=document.getElementById('gmNavMobile');
+    if(t&&m){t.addEventListener('click',function(){m.classList.toggle('open');});
+    m.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(){m.classList.remove('open');});});}
+    // FAQ accordion
+    document.querySelectorAll('.gm-faq-q').forEach(function(btn){
+        btn.addEventListener('click',function(){
+            var item=btn.parentElement, cat=item.parentElement, wasOpen=item.classList.contains('open');
+            cat.querySelectorAll('.gm-faq-item').forEach(function(s){s.classList.remove('open');});
+            if(!wasOpen) item.classList.add('open');
+        });
+    });
+})();
+</script>

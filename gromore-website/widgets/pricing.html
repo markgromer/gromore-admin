@@ -1,0 +1,441 @@
+<!--
+  GroMore Pricing Page Widget - Paste into Elementor HTML widget
+-->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
+
+.gm *, .gm *::before, .gm *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.gm {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: #334155; line-height: 1.65; font-size: 16px;
+    -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+.gm a { color: #2563eb; text-decoration: none; transition: color .2s ease; }
+.gm a:hover { color: #1d4ed8; }
+.gm h1, .gm h2, .gm h3, .gm h4 {
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+    color: #0f172a; line-height: 1.2; font-weight: 700;
+}
+.gm h1 { font-size: clamp(2.2rem, 5vw, 3.5rem); letter-spacing: -.03em; }
+.gm h2 { font-size: clamp(1.75rem, 4vw, 2.75rem); letter-spacing: -.02em; }
+.gm h3 { font-size: clamp(1.15rem, 2.5vw, 1.4rem); }
+.gm p { margin-bottom: 1rem; }
+.gm ul { list-style: none; }
+.gm-wrap { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem; }
+
+.gm-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+    padding: .85rem 2rem; border-radius: 12px; font-weight: 600; font-size: 1rem;
+    border: none; cursor: pointer; transition: all .25s ease; text-decoration: none;
+    font-family: 'Inter', sans-serif;
+}
+.gm-btn-primary { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff !important; box-shadow: 0 4px 14px rgba(37,99,235,.4); }
+.gm-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(37,99,235,.45); color: #fff !important; }
+.gm-btn-white { background: #fff; color: #2563eb !important; box-shadow: 0 4px 14px rgba(0,0,0,.15); }
+.gm-btn-white:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,.2); color: #1d4ed8 !important; }
+.gm-btn-lg { padding: 1rem 2.5rem; font-size: 1.05rem; }
+
+.gm-label { display: inline-flex; align-items: center; gap: .4rem; font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #2563eb; margin-bottom: .75rem; }
+.gm-label::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #2563eb; }
+
+.gm-section { padding: 5rem 0; }
+.gm-section-alt { background: #f8fafc; }
+.gm-section-header { text-align: center; max-width: 680px; margin: 0 auto 3.5rem; }
+.gm-section-header p { color: #64748b; font-size: 1.05rem; margin-top: .5rem; }
+
+/* Page header */
+.gm-page-header {
+    padding: 5rem 0 4rem;
+    background: linear-gradient(150deg, #f8faff 0%, #eef2ff 30%, #e0e7ff 60%, #f0f4ff 100%);
+    text-align: center; position: relative; overflow: hidden;
+}
+.gm-page-header::before { content: ''; position: absolute; top: -150px; right: -150px; width: 500px; height: 500px; background: radial-gradient(circle, rgba(37,99,235,.08) 0%, transparent 60%); border-radius: 50%; }
+.gm-page-header h1 { margin-bottom: .75rem; position: relative; z-index: 1; }
+.gm-page-header p { color: #64748b; font-size: 1.1rem; max-width: 620px; margin: 0 auto; position: relative; z-index: 1; }
+
+/* ── Pricing Card ── */
+.gm-pricing-center {
+    max-width: 540px;
+    margin: 0 auto;
+}
+.gm-pricing-card {
+    background: #fff;
+    border: 2px solid #2563eb;
+    border-radius: 24px;
+    padding: 3rem 2.5rem;
+    position: relative;
+    box-shadow: 0 20px 60px rgba(37,99,235,.12), 0 4px 12px rgba(0,0,0,.04);
+}
+.gm-pricing-badge {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    color: #fff;
+    padding: .35rem 1.25rem;
+    border-radius: 999px;
+    font-size: .78rem;
+    font-weight: 700;
+    letter-spacing: .02em;
+}
+.gm-pricing-card h3 {
+    font-size: 1.2rem;
+    margin-bottom: .5rem;
+    text-align: center;
+}
+.gm-pricing-amount {
+    text-align: center;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 4rem;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1;
+    margin: .75rem 0 .5rem;
+}
+.gm-pricing-amount span {
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: #94a3b8;
+}
+.gm-pricing-desc {
+    text-align: center;
+    color: #64748b;
+    font-size: .95rem;
+    margin-bottom: 2rem;
+    max-width: 380px;
+    margin-left: auto;
+    margin-right: auto;
+}
+.gm-pricing-features {
+    list-style: none;
+    margin-bottom: 2rem;
+    padding: 0;
+}
+.gm-pricing-features li {
+    padding: .45rem 0;
+    font-size: .92rem;
+    display: flex;
+    align-items: flex-start;
+    gap: .65rem;
+    color: #334155;
+}
+.gm-pricing-features li::before {
+    content: '\2713';
+    color: #059669;
+    font-weight: 800;
+    font-size: .85rem;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+/* ── Cost comparison boxes ── */
+.gm-cost-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    max-width: 700px;
+    margin: 0 auto;
+}
+@media (min-width: 600px) { .gm-cost-grid { grid-template-columns: 1fr 1fr; } }
+.gm-cost-box {
+    text-align: center;
+    border-radius: 20px;
+    padding: 2.5rem 2rem;
+    transition: all .3s ease;
+}
+.gm-cost-box:hover { transform: translateY(-3px); }
+.gm-cost-box.agency {
+    background: #fff;
+    border: 2px solid #e2e8f0;
+}
+.gm-cost-box.gromore {
+    background: linear-gradient(135deg, #eff6ff, #dbeafe);
+    border: 2px solid #93c5fd;
+    box-shadow: 0 8px 30px rgba(37,99,235,.1);
+}
+.gm-cost-amount {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 2.25rem;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: .4rem;
+}
+.gm-cost-box.agency .gm-cost-amount { color: #94a3b8; }
+.gm-cost-box.gromore .gm-cost-amount { color: #2563eb; }
+.gm-cost-type {
+    font-weight: 700;
+    font-size: 1rem;
+    margin-bottom: .75rem;
+    color: #0f172a;
+}
+.gm-cost-box p { font-size: .88rem; color: #64748b; margin: 0; }
+
+/* ── FAQ accordion ── */
+.gm-faq-list { max-width: 720px; margin: 0 auto; }
+.gm-faq-item { border-bottom: 1px solid #e2e8f0; }
+.gm-faq-q {
+    width: 100%; background: none; border: none; text-align: left;
+    padding: 1.25rem 0; font-size: 1rem; font-weight: 600; color: #0f172a;
+    cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+    gap: 1rem; font-family: 'Inter', sans-serif; transition: color .2s;
+}
+.gm-faq-q:hover { color: #2563eb; }
+.gm-faq-icon { font-size: 1.4rem; font-weight: 300; color: #94a3b8; transition: transform .3s; flex-shrink: 0; }
+.gm-faq-item.open .gm-faq-icon { transform: rotate(45deg); }
+.gm-faq-a { max-height: 0; overflow: hidden; transition: max-height .3s ease, padding .3s ease; }
+.gm-faq-item.open .gm-faq-a { max-height: 500px; padding-bottom: 1.25rem; }
+.gm-faq-a p { font-size: .94rem; color: #64748b; line-height: 1.7; margin: 0; }
+
+/* Features grid */
+.gm-features { display: grid; grid-template-columns: 1fr; gap: 1.25rem; }
+@media (min-width: 600px) { .gm-features { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 900px) { .gm-features { grid-template-columns: repeat(3, 1fr); } }
+.gm-fcard { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 2rem; transition: all .3s ease; position: relative; overflow: hidden; }
+.gm-fcard::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #2563eb, #7c3aed); opacity: 0; transition: opacity .3s ease; }
+.gm-fcard:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,.08); border-color: transparent; }
+.gm-fcard:hover::before { opacity: 1; }
+.gm-fcard-icon { width: 52px; height: 52px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; margin-bottom: 1.25rem; }
+.gm-fcard-icon.blue { background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: #2563eb; }
+.gm-fcard-icon.green { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: #059669; }
+.gm-fcard-icon.purple { background: linear-gradient(135deg, #ede9fe, #ddd6fe); color: #7c3aed; }
+.gm-fcard-icon.teal { background: linear-gradient(135deg, #ccfbf1, #99f6e4); color: #0d9488; }
+.gm-fcard-icon.amber { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #d97706; }
+.gm-fcard h3 { margin-bottom: .5rem; }
+.gm-fcard p { color: #64748b; font-size: .92rem; margin: 0; }
+
+/* CTA */
+.gm-cta { background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #172554 100%); border-radius: 20px; padding: 4rem 2.5rem; text-align: center; position: relative; overflow: hidden; }
+.gm-cta::before { content: ''; position: absolute; top: -60%; right: -20%; width: 500px; height: 500px; background: radial-gradient(circle, rgba(37,99,235,.25) 0%, transparent 60%); border-radius: 50%; }
+.gm-cta h2 { color: #fff; margin-bottom: .75rem; position: relative; z-index: 1; }
+.gm-cta p { color: #94a3b8; margin-bottom: 2rem; position: relative; z-index: 1; max-width: 500px; margin-left: auto; margin-right: auto; }
+.gm-cta .gm-btn { position: relative; z-index: 1; }
+
+/* Nav */
+.gm-nav { position: sticky; top: 0; background: rgba(255,255,255,.95); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid #e2e8f0; z-index: 1000; padding: 0 1.5rem; }
+.gm-nav-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 68px; }
+.gm-nav-logo { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.5rem; font-weight: 800; color: #0f172a !important; }
+.gm-nav-logo span { color: #2563eb !important; }
+.gm-nav-links { display: none; list-style: none; gap: 2rem; align-items: center; }
+.gm-nav-links a { color: #334155 !important; font-size: .9rem; font-weight: 500; }
+.gm-nav-links a:hover, .gm-nav-links a.active { color: #2563eb !important; }
+.gm-nav-cta { padding: .5rem 1.25rem; background: linear-gradient(135deg, #2563eb, #1d4ed8) !important; color: #fff !important; border-radius: 8px; font-weight: 600; font-size: .85rem; box-shadow: 0 2px 8px rgba(37,99,235,.3); }
+.gm-nav-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,.4); color: #fff !important; }
+.gm-nav-toggle { display: flex; flex-direction: column; gap: 5px; background: none; border: none; cursor: pointer; padding: 4px; }
+.gm-nav-toggle span { display: block; width: 22px; height: 2px; background: #0f172a; border-radius: 2px; transition: .2s ease; }
+.gm-nav-mobile { display: none; position: fixed; top: 68px; left: 0; right: 0; bottom: 0; background: #fff; padding: 1.5rem; z-index: 999; }
+.gm-nav-mobile.open { display: block; }
+.gm-nav-mobile a { display: block; padding: .75rem 0; font-size: 1.05rem; font-weight: 500; color: #334155 !important; border-bottom: 1px solid #f1f5f9; }
+.gm-nav-mobile a:hover { color: #2563eb !important; }
+@media (min-width: 768px) { .gm-nav-links { display: flex; } .gm-nav-toggle { display: none; } }
+
+/* Footer */
+.gm-footer { background: #0f172a; color: #94a3b8; padding: 4rem 0 2rem; }
+.gm-footer-grid { display: grid; grid-template-columns: 1fr; gap: 2rem; margin-bottom: 3rem; }
+@media (min-width: 600px) { .gm-footer-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 900px) { .gm-footer-grid { grid-template-columns: 2fr 1fr 1fr 1fr; } }
+.gm-footer-brand p { font-size: .88rem; max-width: 280px; margin-top: .75rem; }
+.gm-footer h4 { color: #fff; font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 1rem; font-family: 'Plus Jakarta Sans', sans-serif; }
+.gm-footer li { margin-bottom: .5rem; }
+.gm-footer a { color: #94a3b8 !important; font-size: .88rem; }
+.gm-footer a:hover { color: #fff !important; }
+.gm-footer-logo { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.5rem; font-weight: 800; color: #fff !important; }
+.gm-footer-logo span { color: #3b82f6 !important; }
+.gm-footer-bottom { border-top: 1px solid rgba(255,255,255,.08); padding-top: 1.5rem; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; font-size: .8rem; }
+</style>
+
+<div class="gm">
+
+<!-- Nav -->
+<nav class="gm-nav" id="gmNav"><div class="gm-nav-inner">
+    <a href="/" class="gm-nav-logo">Gro<span>More</span></a>
+    <ul class="gm-nav-links">
+        <li><a href="/platform">Platform</a></li>
+        <li><a href="/pricing" class="active">Pricing</a></li>
+        <li><a href="/about">About</a></li>
+        <li><a href="/faq">FAQ</a></li>
+        <li><a href="/contact">Contact</a></li>
+        <li><a href="https://gromore-admin.onrender.com/client/login" class="gm-nav-cta">Launch Portal &rarr;</a></li>
+    </ul>
+    <button class="gm-nav-toggle" id="gmNavToggle" aria-label="Menu"><span></span><span></span><span></span></button>
+</div></nav>
+<div class="gm-nav-mobile" id="gmNavMobile">
+    <a href="/platform">Platform</a><a href="/pricing">Pricing</a><a href="/about">About</a>
+    <a href="/faq">FAQ</a><a href="/contact">Contact</a>
+    <a href="https://gromore-admin.onrender.com/client/login">Launch Portal &rarr;</a>
+</div>
+
+<!-- Page Header -->
+<section class="gm-page-header">
+    <div class="gm-wrap">
+        <div class="gm-label">Pricing</div>
+        <h1>One Plan. Everything Included.</h1>
+        <p>No tiers to decode, no add-ons to calculate, no surprises on the invoice. $449/month gets you the full platform.</p>
+    </div>
+</section>
+
+<!-- Pricing Card -->
+<section class="gm-section">
+    <div class="gm-wrap">
+        <div class="gm-pricing-center">
+            <div class="gm-pricing-card">
+                <div class="gm-pricing-badge">Everything Included</div>
+                <h3>GroMore Pro</h3>
+                <div class="gm-pricing-amount">$449<span>/month</span></div>
+                <p class="gm-pricing-desc">Full platform access. No contracts, cancel anytime.</p>
+                <ul class="gm-pricing-features">
+                    <li>Google Ads management &amp; reporting</li>
+                    <li>Facebook / Meta Ads management &amp; reporting</li>
+                    <li>GA4 &amp; Search Console integration</li>
+                    <li>Google Drive image library</li>
+                    <li>AI-powered recommendations</li>
+                    <li>Month-over-month performance reports</li>
+                    <li>Campaign planning &amp; generation</li>
+                    <li>Campaigns launch paused by default</li>
+                    <li>Facebook post scheduler (single + CSV bulk)</li>
+                    <li>Full audit trail of every change</li>
+                    <li>Dedicated client portal</li>
+                    <li>Email support, Mon - Fri</li>
+                </ul>
+                <a href="/contact" class="gm-btn gm-btn-primary gm-btn-lg" style="width:100%;">Get Started &rarr;</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- What's Included -->
+<section class="gm-section gm-section-alt">
+    <div class="gm-wrap">
+        <div class="gm-section-header">
+            <div class="gm-label">What's Included</div>
+            <h2>Everything, Broken Down</h2>
+        </div>
+        <div class="gm-features">
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon blue">&#128268;</div>
+                <h3>Platform Connections</h3>
+                <p>Google Ads, GA4, Search Console, Facebook Ads, Pages, and Google Drive. All connected through secure OAuth.</p>
+            </div>
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon green">&#128200;</div>
+                <h3>Reporting Engine</h3>
+                <p>Automated month-over-month reports covering spend, CPC, CPL, conversion rates. AI-written summaries explaining what changed.</p>
+            </div>
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon purple">&#128161;</div>
+                <h3>AI Recommendations</h3>
+                <p>Prioritized next steps based on your actual data. Specific actions: adjust this bid, pause this keyword, test this ad copy.</p>
+            </div>
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon blue">&#127919;</div>
+                <h3>Campaign Tools</h3>
+                <p>Generate plans from niche templates. Launch campaigns, manage keywords and budgets. New campaigns launch paused.</p>
+            </div>
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon teal">&#128197;</div>
+                <h3>Post Scheduler</h3>
+                <p>Compose and schedule Facebook posts. Bulk upload via CSV. Attach images from Drive without leaving the platform.</p>
+            </div>
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon amber">&#128221;</div>
+                <h3>Audit Trail</h3>
+                <p>Every action logged with timestamp. Campaign launches, budget edits, keyword changes. If something changes, you will know.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Cost Comparison -->
+<section class="gm-section">
+    <div class="gm-wrap">
+        <div class="gm-section-header">
+            <div class="gm-label">The Math</div>
+            <h2>What You Actually Save</h2>
+            <p>The average home services business spends $1,200 - $2,000/month on agency management fees. Most get a junior account manager splitting time between 30+ clients.</p>
+        </div>
+        <div class="gm-cost-grid">
+            <div class="gm-cost-box agency">
+                <div class="gm-cost-amount">$1,500/mo</div>
+                <div class="gm-cost-type">Average Agency</div>
+                <p>Monthly management fee. Does not include ad spend. Plus a $500 - $1,500 setup fee. 6-month minimum contract.</p>
+            </div>
+            <div class="gm-cost-box gromore">
+                <div class="gm-cost-amount">$449/mo</div>
+                <div class="gm-cost-type">GroMore</div>
+                <p>Everything included. No setup fee. No contract. Cancel anytime. You save $12,000+ per year.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Pricing FAQ -->
+<section class="gm-section gm-section-alt">
+    <div class="gm-wrap">
+        <div class="gm-section-header">
+            <h2>Pricing Questions</h2>
+        </div>
+        <div class="gm-faq-list">
+            <div class="gm-faq-item">
+                <button class="gm-faq-q">Are there any setup or onboarding fees?<span class="gm-faq-icon">+</span></button>
+                <div class="gm-faq-a"><p>No. Connect your accounts and you are up and running. No setup fee, no onboarding call, no hidden charges.</p></div>
+            </div>
+            <div class="gm-faq-item">
+                <button class="gm-faq-q">Is there a contract or minimum commitment?<span class="gm-faq-icon">+</span></button>
+                <div class="gm-faq-a"><p>No. Month-to-month billing, cancel anytime. If you cancel, you keep full access to your accounts and data.</p></div>
+            </div>
+            <div class="gm-faq-item">
+                <button class="gm-faq-q">Does the $449 include my ad spend budget?<span class="gm-faq-icon">+</span></button>
+                <div class="gm-faq-a"><p>No. The $449 is the platform and management fee. Your ad spend goes directly to Google and Facebook through your own accounts. We never touch your ad budget.</p></div>
+            </div>
+            <div class="gm-faq-item">
+                <button class="gm-faq-q">What if I manage multiple locations?<span class="gm-faq-icon">+</span></button>
+                <div class="gm-faq-a"><p>Each business location or brand gets its own portal and account connections. Contact us for multi-location pricing.</p></div>
+            </div>
+            <div class="gm-faq-item">
+                <button class="gm-faq-q">What happens to my data if I cancel?<span class="gm-faq-icon">+</span></button>
+                <div class="gm-faq-a"><p>Your Google and Facebook accounts belong to you, always. When you cancel, you still have full access to your platforms. We do not delete or restrict anything on your side.</p></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- CTA -->
+<section class="gm-section">
+    <div class="gm-wrap">
+        <div class="gm-cta">
+            <h2>Ready to Save $12,000+ Per Year?</h2>
+            <p>Get the full platform for less than what most agencies charge for a single month.</p>
+            <a href="/contact" class="gm-btn gm-btn-white gm-btn-lg">Get Started &rarr;</a>
+        </div>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer class="gm-footer"><div class="gm-wrap">
+    <div class="gm-footer-grid">
+        <div class="gm-footer-brand"><a href="/" class="gm-footer-logo">Gro<span>More</span></a><p>AI-powered ad management built for local service businesses. More leads, lower costs, total transparency.</p></div>
+        <div><h4>Platform</h4><ul><li><a href="/platform">Features</a></li><li><a href="/platform#reporting">Reporting</a></li><li><a href="/platform#campaigns">Campaign Manager</a></li><li><a href="/platform#scheduler">Post Scheduler</a></li></ul></div>
+        <div><h4>Company</h4><ul><li><a href="/about">About</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/faq">FAQ</a></li><li><a href="/contact">Contact</a></li></ul></div>
+        <div><h4>Contact</h4><ul><li><a href="mailto:hello@gromore.media">hello@gromore.media</a></li><li>Mon - Fri, 8am - 6pm CT</li></ul></div>
+    </div>
+    <div class="gm-footer-bottom"><div>&copy; 2026 GroMore Media. All rights reserved.</div><div><a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a></div></div>
+</div></footer>
+
+</div>
+
+<script>
+(function(){
+    // Mobile nav
+    var t=document.getElementById('gmNavToggle'),m=document.getElementById('gmNavMobile');
+    if(t&&m){t.addEventListener('click',function(){m.classList.toggle('open');});
+    m.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(){m.classList.remove('open');});});}
+    // FAQ accordion
+    document.querySelectorAll('.gm-faq-q').forEach(function(btn){
+        btn.addEventListener('click',function(){
+            var item=btn.parentElement, wasOpen=item.classList.contains('open');
+            item.parentElement.querySelectorAll('.gm-faq-item').forEach(function(s){s.classList.remove('open');});
+            if(!wasOpen) item.classList.add('open');
+        });
+    });
+})();
+</script>

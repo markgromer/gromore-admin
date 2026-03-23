@@ -1,0 +1,1064 @@
+<!--
+  GroMore Homepage Widget - Paste into Elementor HTML widget
+  Self-contained: all CSS embedded, no external dependencies except Google Fonts
+-->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
+
+/* ── Reset inside widget ── */
+.gm *, .gm *::before, .gm *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.gm {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: #334155;
+    line-height: 1.65;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+}
+.gm img { max-width: 100%; height: auto; display: block; }
+.gm a { color: #2563eb; text-decoration: none; transition: color .2s ease; }
+.gm a:hover { color: #1d4ed8; }
+.gm h1, .gm h2, .gm h3, .gm h4 {
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+    color: #0f172a;
+    line-height: 1.2;
+    font-weight: 700;
+}
+.gm h1 { font-size: clamp(2.2rem, 5vw, 3.5rem); letter-spacing: -.03em; }
+.gm h2 { font-size: clamp(1.75rem, 4vw, 2.75rem); letter-spacing: -.02em; }
+.gm h3 { font-size: clamp(1.15rem, 2.5vw, 1.4rem); }
+.gm p { margin-bottom: 1rem; }
+.gm ul { list-style: none; }
+
+/* ── Layout ── */
+.gm-wrap {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+}
+
+/* ── Buttons ── */
+.gm-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    padding: .85rem 2rem;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 1rem;
+    border: none;
+    cursor: pointer;
+    transition: all .25s ease;
+    text-decoration: none;
+    font-family: 'Inter', sans-serif;
+}
+.gm-btn-primary {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #fff !important;
+    box-shadow: 0 4px 14px rgba(37,99,235,.4), 0 1px 3px rgba(0,0,0,.1);
+}
+.gm-btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(37,99,235,.45), 0 2px 6px rgba(0,0,0,.1);
+    color: #fff !important;
+}
+.gm-btn-outline {
+    background: transparent;
+    color: #2563eb !important;
+    border: 2px solid rgba(37,99,235,.3);
+    backdrop-filter: blur(4px);
+}
+.gm-btn-outline:hover {
+    background: rgba(37,99,235,.06);
+    border-color: #2563eb;
+    transform: translateY(-2px);
+    color: #2563eb !important;
+}
+.gm-btn-white {
+    background: #fff;
+    color: #2563eb !important;
+    box-shadow: 0 4px 14px rgba(0,0,0,.15);
+}
+.gm-btn-white:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0,0,0,.2);
+    color: #1d4ed8 !important;
+}
+.gm-btn-lg { padding: 1rem 2.5rem; font-size: 1.05rem; }
+
+/* ── Section label ── */
+.gm-label {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: #2563eb;
+    margin-bottom: .75rem;
+}
+.gm-label::before {
+    content: '';
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #2563eb;
+}
+
+/* ═══════════════ HERO ═══════════════ */
+.gm-hero {
+    position: relative;
+    padding: 6rem 0 5rem;
+    background: linear-gradient(150deg, #f8faff 0%, #eef2ff 30%, #e0e7ff 60%, #f0f4ff 100%);
+    overflow: hidden;
+}
+.gm-hero::before {
+    content: '';
+    position: absolute;
+    top: -200px; right: -200px;
+    width: 700px; height: 700px;
+    background: radial-gradient(circle, rgba(37,99,235,.1) 0%, transparent 60%);
+    border-radius: 50%;
+    pointer-events: none;
+}
+.gm-hero::after {
+    content: '';
+    position: absolute;
+    bottom: -100px; left: -100px;
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(16,185,129,.08) 0%, transparent 60%);
+    border-radius: 50%;
+    pointer-events: none;
+}
+.gm-hero-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 3rem;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+}
+@media (min-width: 900px) { .gm-hero-grid { grid-template-columns: 1.1fr 1fr; } }
+
+.gm-hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .45rem 1.1rem;
+    background: rgba(37,99,235,.08);
+    border: 1px solid rgba(37,99,235,.15);
+    color: #2563eb;
+    border-radius: 999px;
+    font-size: .8rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    backdrop-filter: blur(8px);
+}
+.gm-hero-badge-dot {
+    width: 7px; height: 7px;
+    background: #10b981;
+    border-radius: 50%;
+    animation: gm-pulse 2s infinite;
+}
+@keyframes gm-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .4; }
+}
+.gm-hero h1 {
+    margin-bottom: 1.5rem;
+    line-height: 1.1;
+}
+.gm-hero h1 span {
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.gm-hero-sub {
+    font-size: clamp(1rem, 2.5vw, 1.15rem);
+    color: #64748b;
+    max-width: 520px;
+    margin-bottom: 2rem;
+    line-height: 1.75;
+}
+.gm-hero-btns { display: flex; flex-wrap: wrap; gap: .75rem; }
+.gm-hero-stats {
+    display: flex;
+    gap: 2.5rem;
+    margin-top: 3rem;
+    flex-wrap: wrap;
+}
+.gm-hero-stat-num {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 1.65rem;
+    font-weight: 800;
+    color: #0f172a;
+}
+.gm-hero-stat-label {
+    font-size: .78rem;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+/* Hero visual - dashboard mockup */
+.gm-hero-visual {
+    position: relative;
+}
+.gm-dashboard-mock {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 25px 60px rgba(0,0,0,.12), 0 4px 12px rgba(0,0,0,.06);
+    border: 1px solid rgba(226,232,240,.6);
+    overflow: hidden;
+}
+.gm-dash-bar {
+    background: #0f172a;
+    padding: .6rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+}
+.gm-dash-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+}
+.gm-dash-dot:nth-child(1) { background: #ef4444; }
+.gm-dash-dot:nth-child(2) { background: #f59e0b; }
+.gm-dash-dot:nth-child(3) { background: #10b981; }
+.gm-dash-body {
+    padding: 1.5rem;
+}
+.gm-dash-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: .75rem;
+    margin-bottom: 1rem;
+}
+.gm-dash-card {
+    background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+    border-radius: 10px;
+    padding: 1rem;
+    border: 1px solid #e2e8f0;
+}
+.gm-dash-card-label {
+    font-size: .65rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #94a3b8;
+    font-weight: 600;
+    margin-bottom: .3rem;
+}
+.gm-dash-card-val {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: #0f172a;
+}
+.gm-dash-card-change {
+    font-size: .7rem;
+    font-weight: 600;
+    margin-top: .2rem;
+}
+.gm-dash-card-change.up { color: #10b981; }
+.gm-dash-card-change.down { color: #ef4444; }
+.gm-dash-chart {
+    background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+    border-radius: 10px;
+    padding: 1rem;
+    border: 1px solid #e2e8f0;
+    height: 100px;
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+}
+.gm-dash-bar-item {
+    flex: 1;
+    background: linear-gradient(180deg, #3b82f6, #2563eb);
+    border-radius: 3px 3px 0 0;
+    min-height: 10px;
+}
+
+/* ═══════════════ SECTIONS ═══════════════ */
+.gm-section {
+    padding: 5rem 0;
+}
+.gm-section-alt {
+    background: #f8fafc;
+}
+.gm-section-dark {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    color: #e2e8f0;
+}
+.gm-section-dark h2, .gm-section-dark h3, .gm-section-dark h4 { color: #fff; }
+.gm-section-dark p { color: #94a3b8; }
+.gm-section-dark .gm-label { color: #38bdf8; }
+.gm-section-dark .gm-label::before { background: #38bdf8; }
+
+.gm-section-header {
+    text-align: center;
+    max-width: 680px;
+    margin: 0 auto 3.5rem;
+}
+.gm-section-header p {
+    color: #64748b;
+    font-size: 1.05rem;
+    margin-top: .5rem;
+}
+
+/* ═══════════════ FEATURE CARDS ═══════════════ */
+.gm-features {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+}
+@media (min-width: 600px) { .gm-features { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 900px) { .gm-features { grid-template-columns: repeat(3, 1fr); } }
+
+.gm-fcard {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 2rem;
+    transition: all .3s ease;
+    position: relative;
+    overflow: hidden;
+}
+.gm-fcard::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #2563eb, #7c3aed);
+    opacity: 0;
+    transition: opacity .3s ease;
+}
+.gm-fcard:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(0,0,0,.08);
+    border-color: transparent;
+}
+.gm-fcard:hover::before { opacity: 1; }
+
+.gm-fcard-icon {
+    width: 52px; height: 52px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    margin-bottom: 1.25rem;
+}
+.gm-fcard-icon.blue { background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: #2563eb; }
+.gm-fcard-icon.red { background: linear-gradient(135deg, #fee2e2, #fecaca); color: #dc2626; }
+.gm-fcard-icon.amber { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #d97706; }
+.gm-fcard-icon.green { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: #059669; }
+.gm-fcard-icon.purple { background: linear-gradient(135deg, #ede9fe, #ddd6fe); color: #7c3aed; }
+.gm-fcard-icon.teal { background: linear-gradient(135deg, #ccfbf1, #99f6e4); color: #0d9488; }
+
+.gm-fcard h3 { margin-bottom: .5rem; }
+.gm-fcard p { color: #64748b; font-size: .92rem; margin: 0; }
+
+/* ═══════════════ PROBLEM CARDS (red accent) ═══════════════ */
+.gm-problem .gm-fcard::before {
+    background: linear-gradient(90deg, #ef4444, #f97316);
+}
+.gm-problem .gm-label { color: #ef4444; }
+.gm-problem .gm-label::before { background: #ef4444; }
+
+/* ═══════════════ STEPS ═══════════════ */
+.gm-steps {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2rem;
+    position: relative;
+}
+@media (min-width: 600px) { .gm-steps { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 900px) { .gm-steps { grid-template-columns: repeat(4, 1fr); } }
+
+.gm-step {
+    text-align: center;
+    padding: 1.5rem 1rem;
+    position: relative;
+}
+.gm-step-num {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    font-weight: 800;
+    margin: 0 auto 1.25rem;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    box-shadow: 0 4px 14px rgba(37,99,235,.35);
+}
+.gm-step h3 { margin-bottom: .5rem; }
+.gm-step p { font-size: .9rem; color: #64748b; margin: 0; }
+
+/* ═══════════════ COMPARISON TABLE ═══════════════ */
+.gm-compare-wrap { overflow-x: auto; margin: 0 -1.5rem; padding: 0 1.5rem; }
+.gm-compare {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,.08);
+    font-size: .92rem;
+}
+.gm-compare thead th {
+    padding: 1.1rem 1.25rem;
+    text-align: left;
+    font-weight: 700;
+    font-size: .95rem;
+}
+.gm-compare thead th:first-child {
+    background: #1e293b;
+    color: #fff;
+}
+.gm-compare thead th:nth-child(2) {
+    background: #fef2f2;
+    color: #991b1b;
+}
+.gm-compare thead th:nth-child(3) {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #fff;
+}
+.gm-compare tbody td {
+    padding: .9rem 1.25rem;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: top;
+}
+.gm-compare tbody tr:last-child td { border-bottom: none; }
+.gm-compare tbody td:first-child { font-weight: 600; color: #0f172a; background: #fff; }
+.gm-compare tbody td:nth-child(2) { color: #64748b; background: #fff; }
+.gm-compare tbody td:nth-child(3) { color: #059669; font-weight: 600; background: #f0fdf4; }
+.gm-compare tbody tr:nth-child(even) td:first-child,
+.gm-compare tbody tr:nth-child(even) td:nth-child(2) { background: #fafafa; }
+.gm-compare tbody tr:nth-child(even) td:nth-child(3) { background: #ecfdf5; }
+
+/* ═══════════════ TESTIMONIALS ═══════════════ */
+.gm-testimonials {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+}
+@media (min-width: 768px) { .gm-testimonials { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1000px) { .gm-testimonials { grid-template-columns: repeat(3, 1fr); } }
+
+.gm-tcard {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 2rem;
+    position: relative;
+    transition: all .3s ease;
+}
+.gm-tcard:hover {
+    box-shadow: 0 8px 30px rgba(0,0,0,.06);
+    transform: translateY(-2px);
+}
+.gm-tcard-quote {
+    font-size: 3rem;
+    line-height: 1;
+    color: #dbeafe;
+    font-family: Georgia, serif;
+    margin-bottom: .25rem;
+}
+.gm-tcard-stars {
+    color: #f59e0b;
+    font-size: .85rem;
+    letter-spacing: 2px;
+    margin-bottom: .75rem;
+}
+.gm-tcard-text {
+    font-size: .95rem;
+    color: #334155;
+    line-height: 1.75;
+    margin-bottom: 1.25rem;
+    font-style: italic;
+}
+.gm-tcard-author {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding-top: 1rem;
+    border-top: 1px solid #f1f5f9;
+}
+.gm-tcard-avatar {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+    color: #2563eb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: .85rem;
+}
+.gm-tcard-name { font-weight: 700; font-size: .88rem; color: #0f172a; }
+.gm-tcard-role { font-size: .78rem; color: #94a3b8; }
+
+/* ═══════════════ CTA BANNER ═══════════════ */
+.gm-cta {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #172554 100%);
+    border-radius: 20px;
+    padding: 4rem 2.5rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+.gm-cta::before {
+    content: '';
+    position: absolute;
+    top: -60%; right: -20%;
+    width: 500px; height: 500px;
+    background: radial-gradient(circle, rgba(37,99,235,.25) 0%, transparent 60%);
+    border-radius: 50%;
+}
+.gm-cta::after {
+    content: '';
+    position: absolute;
+    bottom: -40%; left: -10%;
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(124,58,237,.15) 0%, transparent 60%);
+    border-radius: 50%;
+}
+.gm-cta h2 { color: #fff; margin-bottom: .75rem; position: relative; z-index: 1; }
+.gm-cta p { color: #94a3b8; margin-bottom: 2rem; position: relative; z-index: 1; max-width: 500px; margin-left: auto; margin-right: auto; }
+.gm-cta .gm-btn { position: relative; z-index: 1; }
+
+/* ═══════════════ FOOTER ═══════════════ */
+.gm-footer {
+    background: #0f172a;
+    color: #94a3b8;
+    padding: 4rem 0 2rem;
+}
+.gm-footer-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2rem;
+    margin-bottom: 3rem;
+}
+@media (min-width: 600px) { .gm-footer-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 900px) { .gm-footer-grid { grid-template-columns: 2fr 1fr 1fr 1fr; } }
+
+.gm-footer-brand p { font-size: .88rem; max-width: 280px; margin-top: .75rem; }
+.gm-footer h4 {
+    color: #fff;
+    font-size: .8rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-bottom: 1rem;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+}
+.gm-footer li { margin-bottom: .5rem; }
+.gm-footer a { color: #94a3b8 !important; font-size: .88rem; transition: color .2s ease; }
+.gm-footer a:hover { color: #fff !important; }
+.gm-footer-logo {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #fff !important;
+}
+.gm-footer-logo span { color: #3b82f6 !important; }
+.gm-footer-bottom {
+    border-top: 1px solid rgba(255,255,255,.08);
+    padding-top: 1.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: .8rem;
+}
+
+/* ═══════════════ NAV ═══════════════ */
+.gm-nav {
+    position: sticky;
+    top: 0;
+    background: rgba(255,255,255,.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid #e2e8f0;
+    z-index: 1000;
+    padding: 0 1.5rem;
+}
+.gm-nav-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 68px;
+}
+.gm-nav-logo {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #0f172a !important;
+}
+.gm-nav-logo span { color: #2563eb !important; }
+.gm-nav-links {
+    display: none;
+    list-style: none;
+    gap: 2rem;
+    align-items: center;
+}
+.gm-nav-links a {
+    color: #334155 !important;
+    font-size: .9rem;
+    font-weight: 500;
+}
+.gm-nav-links a:hover { color: #2563eb !important; }
+.gm-nav-cta {
+    padding: .5rem 1.25rem;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+    color: #fff !important;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: .85rem;
+    box-shadow: 0 2px 8px rgba(37,99,235,.3);
+}
+.gm-nav-cta:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37,99,235,.4);
+    color: #fff !important;
+}
+.gm-nav-toggle {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+}
+.gm-nav-toggle span {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: #0f172a;
+    border-radius: 2px;
+    transition: .2s ease;
+}
+.gm-nav-mobile {
+    display: none;
+    position: fixed;
+    top: 68px; left: 0; right: 0; bottom: 0;
+    background: #fff;
+    padding: 1.5rem;
+    z-index: 999;
+}
+.gm-nav-mobile.open { display: block; }
+.gm-nav-mobile a {
+    display: block;
+    padding: .75rem 0;
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: #334155 !important;
+    border-bottom: 1px solid #f1f5f9;
+}
+.gm-nav-mobile a:hover { color: #2563eb !important; }
+@media (min-width: 768px) {
+    .gm-nav-links { display: flex; }
+    .gm-nav-toggle { display: none; }
+}
+</style>
+
+<div class="gm">
+
+<!-- Nav -->
+<nav class="gm-nav" id="gmNav">
+    <div class="gm-nav-inner">
+        <a href="/" class="gm-nav-logo">Gro<span>More</span></a>
+        <ul class="gm-nav-links">
+            <li><a href="/platform">Platform</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/about">About</a></li>
+            <li><a href="/faq">FAQ</a></li>
+            <li><a href="/contact">Contact</a></li>
+            <li><a href="https://gromore-admin.onrender.com/client/login" class="gm-nav-cta">Launch Portal &rarr;</a></li>
+        </ul>
+        <button class="gm-nav-toggle" id="gmNavToggle" aria-label="Menu">
+            <span></span><span></span><span></span>
+        </button>
+    </div>
+</nav>
+<div class="gm-nav-mobile" id="gmNavMobile">
+    <a href="/platform">Platform</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/about">About</a>
+    <a href="/faq">FAQ</a>
+    <a href="/contact">Contact</a>
+    <a href="https://gromore-admin.onrender.com/client/login">Launch Portal &rarr;</a>
+</div>
+
+<!-- ═══ HERO ═══ -->
+<section class="gm-hero">
+    <div class="gm-wrap">
+        <div class="gm-hero-grid">
+            <div>
+                <div class="gm-hero-badge">
+                    <span class="gm-hero-badge-dot"></span>
+                    Built for Local Service Businesses
+                </div>
+                <h1>Your Ads, Your Data,<br><span>Your Control</span></h1>
+                <p class="gm-hero-sub">
+                    GroMore connects your Google Ads and Facebook accounts, turns raw data
+                    into clear reporting with next-step recommendations, then lets you plan
+                    and launch campaigns in a controlled, auditable workflow.
+                </p>
+                <div class="gm-hero-btns">
+                    <a href="/pricing" class="gm-btn gm-btn-primary gm-btn-lg">See Plans &amp; Pricing &rarr;</a>
+                    <a href="/platform" class="gm-btn gm-btn-outline gm-btn-lg">How It Works</a>
+                </div>
+                <div class="gm-hero-stats">
+                    <div>
+                        <div class="gm-hero-stat-num">5 min</div>
+                        <div class="gm-hero-stat-label">Setup time</div>
+                    </div>
+                    <div>
+                        <div class="gm-hero-stat-num">1 System</div>
+                        <div class="gm-hero-stat-label">Data to action</div>
+                    </div>
+                    <div>
+                        <div class="gm-hero-stat-num">$449</div>
+                        <div class="gm-hero-stat-label">/mo flat rate</div>
+                    </div>
+                </div>
+            </div>
+            <div class="gm-hero-visual">
+                <div class="gm-dashboard-mock">
+                    <div class="gm-dash-bar">
+                        <span class="gm-dash-dot"></span>
+                        <span class="gm-dash-dot"></span>
+                        <span class="gm-dash-dot"></span>
+                    </div>
+                    <div class="gm-dash-body">
+                        <div class="gm-dash-row">
+                            <div class="gm-dash-card">
+                                <div class="gm-dash-card-label">Ad Spend</div>
+                                <div class="gm-dash-card-val">$2,847</div>
+                                <div class="gm-dash-card-change down">-12% vs last mo</div>
+                            </div>
+                            <div class="gm-dash-card">
+                                <div class="gm-dash-card-label">Leads</div>
+                                <div class="gm-dash-card-val">127</div>
+                                <div class="gm-dash-card-change up">+34% vs last mo</div>
+                            </div>
+                            <div class="gm-dash-card">
+                                <div class="gm-dash-card-label">Cost / Lead</div>
+                                <div class="gm-dash-card-val">$22.41</div>
+                                <div class="gm-dash-card-change up">-29% vs last mo</div>
+                            </div>
+                        </div>
+                        <div class="gm-dash-chart">
+                            <div class="gm-dash-bar-item" style="height:40%"></div>
+                            <div class="gm-dash-bar-item" style="height:55%"></div>
+                            <div class="gm-dash-bar-item" style="height:35%"></div>
+                            <div class="gm-dash-bar-item" style="height:70%"></div>
+                            <div class="gm-dash-bar-item" style="height:60%"></div>
+                            <div class="gm-dash-bar-item" style="height:80%"></div>
+                            <div class="gm-dash-bar-item" style="height:75%"></div>
+                            <div class="gm-dash-bar-item" style="height:90%"></div>
+                            <div class="gm-dash-bar-item" style="height:65%"></div>
+                            <div class="gm-dash-bar-item" style="height:85%"></div>
+                            <div class="gm-dash-bar-item" style="height:95%"></div>
+                            <div class="gm-dash-bar-item" style="height:88%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══ THE PROBLEM ═══ -->
+<section class="gm-section gm-section-alt gm-problem">
+    <div class="gm-wrap">
+        <div class="gm-section-header">
+            <div class="gm-label">The Problem</div>
+            <h2>Most Agency Setups Are Broken</h2>
+            <p>Agencies charge $900 to $2,500/month. You get a PDF report full of jargon, no idea what changed, and zero control over your own accounts.</p>
+        </div>
+        <div class="gm-features">
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon red">&#128176;</div>
+                <h3>Expensive for What You Get</h3>
+                <p>A junior account manager with dozens of clients tweaks a few bids and sends a report you can not parse. That is what $1,500/month buys.</p>
+            </div>
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon amber">&#128683;</div>
+                <h3>Zero Visibility</h3>
+                <p>"Impressions are up 23%!" Cool, but how many calls did it generate? Most reports are designed to look busy, not to inform decisions.</p>
+            </div>
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon red">&#128274;</div>
+                <h3>They Own Your Accounts</h3>
+                <p>Your ad accounts, landing pages, tracking pixels, data. Try to leave and you start from zero. The dependency is by design.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══ THE SOLUTION ═══ -->
+<section class="gm-section">
+    <div class="gm-wrap">
+        <div class="gm-section-header">
+            <div class="gm-label">The Solution</div>
+            <h2>One Connected System, From Data to Action</h2>
+            <p>GroMore closes the loop between reporting and execution. Data flows in, insights come out, and when you are ready to act, the tools are right there.</p>
+        </div>
+        <div class="gm-features">
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon blue">&#128268;</div>
+                <h3>Connect Your Accounts</h3>
+                <p>Link Google Ads, GA4, Search Console, Facebook, and Google Drive. One-click OAuth. Takes about 5 minutes. You own everything.</p>
+            </div>
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon green">&#128200;</div>
+                <h3>Clear, Actionable Reporting</h3>
+                <p>Month-over-month comparisons in plain English. What changed, what worked, and a prioritized list of what to do next. No vanity metrics.</p>
+            </div>
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon purple">&#128161;</div>
+                <h3>AI-Generated Recommendations</h3>
+                <p>The system analyzes your data and suggests specific actions: adjust bids, pause underperformers, target new keywords. You decide what to act on.</p>
+            </div>
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon blue">&#127919;</div>
+                <h3>Campaign Planning &amp; Launch</h3>
+                <p>Generate campaign plans from structured templates. Review the plan, then launch directly. New campaigns start paused by default for safety.</p>
+            </div>
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon teal">&#128197;</div>
+                <h3>Facebook Post Scheduler</h3>
+                <p>Schedule organic Facebook posts one at a time or in bulk via CSV upload. Attach images from your Google Drive. Facebook handles delivery.</p>
+            </div>
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon green">&#128221;</div>
+                <h3>Full Audit Trail</h3>
+                <p>Every campaign change is logged: what was modified, when, and by whom. Makes accountability simple and post-mortems painless.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══ HOW IT WORKS ═══ -->
+<section class="gm-section gm-section-alt">
+    <div class="gm-wrap">
+        <div class="gm-section-header">
+            <div class="gm-label">How It Works</div>
+            <h2>Live in 5 Minutes. First Report in 24 Hours.</h2>
+            <p>No onboarding calls. No 3-week setup. Connect your accounts and the system starts pulling data immediately.</p>
+        </div>
+        <div class="gm-steps">
+            <div class="gm-step">
+                <div class="gm-step-num">1</div>
+                <h3>Connect</h3>
+                <p>Link your Google and Meta accounts through secure OAuth. One click per platform. Your credentials stay with Google and Facebook, not us.</p>
+            </div>
+            <div class="gm-step">
+                <div class="gm-step-num">2</div>
+                <h3>Pull Data</h3>
+                <p>The system pulls performance data from Google Ads, GA4, Search Console, and Facebook Ads. Merges it into a single, normalized dataset.</p>
+            </div>
+            <div class="gm-step">
+                <div class="gm-step-num">3</div>
+                <h3>Review &amp; Plan</h3>
+                <p>Get month-over-month reports with clear recommendations. Generate a campaign plan using proven templates for your niche.</p>
+            </div>
+            <div class="gm-step">
+                <div class="gm-step-num">4</div>
+                <h3>Execute</h3>
+                <p>Launch campaigns, adjust budgets, add negative keywords, schedule posts. Every action is logged. Nothing runs without your explicit trigger.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══ COMPARISON TABLE ═══ -->
+<section class="gm-section">
+    <div class="gm-wrap">
+        <div class="gm-section-header">
+            <div class="gm-label">The Comparison</div>
+            <h2>GroMore vs. a Typical Agency</h2>
+        </div>
+        <div class="gm-compare-wrap">
+            <table class="gm-compare">
+                <thead>
+                    <tr>
+                        <th style="width:34%"></th>
+                        <th style="width:33%">Typical Agency</th>
+                        <th style="width:33%">GroMore</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Monthly Cost</td>
+                        <td>$900 - $2,500+</td>
+                        <td>$449 flat</td>
+                    </tr>
+                    <tr>
+                        <td>Reporting</td>
+                        <td>Monthly PDF with jargon</td>
+                        <td>Plain-English dashboard + recommendations</td>
+                    </tr>
+                    <tr>
+                        <td>You Understand Your Data</td>
+                        <td>"Just trust us"</td>
+                        <td>Every metric explained with next steps</td>
+                    </tr>
+                    <tr>
+                        <td>Account Ownership</td>
+                        <td>They control everything</td>
+                        <td>You own all accounts, always</td>
+                    </tr>
+                    <tr>
+                        <td>Change Log</td>
+                        <td>"We made some optimizations"</td>
+                        <td>Full audit trail of every action</td>
+                    </tr>
+                    <tr>
+                        <td>Campaign Launches</td>
+                        <td>They launch when they want</td>
+                        <td>You trigger launches, paused by default</td>
+                    </tr>
+                    <tr>
+                        <td>Setup Time</td>
+                        <td>2-4 weeks</td>
+                        <td>~5 minutes</td>
+                    </tr>
+                    <tr>
+                        <td>Contracts</td>
+                        <td>6-12 months typical</td>
+                        <td>Month-to-month, cancel anytime</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<!-- ═══ TESTIMONIALS ═══ -->
+<section class="gm-section gm-section-alt">
+    <div class="gm-wrap">
+        <div class="gm-section-header">
+            <div class="gm-label">Results</div>
+            <h2>Business Owners Who Made the Switch</h2>
+            <p>Service business owners who stopped overpaying and started managing their own marketing.</p>
+        </div>
+        <div class="gm-testimonials">
+            <div class="gm-tcard">
+                <div class="gm-tcard-quote">&ldquo;</div>
+                <div class="gm-tcard-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+                <p class="gm-tcard-text">First week with GroMore, I understood more about my own marketing than I did in two years with my agency. My cost per lead dropped 34% in the first month.</p>
+                <div class="gm-tcard-author">
+                    <div class="gm-tcard-avatar">MR</div>
+                    <div>
+                        <div class="gm-tcard-name">Mike R.</div>
+                        <div class="gm-tcard-role">Roofing Company, Dallas TX</div>
+                    </div>
+                </div>
+            </div>
+            <div class="gm-tcard">
+                <div class="gm-tcard-quote">&ldquo;</div>
+                <div class="gm-tcard-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+                <p class="gm-tcard-text">I was terrified to run my own ads. The system literally tells you what to do step by step. I spend maybe 20 minutes a day and generate more leads than my old agency did.</p>
+                <div class="gm-tcard-author">
+                    <div class="gm-tcard-avatar">JT</div>
+                    <div>
+                        <div class="gm-tcard-name">Jessica T.</div>
+                        <div class="gm-tcard-role">House Cleaning Service, Austin TX</div>
+                    </div>
+                </div>
+            </div>
+            <div class="gm-tcard">
+                <div class="gm-tcard-quote">&ldquo;</div>
+                <div class="gm-tcard-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+                <p class="gm-tcard-text">The competitor analysis alone is worth the $449. I found out my biggest competitor was bidding on my business name and the report showed me exactly how to counter it.</p>
+                <div class="gm-tcard-author">
+                    <div class="gm-tcard-avatar">DL</div>
+                    <div>
+                        <div class="gm-tcard-name">David L.</div>
+                        <div class="gm-tcard-role">HVAC Company, Atlanta GA</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ═══ CTA ═══ -->
+<section class="gm-section">
+    <div class="gm-wrap">
+        <div class="gm-cta">
+            <h2>Ready to Take Control of Your Marketing?</h2>
+            <p>Stop handing your budget to someone who cares less about your business than you do.</p>
+            <a href="/pricing" class="gm-btn gm-btn-white gm-btn-lg">See Plans &amp; Pricing &rarr;</a>
+        </div>
+    </div>
+</section>
+
+<!-- ═══ FOOTER ═══ -->
+<footer class="gm-footer">
+    <div class="gm-wrap">
+        <div class="gm-footer-grid">
+            <div class="gm-footer-brand">
+                <a href="/" class="gm-footer-logo">Gro<span>More</span></a>
+                <p>AI-powered ad management built for local service businesses. More leads, lower costs, total transparency.</p>
+            </div>
+            <div>
+                <h4>Platform</h4>
+                <ul>
+                    <li><a href="/platform">Features</a></li>
+                    <li><a href="/platform#reporting">Reporting</a></li>
+                    <li><a href="/platform#campaigns">Campaign Manager</a></li>
+                    <li><a href="/platform#scheduler">Post Scheduler</a></li>
+                </ul>
+            </div>
+            <div>
+                <h4>Company</h4>
+                <ul>
+                    <li><a href="/about">About</a></li>
+                    <li><a href="/pricing">Pricing</a></li>
+                    <li><a href="/faq">FAQ</a></li>
+                    <li><a href="/contact">Contact</a></li>
+                </ul>
+            </div>
+            <div>
+                <h4>Contact</h4>
+                <ul>
+                    <li><a href="mailto:hello@gromore.media">hello@gromore.media</a></li>
+                    <li>Mon - Fri, 8am - 6pm CT</li>
+                </ul>
+            </div>
+        </div>
+        <div class="gm-footer-bottom">
+            <div>&copy; 2026 GroMore Media. All rights reserved.</div>
+            <div>
+                <a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a>
+            </div>
+        </div>
+    </div>
+</footer>
+
+</div>
+
+<script>
+(function(){
+    var toggle = document.getElementById('gmNavToggle');
+    var mobile = document.getElementById('gmNavMobile');
+    if(toggle && mobile){
+        toggle.addEventListener('click', function(){
+            mobile.classList.toggle('open');
+        });
+        mobile.querySelectorAll('a').forEach(function(a){
+            a.addEventListener('click', function(){ mobile.classList.remove('open'); });
+        });
+    }
+})();
+</script>

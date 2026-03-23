@@ -1,0 +1,475 @@
+<!--
+  GroMore Platform Page Widget - Paste into Elementor HTML widget
+  Uses same .gm scoped classes + adds split sections and check lists
+  NOTE: If using on same site as homepage, the shared CSS is already loaded.
+  This file includes only the ADDITIONAL CSS needed + full page HTML.
+  For standalone use, paste homepage CSS first, then this.
+-->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
+
+/* ── Only include base if using standalone (remove if homepage CSS already loaded) ── */
+.gm *, .gm *::before, .gm *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.gm {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: #334155; line-height: 1.65; font-size: 16px;
+    -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+.gm a { color: #2563eb; text-decoration: none; transition: color .2s ease; }
+.gm a:hover { color: #1d4ed8; }
+.gm h1, .gm h2, .gm h3, .gm h4 {
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+    color: #0f172a; line-height: 1.2; font-weight: 700;
+}
+.gm h1 { font-size: clamp(2.2rem, 5vw, 3.5rem); letter-spacing: -.03em; }
+.gm h2 { font-size: clamp(1.75rem, 4vw, 2.75rem); letter-spacing: -.02em; }
+.gm h3 { font-size: clamp(1.15rem, 2.5vw, 1.4rem); }
+.gm p { margin-bottom: 1rem; }
+.gm ul { list-style: none; }
+.gm-wrap { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem; }
+
+.gm-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+    padding: .85rem 2rem; border-radius: 12px; font-weight: 600; font-size: 1rem;
+    border: none; cursor: pointer; transition: all .25s ease; text-decoration: none;
+    font-family: 'Inter', sans-serif;
+}
+.gm-btn-primary {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff !important;
+    box-shadow: 0 4px 14px rgba(37,99,235,.4);
+}
+.gm-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(37,99,235,.45); color: #fff !important; }
+.gm-btn-white { background: #fff; color: #2563eb !important; box-shadow: 0 4px 14px rgba(0,0,0,.15); }
+.gm-btn-white:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,.2); color: #1d4ed8 !important; }
+.gm-btn-lg { padding: 1rem 2.5rem; font-size: 1.05rem; }
+
+.gm-label {
+    display: inline-flex; align-items: center; gap: .4rem;
+    font-size: .75rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .1em; color: #2563eb; margin-bottom: .75rem;
+}
+.gm-label::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #2563eb; }
+
+.gm-section { padding: 5rem 0; }
+.gm-section-alt { background: #f8fafc; }
+.gm-section-header { text-align: center; max-width: 680px; margin: 0 auto 3.5rem; }
+.gm-section-header p { color: #64748b; font-size: 1.05rem; margin-top: .5rem; }
+
+/* Features grid (reuse from homepage) */
+.gm-features { display: grid; grid-template-columns: 1fr; gap: 1.25rem; }
+@media (min-width: 600px) { .gm-features { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 900px) { .gm-features { grid-template-columns: repeat(3, 1fr); } }
+.gm-fcard {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 2rem;
+    transition: all .3s ease; position: relative; overflow: hidden;
+}
+.gm-fcard::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, #2563eb, #7c3aed); opacity: 0; transition: opacity .3s ease;
+}
+.gm-fcard:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,.08); border-color: transparent; }
+.gm-fcard:hover::before { opacity: 1; }
+.gm-fcard-icon {
+    width: 52px; height: 52px; border-radius: 14px; display: flex;
+    align-items: center; justify-content: center; font-size: 1.4rem; margin-bottom: 1.25rem;
+}
+.gm-fcard-icon.blue { background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: #2563eb; }
+.gm-fcard-icon.green { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: #059669; }
+.gm-fcard-icon.purple { background: linear-gradient(135deg, #ede9fe, #ddd6fe); color: #7c3aed; }
+.gm-fcard-icon.teal { background: linear-gradient(135deg, #ccfbf1, #99f6e4); color: #0d9488; }
+.gm-fcard-icon.amber { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #d97706; }
+.gm-fcard h3 { margin-bottom: .5rem; }
+.gm-fcard p { color: #64748b; font-size: .92rem; margin: 0; }
+
+/* ── Page Header ── */
+.gm-page-header {
+    padding: 5rem 0 4rem;
+    background: linear-gradient(150deg, #f8faff 0%, #eef2ff 30%, #e0e7ff 60%, #f0f4ff 100%);
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+.gm-page-header::before {
+    content: '';
+    position: absolute; top: -150px; right: -150px;
+    width: 500px; height: 500px;
+    background: radial-gradient(circle, rgba(37,99,235,.08) 0%, transparent 60%);
+    border-radius: 50%;
+}
+.gm-page-header h1 { margin-bottom: .75rem; position: relative; z-index: 1; }
+.gm-page-header p { color: #64748b; font-size: 1.1rem; max-width: 620px; margin: 0 auto; position: relative; z-index: 1; }
+
+/* ── Split Sections ── */
+.gm-split {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 3rem;
+    align-items: center;
+}
+@media (min-width: 900px) {
+    .gm-split { grid-template-columns: 1fr 1fr; }
+    .gm-split.reverse > :first-child { order: 2; }
+    .gm-split.reverse > :last-child { order: 1; }
+}
+.gm-split-visual {
+    background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+    border-radius: 20px;
+    padding: 2.5rem;
+    border: 1px solid #e2e8f0;
+    min-height: 320px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+}
+.gm-split-visual::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+        90deg, transparent, transparent 40px, rgba(226,232,240,.3) 40px, rgba(226,232,240,.3) 41px
+    );
+    pointer-events: none;
+}
+.gm-split-placeholder {
+    text-align: center;
+    color: #94a3b8;
+    font-size: .9rem;
+    position: relative;
+    z-index: 1;
+}
+.gm-split-placeholder-icon {
+    font-size: 3rem;
+    margin-bottom: .5rem;
+    opacity: .6;
+}
+
+/* ── Check List ── */
+.gm-checks {
+    list-style: none;
+    padding: 0;
+    margin: 1.5rem 0 0;
+}
+.gm-checks li {
+    position: relative;
+    padding-left: 1.75rem;
+    margin-bottom: .7rem;
+    line-height: 1.55;
+    font-size: .95rem;
+    color: #334155;
+}
+.gm-checks li::before {
+    content: '';
+    position: absolute;
+    left: 0; top: .35rem;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+    display: flex; align-items: center; justify-content: center;
+}
+.gm-checks li::after {
+    content: '\2713';
+    position: absolute;
+    left: 3px; top: .3rem;
+    color: #059669;
+    font-size: .75rem;
+    font-weight: 800;
+}
+
+/* CTA Banner */
+.gm-cta {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #172554 100%);
+    border-radius: 20px; padding: 4rem 2.5rem; text-align: center;
+    position: relative; overflow: hidden;
+}
+.gm-cta::before {
+    content: ''; position: absolute; top: -60%; right: -20%; width: 500px; height: 500px;
+    background: radial-gradient(circle, rgba(37,99,235,.25) 0%, transparent 60%); border-radius: 50%;
+}
+.gm-cta h2 { color: #fff; margin-bottom: .75rem; position: relative; z-index: 1; }
+.gm-cta p { color: #94a3b8; margin-bottom: 2rem; position: relative; z-index: 1; max-width: 500px; margin-left: auto; margin-right: auto; }
+.gm-cta .gm-btn { position: relative; z-index: 1; }
+
+/* Footer */
+.gm-footer { background: #0f172a; color: #94a3b8; padding: 4rem 0 2rem; }
+.gm-footer-grid { display: grid; grid-template-columns: 1fr; gap: 2rem; margin-bottom: 3rem; }
+@media (min-width: 600px) { .gm-footer-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 900px) { .gm-footer-grid { grid-template-columns: 2fr 1fr 1fr 1fr; } }
+.gm-footer-brand p { font-size: .88rem; max-width: 280px; margin-top: .75rem; }
+.gm-footer h4 { color: #fff; font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 1rem; font-family: 'Plus Jakarta Sans', sans-serif; }
+.gm-footer li { margin-bottom: .5rem; }
+.gm-footer a { color: #94a3b8 !important; font-size: .88rem; }
+.gm-footer a:hover { color: #fff !important; }
+.gm-footer-logo { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.5rem; font-weight: 800; color: #fff !important; }
+.gm-footer-logo span { color: #3b82f6 !important; }
+.gm-footer-bottom { border-top: 1px solid rgba(255,255,255,.08); padding-top: 1.5rem; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; font-size: .8rem; }
+
+/* Nav */
+.gm-nav { position: sticky; top: 0; background: rgba(255,255,255,.95); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid #e2e8f0; z-index: 1000; padding: 0 1.5rem; }
+.gm-nav-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 68px; }
+.gm-nav-logo { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.5rem; font-weight: 800; color: #0f172a !important; }
+.gm-nav-logo span { color: #2563eb !important; }
+.gm-nav-links { display: none; list-style: none; gap: 2rem; align-items: center; }
+.gm-nav-links a { color: #334155 !important; font-size: .9rem; font-weight: 500; }
+.gm-nav-links a:hover, .gm-nav-links a.active { color: #2563eb !important; }
+.gm-nav-cta { padding: .5rem 1.25rem; background: linear-gradient(135deg, #2563eb, #1d4ed8) !important; color: #fff !important; border-radius: 8px; font-weight: 600; font-size: .85rem; box-shadow: 0 2px 8px rgba(37,99,235,.3); }
+.gm-nav-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,.4); color: #fff !important; }
+.gm-nav-toggle { display: flex; flex-direction: column; gap: 5px; background: none; border: none; cursor: pointer; padding: 4px; }
+.gm-nav-toggle span { display: block; width: 22px; height: 2px; background: #0f172a; border-radius: 2px; transition: .2s ease; }
+.gm-nav-mobile { display: none; position: fixed; top: 68px; left: 0; right: 0; bottom: 0; background: #fff; padding: 1.5rem; z-index: 999; }
+.gm-nav-mobile.open { display: block; }
+.gm-nav-mobile a { display: block; padding: .75rem 0; font-size: 1.05rem; font-weight: 500; color: #334155 !important; border-bottom: 1px solid #f1f5f9; }
+.gm-nav-mobile a:hover { color: #2563eb !important; }
+@media (min-width: 768px) { .gm-nav-links { display: flex; } .gm-nav-toggle { display: none; } }
+</style>
+
+<div class="gm">
+
+<!-- Nav -->
+<nav class="gm-nav" id="gmNav">
+    <div class="gm-nav-inner">
+        <a href="/" class="gm-nav-logo">Gro<span>More</span></a>
+        <ul class="gm-nav-links">
+            <li><a href="/platform" class="active">Platform</a></li>
+            <li><a href="/pricing">Pricing</a></li>
+            <li><a href="/about">About</a></li>
+            <li><a href="/faq">FAQ</a></li>
+            <li><a href="/contact">Contact</a></li>
+            <li><a href="https://gromore-admin.onrender.com/client/login" class="gm-nav-cta">Launch Portal &rarr;</a></li>
+        </ul>
+        <button class="gm-nav-toggle" id="gmNavToggle" aria-label="Menu"><span></span><span></span><span></span></button>
+    </div>
+</nav>
+<div class="gm-nav-mobile" id="gmNavMobile">
+    <a href="/platform">Platform</a><a href="/pricing">Pricing</a><a href="/about">About</a>
+    <a href="/faq">FAQ</a><a href="/contact">Contact</a>
+    <a href="https://gromore-admin.onrender.com/client/login">Launch Portal &rarr;</a>
+</div>
+
+<!-- Page Header -->
+<section class="gm-page-header">
+    <div class="gm-wrap">
+        <div class="gm-label">Platform</div>
+        <h1>Everything You Need.<br>Nothing You Don't.</h1>
+        <p>One login, one system. Data ingestion, reporting, campaign planning, post scheduling, and a full audit trail.</p>
+    </div>
+</section>
+
+<!-- Dashboard -->
+<section class="gm-section" id="dashboard">
+    <div class="gm-wrap">
+        <div class="gm-split">
+            <div>
+                <div class="gm-label">Connected Dashboard</div>
+                <h2>All Your Data, One Screen</h2>
+                <p>GroMore connects to your Google Ads, GA4, Search Console, and Facebook Ad accounts through secure OAuth. No API keys to manage, no manual data entry.</p>
+                <p>The dashboard shows your key performance indicators side by side: spend, impressions, clicks, conversions, cost per lead, and month-over-month trends.</p>
+                <ul class="gm-checks">
+                    <li>Google Ads, GA4, and Search Console in one view</li>
+                    <li>Facebook Ads and Page metrics alongside Google</li>
+                    <li>Google Drive integration for ad creative and images</li>
+                    <li>Month-over-month comparisons with trend arrows</li>
+                </ul>
+            </div>
+            <div class="gm-split-visual">
+                <div class="gm-split-placeholder">
+                    <div class="gm-split-placeholder-icon">&#128202;</div>
+                    <strong style="color:#0f172a;">Dashboard View</strong><br>
+                    Screenshot placeholder
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Reporting -->
+<section class="gm-section gm-section-alt" id="reporting">
+    <div class="gm-wrap">
+        <div class="gm-split reverse">
+            <div>
+                <div class="gm-label">Reporting &amp; Insights</div>
+                <h2>Reports That Actually Tell You What to Do</h2>
+                <p>Monthly PDF reports from agencies exist to justify their fee, not to help you. GroMore reporting is different: every metric comes with context, and every section ends with specific, prioritized next steps.</p>
+                <p>If your cost per lead jumped 18%, the report explains why and tells you what to try next.</p>
+                <ul class="gm-checks">
+                    <li>Month-over-month: spend, CPC, CPL, conversion rate</li>
+                    <li>AI-generated recommendations ranked by impact</li>
+                    <li>Plain language, no jargon - built for business owners</li>
+                    <li>Google and Facebook in one unified report</li>
+                </ul>
+            </div>
+            <div class="gm-split-visual">
+                <div class="gm-split-placeholder">
+                    <div class="gm-split-placeholder-icon">&#128200;</div>
+                    <strong style="color:#0f172a;">Reporting View</strong><br>
+                    Screenshot placeholder
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Campaign Manager -->
+<section class="gm-section" id="campaigns">
+    <div class="gm-wrap">
+        <div class="gm-split">
+            <div>
+                <div class="gm-label">Campaign Manager</div>
+                <h2>Plan, Review, Then Launch</h2>
+                <p>GroMore generates campaign plans based on structured templates proven for local service businesses. The system suggests campaign structure, ad groups, keywords, ad copy, and budgets.</p>
+                <p>You review the full plan before anything goes live. New campaigns start paused by default. You enable them on your schedule.</p>
+                <ul class="gm-checks">
+                    <li>Niche-specific templates (HVAC, roofing, plumbing, etc.)</li>
+                    <li>Keywords, negative keywords, ad copy generation</li>
+                    <li>Campaigns launch paused by default for safety</li>
+                    <li>Budget recommendations based on service area</li>
+                    <li>Full audit log of every change</li>
+                </ul>
+            </div>
+            <div class="gm-split-visual">
+                <div class="gm-split-placeholder">
+                    <div class="gm-split-placeholder-icon">&#127919;</div>
+                    <strong style="color:#0f172a;">Campaign Planner</strong><br>
+                    Screenshot placeholder
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Post Scheduler -->
+<section class="gm-section gm-section-alt" id="scheduler">
+    <div class="gm-wrap">
+        <div class="gm-split reverse">
+            <div>
+                <div class="gm-label">Post Scheduler</div>
+                <h2>Schedule Facebook Posts Without Leaving the Platform</h2>
+                <p>Organic reach still matters for local businesses. Write posts individually or upload a full month of content via CSV. Attach images from your Google Drive, pick a date and time, done.</p>
+                <ul class="gm-checks">
+                    <li>Single post composition with image attachments</li>
+                    <li>Bulk scheduling via CSV upload</li>
+                    <li>Google Drive image picker built in</li>
+                    <li>Calendar view of scheduled and published posts</li>
+                    <li>Cancel any scheduled post before publish time</li>
+                </ul>
+            </div>
+            <div class="gm-split-visual">
+                <div class="gm-split-placeholder">
+                    <div class="gm-split-placeholder-icon">&#128197;</div>
+                    <strong style="color:#0f172a;">Post Scheduler</strong><br>
+                    Screenshot placeholder
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Audit Trail -->
+<section class="gm-section" id="audit">
+    <div class="gm-wrap">
+        <div class="gm-split">
+            <div>
+                <div class="gm-label">Audit Trail</div>
+                <h2>Every Change, Documented</h2>
+                <p>"We made some optimizations." What optimizations? When? Why? With agencies, you never find out until something goes wrong.</p>
+                <p>GroMore logs every action. Campaign launches, budget changes, keyword additions, ad copy edits. Date, time, who did it, and the before/after state.</p>
+                <ul class="gm-checks">
+                    <li>Timestamped log of every modification</li>
+                    <li>Before/after state for budget and bid changes</li>
+                    <li>Exportable history for your records</li>
+                    <li>Full visibility, no hidden "optimizations"</li>
+                </ul>
+            </div>
+            <div class="gm-split-visual">
+                <div class="gm-split-placeholder">
+                    <div class="gm-split-placeholder-icon">&#128221;</div>
+                    <strong style="color:#0f172a;">Audit Log</strong><br>
+                    Screenshot placeholder
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Integrations -->
+<section class="gm-section gm-section-alt">
+    <div class="gm-wrap">
+        <div class="gm-section-header">
+            <div class="gm-label">Integrations</div>
+            <h2>Connected to the Platforms That Matter</h2>
+            <p>Secure OAuth connections. No passwords stored. Revoke access anytime.</p>
+        </div>
+        <div class="gm-features">
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon blue">&#127380;</div>
+                <h3>Google Ads</h3>
+                <p>Campaign data, keyword performance, cost per conversion, quality scores, and auction insights.</p>
+            </div>
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon green">&#128200;</div>
+                <h3>Google Analytics 4</h3>
+                <p>Website traffic, goal completions, traffic sources, and engagement metrics.</p>
+            </div>
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon purple">&#128270;</div>
+                <h3>Search Console</h3>
+                <p>Organic rankings, click-through rates, indexed pages, and top queries.</p>
+            </div>
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon blue">&#128244;</div>
+                <h3>Facebook / Meta Ads</h3>
+                <p>Campaign performance, audience metrics, cost per action, reach data.</p>
+            </div>
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon teal">&#128193;</div>
+                <h3>Google Drive</h3>
+                <p>Access your ad creative library and attach images to posts directly.</p>
+            </div>
+            <div class="gm-fcard">
+                <div class="gm-fcard-icon amber">&#128274;</div>
+                <h3>Secure by Design</h3>
+                <p>OAuth 2.0 auth. We never store your platform passwords. Revoke anytime.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- CTA -->
+<section class="gm-section">
+    <div class="gm-wrap">
+        <div class="gm-cta">
+            <h2>See What You Have Been Missing</h2>
+            <p>Connect your accounts and get your first report within 24 hours.</p>
+            <a href="/pricing" class="gm-btn gm-btn-white gm-btn-lg">View Pricing &rarr;</a>
+        </div>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer class="gm-footer">
+    <div class="gm-wrap">
+        <div class="gm-footer-grid">
+            <div class="gm-footer-brand">
+                <a href="/" class="gm-footer-logo">Gro<span>More</span></a>
+                <p>AI-powered ad management built for local service businesses. More leads, lower costs, total transparency.</p>
+            </div>
+            <div><h4>Platform</h4><ul><li><a href="/platform">Features</a></li><li><a href="/platform#reporting">Reporting</a></li><li><a href="/platform#campaigns">Campaign Manager</a></li><li><a href="/platform#scheduler">Post Scheduler</a></li></ul></div>
+            <div><h4>Company</h4><ul><li><a href="/about">About</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/faq">FAQ</a></li><li><a href="/contact">Contact</a></li></ul></div>
+            <div><h4>Contact</h4><ul><li><a href="mailto:hello@gromore.media">hello@gromore.media</a></li><li>Mon - Fri, 8am - 6pm CT</li></ul></div>
+        </div>
+        <div class="gm-footer-bottom">
+            <div>&copy; 2026 GroMore Media. All rights reserved.</div>
+            <div><a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a></div>
+        </div>
+    </div>
+</footer>
+
+</div>
+
+<script>
+(function(){
+    var t=document.getElementById('gmNavToggle'),m=document.getElementById('gmNavMobile');
+    if(t&&m){t.addEventListener('click',function(){m.classList.toggle('open');});
+    m.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(){m.classList.remove('open');});});}
+})();
+</script>

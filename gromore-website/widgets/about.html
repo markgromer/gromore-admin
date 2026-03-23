@@ -1,0 +1,346 @@
+<!--
+  GroMore About Page Widget - Paste into Elementor HTML widget
+-->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
+
+.gm *, .gm *::before, .gm *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.gm {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: #334155; line-height: 1.65; font-size: 16px;
+    -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+.gm a { color: #2563eb; text-decoration: none; transition: color .2s ease; }
+.gm a:hover { color: #1d4ed8; }
+.gm h1, .gm h2, .gm h3, .gm h4 {
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+    color: #0f172a; line-height: 1.2; font-weight: 700;
+}
+.gm h1 { font-size: clamp(2.2rem, 5vw, 3.5rem); letter-spacing: -.03em; }
+.gm h2 { font-size: clamp(1.75rem, 4vw, 2.75rem); letter-spacing: -.02em; }
+.gm h3 { font-size: clamp(1.15rem, 2.5vw, 1.4rem); }
+.gm p { margin-bottom: 1rem; }
+.gm ul { list-style: none; }
+.gm-wrap { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem; }
+
+.gm-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+    padding: .85rem 2rem; border-radius: 12px; font-weight: 600; font-size: 1rem;
+    border: none; cursor: pointer; transition: all .25s ease; text-decoration: none;
+    font-family: 'Inter', sans-serif;
+}
+.gm-btn-primary { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff !important; box-shadow: 0 4px 14px rgba(37,99,235,.4); }
+.gm-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(37,99,235,.45); color: #fff !important; }
+.gm-btn-white { background: #fff; color: #2563eb !important; box-shadow: 0 4px 14px rgba(0,0,0,.15); }
+.gm-btn-white:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,.2); color: #1d4ed8 !important; }
+.gm-btn-lg { padding: 1rem 2.5rem; font-size: 1.05rem; }
+
+.gm-label { display: inline-flex; align-items: center; gap: .4rem; font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #2563eb; margin-bottom: .75rem; }
+.gm-label::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #2563eb; }
+
+.gm-section { padding: 5rem 0; }
+.gm-section-alt { background: #f8fafc; }
+.gm-section-header { text-align: center; max-width: 680px; margin: 0 auto 3.5rem; }
+.gm-section-header p { color: #64748b; font-size: 1.05rem; margin-top: .5rem; }
+
+/* Page header */
+.gm-page-header {
+    padding: 5rem 0 4rem;
+    background: linear-gradient(150deg, #f8faff 0%, #eef2ff 30%, #e0e7ff 60%, #f0f4ff 100%);
+    text-align: center; position: relative; overflow: hidden;
+}
+.gm-page-header::before { content: ''; position: absolute; top: -150px; right: -150px; width: 500px; height: 500px; background: radial-gradient(circle, rgba(37,99,235,.08) 0%, transparent 60%); border-radius: 50%; }
+.gm-page-header h1 { margin-bottom: .75rem; position: relative; z-index: 1; }
+.gm-page-header p { color: #64748b; font-size: 1.1rem; max-width: 620px; margin: 0 auto; position: relative; z-index: 1; }
+
+/* Story section */
+.gm-story-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 3rem;
+    align-items: center;
+}
+@media (min-width: 768px) { .gm-story-grid { grid-template-columns: 1fr 1fr; } }
+.gm-story-text h2 { margin-bottom: 1.25rem; }
+.gm-story-text p { color: #64748b; font-size: 1rem; }
+.gm-story-visual {
+    background: linear-gradient(135deg, #f0f4ff, #dbeafe);
+    border-radius: 20px;
+    padding: 3rem 2rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+.gm-story-visual::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%232563eb' fill-opacity='0.04' fill-rule='evenodd'%3E%3Cpath d='M0 40L40 0H20L0 20M40 40V20L20 40'/%3E%3C/g%3E%3C/svg%3E");
+}
+.gm-story-stat {
+    position: relative; z-index: 1;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-weight: 800;
+    font-size: 4rem;
+    color: #2563eb;
+    line-height: 1;
+    margin-bottom: .5rem;
+}
+.gm-story-stat-label {
+    position: relative; z-index: 1;
+    color: #475569;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+/* Values */
+.gm-values-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+}
+@media (min-width: 600px) { .gm-values-grid { grid-template-columns: repeat(2, 1fr); } }
+.gm-value-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    padding: 2.25rem;
+    transition: all .3s ease;
+    position: relative;
+    overflow: hidden;
+}
+.gm-value-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #2563eb, #7c3aed); opacity: 0; transition: opacity .3s ease; }
+.gm-value-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,.08); border-color: transparent; }
+.gm-value-card:hover::before { opacity: 1; }
+.gm-value-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    margin-bottom: 1.25rem;
+}
+.gm-value-icon.blue { background: linear-gradient(135deg, #dbeafe, #bfdbfe); }
+.gm-value-icon.green { background: linear-gradient(135deg, #d1fae5, #a7f3d0); }
+.gm-value-icon.purple { background: linear-gradient(135deg, #ede9fe, #ddd6fe); }
+.gm-value-icon.amber { background: linear-gradient(135deg, #fef3c7, #fde68a); }
+.gm-value-card h3 { margin-bottom: .5rem; }
+.gm-value-card p { color: #64748b; font-size: .92rem; margin: 0; }
+
+/* Verticals grid */
+.gm-vert-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
+}
+@media (min-width: 600px) { .gm-vert-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 900px) { .gm-vert-grid { grid-template-columns: repeat(6, 1fr); } }
+.gm-vert-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 1.75rem 1.25rem;
+    text-align: center;
+    transition: all .3s ease;
+}
+.gm-vert-card:hover { transform: translateY(-4px); box-shadow: 0 12px 30px rgba(0,0,0,.07); border-color: transparent; }
+.gm-vert-icon {
+    font-size: 2rem;
+    margin-bottom: .75rem;
+}
+.gm-vert-card h4 {
+    font-size: .9rem;
+    font-weight: 700;
+}
+
+/* CTA */
+.gm-cta { background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #172554 100%); border-radius: 20px; padding: 4rem 2.5rem; text-align: center; position: relative; overflow: hidden; }
+.gm-cta::before { content: ''; position: absolute; top: -60%; right: -20%; width: 500px; height: 500px; background: radial-gradient(circle, rgba(37,99,235,.25) 0%, transparent 60%); border-radius: 50%; }
+.gm-cta h2 { color: #fff; margin-bottom: .75rem; position: relative; z-index: 1; }
+.gm-cta p { color: #94a3b8; margin-bottom: 2rem; position: relative; z-index: 1; max-width: 500px; margin-left: auto; margin-right: auto; }
+.gm-cta .gm-btn { position: relative; z-index: 1; }
+
+/* Nav */
+.gm-nav { position: sticky; top: 0; background: rgba(255,255,255,.95); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid #e2e8f0; z-index: 1000; padding: 0 1.5rem; }
+.gm-nav-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 68px; }
+.gm-nav-logo { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.5rem; font-weight: 800; color: #0f172a !important; }
+.gm-nav-logo span { color: #2563eb !important; }
+.gm-nav-links { display: none; list-style: none; gap: 2rem; align-items: center; }
+.gm-nav-links a { color: #334155 !important; font-size: .9rem; font-weight: 500; }
+.gm-nav-links a:hover, .gm-nav-links a.active { color: #2563eb !important; }
+.gm-nav-cta { padding: .5rem 1.25rem; background: linear-gradient(135deg, #2563eb, #1d4ed8) !important; color: #fff !important; border-radius: 8px; font-weight: 600; font-size: .85rem; box-shadow: 0 2px 8px rgba(37,99,235,.3); }
+.gm-nav-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,.4); color: #fff !important; }
+.gm-nav-toggle { display: flex; flex-direction: column; gap: 5px; background: none; border: none; cursor: pointer; padding: 4px; }
+.gm-nav-toggle span { display: block; width: 22px; height: 2px; background: #0f172a; border-radius: 2px; transition: .2s ease; }
+.gm-nav-mobile { display: none; position: fixed; top: 68px; left: 0; right: 0; bottom: 0; background: #fff; padding: 1.5rem; z-index: 999; }
+.gm-nav-mobile.open { display: block; }
+.gm-nav-mobile a { display: block; padding: .75rem 0; font-size: 1.05rem; font-weight: 500; color: #334155 !important; border-bottom: 1px solid #f1f5f9; }
+.gm-nav-mobile a:hover { color: #2563eb !important; }
+@media (min-width: 768px) { .gm-nav-links { display: flex; } .gm-nav-toggle { display: none; } }
+
+/* Footer */
+.gm-footer { background: #0f172a; color: #94a3b8; padding: 4rem 0 2rem; }
+.gm-footer-grid { display: grid; grid-template-columns: 1fr; gap: 2rem; margin-bottom: 3rem; }
+@media (min-width: 600px) { .gm-footer-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 900px) { .gm-footer-grid { grid-template-columns: 2fr 1fr 1fr 1fr; } }
+.gm-footer-brand p { font-size: .88rem; max-width: 280px; margin-top: .75rem; }
+.gm-footer h4 { color: #fff; font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 1rem; font-family: 'Plus Jakarta Sans', sans-serif; }
+.gm-footer li { margin-bottom: .5rem; }
+.gm-footer a { color: #94a3b8 !important; font-size: .88rem; }
+.gm-footer a:hover { color: #fff !important; }
+.gm-footer-logo { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.5rem; font-weight: 800; color: #fff !important; }
+.gm-footer-logo span { color: #3b82f6 !important; }
+.gm-footer-bottom { border-top: 1px solid rgba(255,255,255,.08); padding-top: 1.5rem; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; font-size: .8rem; }
+</style>
+
+<div class="gm">
+
+<!-- Nav -->
+<nav class="gm-nav" id="gmNav"><div class="gm-nav-inner">
+    <a href="/" class="gm-nav-logo">Gro<span>More</span></a>
+    <ul class="gm-nav-links">
+        <li><a href="/platform">Platform</a></li>
+        <li><a href="/pricing">Pricing</a></li>
+        <li><a href="/about" class="active">About</a></li>
+        <li><a href="/faq">FAQ</a></li>
+        <li><a href="/contact">Contact</a></li>
+        <li><a href="https://gromore-admin.onrender.com/client/login" class="gm-nav-cta">Launch Portal &rarr;</a></li>
+    </ul>
+    <button class="gm-nav-toggle" id="gmNavToggle" aria-label="Menu"><span></span><span></span><span></span></button>
+</div></nav>
+<div class="gm-nav-mobile" id="gmNavMobile">
+    <a href="/platform">Platform</a><a href="/pricing">Pricing</a><a href="/about">About</a>
+    <a href="/faq">FAQ</a><a href="/contact">Contact</a>
+    <a href="https://gromore-admin.onrender.com/client/login">Launch Portal &rarr;</a>
+</div>
+
+<!-- Page Header -->
+<section class="gm-page-header">
+    <div class="gm-wrap">
+        <div class="gm-label">About GroMore</div>
+        <h1>Built by Operators, for Operators</h1>
+        <p>GroMore started because local businesses deserve the same calibre of ad technology that enterprise companies use, without the enterprise price tag.</p>
+    </div>
+</section>
+
+<!-- Origin Story -->
+<section class="gm-section">
+    <div class="gm-wrap">
+        <div class="gm-story-grid">
+            <div class="gm-story-text">
+                <div class="gm-label">The Origin</div>
+                <h2>We Saw the Problem Firsthand</h2>
+                <p>Every local service business faces the same dilemma: you need a steady pipeline of leads to grow, but the tools to get them are built for large brands with marketing departments.</p>
+                <p>You have two options - learn Google Ads yourself (takes hundreds of hours and thousands of dollars in trial and error), or hire an agency (costs $1,200 - $2,000/month and you never really know what they are doing).</p>
+                <p>We built GroMore to be a third option. A platform that connects your actual ad accounts, shows you real data, generates actionable recommendations, and lets you execute changes directly. No middleman, no black box, no guesswork.</p>
+            </div>
+            <div class="gm-story-visual">
+                <div class="gm-story-stat">70%</div>
+                <div class="gm-story-stat-label">Less than what most agencies charge. Same calibre of management.</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Values -->
+<section class="gm-section gm-section-alt">
+    <div class="gm-wrap">
+        <div class="gm-section-header">
+            <div class="gm-label">Our Values</div>
+            <h2>What We Stand On</h2>
+        </div>
+        <div class="gm-values-grid">
+            <div class="gm-value-card">
+                <div class="gm-value-icon blue">&#128273;</div>
+                <h3>Ownership</h3>
+                <p>Your ad accounts are yours. Your data is yours. Your campaigns are yours. We connect to your platforms through secure OAuth so you always keep full control. If you cancel, everything stays in your accounts exactly as it is.</p>
+            </div>
+            <div class="gm-value-card">
+                <div class="gm-value-icon green">&#128269;</div>
+                <h3>Transparency</h3>
+                <p>Every action is logged. Reports are generated from your actual data, not curated snapshots. When you see a number in your GroMore dashboard, it matches what is in your Google Ads account.</p>
+            </div>
+            <div class="gm-value-card">
+                <div class="gm-value-icon purple">&#127918;</div>
+                <h3>Control</h3>
+                <p>Campaigns launch paused by default. Recommendations are suggestions, not edits made behind your back. You review, you approve, you launch. Nothing changes without your say-so.</p>
+            </div>
+            <div class="gm-value-card">
+                <div class="gm-value-icon amber">&#128176;</div>
+                <h3>Fair Pricing</h3>
+                <p>One plan, one price, everything included. No tiered upsells, no per-feature charges, no surprise invoices. $449/month gets you the entire platform. Month-to-month, no contracts.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Verticals -->
+<section class="gm-section">
+    <div class="gm-wrap">
+        <div class="gm-section-header">
+            <div class="gm-label">Who We Serve</div>
+            <h2>Built for Local Service Businesses</h2>
+            <p>Our campaign templates, AI recommendations, and reporting are designed for high-intent local search. These are the niches we know best.</p>
+        </div>
+        <div class="gm-vert-grid">
+            <div class="gm-vert-card">
+                <div class="gm-vert-icon">&#127968;</div>
+                <h4>Roofing</h4>
+            </div>
+            <div class="gm-vert-card">
+                <div class="gm-vert-icon">&#10052;&#65039;</div>
+                <h4>HVAC</h4>
+            </div>
+            <div class="gm-vert-card">
+                <div class="gm-vert-icon">&#128681;</div>
+                <h4>Plumbing</h4>
+            </div>
+            <div class="gm-vert-card">
+                <div class="gm-vert-icon">&#9889;</div>
+                <h4>Electrical</h4>
+            </div>
+            <div class="gm-vert-card">
+                <div class="gm-vert-icon">&#10024;</div>
+                <h4>Cleaning</h4>
+            </div>
+            <div class="gm-vert-card">
+                <div class="gm-vert-icon">&#127795;</div>
+                <h4>Landscaping</h4>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- CTA -->
+<section class="gm-section gm-section-alt">
+    <div class="gm-wrap">
+        <div class="gm-cta">
+            <h2>Ready to Take Control of Your Ads?</h2>
+            <p>Stop overpaying agencies for dashboards you cannot access. Get the full platform for $449/month.</p>
+            <a href="/contact" class="gm-btn gm-btn-white gm-btn-lg">Get Started &rarr;</a>
+        </div>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer class="gm-footer"><div class="gm-wrap">
+    <div class="gm-footer-grid">
+        <div class="gm-footer-brand"><a href="/" class="gm-footer-logo">Gro<span>More</span></a><p>AI-powered ad management built for local service businesses. More leads, lower costs, total transparency.</p></div>
+        <div><h4>Platform</h4><ul><li><a href="/platform">Features</a></li><li><a href="/platform#reporting">Reporting</a></li><li><a href="/platform#campaigns">Campaign Manager</a></li><li><a href="/platform#scheduler">Post Scheduler</a></li></ul></div>
+        <div><h4>Company</h4><ul><li><a href="/about">About</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/faq">FAQ</a></li><li><a href="/contact">Contact</a></li></ul></div>
+        <div><h4>Contact</h4><ul><li><a href="mailto:hello@gromore.media">hello@gromore.media</a></li><li>Mon - Fri, 8am - 6pm CT</li></ul></div>
+    </div>
+    <div class="gm-footer-bottom"><div>&copy; 2026 GroMore Media. All rights reserved.</div><div><a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a></div></div>
+</div></footer>
+
+</div>
+
+<script>
+(function(){
+    var t=document.getElementById('gmNavToggle'),m=document.getElementById('gmNavMobile');
+    if(t&&m){t.addEventListener('click',function(){m.classList.toggle('open');});
+    m.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(){m.classList.remove('open');});});}
+})();
+</script>
