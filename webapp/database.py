@@ -395,6 +395,54 @@ class WebDB:
             ON scheduled_posts(brand_id, scheduled_at)
         """)
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS beta_testers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                business_name TEXT DEFAULT '',
+                website TEXT DEFAULT '',
+                industry TEXT DEFAULT '',
+                monthly_ad_spend TEXT DEFAULT '',
+                platforms TEXT DEFAULT '',
+                referral_source TEXT DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'pending',
+                brand_id INTEGER DEFAULT NULL,
+                client_user_id INTEGER DEFAULT NULL,
+                admin_notes TEXT DEFAULT '',
+                invite_sent_at TEXT DEFAULT '',
+                approved_at TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE SET NULL,
+                FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE SET NULL
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_beta_testers_brand
+            ON beta_testers(brand_id);
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS beta_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                client_user_id INTEGER NOT NULL,
+                category TEXT NOT NULL DEFAULT 'general',
+                rating INTEGER DEFAULT 0 CHECK(rating BETWEEN 0 AND 5),
+                message TEXT NOT NULL,
+                page TEXT DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'new',
+                admin_response TEXT DEFAULT '',
+                responded_at TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+                FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_beta_feedback_brand
+            ON beta_feedback(brand_id, created_at);
+        """)
+
         conn.commit()
         brand_columns = {r[1] for r in conn.execute("PRAGMA table_info(brands)").fetchall()}
         new_brand_cols = [
@@ -1930,3 +1978,142 @@ class WebDB:
                      (post_id, brand_id))
         conn.commit()
         conn.close()
+
+    # ── Beta Testers ──
+
+    def create_beta_tester(self, data):
+        conn = self._conn()
+        try:
+            conn.execute(
+                "INSERT INTO beta_testers (name, email, business_name, website, industry, "
+                "monthly_ad_spend, platforms, referral_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    data["name"], data["email"], data.get("business_name", ""),
+                    data.get("website", ""), data.get("industry", ""),
+                    data.get("monthly_ad_spend", ""), data.get("platforms", ""),
+                    data.get("referral_source", ""),
+                ),
+            )
+            conn.commit()
+            row = conn.execute("SELECT id FROM beta_testers WHERE email = ?", (data["email"],)).fetchone()
+            conn.close()
+            return int(row["id"]) if row else None
+        except sqlite3.IntegrityError:
+            conn.close()
+            return None
+
+    def get_beta_testers(self, status=None):
+        conn = self._conn()
+        if status:
+            rows = conn.execute(
+                "SELECT * FROM beta_testers WHERE status = ? ORDER BY created_at DESC", (status,)
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM beta_testers ORDER BY created_at DESC").fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_beta_tester(self, tester_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM beta_testers WHERE id = ?", (tester_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_beta_tester_by_email(self, email):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM beta_testers WHERE email = ?", (email,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def update_beta_tester_status(self, tester_id, status, **kwargs):
+        conn = self._conn()
+        sets = ["status = ?"]
+        params = [status]
+        for k, v in kwargs.items():
+            if k in ("brand_id", "client_user_id", "admin_notes", "invite_sent_at", "approved_at"):
+                sets.append(f"{k} = ?")
+                params.append(v)
+        params.append(tester_id)
+        conn.execute(f"UPDATE beta_testers SET {', '.join(sets)} WHERE id = ?", params)
+        conn.commit()
+        conn.close()
+
+    def get_beta_stats(self):
+        conn = self._conn()
+        total = conn.execute("SELECT COUNT(*) as c FROM beta_testers").fetchone()["c"]
+        pending = conn.execute("SELECT COUNT(*) as c FROM beta_testers WHERE status='pending'").fetchone()["c"]
+        approved = conn.execute("SELECT COUNT(*) as c FROM beta_testers WHERE status='approved'").fetchone()["c"]
+        active = conn.execute("SELECT COUNT(*) as c FROM beta_testers WHERE status='active'").fetchone()["c"]
+        feedback_count = conn.execute("SELECT COUNT(*) as c FROM beta_feedback").fetchone()["c"]
+        new_feedback = conn.execute("SELECT COUNT(*) as c FROM beta_feedback WHERE status='new'").fetchone()["c"]
+        conn.close()
+        return {
+            "total": total, "pending": pending, "approved": approved,
+            "active": active, "feedback_count": feedback_count,
+            "new_feedback": new_feedback,
+        }
+
+    # ── Beta Feedback ──
+
+    def create_beta_feedback(self, brand_id, client_user_id, category, rating, message, page=""):
+        conn = self._conn()
+        conn.execute(
+            "INSERT INTO beta_feedback (brand_id, client_user_id, category, rating, message, page) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (brand_id, client_user_id, category, rating, message, page),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_beta_feedback(self, status=None, limit=100):
+        conn = self._conn()
+        if status:
+            rows = conn.execute(
+                "SELECT bf.*, bt.name as tester_name, bt.email as tester_email, "
+                "b.display_name as brand_name "
+                "FROM beta_feedback bf "
+                "LEFT JOIN beta_testers bt ON bt.client_user_id = bf.client_user_id "
+                "LEFT JOIN brands b ON b.id = bf.brand_id "
+                "WHERE bf.status = ? ORDER BY bf.created_at DESC LIMIT ?",
+                (status, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT bf.*, bt.name as tester_name, bt.email as tester_email, "
+                "b.display_name as brand_name "
+                "FROM beta_feedback bf "
+                "LEFT JOIN beta_testers bt ON bt.client_user_id = bf.client_user_id "
+                "LEFT JOIN brands b ON b.id = bf.brand_id "
+                "ORDER BY bf.created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_beta_feedback_for_brand(self, brand_id):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM beta_feedback WHERE brand_id = ? ORDER BY created_at DESC",
+            (brand_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def update_beta_feedback_status(self, feedback_id, status, admin_response=""):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE beta_feedback SET status = ?, admin_response = ?, responded_at = datetime('now') WHERE id = ?",
+            (status, admin_response, feedback_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_beta_feedback_summary(self):
+        """Aggregate feedback by category for the admin dashboard."""
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT category, COUNT(*) as count, AVG(rating) as avg_rating "
+            "FROM beta_feedback GROUP BY category ORDER BY count DESC"
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]

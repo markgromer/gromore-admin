@@ -1,0 +1,194 @@
+{% extends "client_base.html" %}
+{% block title %}Feedback{% endblock %}
+
+{% block head %}
+<style>
+    .fb-header {
+        background: linear-gradient(135deg, #1a1d2e 0%, #2d1b4e 100%);
+        border-radius: 16px;
+        padding: 2.5rem 2rem;
+        color: #fff;
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+    .fb-header::before {
+        content: '';
+        position: absolute;
+        top: -40%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(99,102,241,.25) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    .fb-header h1 { font-size: 1.6rem; font-weight: 700; margin: 0; }
+    .fb-header p  { color: rgba(255,255,255,.65); margin: .5rem 0 0; font-size: .9rem; }
+
+    .fb-card {
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 2px 12px rgba(0,0,0,.06);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    .fb-card label { font-weight: 600; font-size: .85rem; color: #374151; }
+
+    .category-pills { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0; }
+    .category-pills input[type="radio"] { display: none; }
+    .category-pills label {
+        display: inline-block;
+        padding: .4rem 1rem;
+        border-radius: 20px;
+        border: 1.5px solid #e5e7eb;
+        cursor: pointer;
+        font-size: .82rem;
+        font-weight: 500;
+        transition: all .2s;
+        color: #6b7280;
+    }
+    .category-pills input:checked + label {
+        background: #4f46e5;
+        color: #fff;
+        border-color: #4f46e5;
+    }
+
+    .star-rating { display: flex; gap: .25rem; font-size: 1.5rem; }
+    .star-rating .star { cursor: pointer; color: #d1d5db; transition: color .15s; }
+    .star-rating .star.active { color: #f59e0b; }
+
+    .history-item {
+        border-left: 3px solid #e5e7eb;
+        padding: .75rem 1rem;
+        margin-bottom: 1rem;
+        border-radius: 0 10px 10px 0;
+        background: #f9fafb;
+    }
+    .history-item.status-new { border-left-color: #6366f1; }
+    .history-item.status-reviewed { border-left-color: #10b981; }
+    .history-item.status-resolved { border-left-color: #9ca3af; }
+
+    .cat-badge {
+        display: inline-block;
+        padding: .15rem .55rem;
+        border-radius: 8px;
+        font-size: .72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    .cat-bug        { background: #fef2f2; color: #dc2626; }
+    .cat-feature    { background: #eff6ff; color: #2563eb; }
+    .cat-ui_ux      { background: #faf5ff; color: #7c3aed; }
+    .cat-like       { background: #f0fdf4; color: #16a34a; }
+    .cat-dislike    { background: #fff7ed; color: #ea580c; }
+    .cat-general    { background: #f3f4f6; color: #6b7280; }
+
+    .admin-reply {
+        background: #eff6ff;
+        border-radius: 8px;
+        padding: .6rem .8rem;
+        margin-top: .5rem;
+        font-size: .82rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fb-header">
+    <h1><i class="bi bi-chat-square-text"></i> Feedback</h1>
+    <p>Help us improve GroMore. Report bugs, suggest features, or tell us what you think.</p>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="fb-card">
+            <h5 style="font-weight:700;margin-bottom:1rem;">Submit Feedback</h5>
+            <form method="POST" action="{{ url_for('client.client_feedback_submit') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="page" id="feedbackPage" value="">
+
+                <label>Category</label>
+                <div class="category-pills">
+                    {% for val, lbl, icon in [('bug','Bug','bi-bug'),('feature_request','Feature','bi-lightbulb'),('ui_ux','UI/UX','bi-palette'),('like','Like','bi-hand-thumbs-up'),('dislike','Dislike','bi-hand-thumbs-down'),('general','General','bi-chat')] %}
+                    <input type="radio" name="category" id="cat_{{val}}" value="{{val}}" {% if loop.first %}checked{% endif %}>
+                    <label for="cat_{{val}}"><i class="bi {{icon}}"></i> {{lbl}}</label>
+                    {% endfor %}
+                </div>
+
+                <label class="mt-3">Rating (optional)</label>
+                <div class="star-rating" id="starRating">
+                    {% for i in range(1,6) %}
+                    <span class="star" data-val="{{i}}"><i class="bi bi-star-fill"></i></span>
+                    {% endfor %}
+                </div>
+                <input type="hidden" name="rating" id="ratingInput" value="0">
+
+                <label class="mt-3">Your Feedback</label>
+                <textarea name="message" rows="4" class="form-control" placeholder="Tell us what's on your mind..." required></textarea>
+
+                <button type="submit" class="btn btn-primary w-100 mt-3" style="border-radius:10px;">
+                    <i class="bi bi-send"></i> Submit Feedback
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="fb-card">
+            <h5 style="font-weight:700;margin-bottom:1rem;">Your Feedback History</h5>
+            {% if feedback %}
+                {% for item in feedback %}
+                <div class="history-item status-{{ item.status or 'new' }}">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="cat-badge cat-{{ item.category or 'general' }}">{{ (item.category or 'general')|replace('_',' ') }}</span>
+                            {% if item.rating %}
+                            <span style="color:#f59e0b;font-size:.8rem;margin-left:.5rem;">
+                                {% for i in range(item.rating) %}<i class="bi bi-star-fill"></i>{% endfor %}
+                            </span>
+                            {% endif %}
+                        </div>
+                        <small style="color:#9ca3af;">{{ item.created_at[:10] if item.created_at else '' }}</small>
+                    </div>
+                    <p style="margin:.5rem 0 0;font-size:.88rem;">{{ item.message }}</p>
+                    {% if item.admin_response %}
+                    <div class="admin-reply">
+                        <strong style="font-size:.78rem;"><i class="bi bi-reply"></i> GroMore Team:</strong>
+                        <span style="font-size:.82rem;">{{ item.admin_response }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            {% else %}
+                <div style="text-align:center;padding:2rem;color:#9ca3af;">
+                    <i class="bi bi-chat-square-text" style="font-size:2rem;"></i>
+                    <p style="margin-top:.5rem;">No feedback yet. Be the first to share!</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('feedbackPage').value = document.referrer || window.location.pathname;
+(function(){
+    const stars = document.querySelectorAll('#starRating .star');
+    const input = document.getElementById('ratingInput');
+    stars.forEach(s => {
+        s.addEventListener('click', () => {
+            const v = parseInt(s.dataset.val);
+            input.value = v;
+            stars.forEach((ss, i) => ss.classList.toggle('active', i < v));
+        });
+        s.addEventListener('mouseenter', () => {
+            const v = parseInt(s.dataset.val);
+            stars.forEach((ss, i) => ss.classList.toggle('active', i < v));
+        });
+    });
+    document.getElementById('starRating').addEventListener('mouseleave', () => {
+        const v = parseInt(input.value);
+        stars.forEach((ss, i) => ss.classList.toggle('active', i < v));
+    });
+})();
+</script>
+{% endblock %}

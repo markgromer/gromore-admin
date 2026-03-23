@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GroMore Beta Program</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *{font-family:'Inter',sans-serif;}
+        body{background:radial-gradient(circle at 0% 0%,#312e81 0%,#1e1b4b 40%,#0f172a 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.25rem;}
+        .signup-shell{width:100%;max-width:1020px;display:grid;grid-template-columns:1fr 460px;background:rgba(255,255,255,.97);border:1px solid rgba(226,232,240,.6);border-radius:20px;overflow:hidden;box-shadow:0 24px 65px rgba(0,0,0,.35);}
+        .signup-left{padding:2.4rem;background:linear-gradient(145deg,#312e81 0%,#4338ca 55%,#6366f1 100%);color:#fff;display:flex;flex-direction:column;justify-content:center;}
+        .signup-left h1{font-weight:800;letter-spacing:-.02em;margin-bottom:.7rem;font-size:1.75rem;}
+        .signup-left p{color:rgba(255,255,255,.88);margin-bottom:1.2rem;line-height:1.6;}
+        .signup-left .benefit{display:flex;align-items:start;gap:.65rem;margin-bottom:.85rem;font-size:.88rem;color:rgba(255,255,255,.92);}
+        .signup-left .benefit i{color:#a5b4fc;font-size:1rem;margin-top:.1rem;flex-shrink:0;}
+        .pill{display:inline-flex;width:fit-content;margin-top:.8rem;border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:.35rem .7rem;font-size:.78rem;background:rgba(255,255,255,.12);}
+        .signup-card{background:#fff;padding:2rem 2rem 1.8rem;overflow-y:auto;max-height:95vh;}
+        .signup-card h2{font-weight:700;color:#0f172a;margin-bottom:.3rem;font-size:1.3rem;}
+        .signup-card .subtitle{color:#64748b;font-size:.9rem;margin-bottom:1.5rem;}
+        .btn-primary{background:linear-gradient(135deg,#4f46e5,#4338ca);border-color:#4338ca;font-weight:600;border-radius:10px;}
+        .btn-primary:hover{background:linear-gradient(135deg,#4338ca,#3730a3);border-color:#3730a3;}
+        .form-control,.form-select{border-radius:10px;border-color:#dbe3ef;min-height:42px;font-size:.9rem;}
+        .form-control:focus,.form-select:focus{border-color:#a5b4fc;box-shadow:0 0 0 .2rem rgba(79,70,229,.14);}
+        .form-label{font-weight:600;font-size:.82rem;color:#334155;margin-bottom:.3rem;}
+        .success-state{text-align:center;padding:3rem 1.5rem;}
+        .success-state i{font-size:3rem;color:#059669;}
+        .success-state h3{font-weight:700;margin-top:.8rem;color:#0f172a;}
+        .success-state p{color:#64748b;max-width:400px;margin:0 auto;}
+        @media(max-width:900px){.signup-shell{grid-template-columns:1fr;}.signup-left{display:none;}}
+    </style>
+</head>
+<body>
+    <div class="signup-shell">
+        <div class="signup-left">
+            <h1><i class="bi bi-rocket-takeoff"></i> GroMore Beta Program</h1>
+            <p>Get early access to our AI-powered ad management platform. Manage your Google and Facebook ads from one dashboard with real-time coaching.</p>
+            <div class="benefit"><i class="bi bi-check-circle-fill"></i> <span>Full access to the GroMore client portal during beta</span></div>
+            <div class="benefit"><i class="bi bi-check-circle-fill"></i> <span>AI-powered W.A.R.R.E.N. assistant for campaign optimization</span></div>
+            <div class="benefit"><i class="bi bi-check-circle-fill"></i> <span>Launch and manage Google + Facebook campaigns directly</span></div>
+            <div class="benefit"><i class="bi bi-check-circle-fill"></i> <span>Performance coaching, creative builder, post scheduler</span></div>
+            <div class="benefit"><i class="bi bi-check-circle-fill"></i> <span>Direct line to the dev team for your feedback</span></div>
+            <span class="pill"><i class="bi bi-shield-check me-1"></i> Limited spots available</span>
+        </div>
+        <div class="signup-card" id="signupCard">
+            {% if success %}
+            <div class="success-state">
+                <i class="bi bi-check-circle-fill"></i>
+                <h3>You're on the list!</h3>
+                <p>We've received your application. You'll get an email with setup instructions once you're approved. Keep an eye on your inbox.</p>
+                <a href="/client/login" class="btn btn-primary mt-3">Go to Login</a>
+            </div>
+            {% else %}
+            <h2><i class="bi bi-stars me-1"></i> Apply for Beta Access</h2>
+            <p class="subtitle">Fill out the form below and we'll get you set up.</p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} py-2">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+            {% endwith %}
+
+            <form method="POST" id="betaForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label">Your Name *</label>
+                        <input type="text" name="name" class="form-control" required placeholder="Jane Smith">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Email *</label>
+                        <input type="email" name="email" class="form-control" required placeholder="you@example.com">
+                    </div>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label">Business Name *</label>
+                        <input type="text" name="business_name" class="form-control" required placeholder="Acme Plumbing">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Website</label>
+                        <input type="url" name="website" class="form-control" placeholder="https://example.com">
+                    </div>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label">Industry *</label>
+                        <select name="industry" class="form-select" required>
+                            <option value="">Select...</option>
+                            <option value="plumbing">Plumbing</option>
+                            <option value="hvac">HVAC</option>
+                            <option value="electrical">Electrical</option>
+                            <option value="roofing">Roofing</option>
+                            <option value="landscaping">Landscaping</option>
+                            <option value="dental">Dental</option>
+                            <option value="legal">Legal Services</option>
+                            <option value="real_estate">Real Estate</option>
+                            <option value="restaurant">Restaurant</option>
+                            <option value="fitness">Fitness / Gym</option>
+                            <option value="ecommerce">E-Commerce</option>
+                            <option value="saas">SaaS</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Monthly Ad Budget</label>
+                        <select name="monthly_ad_spend" class="form-select">
+                            <option value="">Unsure</option>
+                            <option value="0-500">$0 - $500</option>
+                            <option value="500-2000">$500 - $2,000</option>
+                            <option value="2000-5000">$2,000 - $5,000</option>
+                            <option value="5000-10000">$5,000 - $10,000</option>
+                            <option value="10000+">$10,000+</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Which platforms are you running ads on? *</label>
+                    <div class="d-flex gap-3 flex-wrap">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="platforms" value="google" id="pGoogle">
+                            <label class="form-check-label" for="pGoogle">Google Ads</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="platforms" value="facebook" id="pFacebook">
+                            <label class="form-check-label" for="pFacebook">Facebook / Instagram</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="platforms" value="neither" id="pNeither">
+                            <label class="form-check-label" for="pNeither">Not yet, planning to</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">How did you hear about us?</label>
+                    <select name="referral_source" class="form-select">
+                        <option value="">Select...</option>
+                        <option value="friend">Friend / Referral</option>
+                        <option value="google">Google Search</option>
+                        <option value="facebook">Facebook / Instagram</option>
+                        <option value="linkedin">LinkedIn</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary w-100 py-2 mt-2">
+                    <i class="bi bi-rocket-takeoff me-1"></i> Apply for Beta Access
+                </button>
+                <div class="text-center mt-3">
+                    <small class="text-muted">Already have access? <a href="/client/login">Log in here</a></small>
+                </div>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

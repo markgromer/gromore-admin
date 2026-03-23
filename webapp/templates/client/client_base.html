@@ -917,6 +917,9 @@
             <a href="{{ url_for('client.client_settings') }}" class="{% if request.endpoint == 'client.client_settings' %}active{% endif %}">
                 <i class="bi bi-plug"></i> Connections
             </a>
+            <a href="{{ url_for('client.client_feedback') }}" class="{% if request.endpoint in ('client.client_feedback', 'client.client_feedback_submit') %}active{% endif %}">
+                <i class="bi bi-chat-square-text"></i> Feedback
+            </a>
             <a href="{{ url_for('client.client_help') }}" class="{% if request.endpoint == 'client.client_help' %}active{% endif %}">
                 <i class="bi bi-question-circle"></i> Help
             </a>

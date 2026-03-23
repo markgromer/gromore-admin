@@ -57,7 +57,10 @@ document.addEventListener('DOMContentLoaded', function () {
     // ── Smooth scroll for anchor links ──
     document.querySelectorAll('a[href^="#"]').forEach(function (link) {
         link.addEventListener('click', function (e) {
-            var target = document.querySelector(link.getAttribute('href'));
+            var href = link.getAttribute('href');
+            if (!href || href === '#') return;
+            var target;
+            try { target = document.querySelector(href); } catch(ex) { return; }
             if (target) {
                 e.preventDefault();
                 var navHeight = nav ? nav.offsetHeight : 0;

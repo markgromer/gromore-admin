@@ -1607,6 +1607,79 @@ def create_app():
             return jsonify({"ok": False, "error": str(e)})
 
     # ── Setup Guide ──
+    # ── Beta Testers Admin ──
+
+    @app.route("/beta")
+    @login_required
+    def beta_dashboard():
+        stats = db.get_beta_stats()
+        testers = db.get_beta_testers()
+        feedback = db.get_beta_feedback(limit=50)
+        fb_summary = db.get_beta_feedback_summary()
+        return render_template(
+            "beta_admin.html",
+            stats=stats,
+            testers=testers,
+            feedback=feedback,
+            fb_summary=fb_summary,
+        )
+
+    @app.route("/beta/approve/<int:tester_id>", methods=["POST"])
+    @login_required
+    def beta_approve(tester_id):
+        tester = db.get_beta_tester(tester_id)
+        if not tester:
+            abort(404)
+
+        import secrets as _secrets
+        import re as _re
+        temp_password = _secrets.token_urlsafe(10)
+
+        # Create brand for the tester
+        slug = _re.sub(r'[^a-z0-9]+', '_', (tester["business_name"] or tester["name"]).lower()).strip('_')
+        brand_id = db.create_brand({
+            "slug": slug,
+            "display_name": tester["business_name"] or tester["name"],
+            "industry": tester.get("industry") or "general",
+            "website": tester.get("website") or "",
+        })
+
+        # Create client user
+        client_user_id = db.create_client_user(brand_id, tester["email"], temp_password, tester["name"])
+
+        # Update tester status
+        db.update_beta_tester_status(tester_id, "approved", brand_id=brand_id, client_user_id=client_user_id)
+
+        # Send welcome email
+        try:
+            from webapp.email_sender import send_beta_welcome_email
+            login_url = app.config.get("APP_URL", request.host_url.rstrip("/")) + "/client/login"
+            send_beta_welcome_email(app.config, tester, temp_password, login_url)
+            flash(f"Approved {tester['name']} and sent welcome email.", "success")
+        except Exception as e:
+            flash(f"Approved {tester['name']} but email failed: {e}", "warning")
+
+        return redirect(url_for("beta_dashboard"))
+
+    @app.route("/beta/reject/<int:tester_id>", methods=["POST"])
+    @login_required
+    def beta_reject(tester_id):
+        tester = db.get_beta_tester(tester_id)
+        if not tester:
+            abort(404)
+        db.update_beta_tester_status(tester_id, "rejected")
+        flash(f"Rejected {tester['name']}.", "info")
+        return redirect(url_for("beta_dashboard"))
+
+    @app.route("/beta/feedback/<int:feedback_id>/respond", methods=["POST"])
+    @login_required
+    def beta_feedback_respond(feedback_id):
+        status = request.form.get("status", "reviewed")
+        admin_response = request.form.get("admin_response", "").strip()
+        db.update_beta_feedback_status(feedback_id, status, admin_response)
+        flash("Feedback updated.", "success")
+        return redirect(url_for("beta_dashboard"))
+
     @app.route("/setup-guide")
     @login_required
     def setup_guide():

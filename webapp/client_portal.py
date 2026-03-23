@@ -4046,6 +4046,73 @@ def client_help():
     )
 
 
+# ── Beta Signup (public - no auth) ──
+
+@client_bp.route("/beta", methods=["GET", "POST"])
+def beta_signup():
+    db = _get_db()
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        name = request.form.get("name", "").strip()
+        if not email or not name:
+            flash("Name and email are required.", "error")
+            return render_template("beta_signup.html")
+
+        existing = db.get_beta_tester_by_email(email)
+        if existing:
+            flash("That email is already registered for the beta.", "info")
+            return render_template("beta_signup.html", success=True)
+
+        data = {
+            "name": name,
+            "email": email,
+            "business_name": request.form.get("business_name", "").strip(),
+            "website": request.form.get("website", "").strip(),
+            "industry": request.form.get("industry", "").strip(),
+            "monthly_ad_spend": request.form.get("monthly_ad_spend", "").strip(),
+            "platforms": ",".join(request.form.getlist("platforms")),
+            "referral_source": request.form.get("referral_source", "").strip(),
+        }
+        db.create_beta_tester(data)
+        return render_template("beta_signup.html", success=True)
+    return render_template("beta_signup.html")
+
+
+# ── Client Feedback ──
+
+@client_bp.route("/feedback")
+@client_login_required
+def client_feedback():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    feedback = db.get_beta_feedback_for_brand(brand_id)
+    return render_template(
+        "client_feedback.html",
+        feedback=feedback,
+        brand_name=session.get("client_brand_name", ""),
+    )
+
+
+@client_bp.route("/feedback/submit", methods=["POST"])
+@client_login_required
+def client_feedback_submit():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    client_user_id = session["client_user_id"]
+    category = request.form.get("category", "general").strip()
+    rating = int(request.form.get("rating", 0) or 0)
+    message = request.form.get("message", "").strip()
+    page = request.form.get("page", "").strip()
+    if not message:
+        flash("Please enter your feedback.", "error")
+        return redirect(url_for("client.client_feedback"))
+    if rating < 0 or rating > 5:
+        rating = 0
+    db.create_beta_feedback(brand_id, client_user_id, category, rating, message, page)
+    flash("Thanks for your feedback!", "success")
+    return redirect(url_for("client.client_feedback"))
+
+
 # ── Helper ──
 
 def _get_db():
