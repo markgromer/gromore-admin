@@ -202,6 +202,24 @@
             letter-spacing: -.02em;
             font-weight: 700;
         }
+        .content-wrap h5 {
+            background: linear-gradient(135deg, #1e1b4b, #4f46e5);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .content-wrap h6 {
+            color: var(--primary);
+        }
+        /* Reset gradient on muted/empty-state headings */
+        .content-wrap h5.text-muted,
+        .content-wrap h6.text-muted {
+            background: none;
+            -webkit-background-clip: unset;
+            -webkit-text-fill-color: var(--text-muted);
+            background-clip: unset;
+            color: var(--text-muted) !important;
+        }
         .text-muted {
             color: var(--text-muted) !important;
         }
@@ -592,7 +610,10 @@
         .channel-section { margin-bottom: 2rem; }
         .channel-section h5 {
             font-weight: 700;
-            color: var(--text-strong);
+            background: linear-gradient(135deg, #1e1b4b, #4f46e5);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             margin-bottom: 1rem;
             font-size: 1.05rem;
         }

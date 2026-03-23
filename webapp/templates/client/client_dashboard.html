@@ -47,7 +47,10 @@
         font-size: .9rem;
         text-transform: uppercase;
         letter-spacing: .06em;
-        color: #334155;
+        background: linear-gradient(135deg, #1e1b4b, #4f46e5);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
         margin: 0;
     }
     .kpi-grid {
@@ -122,7 +125,10 @@
         font-size: .9rem;
         text-transform: uppercase;
         letter-spacing: .06em;
-        color: #334155;
+        background: linear-gradient(135deg, #1e1b4b, #4f46e5);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
         margin: 0;
     }
     .platform-tab {
@@ -574,7 +580,7 @@ function fmtInt(v) {
         if (d.actions && d.actions.length) {
             html += '<div class="perf-snapshot" style="border-left:4px solid #6366f1;">';
             html += '<div class="d-flex justify-content-between align-items-center mb-3">';
-            html += '<h5 style="font-weight:800;font-size:.9rem;text-transform:uppercase;letter-spacing:.06em;color:#334155;margin:0;"><i class="bi bi-lightning-charge-fill text-primary me-1"></i>Top Moves This Month</h5>';
+            html += '<h5 style="font-weight:800;font-size:.9rem;text-transform:uppercase;letter-spacing:.06em;background:linear-gradient(135deg,#1e1b4b,#4f46e5);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:0;"><i class="bi bi-lightning-charge-fill text-primary me-1"></i>Top Moves This Month</h5>';
             html += '<a href="/client/actions?month=' + encodeURIComponent(month) + '" class="btn btn-sm btn-primary">Start Missions <i class="bi bi-arrow-right"></i></a>';
             html += '</div>';
             d.actions.slice(0, 3).forEach(function(a) {
@@ -729,7 +735,7 @@ function fmtInt(v) {
         if (d.channels) {
             html += '<div class="perf-snapshot" style="cursor:pointer;" onclick="var el=document.getElementById(\'channelDetail\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';">';
             html += '<div class="d-flex align-items-center justify-content-between">';
-            html += '<h5 style="font-weight:800;font-size:.9rem;text-transform:uppercase;letter-spacing:.06em;color:#334155;margin:0;">Channel Breakdown</h5>';
+            html += '<h5 style="font-weight:800;font-size:.9rem;text-transform:uppercase;letter-spacing:.06em;background:linear-gradient(135deg,#1e1b4b,#4f46e5);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:0;">Channel Breakdown</h5>';
             html += '<i class="bi bi-chevron-down text-muted"></i></div>';
             html += '<div id="channelDetail" style="display:none;margin-top:1rem;">';
             Object.keys(d.channels).forEach(function(key) {
@@ -860,7 +866,7 @@ function toggleMovesRows(platform, btn) {
 {% if dashboard.actions %}
 <div class="perf-snapshot">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5 style="font-weight:800;font-size:.9rem;text-transform:uppercase;letter-spacing:.06em;color:#334155;margin:0;">Top Moves This Month</h5>
+        <h5 style="font-weight:800;font-size:.9rem;text-transform:uppercase;letter-spacing:.06em;background:linear-gradient(135deg,#1e1b4b,#4f46e5);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:0;">Top Moves This Month</h5>
         <a href="{{ url_for('client.client_actions', month=month) }}" class="btn btn-sm btn-outline-primary">View All <i class="bi bi-arrow-right"></i></a>
     </div>
     {% for action in dashboard.actions[:3] %}
