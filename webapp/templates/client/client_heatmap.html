@@ -84,11 +84,30 @@
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h4 class="mb-1"><i class="bi bi-geo-alt me-2"></i>Local Rank Heatmap</h4>
-        <p class="text-muted mb-0">See where you rank in local search across your service area, just like Local Falcon.</p>
-    </div>
+<style>
+    .hm-header {
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #3730a3 100%);
+        border-radius: 16px;
+        padding: 2rem 2.25rem;
+        margin-bottom: 1.5rem;
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+    }
+    .hm-header::before {
+        content: '';
+        position: absolute;
+        top: -30%; right: -5%;
+        width: 250px; height: 250px;
+        background: radial-gradient(circle, rgba(129,140,248,.2) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    .hm-header h3 { font-weight: 800; font-size: 1.35rem; margin-bottom: .15rem; position: relative; }
+    .hm-header p { opacity: .7; font-size: .88rem; margin: 0; position: relative; }
+</style>
+<div class="hm-header">
+    <h3><i class="bi bi-geo-alt me-2"></i>Local Rank Heatmap</h3>
+    <p>See where you rank in local search across your service area, just like Local Falcon.</p>
 </div>
 
 {% set has_location = brand.business_lat and brand.business_lng and brand.business_lat != 0 %}

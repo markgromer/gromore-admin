@@ -327,15 +327,41 @@
     <p class="text-muted">Analyzing performance, competitors, and keywords. ~15 seconds.</p>
 </div>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h4 class="mb-1">Ad Builder</h4>
-        <p class="text-muted mb-0">AI writes your ad copy using your real performance data. Copy, paste, launch.</p>
-    </div>
-    <div class="month-selector">
-        <form method="GET" class="d-flex align-items-center gap-2">
-            <input type="month" name="month" value="{{ month }}" class="form-control form-control-sm" style="width: 160px;" onchange="this.form.submit()">
-        </form>
+<style>
+    .ab-header {
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
+        border-radius: 16px;
+        padding: 2rem 2.25rem;
+        margin-bottom: 1.5rem;
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+    }
+    .ab-header::before {
+        content: '';
+        position: absolute;
+        top: -30%; right: -5%;
+        width: 250px; height: 250px;
+        background: radial-gradient(circle, rgba(129,140,248,.2) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    .ab-header h3 { font-weight: 800; font-size: 1.35rem; margin-bottom: .15rem; position: relative; }
+    .ab-header p { opacity: .7; font-size: .88rem; margin: 0; position: relative; }
+    .ab-header-actions { position: relative; }
+    .ab-header-actions .form-control { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.2); color: #fff; }
+    .ab-header-actions .form-control:focus { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.4); color: #fff; }
+</style>
+<div class="ab-header">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h3><i class="bi bi-pencil-square me-2"></i>Ad Builder</h3>
+            <p>AI writes your ad copy using your real performance data. Copy, paste, launch.</p>
+        </div>
+        <div class="ab-header-actions">
+            <form method="GET" class="d-flex align-items-center gap-2">
+                <input type="month" name="month" value="{{ month }}" class="form-control form-control-sm" style="width: 160px;" onchange="this.form.submit()">
+            </form>
+        </div>
     </div>
 </div>
 
