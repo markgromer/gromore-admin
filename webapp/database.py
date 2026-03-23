@@ -388,9 +388,11 @@ class WebDB:
                 created_at TEXT DEFAULT (datetime('now')),
                 published_at TEXT DEFAULT NULL,
                 FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
-            );
+            )
+        """)
+        conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_scheduled_posts_brand
-            ON scheduled_posts(brand_id, scheduled_at);
+            ON scheduled_posts(brand_id, scheduled_at)
         """)
 
         conn.commit()
