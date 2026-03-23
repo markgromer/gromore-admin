@@ -493,9 +493,12 @@
         <div class="row">
             <div class="col-lg-5">
                 <div class="card mb-4">
-                    <div class="card-header"><strong><i class="bi bi-signpost-split"></i> Add / Edit Strategy</strong></div>
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <strong><i class="bi bi-signpost-split"></i> <span id="stratFormTitle">Add Strategy</span></strong>
+                        <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="stratCancelEdit" onclick="clearStrategyForm()"><i class="bi bi-x-lg"></i> Cancel</button>
+                    </div>
                     <div class="card-body">
-                        <form method="POST" action="{{ url_for('ad_intel_save_strategy') }}">
+                        <form method="POST" action="{{ url_for('ad_intel_save_strategy') }}" id="strategyForm">
                             <div class="row g-2 mb-3">
                                 <div class="col-6">
                                     <label class="form-label">Strategy Key</label>
@@ -572,24 +575,37 @@
                 <p class="text-muted small">These strategies appear on the client dashboard when creating campaigns.</p>
                 {% if strategies %}
                 {% for s in strategies %}
-                <div class="card mb-3" style="border-left: 4px solid {{ s.color }}">
-                    <div class="card-body py-2 d-flex justify-content-between align-items-start">
-                        <div>
-                            <span class="badge" style="background: {{ s.color }}"><i class="bi {{ s.icon }}"></i></span>
-                            <strong class="ms-2">{{ s.name }}</strong>
-                            <span class="badge bg-{{ 'info' if s.platform == 'meta' else 'primary' }} ms-1">{{ s.platform }}</span>
-                            <span class="badge bg-light text-dark ms-1">{{ s.strategy_key }}</span>
-                            {% if not s.is_active %}<span class="badge bg-secondary ms-1">Inactive</span>{% endif %}
-                            <br>
-                            <small class="text-muted">{{ s.tagline }}</small>
-                            {% if s.best_for %}<br><small class="text-muted">Best for: {{ s.best_for }}</small>{% endif %}
-                            {% if s.blueprint %}<br><pre class="mb-0 mt-1 p-2 bg-light rounded small" style="white-space: pre-wrap;">{{ s.blueprint }}</pre>{% endif %}
+                <div class="card mb-3" style="border-left: 4px solid {{ s.color }}; {{ 'opacity: .55;' if not s.is_active else '' }}">
+                    <div class="card-body py-2">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <span class="badge" style="background: {{ s.color }}"><i class="bi {{ s.icon }}"></i></span>
+                                <strong class="ms-2">{{ s.name }}</strong>
+                                <span class="badge bg-{{ 'info' if s.platform == 'meta' else 'primary' }} ms-1">{{ s.platform }}</span>
+                                <span class="badge bg-light text-dark ms-1">{{ s.strategy_key }}</span>
+                                {% if not s.is_active %}<span class="badge bg-secondary ms-1">Inactive</span>{% endif %}
+                                <br>
+                                <small class="text-muted">{{ s.tagline }}</small>
+                                {% if s.best_for %}<br><small class="text-muted">Best for: {{ s.best_for }}</small>{% endif %}
+                                {% if s.blueprint %}<br><pre class="mb-0 mt-1 p-2 bg-light rounded small" style="white-space: pre-wrap;">{{ s.blueprint }}</pre>{% endif %}
+                            </div>
+                            <div class="d-flex gap-1 flex-shrink-0 ms-2">
+                                <button type="button" class="btn btn-sm btn-outline-primary" title="Edit"
+                                    onclick='editStrategy({{ s | tojson }})'>
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <form method="POST" action="{{ url_for('ad_intel_toggle_strategy', strategy_id=s.id) }}" class="d-inline">
+                                    <button type="submit" class="btn btn-sm btn-outline-{{ 'warning' if s.is_active else 'success' }}" title="{{ 'Deactivate' if s.is_active else 'Activate' }}">
+                                        <i class="bi bi-{{ 'pause-fill' if s.is_active else 'play-fill' }}"></i>
+                                    </button>
+                                </form>
+                                <form method="POST" action="{{ url_for('ad_intel_delete_strategy', strategy_id=s.id) }}" class="d-inline">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete" onclick="return confirm('Delete this strategy?')">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
                         </div>
-                        <form method="POST" action="{{ url_for('ad_intel_delete_strategy', strategy_id=s.id) }}" class="d-inline">
-                            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this strategy?')">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </form>
                     </div>
                 </div>
                 {% endfor %}
@@ -611,6 +627,44 @@
 
 {% block scripts %}
 <script>
-// JSON parsing helper for Jinja
+function editStrategy(s) {
+    var f = document.getElementById('strategyForm');
+    f.querySelector('[name=strategy_key]').value = s.strategy_key || '';
+    f.querySelector('[name=platform]').value = s.platform || 'meta';
+    f.querySelector('[name=name]').value = s.name || '';
+    f.querySelector('[name=tagline]').value = s.tagline || '';
+    f.querySelector('[name=description]').value = s.description || '';
+    f.querySelector('[name=blueprint]').value = s.blueprint || '';
+    f.querySelector('[name=best_for]').value = s.best_for || '';
+    f.querySelector('[name=recommended_min]').value = s.recommended_min || 200;
+    f.querySelector('[name=icon]').value = s.icon || 'bi-megaphone-fill';
+    f.querySelector('[name=color]').value = s.color || '#6366f1';
+    f.querySelector('[name=objective]').value = s.objective || '';
+    f.querySelector('[name=sort_order]').value = s.sort_order || 0;
+    document.getElementById('stratFormTitle').textContent = 'Edit: ' + s.name;
+    document.getElementById('stratCancelEdit').classList.remove('d-none');
+    f.querySelector('[name=strategy_key]').setAttribute('readonly', true);
+    f.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+function clearStrategyForm() {
+    var f = document.getElementById('strategyForm');
+    f.reset();
+    f.querySelector('[name=strategy_key]').removeAttribute('readonly');
+    f.querySelector('[name=recommended_min]').value = 200;
+    f.querySelector('[name=icon]').value = 'bi-megaphone-fill';
+    f.querySelector('[name=color]').value = '#6366f1';
+    f.querySelector('[name=sort_order]').value = 0;
+    document.getElementById('stratFormTitle').textContent = 'Add Strategy';
+    document.getElementById('stratCancelEdit').classList.add('d-none');
+}
+
+// Activate the correct tab if URL has a hash
+(function() {
+    var hash = window.location.hash;
+    if (hash) {
+        var tab = document.querySelector('a[href="' + hash + '"]');
+        if (tab) new bootstrap.Tab(tab).show();
+    }
+})();
 </script>
 {% endblock %}

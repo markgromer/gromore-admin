@@ -1650,6 +1650,15 @@ class WebDB:
         conn.commit()
         conn.close()
 
+    def toggle_campaign_strategy_active(self, strategy_id):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE campaign_strategies SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END, updated_at = datetime('now') WHERE id = ?",
+            (strategy_id,),
+        )
+        conn.commit()
+        conn.close()
+
     # ── Competitors (structured) ─────────────────────────────────
 
     def add_competitor(self, brand_id, name, website="", facebook_url="",

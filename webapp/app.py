@@ -1407,6 +1407,13 @@ def create_app():
         flash("Strategy deleted.", "success")
         return redirect(url_for("ad_intelligence") + "#tab-strategies")
 
+    @app.route("/ad-intelligence/toggle-strategy/<int:strategy_id>", methods=["POST"])
+    @login_required
+    def ad_intel_toggle_strategy(strategy_id):
+        db.toggle_campaign_strategy_active(strategy_id)
+        flash("Strategy status toggled.", "success")
+        return redirect(url_for("ad_intelligence") + "#tab-strategies")
+
     @app.route("/ad-intelligence/seed-strategies", methods=["POST"])
     @login_required
     def ad_intel_seed_strategies():
