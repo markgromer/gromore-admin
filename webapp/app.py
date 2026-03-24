@@ -1640,6 +1640,7 @@ def create_app():
         import secrets as _secrets
         import re as _re
         temp_password = _secrets.token_urlsafe(10)
+        onboarding_token = _secrets.token_urlsafe(32)
 
         # Create brand for the tester
         slug = _re.sub(r'[^a-z0-9]+', '_', (tester["business_name"] or tester["name"]).lower()).strip('_')
@@ -1650,21 +1651,75 @@ def create_app():
             "website": tester.get("website") or "",
         })
 
-        # Create client user
+        # Create client user (inactive until manually activated)
         client_user_id = db.create_client_user(brand_id, tester["email"], temp_password, tester["name"])
 
-        # Update tester status
-        db.update_beta_tester_status(tester_id, "approved", brand_id=brand_id, client_user_id=client_user_id)
+        # Update tester status - store temp password and onboarding token for later
+        db.update_beta_tester_status(
+            tester_id, "approved",
+            brand_id=brand_id, client_user_id=client_user_id,
+            onboarding_token=onboarding_token, temp_password=temp_password,
+        )
 
-        # Send welcome email
+        # Send welcome email with onboarding link (no credentials yet)
         try:
             from webapp.email_sender import send_beta_welcome_email
-            login_url = app.config.get("APP_URL", request.host_url.rstrip("/")) + "/client/login"
-            send_beta_welcome_email(app.config, tester, temp_password, login_url)
-            flash(f"Approved {tester['name']} and sent welcome email.", "success")
+            app_url = app.config.get("APP_URL", request.host_url.rstrip("/"))
+            onboarding_url = f"{app_url}/client/beta/onboarding/{onboarding_token}"
+            send_beta_welcome_email(app.config, tester, onboarding_url)
+            flash(f"Approved {tester['name']} and sent onboarding email.", "success")
         except Exception as e:
             flash(f"Approved {tester['name']} but email failed: {e}", "warning")
 
+        return redirect(url_for("beta_dashboard"))
+
+    @app.route("/beta/activate/<int:tester_id>", methods=["POST"])
+    @login_required
+    def beta_activate(tester_id):
+        tester = db.get_beta_tester(tester_id)
+        if not tester:
+            abort(404)
+        if tester["status"] != "approved":
+            flash("Tester must be approved first.", "error")
+            return redirect(url_for("beta_dashboard"))
+
+        temp_password = tester.get("temp_password", "")
+        if not temp_password:
+            # Generate a new password if the stored one is missing
+            import secrets as _secrets
+            temp_password = _secrets.token_urlsafe(10)
+            from werkzeug.security import generate_password_hash
+            conn = db._conn()
+            conn.execute(
+                "UPDATE client_users SET password_hash = ? WHERE id = ?",
+                (generate_password_hash(temp_password), tester["client_user_id"]),
+            )
+            conn.commit()
+            conn.close()
+
+        db.update_beta_tester_status(
+            tester_id, "approved",
+            activated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        )
+
+        try:
+            from webapp.email_sender import send_beta_activation_email
+            login_url = app.config.get("APP_URL", request.host_url.rstrip("/")) + "/client/login"
+            send_beta_activation_email(app.config, tester, temp_password, login_url)
+            flash(f"Activation email sent to {tester['name']}.", "success")
+        except Exception as e:
+            flash(f"Activation failed: {e}", "warning")
+
+        return redirect(url_for("beta_dashboard"))
+
+    @app.route("/beta/remove/<int:tester_id>", methods=["POST"])
+    @login_required
+    def beta_remove(tester_id):
+        tester = db.get_beta_tester(tester_id)
+        if not tester:
+            abort(404)
+        db.deactivate_beta_tester(tester_id)
+        flash(f"Removed {tester['name']} from the beta program.", "info")
         return redirect(url_for("beta_dashboard"))
 
     @app.route("/beta/reject/<int:tester_id>", methods=["POST"])

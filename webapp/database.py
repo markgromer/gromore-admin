@@ -511,6 +511,21 @@ class WebDB:
                 conn.execute(f"ALTER TABLE campaign_strategies ADD COLUMN {col_name} {col_def}")
         conn.commit()
 
+        # ── beta_testers migrations ──
+        bt_columns = {r[1] for r in conn.execute("PRAGMA table_info(beta_testers)").fetchall()}
+        new_bt_cols = [
+            ("facebook_page_id", "TEXT DEFAULT ''"),
+            ("google_business_email", "TEXT DEFAULT ''"),
+            ("onboarding_token", "TEXT DEFAULT ''"),
+            ("onboarding_completed_at", "TEXT DEFAULT ''"),
+            ("activated_at", "TEXT DEFAULT ''"),
+            ("temp_password", "TEXT DEFAULT ''"),
+        ]
+        for col_name, col_def in new_bt_cols:
+            if col_name not in bt_columns:
+                conn.execute(f"ALTER TABLE beta_testers ADD COLUMN {col_name} {col_def}")
+        conn.commit()
+
         # ── client_users migrations ──
         cu_columns = {r[1] for r in conn.execute("PRAGMA table_info(client_users)").fetchall()}
         new_cu_cols = [
@@ -2100,12 +2115,40 @@ class WebDB:
         conn = self._conn()
         sets = ["status = ?"]
         params = [status]
+        allowed = ("brand_id", "client_user_id", "admin_notes", "invite_sent_at",
+                   "approved_at", "onboarding_token", "temp_password", "activated_at")
         for k, v in kwargs.items():
-            if k in ("brand_id", "client_user_id", "admin_notes", "invite_sent_at", "approved_at"):
+            if k in allowed:
                 sets.append(f"{k} = ?")
                 params.append(v)
         params.append(tester_id)
         conn.execute(f"UPDATE beta_testers SET {', '.join(sets)} WHERE id = ?", params)
+        conn.commit()
+        conn.close()
+
+    def get_beta_tester_by_token(self, token):
+        if not token:
+            return None
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM beta_testers WHERE onboarding_token = ?", (token,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def update_beta_tester_onboarding(self, tester_id, facebook_page_id, google_business_email):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE beta_testers SET facebook_page_id = ?, google_business_email = ?, onboarding_completed_at = datetime('now') WHERE id = ?",
+            (facebook_page_id, google_business_email, tester_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def deactivate_beta_tester(self, tester_id):
+        conn = self._conn()
+        row = conn.execute("SELECT client_user_id FROM beta_testers WHERE id = ?", (tester_id,)).fetchone()
+        if row and row["client_user_id"]:
+            conn.execute("UPDATE client_users SET is_active = 0 WHERE id = ?", (row["client_user_id"],))
+        conn.execute("UPDATE beta_testers SET status = 'removed' WHERE id = ?", (tester_id,))
         conn.commit()
         conn.close()
 
@@ -2114,13 +2157,17 @@ class WebDB:
         total = conn.execute("SELECT COUNT(*) as c FROM beta_testers").fetchone()["c"]
         pending = conn.execute("SELECT COUNT(*) as c FROM beta_testers WHERE status='pending'").fetchone()["c"]
         approved = conn.execute("SELECT COUNT(*) as c FROM beta_testers WHERE status='approved'").fetchone()["c"]
-        active = conn.execute("SELECT COUNT(*) as c FROM beta_testers WHERE status='active'").fetchone()["c"]
+        active = conn.execute("SELECT COUNT(*) as c FROM beta_testers WHERE status='approved' AND activated_at != ''").fetchone()["c"]
+        removed = conn.execute("SELECT COUNT(*) as c FROM beta_testers WHERE status='removed'").fetchone()["c"]
+        onboarding_done = conn.execute("SELECT COUNT(*) as c FROM beta_testers WHERE onboarding_completed_at != '' AND onboarding_completed_at IS NOT NULL").fetchone()["c"]
         feedback_count = conn.execute("SELECT COUNT(*) as c FROM beta_feedback").fetchone()["c"]
         new_feedback = conn.execute("SELECT COUNT(*) as c FROM beta_feedback WHERE status='new'").fetchone()["c"]
         conn.close()
         return {
             "total": total, "pending": pending, "approved": approved,
-            "active": active, "feedback_count": feedback_count,
+            "active": active, "removed": removed,
+            "onboarding_done": onboarding_done,
+            "feedback_count": feedback_count,
             "new_feedback": new_feedback,
         }
 

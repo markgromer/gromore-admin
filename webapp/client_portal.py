@@ -4125,6 +4125,30 @@ def beta_signup():
     return render_template("beta_signup.html")
 
 
+# ── Beta Onboarding (public - token-based access) ──
+
+@client_bp.route("/beta/onboarding/<token>", methods=["GET", "POST"])
+def beta_onboarding(token):
+    db = _get_db()
+    tester = db.get_beta_tester_by_token(token)
+    if not tester:
+        flash("This onboarding link is invalid or has already been used.", "error")
+        return redirect(url_for("client.beta_signup"))
+
+    if request.method == "POST":
+        facebook_page_id = request.form.get("facebook_page_id", "").strip()
+        google_business_email = request.form.get("google_business_email", "").strip().lower()
+
+        if not facebook_page_id or not google_business_email:
+            flash("Both fields are required.", "error")
+            return render_template("beta_onboarding.html", tester=tester)
+
+        db.update_beta_tester_onboarding(tester["id"], facebook_page_id, google_business_email)
+        return render_template("beta_onboarding.html", tester=tester, success=True)
+
+    return render_template("beta_onboarding.html", tester=tester)
+
+
 # ── Client Feedback ──
 
 @client_bp.route("/feedback")

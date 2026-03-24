@@ -64,10 +64,10 @@ def send_report_email(app_config, brand, report, recipients):
             server.sendmail(from_email, contact["email"], msg.as_string())
 
 
-def send_beta_welcome_email(app_config, tester, temp_password, login_url):
+def send_beta_welcome_email(app_config, tester, onboarding_url):
     """
-    Send welcome email to an approved beta tester with login credentials
-    and setup instructions.
+    Send welcome email to an approved beta tester with a link to complete
+    their onboarding (provide Facebook Page ID + Google business email).
     """
     smtp_host = app_config.get("SMTP_HOST", "smtp.gmail.com")
     smtp_port = app_config.get("SMTP_PORT", 587)
@@ -81,39 +81,123 @@ def send_beta_welcome_email(app_config, tester, temp_password, login_url):
 
     name = tester.get("name", "there")
     email = tester["email"]
-    subject = "Welcome to the GroMore Beta!"
+    subject = "Welcome to the GroMore Beta - Next Steps"
 
     html = f"""
     <div style="font-family:Inter,Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
         <h2 style="color:#4f46e5;">Welcome to GroMore, {name}!</h2>
-        <p>You've been approved for the GroMore beta program. Here's everything you need to get started.</p>
+        <p>You've been approved for the GroMore beta program. Before we can activate your account, we need a few things from you.</p>
+
+        <div style="text-align:center;margin:28px 0;">
+            <a href="{onboarding_url}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#4f46e5,#4338ca);color:#fff;border-radius:10px;text-decoration:none;font-weight:600;font-size:1rem;">Complete Your Setup</a>
+        </div>
 
         <div style="background:#f0f0ff;border-radius:10px;padding:20px;margin:20px 0;">
+            <h3 style="margin-top:0;">What we need from you:</h3>
+            <ol style="line-height:2;">
+                <li><strong>Your Facebook Page ID</strong> - the numeric ID for your business page</li>
+                <li><strong>Your Google business email</strong> - the email you use to manage your Google Ads</li>
+                <li><strong>Create a free Facebook Developer account</strong> at <a href="https://developers.facebook.com" style="color:#4f46e5;">developers.facebook.com</a></li>
+            </ol>
+        </div>
+
+        <div style="background:#fff7ed;border-radius:10px;padding:20px;margin:20px 0;">
+            <h3 style="margin-top:0;">How to find your Facebook Page ID</h3>
+            <ol style="line-height:1.8;font-size:.9rem;">
+                <li>Go to your Facebook Business Page</li>
+                <li>Click <strong>About</strong> (on the left sidebar)</li>
+                <li>Scroll down to <strong>Page transparency</strong></li>
+                <li>Your Page ID is the numeric number listed there</li>
+            </ol>
+            <p style="font-size:.85em;color:#666;">Example: 109876543210987</p>
+        </div>
+
+        <div style="background:#fdf2f8;border-radius:10px;padding:20px;margin:20px 0;">
+            <h3 style="margin-top:0;">Facebook Developer Account (Free)</h3>
+            <p>You'll need a free Facebook Developer account so we can connect to your ad data. This takes about 2 minutes:</p>
+            <ol style="line-height:1.8;font-size:.9rem;">
+                <li>Visit <a href="https://developers.facebook.com" style="color:#4f46e5;">developers.facebook.com</a></li>
+                <li>Click <strong>Get Started</strong> and log in with your Facebook account</li>
+                <li>Accept the terms and complete the registration</li>
+            </ol>
+            <p style="font-size:.85em;color:#666;">Once you've done this, we'll add your account to our system and send you a login link.</p>
+        </div>
+
+        <p>Once you've completed the setup form and we've added your accounts to our backend, we'll send you another email with your login credentials.</p>
+        <p>Questions? Reply to this email and we'll help you out.</p>
+        <p style="color:#666;">- The GroMore Team</p>
+    </div>
+    """
+
+    text = (
+        f"Welcome to GroMore, {name}!\n\n"
+        f"You've been approved for the beta program. Complete your setup here:\n"
+        f"{onboarding_url}\n\n"
+        f"What we need:\n"
+        f"1. Your Facebook Page ID (numeric ID from your business page)\n"
+        f"2. Your Google business email (the one managing your Google Ads)\n"
+        f"3. Create a free Facebook Developer account at developers.facebook.com\n\n"
+        f"Once setup is complete, we'll send your login credentials.\n\n"
+        f"- The GroMore Team"
+    )
+
+    with smtplib.SMTP(smtp_host, smtp_port) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{from_name} <{from_email}>"
+        msg["To"] = email
+        msg.attach(MIMEText(text, "plain"))
+        msg.attach(MIMEText(html, "html"))
+        server.sendmail(from_email, email, msg.as_string())
+
+
+def send_beta_activation_email(app_config, tester, temp_password, login_url):
+    """
+    Send activation email to a beta tester once their accounts have been
+    added to the backend. Includes login credentials.
+    """
+    smtp_host = app_config.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = app_config.get("SMTP_PORT", 587)
+    smtp_user = app_config.get("SMTP_USER", "")
+    smtp_password = app_config.get("SMTP_PASSWORD", "")
+    from_name = app_config.get("SMTP_FROM_NAME", "GroMore")
+    from_email = app_config.get("SMTP_FROM_EMAIL", smtp_user)
+
+    if not smtp_user or not smtp_password:
+        raise ValueError("SMTP not configured.")
+
+    name = tester.get("name", "there")
+    email = tester["email"]
+    subject = "Your GroMore Account Is Active!"
+
+    html = f"""
+    <div style="font-family:Inter,Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+        <h2 style="color:#10b981;">Your GroMore Account Is Live, {name}!</h2>
+        <p>We've added your accounts to our system and everything is ready to go.</p>
+
+        <div style="background:#f0fdf4;border-radius:10px;padding:20px;margin:20px 0;">
             <h3 style="margin-top:0;">Your Login Credentials</h3>
-            <p><strong>Login URL:</strong> <a href="{login_url}">{login_url}</a></p>
+            <p><strong>Login URL:</strong> <a href="{login_url}" style="color:#4f46e5;">{login_url}</a></p>
             <p><strong>Email:</strong> {email}</p>
             <p><strong>Temporary Password:</strong> {temp_password}</p>
             <p style="font-size:0.85em;color:#666;">Please change your password after your first login.</p>
         </div>
 
-        <h3>Getting Started - 3 Steps</h3>
+        <div style="text-align:center;margin:28px 0;">
+            <a href="{login_url}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border-radius:10px;text-decoration:none;font-weight:600;font-size:1rem;">Log In Now</a>
+        </div>
+
+        <h3>Getting Started</h3>
         <ol style="line-height:1.8;">
             <li><strong>Log in</strong> using the credentials above</li>
             <li><strong>Connect your Google account</strong> via Settings &gt; Connections</li>
             <li><strong>Connect your Facebook account</strong> via Settings &gt; Connections</li>
         </ol>
 
-        <div style="background:#fff7ed;border-radius:10px;padding:20px;margin:20px 0;">
-            <h3 style="margin-top:0;">Facebook Setup (Important)</h3>
-            <p>To connect Facebook ads data, you may need to:</p>
-            <ol style="line-height:1.8;">
-                <li>Accept any <strong>tester invitations</strong> sent to your Facebook account</li>
-                <li>If prompted, register as a Facebook developer at <strong>developers.facebook.com</strong></li>
-            </ol>
-            <p style="font-size:0.85em;color:#666;">We'll send tester invites separately if needed.</p>
-        </div>
-
-        <div style="background:#f0fdf4;border-radius:10px;padding:20px;margin:20px 0;">
+        <div style="background:#f0f0ff;border-radius:10px;padding:20px;margin:20px 0;">
             <h3 style="margin-top:0;">Share Your Feedback</h3>
             <p>As a beta tester, your feedback is invaluable. Use the <strong>Feedback</strong>
             link in your dashboard sidebar to report bugs, request features, or share what you like.</p>
@@ -125,7 +209,7 @@ def send_beta_welcome_email(app_config, tester, temp_password, login_url):
     """
 
     text = (
-        f"Welcome to GroMore, {name}!\n\n"
+        f"Your GroMore Account Is Live, {name}!\n\n"
         f"Login URL: {login_url}\n"
         f"Email: {email}\n"
         f"Temporary Password: {temp_password}\n\n"

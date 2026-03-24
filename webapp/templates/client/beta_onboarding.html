@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GroMore Beta - Complete Your Setup</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *{font-family:'Inter',sans-serif;}
+        body{background:radial-gradient(circle at 0% 0%,#312e81 0%,#1e1b4b 40%,#0f172a 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.25rem;}
+        .onboard-shell{width:100%;max-width:1020px;display:grid;grid-template-columns:1fr 480px;background:rgba(255,255,255,.97);border:1px solid rgba(226,232,240,.6);border-radius:20px;overflow:hidden;box-shadow:0 24px 65px rgba(0,0,0,.35);}
+        .onboard-left{padding:2.4rem;background:linear-gradient(145deg,#312e81 0%,#4338ca 55%,#6366f1 100%);color:#fff;display:flex;flex-direction:column;justify-content:center;}
+        .onboard-left h1{font-weight:800;letter-spacing:-.02em;margin-bottom:.7rem;font-size:1.6rem;}
+        .onboard-left p{color:rgba(255,255,255,.88);margin-bottom:1.2rem;line-height:1.6;}
+        .step{display:flex;align-items:start;gap:.65rem;margin-bottom:1rem;font-size:.88rem;color:rgba(255,255,255,.92);}
+        .step-num{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem;flex-shrink:0;}
+        .onboard-card{background:#fff;padding:2rem 2rem 1.8rem;overflow-y:auto;max-height:95vh;}
+        .onboard-card h2{font-weight:700;color:#0f172a;margin-bottom:.3rem;font-size:1.3rem;}
+        .onboard-card .subtitle{color:#64748b;font-size:.9rem;margin-bottom:1.5rem;}
+        .btn-primary{background:linear-gradient(135deg,#4f46e5,#4338ca);border-color:#4338ca;font-weight:600;border-radius:10px;}
+        .btn-primary:hover{background:linear-gradient(135deg,#4338ca,#3730a3);border-color:#3730a3;}
+        .form-control{border-radius:10px;border-color:#dbe3ef;min-height:42px;font-size:.9rem;}
+        .form-control:focus{border-color:#a5b4fc;box-shadow:0 0 0 .2rem rgba(79,70,229,.14);}
+        .form-label{font-weight:600;font-size:.82rem;color:#334155;margin-bottom:.3rem;}
+        .help-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:1rem;margin-bottom:1rem;font-size:.85rem;color:#475569;line-height:1.7;}
+        .help-box strong{color:#0f172a;}
+        .success-state{text-align:center;padding:3rem 1.5rem;}
+        .success-state i{font-size:3rem;color:#059669;}
+        .success-state h3{font-weight:700;margin-top:.8rem;color:#0f172a;}
+        .success-state p{color:#64748b;max-width:400px;margin:0 auto;}
+        @media(max-width:900px){.onboard-shell{grid-template-columns:1fr;}.onboard-left{display:none;}}
+    </style>
+</head>
+<body>
+    <div class="onboard-shell">
+        <div class="onboard-left">
+            <h1><i class="bi bi-gear-wide-connected"></i> Complete Your Setup</h1>
+            <p>Hi {{ tester.name }}! Just a few pieces of info and you'll be all set.</p>
+
+            <div class="step">
+                <div class="step-num">1</div>
+                <div><strong>Provide your Facebook Page ID</strong><br>The numeric ID from your business page's About section.</div>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <div><strong>Share your Google business email</strong><br>The email you use to manage your Google Ads account.</div>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <div><strong>Create a Facebook Developer account</strong><br>Free registration at developers.facebook.com so we can connect your ad data.</div>
+            </div>
+            <div class="step">
+                <div class="step-num">4</div>
+                <div><strong>We'll activate your account</strong><br>Once we add your accounts, you'll get a login email.</div>
+            </div>
+        </div>
+        <div class="onboard-card">
+            {% if success %}
+            <div class="success-state">
+                <i class="bi bi-check-circle-fill"></i>
+                <h3>Setup Complete!</h3>
+                <p>We've received your info. Once we add your accounts to our system, we'll send you an email with your login credentials.</p>
+                <div class="mt-4 p-3" style="background:#fff7ed;border-radius:10px;text-align:left;">
+                    <strong style="font-size:.9rem;"><i class="bi bi-info-circle"></i> Next step:</strong>
+                    <p style="font-size:.85rem;margin:.5rem 0 0;color:#92400e;">
+                        Make sure you've created your <strong>free Facebook Developer account</strong> at
+                        <a href="https://developers.facebook.com" target="_blank" style="color:#4f46e5;">developers.facebook.com</a>.
+                        We need this before we can connect your Facebook ads.
+                    </p>
+                </div>
+            </div>
+            {% else %}
+            <h2>Beta Onboarding</h2>
+            <p class="subtitle">Fill in the details below so we can connect your ad accounts.</p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            {% for cat, msg in messages %}
+            <div class="alert alert-{{ 'danger' if cat == 'error' else cat }} alert-dismissible fade show" role="alert" style="font-size:.88rem;border-radius:10px;">
+                {{ msg }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+            {% endif %}
+            {% endwith %}
+
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="mb-3">
+                    <label class="form-label">Facebook Page ID <span class="text-danger">*</span></label>
+                    <input type="text" name="facebook_page_id" class="form-control" placeholder="e.g. 109876543210987" required
+                           value="{{ tester.facebook_page_id or '' }}">
+                    <div class="help-box mt-2">
+                        <strong>How to find your Page ID:</strong><br>
+                        1. Go to your Facebook Business Page<br>
+                        2. Click <strong>About</strong> on the left sidebar<br>
+                        3. Scroll to <strong>Page transparency</strong><br>
+                        4. Your Page ID is the numeric number listed there
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Google Business Email <span class="text-danger">*</span></label>
+                    <input type="email" name="google_business_email" class="form-control" placeholder="you@yourbusiness.com" required
+                           value="{{ tester.google_business_email or '' }}">
+                    <div class="form-text">The email address you use to sign in to Google Ads or Google Business Profile.</div>
+                </div>
+
+                <div class="help-box" style="background:#fdf2f8;border-color:#fce7f3;">
+                    <strong><i class="bi bi-facebook"></i> Facebook Developer Account (Required)</strong><br>
+                    You'll also need a <strong>free</strong> Facebook Developer account. If you haven't already:<br>
+                    1. Visit <a href="https://developers.facebook.com" target="_blank" style="color:#4f46e5;">developers.facebook.com</a><br>
+                    2. Click <strong>Get Started</strong> and log in with your Facebook account<br>
+                    3. Accept the terms and complete registration
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100 py-2 mt-3">
+                    <i class="bi bi-send"></i> Submit Setup Info
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

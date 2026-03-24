@@ -94,9 +94,7 @@
                         <th>Name</th>
                         <th>Email</th>
                         <th>Business</th>
-                        <th>Industry</th>
-                        <th>Platforms</th>
-                        <th>Ad Spend</th>
+                        <th>Onboarding</th>
                         <th>Status</th>
                         <th>Signed Up</th>
                         <th>Actions</th>
@@ -108,16 +106,33 @@
                         <td><strong>{{ t.name }}</strong></td>
                         <td>{{ t.email }}</td>
                         <td>{{ t.business_name or '-' }}</td>
-                        <td>{{ (t.industry or '-')|replace('_',' ')|title }}</td>
-                        <td>{{ (t.platforms or '-')|replace(',',' / ') }}</td>
-                        <td>{{ t.monthly_ad_spend or '-' }}</td>
+                        <td>
+                            {% if t.onboarding_completed_at %}
+                            <span class="badge bg-success"><i class="bi bi-check-circle"></i> Done</span>
+                            <details style="font-size:.78rem;margin-top:4px;">
+                                <summary style="cursor:pointer;color:#6366f1;">View info</summary>
+                                <div class="mt-1">
+                                    <strong>FB Page ID:</strong> {{ t.facebook_page_id or '-' }}<br>
+                                    <strong>Google Email:</strong> {{ t.google_business_email or '-' }}
+                                </div>
+                            </details>
+                            {% elif t.status == 'approved' %}
+                            <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> Waiting</span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
                         <td>
                             {% if t.status == 'pending' %}
                                 <span class="badge bg-warning text-dark">Pending</span>
+                            {% elif t.status == 'approved' and t.activated_at %}
+                                <span class="badge bg-success">Active</span>
                             {% elif t.status == 'approved' %}
-                                <span class="badge bg-success">Approved</span>
+                                <span class="badge bg-info">Approved</span>
                             {% elif t.status == 'rejected' %}
                                 <span class="badge bg-secondary">Rejected</span>
+                            {% elif t.status == 'removed' %}
+                                <span class="badge bg-danger">Removed</span>
                             {% else %}
                                 <span class="badge bg-light text-dark">{{ t.status }}</span>
                             {% endif %}
@@ -127,7 +142,7 @@
                             {% if t.status == 'pending' %}
                             <form method="POST" action="{{ url_for('beta_approve', tester_id=t.id) }}" style="display:inline;">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button class="btn btn-sm btn-success" title="Approve and create account">
+                                <button class="btn btn-sm btn-success" title="Approve and send onboarding email">
                                     <i class="bi bi-check-lg"></i>
                                 </button>
                             </form>
@@ -137,8 +152,27 @@
                                     <i class="bi bi-x-lg"></i>
                                 </button>
                             </form>
-                            {% elif t.status == 'approved' %}
-                                <small class="text-muted">Brand #{{ t.brand_id or '-' }}</small>
+                            {% elif t.status == 'approved' and not t.activated_at %}
+                            <form method="POST" action="{{ url_for('beta_activate', tester_id=t.id) }}" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-sm btn-primary" title="Send activation email with login credentials">
+                                    <i class="bi bi-send-check"></i> Send Active
+                                </button>
+                            </form>
+                            <form method="POST" action="{{ url_for('beta_remove', tester_id=t.id) }}" style="display:inline;" class="ms-1">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-sm btn-outline-danger" title="Remove from beta" onclick="return confirm('Remove this tester from the beta program?')">
+                                    <i class="bi bi-person-dash"></i>
+                                </button>
+                            </form>
+                            {% elif t.status == 'approved' and t.activated_at %}
+                            <small class="text-muted me-2">Brand #{{ t.brand_id or '-' }}</small>
+                            <form method="POST" action="{{ url_for('beta_remove', tester_id=t.id) }}" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-sm btn-outline-danger" title="Remove from beta" onclick="return confirm('Remove this tester and deactivate their account?')">
+                                    <i class="bi bi-person-dash"></i>
+                                </button>
+                            </form>
                             {% endif %}
                         </td>
                     </tr>
