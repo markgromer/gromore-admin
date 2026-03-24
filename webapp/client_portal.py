@@ -5394,6 +5394,11 @@ def _run_assessment():
         if place:
             comp = score_profile_completeness(place)
             gbp_data["score"] = comp["score"]
+            gbp_data["found"] = True
+            gbp_data["name"] = place.get("displayName", {}).get("text", "")
+            gbp_data["rating"] = place.get("rating", 0)
+            gbp_data["review_count"] = place.get("userRatingCount", 0)
+            gbp_data["missing"] = [f for f, passed in comp["details"].items() if not passed]
             for field, passed in comp["details"].items():
                 gbp_data["findings"].append({"label": field, "pass": passed})
             rating = place.get("rating", 0)
@@ -5453,6 +5458,12 @@ def _run_assessment():
                 pts += 1
 
             seo_data["score"] = round(pts / total * 100)
+            seo_data["title"] = site_info.get("title", "")
+            seo_data["description"] = site_info.get("description", "")
+            seo_data["ssl"] = has_ssl
+            seo_data["has_h1"] = good_h1
+            seo_data["h2_count"] = len(h2s)
+            seo_data["scanned"] = True
         else:
             err_msg = site_info.get("error", "") if site_info else ""
             seo_data["findings"].append({"label": f"Could not load website{' - ' + err_msg[:60] if err_msg else ''}", "pass": False})
@@ -5470,6 +5481,7 @@ def _run_assessment():
         meta_info = _scrape_meta_ads({"name": search_name}, meta_token)
         if meta_info:
             ad_count = meta_info.get("active_ad_count", 0)
+            ad_data["active_count"] = ad_count
             ad_data["findings"].append({
                 "label": f"{ad_count} active Facebook/Instagram ad(s) found",
                 "pass": ad_count > 0,
@@ -5485,9 +5497,11 @@ def _run_assessment():
                     if titles:
                         ad_data["findings"].append({"label": f"Ad: \"{titles[0][:60]}\"", "pass": True})
         else:
+            ad_data["active_count"] = 0
             ad_data["findings"].append({"label": "No Facebook ad activity found", "pass": False})
             ad_data["score"] = 10
     else:
+        ad_data["active_count"] = 0
         if not facebook_url:
             ad_data["findings"].append({"label": "No Facebook page provided - unable to check ad activity", "pass": False})
         else:
@@ -5498,7 +5512,7 @@ def _run_assessment():
     results["ad_presence"] = ad_data
 
     # ── 4. Industry Benchmarks ──
-    bench_data = {"findings": []}
+    bench_data = {"findings": [], "industry": industry}
     benchmarks_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config", "benchmarks.json")
     benchmarks = {}
     try:
@@ -5507,10 +5521,12 @@ def _run_assessment():
         g = benchmarks.get("google_ads", {}).get(industry, {})
         m = benchmarks.get("meta_ads", {}).get(industry, {})
         if g:
+            bench_data["google_ads"] = g
             bench_data["findings"].append({"label": f"Google Ads avg CPC in your industry: ${g.get('cpc', 'N/A')}", "pass": True})
             bench_data["findings"].append({"label": f"Google Ads avg cost per lead: ${g.get('cpa', 'N/A')}", "pass": True})
             bench_data["findings"].append({"label": f"Google Ads avg conversion rate: {g.get('conversion_rate', 'N/A')}%", "pass": True})
         if m:
+            bench_data["meta_ads"] = m
             bench_data["findings"].append({"label": f"Facebook Ads avg CPC: ${m.get('cpc', 'N/A')}", "pass": True})
             bench_data["findings"].append({"label": f"Facebook Ads avg CPM: ${m.get('cpm', 'N/A')}", "pass": True})
     except Exception:
@@ -5573,7 +5589,11 @@ def _run_assessment():
             "Respond to every Google review within 24 hours to boost your local ranking.",
         ]
 
-    results["recommendations"] = recommendations
+    # Convert plain strings to objects the widget can render with priority badges
+    results["recommendations"] = [
+        {"title": r, "detail": "", "priority": "high" if i < 2 else "medium"}
+        for i, r in enumerate(recommendations)
+    ]
 
     # ── Save lead ──
     db = _get_db()

@@ -164,8 +164,8 @@
         html+='<div class="section-card"><h6>Website SEO <span class="grade-badge '+seoG.cls+' float-end">'+seoScore+'/100</span></h6>';
         if(seo.title) html+='<p class="small mb-1"><strong>Title:</strong> '+_esc(seo.title)+'</p>';
         if(seo.description) html+='<p class="small mb-1"><strong>Meta:</strong> '+_esc(seo.description).substring(0,120)+'...</p>';
-        html+='<p class="small mb-0">SSL: '+(seo.ssl?'Yes':'No')+' | H1 tag: '+(seo.has_h1?'Yes':'Missing')+' | H2 tags: '+(seo.h2_count||0)+'</p>';
-        if(!seo.title&&!seo.scanned) html+='<p class="small mb-0 text-muted">No website provided or could not be scanned.</p>';
+        if(seo.scanned) html+='<p class="small mb-0">SSL: '+(seo.ssl?'Yes':'No')+' | H1 tag: '+(seo.has_h1?'Yes':'Missing')+' | H2 tags: '+(seo.h2_count||0)+'</p>';
+        if(!seo.scanned) html+='<p class="small mb-0 text-muted">No website provided or could not be scanned.</p>';
         html+='</div>';
 
         // Ads section
