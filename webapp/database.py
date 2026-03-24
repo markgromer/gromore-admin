@@ -528,6 +528,7 @@ class WebDB:
             ("wp_site_url", "TEXT DEFAULT ''"),
             ("wp_username", "TEXT DEFAULT ''"),
             ("wp_app_password", "TEXT DEFAULT ''"),
+            ("crm_avg_service_price", "REAL DEFAULT 0"),
         ]
         for col_name, col_def in new_brand_cols:
             if col_name not in brand_columns:
@@ -761,7 +762,7 @@ class WebDB:
 
     def update_brand_number_field(self, brand_id, field, value):
         allowed = {"kpi_target_cpa", "kpi_target_leads", "kpi_target_roas",
-                   "business_lat", "business_lng"}
+                   "business_lat", "business_lng", "crm_avg_service_price"}
         if field not in allowed:
             raise ValueError(f"Cannot update field: {field}")
         try:

@@ -4464,6 +4464,7 @@ def client_save_sng():
 
     api_key = request.form.get("sng_api_key", "").strip()
     org_slug = request.form.get("sng_org_slug", "").strip()
+    avg_price = request.form.get("sng_avg_service_price", "").strip()
 
     # Set CRM type to sweepandgo
     db.update_brand_text_field(brand_id, "crm_type", "sweepandgo")
@@ -4473,6 +4474,10 @@ def client_save_sng():
         db.update_brand_text_field(brand_id, "crm_api_key", api_key)
 
     db.update_brand_text_field(brand_id, "crm_pipeline_id", org_slug)
+
+    # Average service price for revenue estimation
+    if avg_price:
+        db.update_brand_number_field(brand_id, "crm_avg_service_price", avg_price)
 
     flash("Sweep and Go settings saved.", "success")
     return redirect(url_for("client.client_settings"))
@@ -4538,11 +4543,11 @@ def client_crm_data():
         sng_count_happy_dogs, sng_count_jobs,
         sng_get_active_clients, sng_get_inactive_clients,
         sng_get_active_no_subscription, sng_get_leads,
-        sng_get_free_quotes,
+        sng_get_free_quotes, sng_estimate_revenue_snapshot,
     )
 
     data = {"kpis": {}, "clients": [], "inactive": [], "no_subscription": [],
-            "leads": [], "free_quotes": []}
+            "leads": [], "free_quotes": [], "revenue": {}}
 
     # KPIs
     r, _ = sng_count_active_clients(brand)
@@ -4585,6 +4590,46 @@ def client_crm_data():
     r, _ = sng_get_free_quotes(brand)
     if isinstance(r, dict):
         data["free_quotes"] = r.get("free_quotes", [])
+
+    # Revenue intelligence
+    try:
+        rev = sng_estimate_revenue_snapshot(brand)
+        data["revenue"] = rev
+
+        # Fetch ad spend for ROAS calculation
+        month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+        try:
+            from webapp.report_runner import build_analysis_and_suggestions_for_brand
+            analysis, _ = build_analysis_and_suggestions_for_brand(db, brand, month)
+            if analysis:
+                roas_info = analysis.get("roas", {})
+                data["revenue"]["ad_spend"] = roas_info.get("total_spend", 0)
+                data["revenue"]["total_conversions"] = roas_info.get("total_conversions", 0)
+                if rev.get("mrr") and roas_info.get("total_spend"):
+                    data["revenue"]["blended_roas"] = round(rev["mrr"] / roas_info["total_spend"], 2)
+                # Cost per acquisition
+                conversions = roas_info.get("total_conversions", 0)
+                spend = roas_info.get("total_spend", 0)
+                if conversions > 0 and spend > 0:
+                    data["revenue"]["cost_per_acquisition"] = round(spend / conversions, 2)
+        except Exception:
+            pass  # ad spend data is optional
+
+        # Auto-sync estimated MRR to brand_month_finance (so existing ROAS pipeline picks it up)
+        if rev.get("mrr") and rev["mrr"] > 0:
+            try:
+                month = datetime.now().strftime("%Y-%m")
+                db.upsert_brand_month_finance(
+                    brand_id, month,
+                    closed_revenue=rev["mrr"],
+                    closed_deals=rev["active_clients"],
+                    notes="SNG auto-sync (estimated MRR)"
+                )
+            except Exception:
+                pass
+
+    except Exception:
+        data["revenue"] = {}
 
     return jsonify(data)
 

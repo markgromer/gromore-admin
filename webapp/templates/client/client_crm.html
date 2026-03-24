@@ -143,6 +143,100 @@
         </div>
     </div>
 
+    <!-- Revenue Intelligence -->
+    <div id="revenueSection" class="crm-section" style="display:none;">
+        <h5><i class="bi bi-graph-up-arrow text-success"></i> Revenue Intelligence</h5>
+        <div id="revenueNeedPrice" style="display:none;">
+            <div class="d-flex align-items-start gap-3 p-3" style="background:#fefce8; border-radius:10px; border:1px solid #fde68a;">
+                <i class="bi bi-lightbulb text-warning" style="font-size:1.3rem; margin-top:.1rem;"></i>
+                <div>
+                    <div class="fw-bold" style="font-size:.9rem;">Set your average service price to unlock revenue tracking</div>
+                    <div class="text-muted" style="font-size:.84rem;">Go to <a href="{{ url_for('client.client_settings') }}">Connections</a> and enter your average price per visit in the Sweep and Go section. This lets us calculate your estimated revenue and true ROAS.</div>
+                </div>
+            </div>
+        </div>
+        <div id="revenueCards" style="display:none;">
+            <div class="row g-3 mb-3">
+                <div class="col-6 col-lg-3">
+                    <div class="crm-kpi-card">
+                        <div class="kpi-value text-success" id="revMrr">-</div>
+                        <div class="kpi-label">Est. Monthly Revenue</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="crm-kpi-card">
+                        <div class="kpi-value text-primary" id="revRoas">-</div>
+                        <div class="kpi-label">Blended ROAS</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="crm-kpi-card">
+                        <div class="kpi-value" style="color:#7c3aed;" id="revClv">-</div>
+                        <div class="kpi-label">Est. Client Lifetime Value</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="crm-kpi-card">
+                        <div class="kpi-value" style="color:#dc2626;" id="revChurn">-</div>
+                        <div class="kpi-label">Churn Cost (Lost Value)</div>
+                    </div>
+                </div>
+            </div>
+            <!-- Acquisition Economics -->
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="p-3" style="background:#f0fdf4; border-radius:10px; border:1px solid #bbf7d0;">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <span class="fw-bold" style="font-size:.88rem;"><i class="bi bi-arrow-up-circle text-success me-1"></i> When You Acquire a Client</span>
+                        </div>
+                        <div class="d-flex gap-4" style="font-size:.84rem;">
+                            <div>
+                                <div class="text-muted">Avg Monthly Value</div>
+                                <div class="fw-bold text-success" id="revMonthlyVal">-</div>
+                            </div>
+                            <div>
+                                <div class="text-muted">Lifetime Value</div>
+                                <div class="fw-bold text-success" id="revLifetimeVal">-</div>
+                            </div>
+                            <div>
+                                <div class="text-muted">Cost to Acquire</div>
+                                <div class="fw-bold" id="revCpa" style="color:#2563eb;">-</div>
+                            </div>
+                            <div>
+                                <div class="text-muted">ROI per Client</div>
+                                <div class="fw-bold" id="revRoi" style="color:#16a34a;">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="p-3" style="background:#fef2f2; border-radius:10px; border:1px solid #fecaca;">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <span class="fw-bold" style="font-size:.88rem;"><i class="bi bi-arrow-down-circle text-danger me-1"></i> When You Lose a Client</span>
+                        </div>
+                        <div class="d-flex gap-4" style="font-size:.84rem;">
+                            <div>
+                                <div class="text-muted">Clients Lost</div>
+                                <div class="fw-bold text-danger" id="revChurnCount">-</div>
+                            </div>
+                            <div>
+                                <div class="text-muted">Monthly Revenue Lost</div>
+                                <div class="fw-bold text-danger" id="revChurnMonthly">-</div>
+                            </div>
+                            <div>
+                                <div class="text-muted">Total Lifetime Value Lost</div>
+                                <div class="fw-bold text-danger" id="revChurnTotal">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-2 text-end">
+                <small class="text-muted" style="font-size:.75rem;">Revenue based on <span id="revAvgPrice">$0</span>/visit avg, ~3.5 visits/client/month, ~18 month avg retention</small>
+            </div>
+        </div>
+    </div>
+
     <!-- Tabs -->
     <ul class="nav nav-tabs mb-0" role="tablist" style="border-bottom: 2px solid #e2e8f0;">
         <li class="nav-item">
@@ -424,6 +518,56 @@ function loadCrmData() {
             function(c) { return (c.clean_up_frequency || '').replace(/_/g, ' '); },
             function(c) { return c.created_at ? c.created_at.substring(0, 10) : '-'; }
         ]);
+
+        // Revenue Intelligence
+        var rev = data.revenue || {};
+        var revSection = document.getElementById('revenueSection');
+        revSection.style.display = '';
+        if (!rev.avg_service_price || rev.avg_service_price <= 0) {
+            document.getElementById('revenueNeedPrice').style.display = '';
+            document.getElementById('revenueCards').style.display = 'none';
+        } else {
+            document.getElementById('revenueNeedPrice').style.display = 'none';
+            document.getElementById('revenueCards').style.display = '';
+
+            function fmtDollar(v) { return '$' + (parseFloat(v) || 0).toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}); }
+            function fmtDollar2(v) { return '$' + (parseFloat(v) || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+
+            document.getElementById('revMrr').textContent = fmtDollar(rev.mrr);
+            document.getElementById('revClv').textContent = fmtDollar(rev.estimated_clv);
+            document.getElementById('revChurn').textContent = fmtDollar(rev.churn_cost_total);
+            document.getElementById('revAvgPrice').textContent = fmtDollar2(rev.avg_service_price);
+            document.getElementById('revMonthlyVal').textContent = fmtDollar2(rev.avg_client_monthly_value);
+            document.getElementById('revLifetimeVal').textContent = fmtDollar(rev.estimated_clv);
+            document.getElementById('revChurnCount').textContent = (rev.inactive_clients || 0).toLocaleString();
+            document.getElementById('revChurnMonthly').textContent = fmtDollar(rev.inactive_clients * (rev.avg_client_monthly_value || 0));
+            document.getElementById('revChurnTotal').textContent = fmtDollar(rev.churn_cost_total);
+
+            // ROAS
+            if (rev.blended_roas) {
+                document.getElementById('revRoas').textContent = rev.blended_roas.toFixed(1) + 'x';
+            } else if (rev.ad_spend) {
+                document.getElementById('revRoas').innerHTML = '<span style="font-size:.85rem;color:#94a3b8;">No spend data</span>';
+            } else {
+                document.getElementById('revRoas').innerHTML = '<span style="font-size:.85rem;color:#94a3b8;">Connect ads</span>';
+            }
+
+            // CPA
+            if (rev.cost_per_acquisition) {
+                document.getElementById('revCpa').textContent = fmtDollar2(rev.cost_per_acquisition);
+            } else {
+                document.getElementById('revCpa').innerHTML = '<span style="color:#94a3b8;">-</span>';
+            }
+
+            // ROI per client
+            if (rev.cost_per_acquisition && rev.estimated_clv) {
+                var roi = ((rev.estimated_clv - rev.cost_per_acquisition) / rev.cost_per_acquisition * 100).toFixed(0);
+                document.getElementById('revRoi').textContent = roi + '%';
+                document.getElementById('revRoi').style.color = roi > 0 ? '#16a34a' : '#dc2626';
+            } else {
+                document.getElementById('revRoi').innerHTML = '<span style="color:#94a3b8;">-</span>';
+            }
+        }
 
         loader.style.display = 'none';
         content.style.display = '';

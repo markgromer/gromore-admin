@@ -368,15 +368,15 @@ def sng_get_org_data(brand, org_slug):
 
 
 def pull_sweepandgo_revenue(brand, month=None):
-    """Pull revenue from Sweep and Go by summing completed job payments for a month.
-    Uses dispatch board to iterate over days and count completed jobs + payments.
+    """Pull revenue from Sweep and Go for a month.
+    Uses completed job count × average service price for revenue estimation.
+    If avg_service_price is set on the brand, uses that; otherwise returns job counts only.
     Returns (revenue, job_count, error_or_None)."""
     if not month:
         from datetime import datetime
         month = datetime.now().strftime("%Y-%m")
 
     import calendar
-    from datetime import date
 
     try:
         year, mon = int(month[:4]), int(month[5:7])
@@ -384,8 +384,6 @@ def pull_sweepandgo_revenue(brand, month=None):
     except (ValueError, IndexError):
         return 0, 0, f"Invalid month format: {month}"
 
-    # Get all active clients and sum payments for the month
-    total_revenue = 0.0
     total_jobs = 0
 
     # Use dispatch board day by day for the month
@@ -400,14 +398,70 @@ def pull_sweepandgo_revenue(brand, month=None):
             if job.get("status_id") == 2 or job.get("status_name") == "completed":
                 total_jobs += 1
 
-    # For actual revenue, pull client payment details
-    # First get active client count as a KPI
-    count_result, _ = sng_count_active_clients(brand)
-    active_count = 0
-    if isinstance(count_result, dict):
-        active_count = count_result.get("data", 0)
+    # Estimate revenue using avg service price
+    avg_price = 0.0
+    try:
+        avg_price = float(brand.get("crm_avg_service_price") or 0)
+    except (ValueError, TypeError):
+        avg_price = 0.0
+
+    total_revenue = round(total_jobs * avg_price, 2) if avg_price > 0 else 0.0
 
     return total_revenue, total_jobs, None
+
+
+def sng_estimate_revenue_snapshot(brand):
+    """Quick revenue intelligence without iterating the full month.
+    Uses report API counts × avg service price for fast estimation.
+    Returns dict with mrr, avg_client_value, active, inactive counts."""
+    avg_price = 0.0
+    try:
+        avg_price = float(brand.get("crm_avg_service_price") or 0)
+    except (ValueError, TypeError):
+        avg_price = 0.0
+
+    # Get counts from report API (fast, single calls)
+    active_count = 0
+    r, _ = sng_count_active_clients(brand)
+    if isinstance(r, dict):
+        active_count = r.get("data", 0) or 0
+
+    inactive_count = 0
+    r, _ = sng_get_inactive_clients(brand, page=1)
+    if isinstance(r, dict):
+        inactive_count = (r.get("paginate") or {}).get("total", len(r.get("data", [])))
+
+    jobs_count = 0
+    r, _ = sng_count_jobs(brand)
+    if isinstance(r, dict):
+        jobs_count = r.get("data", 0) or 0
+
+    # Frequency estimation: average ~3.5 visits per client per month
+    # (mix of weekly=4, biweekly=2, monthly=1, weighted toward weekly)
+    avg_monthly_visits = 3.5
+
+    # Monthly recurring revenue estimate
+    mrr = round(active_count * avg_monthly_visits * avg_price, 2) if avg_price > 0 else 0
+    # Average client monthly value
+    avg_client_monthly = round(avg_monthly_visits * avg_price, 2) if avg_price > 0 else 0
+    # Estimated annual client value (avg retention ~18 months in service businesses)
+    avg_retention_months = 18
+    estimated_clv = round(avg_client_monthly * avg_retention_months, 2)
+    # Churn cost: inactive clients × CLV (value lost)
+    churn_cost = round(inactive_count * estimated_clv, 2) if avg_price > 0 else 0
+
+    return {
+        "avg_service_price": avg_price,
+        "active_clients": active_count,
+        "inactive_clients": inactive_count,
+        "total_jobs": jobs_count,
+        "avg_monthly_visits": avg_monthly_visits,
+        "mrr": mrr,
+        "avg_client_monthly_value": avg_client_monthly,
+        "estimated_clv": estimated_clv,
+        "churn_cost_total": churn_cost,
+        "avg_retention_months": avg_retention_months,
+    }
 
 
 def pull_sweepandgo_customers(brand, page=1):
