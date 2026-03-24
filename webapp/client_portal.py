@@ -3934,12 +3934,15 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
                     tags="", featured_image_url="", status="publish"):
     """Publish or update a post on WordPress via REST API. Returns dict."""
     import requests as req_lib
+    import base64
 
     wp_url = brand["wp_site_url"].strip().rstrip("/")
     wp_user = brand["wp_username"].strip()
     wp_pass = brand["wp_app_password"].strip()
 
     api_url = f"{wp_url}/wp-json/wp/v2/posts"
+    token = base64.b64encode(f"{wp_user}:{wp_pass}".encode()).decode()
+    headers = {"Authorization": f"Basic {token}"}
 
     post_data = {
         "title": seo_title or title,
@@ -3962,7 +3965,7 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
         resp = req_lib.post(
             api_url,
             json=post_data,
-            auth=(wp_user, wp_pass),
+            headers=headers,
             timeout=30,
         )
         if resp.status_code in (200, 201):
@@ -4425,14 +4428,43 @@ def client_blog_test_connection():
         return jsonify(ok=False, error="WordPress not configured.")
 
     import requests as req_lib
+    import base64
     wp_url = brand["wp_site_url"].strip().rstrip("/")
     wp_user = brand["wp_username"].strip()
     wp_pass = brand["wp_app_password"].strip()
 
+    # Step 1: Check if the REST API is reachable at all (no auth)
+    try:
+        probe = req_lib.get(f"{wp_url}/wp-json/", timeout=15)
+        if probe.status_code == 404:
+            return jsonify(ok=False, error=f"REST API not found at {wp_url}/wp-json/. Verify the site URL is correct and that the REST API is not disabled by a security plugin (e.g. Wordfence, iThemes).")
+        if probe.status_code >= 500:
+            return jsonify(ok=False, error=f"WordPress returned a server error ({probe.status_code}). The site may be down or misconfigured.")
+    except req_lib.exceptions.ConnectionError:
+        return jsonify(ok=False, error=f"Could not connect to {wp_url}. Check the URL and make sure the site is online.")
+    except req_lib.exceptions.Timeout:
+        return jsonify(ok=False, error=f"Connection to {wp_url} timed out. The server may be slow or blocking requests.")
+    except Exception as e:
+        return jsonify(ok=False, error=f"Connection error: {str(e)[:120]}")
+
+    # Step 2: Check if Application Passwords are enabled
+    try:
+        api_info = probe.json()
+        auth_methods = api_info.get("authentication", {})
+        if not auth_methods.get("application-passwords"):
+            return jsonify(ok=False, error="Application Passwords are not enabled on this WordPress site. Go to WordPress Admin > Users > Your Profile and check that Application Passwords are available. Some hosting providers or security plugins disable this feature.")
+    except Exception:
+        pass  # Non-standard response, continue anyway
+
+    # Step 3: Authenticate - use explicit Authorization header (some hosts strip
+    # the auth= parameter but keep raw headers)
+    token = base64.b64encode(f"{wp_user}:{wp_pass}".encode()).decode()
+    headers = {"Authorization": f"Basic {token}"}
+
     try:
         resp = req_lib.get(
             f"{wp_url}/wp-json/wp/v2/users/me?context=edit",
-            auth=(wp_user, wp_pass),
+            headers=headers,
             timeout=15,
         )
         if resp.status_code == 200:
@@ -4446,11 +4478,21 @@ def client_blog_test_connection():
             else:
                 return jsonify(ok=False, error=f"Connected as {name}, but this user does not have permission to create posts. The WordPress user needs an Editor or Administrator role.")
         elif resp.status_code == 401:
-            return jsonify(ok=False, error="Authentication failed. Check your username and application password. Make sure the app password has no extra spaces.")
+            # Detailed 401 diagnostics
+            body = resp.text[:300]
+            hints = []
+            if "incorrect_password" in body or "invalid_password" in body:
+                hints.append("WordPress says the password is wrong.")
+            if "invalid_username" in body:
+                hints.append(f"WordPress says the username '{wp_user}' does not exist. Use your WordPress login username (not your email).")
+            if not hints:
+                hints.append("WordPress rejected the credentials.")
+            hints.append("Make sure you're using an Application Password (not your regular WP login password). Generate one at WordPress Admin > Users > Profile > Application Passwords.")
+            return jsonify(ok=False, error=" ".join(hints))
         elif resp.status_code == 403:
-            return jsonify(ok=False, error="User authenticated but forbidden. The REST API may be restricted by a security plugin.")
+            return jsonify(ok=False, error="User authenticated but forbidden (403). A security plugin may be blocking REST API access, or your hosting provider may block the Authorization header. Check Wordfence, Sucuri, or .htaccess rules.")
         else:
-            return jsonify(ok=False, error=f"WordPress returned HTTP {resp.status_code}. Verify the site URL is correct.")
+            return jsonify(ok=False, error=f"WordPress returned HTTP {resp.status_code}. Response: {resp.text[:150]}")
     except Exception as e:
         return jsonify(ok=False, error=str(e)[:150])
 
@@ -5203,6 +5245,23 @@ def client_feedback_submit():
     return redirect(url_for("client.client_feedback"))
 
 
+# ── Drip Unsubscribe (public, no auth) ──
+
+@client_bp.route("/unsubscribe/<int:enrollment_id>")
+def drip_unsubscribe(enrollment_id):
+    """One-click unsubscribe from drip emails."""
+    db = _get_db()
+    db.complete_drip_enrollment(enrollment_id, "unsubscribed")
+    return """<!DOCTYPE html>
+<html><head><title>Unsubscribed</title>
+<style>body{font-family:Inter,Arial,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#f9fafb;}
+.card{text-align:center;padding:40px;background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.1);max-width:420px;}
+h2{color:#1f2937;margin-bottom:8px;}p{color:#6b7280;}</style></head>
+<body><div class="card"><h2>You've been unsubscribed</h2>
+<p>You won't receive any more emails from this sequence. If this was a mistake, reply to any previous email and we'll re-enroll you.</p>
+</div></body></html>""", 200
+
+
 # ── Public Signup (no auth, cross-origin JSON) ──
 
 @client_bp.route("/signup", methods=["POST", "OPTIONS"])
@@ -5490,17 +5549,31 @@ def public_assess():
 
     # ── Save lead ──
     db = _get_db()
+    lead_id = None
     try:
-        db._conn().execute(
+        conn = db._conn()
+        conn.execute(
             """INSERT INTO assessment_leads
                (name, email, business_name, industry, service_area, website, gmb_url, facebook_url, overall_score, results_json)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             [name, email, business_name, industry, service_area, website, gmb_url, facebook_url,
              results["overall_score"], _json.dumps(results)],
         )
-        db._conn().commit()
+        conn.commit()
+        row = conn.execute("SELECT last_insert_rowid() AS id").fetchone()
+        lead_id = row["id"] if row else None
     except Exception:
         pass  # Don't fail the assessment if DB save fails
+
+    # ── Auto-enroll in drip sequence (only if user consented) ──
+    email_consent = payload.get("email_consent")
+    if email_consent:
+        try:
+            seq = db.get_active_drip_sequence_for_trigger("assessment")
+            if seq:
+                db.enroll_in_drip(seq["id"], email, name, lead_source="assessment", lead_id=lead_id)
+        except Exception:
+            pass
 
     return _cors_json({"ok": True, "data": results})
 

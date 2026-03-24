@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}{{ seq.name }} - Drip Sequence{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-4">
+    <a href="{{ url_for('drip_dashboard') }}" class="btn btn-outline-secondary btn-sm me-3"><i class="bi bi-arrow-left"></i></a>
+    <h2 class="mb-0">{{ seq.name }}</h2>
+    {% if seq.is_active %}
+    <span class="badge bg-success ms-3">Active</span>
+    {% else %}
+    <span class="badge bg-secondary ms-3">Inactive</span>
+    {% endif %}
+</div>
+
+<div class="row g-4">
+
+    <!-- Sequence Settings -->
+    <div class="col-lg-4">
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0">Settings</h5></div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('drip_sequence_update', seq_id=seq.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Name</label>
+                        <input type="text" name="name" class="form-control form-control-sm" value="{{ seq.name }}" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Description</label>
+                        <textarea name="description" class="form-control form-control-sm" rows="2">{{ seq.description or '' }}</textarea>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="hidden" name="is_active" value="0">
+                        <input type="checkbox" name="is_active" value="1" class="form-check-input" id="seqActive" {% if seq.is_active %}checked{% endif %}>
+                        <label class="form-check-label" for="seqActive">Active</label>
+                    </div>
+                    <button class="btn btn-primary btn-sm">Save Settings</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body text-center">
+                <form method="POST" action="{{ url_for('drip_sequence_delete', seq_id=seq.id) }}" onsubmit="return confirm('Delete this sequence and all its steps?')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> Delete Sequence</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Steps -->
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Steps ({{ steps|length }})</h5>
+                <button class="btn btn-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#newStepForm"><i class="bi bi-plus"></i> Add Step</button>
+            </div>
+
+            <!-- New Step Form -->
+            <div class="collapse" id="newStepForm">
+                <div class="card-body border-bottom">
+                    <form method="POST" action="{{ url_for('drip_step_create', seq_id=seq.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="row g-2 mb-2">
+                            <div class="col-sm-4">
+                                <label class="form-label small fw-semibold">Step Order</label>
+                                <input type="number" name="step_order" class="form-control form-control-sm" value="{{ (steps|length) + 1 }}" min="1">
+                            </div>
+                            <div class="col-sm-4">
+                                <label class="form-label small fw-semibold">Delay (days)</label>
+                                <input type="number" name="delay_days" class="form-control form-control-sm" value="3" min="0">
+                            </div>
+                            <div class="col-sm-4">
+                                <label class="form-label small fw-semibold">Subject</label>
+                                <input type="text" name="subject" class="form-control form-control-sm" required>
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small fw-semibold">HTML Body</label>
+                            <textarea name="body_html" class="form-control form-control-sm" rows="6" required placeholder="Use {{name}}, {{email}}, {{unsubscribe_url}}, {{signup_url}}, {{assess_url}} as merge fields"></textarea>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small fw-semibold">Plain Text (optional fallback)</label>
+                            <textarea name="body_text" class="form-control form-control-sm" rows="3"></textarea>
+                        </div>
+                        <button class="btn btn-primary btn-sm">Add Step</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Existing Steps -->
+            {% for step in steps %}
+            <div class="card-body border-bottom">
+                <form method="POST" action="{{ url_for('drip_step_update', step_id=step.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="mb-0">
+                            <span class="badge bg-dark me-1">Step {{ step.step_order }}</span>
+                            {{ step.subject }}
+                        </h6>
+                        <small class="text-muted">Delay: {{ step.delay_days }}d</small>
+                    </div>
+
+                    <div class="collapse" id="editStep{{ step.id }}">
+                        <div class="row g-2 mb-2">
+                            <div class="col-sm-4">
+                                <label class="form-label small fw-semibold">Step Order</label>
+                                <input type="number" name="step_order" class="form-control form-control-sm" value="{{ step.step_order }}" min="1">
+                            </div>
+                            <div class="col-sm-4">
+                                <label class="form-label small fw-semibold">Delay (days)</label>
+                                <input type="number" name="delay_days" class="form-control form-control-sm" value="{{ step.delay_days }}" min="0">
+                            </div>
+                            <div class="col-sm-4">
+                                <label class="form-label small fw-semibold">Subject</label>
+                                <input type="text" name="subject" class="form-control form-control-sm" value="{{ step.subject }}" required>
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small fw-semibold">HTML Body</label>
+                            <textarea name="body_html" class="form-control form-control-sm" rows="6">{{ step.body_html }}</textarea>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small fw-semibold">Plain Text</label>
+                            <textarea name="body_text" class="form-control form-control-sm" rows="3">{{ step.body_text }}</textarea>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary btn-sm">Save Step</button>
+                </form>
+                            <form method="POST" action="{{ url_for('drip_step_delete', step_id=step.id) }}" onsubmit="return confirm('Delete this step?')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> Delete</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn btn-outline-secondary btn-sm mt-2" data-bs-toggle="collapse" data-bs-target="#editStep{{ step.id }}">
+                        <i class="bi bi-pencil"></i> Edit
+                    </button>
+            </div>
+            {% else %}
+            <div class="card-body text-center text-muted py-4">
+                No steps yet. Add your first email step above.
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Enrollments for this sequence -->
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0">Enrollments ({{ enrollments|length }})</h5></div>
+            <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light sticky-top">
+                        <tr><th>Email</th><th>Name</th><th>Source</th><th>Step</th><th>Status</th><th>Enrolled</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                        {% for e in enrollments %}
+                        <tr>
+                            <td>{{ e.email }}</td>
+                            <td>{{ e.name or '' }}</td>
+                            <td><small>{{ e.lead_source }}</small></td>
+                            <td>{{ e.current_step }}</td>
+                            <td>
+                                {% if e.status == 'active' %}
+                                <span class="badge bg-primary">Active</span>
+                                {% elif e.status == 'converted' %}
+                                <span class="badge bg-success">Converted</span>
+                                {% elif e.status == 'completed' %}
+                                <span class="badge bg-info">Completed</span>
+                                {% elif e.status == 'unsubscribed' %}
+                                <span class="badge bg-secondary">Unsub</span>
+                                {% endif %}
+                            </td>
+                            <td><small>{{ e.enrolled_at[:10] if e.enrolled_at else '' }}</small></td>
+                            <td>
+                                {% if e.status == 'active' %}
+                                <form method="POST" action="{{ url_for('drip_enrollment_cancel', enrollment_id=e.id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="reason" value="unsubscribed">
+                                    <button class="btn btn-outline-danger btn-sm py-0 px-1" title="Cancel"><i class="bi bi-x"></i></button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="7" class="text-center text-muted py-3">No enrollments in this sequence.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

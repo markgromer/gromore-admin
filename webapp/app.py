@@ -1703,6 +1703,142 @@ def create_app():
         flash("Feature flags updated.", "success")
         return redirect(url_for("feature_flags_page"))
 
+    # ── Drip Campaigns Admin ──
+
+    @app.route("/drip")
+    @login_required
+    def drip_dashboard():
+        stats = db.get_drip_stats()
+        sequences = db.get_drip_sequences()
+        leads = db.get_assessment_leads(limit=50)
+        signup_leads = db.get_signup_leads(limit=50)
+        enrollments = db.get_drip_enrollments(limit=100)
+        recent_sends = db.get_drip_sends(limit=50)
+        return render_template(
+            "drip_campaigns.html",
+            stats=stats, sequences=sequences, leads=leads,
+            signup_leads=signup_leads, enrollments=enrollments,
+            recent_sends=recent_sends,
+        )
+
+    @app.route("/drip/sequence/new", methods=["POST"])
+    @login_required
+    def drip_sequence_create():
+        name = request.form.get("name", "").strip()
+        description = request.form.get("description", "").strip()
+        trigger = request.form.get("trigger", "assessment")
+        if not name:
+            flash("Sequence name is required.", "error")
+            return redirect(url_for("drip_dashboard"))
+        seq_id = db.create_drip_sequence(name, description, trigger)
+        flash(f"Sequence '{name}' created.", "success")
+        return redirect(url_for("drip_sequence_detail", seq_id=seq_id))
+
+    @app.route("/drip/sequence/<int:seq_id>")
+    @login_required
+    def drip_sequence_detail(seq_id):
+        seq = db.get_drip_sequence(seq_id)
+        if not seq:
+            flash("Sequence not found.", "error")
+            return redirect(url_for("drip_dashboard"))
+        steps = db.get_drip_steps(seq_id)
+        enrollments = db.get_drip_enrollments(sequence_id=seq_id)
+        return render_template("drip_sequence_detail.html", seq=seq, steps=steps, enrollments=enrollments)
+
+    @app.route("/drip/sequence/<int:seq_id>/update", methods=["POST"])
+    @login_required
+    def drip_sequence_update(seq_id):
+        name = request.form.get("name", "").strip()
+        description = request.form.get("description", "").strip()
+        is_active = request.form.get("is_active") == "1"
+        db.update_drip_sequence(seq_id, name, description, is_active)
+        flash("Sequence updated.", "success")
+        return redirect(url_for("drip_sequence_detail", seq_id=seq_id))
+
+    @app.route("/drip/sequence/<int:seq_id>/delete", methods=["POST"])
+    @login_required
+    def drip_sequence_delete(seq_id):
+        db.delete_drip_sequence(seq_id)
+        flash("Sequence deleted.", "success")
+        return redirect(url_for("drip_dashboard"))
+
+    @app.route("/drip/sequence/<int:seq_id>/step/new", methods=["POST"])
+    @login_required
+    def drip_step_create(seq_id):
+        step_order = int(request.form.get("step_order", 1))
+        delay_days = int(request.form.get("delay_days", 1))
+        subject = request.form.get("subject", "").strip()
+        body_html = request.form.get("body_html", "").strip()
+        body_text = request.form.get("body_text", "").strip()
+        if not subject or not body_html:
+            flash("Subject and HTML body are required.", "error")
+            return redirect(url_for("drip_sequence_detail", seq_id=seq_id))
+        db.create_drip_step(seq_id, step_order, delay_days, subject, body_html, body_text)
+        flash(f"Step {step_order} added.", "success")
+        return redirect(url_for("drip_sequence_detail", seq_id=seq_id))
+
+    @app.route("/drip/step/<int:step_id>/update", methods=["POST"])
+    @login_required
+    def drip_step_update(step_id):
+        step = db.get_drip_step(step_id)
+        if not step:
+            flash("Step not found.", "error")
+            return redirect(url_for("drip_dashboard"))
+        step_order = int(request.form.get("step_order", step["step_order"]))
+        delay_days = int(request.form.get("delay_days", step["delay_days"]))
+        subject = request.form.get("subject", "").strip()
+        body_html = request.form.get("body_html", "").strip()
+        body_text = request.form.get("body_text", "").strip()
+        db.update_drip_step(step_id, step_order, delay_days, subject, body_html, body_text)
+        flash("Step updated.", "success")
+        return redirect(url_for("drip_sequence_detail", seq_id=step["sequence_id"]))
+
+    @app.route("/drip/step/<int:step_id>/delete", methods=["POST"])
+    @login_required
+    def drip_step_delete(step_id):
+        step = db.get_drip_step(step_id)
+        if not step:
+            flash("Step not found.", "error")
+            return redirect(url_for("drip_dashboard"))
+        seq_id = step["sequence_id"]
+        db.delete_drip_step(step_id)
+        flash("Step deleted.", "success")
+        return redirect(url_for("drip_sequence_detail", seq_id=seq_id))
+
+    @app.route("/drip/enrollment/<int:enrollment_id>/cancel", methods=["POST"])
+    @login_required
+    def drip_enrollment_cancel(enrollment_id):
+        reason = request.form.get("reason", "unsubscribed")
+        db.complete_drip_enrollment(enrollment_id, reason)
+        flash("Enrollment cancelled.", "success")
+        return redirect(url_for("drip_dashboard"))
+
+    @app.route("/drip/process", methods=["POST"])
+    @login_required
+    def drip_process():
+        """Manually trigger drip processing (also called by cron/scheduler)."""
+        from webapp.drip_engine import process_pending_drips
+        sent, failed = process_pending_drips(app.config, db)
+        flash(f"Drip processed: {sent} sent, {failed} failed.", "success" if failed == 0 else "warning")
+        return redirect(url_for("drip_dashboard"))
+
+    @app.route("/drip/enroll", methods=["POST"])
+    @login_required
+    def drip_enroll_manual():
+        """Manually enroll a lead into a sequence."""
+        seq_id = int(request.form.get("sequence_id", 0))
+        email = request.form.get("email", "").strip().lower()
+        name = request.form.get("name", "").strip()
+        if not seq_id or not email:
+            flash("Sequence and email are required.", "error")
+            return redirect(url_for("drip_dashboard"))
+        result = db.enroll_in_drip(seq_id, email, name, lead_source="manual")
+        if result:
+            flash(f"Enrolled {email} in drip.", "success")
+        else:
+            flash(f"{email} is already active in this sequence.", "info")
+        return redirect(url_for("drip_dashboard"))
+
     # ── Beta Testers Admin ──
 
     @app.route("/beta")

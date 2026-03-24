@@ -117,6 +117,9 @@
             <a class="nav-link {% if request.endpoint in ('beta_dashboard', 'beta_approve', 'beta_reject', 'beta_feedback_respond') %}active{% endif %}" href="{{ url_for('beta_dashboard') }}">
                 <i class="bi bi-people"></i> Beta Testers
             </a>
+            <a class="nav-link {% if 'drip' in request.endpoint|default('') %}active{% endif %}" href="{{ url_for('drip_dashboard') }}">
+                <i class="bi bi-send"></i> Drip Campaigns
+            </a>
             <a class="nav-link {% if request.endpoint in ('feature_flags_page', 'feature_flags_update') %}active{% endif %}" href="{{ url_for('feature_flags_page') }}">
                 <i class="bi bi-toggles"></i> Feature Flags
             </a>

@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% block title %}Drip Campaigns{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-4">
+    <h2 class="mb-0"><i class="bi bi-send"></i> Drip Campaigns</h2>
+    <span class="badge bg-primary ms-3">Nurture Engine</span>
+</div>
+
+<!-- Stats Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg">
+        <div class="card text-center" style="border:none;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);">
+            <div class="card-body py-2">
+                <div style="font-size:1.8rem;font-weight:700;color:#3b82f6;">{{ stats.active or 0 }}</div>
+                <small class="text-muted">Active</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card text-center" style="border:none;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);">
+            <div class="card-body py-2">
+                <div style="font-size:1.8rem;font-weight:700;color:#10b981;">{{ stats.converted or 0 }}</div>
+                <small class="text-muted">Converted</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card text-center" style="border:none;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);">
+            <div class="card-body py-2">
+                <div style="font-size:1.8rem;font-weight:700;color:#8b5cf6;">{{ stats.completed or 0 }}</div>
+                <small class="text-muted">Completed</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card text-center" style="border:none;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);">
+            <div class="card-body py-2">
+                <div style="font-size:1.8rem;font-weight:700;color:#6b7280;">{{ stats.unsubscribed or 0 }}</div>
+                <small class="text-muted">Unsubscribed</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card text-center" style="border:none;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);">
+            <div class="card-body py-2">
+                <div style="font-size:1.8rem;font-weight:700;color:#0ea5e9;">{{ stats.emails_sent or 0 }}</div>
+                <small class="text-muted">Emails Sent</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row g-3 mb-4">
+    <div class="col-auto">
+        <form method="POST" action="{{ url_for('drip_process') }}" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-primary btn-sm"><i class="bi bi-play-circle"></i> Process Pending Drips</button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-4">
+
+    <!-- Sequences -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Sequences</h5>
+                <button class="btn btn-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#newSeqForm"><i class="bi bi-plus"></i> New</button>
+            </div>
+            <div class="collapse" id="newSeqForm">
+                <div class="card-body border-bottom">
+                    <form method="POST" action="{{ url_for('drip_sequence_create') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-2">
+                            <input type="text" name="name" class="form-control form-control-sm" placeholder="Sequence name" required>
+                        </div>
+                        <div class="mb-2">
+                            <textarea name="description" class="form-control form-control-sm" rows="2" placeholder="Description (optional)"></textarea>
+                        </div>
+                        <div class="mb-2">
+                            <select name="trigger" class="form-select form-select-sm">
+                                <option value="assessment">Assessment lead</option>
+                                <option value="signup">Signup lead</option>
+                                <option value="manual">Manual only</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary btn-sm">Create Sequence</button>
+                    </form>
+                </div>
+            </div>
+            <div class="list-group list-group-flush">
+                {% for seq in sequences %}
+                <a href="{{ url_for('drip_sequence_detail', seq_id=seq.id) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>{{ seq.name }}</strong>
+                        <br><small class="text-muted">Trigger: {{ seq.trigger }} | {{ seq.description[:60] if seq.description else 'No description' }}</small>
+                    </div>
+                    {% if seq.is_active %}
+                    <span class="badge bg-success">Active</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Inactive</span>
+                    {% endif %}
+                </a>
+                {% else %}
+                <div class="list-group-item text-muted text-center py-4">No sequences yet. Create one to get started.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Manual Enroll -->
+    <div class="col-lg-6">
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0">Manual Enroll</h5></div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('drip_enroll_manual') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-2">
+                        <div class="col-sm-4">
+                            <select name="sequence_id" class="form-select form-select-sm" required>
+                                <option value="">Sequence...</option>
+                                {% for seq in sequences %}
+                                <option value="{{ seq.id }}">{{ seq.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-sm-3">
+                            <input type="email" name="email" class="form-control form-control-sm" placeholder="Email" required>
+                        </div>
+                        <div class="col-sm-3">
+                            <input type="text" name="name" class="form-control form-control-sm" placeholder="Name">
+                        </div>
+                        <div class="col-sm-2">
+                            <button class="btn btn-primary btn-sm w-100">Enroll</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Active Enrollments -->
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0">Enrollments</h5></div>
+            <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light sticky-top">
+                        <tr><th>Email</th><th>Source</th><th>Step</th><th>Status</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                        {% for e in enrollments %}
+                        <tr>
+                            <td>
+                                <strong>{{ e.email }}</strong>
+                                {% if e.name %}<br><small class="text-muted">{{ e.name }}</small>{% endif %}
+                            </td>
+                            <td><small>{{ e.lead_source }}</small></td>
+                            <td>{{ e.current_step }}</td>
+                            <td>
+                                {% if e.status == 'active' %}
+                                <span class="badge bg-primary">Active</span>
+                                {% elif e.status == 'converted' %}
+                                <span class="badge bg-success">Converted</span>
+                                {% elif e.status == 'completed' %}
+                                <span class="badge bg-info">Completed</span>
+                                {% elif e.status == 'unsubscribed' %}
+                                <span class="badge bg-secondary">Unsub</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if e.status == 'active' %}
+                                <form method="POST" action="{{ url_for('drip_enrollment_cancel', enrollment_id=e.id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="reason" value="unsubscribed">
+                                    <button class="btn btn-outline-danger btn-sm py-0 px-1" title="Cancel"><i class="bi bi-x"></i></button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="text-center text-muted py-3">No enrollments yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Leads Tabs -->
+<div class="card mt-4">
+    <div class="card-header">
+        <ul class="nav nav-tabs card-header-tabs" role="tablist">
+            <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#assessLeads">Assessment Leads</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#signupLeads">Signup Leads</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#recentSends">Recent Sends</a></li>
+        </ul>
+    </div>
+    <div class="tab-content">
+        <!-- Assessment Leads -->
+        <div class="tab-pane fade show active" id="assessLeads">
+            <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light sticky-top">
+                        <tr><th>Name</th><th>Email</th><th>Business</th><th>Industry</th><th>Score</th><th>Date</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for l in leads %}
+                        <tr>
+                            <td>{{ l.name }}</td>
+                            <td>{{ l.email }}</td>
+                            <td>{{ l.business_name }}</td>
+                            <td>{{ l.industry }}</td>
+                            <td>
+                                {% if l.overall_score %}
+                                <span class="badge {% if l.overall_score >= 70 %}bg-success{% elif l.overall_score >= 40 %}bg-warning text-dark{% else %}bg-danger{% endif %}">{{ l.overall_score }}</span>
+                                {% endif %}
+                            </td>
+                            <td><small>{{ l.created_at[:10] if l.created_at else '' }}</small></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" class="text-center text-muted py-3">No assessment leads yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Signup Leads -->
+        <div class="tab-pane fade" id="signupLeads">
+            <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light sticky-top">
+                        <tr><th>Name</th><th>Email</th><th>Business</th><th>Industry</th><th>Date</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for l in signup_leads %}
+                        <tr>
+                            <td>{{ l.name }}</td>
+                            <td>{{ l.email }}</td>
+                            <td>{{ l.business_name }}</td>
+                            <td>{{ l.industry }}</td>
+                            <td><small>{{ l.created_at[:10] if l.created_at else '' }}</small></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="text-center text-muted py-3">No signup leads yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Recent Sends -->
+        <div class="tab-pane fade" id="recentSends">
+            <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light sticky-top">
+                        <tr><th>Enrollment</th><th>Step</th><th>Status</th><th>Sent At</th><th>Error</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for s in recent_sends %}
+                        <tr>
+                            <td>{{ s.enrollment_id }}</td>
+                            <td>{{ s.step_id }}</td>
+                            <td>
+                                {% if s.status == 'sent' %}
+                                <span class="badge bg-success">Sent</span>
+                                {% else %}
+                                <span class="badge bg-danger">Failed</span>
+                                {% endif %}
+                            </td>
+                            <td><small>{{ s.sent_at[:16] if s.sent_at else '' }}</small></td>
+                            <td><small class="text-danger">{{ s.error[:80] if s.error else '' }}</small></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="text-center text-muted py-3">No sends yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

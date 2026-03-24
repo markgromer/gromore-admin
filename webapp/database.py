@@ -553,6 +553,68 @@ class WebDB:
             );
         """)
 
+        # ── Drip campaign tables ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS drip_sequences (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                trigger TEXT NOT NULL DEFAULT 'assessment',
+                is_active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS drip_steps (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sequence_id INTEGER NOT NULL,
+                step_order INTEGER NOT NULL DEFAULT 1,
+                delay_days INTEGER NOT NULL DEFAULT 1,
+                subject TEXT NOT NULL,
+                body_html TEXT NOT NULL DEFAULT '',
+                body_text TEXT NOT NULL DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (sequence_id) REFERENCES drip_sequences(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS drip_enrollments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sequence_id INTEGER NOT NULL,
+                email TEXT NOT NULL COLLATE NOCASE,
+                name TEXT DEFAULT '',
+                lead_source TEXT DEFAULT 'assessment',
+                lead_id INTEGER DEFAULT NULL,
+                current_step INTEGER DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'active',
+                enrolled_at TEXT DEFAULT (datetime('now')),
+                completed_at TEXT DEFAULT NULL,
+                converted_at TEXT DEFAULT NULL,
+                unsubscribed_at TEXT DEFAULT NULL,
+                FOREIGN KEY (sequence_id) REFERENCES drip_sequences(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_drip_enrollments_status
+            ON drip_enrollments(status);
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_drip_enrollments_email
+            ON drip_enrollments(email);
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS drip_sends (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                enrollment_id INTEGER NOT NULL,
+                step_id INTEGER NOT NULL,
+                sent_at TEXT DEFAULT (datetime('now')),
+                status TEXT NOT NULL DEFAULT 'sent',
+                error TEXT DEFAULT '',
+                FOREIGN KEY (enrollment_id) REFERENCES drip_enrollments(id) ON DELETE CASCADE,
+                FOREIGN KEY (step_id) REFERENCES drip_steps(id) ON DELETE CASCADE
+            );
+        """)
+
         conn.commit()
 
         # ── Seed default feature flags ──
@@ -1201,6 +1263,11 @@ class WebDB:
             conn.commit()
             row = conn.execute("SELECT id FROM client_users WHERE email = ?", (email,)).fetchone()
             conn.close()
+            # Auto-remove from drip campaigns on conversion
+            try:
+                self.convert_drip_by_email(email.lower())
+            except Exception:
+                pass
             return int(row["id"]) if row else None
         except sqlite3.IntegrityError:
             conn.close()
@@ -2602,3 +2669,264 @@ class WebDB:
         ).fetchone()
         conn.close()
         return row is not None
+
+    # ── Drip Campaigns ──
+
+    def get_drip_sequences(self):
+        conn = self._conn()
+        rows = conn.execute("SELECT * FROM drip_sequences ORDER BY id").fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_drip_sequence(self, seq_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM drip_sequences WHERE id = ?", (seq_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def create_drip_sequence(self, name, description="", trigger="assessment"):
+        conn = self._conn()
+        conn.execute(
+            "INSERT INTO drip_sequences (name, description, trigger) VALUES (?, ?, ?)",
+            (name, description, trigger),
+        )
+        conn.commit()
+        row = conn.execute("SELECT last_insert_rowid() AS id").fetchone()
+        seq_id = row["id"]
+        conn.close()
+        return seq_id
+
+    def update_drip_sequence(self, seq_id, name, description, is_active):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE drip_sequences SET name = ?, description = ?, is_active = ? WHERE id = ?",
+            (name, description, 1 if is_active else 0, seq_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def delete_drip_sequence(self, seq_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM drip_sequences WHERE id = ?", (seq_id,))
+        conn.commit()
+        conn.close()
+
+    def get_drip_steps(self, sequence_id):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM drip_steps WHERE sequence_id = ? ORDER BY step_order", (sequence_id,)
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_drip_step(self, step_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM drip_steps WHERE id = ?", (step_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def create_drip_step(self, sequence_id, step_order, delay_days, subject, body_html, body_text=""):
+        conn = self._conn()
+        conn.execute(
+            "INSERT INTO drip_steps (sequence_id, step_order, delay_days, subject, body_html, body_text) VALUES (?, ?, ?, ?, ?, ?)",
+            (sequence_id, step_order, delay_days, subject, body_html, body_text),
+        )
+        conn.commit()
+        conn.close()
+
+    def update_drip_step(self, step_id, step_order, delay_days, subject, body_html, body_text=""):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE drip_steps SET step_order = ?, delay_days = ?, subject = ?, body_html = ?, body_text = ? WHERE id = ?",
+            (step_order, delay_days, subject, body_html, body_text, step_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def delete_drip_step(self, step_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM drip_steps WHERE id = ?", (step_id,))
+        conn.commit()
+        conn.close()
+
+    # Enrollments
+
+    def enroll_in_drip(self, sequence_id, email, name="", lead_source="assessment", lead_id=None):
+        """Enroll a lead unless already active in this sequence."""
+        email = (email or "").strip().lower()
+        if not email:
+            return None
+        conn = self._conn()
+        existing = conn.execute(
+            "SELECT id FROM drip_enrollments WHERE sequence_id = ? AND LOWER(email) = ? AND status = 'active'",
+            (sequence_id, email),
+        ).fetchone()
+        if existing:
+            conn.close()
+            return None
+        conn.execute(
+            "INSERT INTO drip_enrollments (sequence_id, email, name, lead_source, lead_id, status) VALUES (?, ?, ?, ?, ?, 'active')",
+            (sequence_id, email, name, lead_source, lead_id),
+        )
+        conn.commit()
+        row = conn.execute("SELECT last_insert_rowid() AS id").fetchone()
+        eid = row["id"]
+        conn.close()
+        return eid
+
+    def get_drip_enrollments(self, sequence_id=None, status=None, limit=200):
+        conn = self._conn()
+        sql = "SELECT * FROM drip_enrollments WHERE 1=1"
+        params = []
+        if sequence_id:
+            sql += " AND sequence_id = ?"
+            params.append(sequence_id)
+        if status:
+            sql += " AND status = ?"
+            params.append(status)
+        sql += " ORDER BY enrolled_at DESC LIMIT ?"
+        params.append(limit)
+        rows = conn.execute(sql, params).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_pending_drip_sends(self):
+        """Return active enrollments that have a next step due based on delay_days."""
+        conn = self._conn()
+        rows = conn.execute("""
+            SELECT e.id AS enrollment_id, e.sequence_id, e.email, e.name,
+                   e.current_step, e.enrolled_at, e.lead_source,
+                   s.id AS step_id, s.step_order, s.delay_days,
+                   s.subject, s.body_html, s.body_text
+            FROM drip_enrollments e
+            JOIN drip_steps s ON s.sequence_id = e.sequence_id
+                AND s.step_order = e.current_step + 1
+            JOIN drip_sequences seq ON seq.id = e.sequence_id AND seq.is_active = 1
+            WHERE e.status = 'active'
+              AND datetime(e.enrolled_at, '+' || (
+                  SELECT COALESCE(SUM(ds.delay_days), 0)
+                  FROM drip_steps ds
+                  WHERE ds.sequence_id = e.sequence_id
+                    AND ds.step_order <= e.current_step + 1
+              ) || ' days') <= datetime('now')
+        """).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def record_drip_send(self, enrollment_id, step_id, expected_step, status="sent", error=""):
+        """Record a send and advance step only if current_step matches expected_step (race guard)."""
+        conn = self._conn()
+        conn.execute(
+            "INSERT INTO drip_sends (enrollment_id, step_id, status, error) VALUES (?, ?, ?, ?)",
+            (enrollment_id, step_id, status, error),
+        )
+        if status == "sent":
+            conn.execute(
+                "UPDATE drip_enrollments SET current_step = current_step + 1 WHERE id = ? AND current_step = ?",
+                (enrollment_id, expected_step),
+            )
+        conn.commit()
+        conn.close()
+
+    def complete_drip_enrollment(self, enrollment_id, reason="completed"):
+        conn = self._conn()
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if reason == "converted":
+            conn.execute(
+                "UPDATE drip_enrollments SET status = 'converted', converted_at = ? WHERE id = ?",
+                (ts, enrollment_id),
+            )
+        elif reason == "unsubscribed":
+            conn.execute(
+                "UPDATE drip_enrollments SET status = 'unsubscribed', unsubscribed_at = ? WHERE id = ?",
+                (ts, enrollment_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE drip_enrollments SET status = 'completed', completed_at = ? WHERE id = ?",
+                (ts, enrollment_id),
+            )
+        conn.commit()
+        conn.close()
+
+    def check_and_complete_finished_enrollments(self):
+        conn = self._conn()
+        conn.execute("""
+            UPDATE drip_enrollments SET status = 'completed', completed_at = datetime('now')
+            WHERE status = 'active'
+              AND current_step >= (
+                  SELECT MAX(step_order) FROM drip_steps
+                  WHERE drip_steps.sequence_id = drip_enrollments.sequence_id
+              )
+        """)
+        conn.commit()
+        conn.close()
+
+    def convert_drip_by_email(self, email):
+        """When a lead converts (signs up as client), remove them from all active drips."""
+        conn = self._conn()
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        conn.execute(
+            "UPDATE drip_enrollments SET status = 'converted', converted_at = ? WHERE email = ? AND status = 'active'",
+            (ts, email),
+        )
+        conn.execute(
+            "UPDATE assessment_leads SET converted_to_brand_id = -1 WHERE email = ? AND converted_to_brand_id IS NULL",
+            (email,),
+        )
+        conn.execute(
+            "UPDATE signup_leads SET converted_to_brand_id = -1 WHERE email = ? AND converted_to_brand_id IS NULL",
+            (email,),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_drip_sends(self, enrollment_id=None, limit=100):
+        conn = self._conn()
+        if enrollment_id:
+            rows = conn.execute(
+                "SELECT * FROM drip_sends WHERE enrollment_id = ? ORDER BY sent_at DESC LIMIT ?",
+                (enrollment_id, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM drip_sends ORDER BY sent_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_drip_stats(self):
+        conn = self._conn()
+        total = conn.execute("SELECT COUNT(*) FROM drip_enrollments").fetchone()[0]
+        active = conn.execute("SELECT COUNT(*) FROM drip_enrollments WHERE status = 'active'").fetchone()[0]
+        completed = conn.execute("SELECT COUNT(*) FROM drip_enrollments WHERE status = 'completed'").fetchone()[0]
+        converted = conn.execute("SELECT COUNT(*) FROM drip_enrollments WHERE status = 'converted'").fetchone()[0]
+        unsubscribed = conn.execute("SELECT COUNT(*) FROM drip_enrollments WHERE status = 'unsubscribed'").fetchone()[0]
+        emails_sent = conn.execute("SELECT COUNT(*) FROM drip_sends WHERE status = 'sent'").fetchone()[0]
+        conn.close()
+        return {
+            "total": total, "active": active, "completed": completed,
+            "converted": converted, "unsubscribed": unsubscribed,
+            "emails_sent": emails_sent,
+        }
+
+    def get_assessment_leads(self, limit=200):
+        conn = self._conn()
+        rows = conn.execute("SELECT * FROM assessment_leads ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_signup_leads(self, limit=200):
+        conn = self._conn()
+        rows = conn.execute("SELECT * FROM signup_leads ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_active_drip_sequence_for_trigger(self, trigger):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM drip_sequences WHERE trigger = ? AND is_active = 1 ORDER BY id LIMIT 1",
+            (trigger,),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
