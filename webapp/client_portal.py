@@ -4464,7 +4464,6 @@ def client_save_sng():
 
     api_key = request.form.get("sng_api_key", "").strip()
     org_slug = request.form.get("sng_org_slug", "").strip()
-    avg_price = request.form.get("sng_avg_service_price", "").strip()
 
     # Set CRM type to sweepandgo
     db.update_brand_text_field(brand_id, "crm_type", "sweepandgo")
@@ -4474,10 +4473,6 @@ def client_save_sng():
         db.update_brand_text_field(brand_id, "crm_api_key", api_key)
 
     db.update_brand_text_field(brand_id, "crm_pipeline_id", org_slug)
-
-    # Average service price for revenue estimation
-    if avg_price:
-        db.update_brand_number_field(brand_id, "crm_avg_service_price", avg_price)
 
     flash("Sweep and Go settings saved.", "success")
     return redirect(url_for("client.client_settings"))
@@ -4623,7 +4618,7 @@ def client_crm_data():
                     brand_id, month,
                     closed_revenue=rev["mrr"],
                     closed_deals=rev["active_clients"],
-                    notes="SNG auto-sync (estimated MRR)"
+                    notes="SNG auto-sync (real payments)"
                 )
             except Exception:
                 pass
@@ -4632,6 +4627,64 @@ def client_crm_data():
         data["revenue"] = {}
 
     return jsonify(data)
+
+
+@client_bp.route("/crm/sng/probe")
+@client_login_required
+def client_sng_probe():
+    """Diagnostic: inspect raw SNG API response shapes to discover revenue fields."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand or brand.get("crm_type") != "sweepandgo" or not brand.get("crm_api_key"):
+        return jsonify(error="SNG not configured"), 400
+
+    from webapp.crm_bridge import (
+        sng_get_active_clients, sng_get_dispatch_board, sng_get_client_details,
+        sng_get_free_quotes,
+    )
+    from datetime import datetime
+
+    probe = {}
+
+    # Sample 1 active client (full record)
+    r, e = sng_get_active_clients(brand, page=1)
+    if isinstance(r, dict) and r.get("data"):
+        first_client = r["data"][0] if r["data"] else {}
+        probe["active_client_sample_keys"] = sorted(first_client.keys()) if isinstance(first_client, dict) else str(type(first_client))
+        probe["active_client_sample"] = first_client
+
+        # If we have a client ID, probe client_details
+        client_id = first_client.get("id") or first_client.get("client_id")
+        if client_id:
+            dr, de = sng_get_client_details(brand, client_id)
+            probe["client_details_sample_keys"] = sorted(dr.keys()) if isinstance(dr, dict) else str(type(dr))
+            probe["client_details_sample"] = dr
+            if de:
+                probe["client_details_error"] = de
+    else:
+        probe["active_client_error"] = e
+
+    # Sample 1 dispatch board day (today)
+    today = datetime.now().strftime("%Y-%m-%d")
+    r, e = sng_get_dispatch_board(brand, today)
+    if isinstance(r, dict) and r.get("data"):
+        first_job = r["data"][0] if r["data"] else {}
+        probe["dispatch_job_sample_keys"] = sorted(first_job.keys()) if isinstance(first_job, dict) else str(type(first_job))
+        probe["dispatch_job_sample"] = first_job
+        probe["dispatch_job_count_today"] = len(r.get("data", []))
+    else:
+        probe["dispatch_error"] = e
+        probe["dispatch_raw"] = r
+
+    # Free quotes sample
+    r, e = sng_get_free_quotes(brand)
+    if isinstance(r, dict) and r.get("free_quotes"):
+        first_quote = r["free_quotes"][0] if r["free_quotes"] else {}
+        probe["free_quote_sample_keys"] = sorted(first_quote.keys()) if isinstance(first_quote, dict) else str(type(first_quote))
+        probe["free_quote_sample"] = first_quote
+
+    return jsonify(probe)
 
 
 @client_bp.route("/crm/sng/create-coupon", methods=["POST"])

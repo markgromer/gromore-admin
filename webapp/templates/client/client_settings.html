@@ -248,6 +248,81 @@
     </div>
 </div>
 
+<!-- Sweep and Go CRM -->
+<div class="card mb-4" style="border-radius:12px; border:none; box-shadow:0 1px 3px rgba(0,0,0,.05);">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-start">
+            <div class="d-flex align-items-center gap-3">
+                <div style="width:48px; height:48px; border-radius:12px; background:linear-gradient(135deg,#059669,#10b981); display:flex; align-items:center; justify-content:center;">
+                    <i class="bi bi-recycle" style="font-size:1.4rem; color:#fff;"></i>
+                </div>
+                <div>
+                    <h5 class="mb-1 fw-semibold">Sweep and Go</h5>
+                    <p class="text-muted mb-0" style="font-size:.88rem;">Connect your Sweep and Go account to pull CRM data, clients, leads, and revenue</p>
+                </div>
+            </div>
+            {% if brand.crm_type == 'sweepandgo' and brand.crm_api_key %}
+            <span class="badge bg-success rounded-pill px-3 py-2">
+                <i class="bi bi-check-circle me-1"></i> Connected
+            </span>
+            {% else %}
+            <span class="badge bg-secondary rounded-pill px-3 py-2">Not Connected</span>
+            {% endif %}
+        </div>
+
+        <form method="POST" action="{{ url_for('client.client_save_sng') }}" class="mt-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">API Token</label>
+                    <div class="input-group">
+                        <input type="password" class="form-control" name="sng_api_key"
+                               placeholder="{{ '••••••••' ~ brand.crm_api_key[-4:] if brand.crm_api_key and brand.crm_type == 'sweepandgo' else 'Paste your API token' }}"
+                               autocomplete="off" id="sngApiKeyInput">
+                        <button class="btn btn-outline-secondary" type="button" onclick="var i=document.getElementById('sngApiKeyInput');i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=\'bi bi-eye\'></i>':'<i class=\'bi bi-eye-slash\'></i>'">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
+                    <small class="text-muted">Leave blank to keep current token</small>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">Organization Slug</label>
+                    <input type="text" class="form-control" name="sng_org_slug"
+                           value="{{ brand.crm_pipeline_id or '' if brand.crm_type == 'sweepandgo' else '' }}"
+                           placeholder="e.g. scoop-doggy-logs-1fful">
+                    <small class="text-muted">Found in your Sweep and Go Employee Portal URL</small>
+                </div>
+            </div>
+            <div class="mt-3 d-flex align-items-center gap-2">
+                <button class="btn btn-primary" type="submit">Save Sweep and Go Settings</button>
+                {% if brand.crm_type == 'sweepandgo' and brand.crm_api_key %}
+                <button class="btn btn-outline-primary" type="button" id="sngTestBtn">
+                    <i class="bi bi-plug me-1"></i> Test Connection
+                </button>
+                {% endif %}
+            </div>
+        </form>
+
+        <div id="sngTestResult" class="mt-2" style="display:none;"></div>
+
+        <div class="mt-3 p-3" style="background:#f0fdf4; border-radius:8px;">
+            <div class="d-flex align-items-start gap-2">
+                <i class="bi bi-info-circle text-success mt-1"></i>
+                <div>
+                    <div class="fw-medium" style="font-size:.88rem;">How to get your API Token</div>
+                    <small class="text-muted">
+                        1. Log into <strong>Sweep and Go Employee Portal</strong><br>
+                        2. Go to <strong>Settings > Open API</strong><br>
+                        3. Click <strong>Generate API Token</strong><br>
+                        4. Copy the token and paste it above<br>
+                        5. Your organization slug is the text in your portal URL (e.g. <code>scoop-doggy-logs-1fful</code>)
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- WordPress Connection -->
 <div class="card mb-4" style="border-radius:12px; border:none; box-shadow:0 1px 3px rgba(0,0,0,.05);">
     <div class="card-body p-4">
@@ -321,91 +396,6 @@
                         4. Enter a name like "GroMore" and click <strong>Add New Application Password</strong><br>
                         5. Copy the generated password and paste it above<br>
                         <span class="text-warning-emphasis">Note: Your site must use HTTPS and have the REST API enabled (most sites do by default).</span>
-                    </small>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Sweep and Go CRM -->
-<div class="card mb-4" style="border-radius:12px; border:none; box-shadow:0 1px 3px rgba(0,0,0,.05);">
-    <div class="card-body p-4">
-        <div class="d-flex justify-content-between align-items-start">
-            <div class="d-flex align-items-center gap-3">
-                <div style="width:48px; height:48px; border-radius:12px; background:linear-gradient(135deg,#059669,#10b981); display:flex; align-items:center; justify-content:center;">
-                    <i class="bi bi-recycle" style="font-size:1.4rem; color:#fff;"></i>
-                </div>
-                <div>
-                    <h5 class="mb-1 fw-semibold">Sweep and Go</h5>
-                    <p class="text-muted mb-0" style="font-size:.88rem;">Connect your Sweep and Go account to pull CRM data, clients, leads, and revenue</p>
-                </div>
-            </div>
-            {% if brand.crm_type == 'sweepandgo' and brand.crm_api_key %}
-            <span class="badge bg-success rounded-pill px-3 py-2">
-                <i class="bi bi-check-circle me-1"></i> Connected
-            </span>
-            {% else %}
-            <span class="badge bg-secondary rounded-pill px-3 py-2">Not Connected</span>
-            {% endif %}
-        </div>
-
-        <form method="POST" action="{{ url_for('client.client_save_sng') }}" class="mt-3">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <label class="form-label fw-medium" style="font-size:.88rem;">API Token</label>
-                    <div class="input-group">
-                        <input type="password" class="form-control" name="sng_api_key"
-                               placeholder="{{ '••••••••' ~ brand.crm_api_key[-4:] if brand.crm_api_key and brand.crm_type == 'sweepandgo' else 'Paste your API token' }}"
-                               autocomplete="off" id="sngApiKeyInput">
-                        <button class="btn btn-outline-secondary" type="button" onclick="var i=document.getElementById('sngApiKeyInput');i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=\'bi bi-eye\'></i>':'<i class=\'bi bi-eye-slash\'></i>'">
-                            <i class="bi bi-eye"></i>
-                        </button>
-                    </div>
-                    <small class="text-muted">Leave blank to keep current token</small>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-medium" style="font-size:.88rem;">Organization Slug</label>
-                    <input type="text" class="form-control" name="sng_org_slug"
-                           value="{{ brand.crm_pipeline_id or '' if brand.crm_type == 'sweepandgo' else '' }}"
-                           placeholder="e.g. scoop-doggy-logs-1fful">
-                    <small class="text-muted">Found in your Sweep and Go Employee Portal URL</small>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-medium" style="font-size:.88rem;">Average Service Price</label>
-                    <div class="input-group">
-                        <span class="input-group-text">$</span>
-                        <input type="number" class="form-control" name="sng_avg_service_price"
-                               value="{{ brand.crm_avg_service_price or '' if brand.crm_type == 'sweepandgo' else '' }}"
-                               placeholder="e.g. 15.00" step="0.01" min="0">
-                    </div>
-                    <small class="text-muted">Price per visit (used to estimate revenue and ROAS)</small>
-                </div>
-            </div>
-            <div class="mt-3 d-flex align-items-center gap-2">
-                <button class="btn btn-primary" type="submit">Save Sweep and Go Settings</button>
-                {% if brand.crm_type == 'sweepandgo' and brand.crm_api_key %}
-                <button class="btn btn-outline-primary" type="button" id="sngTestBtn">
-                    <i class="bi bi-plug me-1"></i> Test Connection
-                </button>
-                {% endif %}
-            </div>
-        </form>
-
-        <div id="sngTestResult" class="mt-2" style="display:none;"></div>
-
-        <div class="mt-3 p-3" style="background:#f0fdf4; border-radius:8px;">
-            <div class="d-flex align-items-start gap-2">
-                <i class="bi bi-info-circle text-success mt-1"></i>
-                <div>
-                    <div class="fw-medium" style="font-size:.88rem;">How to get your API Token</div>
-                    <small class="text-muted">
-                        1. Log into <strong>Sweep and Go Employee Portal</strong><br>
-                        2. Go to <strong>Settings > Open API</strong><br>
-                        3. Click <strong>Generate API Token</strong><br>
-                        4. Copy the token and paste it above<br>
-                        5. Your organization slug is the text in your portal URL (e.g. <code>scoop-doggy-logs-1fful</code>)
                     </small>
                 </div>
             </div>

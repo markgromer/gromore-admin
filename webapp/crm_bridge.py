@@ -367,58 +367,84 @@ def sng_get_org_data(brand, org_slug):
                     params={"organization": org_slug})
 
 
+def _sng_collect_all_clients(brand, fetcher):
+    """Paginate through an SNG client list endpoint and return all client records."""
+    all_clients = []
+    page = 1
+    while True:
+        result, error = fetcher(brand, page)
+        if error or not isinstance(result, dict):
+            break
+        clients = result.get("data", [])
+        all_clients.extend(clients)
+        paginate = result.get("paginate") or {}
+        if page >= (paginate.get("total_pages") or 1):
+            break
+        page += 1
+    return all_clients
+
+
+def _sng_sum_payments_for_month(brand, client_ids, month_prefix):
+    """Call client_details for each client and sum succeeded payments in given month.
+    month_prefix is like '2026-03'. Returns (total_revenue, payment_count)."""
+    total_revenue = 0.0
+    payment_count = 0
+    for cid in client_ids:
+        result, error = sng_get_client_details(brand, cid)
+        if error or not isinstance(result, dict):
+            continue
+        for pmt in (result.get("payments") or []):
+            if pmt.get("status") != "succeeded":
+                continue
+            pmt_date = (pmt.get("date") or "")
+            if not pmt_date.startswith(month_prefix):
+                continue
+            try:
+                total_revenue += float(pmt.get("amount") or 0)
+            except (ValueError, TypeError):
+                pass
+            payment_count += 1
+    return round(total_revenue, 2), payment_count
+
+
 def pull_sweepandgo_revenue(brand, month=None):
-    """Pull revenue from Sweep and Go for a month.
-    Uses completed job count × average service price for revenue estimation.
-    If avg_service_price is set on the brand, uses that; otherwise returns job counts only.
-    Returns (revenue, job_count, error_or_None)."""
+    """Pull real revenue from Sweep and Go payment history for a month.
+    Iterates active clients, calls client_details, sums succeeded payments.
+    Returns (revenue, payment_count, error_or_None)."""
+    from datetime import datetime
+
     if not month:
-        from datetime import datetime
         month = datetime.now().strftime("%Y-%m")
 
-    import calendar
-
+    # Validate month format
     try:
-        year, mon = int(month[:4]), int(month[5:7])
-        _, last_day = calendar.monthrange(year, mon)
+        int(month[:4])
+        int(month[5:7])
     except (ValueError, IndexError):
         return 0, 0, f"Invalid month format: {month}"
 
-    total_jobs = 0
+    # Collect all active client IDs
+    active = _sng_collect_all_clients(brand, sng_get_active_clients)
+    client_ids = []
+    for c in active:
+        cid = c.get("client") or c.get("id") or c.get("client_id")
+        if cid:
+            client_ids.append(cid)
 
-    # Use dispatch board day by day for the month
-    for day in range(1, last_day + 1):
-        date_str = f"{year:04d}-{mon:02d}-{day:02d}"
-        result, error = sng_get_dispatch_board(brand, date_str)
-        if error:
-            continue  # skip days that fail
+    if not client_ids:
+        return 0, 0, "No active clients found"
 
-        jobs = result.get("data", []) if isinstance(result, dict) else []
-        for job in jobs:
-            if job.get("status_id") == 2 or job.get("status_name") == "completed":
-                total_jobs += 1
-
-    # Estimate revenue using avg service price
-    avg_price = 0.0
-    try:
-        avg_price = float(brand.get("crm_avg_service_price") or 0)
-    except (ValueError, TypeError):
-        avg_price = 0.0
-
-    total_revenue = round(total_jobs * avg_price, 2) if avg_price > 0 else 0.0
-
-    return total_revenue, total_jobs, None
+    total_revenue, payment_count = _sng_sum_payments_for_month(brand, client_ids, month)
+    return total_revenue, payment_count, None
 
 
 def sng_estimate_revenue_snapshot(brand):
-    """Quick revenue intelligence without iterating the full month.
-    Uses report API counts × avg service price for fast estimation.
-    Returns dict with mrr, avg_client_value, active, inactive counts."""
-    avg_price = 0.0
-    try:
-        avg_price = float(brand.get("crm_avg_service_price") or 0)
-    except (ValueError, TypeError):
-        avg_price = 0.0
+    """Revenue intelligence using real SNG payment data.
+    Returns dict with real mrr, avg_client_value, active/inactive counts, etc."""
+    from datetime import datetime
+
+    now = datetime.now()
+    current_month = now.strftime("%Y-%m")
 
     # Get counts from report API (fast, single calls)
     active_count = 0
@@ -436,31 +462,38 @@ def sng_estimate_revenue_snapshot(brand):
     if isinstance(r, dict):
         jobs_count = r.get("data", 0) or 0
 
-    # Frequency estimation: average ~3.5 visits per client per month
-    # (mix of weekly=4, biweekly=2, monthly=1, weighted toward weekly)
-    avg_monthly_visits = 3.5
+    # Pull real payment data for current month
+    active = _sng_collect_all_clients(brand, sng_get_active_clients)
+    client_ids = []
+    for c in active:
+        cid = c.get("client") or c.get("id") or c.get("client_id")
+        if cid:
+            client_ids.append(cid)
 
-    # Monthly recurring revenue estimate
-    mrr = round(active_count * avg_monthly_visits * avg_price, 2) if avg_price > 0 else 0
-    # Average client monthly value
-    avg_client_monthly = round(avg_monthly_visits * avg_price, 2) if avg_price > 0 else 0
+    mrr = 0.0
+    payment_count = 0
+    if client_ids:
+        mrr, payment_count = _sng_sum_payments_for_month(brand, client_ids, current_month)
+
+    # Calculate average client monthly value from real data
+    avg_client_monthly = round(mrr / active_count, 2) if active_count > 0 and mrr > 0 else 0
     # Estimated annual client value (avg retention ~18 months in service businesses)
     avg_retention_months = 18
     estimated_clv = round(avg_client_monthly * avg_retention_months, 2)
-    # Churn cost: inactive clients × CLV (value lost)
-    churn_cost = round(inactive_count * estimated_clv, 2) if avg_price > 0 else 0
+    # Churn cost: inactive clients x CLV (value lost)
+    churn_cost = round(inactive_count * estimated_clv, 2) if mrr > 0 else 0
 
     return {
-        "avg_service_price": avg_price,
         "active_clients": active_count,
         "inactive_clients": inactive_count,
         "total_jobs": jobs_count,
-        "avg_monthly_visits": avg_monthly_visits,
         "mrr": mrr,
+        "payment_count": payment_count,
         "avg_client_monthly_value": avg_client_monthly,
         "estimated_clv": estimated_clv,
         "churn_cost_total": churn_cost,
         "avg_retention_months": avg_retention_months,
+        "data_source": "real_payments",
     }
 
 
