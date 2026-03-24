@@ -3942,7 +3942,7 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
 
     api_url = f"{wp_url}/wp-json/wp/v2/posts"
     token = base64.b64encode(f"{wp_user}:{wp_pass}".encode()).decode()
-    headers = {"Authorization": f"Basic {token}"}
+    headers = {"Authorization": f"Basic {token}", "X-GM-Auth": f"Basic {token}"}
 
     post_data = {
         "title": seo_title or title,
@@ -4459,10 +4459,10 @@ def client_blog_test_connection():
     except Exception:
         pass  # Non-standard response, continue anyway
 
-    # Step 3: Authenticate - use explicit Authorization header (some hosts strip
-    # the auth= parameter but keep raw headers)
+    # Step 3: Authenticate - send both standard header AND custom header.
+    # SiteGround nginx strips Authorization; mu-plugin reads X-GM-Auth instead.
     token = base64.b64encode(f"{wp_user}:{wp_pass}".encode()).decode()
-    headers = {"Authorization": f"Basic {token}"}
+    headers = {"Authorization": f"Basic {token}", "X-GM-Auth": f"Basic {token}"}
 
     try:
         resp = req_lib.get(
