@@ -225,16 +225,7 @@ document.addEventListener('DOMContentLoaded', function() {
             ['view', ['codeview', 'fullscreen']],
         ],
         styleTags: ['p', 'h2', 'h3', 'h4', 'blockquote'],
-        callbacks: {
-            onChange: function() {
-                // auto-generate excerpt if empty
-                var excerptField = document.querySelector('textarea[name="excerpt"]');
-                if (!excerptField.value.trim()) {
-                    var text = $(this).summernote('isEmpty') ? '' : $('<div>').html($(this).summernote('code')).text();
-                    // Don't auto-fill, just leave blank
-                }
-            }
-        }
+        callbacks: {}
     });
 
     // Schedule toggle

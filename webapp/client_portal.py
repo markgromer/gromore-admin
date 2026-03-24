@@ -3838,8 +3838,6 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
     }
     if slug:
         post_data["slug"] = slug
-    if tags:
-        post_data["tags"] = []  # WP expects tag IDs, so pass as meta
     # Yoast SEO fields (if plugin installed)
     meta = {}
     if seo_title:
@@ -3977,8 +3975,10 @@ def client_blog_save():
 
         result = _publish_to_wp(
             brand, title, content,
-            excerpt=excerpt, seo_title=seo_title,
-            seo_description=seo_description,
+            excerpt=excerpt, slug=title.lower().replace(' ', '-')[:80],
+            seo_title=seo_title, seo_description=seo_description,
+            categories=categories, tags=tags,
+            featured_image_url=featured_image_url,
         )
         if result["ok"]:
             fields["status"] = "published"
@@ -4140,7 +4140,13 @@ Return ONLY valid JSON, no markdown code fences."""
                 raw = raw[:-3]
             raw = raw.strip()
 
-        result = json.loads(raw)
+        # Robust JSON extraction: find the first { ... } block
+        import re as _re
+        json_match = _re.search(r'\{.*\}', raw, _re.DOTALL)
+        if not json_match:
+            return jsonify(ok=False, error="AI returned invalid format. Try again.")
+
+        result = json.loads(json_match.group())
         result["ok"] = True
         return jsonify(result)
     except json.JSONDecodeError:
