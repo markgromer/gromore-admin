@@ -3973,7 +3973,12 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
                 "wp_post_url": wp_post.get("link", ""),
             }
         else:
-            return {"ok": False, "error": f"WordPress API error {resp.status_code}: {resp.text[:200]}"}
+            err_msg = f"WordPress API error {resp.status_code}: {resp.text[:200]}"
+            if resp.status_code == 401:
+                err_msg = "Publish failed: WordPress returned 401. The application password may be expired or the user lacks permission to create posts. Re-enter your app password in Settings, or check that the WordPress user has an Editor/Administrator role."
+            elif resp.status_code == 403:
+                err_msg = "Publish failed: WordPress returned 403 Forbidden. A security plugin may be blocking REST API access."
+            return {"ok": False, "error": err_msg}
     except Exception as e:
         return {"ok": False, "error": str(e)[:200]}
 
@@ -4426,15 +4431,26 @@ def client_blog_test_connection():
 
     try:
         resp = req_lib.get(
-            f"{wp_url}/wp-json/wp/v2/users/me",
+            f"{wp_url}/wp-json/wp/v2/users/me?context=edit",
             auth=(wp_user, wp_pass),
             timeout=15,
         )
         if resp.status_code == 200:
-            name = resp.json().get("name", "")
-            return jsonify(ok=True, message=f"Connected as {name}")
+            data = resp.json()
+            name = data.get("name", "")
+            caps = data.get("capabilities", {})
+            roles = data.get("roles", [])
+            can_publish = caps.get("publish_posts") or caps.get("edit_posts")
+            if can_publish:
+                return jsonify(ok=True, message=f"Connected as {name} ({', '.join(roles)})")
+            else:
+                return jsonify(ok=False, error=f"Connected as {name}, but this user does not have permission to create posts. The WordPress user needs an Editor or Administrator role.")
+        elif resp.status_code == 401:
+            return jsonify(ok=False, error="Authentication failed. Check your username and application password. Make sure the app password has no extra spaces.")
+        elif resp.status_code == 403:
+            return jsonify(ok=False, error="User authenticated but forbidden. The REST API may be restricted by a security plugin.")
         else:
-            return jsonify(ok=False, error=f"Auth failed (HTTP {resp.status_code})")
+            return jsonify(ok=False, error=f"WordPress returned HTTP {resp.status_code}. Verify the site URL is correct.")
     except Exception as e:
         return jsonify(ok=False, error=str(e)[:150])
 
