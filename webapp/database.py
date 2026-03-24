@@ -506,6 +506,7 @@ class WebDB:
             ("crm_api_key", "TEXT DEFAULT ''"),
             ("crm_webhook_url", "TEXT DEFAULT ''"),
             ("crm_pipeline_id", "TEXT DEFAULT ''"),
+            ("crm_server_url", "TEXT DEFAULT ''"),
             ("crm_last_webhook_at", "TEXT DEFAULT ''"),
             ("google_ads_customer_id", "TEXT DEFAULT ''"),
             ("openai_api_key", "TEXT DEFAULT ''"),
@@ -743,7 +744,7 @@ class WebDB:
         allowed = {
             "brand_voice", "active_offers", "target_audience", "competitors",
             "reporting_notes", "call_tracking_number",
-            "crm_type", "crm_api_key", "crm_webhook_url", "crm_pipeline_id",
+            "crm_type", "crm_api_key", "crm_webhook_url", "crm_pipeline_id", "crm_server_url",
             "openai_api_key", "openai_model",
             "openai_model_chat", "openai_model_images", "openai_model_analysis", "openai_model_ads",
             "logo_path", "logo_variants", "brand_colors",

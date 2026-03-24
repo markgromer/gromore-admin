@@ -930,6 +930,7 @@ def create_app():
                     db.update_brand_text_field(brand_id, "crm_api_key", crm_api_key)
                 db.update_brand_text_field(brand_id, "crm_webhook_url", request.form.get("crm_webhook_url", ""))
                 db.update_brand_text_field(brand_id, "crm_pipeline_id", request.form.get("crm_pipeline_id", ""))
+                db.update_brand_text_field(brand_id, "crm_server_url", request.form.get("crm_server_url", ""))
                 flash("CRM settings saved", "success")
             return redirect(url_for("brand_settings", brand_id=brand_id))
         # Reload brand to get latest data
@@ -1027,6 +1028,53 @@ def create_app():
             return jsonify({"ok": False, "error": data.get("error") or f"Status {resp.status_code}"}), 400
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.route("/brands/<int:brand_id>/crm-sync/revenue", methods=["POST"])
+    @login_required
+    def crm_sync_revenue(brand_id):
+        """Pull revenue from Sweep and Go or Jobber and save it."""
+        brand = db.get_brand(brand_id)
+        if not brand:
+            return jsonify({"ok": False, "error": "Brand not found"}), 404
+
+        crm_type = (brand.get("crm_type") or "").strip().lower()
+        month = request.get_json(silent=True) or {}
+        target_month = (month.get("month") or "") or datetime.now().strftime("%Y-%m")
+
+        if crm_type == "sweepandgo":
+            from webapp.crm_bridge import pull_sweepandgo_revenue
+            revenue, job_count, error = pull_sweepandgo_revenue(brand, target_month)
+            if error:
+                return jsonify({"ok": False, "error": error}), 400
+            db.upsert_brand_month_finance(brand_id, target_month, revenue, job_count,
+                                          f"Sweep and Go sync: {job_count} jobs")
+            db.mark_brand_webhook_received(brand_id)
+            return jsonify({
+                "ok": True,
+                "month": target_month,
+                "closed_revenue": revenue,
+                "closed_deals": job_count,
+                "source": "sweepandgo",
+            })
+
+        elif crm_type == "jobber":
+            from webapp.crm_bridge import pull_jobber_revenue
+            revenue, inv_count, error = pull_jobber_revenue(brand, target_month)
+            if error:
+                return jsonify({"ok": False, "error": error}), 400
+            db.upsert_brand_month_finance(brand_id, target_month, revenue, inv_count,
+                                          f"Jobber sync: {inv_count} invoices")
+            db.mark_brand_webhook_received(brand_id)
+            return jsonify({
+                "ok": True,
+                "month": target_month,
+                "closed_revenue": revenue,
+                "closed_deals": inv_count,
+                "source": "jobber",
+            })
+
+        else:
+            return jsonify({"ok": False, "error": f"Revenue pull not supported for CRM type: {crm_type}"}), 400
 
     @app.route("/brands/<int:brand_id>/delete", methods=["POST"])
     @login_required

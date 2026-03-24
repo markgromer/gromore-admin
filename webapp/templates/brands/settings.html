@@ -124,8 +124,10 @@ RotoRooter">{{ brand.competitors or '' }}</textarea>
 
                     <div class="mb-3">
                         <label class="form-label">CRM Platform</label>
-                        <select name="crm_type" class="form-select">
+                        <select name="crm_type" class="form-select" id="crmTypeSelect">
                             <option value="" {% if not brand.crm_type %}selected{% endif %}>None</option>
+                            <option value="sweepandgo" {% if brand.crm_type == 'sweepandgo' %}selected{% endif %}>Sweep and Go</option>
+                            <option value="jobber" {% if brand.crm_type == 'jobber' %}selected{% endif %}>Jobber</option>
                             <option value="gohighlevel" {% if brand.crm_type == 'gohighlevel' %}selected{% endif %}>GoHighLevel</option>
                             <option value="hubspot" {% if brand.crm_type == 'hubspot' %}selected{% endif %}>HubSpot</option>
                             <option value="webhook" {% if brand.crm_type == 'webhook' %}selected{% endif %}>Custom Webhook</option>
@@ -133,18 +135,26 @@ RotoRooter">{{ brand.competitors or '' }}</textarea>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">API Key</label>
+                        <label class="form-label" id="crmApiKeyLabel">API Key</label>
                         <input type="password" name="crm_api_key" class="form-control"
                                placeholder="{{ '******  (saved)' if brand.crm_api_key else 'Enter API key' }}">
-                        <small class="text-muted">Leave blank to keep current key</small>
+                        <small class="text-muted" id="crmApiKeyHelp">Leave blank to keep current key</small>
                     </div>
 
-                    <div class="mb-3">
+                    <div class="mb-3" id="crmServerUrlGroup" style="display:{{ 'block' if brand.crm_type == 'sweepandgo' else 'none' }};">
+                        <label class="form-label">MCP Server URL</label>
+                        <input type="url" name="crm_server_url" class="form-control"
+                               value="{{ brand.crm_server_url or '' }}"
+                               placeholder="https://your-sng-mcp-server.onrender.com">
+                        <small class="text-muted">Your Sweep and Go MCP server endpoint on Render</small>
+                    </div>
+
+                    <div class="mb-3" id="crmWebhookUrlGroup">
                         <label class="form-label">Webhook URL</label>
                         <input type="url" name="crm_webhook_url" class="form-control"
                                value="{{ brand.crm_webhook_url or '' }}"
                                placeholder="https://...">
-                        <small class="text-muted">For GoHighLevel or custom webhooks</small>
+                        <small class="text-muted" id="crmWebhookHelp">For GoHighLevel or custom webhooks</small>
                     </div>
 
                     <div class="mb-3">
@@ -166,6 +176,12 @@ RotoRooter">{{ brand.competitors or '' }}</textarea>
                     <button type="submit" class="btn btn-primary w-100">
                         <i class="bi bi-check-lg"></i> Save CRM
                     </button>
+                    {% if brand.crm_type in ('sweepandgo', 'jobber') %}
+                    <button type="button" class="btn btn-outline-info w-100 mt-2" onclick="syncCrmRevenue({{ brand.id }})">
+                        <i class="bi bi-arrow-repeat"></i> Pull Revenue from {{ brand.crm_type|title }}
+                    </button>
+                    <span id="crm-sync-result" class="small d-block mt-1 text-muted"></span>
+                    {% endif %}
                     <button type="button" class="btn btn-outline-secondary w-100 mt-2" onclick="testRevenueWebhook({{ brand.id }})">
                         <i class="bi bi-plug"></i> Send Test Webhook
                     </button>
@@ -182,6 +198,46 @@ RotoRooter">{{ brand.competitors or '' }}</textarea>
                     <span class="badge bg-success mt-2">{{ brand.crm_type|title }} configured</span>
                     {% endif %}
                 </form>
+
+                <script>
+                (function() {
+                    var sel = document.getElementById('crmTypeSelect');
+                    var serverGroup = document.getElementById('crmServerUrlGroup');
+                    var webhookGroup = document.getElementById('crmWebhookUrlGroup');
+                    var apiKeyLabel = document.getElementById('crmApiKeyLabel');
+                    var apiKeyHelp = document.getElementById('crmApiKeyHelp');
+                    var webhookHelp = document.getElementById('crmWebhookHelp');
+
+                    function updateFields() {
+                        var v = sel.value;
+                        serverGroup.style.display = (v === 'sweepandgo') ? 'block' : 'none';
+
+                        if (v === 'sweepandgo') {
+                            apiKeyLabel.textContent = 'MCP Server Auth Key';
+                            apiKeyHelp.textContent = 'Bearer token for your SNG MCP server (leave blank to keep current)';
+                            webhookHelp.textContent = 'Optional: SNG can also POST completed-job data to the inbound webhook below';
+                        } else if (v === 'jobber') {
+                            apiKeyLabel.textContent = 'Jobber API Token';
+                            apiKeyHelp.textContent = 'OAuth access token from Jobber (leave blank to keep current)';
+                            webhookHelp.textContent = 'Optional: Jobber webhook URL for inbound events';
+                        } else if (v === 'gohighlevel') {
+                            apiKeyLabel.textContent = 'GoHighLevel API Key';
+                            apiKeyHelp.textContent = 'Leave blank to keep current key';
+                            webhookHelp.textContent = 'For GoHighLevel webhooks';
+                        } else if (v === 'hubspot') {
+                            apiKeyLabel.textContent = 'HubSpot Access Token';
+                            apiKeyHelp.textContent = 'Leave blank to keep current key';
+                            webhookHelp.textContent = 'Optional webhook URL';
+                        } else {
+                            apiKeyLabel.textContent = 'API Key';
+                            apiKeyHelp.textContent = 'Leave blank to keep current key';
+                            webhookHelp.textContent = 'For custom webhooks';
+                        }
+                    }
+                    sel.addEventListener('change', updateFields);
+                    updateFields();
+                })();
+                </script>
             </div>
         </div>
     </div>
@@ -214,6 +270,37 @@ function testRevenueWebhook(brandId) {
     .catch(function(err) {
         resultEl.textContent = 'Webhook test failed: ' + err.message;
         resultEl.className = 'small d-block mt-2 text-danger fw-medium';
+    });
+}
+
+function syncCrmRevenue(brandId) {
+    var resultEl = document.getElementById('crm-sync-result');
+    if (!resultEl) return;
+    resultEl.textContent = 'Pulling revenue data...';
+    resultEl.className = 'small d-block mt-1 text-muted';
+
+    fetch('/brands/' + brandId + '/crm-sync/revenue', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok) {
+            var msg = data.source + ' sync complete: $' + parseFloat(data.closed_revenue).toFixed(2) + ' from ' + data.closed_deals + ' jobs/invoices (' + data.month + ')';
+            resultEl.textContent = msg;
+            resultEl.className = 'small d-block mt-1 text-success fw-medium';
+        } else {
+            resultEl.textContent = data.error || 'Sync failed';
+            resultEl.className = 'small d-block mt-1 text-danger fw-medium';
+        }
+    })
+    .catch(function(err) {
+        resultEl.textContent = 'Sync failed: ' + err.message;
+        resultEl.className = 'small d-block mt-1 text-danger fw-medium';
     });
 }
 </script>
