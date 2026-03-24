@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 from datetime import datetime
 from decimal import Decimal
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -35,7 +35,7 @@ def _get_jinja_env():
 
     env = Environment(
         loader=FileSystemLoader(str(TEMPLATES_DIR)),
-        autoescape=True,
+        autoescape=select_autoescape(["html", "htm", "xml"]),
         finalize=_finalize_display_value,
     )
     env.filters["pct"] = lambda v: f"{round(float(v), 1)}" if v is not None else "0"
@@ -177,7 +177,7 @@ def generate_client_report(analysis, suggestions_client, output_dir=None, brandi
         if google_ads:
             total_spend += google_ads.get("metrics", {}).get("spend", 0)
 
-    cost_per_lead = round(total_spend / paid_leads, 3) if paid_leads > 0 and total_spend > 0 else None
+    cost_per_lead = round(total_spend / paid_leads, 2) if paid_leads > 0 and total_spend > 0 else None
 
     # MoM for paid leads - weighted average across channels
     leads_change = None
