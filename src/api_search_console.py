@@ -72,12 +72,12 @@ def pull_search_console_data(site_url, month_str, credentials_path=None):
     # ── Pull aggregate totals ──
     totals = _pull_totals(service, site_url, start_date, end_date)
 
-    # Override avg_position: top 5 queries by impressions, best 3 positions from those
-    if len(query_data) >= 3:
+    # Override avg_position: average position of top 5 queries by impressions
+    if len(query_data) >= 5:
         sorted_by_imp = sorted(query_data, key=lambda r: r.get("impressions", 0), reverse=True)
         top5 = sorted_by_imp[:5]
-        best3_positions = sorted([r.get("position", 0) for r in top5])[:3]
-        totals["avg_position"] = round(sum(best3_positions) / len(best3_positions), 1)
+        top5_positions = [r.get("position", 0) for r in top5]
+        totals["avg_position"] = round(sum(top5_positions) / len(top5_positions), 1)
 
     # Override CTR: top 10 queries by impressions to avoid long-tail dilution
     if len(query_data) >= 3:
