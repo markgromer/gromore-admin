@@ -757,6 +757,22 @@ function fmtInt(v) {
             html += '</div></div>';
         }
 
+        // SNG Business Pulse
+        var sng = d.sng || {};
+        if (sng.connected) {
+            html += '<div class="perf-snapshot">';
+            html += '<div class="perf-snapshot-header">';
+            html += '<h5><i class="bi bi-people me-1"></i> Business Pulse</h5>';
+            html += '<a href="/client/crm" class="btn btn-sm btn-outline-success">View CRM <i class="bi bi-arrow-right"></i></a>';
+            html += '</div>';
+            html += '<div class="kpi-grid">';
+            html += '<div class="kpi-card"><div class="kpi-label">Active Clients</div><div class="kpi-value" style="color:#16a34a;">' + fmtInt(sng.active_clients) + '</div></div>';
+            html += '<div class="kpi-card"><div class="kpi-label">Happy Clients</div><div class="kpi-value" style="color:#2563eb;">' + fmtInt(sng.happy_clients) + '</div></div>';
+            html += '<div class="kpi-card"><div class="kpi-label">Happy Dogs</div><div class="kpi-value" style="color:#e11d48;">' + fmtInt(sng.happy_dogs) + '</div></div>';
+            html += '<div class="kpi-card"><div class="kpi-label">Completed Jobs</div><div class="kpi-value" style="color:#d97706;">' + fmtInt(sng.completed_jobs) + '</div></div>';
+            html += '</div></div>';
+        }
+
         container.innerHTML = html;
         container.classList.add('visible');
     }

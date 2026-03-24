@@ -1,0 +1,539 @@
+{% extends "client_base.html" %}
+{% block title %}CRM{% endblock %}
+
+{% block content %}
+<style>
+    .crm-header {
+        background: linear-gradient(135deg, #064e3b 0%, #047857 50%, #059669 100%);
+        border-radius: 16px;
+        padding: 1.75rem 2rem;
+        margin-bottom: 1.5rem;
+        color: #fff;
+        box-shadow: 0 8px 32px rgba(6, 78, 59, .25);
+    }
+    .crm-header h3 { font-weight: 800; font-size: 1.4rem; margin-bottom: .15rem; color: #fff !important; }
+    .crm-header p { opacity: .7; font-size: .88rem; margin: 0; }
+
+    .crm-kpi-card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 1.25rem 1.5rem;
+        text-align: center;
+        box-shadow: 0 2px 8px rgba(15,23,42,.04);
+        transition: box-shadow .2s;
+    }
+    .crm-kpi-card:hover { box-shadow: 0 4px 16px rgba(15,23,42,.1); }
+    .crm-kpi-card .kpi-value {
+        font-size: 2rem;
+        font-weight: 800;
+        line-height: 1.1;
+    }
+    .crm-kpi-card .kpi-label {
+        font-size: .78rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: #64748b;
+        margin-top: .35rem;
+    }
+
+    .crm-section {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 2px 8px rgba(15,23,42,.04);
+    }
+    .crm-section h5 {
+        font-weight: 700;
+        font-size: .95rem;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+    }
+    .crm-table { font-size: .84rem; }
+    .crm-table th {
+        font-size: .72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: #64748b;
+        border-bottom: 2px solid #e2e8f0;
+    }
+    .crm-table td { vertical-align: middle; }
+
+    .tab-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        padding: .2rem .6rem;
+        border-radius: 20px;
+        font-size: .72rem;
+        font-weight: 600;
+    }
+
+    .crm-loader {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 4rem 2rem;
+        text-align: center;
+    }
+    .crm-loader .spinner-border { width: 2.5rem; height: 2.5rem; color: #059669; }
+
+    .coupon-form .form-control, .coupon-form .form-select { font-size: .88rem; }
+</style>
+
+<div class="crm-header">
+    <h3><i class="bi bi-people me-2"></i>CRM Dashboard</h3>
+    <p>Live data from your Sweep and Go account</p>
+</div>
+
+{% if not crm_connected %}
+<!-- Not connected state -->
+<div class="crm-section text-center py-5">
+    <i class="bi bi-plug" style="font-size: 3rem; color: #cbd5e1;"></i>
+    <h5 class="mt-3 fw-bold">Connect Sweep and Go</h5>
+    <p class="text-muted mb-3">Add your SNG API token in Connections to see your CRM data here.</p>
+    <a href="{{ url_for('client.client_settings') }}" class="btn btn-primary">
+        <i class="bi bi-gear me-1"></i> Go to Connections
+    </a>
+</div>
+
+{% else %}
+<!-- Loading state -->
+<div id="crmLoader" class="crm-loader">
+    <div class="spinner-border mb-3" role="status"></div>
+    <div class="fw-semibold">Pulling data from Sweep and Go...</div>
+    <div class="text-muted" style="font-size:.85rem;">This may take a few seconds</div>
+</div>
+
+<!-- Data state (hidden until loaded) -->
+<div id="crmContent" style="display:none;">
+
+    <!-- KPI Cards Row -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="crm-kpi-card">
+                <div class="kpi-value text-success" id="kpiActiveClients">-</div>
+                <div class="kpi-label">Active Clients</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="crm-kpi-card">
+                <div class="kpi-value text-primary" id="kpiHappyClients">-</div>
+                <div class="kpi-label">Happy Clients</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="crm-kpi-card">
+                <div class="kpi-value" style="color:#e11d48;" id="kpiHappyDogs">-</div>
+                <div class="kpi-label">Happy Dogs</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="crm-kpi-card">
+                <div class="kpi-value text-warning" id="kpiCompletedJobs">-</div>
+                <div class="kpi-label">Completed Jobs</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-0" role="tablist" style="border-bottom: 2px solid #e2e8f0;">
+        <li class="nav-item">
+            <button class="nav-link active fw-semibold" data-bs-toggle="tab" data-bs-target="#tabClients" style="font-size:.88rem;">
+                Active Clients <span class="tab-badge bg-success bg-opacity-10 text-success" id="tabClientsBadge">0</span>
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link fw-semibold" data-bs-toggle="tab" data-bs-target="#tabInactive" style="font-size:.88rem;">
+                Inactive <span class="tab-badge bg-secondary bg-opacity-10 text-secondary" id="tabInactiveBadge">0</span>
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link fw-semibold" data-bs-toggle="tab" data-bs-target="#tabNoSub" style="font-size:.88rem;">
+                No Subscription <span class="tab-badge bg-warning bg-opacity-10 text-warning" id="tabNoSubBadge">0</span>
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link fw-semibold" data-bs-toggle="tab" data-bs-target="#tabLeads" style="font-size:.88rem;">
+                Leads <span class="tab-badge bg-primary bg-opacity-10 text-primary" id="tabLeadsBadge">0</span>
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link fw-semibold" data-bs-toggle="tab" data-bs-target="#tabQuotes" style="font-size:.88rem;">
+                Free Quotes <span class="tab-badge bg-info bg-opacity-10 text-info" id="tabQuotesBadge">0</span>
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link fw-semibold" data-bs-toggle="tab" data-bs-target="#tabCoupons" style="font-size:.88rem;">
+                <i class="bi bi-tag me-1"></i> Create Coupon
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- Active Clients Tab -->
+        <div class="tab-pane fade show active crm-section" style="border-top-left-radius:0; border-top-right-radius:0; margin-top:0; border-top:none;" id="tabClients">
+            <div class="table-responsive">
+                <table class="table crm-table mb-0">
+                    <thead><tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Service</th>
+                        <th>Frequency</th>
+                        <th>Assigned To</th>
+                        <th>Source</th>
+                    </tr></thead>
+                    <tbody id="clientsTableBody">
+                        <tr><td colspan="7" class="text-center text-muted py-3">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Inactive Clients Tab -->
+        <div class="tab-pane fade crm-section" style="border-top-left-radius:0; border-top-right-radius:0; margin-top:0; border-top:none;" id="tabInactive">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <small class="text-muted">Win-back campaign targets - these clients canceled or paused</small>
+            </div>
+            <div class="table-responsive">
+                <table class="table crm-table mb-0">
+                    <thead><tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Last Service</th>
+                        <th>Marketing OK</th>
+                    </tr></thead>
+                    <tbody id="inactiveTableBody">
+                        <tr><td colspan="5" class="text-center text-muted py-3">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- No Subscription Tab -->
+        <div class="tab-pane fade crm-section" style="border-top-left-radius:0; border-top-right-radius:0; margin-top:0; border-top:none;" id="tabNoSub">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <small class="text-muted">Active clients without recurring subscriptions - upsell opportunities</small>
+            </div>
+            <div class="table-responsive">
+                <table class="table crm-table mb-0">
+                    <thead><tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Type</th>
+                        <th>Marketing OK</th>
+                    </tr></thead>
+                    <tbody id="noSubTableBody">
+                        <tr><td colspan="5" class="text-center text-muted py-3">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Leads Tab -->
+        <div class="tab-pane fade crm-section" style="border-top-left-radius:0; border-top-right-radius:0; margin-top:0; border-top:none;" id="tabLeads">
+            <div class="table-responsive">
+                <table class="table crm-table mb-0">
+                    <thead><tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>ZIP</th>
+                        <th>Type</th>
+                        <th>Marketing OK</th>
+                    </tr></thead>
+                    <tbody id="leadsTableBody">
+                        <tr><td colspan="6" class="text-center text-muted py-3">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Free Quotes Tab -->
+        <div class="tab-pane fade crm-section" style="border-top-left-radius:0; border-top-right-radius:0; margin-top:0; border-top:none;" id="tabQuotes">
+            <div class="table-responsive">
+                <table class="table crm-table mb-0">
+                    <thead><tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Dogs</th>
+                        <th>Frequency</th>
+                        <th>Date</th>
+                    </tr></thead>
+                    <tbody id="quotesTableBody">
+                        <tr><td colspan="6" class="text-center text-muted py-3">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Create Coupon Tab -->
+        <div class="tab-pane fade crm-section" style="border-top-left-radius:0; border-top-right-radius:0; margin-top:0; border-top:none;" id="tabCoupons">
+            <h5><i class="bi bi-tag text-primary"></i> Create Promo Coupon</h5>
+            <p class="text-muted mb-3" style="font-size:.88rem;">Create a coupon code in Sweep and Go to use in ad campaigns (e.g. "Use code SPRING25 for 20% off!").</p>
+            <form class="coupon-form" id="couponForm">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-medium">Coupon Code (optional)</label>
+                        <input type="text" class="form-control" name="coupon_id" placeholder="e.g. SPRING25" style="text-transform:uppercase;">
+                        <small class="text-muted">Leave blank to auto-generate</small>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-medium">Name</label>
+                        <input type="text" class="form-control" name="name" placeholder="e.g. Spring Campaign">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-medium">Type</label>
+                        <select class="form-select" name="coupon_type">
+                            <option value="percent">Percent Off</option>
+                            <option value="amount">Dollar Off</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-medium">Discount</label>
+                        <input type="number" class="form-control" name="discount_value" placeholder="e.g. 20" step="0.01">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-medium">Duration</label>
+                        <select class="form-select" name="duration">
+                            <option value="once">One-time</option>
+                            <option value="repeating">Repeating</option>
+                            <option value="forever">Forever</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-medium">Expires</label>
+                        <input type="date" class="form-control" name="redeem_by">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-medium">Max Uses</label>
+                        <input type="number" class="form-control" name="max_redemptions" placeholder="Unlimited">
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button type="submit" class="btn btn-primary" id="couponSubmitBtn">
+                        <i class="bi bi-plus-circle me-1"></i> Create Coupon
+                    </button>
+                    <span id="couponResult" class="ms-2" style="display:none;"></span>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Error state -->
+<div id="crmError" style="display:none;" class="crm-section text-center py-4">
+    <i class="bi bi-exclamation-triangle" style="font-size: 2.5rem; color: #f59e0b;"></i>
+    <h5 class="mt-3 fw-bold">Couldn't load CRM data</h5>
+    <p class="text-muted" id="crmErrorMsg">Unknown error</p>
+    <button class="btn btn-outline-primary" onclick="loadCrmData()">
+        <i class="bi bi-arrow-clockwise me-1"></i> Retry
+    </button>
+</div>
+
+{% endif %}
+
+{% if crm_connected %}
+<script>
+var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+function loadCrmData() {
+    var loader = document.getElementById('crmLoader');
+    var content = document.getElementById('crmContent');
+    var errDiv = document.getElementById('crmError');
+
+    loader.style.display = '';
+    content.style.display = 'none';
+    errDiv.style.display = 'none';
+
+    fetch('/client/crm/data')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) {
+            loader.style.display = 'none';
+            errDiv.style.display = '';
+            document.getElementById('crmErrorMsg').textContent = data.error;
+            return;
+        }
+
+        // KPIs
+        var k = data.kpis || {};
+        document.getElementById('kpiActiveClients').textContent = (k.active_clients || 0).toLocaleString();
+        document.getElementById('kpiHappyClients').textContent = (k.happy_clients || 0).toLocaleString();
+        document.getElementById('kpiHappyDogs').textContent = (k.happy_dogs || 0).toLocaleString();
+        document.getElementById('kpiCompletedJobs').textContent = (k.completed_jobs || 0).toLocaleString();
+
+        // Active Clients
+        var clients = data.clients || [];
+        document.getElementById('tabClientsBadge').textContent = (data.clients_pagination || {}).total || clients.length;
+        renderClientTable('clientsTableBody', clients, ['first_name+last_name', 'email', 'cell_phone', 'subscription_names', 'cleanup_frequency', 'assigned_to', 'tracking_field']);
+
+        // Inactive
+        var inactive = data.inactive || [];
+        document.getElementById('tabInactiveBadge').textContent = (data.inactive_pagination || {}).total || inactive.length;
+        renderSimpleTable('inactiveTableBody', inactive, [
+            function(c) { return (c.first_name || '') + ' ' + (c.last_name || ''); },
+            function(c) { return c.email || '-'; },
+            function(c) { return c.cell_phone || c.home_phone || '-'; },
+            function(c) { return c.subscription_names || 'None'; },
+            function(c) { return c.marketing_allowed ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>'; }
+        ]);
+
+        // No Subscription
+        var noSub = data.no_subscription || [];
+        document.getElementById('tabNoSubBadge').textContent = (data.no_sub_pagination || {}).total || noSub.length;
+        renderSimpleTable('noSubTableBody', noSub, [
+            function(c) { return (c.first_name || '') + ' ' + (c.last_name || ''); },
+            function(c) { return c.email || '-'; },
+            function(c) { return c.cell_phone || c.home_phone || '-'; },
+            function(c) { return c.type || c.one_time_client ? 'One-time' : 'Recurring'; },
+            function(c) { return c.marketing_allowed ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>'; }
+        ]);
+
+        // Leads
+        var leads = data.leads || [];
+        document.getElementById('tabLeadsBadge').textContent = (data.leads_pagination || {}).total || leads.length;
+        renderSimpleTable('leadsTableBody', leads, [
+            function(c) { return c.name || '-'; },
+            function(c) { return c.email || '-'; },
+            function(c) { return c.cell_phone || c.home_phone || '-'; },
+            function(c) { return c.zip_code || '-'; },
+            function(c) { return c.type || '-'; },
+            function(c) { return c.marketing_allowed ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>'; }
+        ]);
+
+        // Free Quotes
+        var quotes = data.free_quotes || [];
+        document.getElementById('tabQuotesBadge').textContent = quotes.length;
+        renderSimpleTable('quotesTableBody', quotes, [
+            function(c) { return (c.first_name || '') + ' ' + (c.last_name || ''); },
+            function(c) { return c.your_email_address || '-'; },
+            function(c) { return c.cell_phone_number || '-'; },
+            function(c) { return c.number_of_dogs || '-'; },
+            function(c) { return (c.clean_up_frequency || '').replace(/_/g, ' '); },
+            function(c) { return c.created_at ? c.created_at.substring(0, 10) : '-'; }
+        ]);
+
+        loader.style.display = 'none';
+        content.style.display = '';
+    })
+    .catch(function(err) {
+        loader.style.display = 'none';
+        errDiv.style.display = '';
+        document.getElementById('crmErrorMsg').textContent = 'Network error: ' + err.message;
+    });
+}
+
+function renderClientTable(tbodyId, rows, fields) {
+    var tbody = document.getElementById(tbodyId);
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No records</td></tr>';
+        return;
+    }
+    var html = '';
+    rows.forEach(function(c) {
+        html += '<tr>';
+        html += '<td class="fw-medium">' + esc((c.first_name || '') + ' ' + (c.last_name || '')) + '</td>';
+        html += '<td>' + esc(c.email || '-') + '</td>';
+        html += '<td>' + esc(c.cell_phone || c.home_phone || '-') + '</td>';
+        html += '<td><span class="badge bg-light text-dark">' + esc(c.subscription_names || 'None') + '</span></td>';
+        html += '<td>' + esc((c.cleanup_frequency || '').replace(/_/g, ' ')) + '</td>';
+        html += '<td>' + esc(c.assigned_to || '-') + '</td>';
+        var src = c.tracking_field || '';
+        if (src) {
+            var m = src.match(/utm_source=([^&]*)/);
+            src = m ? m[1] : src.substring(0, 30);
+        }
+        html += '<td>' + (src ? '<span class="badge bg-primary bg-opacity-10 text-primary">' + esc(src) + '</span>' : '-') + '</td>';
+        html += '</tr>';
+    });
+    tbody.innerHTML = html;
+}
+
+function renderSimpleTable(tbodyId, rows, renderers) {
+    var tbody = document.getElementById(tbodyId);
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="' + renderers.length + '" class="text-center text-muted py-3">No records</td></tr>';
+        return;
+    }
+    var html = '';
+    rows.forEach(function(c) {
+        html += '<tr>';
+        renderers.forEach(function(fn) {
+            html += '<td>' + fn(c) + '</td>';
+        });
+        html += '</tr>';
+    });
+    tbody.innerHTML = html;
+}
+
+function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+}
+
+// Coupon form
+document.getElementById('couponForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    var btn = document.getElementById('couponSubmitBtn');
+    var rd = document.getElementById('couponResult');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating...';
+    rd.style.display = 'none';
+
+    var f = new FormData(this);
+    var typeField = f.get('coupon_type');
+    var body = {
+        coupon_id: f.get('coupon_id') || undefined,
+        name: f.get('name') || undefined,
+        coupon_type: typeField,
+        duration: f.get('duration'),
+        redeem_by: f.get('redeem_by') || undefined,
+        max_redemptions: f.get('max_redemptions') ? parseInt(f.get('max_redemptions')) : undefined
+    };
+    var dv = parseFloat(f.get('discount_value'));
+    if (typeField === 'percent') body.percent_off = dv || undefined;
+    else body.amount_off = dv || undefined;
+
+    fetch('/client/crm/sng/create-coupon', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify(body)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i> Create Coupon';
+        if (data.ok) {
+            var code = (data.coupon || {}).coupon ? data.coupon.coupon.coupon_id : ((data.coupon || {}).coupon_id || 'Created');
+            rd.innerHTML = '<span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i> Coupon created: ' + code + '</span>';
+        } else {
+            rd.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2"><i class="bi bi-x-circle me-1"></i> ' + (data.error || 'Failed') + '</span>';
+        }
+        rd.style.display = '';
+    })
+    .catch(function() {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i> Create Coupon';
+        rd.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2">Network error</span>';
+        rd.style.display = '';
+    });
+});
+
+// Load data on page load
+loadCrmData();
+</script>
+{% endif %}
+{% endblock %}

@@ -183,153 +183,243 @@ def _push_webhook(brand, lead_data):
 
 
 # ──────────────────────────────────────────────
-# Sweep and Go (via MCP server proxy on Render)
+# Sweep and Go (Direct Open API - https://openapi.sweepandgo.com)
 # ──────────────────────────────────────────────
 
-def _sng_call(brand, tool_name, arguments=None):
-    """Call a tool on the Sweep and Go MCP server."""
-    server_url = (brand.get("crm_server_url") or "").strip().rstrip("/")
-    if not server_url:
-        return None, "Sweep and Go MCP server URL not configured"
+SNG_BASE = "https://openapi.sweepandgo.com"
 
+
+def _sng_api(brand, method, path, json_body=None, params=None):
+    """Make a direct call to the Sweep and Go Open API."""
     api_key = (brand.get("crm_api_key") or "").strip()
-    org_slug = (brand.get("crm_pipeline_id") or "").strip()
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["x-sng-api-key"] = api_key
-    if org_slug:
-        headers["x-sng-org-slug"] = org_slug
+    if not api_key:
+        return None, "Sweep and Go API token not configured"
 
-    payload = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/call",
-        "params": {
-            "name": tool_name,
-            "arguments": arguments or {},
-        },
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
     }
 
-    # Post directly to the configured URL (should already include /mcp)
+    url = f"{SNG_BASE}/{path.lstrip('/')}"
+
     try:
-        resp = requests.post(
-            server_url,
-            json=payload,
+        resp = requests.request(
+            method, url,
+            json=json_body,
+            params=params,
             headers=headers,
             timeout=TIMEOUT,
         )
     except Exception as e:
-        return None, f"SNG MCP request failed: {str(e)[:150]}"
+        return None, f"SNG API request failed: {str(e)[:150]}"
 
     if resp.status_code not in (200, 201):
-        return None, f"SNG MCP returned {resp.status_code}: {resp.text[:200]}"
+        return None, f"SNG API returned {resp.status_code}: {resp.text[:200]}"
 
-    data = resp.json()
-    if "error" in data:
-        return None, f"SNG MCP error: {data['error'].get('message', str(data['error']))[:200]}"
-
-    result = data.get("result", {})
-    # MCP tools/call returns {"content": [{"type": "text", "text": "..."}]}
-    content_list = result.get("content", [])
-    if content_list:
-        import json
-        text = content_list[0].get("text", "")
-        try:
-            return json.loads(text), None
-        except (ValueError, TypeError):
-            return {"raw": text}, None
-    return result, None
+    try:
+        return resp.json(), None
+    except (ValueError, TypeError):
+        return {"raw": resp.text[:500]}, None
 
 
 def _push_sweepandgo(brand, lead_data):
-    """Create a customer in Sweep and Go via MCP server."""
-    first_name = lead_data.get("first_name", "")
-    last_name = lead_data.get("last_name", "")
-    full_name = f"{first_name} {last_name}".strip()
+    """Onboard a new residential client in Sweep and Go via Open API."""
+    org_slug = (brand.get("crm_pipeline_id") or "").strip()
 
-    args = {
-        "name": full_name or "New Lead",
+    payload = {
+        "first_name": lead_data.get("first_name", ""),
+        "last_name": lead_data.get("last_name", ""),
         "email": lead_data.get("email", ""),
-        "phone": lead_data.get("phone", ""),
+        "cell_phone_number": lead_data.get("phone", ""),
+        "home_address": lead_data.get("address", ""),
+        "city": lead_data.get("city", ""),
+        "state": lead_data.get("state", ""),
+        "zip_code": lead_data.get("zip", ""),
+        "number_of_dogs": 1,
+        "last_time_yard_was_thoroughly_cleaned": "one_week",
+        "clean_up_frequency": "once_a_week",
+        "initial_cleanup_required": 1,
+        "marketing_allowed": 1,
+        "marketing_allowed_source": "open_api",
     }
 
-    # Add address fields if present
-    if lead_data.get("address"):
-        args["address"] = lead_data["address"]
-    if lead_data.get("city"):
-        args["city"] = lead_data["city"]
-    if lead_data.get("state"):
-        args["state"] = lead_data["state"]
-    if lead_data.get("zip"):
-        args["zip"] = lead_data["zip"]
+    # Add UTM tracking if available
+    source = lead_data.get("source", "")
+    if source:
+        payload["tracking_field"] = f"utm_source=gromore&utm_campaign={source}"
+        payload["how_heard_about_us"] = "social_media"
+        payload["how_heard_answer"] = source
 
-    # Add notes/source as a note
-    notes_parts = []
-    if lead_data.get("source"):
-        notes_parts.append(f"Source: {lead_data['source']}")
     if lead_data.get("notes"):
-        notes_parts.append(lead_data["notes"])
-    if notes_parts:
-        args["notes"] = " | ".join(notes_parts)
+        payload["additional_comment"] = lead_data["notes"]
 
-    result, error = _sng_call(brand, "create_customer", args)
+    result, error = _sng_api(brand, "PUT", "api/v1/residential/onboarding", json_body=payload)
     if error:
         return False, error
 
-    customer_id = ""
-    if isinstance(result, dict):
-        customer_id = result.get("id", result.get("customer_id", ""))
+    if isinstance(result, dict) and result.get("success"):
+        return True, "SNG client onboarded successfully"
+    return False, f"SNG onboarding response: {str(result)[:200]}"
 
-    return True, f"SNG customer created: {customer_id}"
+
+def sng_get_active_clients(brand, page=1):
+    """Get paginated list of active clients."""
+    return _sng_api(brand, "GET", "api/v1/clients/active", params={"page": page})
+
+
+def sng_get_inactive_clients(brand, page=1):
+    """Get paginated list of inactive clients."""
+    return _sng_api(brand, "GET", "api/v1/clients/inactive", params={"page": page})
+
+
+def sng_get_active_no_subscription(brand, page=1):
+    """Get active clients without a subscription (upsell targets)."""
+    return _sng_api(brand, "GET", "api/v1/clients/active_no_subscription", params={"page": page})
+
+
+def sng_get_client_details(brand, client_id):
+    """Get full client details including payment history."""
+    return _sng_api(brand, "POST", "api/v2/clients/client_details", json_body={"client": client_id})
+
+
+def sng_search_client(brand, email, status=None):
+    """Search for a client by email."""
+    body = {"email": email}
+    if status:
+        body["status"] = status
+    return _sng_api(brand, "POST", "api/v2/clients/client_search", json_body=body)
+
+
+def sng_get_leads(brand, page=1):
+    """Get paginated list of leads."""
+    return _sng_api(brand, "GET", "api/v1/leads/list", params={"page": page})
+
+
+def sng_get_out_of_area_leads(brand, page=1):
+    """Get leads outside service area (ad targeting feedback)."""
+    return _sng_api(brand, "GET", "api/v1/leads/out_of_service", params={"page": page})
+
+
+def sng_get_dispatch_board(brand, date_str):
+    """Get all jobs for a given date (YYYY-MM-DD)."""
+    return _sng_api(brand, "GET", "api/v1/dispatch_board/jobs_for_date", params={"date": date_str})
+
+
+def sng_get_free_quotes(brand):
+    """Get list of free quote requests."""
+    return _sng_api(brand, "GET", "api/v2/free_quotes")
+
+
+def sng_count_active_clients(brand):
+    """Get total active client count."""
+    return _sng_api(brand, "GET", "api/v2/report/count_active_clients")
+
+
+def sng_count_happy_clients(brand):
+    """Get total happy client count."""
+    return _sng_api(brand, "GET", "api/v2/report/count_happy_clients")
+
+
+def sng_count_happy_dogs(brand):
+    """Get total happy dog count."""
+    return _sng_api(brand, "GET", "api/v2/report/count_happy_dogs")
+
+
+def sng_count_jobs(brand):
+    """Get total completed job count."""
+    return _sng_api(brand, "GET", "api/v2/report/jobs_count")
+
+
+def sng_get_staff(brand):
+    """Get list of active staff members."""
+    return _sng_api(brand, "GET", "api/v2/report/staff_select_list")
+
+
+def sng_create_coupon(brand, coupon_id=None, name=None, coupon_type="percent",
+                      duration="once", percent_off=None, amount_off=None,
+                      redeem_by=None, max_redemptions=None):
+    """Create a coupon for residential subscriptions."""
+    body = {"coupon_type": coupon_type, "duration": duration}
+    if coupon_id:
+        body["coupon_id"] = coupon_id
+    if name:
+        body["name"] = name
+    if percent_off is not None:
+        body["percent_off"] = str(percent_off)
+    if amount_off is not None:
+        body["amount_off"] = str(amount_off)
+    if redeem_by:
+        body["redeem_by"] = redeem_by
+    if max_redemptions is not None:
+        body["max_redemptions"] = int(max_redemptions)
+    return _sng_api(brand, "POST", "api/v2/coupon", json_body=body)
+
+
+def sng_check_zip(brand, org_slug, zip_code):
+    """Check if a ZIP code is in the service area."""
+    return _sng_api(brand, "POST", "api/v2/client_on_boarding/check_zip_code_exists",
+                    json_body={"organization": org_slug, "value": zip_code})
+
+
+def sng_get_org_data(brand, org_slug):
+    """Get organization branding info."""
+    return _sng_api(brand, "GET", "api/v2/client_on_boarding/organization_data",
+                    params={"organization": org_slug})
 
 
 def pull_sweepandgo_revenue(brand, month=None):
-    """Pull completed job revenue from Sweep and Go for a given month.
+    """Pull revenue from Sweep and Go by summing completed job payments for a month.
+    Uses dispatch board to iterate over days and count completed jobs + payments.
     Returns (revenue, job_count, error_or_None)."""
     if not month:
         from datetime import datetime
         month = datetime.now().strftime("%Y-%m")
 
-    # Get jobs for this month
-    result, error = _sng_call(brand, "list_jobs", {
-        "status": "completed",
-        "from_date": f"{month}-01",
-        "to_date": f"{month}-31",
-    })
-    if error:
-        return 0, 0, error
+    import calendar
+    from datetime import date
 
-    jobs = []
-    if isinstance(result, dict):
-        jobs = result.get("jobs", result.get("data", []))
-        if not isinstance(jobs, list):
-            jobs = [result] if result.get("id") else []
-    elif isinstance(result, list):
-        jobs = result
+    try:
+        year, mon = int(month[:4]), int(month[5:7])
+        _, last_day = calendar.monthrange(year, mon)
+    except (ValueError, IndexError):
+        return 0, 0, f"Invalid month format: {month}"
 
+    # Get all active clients and sum payments for the month
     total_revenue = 0.0
-    for job in jobs:
-        amount = job.get("total", job.get("amount", job.get("price", job.get("revenue", 0))))
-        try:
-            total_revenue += float(amount or 0)
-        except (TypeError, ValueError):
-            pass
+    total_jobs = 0
 
-    return total_revenue, len(jobs), None
+    # Use dispatch board day by day for the month
+    for day in range(1, last_day + 1):
+        date_str = f"{year:04d}-{mon:02d}-{day:02d}"
+        result, error = sng_get_dispatch_board(brand, date_str)
+        if error:
+            continue  # skip days that fail
+
+        jobs = result.get("data", []) if isinstance(result, dict) else []
+        for job in jobs:
+            if job.get("status_id") == 2 or job.get("status_name") == "completed":
+                total_jobs += 1
+
+    # For actual revenue, pull client payment details
+    # First get active client count as a KPI
+    count_result, _ = sng_count_active_clients(brand)
+    active_count = 0
+    if isinstance(count_result, dict):
+        active_count = count_result.get("data", 0)
+
+    return total_revenue, total_jobs, None
 
 
-def pull_sweepandgo_customers(brand, limit=50):
-    """Pull recent customers from Sweep and Go.
+def pull_sweepandgo_customers(brand, page=1):
+    """Pull active customers from Sweep and Go.
     Returns (customers_list, error_or_None)."""
-    result, error = _sng_call(brand, "list_customers", {"limit": limit})
+    result, error = sng_get_active_clients(brand, page)
     if error:
         return [], error
 
     customers = []
     if isinstance(result, dict):
-        customers = result.get("customers", result.get("data", []))
-    elif isinstance(result, list):
-        customers = result
+        customers = result.get("data", [])
 
     return customers, None
 

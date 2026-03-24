@@ -290,6 +290,25 @@ def client_dashboard_data():
             except Exception:
                 dashboard_data["drafts"] = []
 
+            # SNG business pulse (non-blocking)
+            try:
+                if brand.get("crm_type") == "sweepandgo" and brand.get("crm_api_key"):
+                    from webapp.crm_bridge import (
+                        sng_count_active_clients,
+                        sng_count_happy_clients,
+                        sng_count_happy_dogs,
+                        sng_count_jobs,
+                    )
+                    dashboard_data["sng"] = {
+                        "connected": True,
+                        "active_clients": sng_count_active_clients(brand) or 0,
+                        "happy_clients": sng_count_happy_clients(brand) or 0,
+                        "happy_dogs": sng_count_happy_dogs(brand) or 0,
+                        "completed_jobs": sng_count_jobs(brand) or 0,
+                    }
+            except Exception:
+                dashboard_data["sng"] = {"connected": False}
+
             return jsonify({"dashboard": dashboard_data, "error": ""})
         else:
             return jsonify({"dashboard": None, "error": "No data available for this month."})
@@ -4435,6 +4454,170 @@ def client_save_wordpress():
 
     flash("WordPress settings saved.", "success")
     return redirect(url_for("client.client_settings"))
+
+
+@client_bp.route("/settings/sng", methods=["POST"])
+@client_login_required
+def client_save_sng():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    api_key = request.form.get("sng_api_key", "").strip()
+    org_slug = request.form.get("sng_org_slug", "").strip()
+
+    # Set CRM type to sweepandgo
+    db.update_brand_text_field(brand_id, "crm_type", "sweepandgo")
+
+    # Only update key if user entered something (don't blank it)
+    if api_key:
+        db.update_brand_text_field(brand_id, "crm_api_key", api_key)
+
+    db.update_brand_text_field(brand_id, "crm_pipeline_id", org_slug)
+
+    flash("Sweep and Go settings saved.", "success")
+    return redirect(url_for("client.client_settings"))
+
+
+@client_bp.route("/crm/sng/test", methods=["POST"])
+@client_login_required
+def client_sng_test():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    if brand.get("crm_type") != "sweepandgo" or not brand.get("crm_api_key"):
+        return jsonify(ok=False, error="Sweep and Go not configured. Save your API token first.")
+
+    from webapp.crm_bridge import sng_count_active_clients
+    result, error = sng_count_active_clients(brand)
+    if error:
+        return jsonify(ok=False, error=error)
+
+    count = result.get("data", 0) if isinstance(result, dict) else 0
+    return jsonify(ok=True, message=f"Connected - {count} active clients found")
+
+
+# ── CRM Dashboard Tab ──
+
+@client_bp.route("/crm")
+@client_login_required
+def client_crm():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    crm_connected = (brand.get("crm_type") == "sweepandgo" and bool(brand.get("crm_api_key")))
+
+    return render_template(
+        "client_crm.html",
+        brand=brand,
+        crm_connected=crm_connected,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/crm/data")
+@client_login_required
+def client_crm_data():
+    """JSON endpoint: fetch all SNG data for the CRM tab."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(error="Brand not found"), 404
+
+    if brand.get("crm_type") != "sweepandgo" or not brand.get("crm_api_key"):
+        return jsonify(error="Sweep and Go not connected"), 400
+
+    from webapp.crm_bridge import (
+        sng_count_active_clients, sng_count_happy_clients,
+        sng_count_happy_dogs, sng_count_jobs,
+        sng_get_active_clients, sng_get_inactive_clients,
+        sng_get_active_no_subscription, sng_get_leads,
+        sng_get_free_quotes,
+    )
+
+    data = {"kpis": {}, "clients": [], "inactive": [], "no_subscription": [],
+            "leads": [], "free_quotes": []}
+
+    # KPIs
+    r, _ = sng_count_active_clients(brand)
+    data["kpis"]["active_clients"] = r.get("data", 0) if isinstance(r, dict) else 0
+
+    r, _ = sng_count_happy_clients(brand)
+    data["kpis"]["happy_clients"] = r.get("data", 0) if isinstance(r, dict) else 0
+
+    r, _ = sng_count_happy_dogs(brand)
+    data["kpis"]["happy_dogs"] = r.get("data", 0) if isinstance(r, dict) else 0
+
+    r, _ = sng_count_jobs(brand)
+    data["kpis"]["completed_jobs"] = r.get("data", 0) if isinstance(r, dict) else 0
+
+    # Active clients (page 1)
+    r, _ = sng_get_active_clients(brand, page=1)
+    if isinstance(r, dict):
+        data["clients"] = r.get("data", [])
+        data["clients_pagination"] = r.get("paginate", {})
+
+    # Inactive clients (page 1)
+    r, _ = sng_get_inactive_clients(brand, page=1)
+    if isinstance(r, dict):
+        data["inactive"] = r.get("data", [])
+        data["inactive_pagination"] = r.get("paginate", {})
+
+    # No subscription (page 1)
+    r, _ = sng_get_active_no_subscription(brand, page=1)
+    if isinstance(r, dict):
+        data["no_subscription"] = r.get("data", [])
+        data["no_sub_pagination"] = r.get("paginate", {})
+
+    # Leads
+    r, _ = sng_get_leads(brand, page=1)
+    if isinstance(r, dict):
+        data["leads"] = r.get("data", [])
+        data["leads_pagination"] = r.get("paginate", {})
+
+    # Free quotes
+    r, _ = sng_get_free_quotes(brand)
+    if isinstance(r, dict):
+        data["free_quotes"] = r.get("free_quotes", [])
+
+    return jsonify(data)
+
+
+@client_bp.route("/crm/sng/create-coupon", methods=["POST"])
+@client_login_required
+def client_sng_create_coupon():
+    """Create a coupon in SNG from the CRM tab."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand or brand.get("crm_type") != "sweepandgo":
+        return jsonify(ok=False, error="SNG not configured"), 400
+
+    from webapp.crm_bridge import sng_create_coupon
+    payload = request.get_json(silent=True) or {}
+
+    result, error = sng_create_coupon(
+        brand,
+        coupon_id=payload.get("coupon_id"),
+        name=payload.get("name"),
+        coupon_type=payload.get("coupon_type", "percent"),
+        duration=payload.get("duration", "once"),
+        percent_off=payload.get("percent_off"),
+        amount_off=payload.get("amount_off"),
+        redeem_by=payload.get("redeem_by"),
+        max_redemptions=payload.get("max_redemptions"),
+    )
+
+    if error:
+        return jsonify(ok=False, error=error)
+
+    return jsonify(ok=True, coupon=result)
 
 
 # ── Post Scheduler ──

@@ -905,6 +905,9 @@
             <a href="{{ url_for('client.client_my_business') }}" class="{% if request.endpoint == 'client.client_my_business' %}active{% endif %}">
                 <i class="bi bi-building"></i> My Business
             </a>
+            <a href="{{ url_for('client.client_crm') }}" class="{% if request.endpoint in ('client.client_crm',) %}active{% endif %}">
+                <i class="bi bi-people"></i> CRM
+            </a>
             <a href="{{ url_for('client.client_gbp') }}" class="{% if request.endpoint == 'client.client_gbp' %}active{% endif %}">
                 <i class="bi bi-google"></i> Google Profile
             </a>
