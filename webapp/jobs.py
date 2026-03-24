@@ -70,3 +70,31 @@ def send_all_reports():
 
     flash(f"Sent {sent} reports, skipped {skipped}", "success" if sent > 0 else "info")
     return redirect(url_for("dashboard"))
+
+
+@jobs_bp.route("/sync-sng-revenue", methods=["POST"])
+def sync_sng_revenue_all():
+    """Batch sync SNG revenue for all brands with Sweep and Go configured.
+    Pulls previous complete month payment data for each brand."""
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    db = current_app.db
+    brands = db.get_all_brands()
+
+    from webapp.crm_bridge import sng_sync_revenue
+
+    synced = 0
+    skipped = 0
+    for brand in brands:
+        if brand.get("crm_type") != "sweepandgo" or not brand.get("crm_api_key"):
+            skipped += 1
+            continue
+        try:
+            sng_sync_revenue(brand, db)
+            synced += 1
+        except Exception:
+            skipped += 1
+
+    flash(f"SNG revenue synced: {synced} brands, {skipped} skipped", "success" if synced > 0 else "info")
+    return redirect(url_for("dashboard"))

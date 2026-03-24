@@ -4538,7 +4538,7 @@ def client_crm_data():
         sng_count_happy_dogs, sng_count_jobs,
         sng_get_active_clients, sng_get_inactive_clients,
         sng_get_active_no_subscription, sng_get_leads,
-        sng_get_free_quotes, sng_estimate_revenue_snapshot,
+        sng_get_free_quotes, sng_get_cached_revenue,
     )
 
     data = {"kpis": {}, "clients": [], "inactive": [], "no_subscription": [],
@@ -4586,23 +4586,22 @@ def client_crm_data():
     if isinstance(r, dict):
         data["free_quotes"] = r.get("free_quotes", [])
 
-    # Revenue intelligence
+    # Revenue intelligence - read from cache (fast, no heavy API calls)
     try:
-        rev = sng_estimate_revenue_snapshot(brand)
+        rev = sng_get_cached_revenue(brand, db)
         data["revenue"] = rev
 
         # Fetch ad spend for ROAS calculation
-        month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+        rev_month = rev.get("revenue_month") or request.args.get("month") or datetime.now().strftime("%Y-%m")
         try:
             from webapp.report_runner import build_analysis_and_suggestions_for_brand
-            analysis, _ = build_analysis_and_suggestions_for_brand(db, brand, month)
+            analysis, _ = build_analysis_and_suggestions_for_brand(db, brand, rev_month)
             if analysis:
                 roas_info = analysis.get("roas", {})
                 data["revenue"]["ad_spend"] = roas_info.get("total_spend", 0)
                 data["revenue"]["total_conversions"] = roas_info.get("total_conversions", 0)
                 if rev.get("mrr") and roas_info.get("total_spend"):
                     data["revenue"]["blended_roas"] = round(rev["mrr"] / roas_info["total_spend"], 2)
-                # Cost per acquisition
                 conversions = roas_info.get("total_conversions", 0)
                 spend = roas_info.get("total_spend", 0)
                 if conversions > 0 and spend > 0:
@@ -4610,24 +4609,32 @@ def client_crm_data():
         except Exception:
             pass  # ad spend data is optional
 
-        # Auto-sync MRR to brand_month_finance (so existing ROAS pipeline picks it up)
-        if rev.get("mrr") and rev["mrr"] > 0:
-            try:
-                month = datetime.now().strftime("%Y-%m")
-                db.upsert_brand_month_finance(
-                    brand_id, month,
-                    closed_revenue=rev["mrr"],
-                    closed_deals=rev["active_clients"],
-                    notes="SNG auto-sync (real payments)"
-                )
-            except Exception:
-                pass
-
     except Exception as exc:
         import traceback
         data["revenue"] = {"error": str(exc), "traceback": traceback.format_exc()}
 
     return jsonify(data)
+
+
+@client_bp.route("/crm/sng/sync", methods=["POST"])
+@client_login_required
+def client_sng_sync_revenue():
+    """Trigger a full revenue sync for this brand. Pulls ALL client payment data
+    for the previous complete month. This is slow (minutes) but only needs to run
+    once a month."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand or brand.get("crm_type") != "sweepandgo" or not brand.get("crm_api_key"):
+        return jsonify(error="SNG not configured"), 400
+
+    from webapp.crm_bridge import sng_sync_revenue
+    try:
+        snapshot = sng_sync_revenue(brand, db)
+        return jsonify(ok=True, revenue=snapshot)
+    except Exception as exc:
+        import traceback
+        return jsonify(ok=False, error=str(exc), traceback=traceback.format_exc()), 500
 
 
 @client_bp.route("/crm/sng/probe")

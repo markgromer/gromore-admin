@@ -145,7 +145,15 @@
 
     <!-- Revenue Intelligence -->
     <div id="revenueSection" class="crm-section" style="display:none;">
-        <h5><i class="bi bi-graph-up-arrow text-success"></i> Revenue Intelligence</h5>
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <h5 class="mb-0"><i class="bi bi-graph-up-arrow text-success"></i> Revenue Intelligence</h5>
+            <div class="d-flex align-items-center gap-2">
+                <small class="text-muted" id="revSyncedAt" style="font-size:.75rem;"></small>
+                <button class="btn btn-outline-success btn-sm" id="revSyncBtn" onclick="syncRevenue()" style="font-size:.78rem;">
+                    <i class="bi bi-arrow-repeat"></i> Sync Revenue
+                </button>
+            </div>
+        </div>
         <div id="revenueCards" style="display:none;">
             <div class="row g-3 mb-3">
                 <div class="col-6 col-lg-3">
@@ -223,7 +231,7 @@
                 </div>
             </div>
             <div class="mt-2 text-end">
-                <small class="text-muted" style="font-size:.75rem;">Revenue from real Sweep and Go payment data (<span id="revSampleInfo">sampled</span>). CLV based on ~18 month avg retention.</small>
+                <small class="text-muted" style="font-size:.75rem;">Revenue from real Sweep and Go payment data for <span id="revMonthLabel">previous month</span>. CLV based on ~18 month avg retention.</small>
             </div>
         </div>
     </div>
@@ -514,14 +522,32 @@ function loadCrmData() {
         var rev = data.revenue || {};
         var revSection = document.getElementById('revenueSection');
         revSection.style.display = '';
+
+        // Show error info in console if revenue failed
+        if (rev.error) {
+            console.error('Revenue error:', rev.error, rev.traceback);
+        }
+
         document.getElementById('revenueCards').style.display = '';
 
         function fmtDollar(v) { return '$' + (parseFloat(v) || 0).toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}); }
         function fmtDollar2(v) { return '$' + (parseFloat(v) || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
 
-        document.getElementById('revMrr').textContent = fmtDollar(rev.mrr);
-        document.getElementById('revClv').textContent = fmtDollar(rev.estimated_clv);
-        document.getElementById('revChurn').textContent = fmtDollar(rev.churn_cost_total);
+        // Show "no data yet" state if cache is empty (no mrr key or zero with no synced_at)
+        var hasRevenueData = rev.synced_at && rev.mrr !== undefined;
+        if (!hasRevenueData) {
+            document.getElementById('revMrr').innerHTML = '<span style="font-size:.85rem;color:#94a3b8;">Not synced yet</span>';
+            document.getElementById('revClv').innerHTML = '<span style="font-size:.85rem;color:#94a3b8;">-</span>';
+            document.getElementById('revChurn').innerHTML = '<span style="font-size:.85rem;color:#94a3b8;">-</span>';
+            document.getElementById('revSyncedAt').textContent = 'Click "Sync Revenue" to pull payment data';
+        } else {
+            document.getElementById('revMrr').textContent = fmtDollar(rev.mrr);
+            document.getElementById('revClv').textContent = fmtDollar(rev.estimated_clv);
+            document.getElementById('revChurn').textContent = fmtDollar(rev.churn_cost_total);
+            document.getElementById('revSyncedAt').textContent = 'Last synced: ' + rev.synced_at + ' (' + (rev.revenue_month || '') + ')';
+            document.getElementById('revMonthLabel').textContent = rev.revenue_month || 'previous month';
+        }
+
         document.getElementById('revMonthlyVal').textContent = fmtDollar2(rev.avg_client_monthly_value);
         document.getElementById('revLifetimeVal').textContent = fmtDollar(rev.estimated_clv);
         document.getElementById('revChurnCount').textContent = (rev.inactive_clients || 0).toLocaleString();
@@ -560,6 +586,44 @@ function loadCrmData() {
         loader.style.display = 'none';
         errDiv.style.display = '';
         document.getElementById('crmErrorMsg').textContent = 'Network error: ' + err.message;
+    });
+}
+
+function syncRevenue() {
+    var btn = document.getElementById('revSyncBtn');
+    var origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Syncing...';
+    document.getElementById('revSyncedAt').textContent = 'Scanning all clients - this may take a minute...';
+
+    fetch('{{ url_for("client.client_sng_sync_revenue") }}', {method: 'POST'})
+    .then(function(r) { return r.json(); })
+    .then(function(resp) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+        if (resp.ok && resp.revenue) {
+            var rev = resp.revenue;
+            function fmtDollar(v) { return '$' + (parseFloat(v) || 0).toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}); }
+            function fmtDollar2(v) { return '$' + (parseFloat(v) || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+            document.getElementById('revMrr').textContent = fmtDollar(rev.mrr);
+            document.getElementById('revClv').textContent = fmtDollar(rev.estimated_clv);
+            document.getElementById('revChurn').textContent = fmtDollar(rev.churn_cost_total);
+            document.getElementById('revMonthlyVal').textContent = fmtDollar2(rev.avg_client_monthly_value);
+            document.getElementById('revLifetimeVal').textContent = fmtDollar(rev.estimated_clv);
+            document.getElementById('revChurnCount').textContent = (rev.inactive_clients || 0).toLocaleString();
+            document.getElementById('revChurnMonthly').textContent = fmtDollar(rev.inactive_clients * (rev.avg_client_monthly_value || 0));
+            document.getElementById('revChurnTotal').textContent = fmtDollar(rev.churn_cost_total);
+            document.getElementById('revSyncedAt').textContent = 'Last synced: ' + rev.synced_at + ' (' + rev.revenue_month + ')';
+            document.getElementById('revMonthLabel').textContent = rev.revenue_month || 'previous month';
+        } else {
+            document.getElementById('revSyncedAt').textContent = 'Sync failed: ' + (resp.error || 'Unknown error');
+            console.error('Sync error:', resp);
+        }
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+        document.getElementById('revSyncedAt').textContent = 'Sync failed: ' + err.message;
     });
 }
 
