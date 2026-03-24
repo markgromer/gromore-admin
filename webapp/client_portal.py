@@ -4539,10 +4539,14 @@ def client_crm_data():
         sng_get_active_clients, sng_get_inactive_clients,
         sng_get_active_no_subscription, sng_get_leads,
         sng_get_free_quotes, sng_get_cached_revenue,
+        sng_sync_revenue,
     )
 
     data = {"kpis": {}, "clients": [], "inactive": [], "no_subscription": [],
             "leads": [], "free_quotes": [], "revenue": {}}
+
+    # If ?sync=1 is passed, do a full revenue sync first
+    do_sync = request.args.get("sync") == "1"
 
     # KPIs
     r, _ = sng_count_active_clients(brand)
@@ -4586,9 +4590,15 @@ def client_crm_data():
     if isinstance(r, dict):
         data["free_quotes"] = r.get("free_quotes", [])
 
-    # Revenue intelligence - read from cache (fast, no heavy API calls)
+    # Revenue intelligence
     try:
-        rev = sng_get_cached_revenue(brand, db)
+        if do_sync:
+            # Full sync: sample clients, get real payments, cache results
+            rev = sng_sync_revenue(brand, db)
+        else:
+            # Normal page load: read from cache (fast, no heavy API calls)
+            rev = sng_get_cached_revenue(brand, db)
+
         data["revenue"] = rev
 
         # Fetch ad spend for ROAS calculation
@@ -4614,26 +4624,6 @@ def client_crm_data():
         data["revenue"] = {"error": str(exc), "traceback": traceback.format_exc()}
 
     return jsonify(data)
-
-
-@client_bp.route("/crm/sng/sync", methods=["POST"])
-@client_login_required
-def client_sng_sync_revenue():
-    """Synchronous revenue sync - samples ~50 clients from previous month
-    and extrapolates. Completes in ~60 seconds."""
-    db = _get_db()
-    brand_id = session["client_brand_id"]
-    brand = db.get_brand(brand_id)
-    if not brand or brand.get("crm_type") != "sweepandgo" or not brand.get("crm_api_key"):
-        return jsonify(ok=False, error="SNG not configured"), 400
-
-    from webapp.crm_bridge import sng_sync_revenue
-    try:
-        snapshot = sng_sync_revenue(brand, db)
-        return jsonify(ok=True, revenue=snapshot)
-    except Exception as exc:
-        import traceback
-        return jsonify(ok=False, error=str(exc), traceback=traceback.format_exc()), 500
 
 
 @client_bp.route("/crm/sng/probe")

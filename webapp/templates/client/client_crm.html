@@ -596,16 +596,19 @@ function syncRevenue() {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Syncing...';
     document.getElementById('revSyncedAt').textContent = 'Scanning clients - this may take up to a minute...';
 
-    fetch('{{ url_for("client.client_sng_sync_revenue") }}', {method: 'POST'})
+    // Re-use the same /crm/data endpoint with ?sync=1 to trigger revenue sync
+    fetch('{{ url_for("client.client_crm_data") }}?sync=1')
     .then(function(r) { return r.json(); })
-    .then(function(resp) {
+    .then(function(data) {
         btn.disabled = false;
         btn.innerHTML = origHtml;
-        if (resp.ok && resp.revenue) {
-            updateRevenueCards(resp.revenue);
+        if (data.revenue && data.revenue.synced_at) {
+            updateRevenueCards(data.revenue);
+        } else if (data.revenue && data.revenue.error) {
+            document.getElementById('revSyncedAt').textContent = 'Sync error: ' + data.revenue.error;
+            console.error('Revenue sync error:', data.revenue);
         } else {
-            document.getElementById('revSyncedAt').textContent = 'Sync failed: ' + (resp.error || 'Unknown error');
-            console.error('Sync error:', resp);
+            document.getElementById('revSyncedAt').textContent = 'Sync returned no data';
         }
     })
     .catch(function(err) {
