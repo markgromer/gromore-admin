@@ -481,6 +481,7 @@ def sng_sync_revenue(brand, db):
         "churn_cost_total": churn_cost,
         "avg_retention_months": avg_retention_months,
         "synced_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "sync_status": "done",
         "data_source": "real_payments_full",
     }
 

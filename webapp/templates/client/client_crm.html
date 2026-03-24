@@ -594,30 +594,18 @@ function syncRevenue() {
     var origHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Syncing...';
-    document.getElementById('revSyncedAt').textContent = 'Scanning all clients - this may take a minute...';
+    document.getElementById('revSyncedAt').textContent = 'Scanning all clients - this may take a few minutes...';
 
     fetch('{{ url_for("client.client_sng_sync_revenue") }}', {method: 'POST'})
     .then(function(r) { return r.json(); })
     .then(function(resp) {
-        btn.disabled = false;
-        btn.innerHTML = origHtml;
-        if (resp.ok && resp.revenue) {
-            var rev = resp.revenue;
-            function fmtDollar(v) { return '$' + (parseFloat(v) || 0).toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}); }
-            function fmtDollar2(v) { return '$' + (parseFloat(v) || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
-            document.getElementById('revMrr').textContent = fmtDollar(rev.mrr);
-            document.getElementById('revClv').textContent = fmtDollar(rev.estimated_clv);
-            document.getElementById('revChurn').textContent = fmtDollar(rev.churn_cost_total);
-            document.getElementById('revMonthlyVal').textContent = fmtDollar2(rev.avg_client_monthly_value);
-            document.getElementById('revLifetimeVal').textContent = fmtDollar(rev.estimated_clv);
-            document.getElementById('revChurnCount').textContent = (rev.inactive_clients || 0).toLocaleString();
-            document.getElementById('revChurnMonthly').textContent = fmtDollar(rev.inactive_clients * (rev.avg_client_monthly_value || 0));
-            document.getElementById('revChurnTotal').textContent = fmtDollar(rev.churn_cost_total);
-            document.getElementById('revSyncedAt').textContent = 'Last synced: ' + rev.synced_at + ' (' + rev.revenue_month + ')';
-            document.getElementById('revMonthLabel').textContent = rev.revenue_month || 'previous month';
+        if (resp.ok && resp.status === 'started') {
+            // Poll for completion every 5 seconds
+            pollSyncStatus(btn, origHtml);
         } else {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
             document.getElementById('revSyncedAt').textContent = 'Sync failed: ' + (resp.error || 'Unknown error');
-            console.error('Sync error:', resp);
         }
     })
     .catch(function(err) {
@@ -625,6 +613,46 @@ function syncRevenue() {
         btn.innerHTML = origHtml;
         document.getElementById('revSyncedAt').textContent = 'Sync failed: ' + err.message;
     });
+}
+
+function pollSyncStatus(btn, origHtml) {
+    var pollUrl = '{{ url_for("client.client_sng_sync_status") }}';
+    var pollInterval = setInterval(function() {
+        fetch(pollUrl)
+        .then(function(r) { return r.json(); })
+        .then(function(resp) {
+            if (resp.status === 'done') {
+                clearInterval(pollInterval);
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+                updateRevenueCards(resp.revenue);
+            } else if (resp.status === 'error') {
+                clearInterval(pollInterval);
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+                document.getElementById('revSyncedAt').textContent = 'Sync error: ' + (resp.revenue.sync_error || 'Unknown');
+            }
+            // else status === 'running', keep polling
+        })
+        .catch(function() {
+            // Network error, keep polling
+        });
+    }, 5000);
+}
+
+function updateRevenueCards(rev) {
+    function fmtDollar(v) { return '$' + (parseFloat(v) || 0).toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}); }
+    function fmtDollar2(v) { return '$' + (parseFloat(v) || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+    document.getElementById('revMrr').textContent = fmtDollar(rev.mrr);
+    document.getElementById('revClv').textContent = fmtDollar(rev.estimated_clv);
+    document.getElementById('revChurn').textContent = fmtDollar(rev.churn_cost_total);
+    document.getElementById('revMonthlyVal').textContent = fmtDollar2(rev.avg_client_monthly_value);
+    document.getElementById('revLifetimeVal').textContent = fmtDollar(rev.estimated_clv);
+    document.getElementById('revChurnCount').textContent = (rev.inactive_clients || 0).toLocaleString();
+    document.getElementById('revChurnMonthly').textContent = fmtDollar(rev.inactive_clients * (rev.avg_client_monthly_value || 0));
+    document.getElementById('revChurnTotal').textContent = fmtDollar(rev.churn_cost_total);
+    document.getElementById('revSyncedAt').textContent = 'Last synced: ' + (rev.synced_at || 'just now') + ' (' + (rev.revenue_month || '') + ')';
+    document.getElementById('revMonthLabel').textContent = rev.revenue_month || 'previous month';
 }
 
 function renderClientTable(tbodyId, rows, fields) {

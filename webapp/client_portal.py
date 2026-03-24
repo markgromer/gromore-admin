@@ -4619,22 +4619,72 @@ def client_crm_data():
 @client_bp.route("/crm/sng/sync", methods=["POST"])
 @client_login_required
 def client_sng_sync_revenue():
-    """Trigger a full revenue sync for this brand. Pulls ALL client payment data
-    for the previous complete month. This is slow (minutes) but only needs to run
-    once a month."""
+    """Kick off a full revenue sync in a background thread.
+    Returns immediately so we don't hit Gunicorn's timeout on 249+ API calls."""
+    import threading
     db = _get_db()
     brand_id = session["client_brand_id"]
     brand = db.get_brand(brand_id)
     if not brand or brand.get("crm_type") != "sweepandgo" or not brand.get("crm_api_key"):
         return jsonify(error="SNG not configured"), 400
 
-    from webapp.crm_bridge import sng_sync_revenue
+    # Mark sync as in-progress so the UI can poll
+    import json
+    cache_key = f"sng_revenue_cache_{brand_id}"
+    existing = db.get_setting(cache_key, "{}")
     try:
-        snapshot = sng_sync_revenue(brand, db)
-        return jsonify(ok=True, revenue=snapshot)
-    except Exception as exc:
-        import traceback
-        return jsonify(ok=False, error=str(exc), traceback=traceback.format_exc()), 500
+        cached = json.loads(existing)
+    except Exception:
+        cached = {}
+    cached["sync_status"] = "running"
+    cached["sync_started"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.save_setting(cache_key, json.dumps(cached))
+
+    # Run the heavy sync in a background thread
+    # Need a fresh db connection since SQLite connections can't cross threads
+    from webapp.app import create_app
+    brand_copy = dict(brand)
+
+    def _run_sync():
+        try:
+            app = create_app()
+            with app.app_context():
+                from webapp.crm_bridge import sng_sync_revenue
+                sync_db = app.db
+                sng_sync_revenue(brand_copy, sync_db)
+        except Exception as exc:
+            import traceback
+            # Write error to cache so UI sees it
+            try:
+                app = create_app()
+                with app.app_context():
+                    err_db = app.db
+                    err_cache = {"sync_status": "error", "sync_error": str(exc)}
+                    err_db.save_setting(cache_key, json.dumps(err_cache))
+            except Exception:
+                pass
+
+    t = threading.Thread(target=_run_sync, daemon=True)
+    t.start()
+
+    return jsonify(ok=True, status="started", message="Revenue sync started. This may take a few minutes.")
+
+
+@client_bp.route("/crm/sng/sync-status")
+@client_login_required
+def client_sng_sync_status():
+    """Poll endpoint: check if background revenue sync is complete."""
+    import json
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    cache_key = f"sng_revenue_cache_{brand_id}"
+    raw = db.get_setting(cache_key, "{}")
+    try:
+        cached = json.loads(raw)
+    except Exception:
+        cached = {}
+    status = cached.get("sync_status", "idle")
+    return jsonify(status=status, revenue=cached)
 
 
 @client_bp.route("/crm/sng/probe")

@@ -16,7 +16,7 @@
     },
     "_template": {
         "display_name": "Client Display Name",
-        "industry": "plumbing|hvac|electrical|roofing|landscaping|pest_control|cleaning|general_contracting|painting|garage_door|foundation_repair|water_damage",
+        "industry": "plumbing|hvac|electrical|roofing|landscaping|lawn_care|tree_service|pest_control|cleaning|carpet_cleaning|pressure_washing|pool_service|general_contracting|painting|garage_door|fencing|concrete|flooring|windows_doors|foundation_repair|water_damage|mold_remediation|pet_waste_removal|dog_grooming|pet_sitting|moving|junk_removal|solar|appliance_repair|locksmith|towing|auto_detailing|dental|chiropractic|med_spa|fitness|legal|real_estate|restaurant|ecommerce|saas|other",
         "monthly_budget": 0,
         "website": "https://example.com",
         "goals": ["increase_leads", "reduce_cpa", "increase_brand_awareness", "improve_roas"],
