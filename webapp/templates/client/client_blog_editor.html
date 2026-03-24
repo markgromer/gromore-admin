@@ -1,0 +1,346 @@
+{% extends "client/client_base.html" %}
+{% block title %}{{ 'Edit Post' if post else 'New Post' }}{% endblock %}
+
+{% block head %}
+<link href="https://cdn.jsdelivr.net/npm/summernote@0.8.20/dist/summernote-bs5.min.css" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<style>
+    .editor-header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+        border-radius: 16px;
+        padding: 1.5rem 2rem;
+        margin-bottom: 1.5rem;
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+    }
+    .editor-header h3 { font-weight: 800; font-size: 1.2rem; margin: 0; position: relative; color: #fff !important; }
+    .editor-header p { opacity: .7; font-size: .85rem; margin: .25rem 0 0; position: relative; }
+
+    .editor-card {
+        background: var(--surface);
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow-soft);
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    .editor-card h6 { font-weight: 700; font-size: .9rem; margin-bottom: 1rem; color: var(--primary) !important; }
+
+    .note-editor { border-radius: 10px !important; border-color: #dbe3ef !important; }
+    .note-toolbar { border-radius: 10px 10px 0 0 !important; background: #f8f9fa !important; }
+    .note-editing-area { min-height: 350px; }
+
+    .ai-btn {
+        background: linear-gradient(135deg, #6366f1, #818cf8);
+        border: none; color: #fff; font-weight: 600;
+        border-radius: 10px; padding: .5rem 1rem; font-size: .88rem;
+        cursor: pointer; transition: var(--transition);
+    }
+    .ai-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(99,102,241,.3); color: #fff; }
+    .ai-btn:disabled { opacity: .6; cursor: wait; }
+
+    .seo-preview {
+        background: #fff; border: 1px solid #ddd; border-radius: 10px;
+        padding: 1rem; font-family: Arial, sans-serif;
+    }
+    .seo-preview .seo-title { color: #1a0dab; font-size: 1.1rem; font-weight: 400; line-height: 1.3; }
+    .seo-preview .seo-url { color: #006621; font-size: .85rem; }
+    .seo-preview .seo-desc { color: #545454; font-size: .88rem; line-height: 1.4; }
+
+    .schedule-toggle {
+        display: flex; align-items: center; gap: .75rem;
+        padding: .75rem 1rem; background: #f8f9fa; border-radius: 10px;
+        cursor: pointer;
+    }
+    .schedule-toggle:hover { background: #eef2ff; }
+</style>
+
+<div class="editor-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h3><i class="bi bi-pencil-square me-2"></i>{{ 'Edit Post' if post else 'New Post' }}</h3>
+            <p>{% if post %}Editing: {{ post.title or 'Untitled' }}{% else %}Create a new blog post for your website.{% endif %}</p>
+        </div>
+        <a href="{{ url_for('client.client_blog') }}" class="btn btn-outline-light btn-sm" style="position:relative; z-index:1;">
+            <i class="bi bi-arrow-left me-1"></i> Back to Blog
+        </a>
+    </div>
+</div>
+
+<form id="blogForm" method="POST" action="{{ url_for('client.client_blog_save') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="post_id" value="{{ post.id if post else '' }}">
+
+    <div class="row g-3">
+        <div class="col-lg-8">
+            <!-- Title & Content -->
+            <div class="editor-card">
+                <div class="mb-3">
+                    <input type="text" class="form-control form-control-lg" name="title" id="postTitle"
+                           value="{{ post.title if post else '' }}"
+                           placeholder="Post Title" style="font-weight:700; font-size:1.25rem; border-radius:10px;">
+                </div>
+
+                <!-- AI Writer -->
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <button type="button" class="ai-btn" id="aiWriteBtn" title="Have AI write a full blog post based on your topic">
+                        <i class="bi bi-stars me-1"></i> Write with AI
+                    </button>
+                    <input type="text" class="form-control" id="aiTopic" placeholder="Enter a topic, keyword, or brief description..."
+                           style="flex:1; font-size:.88rem;">
+                </div>
+                <div id="aiStatus" class="mb-2" style="display:none;"></div>
+
+                <textarea id="postContent" name="content">{{ post.content if post else '' }}</textarea>
+            </div>
+
+            <!-- Excerpt -->
+            <div class="editor-card">
+                <h6><i class="bi bi-text-left me-1"></i> Excerpt</h6>
+                <textarea class="form-control" name="excerpt" rows="2" placeholder="A short summary shown in search results and post previews..."
+                          style="font-size:.88rem;">{{ post.excerpt if post else '' }}</textarea>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <!-- Publish Controls -->
+            <div class="editor-card">
+                <h6><i class="bi bi-send me-1"></i> Publish</h6>
+                <div class="mb-3">
+                    <label class="form-label fw-medium" style="font-size:.84rem;">Status</label>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="submit" name="action" value="draft" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-file-earmark me-1"></i> Save Draft
+                        </button>
+                        <button type="submit" name="action" value="publish" class="btn btn-primary btn-sm">
+                            <i class="bi bi-send me-1"></i> Publish Now
+                        </button>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="schedule-toggle" for="scheduleCheck">
+                        <input type="checkbox" id="scheduleCheck" name="schedule_enabled"
+                               {{ 'checked' if post and post.status == 'scheduled' else '' }}>
+                        <span style="font-size:.88rem; font-weight:500;">Schedule for later</span>
+                    </label>
+                    <div id="scheduleFields" style="display:{{ 'block' if post and post.status == 'scheduled' else 'none' }}; margin-top:.75rem;">
+                        <input type="datetime-local" class="form-control form-control-sm" name="scheduled_at"
+                               value="{{ post.scheduled_at[:16] if post and post.scheduled_at else '' }}">
+                        <button type="submit" name="action" value="schedule" class="btn btn-outline-primary btn-sm mt-2 w-100">
+                            <i class="bi bi-clock me-1"></i> Save & Schedule
+                        </button>
+                    </div>
+                </div>
+                {% if post and post.status == 'published' and post.wp_post_url %}
+                <div class="p-2" style="background:#dcfce7; border-radius:8px;">
+                    <small class="fw-medium text-success">
+                        <i class="bi bi-check-circle me-1"></i> Published
+                    </small><br>
+                    <a href="{{ post.wp_post_url }}" target="_blank" rel="noopener" style="font-size:.82rem;">
+                        View on site <i class="bi bi-box-arrow-up-right" style="font-size:.7rem;"></i>
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- SEO -->
+            <div class="editor-card">
+                <h6><i class="bi bi-search me-1"></i> SEO</h6>
+                <div class="mb-2">
+                    <label class="form-label" style="font-size:.82rem;">SEO Title</label>
+                    <input type="text" class="form-control form-control-sm" name="seo_title" id="seoTitle"
+                           value="{{ post.seo_title if post else '' }}" placeholder="Defaults to post title" maxlength="70">
+                    <small class="text-muted"><span id="seoTitleCount">{{ (post.seo_title or '')|length if post else 0 }}</span>/70</small>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label" style="font-size:.82rem;">Meta Description</label>
+                    <textarea class="form-control form-control-sm" name="seo_description" id="seoDesc" rows="2"
+                              placeholder="Brief description for search engines" maxlength="160">{{ post.seo_description if post else '' }}</textarea>
+                    <small class="text-muted"><span id="seoDescCount">{{ (post.seo_description or '')|length if post else 0 }}</span>/160</small>
+                </div>
+                <div class="seo-preview mt-2">
+                    <div class="seo-title" id="seoPreviewTitle">{{ post.seo_title or post.title or 'Your Post Title' if post else 'Your Post Title' }}</div>
+                    <div class="seo-url">{{ brand.wp_site_url or 'yourdomain.com' }}/blog/your-post</div>
+                    <div class="seo-desc" id="seoPreviewDesc">{{ post.seo_description or post.excerpt or 'Your meta description will appear here...' if post else 'Your meta description will appear here...' }}</div>
+                </div>
+            </div>
+
+            <!-- Categories & Tags -->
+            <div class="editor-card">
+                <h6><i class="bi bi-tags me-1"></i> Organization</h6>
+                <div class="mb-2">
+                    <label class="form-label" style="font-size:.82rem;">Categories</label>
+                    <input type="text" class="form-control form-control-sm" name="categories"
+                           value="{{ post.categories if post else '' }}" placeholder="Comma-separated">
+                </div>
+                <div>
+                    <label class="form-label" style="font-size:.82rem;">Tags</label>
+                    <input type="text" class="form-control form-control-sm" name="tags"
+                           value="{{ post.tags if post else '' }}" placeholder="Comma-separated">
+                </div>
+            </div>
+
+            <!-- Featured Image -->
+            <div class="editor-card">
+                <h6><i class="bi bi-image me-1"></i> Featured Image</h6>
+                <input type="url" class="form-control form-control-sm" name="featured_image_url"
+                       value="{{ post.featured_image_url if post else '' }}" placeholder="Image URL">
+                {% if post and post.featured_image_url %}
+                <img src="{{ post.featured_image_url }}" alt="" class="mt-2 rounded" style="max-width:100%; max-height:150px; object-fit:cover;">
+                {% endif %}
+            </div>
+
+            {% if post %}
+            <!-- Delete -->
+            <div class="editor-card" style="border-color:#fee2e2;">
+                <button type="button" class="btn btn-outline-danger btn-sm w-100" id="deletePostBtn">
+                    <i class="bi bi-trash3 me-1"></i> Delete Post
+                </button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/summernote@0.8.20/dist/summernote-bs5.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+    // Initialize Summernote
+    $('#postContent').summernote({
+        height: 400,
+        placeholder: 'Start writing your blog post...',
+        toolbar: [
+            ['style', ['style']],
+            ['font', ['bold', 'italic', 'underline', 'clear']],
+            ['fontsize', ['fontsize']],
+            ['para', ['ul', 'ol', 'paragraph']],
+            ['insert', ['link', 'picture', 'hr']],
+            ['view', ['codeview', 'fullscreen']],
+        ],
+        styleTags: ['p', 'h2', 'h3', 'h4', 'blockquote'],
+        callbacks: {
+            onChange: function() {
+                // auto-generate excerpt if empty
+                var excerptField = document.querySelector('textarea[name="excerpt"]');
+                if (!excerptField.value.trim()) {
+                    var text = $(this).summernote('isEmpty') ? '' : $('<div>').html($(this).summernote('code')).text();
+                    // Don't auto-fill, just leave blank
+                }
+            }
+        }
+    });
+
+    // Schedule toggle
+    document.getElementById('scheduleCheck').addEventListener('change', function() {
+        document.getElementById('scheduleFields').style.display = this.checked ? 'block' : 'none';
+    });
+
+    // SEO character counts
+    document.getElementById('seoTitle').addEventListener('input', function() {
+        document.getElementById('seoTitleCount').textContent = this.value.length;
+        document.getElementById('seoPreviewTitle').textContent = this.value || document.getElementById('postTitle').value || 'Your Post Title';
+    });
+    document.getElementById('seoDesc').addEventListener('input', function() {
+        document.getElementById('seoDescCount').textContent = this.value.length;
+        document.getElementById('seoPreviewDesc').textContent = this.value || 'Your meta description will appear here...';
+    });
+    document.getElementById('postTitle').addEventListener('input', function() {
+        if (!document.getElementById('seoTitle').value) {
+            document.getElementById('seoPreviewTitle').textContent = this.value || 'Your Post Title';
+        }
+    });
+
+    // AI Write
+    var aiBtn = document.getElementById('aiWriteBtn');
+    var aiTopic = document.getElementById('aiTopic');
+    var aiStatus = document.getElementById('aiStatus');
+    aiBtn.addEventListener('click', function() {
+        var topic = aiTopic.value.trim();
+        var title = document.getElementById('postTitle').value.trim();
+        if (!topic && !title) {
+            alert('Enter a topic or post title first.');
+            return;
+        }
+        aiBtn.disabled = true;
+        aiBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Writing...';
+        aiStatus.innerHTML = '<small class="text-muted"><i class="bi bi-hourglass-split me-1"></i>AI is writing your blog post. This may take 15-30 seconds...</small>';
+        aiStatus.style.display = '';
+
+        fetch('{{ url_for("client.client_blog_ai_generate") }}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+            body: JSON.stringify({topic: topic, title: title})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            aiBtn.disabled = false;
+            aiBtn.innerHTML = '<i class="bi bi-stars me-1"></i> Write with AI';
+            if (data.ok) {
+                if (data.title && !document.getElementById('postTitle').value.trim()) {
+                    document.getElementById('postTitle').value = data.title;
+                }
+                if (data.content) {
+                    $('#postContent').summernote('code', data.content);
+                }
+                if (data.excerpt) {
+                    document.querySelector('textarea[name="excerpt"]').value = data.excerpt;
+                }
+                if (data.seo_title) {
+                    document.getElementById('seoTitle').value = data.seo_title;
+                    document.getElementById('seoTitleCount').textContent = data.seo_title.length;
+                    document.getElementById('seoPreviewTitle').textContent = data.seo_title;
+                }
+                if (data.seo_description) {
+                    document.getElementById('seoDesc').value = data.seo_description;
+                    document.getElementById('seoDescCount').textContent = data.seo_description.length;
+                    document.getElementById('seoPreviewDesc').textContent = data.seo_description;
+                }
+                if (data.tags) {
+                    document.querySelector('input[name="tags"]').value = data.tags;
+                }
+                aiStatus.innerHTML = '<small class="text-success"><i class="bi bi-check-circle me-1"></i>Blog post generated. Review and edit before publishing.</small>';
+            } else {
+                aiStatus.innerHTML = '<small class="text-danger"><i class="bi bi-x-circle me-1"></i>' + (data.error || 'AI generation failed') + '</small>';
+            }
+        })
+        .catch(function() {
+            aiBtn.disabled = false;
+            aiBtn.innerHTML = '<i class="bi bi-stars me-1"></i> Write with AI';
+            aiStatus.innerHTML = '<small class="text-danger">Network error. Try again.</small>';
+        });
+    });
+
+    // Enter key in AI topic
+    aiTopic.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); aiBtn.click(); }
+    });
+
+    // Delete post
+    var deleteBtn = document.getElementById('deletePostBtn');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function() {
+            if (!confirm('Delete this post? This cannot be undone.')) return;
+            fetch('{{ url_for("client.client_blog_delete", post_id=post.id if post else 0) }}', {
+                method: 'POST',
+                headers: {'X-CSRFToken': csrfToken}
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok) {
+                    window.location = '{{ url_for("client.client_blog") }}';
+                } else {
+                    alert(data.error || 'Delete failed');
+                }
+            });
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,169 @@
+{% extends "client/client_base.html" %}
+{% block title %}Blog{% endblock %}
+
+{% block content %}
+<style>
+    .blog-header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+        border-radius: 16px;
+        padding: 2rem 2.25rem;
+        margin-bottom: 1.5rem;
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+    }
+    .blog-header::before {
+        content: '';
+        position: absolute;
+        top: -30%; right: -5%;
+        width: 250px; height: 250px;
+        background: radial-gradient(circle, rgba(33,117,155,.2) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    .blog-header h3 { font-weight: 800; font-size: 1.35rem; margin-bottom: .15rem; position: relative; color: #fff !important; }
+    .blog-header p { opacity: .7; font-size: .88rem; margin: 0; position: relative; }
+
+    .post-row {
+        background: var(--surface);
+        border-radius: 12px;
+        padding: 1rem 1.25rem;
+        margin-bottom: .75rem;
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow-soft);
+        transition: var(--transition);
+        cursor: pointer;
+    }
+    .post-row:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+    .post-row .post-title { font-weight: 600; font-size: .95rem; color: var(--text-strong); }
+    .post-row .post-meta { font-size: .8rem; color: var(--text-muted); }
+
+    .status-pill { font-size: .72rem; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+    .status-draft { background: #f1f5f9; color: #475569; }
+    .status-scheduled { background: #dbeafe; color: #1e40af; }
+    .status-published { background: #dcfce7; color: #166534; }
+    .status-failed { background: #fee2e2; color: #991b1b; }
+
+    .tab-filter {
+        display: inline-flex; gap: .25rem; background: #f1f5f9;
+        border-radius: 10px; padding: 3px;
+    }
+    .tab-filter button {
+        border: none; background: none; padding: .35rem .85rem;
+        border-radius: 8px; font-size: .82rem; font-weight: 600;
+        color: var(--text-muted); cursor: pointer; transition: var(--transition);
+    }
+    .tab-filter button.active { background: #fff; color: var(--text-strong); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+
+    .empty-state {
+        text-align: center; padding: 3rem; color: var(--text-muted);
+    }
+    .empty-state i { font-size: 2.5rem; opacity: .3; }
+
+    .wp-required-notice {
+        background: #fffbeb; border: 1px solid #fcd34d; border-radius: 12px;
+        padding: 1.25rem; text-align: center;
+    }
+</style>
+
+<div class="blog-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h3><i class="bi bi-journal-richtext me-2"></i>Blog</h3>
+            <p>Write, schedule, and publish blog posts to your WordPress site.</p>
+        </div>
+        {% if wp_connected %}
+        <a href="{{ url_for('client.client_blog_editor') }}" class="btn btn-light btn-sm" style="font-weight:600; position:relative; z-index:1;">
+            <i class="bi bi-plus-lg me-1"></i> New Post
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+{% if not wp_connected %}
+<div class="wp-required-notice">
+    <i class="bi bi-wordpress" style="font-size:2rem; color:#21759b;"></i>
+    <h5 class="mt-2 fw-bold">Connect WordPress to get started</h5>
+    <p class="text-muted mb-3" style="font-size:.9rem;">
+        To publish blog posts, you need to connect your WordPress site first.
+        It takes about 2 minutes.
+    </p>
+    <a href="{{ url_for('client.client_settings') }}" class="btn btn-primary">
+        <i class="bi bi-plug me-1"></i> Go to Connections
+    </a>
+</div>
+{% else %}
+
+<!-- Filter Tabs -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="tab-filter" id="statusFilter">
+        <button class="active" data-filter="all">All ({{ posts|length }})</button>
+        <button data-filter="draft">Drafts ({{ posts|selectattr('status','equalto','draft')|list|length }})</button>
+        <button data-filter="scheduled">Scheduled ({{ posts|selectattr('status','equalto','scheduled')|list|length }})</button>
+        <button data-filter="published">Published ({{ posts|selectattr('status','equalto','published')|list|length }})</button>
+    </div>
+</div>
+
+<!-- Posts List -->
+<div id="postsList">
+{% if posts %}
+    {% for post in posts %}
+    <div class="post-row" data-status="{{ post.status }}" onclick="window.location='{{ url_for('client.client_blog_editor', post_id=post.id) }}'">
+        <div class="d-flex justify-content-between align-items-start">
+            <div style="flex:1; min-width:0;">
+                <div class="post-title">{{ post.title or 'Untitled Post' }}</div>
+                <div class="post-meta mt-1">
+                    {% if post.status == 'published' and post.wp_post_url %}
+                        Published {{ post.published_at[:16] if post.published_at else '' }}
+                        - <a href="{{ post.wp_post_url }}" target="_blank" rel="noopener" onclick="event.stopPropagation();">View on site <i class="bi bi-box-arrow-up-right" style="font-size:.7rem;"></i></a>
+                    {% elif post.status == 'scheduled' %}
+                        Scheduled for {{ post.scheduled_at[:16] if post.scheduled_at else 'TBD' }}
+                    {% else %}
+                        Last edited {{ post.updated_at[:16] if post.updated_at else post.created_at[:16] }}
+                    {% endif %}
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="status-pill status-{{ post.status }}">{{ post.status|capitalize }}</span>
+            </div>
+        </div>
+        {% if post.excerpt %}
+        <div class="text-muted mt-1" style="font-size:.84rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            {{ post.excerpt[:150] }}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="empty-state">
+        <i class="bi bi-journal-plus d-block mb-2"></i>
+        <div class="fw-semibold">No blog posts yet</div>
+        <p class="mb-3" style="font-size:.88rem;">Create your first post and publish it to your website.</p>
+        <a href="{{ url_for('client.client_blog_editor') }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-lg me-1"></i> Write Your First Post
+        </a>
+    </div>
+{% endif %}
+</div>
+
+{% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var filterBtns = document.querySelectorAll('#statusFilter button');
+    filterBtns.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            filterBtns.forEach(function(b) { b.classList.remove('active'); });
+            this.classList.add('active');
+            var filter = this.getAttribute('data-filter');
+            document.querySelectorAll('.post-row').forEach(function(row) {
+                if (filter === 'all' || row.getAttribute('data-status') === filter) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+    });
+});
+</script>
+{% endblock %}

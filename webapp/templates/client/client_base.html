@@ -897,6 +897,9 @@
             <a href="{{ url_for('client.client_creative') }}" class="{% if request.endpoint in ('client.client_creative', 'client.client_creative_generate') %}active{% endif %}">
                 <i class="bi bi-palette"></i> Creative
             </a>
+            <a href="{{ url_for('client.client_blog') }}" class="{% if request.endpoint in ('client.client_blog', 'client.client_blog_editor') %}active{% endif %}">
+                <i class="bi bi-journal-richtext"></i> Blog
+            </a>
 
             <div class="nav-section-label">Business</div>
             <a href="{{ url_for('client.client_my_business') }}" class="{% if request.endpoint == 'client.client_my_business' %}active{% endif %}">

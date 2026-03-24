@@ -3808,6 +3808,366 @@ def client_heatmap_clear_scans():
     return jsonify(ok=True)
 
 
+# ── Blog ──
+
+def _wp_connected(brand):
+    return bool(
+        (brand.get("wp_site_url") or "").strip()
+        and (brand.get("wp_username") or "").strip()
+        and (brand.get("wp_app_password") or "").strip()
+    )
+
+
+def _publish_to_wp(brand, title, content, excerpt="", slug="",
+                    seo_title="", seo_description="", categories="",
+                    tags="", featured_image_url="", status="publish"):
+    """Publish or update a post on WordPress via REST API. Returns dict."""
+    import requests as req_lib
+
+    wp_url = brand["wp_site_url"].strip().rstrip("/")
+    wp_user = brand["wp_username"].strip()
+    wp_pass = brand["wp_app_password"].strip()
+
+    api_url = f"{wp_url}/wp-json/wp/v2/posts"
+
+    post_data = {
+        "title": seo_title or title,
+        "content": content,
+        "excerpt": excerpt,
+        "status": status,
+    }
+    if slug:
+        post_data["slug"] = slug
+    if tags:
+        post_data["tags"] = []  # WP expects tag IDs, so pass as meta
+    # Yoast SEO fields (if plugin installed)
+    meta = {}
+    if seo_title:
+        meta["_yoast_wpseo_title"] = seo_title
+    if seo_description:
+        meta["_yoast_wpseo_metadesc"] = seo_description
+    if meta:
+        post_data["meta"] = meta
+
+    try:
+        resp = req_lib.post(
+            api_url,
+            json=post_data,
+            auth=(wp_user, wp_pass),
+            timeout=30,
+        )
+        if resp.status_code in (200, 201):
+            wp_post = resp.json()
+            return {
+                "ok": True,
+                "wp_post_id": wp_post.get("id", 0),
+                "wp_post_url": wp_post.get("link", ""),
+            }
+        else:
+            return {"ok": False, "error": f"WordPress API error {resp.status_code}: {resp.text[:200]}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+@client_bp.route("/blog")
+@client_login_required
+def client_blog():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    wp_ok = _wp_connected(brand)
+    posts = db.get_blog_posts(brand_id) if wp_ok else []
+
+    # Check for due scheduled posts and publish them
+    if wp_ok:
+        due = db.get_due_blog_posts()
+        for bp in due:
+            if bp["brand_id"] != brand_id:
+                continue
+            result = _publish_to_wp(
+                brand, bp["title"], bp["content"],
+                excerpt=bp.get("excerpt", ""),
+                slug=bp.get("slug", ""),
+                seo_title=bp.get("seo_title", ""),
+                seo_description=bp.get("seo_description", ""),
+            )
+            if result["ok"]:
+                db.update_blog_post(
+                    bp["id"], status="published",
+                    wp_post_id=result["wp_post_id"],
+                    wp_post_url=result["wp_post_url"],
+                    published_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                )
+            else:
+                db.update_blog_post(bp["id"], status="failed")
+        # Refresh list after publishing
+        if due:
+            posts = db.get_blog_posts(brand_id)
+
+    return render_template(
+        "client/client_blog.html",
+        brand=brand,
+        posts=posts,
+        wp_connected=wp_ok,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/blog/new")
+@client_bp.route("/blog/<int:post_id>/edit")
+@client_login_required
+def client_blog_editor(post_id=None):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+    if not _wp_connected(brand):
+        flash("Connect WordPress in Settings first.", "warning")
+        return redirect(url_for("client.client_settings"))
+
+    post = None
+    if post_id:
+        post = db.get_blog_post(post_id)
+        if not post or post["brand_id"] != brand_id:
+            abort(404)
+
+    return render_template(
+        "client/client_blog_editor.html",
+        brand=brand,
+        post=post,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/blog/save", methods=["POST"])
+@client_login_required
+def client_blog_save():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    post_id = request.form.get("post_id", "").strip()
+    title = request.form.get("title", "").strip() or "Untitled Post"
+    content = request.form.get("content", "")
+    excerpt = request.form.get("excerpt", "").strip()
+    categories = request.form.get("categories", "").strip()
+    tags = request.form.get("tags", "").strip()
+    seo_title = request.form.get("seo_title", "").strip()
+    seo_description = request.form.get("seo_description", "").strip()
+    featured_image_url = request.form.get("featured_image_url", "").strip()
+    scheduled_at = request.form.get("scheduled_at", "").strip() or None
+    action = request.form.get("action", "draft")
+
+    fields = dict(
+        title=title, content=content, excerpt=excerpt,
+        categories=categories, tags=tags, seo_title=seo_title,
+        seo_description=seo_description, featured_image_url=featured_image_url,
+    )
+
+    if action == "publish":
+        if not _wp_connected(brand):
+            flash("Connect WordPress in Settings first.", "error")
+            return redirect(url_for("client.client_blog"))
+
+        result = _publish_to_wp(
+            brand, title, content,
+            excerpt=excerpt, seo_title=seo_title,
+            seo_description=seo_description,
+        )
+        if result["ok"]:
+            fields["status"] = "published"
+            fields["wp_post_id"] = result["wp_post_id"]
+            fields["wp_post_url"] = result["wp_post_url"]
+            fields["published_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            flash("Post published to WordPress!", "success")
+        else:
+            flash(f"Publish failed: {result['error']}", "error")
+            fields["status"] = "draft"
+    elif action == "schedule":
+        if not scheduled_at:
+            flash("Pick a date and time to schedule.", "error")
+            fields["status"] = "draft"
+        else:
+            fields["status"] = "scheduled"
+            fields["scheduled_at"] = scheduled_at
+            flash("Post scheduled.", "success")
+    else:
+        fields["status"] = "draft"
+        flash("Draft saved.", "success")
+
+    if post_id:
+        db.update_blog_post(int(post_id), **fields)
+        return redirect(url_for("client.client_blog_editor", post_id=int(post_id)))
+    else:
+        new_id = db.save_blog_post(
+            brand_id, title, content, excerpt=excerpt,
+            categories=categories, tags=tags,
+            seo_title=seo_title, seo_description=seo_description,
+            featured_image_url=featured_image_url,
+            status=fields.get("status", "draft"),
+            scheduled_at=fields.get("scheduled_at"),
+            created_by=session.get("client_user_id", 0),
+        )
+        if fields.get("wp_post_id"):
+            db.update_blog_post(
+                new_id,
+                wp_post_id=fields["wp_post_id"],
+                wp_post_url=fields["wp_post_url"],
+                published_at=fields.get("published_at"),
+            )
+        return redirect(url_for("client.client_blog_editor", post_id=new_id))
+
+
+@client_bp.route("/blog/<int:post_id>/delete", methods=["POST"])
+@client_login_required
+def client_blog_delete(post_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    post = db.get_blog_post(post_id)
+    if not post or post["brand_id"] != brand_id:
+        return jsonify(ok=False, error="Post not found"), 404
+    db.delete_blog_post(post_id)
+    return jsonify(ok=True)
+
+
+@client_bp.route("/blog/test-connection", methods=["POST"])
+@client_login_required
+def client_blog_test_connection():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand or not _wp_connected(brand):
+        return jsonify(ok=False, error="WordPress not configured.")
+
+    import requests as req_lib
+    wp_url = brand["wp_site_url"].strip().rstrip("/")
+    wp_user = brand["wp_username"].strip()
+    wp_pass = brand["wp_app_password"].strip()
+
+    try:
+        resp = req_lib.get(
+            f"{wp_url}/wp-json/wp/v2/users/me",
+            auth=(wp_user, wp_pass),
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            name = resp.json().get("name", "")
+            return jsonify(ok=True, message=f"Connected as {name}")
+        else:
+            return jsonify(ok=False, error=f"Auth failed (HTTP {resp.status_code})")
+    except Exception as e:
+        return jsonify(ok=False, error=str(e)[:150])
+
+
+@client_bp.route("/blog/ai-generate", methods=["POST"])
+@client_login_required
+def client_blog_ai_generate():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    api_key = _get_openai_api_key(brand)
+    if not api_key:
+        return jsonify(ok=False, error="No OpenAI API key. Add one in Settings > AI Configuration.")
+
+    data = request.get_json(silent=True) or {}
+    topic = (data.get("topic") or "").strip()
+    title = (data.get("title") or "").strip()
+
+    if not topic and not title:
+        return jsonify(ok=False, error="Provide a topic or title.")
+
+    model = _pick_ai_model(brand, "analysis")
+    brand_name = brand.get("display_name", "")
+    industry = brand.get("industry", "")
+    services = brand.get("primary_services", "")
+    area = brand.get("service_area", "")
+    voice = brand.get("brand_voice", "")
+
+    prompt = f"""Write a complete blog post for a business website.
+
+Business: {brand_name}
+Industry: {industry}
+Services: {services}
+Service Area: {area}
+Brand Voice: {voice or 'Professional, helpful, approachable'}
+
+Topic/Brief: {topic or title}
+
+Requirements:
+- Write 600-1000 words of high-quality, original content
+- Use proper HTML formatting with h2, h3, p, ul/ol, strong tags
+- Include an engaging introduction that hooks the reader
+- Break content into scannable sections with clear headings
+- Include a call to action at the end
+- Write naturally, avoid filler phrases like "In today's world" or "In this article"
+- Be specific and provide real value to readers
+- Optimize for SEO around the main topic
+- Do NOT use em dashes
+
+Return a JSON object with these exact keys:
+- "title": a compelling blog title (if none was provided)
+- "content": the full HTML blog post content (just the body HTML, no wrapper)
+- "excerpt": a 1-2 sentence summary (plain text, under 160 chars)
+- "seo_title": an SEO-optimized title (under 70 chars)
+- "seo_description": meta description (under 160 chars)
+- "tags": comma-separated relevant tags
+
+Return ONLY valid JSON, no markdown code fences."""
+
+    import openai
+    try:
+        client = openai.OpenAI(api_key=api_key)
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=4000,
+        )
+        raw = resp.choices[0].message.content.strip()
+        # Strip markdown code fences if present
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[-1]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+            raw = raw.strip()
+
+        result = json.loads(raw)
+        result["ok"] = True
+        return jsonify(result)
+    except json.JSONDecodeError:
+        return jsonify(ok=False, error="AI returned invalid format. Try again.")
+    except Exception as e:
+        return jsonify(ok=False, error=str(e)[:200])
+
+
+@client_bp.route("/settings/wordpress", methods=["POST"])
+@client_login_required
+def client_save_wordpress():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    wp_site_url = request.form.get("wp_site_url", "").strip().rstrip("/")
+    wp_username = request.form.get("wp_username", "").strip()
+    wp_app_password = request.form.get("wp_app_password", "").strip()
+
+    db.update_brand_text_field(brand_id, "wp_site_url", wp_site_url)
+    db.update_brand_text_field(brand_id, "wp_username", wp_username)
+    if wp_app_password:
+        db.update_brand_text_field(brand_id, "wp_app_password", wp_app_password)
+
+    flash("WordPress settings saved.", "success")
+    return redirect(url_for("client.client_settings"))
+
+
 # ── Post Scheduler ──
 
 @client_bp.route("/post-scheduler")

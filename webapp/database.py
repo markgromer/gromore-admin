@@ -461,6 +461,35 @@ class WebDB:
             );
         """)
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS blog_posts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                content TEXT NOT NULL DEFAULT '',
+                excerpt TEXT DEFAULT '',
+                slug TEXT DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft',
+                featured_image_url TEXT DEFAULT '',
+                categories TEXT DEFAULT '',
+                tags TEXT DEFAULT '',
+                seo_title TEXT DEFAULT '',
+                seo_description TEXT DEFAULT '',
+                wp_post_id INTEGER DEFAULT 0,
+                wp_post_url TEXT DEFAULT '',
+                scheduled_at TEXT DEFAULT NULL,
+                published_at TEXT DEFAULT NULL,
+                created_by INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_blog_posts_brand
+            ON blog_posts(brand_id, status);
+        """)
+
         conn.commit()
         brand_columns = {r[1] for r in conn.execute("PRAGMA table_info(brands)").fetchall()}
         new_brand_cols = [
@@ -495,6 +524,9 @@ class WebDB:
             ("business_lng", "REAL DEFAULT 0"),
             ("google_place_id", "TEXT DEFAULT ''"),
             ("google_maps_api_key", "TEXT DEFAULT ''"),
+            ("wp_site_url", "TEXT DEFAULT ''"),
+            ("wp_username", "TEXT DEFAULT ''"),
+            ("wp_app_password", "TEXT DEFAULT ''"),
         ]
         for col_name, col_def in new_brand_cols:
             if col_name not in brand_columns:
@@ -2155,6 +2187,84 @@ class WebDB:
         conn.execute("UPDATE beta_testers SET status = 'removed' WHERE id = ?", (tester_id,))
         conn.commit()
         conn.close()
+
+    # ── Blog Posts ──────────────────────────────────────────────────
+
+    def save_blog_post(self, brand_id, title, content, excerpt="",
+                       slug="", status="draft", featured_image_url="",
+                       categories="", tags="", seo_title="",
+                       seo_description="", scheduled_at=None, created_by=0):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO blog_posts
+               (brand_id, title, content, excerpt, slug, status,
+                featured_image_url, categories, tags, seo_title,
+                seo_description, scheduled_at, created_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (brand_id, title, content, excerpt, slug, status,
+             featured_image_url, categories, tags, seo_title,
+             seo_description, scheduled_at, created_by),
+        )
+        conn.commit()
+        row_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.close()
+        return row_id
+
+    def update_blog_post(self, post_id, **kwargs):
+        conn = self._conn()
+        allowed = ("title", "content", "excerpt", "slug", "status",
+                   "featured_image_url", "categories", "tags",
+                   "seo_title", "seo_description", "scheduled_at",
+                   "wp_post_id", "wp_post_url", "published_at")
+        sets = ["updated_at = datetime('now')"]
+        params = []
+        for k, v in kwargs.items():
+            if k in allowed:
+                sets.append(f"{k} = ?")
+                params.append(v)
+        if len(params) == 0:
+            conn.close()
+            return
+        params.append(post_id)
+        conn.execute(f"UPDATE blog_posts SET {', '.join(sets)} WHERE id = ?", params)
+        conn.commit()
+        conn.close()
+
+    def get_blog_posts(self, brand_id, status=None, limit=50):
+        conn = self._conn()
+        if status:
+            rows = conn.execute(
+                "SELECT * FROM blog_posts WHERE brand_id = ? AND status = ? ORDER BY updated_at DESC LIMIT ?",
+                (brand_id, status, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM blog_posts WHERE brand_id = ? ORDER BY updated_at DESC LIMIT ?",
+                (brand_id, limit),
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_blog_post(self, post_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM blog_posts WHERE id = ?", (post_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def delete_blog_post(self, post_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM blog_posts WHERE id = ?", (post_id,))
+        conn.commit()
+        conn.close()
+
+    def get_due_blog_posts(self):
+        """Return blog posts that are scheduled and past due."""
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM blog_posts WHERE status = 'scheduled' AND scheduled_at <= datetime('now')"
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
 
     def get_beta_stats(self):
         conn = self._conn()
