@@ -5579,7 +5579,7 @@ def public_assess():
         pass  # Don't fail the assessment if DB save fails
 
     # ── Auto-enroll in drip sequence (only if user consented) ──
-    email_consent = payload.get("email_consent")
+    email_consent = data.get("email_consent")
     if email_consent:
         try:
             seq = db.get_active_drip_sequence_for_trigger("assessment")
