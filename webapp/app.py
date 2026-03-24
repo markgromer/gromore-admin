@@ -173,6 +173,16 @@ def create_app():
     app.register_blueprint(jobs_bp, url_prefix="/jobs")
     app.register_blueprint(client_bp)
 
+    # Global 500 handler that includes CORS headers for cross-origin API callers
+    @app.errorhandler(500)
+    def _handle_500(e):
+        import traceback, logging
+        logging.getLogger(__name__).error("[500] %s", traceback.format_exc())
+        resp = jsonify({"ok": False, "error": f"Server error: {str(e)[:200]}"})
+        resp.status_code = 500
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        return resp
+
     # Exempt OAuth callback routes from CSRF (external redirects have no token)
     csrf.exempt(google_bp)
     csrf.exempt(meta_bp)
@@ -182,6 +192,8 @@ def create_app():
     # Exempt public cross-origin API endpoints from CSRF
     csrf.exempt("webapp.client_portal.public_signup")
     csrf.exempt("webapp.client_portal.public_assess")
+    csrf.exempt("client.public_signup")
+    csrf.exempt("client.public_assess")
 
     # ── Auth decorator ──
     def login_required(f):
