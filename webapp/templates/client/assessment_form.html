@@ -1,0 +1,236 @@
+<!-- GroMore Free AI Assessment - embed anywhere -->
+<!-- Requires Bootstrap 5 CSS on the host page -->
+
+<style>
+#gmAssessWrap .score-ring{width:100px;height:100px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.75rem;font-weight:700;margin:0 auto .5rem;border:6px solid #dee2e6}
+#gmAssessWrap .score-ring.bad{border-color:#dc3545;color:#dc3545}
+#gmAssessWrap .score-ring.ok{border-color:#fd7e14;color:#fd7e14}
+#gmAssessWrap .score-ring.good{border-color:#198754;color:#198754}
+#gmAssessWrap .section-card{background:#f8f9fa;border-radius:.5rem;padding:1rem;margin-bottom:.75rem}
+#gmAssessWrap .section-card h6{margin-bottom:.5rem;font-weight:600}
+#gmAssessWrap .grade-badge{font-size:.75rem;padding:.25rem .5rem;border-radius:.25rem;font-weight:600}
+#gmAssessWrap .grade-a{background:#d1e7dd;color:#0f5132}
+#gmAssessWrap .grade-b{background:#cff4fc;color:#055160}
+#gmAssessWrap .grade-c{background:#fff3cd;color:#664d03}
+#gmAssessWrap .grade-d{background:#f8d7da;color:#842029}
+#gmAssessWrap .step-item{display:flex;align-items:center;gap:.75rem;padding:.5rem 0;opacity:.4;transition:opacity .3s}
+#gmAssessWrap .step-item.active{opacity:1}
+#gmAssessWrap .step-item.done{opacity:.7}
+#gmAssessWrap .step-icon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0;background:#e9ecef;color:#6c757d}
+#gmAssessWrap .step-item.active .step-icon{background:#0d6efd;color:#fff}
+#gmAssessWrap .step-item.done .step-icon{background:#198754;color:#fff}
+#gmAssessWrap .rec-item{padding:.6rem 0;border-bottom:1px solid #dee2e6}
+#gmAssessWrap .rec-item:last-child{border-bottom:none}
+</style>
+
+<div id="gmAssessWrap">
+    <div id="gmAssessAlert"></div>
+
+    <!-- FORM -->
+    <form id="gmAssessForm">
+        <p class="text-muted small mb-3">Get a free AI-powered assessment of your online presence. We'll check your Google Business Profile, website SEO, ad presence, and compare you to industry benchmarks.</p>
+        <div class="row g-2 mb-3">
+            <div class="col-sm-6">
+                <label class="form-label fw-semibold small">Your Name *</label>
+                <input type="text" name="name" class="form-control" required placeholder="Jane Smith">
+            </div>
+            <div class="col-sm-6">
+                <label class="form-label fw-semibold small">Email *</label>
+                <input type="email" name="email" class="form-control" required placeholder="you@example.com">
+            </div>
+        </div>
+        <div class="row g-2 mb-3">
+            <div class="col-sm-6">
+                <label class="form-label fw-semibold small">Business Name *</label>
+                <input type="text" name="business_name" class="form-control" required placeholder="Acme Plumbing">
+            </div>
+            <div class="col-sm-6">
+                <label class="form-label fw-semibold small">Industry *</label>
+                <select name="industry" class="form-select" required>
+                    <option value="">Select...</option>
+                    <optgroup label="Home Services"><option value="plumbing">Plumbing</option><option value="hvac">HVAC</option><option value="electrical">Electrical</option><option value="roofing">Roofing</option><option value="general_contracting">General Contracting</option><option value="painting">Painting</option><option value="garage_door">Garage Door</option><option value="fencing">Fencing</option><option value="concrete">Concrete / Masonry</option><option value="flooring">Flooring</option><option value="windows_doors">Windows &amp; Doors</option><option value="foundation_repair">Foundation Repair</option><option value="appliance_repair">Appliance Repair</option><option value="locksmith">Locksmith</option><option value="solar">Solar</option></optgroup>
+                    <optgroup label="Outdoor / Property"><option value="landscaping">Landscaping</option><option value="lawn_care">Lawn Care</option><option value="tree_service">Tree Service</option><option value="pool_service">Pool Service</option><option value="pressure_washing">Pressure Washing</option><option value="pest_control">Pest Control</option></optgroup>
+                    <optgroup label="Cleaning & Restoration"><option value="cleaning">Cleaning Services</option><option value="carpet_cleaning">Carpet Cleaning</option><option value="water_damage">Water Damage Restoration</option><option value="mold_remediation">Mold Remediation</option><option value="junk_removal">Junk Removal</option></optgroup>
+                    <optgroup label="Pet Services"><option value="pet_waste_removal">Pet Waste Removal</option><option value="dog_grooming">Dog Grooming</option><option value="pet_sitting">Pet Sitting / Dog Walking</option></optgroup>
+                    <optgroup label="Auto & Transport"><option value="auto_detailing">Auto Detailing</option><option value="towing">Towing</option><option value="moving">Moving / Hauling</option></optgroup>
+                    <optgroup label="Health & Wellness"><option value="dental">Dental</option><option value="chiropractic">Chiropractic</option><option value="med_spa">Med Spa / Aesthetics</option><option value="fitness">Fitness / Gym</option></optgroup>
+                    <optgroup label="Professional & Other"><option value="legal">Legal Services</option><option value="real_estate">Real Estate</option><option value="restaurant">Restaurant</option><option value="ecommerce">E-Commerce</option><option value="saas">SaaS</option><option value="other">Other</option></optgroup>
+                </select>
+            </div>
+        </div>
+        <div class="row g-2 mb-3">
+            <div class="col-sm-6">
+                <label class="form-label fw-semibold small">Service Area *</label>
+                <input type="text" name="service_area" class="form-control" required placeholder="Dallas-Fort Worth Metro">
+            </div>
+            <div class="col-sm-6">
+                <label class="form-label fw-semibold small">Website</label>
+                <input type="url" name="website" class="form-control" placeholder="https://example.com">
+            </div>
+        </div>
+        <div class="row g-2 mb-3">
+            <div class="col-sm-6">
+                <label class="form-label fw-semibold small">Google Business Profile URL</label>
+                <input type="url" name="gmb_url" class="form-control" placeholder="https://maps.google.com/...">
+                <div class="form-text">Optional. We can find it by business name if left blank.</div>
+            </div>
+            <div class="col-sm-6">
+                <label class="form-label fw-semibold small">Facebook Page URL</label>
+                <input type="url" name="facebook_url" class="form-control" placeholder="https://facebook.com/yourpage">
+                <div class="form-text">Optional. Used to check your ad presence.</div>
+            </div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label fw-semibold small">Phone</label>
+            <input type="tel" name="phone" class="form-control" placeholder="(555) 123-4567">
+        </div>
+        <button type="submit" class="btn btn-primary w-100 py-2" id="gmAssessBtn">Run My Free Assessment</button>
+    </form>
+
+    <!-- LOADING -->
+    <div class="d-none" id="gmAssessLoading">
+        <div class="text-center mb-3">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2 fw-semibold">Analyzing your online presence...</p>
+        </div>
+        <div class="px-3">
+            <div class="step-item" id="step-gbp"><div class="step-icon">1</div><div><strong>Google Business Profile</strong><br><small class="text-muted">Checking listing completeness and reviews</small></div></div>
+            <div class="step-item" id="step-seo"><div class="step-icon">2</div><div><strong>Website SEO</strong><br><small class="text-muted">Scanning page structure and metadata</small></div></div>
+            <div class="step-item" id="step-ads"><div class="step-icon">3</div><div><strong>Ad Presence</strong><br><small class="text-muted">Checking Meta Ad Library for active campaigns</small></div></div>
+            <div class="step-item" id="step-bench"><div class="step-icon">4</div><div><strong>Industry Benchmarks</strong><br><small class="text-muted">Comparing against your competitors</small></div></div>
+            <div class="step-item" id="step-ai"><div class="step-icon">5</div><div><strong>AI Recommendations</strong><br><small class="text-muted">Generating personalized action items</small></div></div>
+        </div>
+    </div>
+
+    <!-- RESULTS -->
+    <div class="d-none" id="gmAssessResults"></div>
+</div>
+
+<script>
+(function(){
+    const API='https://gromore-admin.onrender.com/client/assess';
+
+    function gradeFor(score){
+        if(score>=80) return {cls:'grade-a',label:'A'};
+        if(score>=60) return {cls:'grade-b',label:'B'};
+        if(score>=40) return {cls:'grade-c',label:'C'};
+        return {cls:'grade-d',label:'D'};
+    }
+    function ringCls(score){return score>=70?'good':score>=40?'ok':'bad';}
+
+    function animateSteps(){
+        const ids=['step-gbp','step-seo','step-ads','step-bench','step-ai'];
+        let i=0;
+        function next(){
+            if(i>0) document.getElementById(ids[i-1]).className='step-item done';
+            if(i<ids.length){document.getElementById(ids[i]).className='step-item active';i++;setTimeout(next,2500);}
+        }
+        next();
+    }
+
+    function renderResults(data){
+        const r=data.results||data;
+        const overall=r.overall_score||0;
+        const gbp=r.gbp||{};
+        const seo=r.seo||{};
+        const ads=r.ads||{};
+        const bench=r.benchmarks||{};
+        const recs=r.recommendations||[];
+        const g=gradeFor(overall);
+
+        let html='<div class="text-center mb-4">';
+        html+='<div class="score-ring '+ringCls(overall)+'">'+overall+'</div>';
+        html+='<h5 class="fw-bold mb-1">Overall Score: '+overall+'/100</h5>';
+        html+='<span class="grade-badge '+g.cls+'">Grade: '+g.label+'</span>';
+        html+='</div>';
+
+        // GBP section
+        const gbpScore=gbp.score||0; const gbpG=gradeFor(gbpScore);
+        html+='<div class="section-card"><h6>Google Business Profile <span class="grade-badge '+gbpG.cls+' float-end">'+gbpScore+'/100</span></h6>';
+        if(gbp.name) html+='<p class="small mb-1"><strong>Found:</strong> '+_esc(gbp.name)+'</p>';
+        if(gbp.rating) html+='<p class="small mb-1">Rating: '+gbp.rating+' stars ('+( gbp.review_count||0)+' reviews)</p>';
+        if(gbp.missing&&gbp.missing.length) html+='<p class="small mb-0 text-danger">Missing: '+gbp.missing.join(', ')+'</p>';
+        if(!gbp.name&&!gbp.found) html+='<p class="small mb-0 text-muted">No Google Business Profile found. This is a major missed opportunity for local visibility.</p>';
+        html+='</div>';
+
+        // SEO section
+        const seoScore=seo.score||0; const seoG=gradeFor(seoScore);
+        html+='<div class="section-card"><h6>Website SEO <span class="grade-badge '+seoG.cls+' float-end">'+seoScore+'/100</span></h6>';
+        if(seo.title) html+='<p class="small mb-1"><strong>Title:</strong> '+_esc(seo.title)+'</p>';
+        if(seo.description) html+='<p class="small mb-1"><strong>Meta:</strong> '+_esc(seo.description).substring(0,120)+'...</p>';
+        html+='<p class="small mb-0">SSL: '+(seo.ssl?'Yes':'No')+' | H1 tag: '+(seo.has_h1?'Yes':'Missing')+' | H2 tags: '+(seo.h2_count||0)+'</p>';
+        if(!seo.title&&!seo.scanned) html+='<p class="small mb-0 text-muted">No website provided or could not be scanned.</p>';
+        html+='</div>';
+
+        // Ads section
+        const adsScore=ads.score||0; const adsG=gradeFor(adsScore);
+        html+='<div class="section-card"><h6>Ad Presence <span class="grade-badge '+adsG.cls+' float-end">'+adsScore+'/100</span></h6>';
+        html+='<p class="small mb-0">Active Meta ads found: '+(ads.active_count||0)+'</p>';
+        if(ads.active_count===0) html+='<p class="small mb-0 text-muted">No active Facebook/Instagram ads detected. Paid social could help you reach more local customers.</p>';
+        html+='</div>';
+
+        // Benchmarks section
+        if(bench.industry){
+            html+='<div class="section-card"><h6>Industry Benchmarks: '+_esc(bench.industry).replace(/_/g,' ')+'</h6>';
+            if(bench.google_ads) html+='<p class="small mb-1"><strong>Google Ads avg:</strong> CTR '+bench.google_ads.ctr+'% | CPC $'+bench.google_ads.cpc+' | Conv. rate '+bench.google_ads.conversion_rate+'%</p>';
+            if(bench.meta_ads) html+='<p class="small mb-0"><strong>Meta Ads avg:</strong> CTR '+bench.meta_ads.ctr+'% | CPC $'+bench.meta_ads.cpc+' | CPM $'+bench.meta_ads.cpm+'</p>';
+            html+='</div>';
+        }
+
+        // Recommendations
+        if(recs.length){
+            html+='<h6 class="fw-bold mt-3 mb-2">Recommendations</h6>';
+            recs.forEach(function(r){
+                const pri=r.priority||'medium';
+                const col=pri==='high'?'danger':pri==='medium'?'warning':'info';
+                html+='<div class="rec-item"><span class="badge bg-'+col+' me-2">'+pri+'</span><strong>'+_esc(r.title||'')+'</strong><br><small class="text-muted">'+_esc(r.detail||r.description||'')+'</small></div>';
+            });
+        }
+
+        // CTA
+        html+='<div class="text-center mt-4 p-3" style="background:#e8f4fd;border-radius:.5rem">';
+        html+='<h6 class="fw-bold mb-1">Want us to fix these issues for you?</h6>';
+        html+='<p class="small text-muted mb-2">GroMore manages Google Ads, Meta Ads, SEO, and your Google Business Profile - all from one dashboard.</p>';
+        html+='<a href="https://gromore.com/pricing" class="btn btn-primary btn-sm" target="_blank">See Plans</a>';
+        html+='</div>';
+
+        document.getElementById('gmAssessResults').innerHTML=html;
+    }
+
+    function _esc(s){var d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
+
+    document.getElementById('gmAssessForm').addEventListener('submit',async function(e){
+        e.preventDefault();
+        var btn=document.getElementById('gmAssessBtn'),alert=document.getElementById('gmAssessAlert');
+        btn.disabled=true;btn.textContent='Starting...';alert.innerHTML='';
+
+        var fd=new FormData(this),data={};
+        fd.forEach(function(v,k){data[k]=v;});
+
+        // Show loading
+        document.getElementById('gmAssessForm').classList.add('d-none');
+        document.getElementById('gmAssessLoading').classList.remove('d-none');
+        animateSteps();
+
+        try{
+            var resp=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+            var json=await resp.json();
+            if(json.ok){
+                document.getElementById('gmAssessLoading').classList.add('d-none');
+                document.getElementById('gmAssessResults').classList.remove('d-none');
+                renderResults(json);
+            } else {
+                document.getElementById('gmAssessLoading').classList.add('d-none');
+                document.getElementById('gmAssessForm').classList.remove('d-none');
+                alert.innerHTML='<div class="alert alert-danger py-2">'+(json.error||'Assessment failed. Please try again.')+'</div>';
+                btn.disabled=false;btn.textContent='Run My Free Assessment';
+            }
+        }catch(err){
+            document.getElementById('gmAssessLoading').classList.add('d-none');
+            document.getElementById('gmAssessForm').classList.remove('d-none');
+            alert.innerHTML='<div class="alert alert-danger py-2">Connection error. Please try again.</div>';
+            btn.disabled=false;btn.textContent='Run My Free Assessment';
+        }
+    });
+})();
+</script>

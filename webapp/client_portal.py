@@ -5095,6 +5095,325 @@ def client_feedback_submit():
     return redirect(url_for("client.client_feedback"))
 
 
+# ── Public Signup (no auth, cross-origin JSON) ──
+
+@client_bp.route("/signup", methods=["POST", "OPTIONS"])
+def public_signup():
+    """Normal signup intake form - saves lead for admin to build brand."""
+    if request.method == "OPTIONS":
+        return _cors_preflight()
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+    business_name = (data.get("business_name") or "").strip()
+    industry = (data.get("industry") or "").strip()
+
+    if not name or not email or not business_name or not industry:
+        return _cors_json({"ok": False, "error": "Name, email, business name, and industry are required."}, 400)
+
+    db = _get_db()
+    db._conn().execute(
+        """INSERT INTO signup_leads
+           (name, email, phone, business_name, website, industry, service_area,
+            primary_services, monthly_budget, platforms, goals, referral_source)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        [
+            name, email,
+            (data.get("phone") or "").strip(),
+            business_name,
+            (data.get("website") or "").strip(),
+            industry,
+            (data.get("service_area") or "").strip(),
+            (data.get("primary_services") or "").strip(),
+            (data.get("monthly_budget") or "").strip(),
+            ",".join(data.get("platforms") or []) if isinstance(data.get("platforms"), list) else (data.get("platforms") or ""),
+            ",".join(data.get("goals") or []) if isinstance(data.get("goals"), list) else (data.get("goals") or ""),
+            (data.get("referral_source") or "").strip(),
+        ],
+    )
+    db._conn().commit()
+    return _cors_json({"ok": True})
+
+
+# ── Public AI Assessment (no auth, cross-origin JSON) ──
+
+@client_bp.route("/assess", methods=["POST", "OPTIONS"])
+def public_assess():
+    """Free AI assessment lead magnet - runs GBP, website, ad, and benchmark checks."""
+    if request.method == "OPTIONS":
+        return _cors_preflight()
+
+    import json as _json
+    import requests as _req
+    from webapp.google_business import get_place_details, score_profile_completeness
+    from webapp.competitor_intel import _scrape_website, _scrape_meta_ads
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+    business_name = (data.get("business_name") or "").strip()
+    industry = (data.get("industry") or "").strip()
+    service_area = (data.get("service_area") or "").strip()
+    website = (data.get("website") or "").strip()
+    gmb_url = (data.get("gmb_url") or "").strip()
+    facebook_url = (data.get("facebook_url") or "").strip()
+
+    if not name or not email or not business_name or not industry:
+        return _cors_json({"ok": False, "error": "Name, email, business name, and industry are required."}, 400)
+
+    results = {"business_name": business_name, "industry_label": industry.replace("_", " ").title()}
+    scores = []
+
+    # ── 1. GBP Check ──
+    gbp_data = {"score": 0, "findings": [], "icon": "geo-alt"}
+    place_id = None
+    api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+
+    if gmb_url:
+        pid_match = re.search(r"place_id[=:]([A-Za-z0-9_-]+)", gmb_url)
+        if pid_match:
+            place_id = pid_match.group(1)
+
+    if not place_id and api_key and business_name:
+        try:
+            search_resp = _req.post(
+                "https://places.googleapis.com/v1/places:searchText",
+                json={"textQuery": f"{business_name} {service_area}", "maxResultCount": 1},
+                headers={
+                    "X-Goog-Api-Key": api_key,
+                    "X-Goog-FieldMask": "places.id",
+                    "Content-Type": "application/json",
+                },
+                timeout=10,
+            )
+            if search_resp.status_code == 200:
+                places_list = search_resp.json().get("places", [])
+                if places_list:
+                    place_id = places_list[0].get("id")
+        except Exception:
+            pass
+
+    if place_id and api_key:
+        place = get_place_details(api_key, place_id)
+        if place:
+            comp = score_profile_completeness(place)
+            gbp_data["score"] = comp["score"]
+            for field, passed in comp["details"].items():
+                gbp_data["findings"].append({"label": field, "pass": passed})
+            rating = place.get("rating", 0)
+            count = place.get("userRatingCount", 0)
+            gbp_data["findings"].append({
+                "label": f"Rating: {rating} stars from {count} reviews",
+                "pass": rating >= 4.0 and count >= 10,
+            })
+            scores.append(comp["score"])
+        else:
+            gbp_data["findings"].append({"label": "Could not load Google Business Profile data", "pass": False})
+            scores.append(0)
+    else:
+        gbp_data["findings"].append({"label": "No Google Business Profile found - this is costing you leads", "pass": False})
+        scores.append(0)
+
+    results["gbp"] = gbp_data
+
+    # ── 2. Website SEO Check ──
+    seo_data = {"score": 0, "findings": []}
+    if website:
+        site_info = _scrape_website({"website": website})
+        if site_info and not site_info.get("error"):
+            pts = 0
+            total = 5
+
+            has_title = bool(site_info.get("title"))
+            seo_data["findings"].append({"label": f"Title tag: {site_info.get('title', 'MISSING')[:80]}", "pass": has_title})
+            if has_title:
+                pts += 1
+
+            has_desc = bool(site_info.get("description"))
+            seo_data["findings"].append({
+                "label": "Meta description: " + (site_info.get("description", "")[:80] or "MISSING"),
+                "pass": has_desc,
+            })
+            if has_desc:
+                pts += 1
+
+            h1s = site_info.get("h1", [])
+            good_h1 = len(h1s) >= 1 and h1s[0].lower() not in ("home", "welcome", "")
+            seo_data["findings"].append({
+                "label": f"H1 heading: {h1s[0][:60] if h1s else 'MISSING'}" + (" (too generic)" if h1s and h1s[0].lower() in ("home", "welcome") else ""),
+                "pass": good_h1,
+            })
+            if good_h1:
+                pts += 1
+
+            has_ssl = site_info.get("url", "").startswith("https")
+            seo_data["findings"].append({"label": "SSL/HTTPS: " + ("Yes" if has_ssl else "No"), "pass": has_ssl})
+            if has_ssl:
+                pts += 1
+
+            h2s = site_info.get("h2", [])
+            seo_data["findings"].append({"label": f"Content structure: {len(h2s)} section headings found", "pass": len(h2s) >= 3})
+            if len(h2s) >= 3:
+                pts += 1
+
+            seo_data["score"] = round(pts / total * 100)
+        else:
+            err_msg = site_info.get("error", "") if site_info else ""
+            seo_data["findings"].append({"label": f"Could not load website{' - ' + err_msg[:60] if err_msg else ''}", "pass": False})
+    else:
+        seo_data["findings"].append({"label": "No website provided", "pass": False})
+
+    scores.append(seo_data["score"])
+    results["website_seo"] = seo_data
+
+    # ── 3. Ad Presence (Meta Ad Library) ──
+    ad_data = {"score": 0, "findings": []}
+    meta_token = os.environ.get("META_SYSTEM_TOKEN", "")
+    search_name = facebook_url.rstrip("/").split("/")[-1] if facebook_url else business_name
+    if meta_token and search_name:
+        meta_info = _scrape_meta_ads({"name": search_name}, meta_token)
+        if meta_info:
+            ad_count = meta_info.get("active_ad_count", 0)
+            ad_data["findings"].append({
+                "label": f"{ad_count} active Facebook/Instagram ad(s) found",
+                "pass": ad_count > 0,
+            })
+            if ad_count == 0:
+                ad_data["findings"].append({"label": "Your competitors may be running ads while you're invisible on social", "pass": False})
+                ad_data["score"] = 20
+            else:
+                ad_data["score"] = min(80 + ad_count * 2, 100)
+                samples = meta_info.get("sample_ads", [])[:3]
+                for s in samples:
+                    titles = s.get("titles", [])
+                    if titles:
+                        ad_data["findings"].append({"label": f"Ad: \"{titles[0][:60]}\"", "pass": True})
+        else:
+            ad_data["findings"].append({"label": "No Facebook ad activity found", "pass": False})
+            ad_data["score"] = 10
+    else:
+        if not facebook_url:
+            ad_data["findings"].append({"label": "No Facebook page provided - unable to check ad activity", "pass": False})
+        else:
+            ad_data["findings"].append({"label": "Ad library check unavailable", "pass": False})
+        ad_data["score"] = 0
+
+    scores.append(ad_data["score"])
+    results["ad_presence"] = ad_data
+
+    # ── 4. Industry Benchmarks ──
+    bench_data = {"findings": []}
+    benchmarks_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config", "benchmarks.json")
+    benchmarks = {}
+    try:
+        with open(benchmarks_path) as f:
+            benchmarks = _json.load(f)
+        g = benchmarks.get("google_ads", {}).get(industry, {})
+        m = benchmarks.get("meta_ads", {}).get(industry, {})
+        if g:
+            bench_data["findings"].append({"label": f"Google Ads avg CPC in your industry: ${g.get('cpc', 'N/A')}", "pass": True})
+            bench_data["findings"].append({"label": f"Google Ads avg cost per lead: ${g.get('cpa', 'N/A')}", "pass": True})
+            bench_data["findings"].append({"label": f"Google Ads avg conversion rate: {g.get('conversion_rate', 'N/A')}%", "pass": True})
+        if m:
+            bench_data["findings"].append({"label": f"Facebook Ads avg CPC: ${m.get('cpc', 'N/A')}", "pass": True})
+            bench_data["findings"].append({"label": f"Facebook Ads avg CPM: ${m.get('cpm', 'N/A')}", "pass": True})
+    except Exception:
+        pass
+    results["benchmarks"] = bench_data
+
+    # ── 5. Overall Score ──
+    results["overall_score"] = round(sum(scores) / len(scores)) if scores else 0
+
+    # ── 6. AI Recommendations ──
+    openai_key = os.environ.get("OPENAI_API_KEY", "")
+    recommendations = []
+    if openai_key:
+        try:
+            prompt = (
+                f"You are a local marketing expert. A {industry.replace('_', ' ')} business called "
+                f"\"{business_name}\" in {service_area or 'an unspecified area'} just ran an automated assessment.\n\n"
+                f"GBP Score: {gbp_data['score']}/100\n"
+                f"Website SEO Score: {seo_data['score']}/100\n"
+                f"Ad Presence Score: {ad_data['score']}/100\n"
+                f"Overall: {results['overall_score']}/100\n\n"
+                f"GBP findings: {_json.dumps(gbp_data['findings'])}\n"
+                f"SEO findings: {_json.dumps(seo_data['findings'])}\n"
+                f"Ad findings: {_json.dumps(ad_data['findings'])}\n\n"
+                "Give exactly 5 specific, actionable recommendations. Be direct. "
+                "Reference their actual data. No fluff. No numbered sub-points. "
+                "Each recommendation should be 1-2 sentences max. Return as a JSON object with key \"recommendations\" containing an array of strings."
+            )
+            ai_resp = _req.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.7,
+                    "response_format": {"type": "json_object"},
+                },
+                timeout=30,
+            )
+            if ai_resp.status_code == 200:
+                ai_text = ai_resp.json()["choices"][0]["message"]["content"]
+                parsed = _json.loads(ai_text)
+                if isinstance(parsed, list):
+                    recommendations = parsed[:5]
+                elif isinstance(parsed, dict):
+                    for v in parsed.values():
+                        if isinstance(v, list):
+                            recommendations = [str(x) for x in v[:5]]
+                            break
+        except Exception:
+            pass
+
+    if not recommendations:
+        default_cpa = benchmarks.get("google_ads", {}).get(industry, {}).get("cpa", 50)
+        recommendations = [
+            "Claim and fully complete your Google Business Profile if you haven't already.",
+            "Make sure your website has a unique title tag and meta description on every page.",
+            "Run at least one Facebook awareness campaign to stay visible in your service area.",
+            f"Target a cost per lead under ${default_cpa} based on {industry.replace('_', ' ')} benchmarks.",
+            "Respond to every Google review within 24 hours to boost your local ranking.",
+        ]
+
+    results["recommendations"] = recommendations
+
+    # ── Save lead ──
+    db = _get_db()
+    try:
+        db._conn().execute(
+            """INSERT INTO assessment_leads
+               (name, email, business_name, industry, service_area, website, gmb_url, facebook_url, overall_score, results_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            [name, email, business_name, industry, service_area, website, gmb_url, facebook_url,
+             results["overall_score"], _json.dumps(results)],
+        )
+        db._conn().commit()
+    except Exception:
+        pass  # Don't fail the assessment if DB save fails
+
+    return _cors_json({"ok": True, "data": results})
+
+
+# ── CORS helpers for public endpoints ──
+
+def _cors_preflight():
+    resp = jsonify({"ok": True})
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    resp.headers["Access-Control-Allow-Methods"] = "POST"
+    return resp
+
+
+def _cors_json(payload, status=200):
+    resp = jsonify(payload)
+    resp.status_code = status
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
+
+
 # ── Helper ──
 
 def _get_db():

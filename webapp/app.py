@@ -183,6 +183,10 @@ def create_app():
     csrf.exempt(client_google_bp)
     csrf.exempt(client_meta_bp)
 
+    # Exempt public cross-origin API endpoints from CSRF
+    csrf.exempt("webapp.client_portal.public_signup")
+    csrf.exempt("webapp.client_portal.public_assess")
+
     # ── Auth decorator ──
     def login_required(f):
         @wraps(f)

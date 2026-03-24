@@ -1,0 +1,118 @@
+<!-- GroMore Signup Form - embed anywhere -->
+<!-- Requires Bootstrap 5 CSS on the host page -->
+
+<div id="gmSignupWrap">
+    <div id="gmAlertArea"></div>
+
+    <form id="gmSignupForm">
+        <div class="row g-2 mb-3">
+            <div class="col-sm-6">
+                <label class="form-label fw-semibold small">Your Name *</label>
+                <input type="text" name="name" class="form-control" required placeholder="Jane Smith">
+            </div>
+            <div class="col-sm-6">
+                <label class="form-label fw-semibold small">Email *</label>
+                <input type="email" name="email" class="form-control" required placeholder="you@example.com">
+            </div>
+        </div>
+        <div class="row g-2 mb-3">
+            <div class="col-sm-6">
+                <label class="form-label fw-semibold small">Phone</label>
+                <input type="tel" name="phone" class="form-control" placeholder="(555) 123-4567">
+            </div>
+        </div>
+        <hr class="my-3">
+        <div class="row g-2 mb-3">
+            <div class="col-sm-6">
+                <label class="form-label fw-semibold small">Business Name *</label>
+                <input type="text" name="business_name" class="form-control" required placeholder="Acme Plumbing">
+            </div>
+            <div class="col-sm-6">
+                <label class="form-label fw-semibold small">Website</label>
+                <input type="url" name="website" class="form-control" placeholder="https://example.com">
+            </div>
+        </div>
+        <div class="row g-2 mb-3">
+            <div class="col-sm-6">
+                <label class="form-label fw-semibold small">Industry *</label>
+                <select name="industry" class="form-select" required>
+                    <option value="">Select...</option>
+                    <optgroup label="Home Services"><option value="plumbing">Plumbing</option><option value="hvac">HVAC</option><option value="electrical">Electrical</option><option value="roofing">Roofing</option><option value="general_contracting">General Contracting</option><option value="painting">Painting</option><option value="garage_door">Garage Door</option><option value="fencing">Fencing</option><option value="concrete">Concrete / Masonry</option><option value="flooring">Flooring</option><option value="windows_doors">Windows &amp; Doors</option><option value="foundation_repair">Foundation Repair</option><option value="appliance_repair">Appliance Repair</option><option value="locksmith">Locksmith</option><option value="solar">Solar</option></optgroup>
+                    <optgroup label="Outdoor / Property"><option value="landscaping">Landscaping</option><option value="lawn_care">Lawn Care</option><option value="tree_service">Tree Service</option><option value="pool_service">Pool Service</option><option value="pressure_washing">Pressure Washing</option><option value="pest_control">Pest Control</option></optgroup>
+                    <optgroup label="Cleaning & Restoration"><option value="cleaning">Cleaning Services</option><option value="carpet_cleaning">Carpet Cleaning</option><option value="water_damage">Water Damage Restoration</option><option value="mold_remediation">Mold Remediation</option><option value="junk_removal">Junk Removal</option></optgroup>
+                    <optgroup label="Pet Services"><option value="pet_waste_removal">Pet Waste Removal</option><option value="dog_grooming">Dog Grooming</option><option value="pet_sitting">Pet Sitting / Dog Walking</option></optgroup>
+                    <optgroup label="Auto & Transport"><option value="auto_detailing">Auto Detailing</option><option value="towing">Towing</option><option value="moving">Moving / Hauling</option></optgroup>
+                    <optgroup label="Health & Wellness"><option value="dental">Dental</option><option value="chiropractic">Chiropractic</option><option value="med_spa">Med Spa / Aesthetics</option><option value="fitness">Fitness / Gym</option></optgroup>
+                    <optgroup label="Professional & Other"><option value="legal">Legal Services</option><option value="real_estate">Real Estate</option><option value="restaurant">Restaurant</option><option value="ecommerce">E-Commerce</option><option value="saas">SaaS</option><option value="other">Other</option></optgroup>
+                </select>
+            </div>
+            <div class="col-sm-6">
+                <label class="form-label fw-semibold small">Service Area *</label>
+                <input type="text" name="service_area" class="form-control" required placeholder="Dallas-Fort Worth Metro">
+            </div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label fw-semibold small">Primary Services</label>
+            <input type="text" name="primary_services" class="form-control" placeholder="e.g. Drain cleaning, water heater install, repiping">
+            <div class="form-text">Comma-separated list of your main services.</div>
+        </div>
+        <hr class="my-3">
+        <div class="row g-2 mb-3">
+            <div class="col-sm-6">
+                <label class="form-label fw-semibold small">Monthly Ad Budget</label>
+                <select name="monthly_budget" class="form-select">
+                    <option value="">Not sure yet</option>
+                    <option value="500">Up to $500</option><option value="1000">$500 - $1,000</option><option value="2000">$1,000 - $2,000</option><option value="5000">$2,000 - $5,000</option><option value="10000">$5,000 - $10,000</option><option value="10001">$10,000+</option>
+                </select>
+            </div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label fw-semibold small">Platforms</label>
+            <div class="d-flex gap-3 flex-wrap">
+                <div class="form-check"><input class="form-check-input" type="checkbox" name="platforms" value="google" id="gmPGoogle"><label class="form-check-label" for="gmPGoogle">Google Ads</label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" name="platforms" value="facebook" id="gmPFacebook"><label class="form-check-label" for="gmPFacebook">Facebook / Instagram</label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" name="platforms" value="neither" id="gmPNeither"><label class="form-check-label" for="gmPNeither">Not sure yet</label></div>
+            </div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label fw-semibold small">Goals</label>
+            <div class="d-flex gap-3 flex-wrap">
+                <div class="form-check"><input class="form-check-input" type="checkbox" name="goals" value="increase_leads" id="gmGLeads"><label class="form-check-label" for="gmGLeads">More leads</label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" name="goals" value="reduce_cpl" id="gmGCPL"><label class="form-check-label" for="gmGCPL">Lower cost per lead</label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" name="goals" value="improve_roas" id="gmGROAS"><label class="form-check-label" for="gmGROAS">Better ROAS</label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" name="goals" value="brand_awareness" id="gmGBrand"><label class="form-check-label" for="gmGBrand">Brand awareness</label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" name="goals" value="local_seo" id="gmGSEO"><label class="form-check-label" for="gmGSEO">Local SEO</label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" name="goals" value="increase_reviews" id="gmGReviews"><label class="form-check-label" for="gmGReviews">More reviews</label></div>
+            </div>
+        </div>
+        <hr class="my-3">
+        <div class="mb-3">
+            <label class="form-label fw-semibold small">How did you hear about us?</label>
+            <select name="referral_source" class="form-select">
+                <option value="">Select...</option><option value="friend">Friend / Referral</option><option value="google">Google Search</option><option value="facebook">Facebook / Instagram</option><option value="linkedin">LinkedIn</option><option value="other">Other</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary w-100 py-2 mt-2" id="gmSubmitBtn">Get Started</button>
+    </form>
+    <div class="text-center d-none" id="gmSuccessState">
+        <div class="py-4">
+            <h4 class="fw-bold">You're all set!</h4>
+            <p class="text-muted">We'll have your account ready within 24 hours. Check your email for login details.</p>
+        </div>
+    </div>
+</div>
+<script>
+document.getElementById('gmSignupForm').addEventListener('submit',async function(e){
+    e.preventDefault();
+    const btn=document.getElementById('gmSubmitBtn'),alert=document.getElementById('gmAlertArea');
+    btn.disabled=true;btn.textContent='Submitting...';alert.innerHTML='';
+    const fd=new FormData(this),data={};
+    fd.forEach((v,k)=>{if(k==='platforms'||k==='goals'){if(!data[k])data[k]=[];data[k].push(v);}else{data[k]=v;}});
+    try{
+        const r=await fetch('https://gromore-admin.onrender.com/client/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+        const j=await r.json();
+        if(j.ok){document.getElementById('gmSignupForm').classList.add('d-none');document.getElementById('gmSuccessState').classList.remove('d-none');}
+        else{alert.innerHTML='<div class="alert alert-danger py-2">'+(j.error||'Something went wrong.')+'</div>';btn.disabled=false;btn.textContent='Get Started';}
+    }catch(err){alert.innerHTML='<div class="alert alert-danger py-2">Connection error. Please try again.</div>';btn.disabled=false;btn.textContent='Get Started';}
+});
+</script>

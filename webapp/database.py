@@ -490,6 +490,55 @@ class WebDB:
             ON blog_posts(brand_id, status);
         """)
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS assessment_leads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                business_name TEXT DEFAULT '',
+                industry TEXT DEFAULT '',
+                service_area TEXT DEFAULT '',
+                website TEXT DEFAULT '',
+                gmb_url TEXT DEFAULT '',
+                facebook_url TEXT DEFAULT '',
+                phone TEXT DEFAULT '',
+                overall_score INTEGER DEFAULT 0,
+                results_json TEXT DEFAULT '',
+                converted_to_brand_id INTEGER DEFAULT NULL,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (converted_to_brand_id) REFERENCES brands(id) ON DELETE SET NULL
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_assessment_leads_email
+            ON assessment_leads(email);
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS signup_leads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                phone TEXT DEFAULT '',
+                business_name TEXT DEFAULT '',
+                website TEXT DEFAULT '',
+                industry TEXT DEFAULT '',
+                service_area TEXT DEFAULT '',
+                primary_services TEXT DEFAULT '',
+                monthly_budget TEXT DEFAULT '',
+                platforms TEXT DEFAULT '',
+                goals TEXT DEFAULT '',
+                referral_source TEXT DEFAULT '',
+                converted_to_brand_id INTEGER DEFAULT NULL,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (converted_to_brand_id) REFERENCES brands(id) ON DELETE SET NULL
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_signup_leads_email
+            ON signup_leads(email);
+        """)
+
         conn.commit()
         brand_columns = {r[1] for r in conn.execute("PRAGMA table_info(brands)").fetchall()}
         new_brand_cols = [
