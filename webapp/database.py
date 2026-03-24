@@ -516,6 +516,7 @@ class WebDB:
         new_bt_cols = [
             ("facebook_page_id", "TEXT DEFAULT ''"),
             ("google_business_email", "TEXT DEFAULT ''"),
+            ("meta_login_email", "TEXT DEFAULT ''"),
             ("onboarding_token", "TEXT DEFAULT ''"),
             ("onboarding_completed_at", "TEXT DEFAULT ''"),
             ("activated_at", "TEXT DEFAULT ''"),
@@ -2134,11 +2135,11 @@ class WebDB:
         conn.close()
         return dict(row) if row else None
 
-    def update_beta_tester_onboarding(self, tester_id, facebook_page_id, google_business_email):
+    def update_beta_tester_onboarding(self, tester_id, facebook_page_id, google_business_email, meta_login_email):
         conn = self._conn()
         conn.execute(
-            "UPDATE beta_testers SET facebook_page_id = ?, google_business_email = ?, onboarding_completed_at = datetime('now') WHERE id = ?",
-            (facebook_page_id, google_business_email, tester_id),
+            "UPDATE beta_testers SET facebook_page_id = ?, google_business_email = ?, meta_login_email = ?, onboarding_completed_at = datetime('now') WHERE id = ?",
+            (facebook_page_id, google_business_email, meta_login_email, tester_id),
         )
         conn.commit()
         conn.close()

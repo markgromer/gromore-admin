@@ -41,18 +41,22 @@
 
             <div class="step">
                 <div class="step-num">1</div>
-                <div><strong>Provide your Facebook Page ID</strong><br>The numeric ID from your business page's About section.</div>
+                <div><strong>Provide your Meta/Facebook login email</strong><br>The email you use to log into Facebook, so we can add you as a tester on our app.</div>
             </div>
             <div class="step">
                 <div class="step-num">2</div>
-                <div><strong>Share your Google business email</strong><br>The email you use to manage your Google Ads account.</div>
+                <div><strong>Share your Google account email</strong><br>The Gmail or Google Workspace email you'll use to sign in, so we can add you as a test user.</div>
             </div>
             <div class="step">
                 <div class="step-num">3</div>
-                <div><strong>Create a Facebook Developer account</strong><br>Free registration at developers.facebook.com so we can connect your ad data.</div>
+                <div><strong>Provide your Facebook Page ID</strong><br>The numeric ID from your business page's About section.</div>
             </div>
             <div class="step">
                 <div class="step-num">4</div>
+                <div><strong>Create a Facebook Developer account</strong><br>Free registration at developers.facebook.com so we can connect your ad data.</div>
+            </div>
+            <div class="step">
+                <div class="step-num">5</div>
                 <div><strong>We'll activate your account</strong><br>Once we add your accounts, you'll get a login email.</div>
             </div>
         </div>
@@ -90,6 +94,20 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                 <div class="mb-3">
+                    <label class="form-label">Meta / Facebook Login Email <span class="text-danger">*</span></label>
+                    <input type="email" name="meta_login_email" class="form-control" placeholder="your-facebook-email@example.com" required
+                           value="{{ tester.meta_login_email or '' }}">
+                    <div class="form-text">The email address you use to log into Facebook. We need this to add you as a tester on our Facebook app before you can sign in.</div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Google Account Email <span class="text-danger">*</span></label>
+                    <input type="email" name="google_business_email" class="form-control" placeholder="you@gmail.com" required
+                           value="{{ tester.google_business_email or '' }}">
+                    <div class="form-text">The Gmail or Google Workspace email you'll use to sign in. We need this to add you as a test user on our Google app.</div>
+                </div>
+
+                <div class="mb-3">
                     <label class="form-label">Facebook Page ID <span class="text-danger">*</span></label>
                     <input type="text" name="facebook_page_id" class="form-control" placeholder="e.g. 109876543210987" required
                            value="{{ tester.facebook_page_id or '' }}">
@@ -100,13 +118,6 @@
                         3. Scroll to <strong>Page transparency</strong><br>
                         4. Your Page ID is the numeric number listed there
                     </div>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label">Google Business Email <span class="text-danger">*</span></label>
-                    <input type="email" name="google_business_email" class="form-control" placeholder="you@yourbusiness.com" required
-                           value="{{ tester.google_business_email or '' }}">
-                    <div class="form-text">The email address you use to sign in to Google Ads or Google Business Profile.</div>
                 </div>
 
                 <div class="help-box" style="background:#fdf2f8;border-color:#fce7f3;">

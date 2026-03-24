@@ -4136,14 +4136,15 @@ def beta_onboarding(token):
         return redirect(url_for("client.beta_signup"))
 
     if request.method == "POST":
-        facebook_page_id = request.form.get("facebook_page_id", "").strip()
+        meta_login_email = request.form.get("meta_login_email", "").strip().lower()
         google_business_email = request.form.get("google_business_email", "").strip().lower()
+        facebook_page_id = request.form.get("facebook_page_id", "").strip()
 
-        if not facebook_page_id or not google_business_email:
-            flash("Both fields are required.", "error")
+        if not meta_login_email or not google_business_email or not facebook_page_id:
+            flash("All fields are required.", "error")
             return render_template("beta_onboarding.html", tester=tester)
 
-        db.update_beta_tester_onboarding(tester["id"], facebook_page_id, google_business_email)
+        db.update_beta_tester_onboarding(tester["id"], facebook_page_id, google_business_email, meta_login_email)
         return render_template("beta_onboarding.html", tester=tester, success=True)
 
     return render_template("beta_onboarding.html", tester=tester)

@@ -95,8 +95,9 @@ def send_beta_welcome_email(app_config, tester, onboarding_url):
         <div style="background:#f0f0ff;border-radius:10px;padding:20px;margin:20px 0;">
             <h3 style="margin-top:0;">What we need from you:</h3>
             <ol style="line-height:2;">
+                <li><strong>Your Meta/Facebook login email</strong> - the email you use to log into Facebook (so we can add you as a tester on our app)</li>
+                <li><strong>Your Google account email</strong> - the Gmail or Google Workspace email you'll use to sign in (so we can add you as a test user)</li>
                 <li><strong>Your Facebook Page ID</strong> - the numeric ID for your business page</li>
-                <li><strong>Your Google business email</strong> - the email you use to manage your Google Ads</li>
                 <li><strong>Create a free Facebook Developer account</strong> at <a href="https://developers.facebook.com" style="color:#4f46e5;">developers.facebook.com</a></li>
             </ol>
         </div>
@@ -134,9 +135,10 @@ def send_beta_welcome_email(app_config, tester, onboarding_url):
         f"You've been approved for the beta program. Complete your setup here:\n"
         f"{onboarding_url}\n\n"
         f"What we need:\n"
-        f"1. Your Facebook Page ID (numeric ID from your business page)\n"
-        f"2. Your Google business email (the one managing your Google Ads)\n"
-        f"3. Create a free Facebook Developer account at developers.facebook.com\n\n"
+        f"1. Your Meta/Facebook login email (so we can add you as a tester on our app)\n"
+        f"2. Your Google account email (so we can add you as a test user)\n"
+        f"3. Your Facebook Page ID (numeric ID from your business page)\n"
+        f"4. Create a free Facebook Developer account at developers.facebook.com\n\n"
         f"Once setup is complete, we'll send your login credentials.\n\n"
         f"- The GroMore Team"
     )

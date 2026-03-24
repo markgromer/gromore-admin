@@ -112,8 +112,9 @@
                             <details style="font-size:.78rem;margin-top:4px;">
                                 <summary style="cursor:pointer;color:#6366f1;">View info</summary>
                                 <div class="mt-1">
-                                    <strong>FB Page ID:</strong> {{ t.facebook_page_id or '-' }}<br>
-                                    <strong>Google Email:</strong> {{ t.google_business_email or '-' }}
+                                    <strong>Meta Login Email:</strong> {{ t.meta_login_email or '-' }}<br>
+                                    <strong>Google Email:</strong> {{ t.google_business_email or '-' }}<br>
+                                    <strong>FB Page ID:</strong> {{ t.facebook_page_id or '-' }}
                                 </div>
                             </details>
                             {% elif t.status == 'approved' %}
