@@ -135,22 +135,18 @@ def create_app():
     from webapp.ai_assistant import DEFAULT_CHAT_SYSTEM_PROMPT
     app.config["AI_CHAT_SYSTEM_PROMPT"] = _cfg("ai_chat_system_prompt", "AI_CHAT_SYSTEM_PROMPT", "") or DEFAULT_CHAT_SYSTEM_PROMPT
 
-    # Create default admin if none exists
-    if not db.get_users():
-        default_pw = os.environ.get("ADMIN_PASSWORD", "changeme123")
-        db.create_user("admin", default_pw, "Admin")
-        print(f"Created default admin user (username: admin)")
-
-    # Optional break-glass: reset admin password via env vars
-    reset_admin = os.environ.get("RESET_ADMIN_PASSWORD", "").strip().lower() in ("1", "true", "yes")
+    # Ensure admin user exists and password stays in sync with env var
     admin_pw = os.environ.get("ADMIN_PASSWORD", "").strip()
-    if reset_admin:
-        if not admin_pw:
-            print("RESET_ADMIN_PASSWORD is set but ADMIN_PASSWORD is empty; skipping reset")
-        else:
-            db.create_user("admin", admin_pw, "Admin")
-            db.update_password_by_username("admin", admin_pw)
-            print("Admin password reset via RESET_ADMIN_PASSWORD")
+    if not db.get_users():
+        pw = admin_pw or "changeme123"
+        db.create_user("admin", pw, "Admin")
+        print(f"Created default admin user (username: admin)")
+    elif admin_pw:
+        # Always sync admin password from ADMIN_PASSWORD env var so
+        # changing the env var on Render takes effect on next restart.
+        db.create_user("admin", admin_pw, "Admin")  # no-op if exists
+        db.update_password_by_username("admin", admin_pw)
+        print("Admin password synced from ADMIN_PASSWORD env var")
 
     # Optional bootstrap user (useful for first-time access or recovery)
     bootstrap_username = os.environ.get("BOOTSTRAP_USERNAME", "").strip()
@@ -1700,7 +1696,7 @@ def create_app():
         for f in flags:
             key = f["feature_key"]
             level = request.form.get(f"level_{key}", f["access_level"])
-            enabled = request.form.get(f"enabled_{key}") == "1"
+            enabled = "1" in request.form.getlist(f"enabled_{key}")
             if level not in ("all", "beta", "admin"):
                 level = "all"
             db.update_feature_flag(key, level, enabled)
