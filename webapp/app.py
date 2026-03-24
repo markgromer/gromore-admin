@@ -225,10 +225,32 @@ def create_app():
         user = None
         if "user_id" in session:
             user = db.get_user(session["user_id"])
+
+        # Build feature-flag lookup for templates
+        _flags = {f["feature_key"]: f for f in db.get_feature_flags()}
+
+        def feature_on(key):
+            """Return True if the feature should be visible to the current viewer."""
+            flag = _flags.get(key)
+            if not flag or not flag["enabled"]:
+                return False
+            level = flag["access_level"]  # 'all', 'beta', 'admin'
+            # Admin session sees everything
+            if "user_id" in session:
+                return True
+            if level == "all":
+                return True
+            if level == "beta":
+                brand_id = session.get("client_brand_id")
+                return bool(brand_id and db.is_beta_brand(brand_id))
+            # level == 'admin' and no admin session
+            return False
+
         return {
             "current_user": user,
             "now": datetime.now(),
             "app_name": "Agency Analytics",
+            "feature_on": feature_on,
         }
 
     # ── Auth Routes ──
@@ -1659,6 +1681,32 @@ def create_app():
             return jsonify({"ok": False, "error": str(e)})
 
     # ── Setup Guide ──
+    # ── Feature Flags ──
+
+    @app.route("/features")
+    @login_required
+    def feature_flags_page():
+        flags = db.get_feature_flags()
+        categories = {}
+        for f in flags:
+            cat = f["category"] or "general"
+            categories.setdefault(cat, []).append(f)
+        return render_template("feature_flags.html", categories=categories)
+
+    @app.route("/features/update", methods=["POST"])
+    @login_required
+    def feature_flags_update():
+        flags = db.get_feature_flags()
+        for f in flags:
+            key = f["feature_key"]
+            level = request.form.get(f"level_{key}", f["access_level"])
+            enabled = request.form.get(f"enabled_{key}") == "1"
+            if level not in ("all", "beta", "admin"):
+                level = "all"
+            db.update_feature_flag(key, level, enabled)
+        flash("Feature flags updated.", "success")
+        return redirect(url_for("feature_flags_page"))
+
     # ── Beta Testers Admin ──
 
     @app.route("/beta")

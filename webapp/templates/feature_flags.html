@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Feature Flags{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0">Feature Flags</h4>
+    <span class="text-muted small">Control which features are visible in the client portal</span>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body p-3">
+        <div class="d-flex gap-3 small">
+            <span><span class="badge bg-success">All</span> Visible to every client</span>
+            <span><span class="badge bg-warning text-dark">Beta</span> Beta testers only</span>
+            <span><span class="badge bg-danger">Admin</span> Only you (for testing)</span>
+        </div>
+    </div>
+</div>
+
+<form method="POST" action="{{ url_for('feature_flags_update') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {% set cat_labels = {"main": "Main", "create": "Create", "business": "Business", "settings": "Settings", "general": "General"} %}
+
+    {% for cat, flags in categories.items() %}
+    <div class="card mb-3">
+        <div class="card-header py-2">
+            <strong>{{ cat_labels.get(cat, cat|title) }}</strong>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-sm mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:50px" class="text-center">On</th>
+                        <th>Feature</th>
+                        <th style="width:180px">Access Level</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in flags %}
+                    <tr>
+                        <td class="text-center">
+                            <input type="hidden" name="enabled_{{ f.feature_key }}" value="0">
+                            <div class="form-check form-switch d-inline-block mb-0">
+                                <input class="form-check-input" type="checkbox"
+                                       name="enabled_{{ f.feature_key }}" value="1"
+                                       {% if f.enabled %}checked{% endif %}>
+                            </div>
+                        </td>
+                        <td>
+                            <strong>{{ f.label }}</strong>
+                            {% if f.description %}<br><small class="text-muted">{{ f.description }}</small>{% endif %}
+                        </td>
+                        <td>
+                            <select name="level_{{ f.feature_key }}" class="form-select form-select-sm">
+                                <option value="all" {% if f.access_level == 'all' %}selected{% endif %}>All Users</option>
+                                <option value="beta" {% if f.access_level == 'beta' %}selected{% endif %}>Beta Only</option>
+                                <option value="admin" {% if f.access_level == 'admin' %}selected{% endif %}>Admin Only</option>
+                            </select>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+
+    <div class="d-flex justify-content-end mb-4">
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg"></i> Save Changes
+        </button>
+    </div>
+</form>
+{% endblock %}

@@ -98,7 +98,99 @@ def client_login_required(f):
     return decorated
 
 
-# ── Auth ──
+# ── Feature gate (before_request on blueprint) ──
+
+# Map route function names → feature flag keys.
+# Routes not listed here are ungated (login, logout, assistant, etc.).
+_ENDPOINT_FEATURE_MAP = {
+    "client_dashboard":            "dashboard",
+    "client_dashboard_data":       "dashboard",
+    "client_kpis":                 "kpis",
+    "client_campaigns":            "campaigns",
+    "client_campaign_detail":      "campaigns",
+    "client_campaign_status":      "campaigns",
+    "client_campaign_budget":      "campaigns",
+    "client_add_negative_keyword": "campaigns",
+    "client_campaign_create":      "campaigns",
+    "client_campaign_generate":    "campaigns",
+    "client_campaign_launch":      "campaigns",
+    "client_campaign_upload_image":"campaigns",
+    "client_campaign_save_draft":  "campaigns",
+    "client_campaign_launch_draft":"campaigns",
+    "client_campaign_delete_draft":"campaigns",
+    "client_campaign_preflight":   "campaigns",
+    "client_campaign_check_config":"campaigns",
+    "client_quick_launch":         "quick_launch",
+    "client_actions":              "missions",
+    "client_actions_dismiss":      "missions",
+    "client_actions_restore":      "missions",
+    "client_actions_chat":         "missions",
+    "client_coaching":             "coaching",
+    "client_coaching_start":       "coaching",
+    "client_ad_builder":           "ad_builder",
+    "client_ad_builder_generate":  "ad_builder",
+    "client_creative":             "creative",
+    "client_creative_generate":    "creative",
+    "client_creative_templates_list":  "creative",
+    "client_creative_templates_save":  "creative",
+    "client_creative_template_load":   "creative",
+    "client_creative_template_update": "creative",
+    "client_blog":                 "blog",
+    "client_blog_editor":          "blog",
+    "client_blog_save":            "blog",
+    "client_blog_delete":          "blog",
+    "client_blog_import_csv":      "blog",
+    "client_blog_test_connection": "blog",
+    "client_blog_ai_generate":     "blog",
+    "client_my_business":          "my_business",
+    "client_upload_logo":          "my_business",
+    "client_set_primary_logo":     "my_business",
+    "client_rename_logo_variant":  "my_business",
+    "client_delete_logo_variant":  "my_business",
+    "client_crm":                  "crm",
+    "client_crm_data":             "crm",
+    "client_gbp":                  "gbp",
+    "client_gbp_audit":            "gbp",
+    "client_post_scheduler":       "post_scheduler",
+    "client_competitors":          "competitor_intel",
+    "client_competitor_refresh":   "competitor_intel",
+    "client_add_competitor":       "competitor_intel",
+    "client_delete_competitor":    "competitor_intel",
+    "client_edit_competitor":      "competitor_intel",
+    "client_settings":             "connections",
+    "client_feedback":             "feedback",
+    "client_feedback_submit":      "feedback",
+    "client_help":                 "help",
+}
+
+
+@client_bp.before_request
+def _check_feature_gate():
+    """Block access to routes whose feature flag is not visible to this user."""
+    endpoint = request.endpoint or ""
+    # Strip blueprint prefix: "client.client_dashboard" → "client_dashboard"
+    func_name = endpoint.split(".")[-1] if "." in endpoint else endpoint
+    feature_key = _ENDPOINT_FEATURE_MAP.get(func_name)
+    if not feature_key:
+        return  # ungated route
+
+    db = _get_db()
+    flag = db.get_feature_flag(feature_key)
+    if not flag or not flag["enabled"]:
+        abort(404)
+
+    level = flag["access_level"]
+    # Admin session sees everything
+    if "user_id" in session:
+        return
+    if level == "all":
+        return
+    if level == "beta":
+        brand_id = session.get("client_brand_id")
+        if brand_id and db.is_beta_brand(brand_id):
+            return
+    # Not authorized for this feature
+    abort(404)
 
 @client_bp.route("/login", methods=["GET", "POST"])
 def client_login():

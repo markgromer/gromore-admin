@@ -539,6 +539,49 @@ class WebDB:
             ON signup_leads(email);
         """)
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS feature_flags (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                feature_key TEXT UNIQUE NOT NULL,
+                label TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                access_level TEXT NOT NULL DEFAULT 'all',
+                enabled INTEGER DEFAULT 1,
+                category TEXT DEFAULT 'general',
+                sort_order INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+
+        conn.commit()
+
+        # ── Seed default feature flags ──
+        DEFAULT_FLAGS = [
+            ("dashboard",       "Overview",         "Main dashboard overview",           "all",   "main",     10),
+            ("kpis",            "KPIs",             "Key performance indicators",        "all",   "main",     20),
+            ("campaigns",       "Campaigns",        "Campaign list and management",      "all",   "main",     30),
+            ("quick_launch",    "Quick Launch",     "One-click campaign launcher",       "all",   "main",     40),
+            ("missions",        "Missions",         "Action items and tasks",            "all",   "main",     50),
+            ("coaching",        "Coaching",         "AI coaching and learning",          "beta",  "main",     60),
+            ("ad_builder",      "Ad Builder",       "AI-powered ad copy generator",      "all",   "create",   70),
+            ("creative",        "Creative",         "Image and creative generation",     "all",   "create",   80),
+            ("blog",            "Blog",             "Blog post creation and publishing", "all",   "create",   90),
+            ("my_business",     "My Business",      "Business profile and details",      "all",   "business", 100),
+            ("crm",             "CRM",              "Customer relationship management",  "beta",  "business", 110),
+            ("gbp",             "Google Profile",   "Google Business Profile manager",   "all",   "business", 120),
+            ("post_scheduler",  "Post Scheduler",   "Social media post scheduling",      "beta",  "business", 130),
+            ("competitor_intel","Competitor Intel",  "Competitor analysis tools",         "beta",  "business", 140),
+            ("connections",     "Connections",       "Platform connection settings",      "all",   "settings", 150),
+            ("feedback",        "Feedback",          "Submit feedback to the team",       "all",   "settings", 160),
+            ("help",            "Help",              "Help documentation and support",    "all",   "settings", 170),
+        ]
+        existing = {r[0] for r in conn.execute("SELECT feature_key FROM feature_flags").fetchall()}
+        for key, label, desc, level, cat, sort in DEFAULT_FLAGS:
+            if key not in existing:
+                conn.execute(
+                    "INSERT INTO feature_flags (feature_key, label, description, access_level, category, sort_order) VALUES (?,?,?,?,?,?)",
+                    (key, label, desc, level, cat, sort),
+                )
         conn.commit()
         brand_columns = {r[1] for r in conn.execute("PRAGMA table_info(brands)").fetchall()}
         new_brand_cols = [
@@ -2527,3 +2570,35 @@ class WebDB:
         conn.close()
         return {"total": total, "proposed": proposed, "approved": approved,
                 "building": building, "shipped": shipped, "rejected": rejected}
+
+    # ── Feature Flags ──
+
+    def get_feature_flags(self):
+        conn = self._conn()
+        rows = conn.execute("SELECT * FROM feature_flags ORDER BY sort_order, id").fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_feature_flag(self, feature_key):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM feature_flags WHERE feature_key = ?", (feature_key,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def update_feature_flag(self, feature_key, access_level, enabled):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE feature_flags SET access_level = ?, enabled = ? WHERE feature_key = ?",
+            (access_level, 1 if enabled else 0, feature_key),
+        )
+        conn.commit()
+        conn.close()
+
+    def is_beta_brand(self, brand_id):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT id FROM beta_testers WHERE brand_id = ? AND status IN ('approved', 'activated') LIMIT 1",
+            (brand_id,),
+        ).fetchone()
+        conn.close()
+        return row is not None

@@ -117,6 +117,9 @@
             <a class="nav-link {% if request.endpoint in ('beta_dashboard', 'beta_approve', 'beta_reject', 'beta_feedback_respond') %}active{% endif %}" href="{{ url_for('beta_dashboard') }}">
                 <i class="bi bi-people"></i> Beta Testers
             </a>
+            <a class="nav-link {% if request.endpoint in ('feature_flags_page', 'feature_flags_update') %}active{% endif %}" href="{{ url_for('feature_flags_page') }}">
+                <i class="bi bi-toggles"></i> Feature Flags
+            </a>
             <a class="nav-link {% if request.endpoint == 'setup_guide' %}active{% endif %}" href="{{ url_for('setup_guide') }}">
                 <i class="bi bi-book"></i> Setup Guide
             </a>

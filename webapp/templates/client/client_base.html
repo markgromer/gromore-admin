@@ -871,63 +871,97 @@
         </div>
         <div class="nav-links">
             <div class="nav-section-label">Main</div>
+            {% if feature_on('dashboard') %}
             <a href="{{ url_for('client.client_dashboard') }}" class="{% if request.endpoint == 'client.client_dashboard' %}active{% endif %}">
                 <i class="bi bi-speedometer2"></i> Overview
             </a>
+            {% endif %}
+            {% if feature_on('kpis') %}
             <a href="{{ url_for('client.client_kpis') }}" class="{% if request.endpoint == 'client.client_kpis' %}active{% endif %}">
                 <i class="bi bi-bullseye"></i> KPIs
             </a>
+            {% endif %}
+            {% if feature_on('campaigns') %}
             <a href="{{ url_for('client.client_campaigns') }}" class="{% if request.endpoint in ('client.client_campaigns', 'client.client_campaign_detail', 'client.client_campaign_create', 'client.client_campaign_generate', 'client.client_campaign_launch') %}active{% endif %}">
                 <i class="bi bi-megaphone"></i> Campaigns
             </a>
+            {% endif %}
+            {% if feature_on('quick_launch') %}
             <a href="{{ url_for('client.client_quick_launch') }}" class="{% if request.endpoint == 'client.client_quick_launch' %}active{% endif %}" style="color:#4f46e5; font-weight:600;">
                 <i class="bi bi-rocket-takeoff"></i> Quick Launch
             </a>
+            {% endif %}
+            {% if feature_on('missions') %}
             <a href="{{ url_for('client.client_actions') }}" class="{% if request.endpoint == 'client.client_actions' %}active{% endif %}">
                 <i class="bi bi-clipboard2-check"></i> Missions
             </a>
+            {% endif %}
+            {% if feature_on('coaching') %}
             <a href="{{ url_for('client.client_coaching') }}" class="{% if request.endpoint == 'client.client_coaching' %}active{% endif %}" style="color:#059669; font-weight:600;">
                 <i class="bi bi-mortarboard"></i> Coaching
             </a>
+            {% endif %}
 
             <div class="nav-section-label">Create</div>
+            {% if feature_on('ad_builder') %}
             <a href="{{ url_for('client.client_ad_builder') }}" class="{% if request.endpoint in ('client.client_ad_builder', 'client.client_ad_builder_generate') %}active{% endif %}">
                 <i class="bi bi-brush"></i> Ad Builder
             </a>
+            {% endif %}
+            {% if feature_on('creative') %}
             <a href="{{ url_for('client.client_creative') }}" class="{% if request.endpoint in ('client.client_creative', 'client.client_creative_generate') %}active{% endif %}">
                 <i class="bi bi-palette"></i> Creative
             </a>
+            {% endif %}
+            {% if feature_on('blog') %}
             <a href="{{ url_for('client.client_blog') }}" class="{% if request.endpoint in ('client.client_blog', 'client.client_blog_editor') %}active{% endif %}">
                 <i class="bi bi-journal-richtext"></i> Blog
             </a>
+            {% endif %}
 
             <div class="nav-section-label">Business</div>
+            {% if feature_on('my_business') %}
             <a href="{{ url_for('client.client_my_business') }}" class="{% if request.endpoint == 'client.client_my_business' %}active{% endif %}">
                 <i class="bi bi-building"></i> My Business
             </a>
+            {% endif %}
+            {% if feature_on('crm') %}
             <a href="{{ url_for('client.client_crm') }}" class="{% if request.endpoint in ('client.client_crm',) %}active{% endif %}">
                 <i class="bi bi-people"></i> CRM
             </a>
+            {% endif %}
+            {% if feature_on('gbp') %}
             <a href="{{ url_for('client.client_gbp') }}" class="{% if request.endpoint == 'client.client_gbp' %}active{% endif %}">
                 <i class="bi bi-google"></i> Google Profile
             </a>
+            {% endif %}
+            {% if feature_on('post_scheduler') %}
             <a href="{{ url_for('client.client_post_scheduler') }}" class="{% if request.endpoint == 'client.client_post_scheduler' %}active{% endif %}">
                 <i class="bi bi-calendar2-week"></i> Post Scheduler
             </a>
+            {% endif %}
+            {% if feature_on('competitor_intel') %}
             <a href="{{ url_for('client.client_competitors') }}" class="{% if request.endpoint == 'client.client_competitors' %}active{% endif %}">
                 <i class="bi bi-binoculars"></i> Competitor Intel
             </a>
+            {% endif %}
 
             <div class="nav-section-label">Settings</div>
+            {% if feature_on('connections') %}
             <a href="{{ url_for('client.client_settings') }}" class="{% if request.endpoint == 'client.client_settings' %}active{% endif %}">
                 <i class="bi bi-plug"></i> Connections
             </a>
+            {% endif %}
+            {% if feature_on('feedback') %}
             <a href="{{ url_for('client.client_feedback') }}" class="{% if request.endpoint in ('client.client_feedback', 'client.client_feedback_submit') %}active{% endif %}">
                 <i class="bi bi-chat-square-text"></i> Feedback
             </a>
+            {% endif %}
+            {% if feature_on('help') %}
             <a href="{{ url_for('client.client_help') }}" class="{% if request.endpoint == 'client.client_help' %}active{% endif %}">
                 <i class="bi bi-question-circle"></i> Help
             </a>
+            {% endif %}
         </div>
         <div class="sidebar-footer">
             <span class="user-name"><i class="bi bi-person-circle"></i> {{ client_user or '' }}</span>
