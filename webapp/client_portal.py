@@ -4610,7 +4610,7 @@ def client_crm_data():
         except Exception:
             pass  # ad spend data is optional
 
-        # Auto-sync estimated MRR to brand_month_finance (so existing ROAS pipeline picks it up)
+        # Auto-sync MRR to brand_month_finance (so existing ROAS pipeline picks it up)
         if rev.get("mrr") and rev["mrr"] > 0:
             try:
                 month = datetime.now().strftime("%Y-%m")
@@ -4623,8 +4623,9 @@ def client_crm_data():
             except Exception:
                 pass
 
-    except Exception:
-        data["revenue"] = {}
+    except Exception as exc:
+        import traceback
+        data["revenue"] = {"error": str(exc), "traceback": traceback.format_exc()}
 
     return jsonify(data)
 

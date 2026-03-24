@@ -391,9 +391,14 @@ def _sng_sum_payments_for_month(brand, client_ids, month_prefix):
     payment_count = 0
     for cid in client_ids:
         result, error = sng_get_client_details(brand, cid)
-        if error or not isinstance(result, dict):
+        if error:
+            log.warning("client_details error for %s: %s", cid, error)
             continue
-        for pmt in (result.get("payments") or []):
+        if not isinstance(result, dict):
+            log.warning("client_details non-dict for %s: %s", cid, type(result))
+            continue
+        payments = result.get("payments") or []
+        for pmt in payments:
             if pmt.get("status") != "succeeded":
                 continue
             pmt_date = (pmt.get("date") or "")
@@ -404,6 +409,11 @@ def _sng_sum_payments_for_month(brand, client_ids, month_prefix):
             except (ValueError, TypeError):
                 pass
             payment_count += 1
+        if not payments:
+            log.debug("client_details for %s returned 0 payments (keys: %s)",
+                       cid, list(result.keys()) if isinstance(result, dict) else "N/A")
+    log.info("SNG payment sum: %d clients, %d payments, $%.2f for %s",
+             len(client_ids), payment_count, total_revenue, month_prefix)
     return round(total_revenue, 2), payment_count
 
 
@@ -440,7 +450,8 @@ def pull_sweepandgo_revenue(brand, month=None):
 
 def sng_estimate_revenue_snapshot(brand):
     """Revenue intelligence using real SNG payment data.
-    Returns dict with real mrr, avg_client_value, active/inactive counts, etc."""
+    Samples one page of clients and extrapolates to avoid 249+ API calls.
+    Returns dict with mrr, avg_client_value, active/inactive counts, etc."""
     from datetime import datetime
 
     now = datetime.now()
@@ -462,18 +473,32 @@ def sng_estimate_revenue_snapshot(brand):
     if isinstance(r, dict):
         jobs_count = r.get("data", 0) or 0
 
-    # Pull real payment data for current month
-    active = _sng_collect_all_clients(brand, sng_get_active_clients)
-    client_ids = []
-    for c in active:
-        cid = c.get("client") or c.get("id") or c.get("client_id")
-        if cid:
-            client_ids.append(cid)
+    # Sample page 1 of active clients (typically 10) and get their real payments
+    sample_ids = []
+    r, _ = sng_get_active_clients(brand, page=1)
+    if isinstance(r, dict):
+        for c in (r.get("data") or []):
+            cid = c.get("client") or c.get("id") or c.get("client_id")
+            if cid:
+                sample_ids.append(cid)
 
-    mrr = 0.0
-    payment_count = 0
-    if client_ids:
-        mrr, payment_count = _sng_sum_payments_for_month(brand, client_ids, current_month)
+    sample_revenue = 0.0
+    sample_payments = 0
+    sample_size = len(sample_ids)
+
+    if sample_ids:
+        sample_revenue, sample_payments = _sng_sum_payments_for_month(
+            brand, sample_ids, current_month
+        )
+
+    # Extrapolate from sample to full active client base
+    if sample_size > 0 and active_count > 0:
+        scale = active_count / sample_size
+        mrr = round(sample_revenue * scale, 2)
+        payment_count = int(sample_payments * scale)
+    else:
+        mrr = 0.0
+        payment_count = 0
 
     # Calculate average client monthly value from real data
     avg_client_monthly = round(mrr / active_count, 2) if active_count > 0 and mrr > 0 else 0
@@ -489,11 +514,12 @@ def sng_estimate_revenue_snapshot(brand):
         "total_jobs": jobs_count,
         "mrr": mrr,
         "payment_count": payment_count,
+        "sample_size": sample_size,
         "avg_client_monthly_value": avg_client_monthly,
         "estimated_clv": estimated_clv,
         "churn_cost_total": churn_cost,
         "avg_retention_months": avg_retention_months,
-        "data_source": "real_payments",
+        "data_source": "real_payments_sampled",
     }
 
 
