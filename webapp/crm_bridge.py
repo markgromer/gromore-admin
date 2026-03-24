@@ -388,22 +388,57 @@ def _sng_collect_all_client_ids(brand):
 
 def _sng_sum_payments_for_month(brand, client_ids, month_prefix):
     """Call client_details for each client and sum succeeded payments in given month.
-    month_prefix is like '2026-03'. Returns (total_revenue, payment_count)."""
+    month_prefix is like '2026-03'. Returns (total_revenue, payment_count, diagnostics)."""
     total_revenue = 0.0
     payment_count = 0
-    for cid in client_ids:
+    diag = {
+        "errors": 0,
+        "clients_with_payments": 0,
+        "clients_without_payments": 0,
+        "all_payment_statuses": {},
+        "all_payment_months": {},
+        "sample_response_keys": None,
+        "sample_payment": None,
+        "first_error": None,
+    }
+    for i, cid in enumerate(client_ids):
         result, error = sng_get_client_details(brand, cid)
         if error:
-            log.warning("client_details error for %s: %s", cid, error)
+            diag["errors"] += 1
+            if not diag["first_error"]:
+                diag["first_error"] = f"{cid}: {error}"
             continue
         if not isinstance(result, dict):
-            log.warning("client_details non-dict for %s: %s", cid, type(result))
+            diag["errors"] += 1
+            if not diag["first_error"]:
+                diag["first_error"] = f"{cid}: non-dict response ({type(result).__name__})"
             continue
+
+        # Capture the keys from first successful response
+        if diag["sample_response_keys"] is None:
+            diag["sample_response_keys"] = list(result.keys())
+
         payments = result.get("payments") or []
+        if payments:
+            diag["clients_with_payments"] += 1
+            # Capture first payment as sample
+            if diag["sample_payment"] is None:
+                diag["sample_payment"] = {k: str(v)[:100] for k, v in payments[0].items()}
+        else:
+            diag["clients_without_payments"] += 1
+
         for pmt in payments:
+            # Track all statuses and months seen
+            status = pmt.get("status") or "unknown"
+            diag["all_payment_statuses"][status] = diag["all_payment_statuses"].get(status, 0) + 1
+
+            pmt_date = (pmt.get("date") or "")
+            if len(pmt_date) >= 7:
+                pmt_month = pmt_date[:7]
+                diag["all_payment_months"][pmt_month] = diag["all_payment_months"].get(pmt_month, 0) + 1
+
             if pmt.get("status") != "succeeded":
                 continue
-            pmt_date = (pmt.get("date") or "")
             if not pmt_date.startswith(month_prefix):
                 continue
             try:
@@ -411,12 +446,11 @@ def _sng_sum_payments_for_month(brand, client_ids, month_prefix):
             except (ValueError, TypeError):
                 pass
             payment_count += 1
-        if not payments:
-            log.debug("client_details for %s returned 0 payments (keys: %s)",
-                       cid, list(result.keys()) if isinstance(result, dict) else "N/A")
-    log.info("SNG payment sum: %d clients, %d payments, $%.2f for %s",
-             len(client_ids), payment_count, total_revenue, month_prefix)
-    return round(total_revenue, 2), payment_count
+
+    log.info("SNG payment sum: %d clients, %d payments, $%.2f for %s | diag: with_pmts=%d, without=%d, errors=%d",
+             len(client_ids), payment_count, total_revenue, month_prefix,
+             diag["clients_with_payments"], diag["clients_without_payments"], diag["errors"])
+    return round(total_revenue, 2), payment_count, diag
 
 
 def sng_sync_revenue(brand, db, max_sample=50):
@@ -478,8 +512,9 @@ def sng_sync_revenue(brand, db, max_sample=50):
 
     sample_revenue = 0.0
     sample_payments = 0
+    diag = {}
     if sample_ids:
-        sample_revenue, sample_payments = _sng_sum_payments_for_month(
+        sample_revenue, sample_payments, diag = _sng_sum_payments_for_month(
             brand, sample_ids, rev_month
         )
 
@@ -516,6 +551,7 @@ def sng_sync_revenue(brand, db, max_sample=50):
         "synced_at": now.strftime("%Y-%m-%d %H:%M:%S"),
         "sync_status": "done",
         "data_source": "real_payments_sampled" if sample_size < active_count else "real_payments_full",
+        "diagnostics": diag,
     }
 
     # Store in brand_month_finance for ROAS pipeline

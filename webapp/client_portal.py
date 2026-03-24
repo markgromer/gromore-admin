@@ -5318,6 +5318,12 @@ def public_signup():
 
 # ── Public AI Assessment (no auth, cross-origin JSON) ──
 
+@client_bp.route("/assess-ping", methods=["GET"])
+def assess_ping():
+    """Simple ping to verify the assessment module is loaded."""
+    return _cors_json({"ok": True, "v": "ea743a6"})
+
+
 @client_bp.route("/assess", methods=["POST", "OPTIONS"])
 def public_assess():
     """Free AI assessment lead magnet - runs GBP, website, ad, and benchmark checks."""
