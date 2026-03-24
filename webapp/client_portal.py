@@ -3899,6 +3899,12 @@ def client_blog():
                     wp_post_url=result["wp_post_url"],
                     published_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 )
+                # Auto-create Facebook promo for the just-published scheduled post
+                _create_fb_promo_for_blog(
+                    db, brand, brand_id, bp["title"], result["wp_post_url"],
+                    excerpt=bp.get("excerpt", ""),
+                    featured_image_url=bp.get("featured_image_url", ""),
+                )
             else:
                 db.update_blog_post(bp["id"], status="failed")
         # Refresh list after publishing
@@ -3961,6 +3967,7 @@ def client_blog_save():
     featured_image_url = request.form.get("featured_image_url", "").strip()
     scheduled_at = request.form.get("scheduled_at", "").strip() or None
     action = request.form.get("action", "draft")
+    auto_facebook = request.form.get("auto_facebook") == "1"
 
     fields = dict(
         title=title, content=content, excerpt=excerpt,
@@ -3986,6 +3993,19 @@ def client_blog_save():
             fields["wp_post_url"] = result["wp_post_url"]
             fields["published_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             flash("Post published to WordPress!", "success")
+
+            # Auto-create Facebook promo post
+            if auto_facebook:
+                fb_result = _create_fb_promo_for_blog(
+                    db, brand, brand_id, title, result["wp_post_url"],
+                    excerpt=excerpt, featured_image_url=featured_image_url,
+                )
+                if fb_result.get("ok"):
+                    flash("Facebook promo post scheduled.", "success")
+                else:
+                    fb_err = fb_result.get("error", "")
+                    if fb_err:
+                        flash(f"Facebook post skipped: {fb_err[:80]}", "warning")
         else:
             flash(f"Publish failed: {result['error']}", "error")
             fields["status"] = "draft"
@@ -3997,6 +4017,24 @@ def client_blog_save():
             fields["status"] = "scheduled"
             fields["scheduled_at"] = scheduled_at
             flash("Post scheduled.", "success")
+
+            # Auto-create Facebook promo post (scheduled 15 min after blog)
+            if auto_facebook:
+                site_url = (brand.get("wp_site_url") or "").rstrip("/")
+                slug = re.sub(r'[^a-z0-9]+', '-', title.lower())[:80].strip('-')
+                estimated_url = f"{site_url}/{slug}/" if site_url else ""
+                if estimated_url:
+                    fb_result = _create_fb_promo_for_blog(
+                        db, brand, brand_id, title, estimated_url,
+                        excerpt=excerpt, featured_image_url=featured_image_url,
+                        scheduled_at=scheduled_at,
+                    )
+                    if fb_result.get("ok"):
+                        flash("Facebook promo post scheduled 15 min after blog publish.", "success")
+                    else:
+                        fb_err = fb_result.get("error", "")
+                        if fb_err:
+                            flash(f"Facebook post skipped: {fb_err[:80]}", "warning")
     else:
         fields["status"] = "draft"
         flash("Draft saved.", "success")
@@ -4034,6 +4072,231 @@ def client_blog_delete(post_id):
         return jsonify(ok=False, error="Post not found"), 404
     db.delete_blog_post(post_id)
     return jsonify(ok=True)
+
+
+def _create_fb_promo_for_blog(db, brand, brand_id, title, wp_post_url, excerpt="",
+                               featured_image_url="", scheduled_at=None):
+    """Create a Facebook Page post promoting a blog post.
+    If scheduled_at is provided, schedule the FB post 15 minutes after that time.
+    Otherwise post 10 minutes from now."""
+    page_id = brand.get("facebook_page_id", "")
+    if not page_id:
+        return {"ok": False, "error": "No Facebook page connected."}
+
+    connections = db.get_brand_connections(brand_id)
+    meta_conn = connections.get("meta")
+    if not meta_conn or meta_conn.get("status") != "connected":
+        return {"ok": False, "error": "Meta not connected."}
+
+    from webapp.api_bridge import _get_meta_token, _get_page_access_token
+    user_token = _get_meta_token(db, brand_id, meta_conn)
+    if not user_token:
+        return {"ok": False, "error": "Meta token expired."}
+    page_token = _get_page_access_token(page_id, user_token)
+    if not page_token:
+        return {"ok": False, "error": "Could not get page access token."}
+
+    # Build the promo message
+    brand_name = brand.get("display_name", "")
+    teaser = excerpt[:200] if excerpt else ""
+    if teaser:
+        message = f"{teaser}\n\nRead more on our blog:"
+    else:
+        message = f"New on the {brand_name} blog: {title}\n\nRead the full post:"
+
+    # Calculate schedule time
+    from datetime import timedelta, timezone
+    now = datetime.now(timezone.utc)
+    if scheduled_at:
+        try:
+            sched_dt = datetime.fromisoformat(scheduled_at).replace(tzinfo=timezone.utc)
+            fb_sched = sched_dt + timedelta(minutes=15)
+        except ValueError:
+            fb_sched = now + timedelta(minutes=15)
+    else:
+        fb_sched = now + timedelta(minutes=10)
+
+    # Ensure at least 10 min in the future (Facebook requirement)
+    if fb_sched < now + timedelta(minutes=10):
+        fb_sched = now + timedelta(minutes=10)
+
+    unix_ts = int(fb_sched.timestamp())
+    fb_sched_str = fb_sched.strftime("%Y-%m-%dT%H:%M:%S")
+
+    import requests as req_lib
+    fb_url = f"https://graph.facebook.com/v21.0/{page_id}/feed"
+    payload = {
+        "access_token": page_token,
+        "message": message,
+        "link": wp_post_url,
+        "scheduled_publish_time": unix_ts,
+        "published": "false",
+    }
+
+    try:
+        resp = req_lib.post(fb_url, data=payload, timeout=30)
+        resp_data = resp.json()
+    except Exception as exc:
+        db.save_scheduled_post(brand_id, "facebook", message, fb_sched_str,
+                               link_url=wp_post_url, image_url=featured_image_url or "")
+        return {"ok": False, "error": str(exc)[:200]}
+
+    fb_post_id = resp_data.get("id") or resp_data.get("post_id") or ""
+    post_id = db.save_scheduled_post(brand_id, "facebook", message, fb_sched_str,
+                                      link_url=wp_post_url, image_url=featured_image_url or "")
+
+    if resp.status_code == 200 and fb_post_id:
+        db.update_scheduled_post_status(post_id, "scheduled", fb_post_id=fb_post_id)
+        return {"ok": True, "fb_post_id": fb_post_id}
+    else:
+        error_msg = resp_data.get("error", {}).get("message", resp.text[:300])
+        db.update_scheduled_post_status(post_id, "failed", error_message=error_msg)
+        return {"ok": False, "error": error_msg[:200]}
+
+
+@client_bp.route("/blog/import-csv", methods=["POST"])
+@client_login_required
+def client_blog_import_csv():
+    """Import blog posts from a CSV payload (parsed client-side)."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    data = request.get_json(silent=True) or {}
+    posts = data.get("posts", [])
+    auto_facebook = data.get("auto_facebook", False)
+
+    if not posts:
+        return jsonify(ok=False, error="No posts provided."), 400
+    if len(posts) > 200:
+        return jsonify(ok=False, error="Maximum 200 posts per import."), 400
+
+    wp_ok = _wp_connected(brand)
+
+    ALLOWED_STATUSES = {"draft", "publish", "published", "schedule", "scheduled"}
+    imported = 0
+    published = 0
+    scheduled = 0
+    fb_posts = 0
+    errors = 0
+    error_details = []
+
+    for idx, post in enumerate(posts):
+        title = (post.get("title") or "").strip()
+        if not title:
+            errors += 1
+            error_details.append(f"Row {idx + 1}: Missing title, skipped.")
+            continue
+
+        content = (post.get("content") or "").strip()
+        excerpt = (post.get("excerpt") or "").strip()
+        categories = (post.get("categories") or "").strip()
+        tags = (post.get("tags") or "").strip()
+        seo_title = (post.get("seo_title") or "").strip()
+        seo_description = (post.get("seo_description") or "").strip()
+        featured_image_url = (post.get("featured_image_url") or "").strip()
+        raw_status = (post.get("status") or "draft").strip().lower()
+        sched_at = (post.get("scheduled_at") or "").strip() or None
+
+        if raw_status not in ALLOWED_STATUSES:
+            raw_status = "draft"
+
+        # Normalize status
+        if raw_status in ("publish", "published"):
+            action = "publish"
+        elif raw_status in ("schedule", "scheduled"):
+            action = "schedule"
+        else:
+            action = "draft"
+
+        fields = dict(
+            title=title, content=content, excerpt=excerpt,
+            categories=categories, tags=tags, seo_title=seo_title,
+            seo_description=seo_description, featured_image_url=featured_image_url,
+        )
+
+        # Try to publish to WordPress
+        wp_post_url = ""
+        if action == "publish" and wp_ok:
+            result = _publish_to_wp(
+                brand, title, content,
+                excerpt=excerpt, slug=title.lower().replace(' ', '-')[:80],
+                seo_title=seo_title, seo_description=seo_description,
+                categories=categories, tags=tags,
+                featured_image_url=featured_image_url,
+            )
+            if result["ok"]:
+                fields["status"] = "published"
+                fields["wp_post_id"] = result["wp_post_id"]
+                fields["wp_post_url"] = result["wp_post_url"]
+                fields["published_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                wp_post_url = result["wp_post_url"]
+                published += 1
+            else:
+                fields["status"] = "draft"
+                error_details.append(f"Row {idx + 1} '{title[:40]}': Publish failed - {result['error'][:80]}")
+                errors += 1
+        elif action == "schedule" and sched_at:
+            fields["status"] = "scheduled"
+            fields["scheduled_at"] = sched_at
+            scheduled += 1
+        else:
+            if action == "publish" and not wp_ok:
+                error_details.append(f"Row {idx + 1} '{title[:40]}': WordPress not connected, saved as draft.")
+            fields["status"] = "draft"
+
+        new_id = db.save_blog_post(
+            brand_id, title, content, excerpt=excerpt,
+            categories=categories, tags=tags,
+            seo_title=seo_title, seo_description=seo_description,
+            featured_image_url=featured_image_url,
+            status=fields.get("status", "draft"),
+            scheduled_at=fields.get("scheduled_at"),
+            created_by=session.get("client_user_id", 0),
+        )
+        if fields.get("wp_post_id"):
+            db.update_blog_post(
+                new_id,
+                wp_post_id=fields["wp_post_id"],
+                wp_post_url=fields["wp_post_url"],
+                published_at=fields.get("published_at"),
+            )
+
+        imported += 1
+
+        # Auto-create Facebook promo post
+        if auto_facebook and fields["status"] in ("published", "scheduled"):
+            if fields["status"] == "published" and wp_post_url:
+                fb_result = _create_fb_promo_for_blog(
+                    db, brand, brand_id, title, wp_post_url,
+                    excerpt=excerpt, featured_image_url=featured_image_url,
+                )
+            elif fields["status"] == "scheduled" and sched_at:
+                # We don't have wp_post_url yet, use a placeholder
+                site_url = (brand.get("wp_site_url") or "").rstrip("/")
+                slug = re.sub(r'[^a-z0-9]+', '-', title.lower())[:80].strip('-')
+                estimated_url = f"{site_url}/{slug}/" if site_url else ""
+                if estimated_url:
+                    fb_result = _create_fb_promo_for_blog(
+                        db, brand, brand_id, title, estimated_url,
+                        excerpt=excerpt, featured_image_url=featured_image_url,
+                        scheduled_at=sched_at,
+                    )
+                else:
+                    fb_result = {"ok": False}
+            else:
+                fb_result = {"ok": False}
+
+            if fb_result.get("ok"):
+                fb_posts += 1
+
+    return jsonify(
+        ok=True, imported=imported, published=published,
+        scheduled=scheduled, fb_posts=fb_posts,
+        errors=errors, error_details=error_details[:20],
+    )
 
 
 @client_bp.route("/blog/test-connection", methods=["POST"])

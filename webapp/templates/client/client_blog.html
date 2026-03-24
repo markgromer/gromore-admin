@@ -63,6 +63,27 @@
         background: #fffbeb; border: 1px solid #fcd34d; border-radius: 12px;
         padding: 1.25rem; text-align: center;
     }
+
+    /* CSV Import Modal */
+    .csv-drop-zone {
+        border: 2px dashed var(--line); border-radius: 12px; padding: 2rem;
+        text-align: center; cursor: pointer; transition: var(--transition);
+        background: #f8f9fa;
+    }
+    .csv-drop-zone:hover, .csv-drop-zone.drag-over {
+        border-color: var(--primary); background: #eef2ff;
+    }
+    .csv-preview-table {
+        font-size: .82rem; max-height: 300px; overflow: auto;
+        border-radius: 8px; border: 1px solid var(--line);
+    }
+    .csv-preview-table table { margin: 0; }
+    .csv-preview-table th { background: #f1f5f9; position: sticky; top: 0; z-index: 1; font-size: .78rem; }
+    .csv-preview-table td { white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+    .csv-field-badge { font-size: .72rem; font-weight: 600; padding: 2px 8px; border-radius: 12px; display: inline-block; }
+    .csv-field-found { background: #dcfce7; color: #166534; }
+    .csv-field-missing { background: #f1f5f9; color: #64748b; }
+    .csv-field-required { background: #fee2e2; color: #991b1b; }
 </style>
 
 <div class="blog-header">
@@ -72,9 +93,14 @@
             <p>Write, schedule, and publish blog posts to your WordPress site.</p>
         </div>
         {% if wp_connected %}
-        <a href="{{ url_for('client.client_blog_editor') }}" class="btn btn-light btn-sm" style="font-weight:600; position:relative; z-index:1;">
-            <i class="bi bi-plus-lg me-1"></i> New Post
-        </a>
+        <div class="d-flex gap-2" style="position:relative; z-index:1;">
+            <button class="btn btn-outline-light btn-sm" style="font-weight:600;" data-bs-toggle="modal" data-bs-target="#csvImportModal">
+                <i class="bi bi-filetype-csv me-1"></i> Import CSV
+            </button>
+            <a href="{{ url_for('client.client_blog_editor') }}" class="btn btn-light btn-sm" style="font-weight:600;">
+                <i class="bi bi-plus-lg me-1"></i> New Post
+            </a>
+        </div>
         {% endif %}
     </div>
 </div>
@@ -147,6 +173,95 @@
 
 {% endif %}
 
+<!-- CSV Import Modal -->
+<div class="modal fade" id="csvImportModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content" style="border-radius:16px; border:none;">
+            <div class="modal-header" style="border-bottom:1px solid var(--line); padding:1.25rem 1.5rem;">
+                <h5 class="modal-title fw-bold" style="font-size:1rem;">
+                    <i class="bi bi-filetype-csv me-2 text-primary"></i>Import Blog Posts from CSV
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="padding:1.5rem;">
+                <!-- Step 1: Upload -->
+                <div id="csvStep1">
+                    <div class="csv-drop-zone" id="csvDropZone">
+                        <i class="bi bi-cloud-arrow-up" style="font-size:2rem; color:var(--primary); opacity:.6;"></i>
+                        <div class="fw-semibold mt-2">Drop a CSV file here or click to browse</div>
+                        <p class="text-muted mb-0" style="font-size:.82rem;">
+                            Columns: <strong>title</strong> (required), content, excerpt, categories, tags, seo_title, seo_description, featured_image_url, status, scheduled_at
+                        </p>
+                        <input type="file" id="csvFileInput" accept=".csv" style="display:none;">
+                    </div>
+                    <div class="mt-3 p-3" style="background:#f8f9fa; border-radius:10px;">
+                        <div class="fw-semibold mb-1" style="font-size:.85rem;"><i class="bi bi-info-circle me-1"></i> Image handling</div>
+                        <p class="text-muted mb-0" style="font-size:.82rem;">
+                            For featured images, include a <code>featured_image_url</code> column with full URLs (e.g. https://example.com/photo.jpg).
+                            Images must be hosted online. The block editor in the post editor supports inline images when writing manually.
+                        </p>
+                    </div>
+                    <div class="mt-2">
+                        <a href="#" id="csvDownloadTemplate" class="text-primary" style="font-size:.82rem; text-decoration:none;">
+                            <i class="bi bi-download me-1"></i>Download CSV template
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Step 2: Preview -->
+                <div id="csvStep2" style="display:none;">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <span class="fw-semibold" id="csvRowCount">0</span> posts found
+                            <span class="text-muted ms-2" style="font-size:.82rem;" id="csvFieldSummary"></span>
+                        </div>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="csvBackBtn">
+                            <i class="bi bi-arrow-left me-1"></i>Choose different file
+                        </button>
+                    </div>
+                    <div id="csvFieldBadges" class="mb-3"></div>
+                    <div class="csv-preview-table">
+                        <table class="table table-sm table-striped mb-0" id="csvPreviewTable">
+                            <thead></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="csvDefaultDraft" checked>
+                            <label class="form-check-label" for="csvDefaultDraft" style="font-size:.85rem;">
+                                Import rows without a "status" column as <strong>drafts</strong> (uncheck to publish immediately)
+                            </label>
+                        </div>
+                        <div class="form-check mt-1">
+                            <input class="form-check-input" type="checkbox" id="csvAutoFbPost" checked>
+                            <label class="form-check-label" for="csvAutoFbPost" style="font-size:.85rem;">
+                                Auto-create Facebook promo post for each published/scheduled blog post
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Results -->
+                <div id="csvStep3" style="display:none;">
+                    <div class="text-center py-3" id="csvImporting">
+                        <div class="spinner-border text-primary mb-2"></div>
+                        <div class="fw-semibold">Importing posts...</div>
+                        <div class="text-muted" style="font-size:.85rem;" id="csvProgressText">0 / 0</div>
+                    </div>
+                    <div id="csvResults" style="display:none;"></div>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top:1px solid var(--line); padding:1rem 1.5rem;">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" id="csvImportBtn" style="display:none;">
+                    <i class="bi bi-cloud-arrow-up me-1"></i> Import <span id="csvImportCount">0</span> Posts
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var filterBtns = document.querySelectorAll('#statusFilter button');
@@ -162,6 +277,270 @@ document.addEventListener('DOMContentLoaded', function() {
                     row.style.display = 'none';
                 }
             });
+        });
+    });
+
+    // ======= CSV Import Logic =======
+    var csvData = [];
+    var csvHeaders = [];
+    var KNOWN_FIELDS = ['title','content','excerpt','categories','tags','seo_title','seo_description','featured_image_url','status','scheduled_at'];
+    var REQUIRED_FIELDS = ['title'];
+    var csrfToken = document.querySelector('meta[name="csrf-token"]') ? document.querySelector('meta[name="csrf-token"]').getAttribute('content') : '';
+
+    // Drop zone
+    var dropZone = document.getElementById('csvDropZone');
+    var fileInput = document.getElementById('csvFileInput');
+    dropZone.addEventListener('click', function() { fileInput.click(); });
+    dropZone.addEventListener('dragover', function(e) { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', function() { dropZone.classList.remove('drag-over'); });
+    dropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', function() {
+        if (this.files.length) handleFile(this.files[0]);
+    });
+
+    // Download template
+    document.getElementById('csvDownloadTemplate').addEventListener('click', function(e) {
+        e.preventDefault();
+        var tpl = 'title,content,excerpt,categories,tags,seo_title,seo_description,featured_image_url,status,scheduled_at\n';
+        tpl += '"My First Blog Post","<h2>Introduction</h2><p>Write your post content here with HTML.</p>","A short summary of the post.","Marketing,Tips","seo,blog","My First Blog Post | Brand","A meta description under 160 chars.","https://example.com/image.jpg","draft",""\n';
+        var blob = new Blob([tpl], {type:'text/csv'});
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'blog_import_template.csv';
+        a.click();
+    });
+
+    function handleFile(file) {
+        if (!file.name.toLowerCase().endsWith('.csv')) {
+            alert('Please upload a .csv file.');
+            return;
+        }
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            parseCSV(e.target.result);
+        };
+        reader.readAsText(file);
+    }
+
+    function parseCSV(text) {
+        var lines = [];
+        var current = '';
+        var inQuotes = false;
+        // Simple CSV parser that respects quoted fields
+        for (var i = 0; i < text.length; i++) {
+            var ch = text[i];
+            if (ch === '"') {
+                if (inQuotes && i + 1 < text.length && text[i + 1] === '"') {
+                    current += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+                if (current.length > 0 || lines.length > 0) {
+                    lines.push(current);
+                    current = '';
+                }
+                if (ch === '\r' && i + 1 < text.length && text[i + 1] === '\n') i++;
+            } else {
+                current += ch;
+            }
+        }
+        if (current.length > 0) lines.push(current);
+
+        if (lines.length < 2) {
+            alert('CSV must have a header row and at least one data row.');
+            return;
+        }
+
+        csvHeaders = splitCSVLine(lines[0]);
+        // Normalize headers
+        csvHeaders = csvHeaders.map(function(h) {
+            return h.trim().toLowerCase().replace(/\s+/g, '_');
+        });
+
+        if (csvHeaders.indexOf('title') === -1) {
+            alert('CSV must have a "title" column.');
+            return;
+        }
+
+        csvData = [];
+        for (var j = 1; j < lines.length; j++) {
+            var vals = splitCSVLine(lines[j]);
+            if (!vals.length || (vals.length === 1 && !vals[0].trim())) continue;
+            var row = {};
+            for (var k = 0; k < csvHeaders.length; k++) {
+                row[csvHeaders[k]] = (vals[k] || '').trim();
+            }
+            if (row.title) csvData.push(row);
+        }
+
+        if (!csvData.length) {
+            alert('No valid rows found. Each row needs at least a title.');
+            return;
+        }
+
+        showPreview();
+    }
+
+    function splitCSVLine(line) {
+        var result = [];
+        var current = '';
+        var inQ = false;
+        for (var i = 0; i < line.length; i++) {
+            var c = line[i];
+            if (c === '"') {
+                if (inQ && i + 1 < line.length && line[i+1] === '"') { current += '"'; i++; }
+                else inQ = !inQ;
+            } else if (c === ',' && !inQ) {
+                result.push(current);
+                current = '';
+            } else {
+                current += c;
+            }
+        }
+        result.push(current);
+        return result;
+    }
+
+    function showPreview() {
+        document.getElementById('csvStep1').style.display = 'none';
+        document.getElementById('csvStep2').style.display = '';
+        document.getElementById('csvImportBtn').style.display = '';
+        document.getElementById('csvRowCount').textContent = csvData.length;
+        document.getElementById('csvImportCount').textContent = csvData.length;
+
+        // Field badges
+        var badgesHtml = '';
+        KNOWN_FIELDS.forEach(function(f) {
+            var found = csvHeaders.indexOf(f) !== -1;
+            var req = REQUIRED_FIELDS.indexOf(f) !== -1;
+            if (!found && req) {
+                badgesHtml += '<span class="csv-field-badge csv-field-required me-1 mb-1">' + f + ' (missing!)</span>';
+            } else if (found) {
+                badgesHtml += '<span class="csv-field-badge csv-field-found me-1 mb-1"><i class="bi bi-check-lg me-1"></i>' + f + '</span>';
+            } else {
+                badgesHtml += '<span class="csv-field-badge csv-field-missing me-1 mb-1">' + f + '</span>';
+            }
+        });
+        document.getElementById('csvFieldBadges').innerHTML = badgesHtml;
+
+        // Preview table (first 5 rows)
+        var thHtml = '<tr>';
+        csvHeaders.forEach(function(h) { thHtml += '<th class="px-2 py-1">' + h + '</th>'; });
+        thHtml += '</tr>';
+        document.querySelector('#csvPreviewTable thead').innerHTML = thHtml;
+
+        var tbHtml = '';
+        var previewRows = csvData.slice(0, 5);
+        previewRows.forEach(function(row) {
+            tbHtml += '<tr>';
+            csvHeaders.forEach(function(h) {
+                var val = (row[h] || '').substring(0, 80);
+                tbHtml += '<td class="px-2 py-1">' + escapeHtml(val) + '</td>';
+            });
+            tbHtml += '</tr>';
+        });
+        if (csvData.length > 5) {
+            tbHtml += '<tr><td colspan="' + csvHeaders.length + '" class="text-center text-muted py-2">... and ' + (csvData.length - 5) + ' more rows</td></tr>';
+        }
+        document.querySelector('#csvPreviewTable tbody').innerHTML = tbHtml;
+    }
+
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    // Back button
+    document.getElementById('csvBackBtn').addEventListener('click', function() {
+        document.getElementById('csvStep1').style.display = '';
+        document.getElementById('csvStep2').style.display = 'none';
+        document.getElementById('csvImportBtn').style.display = 'none';
+        csvData = [];
+        csvHeaders = [];
+        fileInput.value = '';
+    });
+
+    // Import button
+    document.getElementById('csvImportBtn').addEventListener('click', function() {
+        var btn = this;
+        btn.disabled = true;
+        document.getElementById('csvStep2').style.display = 'none';
+        document.getElementById('csvStep3').style.display = '';
+        document.getElementById('csvImporting').style.display = '';
+        document.getElementById('csvResults').style.display = 'none';
+
+        var defaultDraft = document.getElementById('csvDefaultDraft').checked;
+        var autoFb = document.getElementById('csvAutoFbPost').checked;
+
+        var payload = {
+            posts: csvData.map(function(row) {
+                var post = {};
+                KNOWN_FIELDS.forEach(function(f) {
+                    if (row[f] !== undefined) post[f] = row[f];
+                });
+                if (!post.status && defaultDraft) post.status = 'draft';
+                return post;
+            }),
+            auto_facebook: autoFb
+        };
+
+        document.getElementById('csvProgressText').textContent = '0 / ' + csvData.length;
+
+        fetch('{{ url_for("client.client_blog_import_csv") }}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+            body: JSON.stringify(payload)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            document.getElementById('csvImporting').style.display = 'none';
+            var resultsDiv = document.getElementById('csvResults');
+            resultsDiv.style.display = '';
+
+            if (data.ok) {
+                var html = '<div class="text-center">';
+                html += '<i class="bi bi-check-circle-fill text-success" style="font-size:2.5rem;"></i>';
+                html += '<h5 class="fw-bold mt-2">Import Complete</h5>';
+                html += '<div class="d-flex justify-content-center gap-3 mt-2">';
+                html += '<div class="text-center"><div class="fw-bold text-success" style="font-size:1.5rem;">' + data.imported + '</div><div class="text-muted" style="font-size:.82rem;">Imported</div></div>';
+                if (data.published > 0) {
+                    html += '<div class="text-center"><div class="fw-bold text-primary" style="font-size:1.5rem;">' + data.published + '</div><div class="text-muted" style="font-size:.82rem;">Published</div></div>';
+                }
+                if (data.scheduled > 0) {
+                    html += '<div class="text-center"><div class="fw-bold" style="font-size:1.5rem; color:#1e40af;">' + data.scheduled + '</div><div class="text-muted" style="font-size:.82rem;">Scheduled</div></div>';
+                }
+                if (data.fb_posts > 0) {
+                    html += '<div class="text-center"><div class="fw-bold" style="font-size:1.5rem; color:#1877f2;">' + data.fb_posts + '</div><div class="text-muted" style="font-size:.82rem;">FB Posts</div></div>';
+                }
+                if (data.errors > 0) {
+                    html += '<div class="text-center"><div class="fw-bold text-danger" style="font-size:1.5rem;">' + data.errors + '</div><div class="text-muted" style="font-size:.82rem;">Errors</div></div>';
+                }
+                html += '</div>';
+                if (data.error_details && data.error_details.length) {
+                    html += '<div class="mt-3 text-start" style="font-size:.82rem;">';
+                    data.error_details.forEach(function(e) { html += '<div class="text-danger"><i class="bi bi-x-circle me-1"></i>' + escapeHtml(e) + '</div>'; });
+                    html += '</div>';
+                }
+                html += '<button class="btn btn-primary btn-sm mt-3" onclick="window.location.reload()"><i class="bi bi-arrow-clockwise me-1"></i>Refresh</button>';
+                html += '</div>';
+                resultsDiv.innerHTML = html;
+            } else {
+                resultsDiv.innerHTML = '<div class="text-center"><i class="bi bi-x-circle-fill text-danger" style="font-size:2rem;"></i><h5 class="mt-2">Import Failed</h5><p class="text-muted">' + escapeHtml(data.error || 'Unknown error') + '</p></div>';
+            }
+            btn.disabled = false;
+        })
+        .catch(function() {
+            document.getElementById('csvImporting').style.display = 'none';
+            document.getElementById('csvResults').style.display = '';
+            document.getElementById('csvResults').innerHTML = '<div class="text-center"><i class="bi bi-x-circle-fill text-danger" style="font-size:2rem;"></i><p class="mt-2">Network error. Try again.</p></div>';
+            btn.disabled = false;
         });
     });
 });

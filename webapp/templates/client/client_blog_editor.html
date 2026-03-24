@@ -193,6 +193,21 @@
                 {% endif %}
             </div>
 
+            <!-- Facebook Promo -->
+            <div class="editor-card">
+                <h6><i class="bi bi-facebook me-1" style="color:#1877f2;"></i> Social Promotion</h6>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="auto_facebook" id="autoFacebookCheck" value="1"
+                           {{ 'checked' if not post else '' }}>
+                    <label class="form-check-label" for="autoFacebookCheck" style="font-size:.85rem;">
+                        Auto-post to Facebook when published
+                    </label>
+                </div>
+                <p class="text-muted mt-1 mb-0" style="font-size:.78rem;">
+                    Creates a Facebook Page post with a link to the blog post. For scheduled posts, the Facebook post goes live 15 minutes after the blog.
+                </p>
+            </div>
+
             {% if post %}
             <!-- Delete -->
             <div class="editor-card" style="border-color:#fee2e2;">
