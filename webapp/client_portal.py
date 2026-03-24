@@ -4433,7 +4433,10 @@ def client_blog_test_connection():
     wp_user = brand["wp_username"].strip()
     wp_pass = brand["wp_app_password"].strip()
 
-    # Step 1: Check if the REST API is reachable at all (no auth)
+    import logging
+    log = logging.getLogger(__name__)
+    log.info("[WP-TEST] URL=%s user=%r pass_len=%d pass_preview=%r",
+             wp_url, wp_user, len(wp_pass), wp_pass[:4] + "..." if len(wp_pass) > 4 else wp_pass)
     try:
         probe = req_lib.get(f"{wp_url}/wp-json/", timeout=15)
         if probe.status_code == 404:
@@ -4479,7 +4482,8 @@ def client_blog_test_connection():
                 return jsonify(ok=False, error=f"Connected as {name}, but this user does not have permission to create posts. The WordPress user needs an Editor or Administrator role.")
         elif resp.status_code == 401:
             # Detailed 401 diagnostics
-            body = resp.text[:300]
+            body = resp.text[:500]
+            log.warning("[WP-TEST] 401 response body: %s", body)
             hints = []
             if "incorrect_password" in body or "invalid_password" in body:
                 hints.append("WordPress says the password is wrong.")
@@ -4488,6 +4492,15 @@ def client_blog_test_connection():
             if not hints:
                 hints.append("WordPress rejected the credentials.")
             hints.append("Make sure you're using an Application Password (not your regular WP login password). Generate one at WordPress Admin > Users > Profile > Application Passwords.")
+            # Include WP error code for debugging
+            try:
+                err_json = resp.json()
+                wp_code = err_json.get("code", "")
+                wp_msg = err_json.get("message", "")
+                if wp_code:
+                    hints.append(f"[WP error: {wp_code} - {wp_msg}]")
+            except Exception:
+                pass
             return jsonify(ok=False, error=" ".join(hints))
         elif resp.status_code == 403:
             return jsonify(ok=False, error="User authenticated but forbidden (403). A security plugin may be blocking REST API access, or your hosting provider may block the Authorization header. Check Wordfence, Sucuri, or .htaccess rules.")
