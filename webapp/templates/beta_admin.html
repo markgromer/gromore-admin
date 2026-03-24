@@ -94,7 +94,7 @@
                         <th>Name</th>
                         <th>Email</th>
                         <th>Business</th>
-                        <th>Onboarding</th>
+                        <th>Account Info</th>
                         <th>Status</th>
                         <th>Signed Up</th>
                         <th>Actions</th>
@@ -107,18 +107,15 @@
                         <td>{{ t.email }}</td>
                         <td>{{ t.business_name or '-' }}</td>
                         <td>
-                            {% if t.onboarding_completed_at %}
-                            <span class="badge bg-success"><i class="bi bi-check-circle"></i> Done</span>
-                            <details style="font-size:.78rem;margin-top:4px;">
+                            {% if t.meta_login_email or t.google_business_email or t.facebook_page_id %}
+                            <details style="font-size:.78rem;">
                                 <summary style="cursor:pointer;color:#6366f1;">View info</summary>
                                 <div class="mt-1">
-                                    <strong>Meta Login Email:</strong> {{ t.meta_login_email or '-' }}<br>
+                                    <strong>Meta Email:</strong> {{ t.meta_login_email or '-' }}<br>
                                     <strong>Google Email:</strong> {{ t.google_business_email or '-' }}<br>
                                     <strong>FB Page ID:</strong> {{ t.facebook_page_id or '-' }}
                                 </div>
                             </details>
-                            {% elif t.status == 'approved' %}
-                            <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> Waiting</span>
                             {% else %}
                             <span class="text-muted">-</span>
                             {% endif %}
@@ -143,7 +140,7 @@
                             {% if t.status == 'pending' %}
                             <form method="POST" action="{{ url_for('beta_approve', tester_id=t.id) }}" style="display:inline;">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button class="btn btn-sm btn-success" title="Approve and send onboarding email">
+                                <button class="btn btn-sm btn-success" title="Approve tester">
                                     <i class="bi bi-check-lg"></i>
                                 </button>
                             </form>
@@ -156,7 +153,7 @@
                             {% elif t.status == 'approved' and not t.activated_at %}
                             <form method="POST" action="{{ url_for('beta_activate', tester_id=t.id) }}" style="display:inline;">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button class="btn btn-sm btn-primary" title="Send activation email with login credentials">
+                                <button class="btn btn-sm btn-primary" title="Send activation email with OAuth sign-in instructions">
                                     <i class="bi bi-send-check"></i> Send Active
                                 </button>
                             </form>

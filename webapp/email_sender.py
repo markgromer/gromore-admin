@@ -159,7 +159,7 @@ def send_beta_welcome_email(app_config, tester, onboarding_url):
 def send_beta_activation_email(app_config, tester, temp_password, login_url):
     """
     Send activation email to a beta tester once their accounts have been
-    added to the backend. Includes login credentials.
+    added to the backend. Includes OAuth login instructions and FB dev acceptance.
     """
     smtp_host = app_config.get("SMTP_HOST", "smtp.gmail.com")
     smtp_port = app_config.get("SMTP_PORT", 587)
@@ -173,53 +173,64 @@ def send_beta_activation_email(app_config, tester, temp_password, login_url):
 
     name = tester.get("name", "there")
     email = tester["email"]
-    subject = "Your GroMore Account Is Active!"
+    subject = "Your GroMore Beta Account Is Active!"
 
     html = f"""
     <div style="font-family:Inter,Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
-        <h2 style="color:#10b981;">Your GroMore Account Is Live, {name}!</h2>
-        <p>We've added your accounts to our system and everything is ready to go.</p>
-
-        <div style="background:#f0fdf4;border-radius:10px;padding:20px;margin:20px 0;">
-            <h3 style="margin-top:0;">Your Login Credentials</h3>
-            <p><strong>Login URL:</strong> <a href="{login_url}" style="color:#4f46e5;">{login_url}</a></p>
-            <p><strong>Email:</strong> {email}</p>
-            <p><strong>Temporary Password:</strong> {temp_password}</p>
-            <p style="font-size:0.85em;color:#666;">Please change your password after your first login.</p>
-        </div>
+        <h2 style="color:#10b981;">You're In, {name}!</h2>
+        <p>Your GroMore beta account is now active. We've added you as a tester on both our Facebook and Google apps, so you're all set to sign in.</p>
 
         <div style="text-align:center;margin:28px 0;">
-            <a href="{login_url}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border-radius:10px;text-decoration:none;font-weight:600;font-size:1rem;">Log In Now</a>
+            <a href="{login_url}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border-radius:10px;text-decoration:none;font-weight:600;font-size:1rem;">Go to GroMore Login</a>
         </div>
 
-        <h3>Getting Started</h3>
-        <ol style="line-height:1.8;">
-            <li><strong>Log in</strong> using the credentials above</li>
-            <li><strong>Connect your Google account</strong> via Settings &gt; Connections</li>
-            <li><strong>Connect your Facebook account</strong> via Settings &gt; Connections</li>
-        </ol>
+        <div style="background:#fdf2f8;border-radius:10px;padding:20px;margin:20px 0;">
+            <h3 style="margin-top:0;"><span style="font-size:1.1em;">&#9312;</span> Accept Facebook Developer Access</h3>
+            <p>Before you can sign in with Facebook, you need to accept the tester invitation we sent you:</p>
+            <ol style="line-height:1.8;font-size:.9rem;">
+                <li>Go to <a href="https://developers.facebook.com/requests/" style="color:#4f46e5;">developers.facebook.com/requests</a></li>
+                <li>Log in with the Facebook account tied to <strong>{tester.get('meta_login_email', email)}</strong></li>
+                <li>You should see a pending tester invitation from <strong>GroMore</strong></li>
+                <li>Click <strong>Accept</strong></li>
+            </ol>
+            <p style="font-size:.85em;color:#666;">If you don't see the invitation right away, give it a few minutes and refresh the page.</p>
+        </div>
+
+        <div style="background:#f0fdf4;border-radius:10px;padding:20px;margin:20px 0;">
+            <h3 style="margin-top:0;"><span style="font-size:1.1em;">&#9313;</span> Sign In to GroMore</h3>
+            <p>Once you've accepted the Facebook invitation, head to the login page and sign in using one of these methods:</p>
+            <ul style="line-height:1.8;font-size:.9rem;">
+                <li><strong>Sign in with Google</strong> using your Google account (<strong>{tester.get('google_business_email', email)}</strong>)</li>
+                <li><strong>Sign in with Facebook</strong> using the Facebook account you accepted the invitation on</li>
+            </ul>
+            <p style="font-size:.85em;color:#666;">You can also use email/password: your email is <strong>{email}</strong> and your temporary password is <strong>{temp_password}</strong>. You'll be prompted to change it on first login.</p>
+        </div>
 
         <div style="background:#f0f0ff;border-radius:10px;padding:20px;margin:20px 0;">
-            <h3 style="margin-top:0;">Share Your Feedback</h3>
-            <p>As a beta tester, your feedback is invaluable. Use the <strong>Feedback</strong>
-            link in your dashboard sidebar to report bugs, request features, or share what you like.</p>
+            <h3 style="margin-top:0;"><span style="font-size:1.1em;">&#9314;</span> Share Your Feedback</h3>
+            <p>As a beta tester, your input directly shapes what we build. Use the <strong>Feedback</strong>
+            link in your dashboard sidebar to report bugs, request features, or tell us what's working.</p>
         </div>
 
-        <p>Questions? Reply to this email and we'll help you out.</p>
+        <p>Questions or issues signing in? Reply to this email and we'll help you out.</p>
         <p style="color:#666;">- The GroMore Team</p>
     </div>
     """
 
     text = (
-        f"Your GroMore Account Is Live, {name}!\n\n"
-        f"Login URL: {login_url}\n"
-        f"Email: {email}\n"
-        f"Temporary Password: {temp_password}\n\n"
-        f"Steps:\n"
-        f"1. Log in with the credentials above\n"
-        f"2. Connect your Google account via Settings > Connections\n"
-        f"3. Connect your Facebook account via Settings > Connections\n\n"
-        f"Use the Feedback link in your sidebar to share bugs, features, or comments.\n\n"
+        f"You're In, {name}!\n\n"
+        f"Your GroMore beta account is now active.\n\n"
+        f"STEP 1 - Accept Facebook Developer Access:\n"
+        f"Go to https://developers.facebook.com/requests/\n"
+        f"Log in with your Facebook account ({tester.get('meta_login_email', email)})\n"
+        f"Accept the tester invitation from GroMore.\n\n"
+        f"STEP 2 - Sign In to GroMore:\n"
+        f"Go to {login_url}\n"
+        f"Sign in with Google ({tester.get('google_business_email', email)}) or Facebook.\n"
+        f"Or use email/password: {email} / {temp_password}\n\n"
+        f"STEP 3 - Share Feedback:\n"
+        f"Use the Feedback link in your dashboard sidebar.\n\n"
+        f"Questions? Reply to this email.\n\n"
         f"- The GroMore Team"
     )
 

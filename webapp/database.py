@@ -2073,12 +2073,15 @@ class WebDB:
         try:
             conn.execute(
                 "INSERT INTO beta_testers (name, email, business_name, website, industry, "
-                "monthly_ad_spend, platforms, referral_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "monthly_ad_spend, platforms, referral_source, meta_login_email, google_business_email, facebook_page_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     data["name"], data["email"], data.get("business_name", ""),
                     data.get("website", ""), data.get("industry", ""),
                     data.get("monthly_ad_spend", ""), data.get("platforms", ""),
                     data.get("referral_source", ""),
+                    data.get("meta_login_email", ""), data.get("google_business_email", ""),
+                    data.get("facebook_page_id", ""),
                 ),
             )
             conn.commit()

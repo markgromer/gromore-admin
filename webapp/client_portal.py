@@ -4119,6 +4119,9 @@ def beta_signup():
             "monthly_ad_spend": request.form.get("monthly_ad_spend", "").strip(),
             "platforms": ",".join(request.form.getlist("platforms")),
             "referral_source": request.form.get("referral_source", "").strip(),
+            "meta_login_email": request.form.get("meta_login_email", "").strip().lower(),
+            "google_business_email": request.form.get("google_business_email", "").strip().lower(),
+            "facebook_page_id": request.form.get("facebook_page_id", "").strip(),
         }
         db.create_beta_tester(data)
         return render_template("beta_signup.html", success=True)

@@ -1640,7 +1640,6 @@ def create_app():
         import secrets as _secrets
         import re as _re
         temp_password = _secrets.token_urlsafe(10)
-        onboarding_token = _secrets.token_urlsafe(32)
 
         # Create brand for the tester
         slug = _re.sub(r'[^a-z0-9]+', '_', (tester["business_name"] or tester["name"]).lower()).strip('_')
@@ -1654,23 +1653,14 @@ def create_app():
         # Create client user (inactive until manually activated)
         client_user_id = db.create_client_user(brand_id, tester["email"], temp_password, tester["name"])
 
-        # Update tester status - store temp password and onboarding token for later
+        # Update tester status - store temp password for activation later
         db.update_beta_tester_status(
             tester_id, "approved",
             brand_id=brand_id, client_user_id=client_user_id,
-            onboarding_token=onboarding_token, temp_password=temp_password,
+            temp_password=temp_password,
         )
 
-        # Send welcome email with onboarding link (no credentials yet)
-        try:
-            from webapp.email_sender import send_beta_welcome_email
-            app_url = app.config.get("APP_URL", request.host_url.rstrip("/"))
-            onboarding_url = f"{app_url}/client/beta/onboarding/{onboarding_token}"
-            send_beta_welcome_email(app.config, tester, onboarding_url)
-            flash(f"Approved {tester['name']} and sent onboarding email.", "success")
-        except Exception as e:
-            flash(f"Approved {tester['name']} but email failed: {e}", "warning")
-
+        flash(f"Approved {tester['name']}. Add them as testers on FB/Google, then click Send Active.", "success")
         return redirect(url_for("beta_dashboard"))
 
     @app.route("/beta/activate/<int:tester_id>", methods=["POST"])
