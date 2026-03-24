@@ -4621,7 +4621,11 @@ def client_crm_data():
 def client_sng_sync_revenue():
     """Kick off a full revenue sync in a background thread.
     Returns immediately so we don't hit Gunicorn's timeout on 249+ API calls."""
+    import json
     import threading
+    from webapp.database import WebDB
+    from webapp.crm_bridge import sng_sync_revenue
+
     db = _get_db()
     brand_id = session["client_brand_id"]
     brand = db.get_brand(brand_id)
@@ -4629,7 +4633,6 @@ def client_sng_sync_revenue():
         return jsonify(error="SNG not configured"), 400
 
     # Mark sync as in-progress so the UI can poll
-    import json
     cache_key = f"sng_revenue_cache_{brand_id}"
     existing = db.get_setting(cache_key, "{}")
     try:
@@ -4640,27 +4643,19 @@ def client_sng_sync_revenue():
     cached["sync_started"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     db.save_setting(cache_key, json.dumps(cached))
 
-    # Run the heavy sync in a background thread
-    # Need a fresh db connection since SQLite connections can't cross threads
-    from webapp.app import create_app
+    # WebDB creates fresh SQLite connections per query, so a new instance
+    # with the same path is safe to use from another thread.
+    db_path = db.db_path
     brand_copy = dict(brand)
 
     def _run_sync():
+        thread_db = WebDB(db_path)
         try:
-            app = create_app()
-            with app.app_context():
-                from webapp.crm_bridge import sng_sync_revenue
-                sync_db = app.db
-                sng_sync_revenue(brand_copy, sync_db)
+            sng_sync_revenue(brand_copy, thread_db)
         except Exception as exc:
-            import traceback
-            # Write error to cache so UI sees it
             try:
-                app = create_app()
-                with app.app_context():
-                    err_db = app.db
-                    err_cache = {"sync_status": "error", "sync_error": str(exc)}
-                    err_db.save_setting(cache_key, json.dumps(err_cache))
+                err_cache = {"sync_status": "error", "sync_error": str(exc)}
+                thread_db.save_setting(cache_key, json.dumps(err_cache))
             except Exception:
                 pass
 
