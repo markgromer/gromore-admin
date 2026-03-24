@@ -443,6 +443,24 @@ class WebDB:
             ON beta_feedback(brand_id, created_at);
         """)
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS upgrade_considerations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                category TEXT NOT NULL DEFAULT 'feature',
+                source_feedback_ids TEXT DEFAULT '',
+                request_count INTEGER DEFAULT 1,
+                feasibility TEXT DEFAULT 'unknown',
+                safety_risk TEXT DEFAULT 'low',
+                priority TEXT DEFAULT 'medium',
+                status TEXT NOT NULL DEFAULT 'proposed',
+                decision_notes TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+
         conn.commit()
         brand_columns = {r[1] for r in conn.execute("PRAGMA table_info(brands)").fetchall()}
         new_brand_cols = [
@@ -491,6 +509,17 @@ class WebDB:
         for col_name, col_def in new_cs_cols:
             if col_name not in cs_columns:
                 conn.execute(f"ALTER TABLE campaign_strategies ADD COLUMN {col_name} {col_def}")
+        conn.commit()
+
+        # ── client_users migrations ──
+        cu_columns = {r[1] for r in conn.execute("PRAGMA table_info(client_users)").fetchall()}
+        new_cu_cols = [
+            ("password_reset_token", "TEXT DEFAULT ''"),
+            ("reset_token_expires", "TEXT DEFAULT ''"),
+        ]
+        for col_name, col_def in new_cu_cols:
+            if col_name not in cu_columns:
+                conn.execute(f"ALTER TABLE client_users ADD COLUMN {col_name} {col_def}")
         conn.commit()
 
         # ── Legacy migration: brands.competitors (text) -> competitors table ──
@@ -1077,6 +1106,48 @@ class WebDB:
     def delete_client_user(self, client_user_id):
         conn = self._conn()
         conn.execute("DELETE FROM client_users WHERE id = ?", (client_user_id,))
+        conn.commit()
+        conn.close()
+
+    def get_client_user_by_email(self, email):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM client_users WHERE email = ? AND is_active = 1",
+            (email,),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def set_password_reset_token(self, client_user_id, token, expires):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE client_users SET password_reset_token = ?, reset_token_expires = ? WHERE id = ?",
+            (token, expires, client_user_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def validate_password_reset_token(self, token):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM client_users WHERE password_reset_token = ? AND is_active = 1",
+            (token,),
+        ).fetchone()
+        conn.close()
+        if not row:
+            return None
+        user = dict(row)
+        expires = user.get("reset_token_expires", "")
+        if expires and expires < datetime.now().strftime("%Y-%m-%d %H:%M:%S"):
+            return None
+        return user
+
+    def clear_password_reset_token(self, client_user_id):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE client_users SET password_reset_token = '', reset_token_expires = '' WHERE id = ?",
+            (client_user_id,),
+        )
         conn.commit()
         conn.close()
 
@@ -2117,3 +2188,129 @@ class WebDB:
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
+    def get_feedback_themes(self):
+        """Group feedback by similar messages to surface recurring themes."""
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT bf.id, bf.category, bf.message, bf.rating, bf.status, bf.created_at, "
+            "bt.name as tester_name "
+            "FROM beta_feedback bf "
+            "LEFT JOIN beta_testers bt ON bt.client_user_id = bf.client_user_id "
+            "WHERE bf.category IN ('feature_request', 'bug', 'ui_ux', 'dislike') "
+            "ORDER BY bf.created_at DESC"
+        ).fetchall()
+        conn.close()
+        items = [dict(r) for r in rows]
+
+        # Simple keyword-based clustering
+        themes = {}
+        for item in items:
+            msg = (item.get("message") or "").lower()
+            words = set(w for w in msg.split() if len(w) > 3)
+            matched = False
+            for key in themes:
+                overlap = words & themes[key]["keywords"]
+                if len(overlap) >= 2:
+                    themes[key]["items"].append(item)
+                    themes[key]["keywords"] |= words
+                    matched = True
+                    break
+            if not matched:
+                themes[item["id"]] = {"keywords": words, "items": [item]}
+
+        result = []
+        for _key, group in themes.items():
+            if len(group["items"]) >= 1:
+                result.append({
+                    "count": len(group["items"]),
+                    "category": group["items"][0]["category"],
+                    "sample": group["items"][0]["message"],
+                    "feedback_ids": [i["id"] for i in group["items"]],
+                    "testers": list(set(i.get("tester_name") or "Unknown" for i in group["items"])),
+                })
+        result.sort(key=lambda x: x["count"], reverse=True)
+        return result
+
+    # ── Upgrade Considerations ──
+
+    def create_upgrade_consideration(self, data):
+        conn = self._conn()
+        conn.execute(
+            "INSERT INTO upgrade_considerations "
+            "(title, description, category, source_feedback_ids, request_count, "
+            "feasibility, safety_risk, priority, status, decision_notes) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                data.get("title", ""),
+                data.get("description", ""),
+                data.get("category", "feature"),
+                data.get("source_feedback_ids", ""),
+                data.get("request_count", 1),
+                data.get("feasibility", "unknown"),
+                data.get("safety_risk", "low"),
+                data.get("priority", "medium"),
+                data.get("status", "proposed"),
+                data.get("decision_notes", ""),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_upgrade_considerations(self, status=None):
+        conn = self._conn()
+        if status:
+            rows = conn.execute(
+                "SELECT * FROM upgrade_considerations WHERE status = ? ORDER BY "
+                "CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 "
+                "WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, created_at DESC",
+                (status,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM upgrade_considerations ORDER BY "
+                "CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 "
+                "WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, created_at DESC"
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def update_upgrade_consideration(self, consideration_id, data):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE upgrade_considerations SET title=?, description=?, category=?, "
+            "feasibility=?, safety_risk=?, priority=?, status=?, decision_notes=?, "
+            "request_count=?, updated_at=datetime('now') WHERE id=?",
+            (
+                data.get("title", ""),
+                data.get("description", ""),
+                data.get("category", "feature"),
+                data.get("feasibility", "unknown"),
+                data.get("safety_risk", "low"),
+                data.get("priority", "medium"),
+                data.get("status", "proposed"),
+                data.get("decision_notes", ""),
+                data.get("request_count", 1),
+                consideration_id,
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+    def delete_upgrade_consideration(self, consideration_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM upgrade_considerations WHERE id = ?", (consideration_id,))
+        conn.commit()
+        conn.close()
+
+    def get_upgrade_stats(self):
+        conn = self._conn()
+        total = conn.execute("SELECT COUNT(*) as c FROM upgrade_considerations").fetchone()["c"]
+        proposed = conn.execute("SELECT COUNT(*) as c FROM upgrade_considerations WHERE status='proposed'").fetchone()["c"]
+        approved = conn.execute("SELECT COUNT(*) as c FROM upgrade_considerations WHERE status='approved'").fetchone()["c"]
+        building = conn.execute("SELECT COUNT(*) as c FROM upgrade_considerations WHERE status='building'").fetchone()["c"]
+        shipped = conn.execute("SELECT COUNT(*) as c FROM upgrade_considerations WHERE status='shipped'").fetchone()["c"]
+        rejected = conn.execute("SELECT COUNT(*) as c FROM upgrade_considerations WHERE status='rejected'").fetchone()["c"]
+        conn.close()
+        return {"total": total, "proposed": proposed, "approved": approved,
+                "building": building, "shipped": shipped, "rejected": rejected}

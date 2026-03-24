@@ -13,35 +13,43 @@
 
 <!-- Stats Cards -->
 <div class="row g-3 mb-4">
-    <div class="col-sm-6 col-lg-3">
+    <div class="col-6 col-lg">
         <div class="card text-center" style="border:none;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);">
-            <div class="card-body">
-                <div style="font-size:2rem;font-weight:700;color:#f59e0b;">{{ stats.pending or 0 }}</div>
-                <small class="text-muted">Pending Signups</small>
+            <div class="card-body py-2">
+                <div style="font-size:1.8rem;font-weight:700;color:#f59e0b;">{{ stats.pending or 0 }}</div>
+                <small class="text-muted">Pending</small>
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-lg-3">
+    <div class="col-6 col-lg">
         <div class="card text-center" style="border:none;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);">
-            <div class="card-body">
-                <div style="font-size:2rem;font-weight:700;color:#10b981;">{{ stats.approved or 0 }}</div>
+            <div class="card-body py-2">
+                <div style="font-size:1.8rem;font-weight:700;color:#10b981;">{{ stats.approved or 0 }}</div>
                 <small class="text-muted">Approved</small>
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-lg-3">
+    <div class="col-6 col-lg">
         <div class="card text-center" style="border:none;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);">
-            <div class="card-body">
-                <div style="font-size:2rem;font-weight:700;color:#6366f1;">{{ stats.total or 0 }}</div>
-                <small class="text-muted">Total Signups</small>
+            <div class="card-body py-2">
+                <div style="font-size:1.8rem;font-weight:700;color:#6366f1;">{{ stats.total or 0 }}</div>
+                <small class="text-muted">Total</small>
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-lg-3">
+    <div class="col-6 col-lg">
         <div class="card text-center" style="border:none;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);">
-            <div class="card-body">
-                <div style="font-size:2rem;font-weight:700;color:#ec4899;">{{ fb_summary|length }}</div>
-                <small class="text-muted">Feedback Categories</small>
+            <div class="card-body py-2">
+                <div style="font-size:1.8rem;font-weight:700;color:#ec4899;">{{ stats.new_feedback or 0 }}</div>
+                <small class="text-muted">New Feedback</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card text-center" style="border:none;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);">
+            <div class="card-body py-2">
+                <div style="font-size:1.8rem;font-weight:700;color:#0891b2;">{{ upgrade_stats.proposed or 0 }}</div>
+                <small class="text-muted">Proposed Upgrades</small>
             </div>
         </div>
     </div>
@@ -58,6 +66,19 @@
     <li class="nav-item">
         <a class="nav-link" data-bs-toggle="tab" href="#tab-feedback" role="tab">
             <i class="bi bi-chat-square-text"></i> Feedback
+            {% if stats.new_feedback %}<span class="badge bg-danger">{{ stats.new_feedback }}</span>{% endif %}
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#tab-themes" role="tab">
+            <i class="bi bi-diagram-3"></i> Themes
+            {% if themes %}<span class="badge bg-info">{{ themes|length }}</span>{% endif %}
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#tab-upgrades" role="tab">
+            <i class="bi bi-rocket-takeoff"></i> Upgrade Considerations
+            {% if upgrade_stats.proposed %}<span class="badge bg-primary">{{ upgrade_stats.proposed }}</span>{% endif %}
         </a>
     </li>
 </ul>
@@ -143,6 +164,9 @@
                     <div class="card-body py-2 px-3 text-center">
                         <div style="font-size:1.3rem;font-weight:700;">{{ cat.count }}</div>
                         <small class="text-muted">{{ (cat.category or 'general')|replace('_',' ')|title }}</small>
+                        {% if cat.avg_rating %}
+                        <div style="color:#f59e0b;font-size:.7rem;">{{ '%.1f'|format(cat.avg_rating) }} <i class="bi bi-star-fill"></i></div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -163,26 +187,24 @@
                                 {% for i in range(fb.rating) %}<i class="bi bi-star-fill"></i>{% endfor %}
                             </span>
                             {% endif %}
-                            <span class="badge bg-{{ 'light text-dark' if fb.status == 'new' else ('success' if fb.status == 'resolved' else 'info') }} ms-1">{{ fb.status or 'new' }}</span>
+                            <span class="badge bg-{{ 'light text-dark' if fb.status == 'new' else ('success' if fb.status == 'resolved' else ('purple' if fb.status == 'promoted' else 'info')) }} ms-1">{{ fb.status or 'new' }}</span>
+                            {% if fb.tester_name %}<small class="text-muted ms-2">{{ fb.tester_name }}</small>{% endif %}
                         </div>
                         <small class="text-muted">{{ fb.created_at[:16] if fb.created_at else '' }}</small>
                     </div>
                     <p class="mb-2" style="font-size:.9rem;">{{ fb.message }}</p>
-                    {% if fb.page %}
-                    <small class="text-muted"><i class="bi bi-link-45deg"></i> {{ fb.page }}</small>
-                    {% endif %}
 
                     {% if fb.admin_response %}
                     <div class="mt-2 p-2" style="background:#eff6ff;border-radius:8px;font-size:.85rem;">
-                        <strong><i class="bi bi-reply"></i> Your reply:</strong> {{ fb.admin_response }}
+                        <strong><i class="bi bi-reply"></i> Reply:</strong> {{ fb.admin_response }}
                     </div>
                     {% endif %}
 
-                    <div class="mt-3 border-top pt-2">
-                        <form method="POST" action="{{ url_for('beta_feedback_respond', feedback_id=fb.id) }}" class="d-flex gap-2 align-items-end">
+                    <div class="mt-3 border-top pt-2 d-flex gap-2 align-items-end flex-wrap">
+                        <form method="POST" action="{{ url_for('beta_feedback_respond', feedback_id=fb.id) }}" class="d-flex gap-2 align-items-end flex-grow-1">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <div class="flex-grow-1">
-                                <input type="text" name="admin_response" class="form-control form-control-sm" placeholder="Reply to this feedback..."
+                                <input type="text" name="admin_response" class="form-control form-control-sm" placeholder="Reply..."
                                        value="{{ fb.admin_response or '' }}">
                             </div>
                             <select name="status" class="form-select form-select-sm" style="width:auto;">
@@ -192,6 +214,15 @@
                             </select>
                             <button class="btn btn-sm btn-primary"><i class="bi bi-send"></i></button>
                         </form>
+                        {% if fb.status != 'promoted' and fb.category in ('feature_request', 'bug', 'ui_ux', 'dislike') %}
+                        <form method="POST" action="{{ url_for('beta_feedback_promote', feedback_id=fb.id) }}" class="d-flex gap-1">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="title" value="{{ fb.message[:80] }}">
+                            <button class="btn btn-sm btn-outline-info" title="Promote to upgrade consideration">
+                                <i class="bi bi-rocket-takeoff"></i> Promote
+                            </button>
+                        </form>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -200,6 +231,207 @@
         <div class="text-center py-5 text-muted">
             <i class="bi bi-chat-square-text" style="font-size:3rem;"></i>
             <p class="mt-2">No feedback received yet.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Themes Tab - Aggregated similar feedback -->
+    <div class="tab-pane fade" id="tab-themes" role="tabpanel">
+        <p class="text-muted mb-3">Feedback automatically grouped by similarity. Recurring requests bubble up.</p>
+        {% if themes %}
+            {% for theme in themes %}
+            <div class="card mb-3" style="border:none;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.05);{% if theme.count > 1 %}border-left:4px solid #6366f1;{% endif %}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            {% set cat_colors = {'bug':'danger','feature_request':'primary','ui_ux':'info','dislike':'warning','general':'secondary'} %}
+                            <span class="badge bg-{{ cat_colors.get(theme.category, 'secondary') }}">{{ (theme.category or 'general')|replace('_',' ')|title }}</span>
+                            <span class="badge bg-dark ms-1">{{ theme.count }}x requested</span>
+                            {% for t in theme.testers[:3] %}
+                            <small class="text-muted ms-1">{{ t }}</small>
+                            {% endfor %}
+                            {% if theme.testers|length > 3 %}<small class="text-muted">+{{ theme.testers|length - 3 }}</small>{% endif %}
+                        </div>
+                    </div>
+                    <p style="font-size:.9rem;margin:0;">{{ theme.sample }}</p>
+
+                    {% if theme.count > 1 %}
+                    <div class="mt-3 border-top pt-2">
+                        <form method="POST" action="{{ url_for('beta_promote_theme') }}" class="d-flex gap-2 align-items-end flex-wrap">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="feedback_ids" value="{{ theme.feedback_ids|join(',') }}">
+                            <input type="hidden" name="category" value="{{ theme.category }}">
+                            <div class="flex-grow-1">
+                                <input type="text" name="title" class="form-control form-control-sm" value="{{ theme.sample[:80] }}" placeholder="Upgrade title...">
+                            </div>
+                            <input type="hidden" name="description" value="{{ theme.sample }}">
+                            <button class="btn btn-sm btn-info text-white"><i class="bi bi-rocket-takeoff"></i> Promote Theme</button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-diagram-3" style="font-size:3rem;"></i>
+            <p class="mt-2">No feedback themes detected yet. Themes appear when testers submit similar requests.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Upgrade Considerations Tab -->
+    <div class="tab-pane fade" id="tab-upgrades" role="tabpanel">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <p class="text-muted mb-0">Validated feature requests and improvements. Evaluate feasibility and safety before building.</p>
+            <button class="btn btn-sm btn-primary" data-bs-toggle="collapse" data-bs-target="#newConsideration">
+                <i class="bi bi-plus-lg"></i> Add Manually
+            </button>
+        </div>
+
+        <!-- Add new consideration form -->
+        <div class="collapse mb-4" id="newConsideration">
+            <div class="card" style="border:none;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.05);">
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('beta_promote_theme') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="feedback_ids" value="">
+                        <div class="row g-2">
+                            <div class="col-md-8">
+                                <input type="text" name="title" class="form-control form-control-sm" placeholder="Upgrade title" required>
+                            </div>
+                            <div class="col-md-4">
+                                <select name="category" class="form-select form-select-sm">
+                                    <option value="feature">Feature</option>
+                                    <option value="bug">Bug Fix</option>
+                                    <option value="ui_ux">UI/UX</option>
+                                    <option value="performance">Performance</option>
+                                    <option value="security">Security</option>
+                                </select>
+                            </div>
+                            <div class="col-12">
+                                <textarea name="description" class="form-control form-control-sm" rows="2" placeholder="Description..."></textarea>
+                            </div>
+                            <div class="col-12">
+                                <button class="btn btn-sm btn-primary"><i class="bi bi-plus-lg"></i> Add Consideration</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        {% if considerations %}
+            {% for c in considerations %}
+            {% set priority_colors = {'critical':'#dc2626','high':'#ea580c','medium':'#f59e0b','low':'#6b7280'} %}
+            {% set status_colors = {'proposed':'info','approved':'success','building':'primary','shipped':'secondary','rejected':'danger'} %}
+            {% set safety_colors = {'low':'success','medium':'warning','high':'danger','unknown':'secondary'} %}
+            {% set feasibility_colors = {'easy':'success','medium':'info','hard':'warning','unknown':'secondary'} %}
+            <div class="card mb-3" style="border:none;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.05);border-left:4px solid {{ priority_colors.get(c.priority, '#6b7280') }};">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <strong style="font-size:.95rem;">{{ c.title }}</strong>
+                            <div class="mt-1">
+                                <span class="badge bg-{{ status_colors.get(c.status, 'secondary') }}">{{ c.status|title }}</span>
+                                <span class="badge" style="background:{{ priority_colors.get(c.priority, '#6b7280') }};color:#fff;">{{ c.priority|title }} priority</span>
+                                <span class="badge bg-{{ safety_colors.get(c.safety_risk, 'secondary') }}"><i class="bi bi-shield"></i> {{ c.safety_risk|title }} risk</span>
+                                <span class="badge bg-{{ feasibility_colors.get(c.feasibility, 'secondary') }}">{{ c.feasibility|title }} feasibility</span>
+                                {% if c.request_count > 1 %}
+                                <span class="badge bg-dark">{{ c.request_count }}x requested</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <small class="text-muted">{{ c.created_at[:10] if c.created_at else '' }}</small>
+                    </div>
+
+                    {% if c.description %}
+                    <p class="mb-2" style="font-size:.88rem;color:#4b5563;">{{ c.description }}</p>
+                    {% endif %}
+                    {% if c.decision_notes %}
+                    <div class="p-2 mb-2" style="background:#f0fdf4;border-radius:8px;font-size:.82rem;">
+                        <strong><i class="bi bi-journal-text"></i> Notes:</strong> {{ c.decision_notes }}
+                    </div>
+                    {% endif %}
+
+                    <details class="mt-2">
+                        <summary style="font-size:.82rem;cursor:pointer;color:#6366f1;">Edit evaluation</summary>
+                        <form method="POST" action="{{ url_for('beta_consideration_update', cid=c.id) }}" class="mt-2">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label class="form-label" style="font-size:.78rem;font-weight:600;">Title</label>
+                                    <input type="text" name="title" class="form-control form-control-sm" value="{{ c.title }}">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label" style="font-size:.78rem;font-weight:600;">Category</label>
+                                    <select name="category" class="form-select form-select-sm">
+                                        {% for val in ['feature','bug','ui_ux','performance','security'] %}
+                                        <option value="{{ val }}" {{ 'selected' if c.category == val else '' }}>{{ val|replace('_',' ')|title }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label" style="font-size:.78rem;font-weight:600;">Requests</label>
+                                    <input type="number" name="request_count" class="form-control form-control-sm" value="{{ c.request_count }}" min="1">
+                                </div>
+                                <div class="col-md-12">
+                                    <label class="form-label" style="font-size:.78rem;font-weight:600;">Description</label>
+                                    <textarea name="description" class="form-control form-control-sm" rows="2">{{ c.description }}</textarea>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label" style="font-size:.78rem;font-weight:600;">Does it make sense?</label>
+                                    <select name="feasibility" class="form-select form-select-sm">
+                                        {% for val, lbl in [('unknown','Not evaluated'),('easy','Easy - straightforward'),('medium','Medium - some work'),('hard','Hard - major effort')] %}
+                                        <option value="{{ val }}" {{ 'selected' if c.feasibility == val else '' }}>{{ lbl }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label" style="font-size:.78rem;font-weight:600;">Safe to add?</label>
+                                    <select name="safety_risk" class="form-select form-select-sm">
+                                        {% for val, lbl in [('low','Low - safe to build'),('medium','Medium - needs review'),('high','High - risky/breaking')] %}
+                                        <option value="{{ val }}" {{ 'selected' if c.safety_risk == val else '' }}>{{ lbl }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label" style="font-size:.78rem;font-weight:600;">Priority</label>
+                                    <select name="priority" class="form-select form-select-sm">
+                                        {% for val in ['low','medium','high','critical'] %}
+                                        <option value="{{ val }}" {{ 'selected' if c.priority == val else '' }}>{{ val|title }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label" style="font-size:.78rem;font-weight:600;">Status</label>
+                                    <select name="status" class="form-select form-select-sm">
+                                        {% for val in ['proposed','approved','building','shipped','rejected'] %}
+                                        <option value="{{ val }}" {{ 'selected' if c.status == val else '' }}>{{ val|title }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label" style="font-size:.78rem;font-weight:600;">Decision notes</label>
+                                    <textarea name="decision_notes" class="form-control form-control-sm" rows="2" placeholder="Why approve or reject? Any caveats?">{{ c.decision_notes }}</textarea>
+                                </div>
+                                <div class="col-12 d-flex gap-2">
+                                    <button class="btn btn-sm btn-primary"><i class="bi bi-check-lg"></i> Save</button>
+                                    <form method="POST" action="{{ url_for('beta_consideration_delete', cid=c.id) }}" style="display:inline;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this consideration?')"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </div>
+                            </div>
+                        </form>
+                    </details>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-rocket-takeoff" style="font-size:3rem;"></i>
+            <p class="mt-2">No upgrade considerations yet. Promote feedback or themes to start building your backlog.</p>
         </div>
         {% endif %}
     </div>

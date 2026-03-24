@@ -1616,12 +1616,18 @@ def create_app():
         testers = db.get_beta_testers()
         feedback = db.get_beta_feedback(limit=50)
         fb_summary = db.get_beta_feedback_summary()
+        themes = db.get_feedback_themes()
+        considerations = db.get_upgrade_considerations()
+        upgrade_stats = db.get_upgrade_stats()
         return render_template(
             "beta_admin.html",
             stats=stats,
             testers=testers,
             feedback=feedback,
             fb_summary=fb_summary,
+            themes=themes,
+            considerations=considerations,
+            upgrade_stats=upgrade_stats,
         )
 
     @app.route("/beta/approve/<int:tester_id>", methods=["POST"])
@@ -1678,6 +1684,69 @@ def create_app():
         admin_response = request.form.get("admin_response", "").strip()
         db.update_beta_feedback_status(feedback_id, status, admin_response)
         flash("Feedback updated.", "success")
+        return redirect(url_for("beta_dashboard"))
+
+    @app.route("/beta/feedback/<int:feedback_id>/promote", methods=["POST"])
+    @login_required
+    def beta_feedback_promote(feedback_id):
+        """Promote a piece of feedback into the upgrade considerations list."""
+        fb = db.get_beta_feedback(limit=200)
+        item = next((f for f in fb if f["id"] == feedback_id), None)
+        if not item:
+            abort(404)
+        title = request.form.get("title", "").strip() or item["message"][:80]
+        db.create_upgrade_consideration({
+            "title": title,
+            "description": item["message"],
+            "category": item.get("category", "feature"),
+            "source_feedback_ids": str(feedback_id),
+            "request_count": 1,
+        })
+        db.update_beta_feedback_status(feedback_id, "promoted", "Promoted to upgrade consideration.")
+        flash(f"Added to upgrade considerations: {title[:50]}", "success")
+        return redirect(url_for("beta_dashboard"))
+
+    @app.route("/beta/promote-theme", methods=["POST"])
+    @login_required
+    def beta_promote_theme():
+        """Promote a whole theme (group of similar feedback) into considerations."""
+        title = request.form.get("title", "").strip()
+        description = request.form.get("description", "").strip()
+        feedback_ids = request.form.get("feedback_ids", "").strip()
+        count = len(feedback_ids.split(",")) if feedback_ids else 1
+        db.create_upgrade_consideration({
+            "title": title,
+            "description": description,
+            "category": request.form.get("category", "feature"),
+            "source_feedback_ids": feedback_ids,
+            "request_count": count,
+        })
+        flash(f"Theme promoted: {title[:50]} ({count} requests)", "success")
+        return redirect(url_for("beta_dashboard"))
+
+    @app.route("/beta/consideration/<int:cid>/update", methods=["POST"])
+    @login_required
+    def beta_consideration_update(cid):
+        data = {
+            "title": request.form.get("title", "").strip(),
+            "description": request.form.get("description", "").strip(),
+            "category": request.form.get("category", "feature"),
+            "feasibility": request.form.get("feasibility", "unknown"),
+            "safety_risk": request.form.get("safety_risk", "low"),
+            "priority": request.form.get("priority", "medium"),
+            "status": request.form.get("status", "proposed"),
+            "decision_notes": request.form.get("decision_notes", "").strip(),
+            "request_count": int(request.form.get("request_count", 1) or 1),
+        }
+        db.update_upgrade_consideration(cid, data)
+        flash("Consideration updated.", "success")
+        return redirect(url_for("beta_dashboard"))
+
+    @app.route("/beta/consideration/<int:cid>/delete", methods=["POST"])
+    @login_required
+    def beta_consideration_delete(cid):
+        db.delete_upgrade_consideration(cid)
+        flash("Consideration removed.", "info")
         return redirect(url_for("beta_dashboard"))
 
     @app.route("/setup-guide")

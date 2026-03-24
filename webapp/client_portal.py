@@ -118,6 +118,53 @@ def client_login():
     return render_template("client_login.html")
 
 
+@client_bp.route("/forgot-password", methods=["GET", "POST"])
+def client_forgot_password():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        db = _get_db()
+        user = db.get_client_user_by_email(email)
+        if user:
+            import secrets as _secrets
+            token = _secrets.token_urlsafe(32)
+            expires = (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+            db.set_password_reset_token(user["id"], token, expires)
+            try:
+                from webapp.email_sender import send_password_reset_email
+                app_url = current_app.config.get("APP_URL", request.host_url.rstrip("/"))
+                reset_url = f"{app_url}/client/reset-password/{token}"
+                send_password_reset_email(current_app.config, email, user["display_name"], reset_url)
+            except Exception:
+                pass  # Don't reveal email delivery failures
+        # Always show success to prevent email enumeration
+        flash("If that email is on file, you'll receive a reset link shortly.", "success")
+        return render_template("client_forgot_password.html", sent=True)
+    return render_template("client_forgot_password.html")
+
+
+@client_bp.route("/reset-password/<token>", methods=["GET", "POST"])
+def client_reset_password(token):
+    db = _get_db()
+    user = db.validate_password_reset_token(token)
+    if not user:
+        flash("This reset link is invalid or has expired.", "error")
+        return redirect(url_for("client.client_forgot_password"))
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm_password", "")
+        if len(password) < 8:
+            flash("Password must be at least 8 characters.", "error")
+            return render_template("client_reset_password.html", token=token)
+        if password != confirm:
+            flash("Passwords do not match.", "error")
+            return render_template("client_reset_password.html", token=token)
+        db.update_client_user_password(user["id"], password)
+        db.clear_password_reset_token(user["id"])
+        flash("Password updated. You can now sign in.", "success")
+        return redirect(url_for("client.client_login"))
+    return render_template("client_reset_password.html", token=token)
+
+
 @client_bp.route("/logout")
 def client_logout():
     session.pop("client_user_id", None)

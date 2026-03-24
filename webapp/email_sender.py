@@ -148,3 +148,52 @@ def send_beta_welcome_email(app_config, tester, temp_password, login_url):
         msg.attach(MIMEText(text, "plain"))
         msg.attach(MIMEText(html, "html"))
         server.sendmail(from_email, email, msg.as_string())
+
+
+def send_password_reset_email(app_config, email, name, reset_url):
+    """
+    Send a password reset link to a client user.
+    """
+    smtp_host = app_config.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = app_config.get("SMTP_PORT", 587)
+    smtp_user = app_config.get("SMTP_USER", "")
+    smtp_password = app_config.get("SMTP_PASSWORD", "")
+    from_name = app_config.get("SMTP_FROM_NAME", "GroMore")
+    from_email = app_config.get("SMTP_FROM_EMAIL", smtp_user)
+
+    if not smtp_user or not smtp_password:
+        raise ValueError("SMTP not configured.")
+
+    subject = "Reset your GroMore password"
+
+    html = f"""
+    <div style="font-family:Inter,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+        <h2 style="color:#4f46e5;">Password Reset</h2>
+        <p>Hi {name or 'there'},</p>
+        <p>We received a request to reset your GroMore password. Click the button below to choose a new one:</p>
+        <div style="text-align:center;margin:28px 0;">
+            <a href="{reset_url}" style="display:inline-block;padding:12px 32px;background:#4f46e5;color:#fff;border-radius:10px;text-decoration:none;font-weight:600;">Reset Password</a>
+        </div>
+        <p style="font-size:.85em;color:#666;">This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
+        <p style="color:#999;font-size:.8em;margin-top:24px;">- The GroMore Team</p>
+    </div>
+    """
+
+    text = (
+        f"Hi {name or 'there'},\n\n"
+        f"Reset your GroMore password by visiting:\n{reset_url}\n\n"
+        f"This link expires in 1 hour.\n\n"
+        f"- The GroMore Team"
+    )
+
+    with smtplib.SMTP(smtp_host, smtp_port) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{from_name} <{from_email}>"
+        msg["To"] = email
+        msg.attach(MIMEText(text, "plain"))
+        msg.attach(MIMEText(html, "html"))
+        server.sendmail(from_email, email, msg.as_string())
