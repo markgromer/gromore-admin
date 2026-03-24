@@ -145,8 +145,8 @@ RotoRooter">{{ brand.competitors or '' }}</textarea>
                         <label class="form-label">MCP Server URL</label>
                         <input type="url" name="crm_server_url" class="form-control"
                                value="{{ brand.crm_server_url or '' }}"
-                               placeholder="https://your-sng-mcp-server.onrender.com">
-                        <small class="text-muted">Your Sweep and Go MCP server endpoint on Render</small>
+                               placeholder="https://your-sng-mcp-server.onrender.com/mcp">
+                        <small class="text-muted">Full URL to your Sweep and Go MCP server endpoint</small>
                     </div>
 
                     <div class="mb-3" id="crmWebhookUrlGroup">
@@ -157,11 +157,13 @@ RotoRooter">{{ brand.competitors or '' }}</textarea>
                         <small class="text-muted" id="crmWebhookHelp">For GoHighLevel or custom webhooks</small>
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Pipeline/List ID</label>
+                    <div class="mb-3" id="crmPipelineGroup">
+                        <label class="form-label" id="crmPipelineLabel">Pipeline/List ID</label>
                         <input type="text" name="crm_pipeline_id" class="form-control"
                                value="{{ brand.crm_pipeline_id or '' }}"
-                               placeholder="Optional pipeline or list identifier">
+                               placeholder="Optional pipeline or list identifier"
+                               id="crmPipelineInput">
+                        <small class="text-muted" id="crmPipelineHelp">Optional identifier</small>
                     </div>
 
                     <div class="border rounded p-2 bg-light mb-3">
@@ -207,31 +209,49 @@ RotoRooter">{{ brand.competitors or '' }}</textarea>
                     var apiKeyLabel = document.getElementById('crmApiKeyLabel');
                     var apiKeyHelp = document.getElementById('crmApiKeyHelp');
                     var webhookHelp = document.getElementById('crmWebhookHelp');
+                    var pipelineLabel = document.getElementById('crmPipelineLabel');
+                    var pipelineInput = document.getElementById('crmPipelineInput');
+                    var pipelineHelp = document.getElementById('crmPipelineHelp');
 
                     function updateFields() {
                         var v = sel.value;
                         serverGroup.style.display = (v === 'sweepandgo') ? 'block' : 'none';
 
                         if (v === 'sweepandgo') {
-                            apiKeyLabel.textContent = 'MCP Server Auth Key';
-                            apiKeyHelp.textContent = 'Bearer token for your SNG MCP server (leave blank to keep current)';
+                            apiKeyLabel.textContent = 'SNG API Key';
+                            apiKeyHelp.textContent = 'Value for the x-sng-api-key header (leave blank to keep current)';
                             webhookHelp.textContent = 'Optional: SNG can also POST completed-job data to the inbound webhook below';
+                            pipelineLabel.textContent = 'Organization Slug';
+                            pipelineInput.placeholder = 'e.g. scoop-doggy-logs-1fful';
+                            pipelineHelp.textContent = 'Value for the x-sng-org-slug header';
                         } else if (v === 'jobber') {
                             apiKeyLabel.textContent = 'Jobber API Token';
                             apiKeyHelp.textContent = 'OAuth access token from Jobber (leave blank to keep current)';
                             webhookHelp.textContent = 'Optional: Jobber webhook URL for inbound events';
+                            pipelineLabel.textContent = 'Pipeline/List ID';
+                            pipelineInput.placeholder = 'Optional pipeline or list identifier';
+                            pipelineHelp.textContent = 'Optional identifier';
                         } else if (v === 'gohighlevel') {
                             apiKeyLabel.textContent = 'GoHighLevel API Key';
                             apiKeyHelp.textContent = 'Leave blank to keep current key';
                             webhookHelp.textContent = 'For GoHighLevel webhooks';
+                            pipelineLabel.textContent = 'Pipeline ID';
+                            pipelineInput.placeholder = 'Optional pipeline identifier';
+                            pipelineHelp.textContent = 'Optional identifier';
                         } else if (v === 'hubspot') {
                             apiKeyLabel.textContent = 'HubSpot Access Token';
                             apiKeyHelp.textContent = 'Leave blank to keep current key';
                             webhookHelp.textContent = 'Optional webhook URL';
+                            pipelineLabel.textContent = 'Pipeline/List ID';
+                            pipelineInput.placeholder = 'Optional pipeline or list identifier';
+                            pipelineHelp.textContent = 'Optional identifier';
                         } else {
                             apiKeyLabel.textContent = 'API Key';
                             apiKeyHelp.textContent = 'Leave blank to keep current key';
                             webhookHelp.textContent = 'For custom webhooks';
+                            pipelineLabel.textContent = 'Pipeline/List ID';
+                            pipelineInput.placeholder = 'Optional pipeline or list identifier';
+                            pipelineHelp.textContent = 'Optional identifier';
                         }
                     }
                     sel.addEventListener('change', updateFields);

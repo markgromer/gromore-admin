@@ -193,9 +193,12 @@ def _sng_call(brand, tool_name, arguments=None):
         return None, "Sweep and Go MCP server URL not configured"
 
     api_key = (brand.get("crm_api_key") or "").strip()
+    org_slug = (brand.get("crm_pipeline_id") or "").strip()
     headers = {"Content-Type": "application/json"}
     if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+        headers["x-sng-api-key"] = api_key
+    if org_slug:
+        headers["x-sng-org-slug"] = org_slug
 
     payload = {
         "jsonrpc": "2.0",
@@ -207,9 +210,10 @@ def _sng_call(brand, tool_name, arguments=None):
         },
     }
 
+    # Post directly to the configured URL (should already include /mcp)
     try:
         resp = requests.post(
-            f"{server_url}/mcp",
+            server_url,
             json=payload,
             headers=headers,
             timeout=TIMEOUT,
