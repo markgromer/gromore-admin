@@ -135,11 +135,11 @@
     }
 
     function renderResults(data){
-        const r=data.results||data;
+        const r=data.data||data.results||data;
         const overall=r.overall_score||0;
         const gbp=r.gbp||{};
-        const seo=r.seo||{};
-        const ads=r.ads||{};
+        const seo=r.website_seo||r.seo||{};
+        const ads=r.ad_presence||r.ads||{};
         const bench=r.benchmarks||{};
         const recs=r.recommendations||[];
         const g=gradeFor(overall);

@@ -5324,6 +5324,15 @@ def public_assess():
     if request.method == "OPTIONS":
         return _cors_preflight()
 
+    try:
+        return _run_assessment()
+    except Exception as exc:
+        import traceback, logging
+        logging.getLogger(__name__).error("[ASSESS] %s", traceback.format_exc())
+        return _cors_json({"ok": False, "error": f"Assessment failed: {str(exc)[:200]}"}, 500)
+
+
+def _run_assessment():
     import json as _json
     import requests as _req
     from webapp.google_business import get_place_details, score_profile_completeness
@@ -5567,10 +5576,10 @@ def public_assess():
         conn = db._conn()
         conn.execute(
             """INSERT INTO assessment_leads
-               (name, email, business_name, industry, service_area, website, gmb_url, facebook_url, overall_score, results_json)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (name, email, business_name, industry, service_area, website, gmb_url, facebook_url, phone, overall_score, results_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             [name, email, business_name, industry, service_area, website, gmb_url, facebook_url,
-             results["overall_score"], _json.dumps(results)],
+             data.get("phone", ""), results["overall_score"], _json.dumps(results)],
         )
         conn.commit()
         row = conn.execute("SELECT last_insert_rowid() AS id").fetchone()
