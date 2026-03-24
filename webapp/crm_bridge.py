@@ -419,10 +419,11 @@ def _sng_sum_payments_for_month(brand, client_ids, month_prefix):
     return round(total_revenue, 2), payment_count
 
 
-def sng_sync_revenue(brand, db):
-    """Full revenue sync: pulls ALL client payments for the previous complete month.
-    Stores results in brand_month_finance + settings cache.
-    This is the heavy function - call monthly or on-demand, not per page load.
+def sng_sync_revenue(brand, db, max_sample=50):
+    """Revenue sync: samples up to max_sample clients from the previous complete
+    month, then extrapolates to the full client base. Stores results in
+    brand_month_finance + settings cache.
+    Designed to complete within ~60s (50 clients x ~1s each).
     Returns the snapshot dict."""
     import json
     from datetime import datetime, timedelta
@@ -435,7 +436,8 @@ def sng_sync_revenue(brand, db):
     last_month_end = first_of_this_month - timedelta(days=1)
     rev_month = last_month_end.strftime("%Y-%m")
 
-    log.info("SNG revenue sync for brand %s, month %s", brand_id, rev_month)
+    log.info("SNG revenue sync for brand %s, month %s (sample=%d)",
+             brand_id, rev_month, max_sample)
 
     # Get counts (fast, single calls each)
     active_count = 0
@@ -453,14 +455,43 @@ def sng_sync_revenue(brand, db):
     if isinstance(r, dict):
         jobs_count = r.get("data", 0) or 0
 
-    # Pull ALL active client IDs and get their real payments for rev_month
-    client_ids = _sng_collect_all_client_ids(brand)
-    log.info("SNG sync: found %d active client IDs", len(client_ids))
+    # Collect client IDs - paginate until we have enough for the sample
+    sample_ids = []
+    page = 1
+    while len(sample_ids) < max_sample:
+        result, error = sng_get_active_clients(brand, page)
+        if error or not isinstance(result, dict):
+            break
+        for c in (result.get("data") or []):
+            cid = c.get("client") or c.get("id") or c.get("client_id")
+            if cid:
+                sample_ids.append(cid)
+            if len(sample_ids) >= max_sample:
+                break
+        paginate = result.get("paginate") or {}
+        if page >= (paginate.get("total_pages") or 1):
+            break
+        page += 1
 
-    mrr = 0.0
-    payment_count = 0
-    if client_ids:
-        mrr, payment_count = _sng_sum_payments_for_month(brand, client_ids, rev_month)
+    sample_size = len(sample_ids)
+    log.info("SNG sync: got %d sample client IDs (of %d active)", sample_size, active_count)
+
+    sample_revenue = 0.0
+    sample_payments = 0
+    if sample_ids:
+        sample_revenue, sample_payments = _sng_sum_payments_for_month(
+            brand, sample_ids, rev_month
+        )
+
+    # Extrapolate from sample to full active client base
+    if sample_size > 0 and active_count > 0:
+        scale = active_count / sample_size
+        mrr = round(sample_revenue * scale, 2)
+        payment_count = int(sample_payments * scale)
+    else:
+        mrr = sample_revenue
+        payment_count = sample_payments
+        scale = 1
 
     # Calculate derived metrics
     avg_client_monthly = round(mrr / active_count, 2) if active_count > 0 and mrr > 0 else 0
@@ -474,7 +505,9 @@ def sng_sync_revenue(brand, db):
         "total_jobs": jobs_count,
         "mrr": mrr,
         "payment_count": payment_count,
-        "clients_scanned": len(client_ids),
+        "sample_size": sample_size,
+        "sample_revenue": sample_revenue,
+        "scale_factor": round(scale, 2),
         "revenue_month": rev_month,
         "avg_client_monthly_value": avg_client_monthly,
         "estimated_clv": estimated_clv,
@@ -482,7 +515,7 @@ def sng_sync_revenue(brand, db):
         "avg_retention_months": avg_retention_months,
         "synced_at": now.strftime("%Y-%m-%d %H:%M:%S"),
         "sync_status": "done",
-        "data_source": "real_payments_full",
+        "data_source": "real_payments_sampled" if sample_size < active_count else "real_payments_full",
     }
 
     # Store in brand_month_finance for ROAS pipeline
@@ -492,7 +525,7 @@ def sng_sync_revenue(brand, db):
                 brand_id, rev_month,
                 closed_revenue=mrr,
                 closed_deals=payment_count,
-                notes="SNG auto-sync (real payments)"
+                notes=f"SNG sync ({sample_size} of {active_count} clients sampled)"
             )
         except Exception as exc:
             log.warning("Failed to upsert brand_month_finance: %s", exc)
@@ -504,8 +537,8 @@ def sng_sync_revenue(brand, db):
         except Exception as exc:
             log.warning("Failed to cache revenue snapshot: %s", exc)
 
-    log.info("SNG revenue sync done: brand=%s month=%s revenue=$%.2f payments=%d",
-             brand_id, rev_month, mrr, payment_count)
+    log.info("SNG revenue sync done: brand=%s month=%s revenue=$%.2f (sample=%d, scale=%.1fx)",
+             brand_id, rev_month, mrr, sample_size, scale)
     return snapshot
 
 

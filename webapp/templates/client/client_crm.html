@@ -594,50 +594,26 @@ function syncRevenue() {
     var origHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Syncing...';
-    document.getElementById('revSyncedAt').textContent = 'Scanning all clients - this may take a few minutes...';
+    document.getElementById('revSyncedAt').textContent = 'Scanning clients - this may take up to a minute...';
 
     fetch('{{ url_for("client.client_sng_sync_revenue") }}', {method: 'POST'})
     .then(function(r) { return r.json(); })
     .then(function(resp) {
-        if (resp.ok && resp.status === 'started') {
-            // Poll for completion every 5 seconds
-            pollSyncStatus(btn, origHtml);
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+        if (resp.ok && resp.revenue) {
+            updateRevenueCards(resp.revenue);
         } else {
-            btn.disabled = false;
-            btn.innerHTML = origHtml;
             document.getElementById('revSyncedAt').textContent = 'Sync failed: ' + (resp.error || 'Unknown error');
+            console.error('Sync error:', resp);
         }
     })
     .catch(function(err) {
         btn.disabled = false;
         btn.innerHTML = origHtml;
         document.getElementById('revSyncedAt').textContent = 'Sync failed: ' + err.message;
+        console.error('Sync fetch error:', err);
     });
-}
-
-function pollSyncStatus(btn, origHtml) {
-    var pollUrl = '{{ url_for("client.client_sng_sync_status") }}';
-    var pollInterval = setInterval(function() {
-        fetch(pollUrl)
-        .then(function(r) { return r.json(); })
-        .then(function(resp) {
-            if (resp.status === 'done') {
-                clearInterval(pollInterval);
-                btn.disabled = false;
-                btn.innerHTML = origHtml;
-                updateRevenueCards(resp.revenue);
-            } else if (resp.status === 'error') {
-                clearInterval(pollInterval);
-                btn.disabled = false;
-                btn.innerHTML = origHtml;
-                document.getElementById('revSyncedAt').textContent = 'Sync error: ' + (resp.revenue.sync_error || 'Unknown');
-            }
-            // else status === 'running', keep polling
-        })
-        .catch(function() {
-            // Network error, keep polling
-        });
-    }, 5000);
 }
 
 function updateRevenueCards(rev) {
@@ -651,7 +627,11 @@ function updateRevenueCards(rev) {
     document.getElementById('revChurnCount').textContent = (rev.inactive_clients || 0).toLocaleString();
     document.getElementById('revChurnMonthly').textContent = fmtDollar(rev.inactive_clients * (rev.avg_client_monthly_value || 0));
     document.getElementById('revChurnTotal').textContent = fmtDollar(rev.churn_cost_total);
-    document.getElementById('revSyncedAt').textContent = 'Last synced: ' + (rev.synced_at || 'just now') + ' (' + (rev.revenue_month || '') + ')';
+    var syncInfo = 'Last synced: ' + (rev.synced_at || 'just now') + ' (' + (rev.revenue_month || '') + ')';
+    if (rev.sample_size && rev.active_clients && rev.sample_size < rev.active_clients) {
+        syncInfo += ' - ' + rev.sample_size + ' of ' + rev.active_clients + ' clients sampled';
+    }
+    document.getElementById('revSyncedAt').textContent = syncInfo;
     document.getElementById('revMonthLabel').textContent = rev.revenue_month || 'previous month';
 }
 

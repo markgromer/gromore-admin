@@ -3,7 +3,7 @@ services:
     name: agency-analytics
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn webapp.app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    startCommand: gunicorn webapp.app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 300
     envVars:
       - key: SECRET_KEY
         generateValue: true
