@@ -51,181 +51,238 @@
         opacity: .5;
     }
 
-    /* Isometric floor */
+    /* Office room - flat top-down view (no isometric) */
     .office-floor {
         position: relative;
         width: 100%;
-        height: 340px;
-        transform: perspective(800px) rotateX(35deg) rotateZ(-15deg);
-        transform-style: preserve-3d;
+        min-height: 420px;
+        background: #1a1a2e;
+        border-radius: 12px;
+        overflow: hidden;
         margin: 0 auto;
-        max-width: 900px;
+        max-width: 960px;
+        border: 2px solid rgba(99,102,241,.15);
     }
+
+    /* Carpet/floor */
     .floor-grid {
         position: absolute;
         inset: 0;
         background:
-            linear-gradient(90deg, rgba(99,102,241,.08) 1px, transparent 1px),
-            linear-gradient(0deg, rgba(99,102,241,.08) 1px, transparent 1px);
-        background-size: 60px 60px;
-        border-radius: 8px;
-        border: 1px solid rgba(99,102,241,.1);
+            radial-gradient(ellipse at 50% 50%, rgba(99,102,241,.06) 0%, transparent 70%),
+            linear-gradient(90deg, rgba(99,102,241,.04) 1px, transparent 1px),
+            linear-gradient(0deg, rgba(99,102,241,.04) 1px, transparent 1px);
+        background-size: 100% 100%, 48px 48px, 48px 48px;
+    }
+
+    /* Walls */
+    .office-wall-top {
+        position: absolute; top: 0; left: 0; right: 0; height: 44px;
+        background: linear-gradient(180deg, #2d2b55 0%, #1e1b4b 100%);
+        border-bottom: 3px solid #3730a3; z-index: 1;
+    }
+    .office-wall-left {
+        position: absolute; top: 0; left: 0; bottom: 0; width: 14px;
+        background: linear-gradient(90deg, #2d2b55, #1e1b4b);
+        border-right: 2px solid #3730a3; z-index: 1;
+    }
+
+    /* Windows */
+    .office-window {
+        position: absolute; top: 6px; height: 28px; width: 80px;
+        background: linear-gradient(180deg, #1e3a5f 0%, #0d1b2a 100%);
+        border: 2px solid #475569; border-radius: 3px; z-index: 2; overflow: hidden;
+    }
+    .office-window::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(96,165,250,.15), transparent 60%); }
+    .office-window .window-star { position: absolute; width: 2px; height: 2px; background: #fff; border-radius: 50%; animation: twinkle 3s ease-in-out infinite; }
+    @keyframes twinkle { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+
+    /* Whiteboard */
+    .office-whiteboard {
+        position: absolute; top: 4px; right: 60px; width: 100px; height: 32px;
+        background: #f0f0f0; border: 2px solid #94a3b8; border-radius: 3px; z-index: 2; overflow: hidden;
+    }
+    .office-whiteboard::before { content: 'Q2 GOALS'; position: absolute; top: 4px; left: 6px; font-size: 6px; font-weight: 700; color: #ef4444; letter-spacing: .3px; }
+    .office-whiteboard::after { content: ''; position: absolute; top: 14px; left: 6px; width: 40px; height: 2px; background: #3b82f6; box-shadow: 0 5px 0 #10b981, 0 10px 0 #f59e0b; }
+
+    /* Clock */
+    .office-clock { position: absolute; top: 8px; left: 300px; width: 24px; height: 24px; background: #fff; border: 2px solid #94a3b8; border-radius: 50%; z-index: 2; }
+    .clock-hand-m { position: absolute; bottom: 50%; left: 50%; width: 1px; height: 8px; background: #1f2937; transform-origin: bottom center; animation: clockMinute 60s linear infinite; }
+    .clock-hand-h { position: absolute; bottom: 50%; left: 50%; width: 1.5px; height: 5px; background: #1f2937; transform-origin: bottom center; animation: clockHour 3600s linear infinite; }
+    @keyframes clockMinute { to { transform: rotate(360deg); } }
+    @keyframes clockHour { to { transform: rotate(360deg); } }
+
+    /* Warren's corner office */
+    .warren-office {
+        position: absolute; top: 44px; left: 14px; width: 200px; height: 120px;
+        border-right: 2px dashed rgba(99,102,241,.2); border-bottom: 2px dashed rgba(99,102,241,.2); z-index: 1;
+    }
+    .warren-office::before { content: 'CORNER OFFICE'; position: absolute; top: 4px; left: 8px; font-size: 6px; letter-spacing: 1px; color: rgba(99,102,241,.25); font-weight: 700; }
+
+    /* Water cooler */
+    .office-cooler { position: absolute; bottom: 20px; left: 24px; z-index: 3; }
+    .cooler-tank { width: 16px; height: 24px; background: linear-gradient(180deg, #bfdbfe, #93c5fd); border: 1px solid #60a5fa; border-radius: 4px 4px 0 0; position: relative; }
+    .cooler-tank::before { content: ''; position: absolute; bottom: 3px; left: 2px; right: 2px; height: 4px; background: rgba(255,255,255,.3); border-radius: 2px; animation: waterBubble 4s ease-in-out infinite; }
+    @keyframes waterBubble { 0%, 100% { transform: translateY(0); opacity: .3; } 50% { transform: translateY(-3px); opacity: .7; } }
+    .cooler-base { width: 18px; height: 14px; background: #e5e7eb; border-radius: 0 0 3px 3px; margin-left: -1px; }
+
+    /* Plants */
+    .office-plant { position: absolute; z-index: 3; }
+    .plant-pot { width: 18px; height: 12px; background: #92400e; border-radius: 2px 2px 4px 4px; }
+    .plant-leaves { display: flex; gap: 1px; justify-content: center; margin-bottom: -2px; }
+    .plant-leaf { width: 8px; height: 14px; background: #22c55e; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; animation: plantSway 5s ease-in-out infinite; }
+    .plant-leaf:nth-child(1) { transform: rotate(-20deg); animation-delay: 0s; }
+    .plant-leaf:nth-child(2) { transform: rotate(0deg); height: 18px; animation-delay: .5s; }
+    .plant-leaf:nth-child(3) { transform: rotate(20deg); animation-delay: 1s; }
+    @keyframes plantSway { 0%, 100% { transform: rotate(var(--r, 0deg)); } 50% { transform: rotate(calc(var(--r, 0deg) + 5deg)); } }
+
+    /* Bookshelf */
+    .office-bookshelf { position: absolute; top: 60px; left: 3px; width: 20px; z-index: 2; }
+    .shelf-row { display: flex; gap: 1px; margin-bottom: 4px; padding: 2px; background: #78350f; border-radius: 1px; }
+    .shelf-book { width: 4px; border-radius: 1px; }
+
+    /* Center rug */
+    .office-rug {
+        position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%);
+        width: 120px; height: 80px; background: rgba(99,102,241,.05);
+        border: 1px solid rgba(99,102,241,.07); border-radius: 40%; z-index: 0;
     }
 
     /* Desk unit */
     .desk-slot {
-        position: absolute;
-        width: 100px;
-        height: 70px;
-        cursor: pointer;
-        transition: transform .2s, filter .2s;
-        transform-style: preserve-3d;
+        position: absolute; width: 100px; height: 80px;
+        cursor: pointer; transition: transform .2s, filter .2s; z-index: 4;
     }
-    .desk-slot:hover { transform: translateY(-4px); filter: brightness(1.1); }
+    .desk-slot:hover { transform: translateY(-3px); filter: brightness(1.15); }
 
     .desk-base {
-        position: absolute;
-        bottom: 0;
-        left: 10px;
-        right: 10px;
-        height: 28px;
-        background: #374151;
-        border-radius: 4px;
-        box-shadow: 0 4px 0 #1f2937, 0 6px 12px rgba(0,0,0,.3);
+        position: absolute; bottom: 0; left: 8px; right: 8px; height: 26px;
+        background: linear-gradient(180deg, #4b5563, #374151);
+        border-radius: 4px; box-shadow: 0 3px 0 #1f2937, 0 5px 10px rgba(0,0,0,.4);
     }
     .desk-base::before {
-        content: '';
-        position: absolute;
-        top: -3px;
-        left: -2px;
-        right: -2px;
-        height: 6px;
-        background: #4b5563;
-        border-radius: 3px 3px 0 0;
+        content: ''; position: absolute; top: -2px; left: -1px; right: -1px; height: 5px;
+        background: linear-gradient(90deg, #64748b, #94a3b8, #64748b); border-radius: 3px 3px 0 0;
     }
-    /* Monitor */
-    .desk-monitor {
-        position: absolute;
-        bottom: 28px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 36px;
-        height: 26px;
-        background: #1e293b;
-        border: 2px solid #475569;
-        border-radius: 3px;
-        box-shadow: 0 0 8px rgba(99,102,241,.3);
+    .desk-base::after {
+        content: ''; position: absolute; top: -5px; right: 6px;
+        width: 6px; height: 6px; background: #fff; border-radius: 1px;
+        border: 1px solid #d1d5db; box-shadow: inset 0 -2px 0 #92400e;
     }
-    .desk-monitor.active { border-color: #6366f1; box-shadow: 0 0 12px rgba(99,102,241,.6); }
-    .desk-monitor::after {
-        content: '';
-        position: absolute;
-        bottom: -6px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 8px;
-        height: 5px;
-        background: #475569;
-        border-radius: 0 0 2px 2px;
+    .desk-chair {
+        position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%);
+        width: 20px; height: 10px; background: #374151;
+        border-radius: 10px 10px 3px 3px; z-index: -1; box-shadow: 0 2px 0 #1f2937;
+    }
+    .desk-chair::after {
+        content: ''; position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%);
+        width: 4px; height: 4px; background: #1f2937; border-radius: 50%;
     }
 
-    /* Agent character (voxel-style) */
+    /* Monitor */
+    .desk-monitor {
+        position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%);
+        width: 34px; height: 24px; background: #0f172a;
+        border: 2px solid #475569; border-radius: 3px;
+        box-shadow: 0 0 6px rgba(99,102,241,.2); overflow: hidden;
+    }
+    .desk-monitor.active { border-color: #6366f1; box-shadow: 0 0 14px rgba(99,102,241,.5); }
+    .desk-monitor.active::before {
+        content: ''; position: absolute; top: 3px; left: 3px; right: 3px; height: 2px;
+        background: #6366f1; box-shadow: 0 4px 0 #818cf8, 0 8px 0 #a78bfa, 0 12px 0 #6366f1;
+        animation: screenScroll 2s linear infinite;
+    }
+    @keyframes screenScroll { 0% { transform: translateY(0); opacity: 1; } 80% { transform: translateY(-4px); opacity: .6; } 100% { transform: translateY(0); opacity: 1; } }
+    .desk-monitor::after {
+        content: ''; position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%);
+        width: 8px; height: 4px; background: #475569; border-radius: 0 0 2px 2px;
+    }
+
+    /* Agent character */
     .desk-agent {
-        position: absolute;
-        bottom: 32px;
-        left: 50%;
-        transform: translateX(-50%);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
+        position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+        display: flex; flex-direction: column; align-items: center;
         transition: opacity .3s, transform .3s;
     }
     .desk-agent.hidden { opacity: 0; transform: translateX(-50%) scale(0.5); pointer-events: none; }
+
     .agent-head {
-        width: 16px;
-        height: 16px;
-        border-radius: 4px;
-        position: relative;
-        z-index: 1;
+        width: 16px; height: 16px; border-radius: 50%;
+        position: relative; z-index: 1; border: 1px solid rgba(255,255,255,.2);
     }
     .agent-head::before {
-        content: '';
-        position: absolute;
-        top: 4px;
-        left: 3px;
-        width: 3px;
-        height: 3px;
-        background: rgba(255,255,255,.8);
-        border-radius: 1px;
-        box-shadow: 7px 0 0 rgba(255,255,255,.8);
+        content: ''; position: absolute; top: 5px; left: 3px;
+        width: 3px; height: 3px; background: rgba(255,255,255,.9); border-radius: 50%;
+        box-shadow: 6px 0 0 rgba(255,255,255,.9);
+    }
+    .agent-head::after {
+        content: ''; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
+        width: 5px; height: 2px; border-bottom: 1.5px solid rgba(255,255,255,.6);
+        border-radius: 0 0 3px 3px;
     }
     .agent-body {
-        width: 20px;
-        height: 14px;
-        border-radius: 3px;
-        margin-top: -2px;
+        width: 20px; height: 14px; border-radius: 3px 3px 2px 2px;
+        margin-top: -2px; position: relative;
+    }
+    .agent-body::before, .agent-body::after {
+        content: ''; position: absolute; top: 2px; width: 5px; height: 8px;
+        border-radius: 2px; background: inherit; opacity: .9;
+    }
+    .agent-body::before { left: -4px; transform: rotate(5deg); }
+    .agent-body::after { right: -4px; transform: rotate(-5deg); }
+
+    /* Agent accessories (emoji hat/item on top of head) */
+    .agent-accessory {
+        position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+        font-size: 10px; line-height: 1; z-index: 2; filter: drop-shadow(0 1px 2px rgba(0,0,0,.3));
     }
 
-    /* Working animation */
-    .desk-slot.working .desk-agent {
-        animation: agentBob 1.5s ease-in-out infinite;
-    }
-    @keyframes agentBob {
-        0%, 100% { transform: translateX(-50%) translateY(0); }
-        50% { transform: translateX(-50%) translateY(-3px); }
-    }
-    .desk-slot.working .desk-monitor {
-        animation: monitorGlow 2s ease-in-out infinite;
-    }
-    @keyframes monitorGlow {
-        0%, 100% { box-shadow: 0 0 8px rgba(99,102,241,.4); }
-        50% { box-shadow: 0 0 20px rgba(99,102,241,.8); }
-    }
+    /* Working animations */
+    .desk-slot.working .desk-agent { animation: agentBob 1.5s ease-in-out infinite; }
+    .desk-slot.working .agent-body::before { animation: armType 0.4s ease-in-out infinite alternate; }
+    .desk-slot.working .agent-body::after { animation: armType 0.4s ease-in-out infinite alternate-reverse; }
+    @keyframes agentBob { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-3px); } }
+    @keyframes armType { 0% { transform: rotate(5deg) translateY(0); } 100% { transform: rotate(-5deg) translateY(-2px); } }
+    .desk-slot.working .desk-monitor { animation: monitorGlow 2s ease-in-out infinite; }
+    @keyframes monitorGlow { 0%, 100% { box-shadow: 0 0 8px rgba(99,102,241,.4); } 50% { box-shadow: 0 0 20px rgba(99,102,241,.8); } }
+
+    /* Idle hired agent - subtle breathing & looking around */
+    .desk-slot:not(.empty):not(.working) .desk-agent { animation: agentBreathe 4s ease-in-out infinite; }
+    @keyframes agentBreathe { 0%, 100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.03); } }
+    .desk-slot:not(.empty):not(.working) .agent-head { animation: agentLook 8s ease-in-out infinite; }
+    @keyframes agentLook { 0%, 85%, 100% { transform: rotate(0deg); } 90% { transform: rotate(8deg); } 95% { transform: rotate(-5deg); } }
 
     /* Nameplate */
     .desk-nameplate {
-        position: absolute;
-        top: -16px;
-        left: 50%;
-        transform: translateX(-50%) rotateX(-35deg) rotateZ(15deg);
-        font-size: .65rem;
-        font-weight: 700;
-        color: #fff;
-        text-align: center;
-        white-space: nowrap;
-        text-shadow: 0 1px 3px rgba(0,0,0,.5);
+        position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
+        font-size: .65rem; font-weight: 700; color: #fff; text-align: center;
+        white-space: nowrap; text-shadow: 0 1px 4px rgba(0,0,0,.7);
+        background: rgba(0,0,0,.35); padding: 1px 6px; border-radius: 4px;
     }
     .desk-nameplate .np-role {
-        font-size: .55rem;
-        font-weight: 400;
-        opacity: .6;
-        display: block;
+        font-size: .55rem; font-weight: 400; opacity: .6; display: block;
     }
 
     /* Empty desk state */
-    .desk-slot.empty .desk-monitor { opacity: .3; border-color: #334155; box-shadow: none; }
-    .desk-slot.empty .desk-base { opacity: .4; }
-    .desk-slot.empty .desk-nameplate { opacity: .3; }
+    .desk-slot.empty .desk-monitor { opacity: .2; border-color: #334155; box-shadow: none; }
+    .desk-slot.empty .desk-monitor::before { display: none; }
+    .desk-slot.empty .desk-base { opacity: .3; }
+    .desk-slot.empty .desk-chair { opacity: .2; }
+    .desk-slot.empty .desk-nameplate { opacity: .25; background: none; }
     .desk-hire-badge {
-        position: absolute;
-        top: -8px;
-        right: -4px;
-        background: #f59e0b;
-        color: #000;
-        font-size: .6rem;
-        font-weight: 800;
-        padding: 2px 6px;
-        border-radius: 8px;
-        text-transform: uppercase;
-        letter-spacing: .3px;
-        transform: rotateX(-35deg) rotateZ(15deg);
-        animation: hirePulse 2s ease-in-out infinite;
-        cursor: pointer;
+        position: absolute; top: -10px; right: -6px;
+        background: #f59e0b; color: #000; font-size: .6rem; font-weight: 800;
+        padding: 2px 8px; border-radius: 8px; text-transform: uppercase;
+        letter-spacing: .3px; animation: hirePulse 2s ease-in-out infinite;
+        cursor: pointer; z-index: 5;
     }
-    @keyframes hirePulse {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,.4); }
-        50% { box-shadow: 0 0 0 6px rgba(245,158,11,0); }
+    @keyframes hirePulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,.4); } 50% { box-shadow: 0 0 0 6px rgba(245,158,11,0); } }
+    .desk-slot.empty:hover::before {
+        content: ''; position: absolute; inset: -6px;
+        border: 2px dashed rgba(245,158,11,.3); border-radius: 8px;
+        animation: hireRingPulse 1.5s ease-in-out infinite;
     }
+    @keyframes hireRingPulse { 0%, 100% { opacity: .4; } 50% { opacity: .8; } }
 
     /* Hero actions row */
     .team-hero-actions {
@@ -581,11 +638,13 @@
 
     @media (max-width: 768px) {
         .agent-grid { grid-template-columns: 1fr; }
-        .office-floor { height: 240px; transform: perspective(600px) rotateX(30deg) rotateZ(-10deg); }
-        .desk-slot { transform: scale(.8); }
+        .office-floor { min-height: 320px; }
+        .desk-slot { transform: scale(.85); }
         .office-stats { gap: 12px; }
         .office-header { flex-direction: column; align-items: flex-start; gap: 12px; }
         .findings-header { flex-direction: column; gap: 10px; align-items: flex-start; }
+        .office-whiteboard { display: none; }
+        .office-clock { display: none; }
     }
 </style>
 
@@ -621,6 +680,61 @@
 
     <div class="office-floor">
         <div class="floor-grid"></div>
+        <!-- Office furniture - static elements -->
+        <div class="office-wall-top">
+            <div class="office-window" style="left:40px;">
+                <span class="window-star" style="top:6px;left:12px;animation-delay:0s;"></span>
+                <span class="window-star" style="top:14px;left:50px;animation-delay:1.2s;"></span>
+                <span class="window-star" style="top:8px;left:35px;animation-delay:2.1s;"></span>
+            </div>
+            <div class="office-window" style="left:160px;">
+                <span class="window-star" style="top:10px;left:20px;animation-delay:.8s;"></span>
+                <span class="window-star" style="top:5px;left:55px;animation-delay:1.7s;"></span>
+            </div>
+            <div class="office-window" style="right:180px;">
+                <span class="window-star" style="top:12px;left:15px;animation-delay:.4s;"></span>
+                <span class="window-star" style="top:6px;left:45px;animation-delay:2.5s;"></span>
+            </div>
+            <div class="office-whiteboard"></div>
+            <div class="office-clock">
+                <div class="clock-hand-m"></div>
+                <div class="clock-hand-h"></div>
+            </div>
+        </div>
+        <div class="office-wall-left">
+            <div class="office-bookshelf">
+                <div class="shelf-row">
+                    <div class="shelf-book" style="height:10px;background:#ef4444;"></div>
+                    <div class="shelf-book" style="height:12px;background:#3b82f6;"></div>
+                    <div class="shelf-book" style="height:9px;background:#f59e0b;"></div>
+                </div>
+                <div class="shelf-row">
+                    <div class="shelf-book" style="height:11px;background:#8b5cf6;"></div>
+                    <div class="shelf-book" style="height:10px;background:#10b981;"></div>
+                    <div class="shelf-book" style="height:13px;background:#ec4899;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="warren-office"></div>
+        <div class="office-rug"></div>
+        <!-- Plants -->
+        <div class="office-plant" style="top:50px;right:20px;">
+            <div class="plant-leaves" style="--r:-20deg;">
+                <div class="plant-leaf"></div><div class="plant-leaf"></div><div class="plant-leaf"></div>
+            </div>
+            <div class="plant-pot"></div>
+        </div>
+        <div class="office-plant" style="bottom:15px;right:30px;">
+            <div class="plant-leaves" style="--r:10deg;">
+                <div class="plant-leaf"></div><div class="plant-leaf"></div><div class="plant-leaf"></div>
+            </div>
+            <div class="plant-pot"></div>
+        </div>
+        <!-- Water cooler -->
+        <div class="office-cooler">
+            <div class="cooler-tank"></div>
+            <div class="cooler-base"></div>
+        </div>
         <div id="office-desks">
             <!-- Desks placed by JS -->
         </div>
@@ -830,19 +944,33 @@ const TRAIN_GUIDANCE = {
     },
 };
 
-// Desk positions in the isometric grid (x%, y% of floor)
+// Desk positions in the office (x%, y% of floor)
 const DESK_POSITIONS = [
-    { key: 'warren', x: 42, y: 8 },   // Warren gets the corner office
-    { key: 'scout',  x: 10, y: 30 },
-    { key: 'penny',  x: 30, y: 30 },
-    { key: 'ace',    x: 55, y: 30 },
-    { key: 'radar',  x: 75, y: 30 },
-    { key: 'hawk',   x: 10, y: 60 },
-    { key: 'pulse',  x: 30, y: 60 },
-    { key: 'spark',  x: 55, y: 60 },
-    { key: 'bridge', x: 75, y: 60 },
-    { key: 'chief',  x: 42, y: 85 },  // Chief near the door, QA checkpoint
+    { key: 'warren', x: 6,  y: 14 },  // Corner office
+    { key: 'scout',  x: 28, y: 14 },
+    { key: 'penny',  x: 50, y: 14 },
+    { key: 'ace',    x: 72, y: 14 },
+    { key: 'radar',  x: 6,  y: 44 },
+    { key: 'hawk',   x: 28, y: 44 },
+    { key: 'pulse',  x: 50, y: 44 },
+    { key: 'spark',  x: 72, y: 44 },
+    { key: 'bridge', x: 28, y: 74 },
+    { key: 'chief',  x: 50, y: 74 },  // Chief by the door, QA checkpoint
 ];
+
+// Each agent gets a unique accessory emoji and body style hint
+const AGENT_AVATARS = {
+    warren: { accessory: '\u2B50', bodyBorder: '1px solid rgba(255,255,255,.2)' },  // Star - boss
+    scout:  { accessory: '\uD83D\uDCC8', bodyBorder: 'none' },  // Chart
+    penny:  { accessory: '\uD83D\uDCB0', bodyBorder: 'none' },  // Money bag
+    ace:    { accessory: '\u270F\uFE0F', bodyBorder: 'none' },   // Pencil
+    radar:  { accessory: '\uD83D\uDEE1\uFE0F', bodyBorder: 'none' }, // Shield
+    hawk:   { accessory: '\uD83D\uDD2D', bodyBorder: 'none' },  // Telescope
+    pulse:  { accessory: '\uD83D\uDCCA', bodyBorder: 'none' },  // Bar chart
+    spark:  { accessory: '\uD83D\uDCA1', bodyBorder: 'none' },  // Lightbulb
+    bridge: { accessory: '\uD83D\uDD17', bodyBorder: 'none' },  // Link
+    chief:  { accessory: '\uD83D\uDCCB', bodyBorder: '1px solid rgba(255,255,255,.15)' }, // Clipboard
+};
 
 let allFindings = [];
 let currentFilter = 'all';
@@ -858,6 +986,7 @@ function renderOffice(latestData) {
         const agent = AGENTS.find(a => a.key === pos.key);
         if (!agent) return;
         const color = AGENT_COLORS[pos.key] || '#6b7280';
+        const avatar = AGENT_AVATARS[pos.key] || {};
         const isHired = !!hiredAgents[pos.key];
         const isTrained = isHired && hiredAgents[pos.key].trained;
         const agentLatest = latest[pos.key];
@@ -869,17 +998,22 @@ function renderOffice(latestData) {
             isWorking ? 'working' : '',
         ].filter(Boolean).join(' ');
 
-        html += `<div class="${classes}" style="left:${pos.x}%;top:${pos.y}%;" onclick="openHireModal('${pos.key}')" title="${agent.name} - ${agent.role}">`;
+        html += `<div class="${classes}" data-agent="${pos.key}" style="left:${pos.x}%;top:${pos.y}%;" onclick="openHireModal('${pos.key}')" title="${agent.name} - ${agent.role}">`;
         html += `<div class="desk-nameplate"><span>${agent.name}</span><span class="np-role">${agent.role}</span></div>`;
 
         // Agent character (only if hired)
         html += `<div class="desk-agent ${isEmpty ? 'hidden' : ''}">`;
+        if (avatar.accessory) {
+            html += `<div class="agent-accessory">${avatar.accessory}</div>`;
+        }
         html += `<div class="agent-head" style="background:${color};"></div>`;
-        html += `<div class="agent-body" style="background:${color};opacity:.7;"></div>`;
+        html += `<div class="agent-body" style="background:${color};opacity:.8;${avatar.bodyBorder ? 'border:'+avatar.bodyBorder+';' : ''}"></div>`;
         html += `</div>`;
 
         // Monitor
         html += `<div class="desk-monitor ${isWorking ? 'active' : ''}"></div>`;
+        // Chair
+        html += `<div class="desk-chair"></div>`;
         // Desk
         html += `<div class="desk-base"></div>`;
 
