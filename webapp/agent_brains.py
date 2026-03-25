@@ -245,6 +245,12 @@ RULES:
 - Rising CPC with falling CTR = ad fatigue signal
 - Compare against industry benchmarks when provided
 
+RULES FOR "steps":
+- Every finding MUST include a "steps" array with 2-5 specific actions in order.
+- Each step = one concrete action the user can take (e.g. "Pause campaign X in Google Ads", "Create a new ad set targeting...")
+- Steps should be sequential - do step 1 first, then step 2, etc.
+- Never write vague steps like "Optimize your campaign". Be specific: which campaign, which setting, what value.
+
 OUTPUT FORMAT (strict JSON):
 {
   "findings": [
@@ -254,7 +260,8 @@ OUTPUT FORMAT (strict JSON):
       "detail": "1-2 sentence explanation with specific numbers",
       "campaign": "campaign name or null",
       "platform": "google|meta|both",
-      "action": "specific action to take",
+      "action": "one-line summary of the fix",
+      "steps": ["first concrete step", "second concrete step", "third concrete step"],
       "impact_estimate": "dollar/lead impact if possible"
     }
   ],
@@ -303,7 +310,8 @@ OUTPUT FORMAT (strict JSON):
       "severity": "critical|warning|info|positive",
       "title": "short headline",
       "detail": "explanation with dollar figures",
-      "action": "specific recommendation",
+      "action": "one-line summary of the fix",
+      "steps": ["first concrete step", "second concrete step", "third concrete step"],
       "dollars_at_stake": "estimated dollar impact or null"
     }
   ],
@@ -361,7 +369,8 @@ OUTPUT FORMAT (strict JSON):
       "severity": "critical|warning|info|positive",
       "title": "short headline",
       "detail": "analysis with specific ad references",
-      "action": "specific copy recommendation"
+      "action": "one-line summary of the fix",
+      "steps": ["first concrete step", "second concrete step", "third concrete step"]
     }
   ],
   "test_ideas": [
@@ -416,7 +425,8 @@ OUTPUT FORMAT (strict JSON):
       "severity": "critical|warning|info|positive",
       "title": "short headline",
       "detail": "explanation with specific data points",
-      "action": "recommended response or fix"
+      "action": "one-line summary of the fix",
+      "steps": ["first concrete step", "second concrete step", "third concrete step"]
     }
   ],
   "reputation_score": {
@@ -474,7 +484,8 @@ OUTPUT FORMAT (strict JSON):
       "title": "short headline",
       "detail": "specific competitive insight",
       "competitor": "competitor name or null",
-      "action": "recommended response"
+      "action": "one-line summary of the fix",
+      "steps": ["first concrete step", "second concrete step", "third concrete step"]
     }
   ],
   "summary": "2-3 sentence competitive landscape assessment",
@@ -524,7 +535,8 @@ OUTPUT FORMAT (strict JSON):
       "severity": "critical|warning|info|positive",
       "title": "short headline",
       "detail": "specific SEO insight with data",
-      "action": "recommended optimization"
+      "action": "one-line summary of the fix",
+      "steps": ["first concrete step", "second concrete step", "third concrete step"]
     }
   ],
   "keyword_opportunities": [
@@ -580,7 +592,8 @@ OUTPUT FORMAT (strict JSON):
       "severity": "critical|warning|info|positive",
       "title": "short headline",
       "detail": "content gap or opportunity with data",
-      "action": "specific content recommendation"
+      "action": "one-line summary of the fix",
+      "steps": ["first concrete step", "second concrete step", "third concrete step"]
     }
   ],
   "content_ideas": [
@@ -639,7 +652,8 @@ OUTPUT FORMAT (strict JSON):
       "severity": "critical|warning|info|positive",
       "title": "short headline",
       "detail": "lead/revenue insight with numbers",
-      "action": "specific recommendation"
+      "action": "one-line summary of the fix",
+      "steps": ["first concrete step", "second concrete step", "third concrete step"]
     }
   ],
   "pipeline": {

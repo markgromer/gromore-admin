@@ -448,6 +448,9 @@
     }
     .finding-assign-btn:hover { background: #4f46e5; color: #fff; }
     .finding-action i { margin-right: 4px; }
+    .finding-steps { list-style: none; padding: 0; margin: 6px 0 0 0; counter-reset: step-counter; }
+    .finding-steps li { font-size: 0.8rem; color: #374151; padding: 3px 0 3px 24px; position: relative; line-height: 1.4; }
+    .finding-steps li::before { counter-increment: step-counter; content: counter(step-counter); position: absolute; left: 0; top: 3px; width: 18px; height: 18px; background: #ede9fe; color: #7c3aed; border-radius: 50%; font-size: 0.65rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
     .finding-dismiss { background: none; border: none; color: #d1d5db; cursor: pointer; font-size: 1rem; padding: 4px; flex-shrink: 0; }
     .finding-dismiss:hover { color: #9ca3af; }
     .findings-empty { text-align: center; padding: 40px; color: #9ca3af; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; }
@@ -1058,10 +1061,22 @@ function renderAgentCard(agent, findingCounts) {
 }
 
 // â”€â”€ FINDINGS â”€â”€
+function parseFindingExtra(f) {
+    if (!f.extra_json) return {};
+    if (typeof f.extra_json === 'object') return f.extra_json;
+    try { return JSON.parse(f.extra_json); } catch { return {}; }
+}
+
 function renderFinding(f) {
     const agentColor = AGENT_COLORS[f.agent_key] || '#6b7280';
     const agentName = (AGENTS.find(a => a.key === f.agent_key) || {}).name || f.agent_key;
     const sevIcon = SEV_ICONS[f.severity] || 'bi-info-circle';
+    const extra = parseFindingExtra(f);
+    const steps = Array.isArray(extra.steps) ? extra.steps : [];
+    let stepsHtml = '';
+    if (steps.length) {
+        stepsHtml = '<ol class="finding-steps">' + steps.map(s => `<li>${escapeHtml(s)}</li>`).join('') + '</ol>';
+    }
     return `
     <div class="finding-card sev-${f.severity}" data-severity="${f.severity}" data-agent="${f.agent_key}" data-id="${f.id}">
         <div class="finding-sev-icon"><i class="bi ${sevIcon}"></i></div>
@@ -1070,6 +1085,7 @@ function renderFinding(f) {
             <div class="finding-title">${escapeHtml(f.title)}</div>
             <div class="finding-detail">${escapeHtml(f.detail)}</div>
             ${f.action ? `<div class="finding-action"><i class="bi bi-arrow-right-circle"></i>${escapeHtml(f.action)}</div>` : ''}
+            ${stepsHtml}
         </div>
         <button class="finding-assign-btn" onclick="event.stopPropagation();createTaskFromFinding(${f.id})" title="Create Task">
             <i class="bi bi-clipboard-plus"></i> Task
@@ -1132,7 +1148,9 @@ function updateFindingsStat() {
 function createTaskFromFinding(findingId) {
     var finding = allFindings.find(function(f) { return f.id === findingId; });
     var title = finding ? finding.title : 'Task from finding';
-    var body = { finding_id: findingId, title: title };
+    var extra = finding ? parseFindingExtra(finding) : {};
+    var steps = Array.isArray(extra.steps) ? extra.steps.map(function(s) { return { text: s }; }) : [];
+    var body = { finding_id: findingId, title: title, steps: steps };
     fetch('/client/tasks/from-finding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
