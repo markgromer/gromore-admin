@@ -586,6 +586,9 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
                 "sessions": _safe_float(_pick(ga, "metrics.sessions")),
                 "conversions": _safe_float(_pick(ga, "metrics.conversions")),
                 "conversion_rate": _safe_float(_pick(ga, "metrics.conversion_rate")),
+                "bounce_rate": _safe_float(_pick(ga, "metrics.bounce_rate")),
+                "pages_per_session": _safe_float(_pick(ga, "metrics.pages_per_session")),
+                "users": _safe_float(_pick(ga, "metrics.users")),
                 "mom": {
                     "sessions_pct": _safe_float(_pick(ga, "month_over_month.sessions.change_pct")),
                     "conversions_pct": _safe_float(_pick(ga, "month_over_month.conversions.change_pct")),

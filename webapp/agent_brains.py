@@ -1017,12 +1017,21 @@ def _build_agent_data(agent_key: str, analysis_summary: dict, brand: dict,
     parts = []
 
     # Brand context (all agents need this)
+    # Calculate actual spend from analysis if available
+    actual_spend_parts = []
+    if analysis_summary:
+        for ch_key, ch_label in [("meta", "Meta"), ("google_ads", "Google Ads")]:
+            ch_spend = (analysis_summary.get("kpis", {}).get(ch_key, {}) or {}).get("spend")
+            if ch_spend:
+                actual_spend_parts.append(f"{ch_label}: ${ch_spend:,.2f}")
+    actual_spend_line = f"\n- Actual Spend This Month: {', '.join(actual_spend_parts)}" if actual_spend_parts else ""
+
     parts.append(f"""BRAND CONTEXT:
 - Business: {brand.get('display_name', 'Unknown')}
 - Industry: {brand.get('industry', 'Unknown')}
 - Services: {brand.get('primary_services', 'N/A')}
 - Service Area: {brand.get('service_area', 'N/A')}
-- Monthly Budget: ${brand.get('monthly_budget', 0)}
+- Monthly Budget Target: ${brand.get('monthly_budget', 0)}{actual_spend_line}
 - Target CPA: ${brand.get('kpi_target_cpa', 'not set')}
 - Target Leads/mo: {brand.get('kpi_target_leads', 'not set')}
 - Target ROAS: {brand.get('kpi_target_roas', 'not set')}""")
@@ -1114,6 +1123,12 @@ GBP DATA:
                          f"Level: {gbp_audit.get('level_name', 'N/A')}")
 
     if agent_key == "hawk":
+        # Give Hawk the brand's own GBP data for comparison
+        if gbp_ctx and not gbp_ctx.get("error"):
+            parts.append(f"""\nYOUR BUSINESS GBP PROFILE:
+- Rating: {gbp_ctx.get('rating', 'N/A')} ({gbp_ctx.get('review_count', 0)} reviews)
+- Category: {gbp_ctx.get('category', 'N/A')}
+- Photos: {gbp_ctx.get('photo_count', 0)}""")
         if competitor_intel:
             parts.append(f"\nCOMPETITOR DATA ({len(competitor_intel)} tracked):")
             for comp in competitor_intel[:5]:
@@ -1870,8 +1885,11 @@ def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
         analysis, _ = build_analysis_and_suggestions_for_brand(db, brand, month)
         if analysis:
             analysis_summary = summarize_analysis_for_ai(analysis)
+        else:
+            logger.warning("Analysis build returned empty for brand %s month %s", brand_id, month)
     except Exception as e:
-        logger.warning("Analysis build failed: %s", e)
+        logger.warning("Analysis build failed for brand %s: %s", brand_id, e)
+        db.log_agent_activity(brand_id, "system", f"Analysis build error: {e}", "", "completed")
 
     try:
         from webapp.campaign_manager import list_all_campaigns
