@@ -1,4 +1,9 @@
-{% extends "client/client_base.html" %}
+"""Rebuild client_team.html with animated office scene.
+Agents walk around, chat, gather for briefing, work at desks."""
+
+PATH = "webapp/templates/client/client_team.html"
+
+PART1 = r'''{% extends "client/client_base.html" %}
 {% block title %}Your Team{% endblock %}
 
 {% block content %}
@@ -663,7 +668,10 @@ const EQUIP_POSITIONS = [
     {key:'plant3',      x:85, y:22, w:40, h:50},
     {key:'watercooler', x:92, y:44, w:40, h:55},
 ];
+'''
 
+# TRAIN_GUIDANCE is very long, split into PART2
+PART2 = r'''
 const TRAIN_GUIDANCE = {
     scout: {
         intro: "Scout analyzes your paid ad performance. Help them understand your ad strategy so they can spot what's working and what's wasting money.",
@@ -1746,3 +1754,10 @@ loadFindings();
 setInterval(loadTeamData, 30000);
 </script>
 {% endblock %}
+'''
+
+with open(PATH, "w", encoding="utf-8") as f:
+    f.write(PART1 + PART2)
+
+lines = (PART1 + PART2).count('\n') + 1
+print(f"Done. Wrote {lines} lines to {PATH}")
