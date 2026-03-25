@@ -990,6 +990,16 @@ def _load_benchmarks():
         return {}
 
 
+def _safe_float(val, default=0.0):
+    """Safely convert a value to float for formatting."""
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
 def _build_agent_data(agent_key: str, analysis_summary: dict, brand: dict,
                       campaigns: dict = None, gbp_ctx: dict = None,
                       gbp_audit: dict = None, competitor_intel: list = None,
@@ -1017,6 +1027,16 @@ def _build_agent_data(agent_key: str, analysis_summary: dict, brand: dict,
 - Target Leads/mo: {brand.get('kpi_target_leads', 'not set')}
 - Target ROAS: {brand.get('kpi_target_roas', 'not set')}""")
 
+    # Inject per-agent custom context from brand settings
+    agent_context = {}
+    try:
+        agent_context = json.loads(brand.get("agent_context") or "{}")
+    except (json.JSONDecodeError, TypeError):
+        pass
+    custom_ctx = (agent_context.get(agent_key) or "").strip()
+    if custom_ctx:
+        parts.append(f"\nOWNER INSTRUCTIONS (from the business owner, follow these):\n{custom_ctx}")
+
     if industry_bench:
         parts.append(f"\nINDUSTRY BENCHMARKS:\n{json.dumps(industry_bench, indent=2)}")
 
@@ -1033,11 +1053,11 @@ def _build_agent_data(agent_key: str, analysis_summary: dict, brand: dict,
                     for c in camp_list[:15]:
                         parts.append(
                             f"  - {c.get('name', '?')}: status={c.get('status')}, "
-                            f"spend=${c.get('spend', 0):.2f}, clicks={c.get('clicks', 0)}, "
+                            f"spend=${_safe_float(c.get('spend')):.2f}, clicks={c.get('clicks', 0)}, "
                             f"conversions={c.get('conversions', 0)}, "
-                            f"cpa=${c.get('cpa') or c.get('cost_per_result') or 0:.2f}, "
-                            f"ctr={c.get('ctr', 0):.2f}%, "
-                            f"budget=${c.get('daily_budget', 0)}/day"
+                            f"cpa=${_safe_float(c.get('cpa') or c.get('cost_per_result')):.2f}, "
+                            f"ctr={_safe_float(c.get('ctr')):.2f}%, "
+                            f"budget=${_safe_float(c.get('daily_budget')):.2f}/day"
                         )
 
         # KPI summaries for paid channels
@@ -1055,7 +1075,7 @@ def _build_agent_data(agent_key: str, analysis_summary: dict, brand: dict,
                 for st in search_terms[:20]:
                     parts.append(
                         f"  - '{st.get('query', '?')}': clicks={st.get('clicks', 0)}, "
-                        f"spend=${st.get('spend', 0):.2f}, conversions={st.get('conversions', 0)}"
+                        f"spend=${_safe_float(st.get('spend')):.2f}, conversions={st.get('conversions', 0)}"
                     )
 
         # Top ads for Ace
@@ -1066,8 +1086,8 @@ def _build_agent_data(agent_key: str, analysis_summary: dict, brand: dict,
                 parts.append(f"\nTOP META ADS ({len(top_ads)}):")
                 for ad in top_ads[:10]:
                     parts.append(
-                        f"  - {ad.get('name', '?')}: spend=${ad.get('spend', 0):.2f}, "
-                        f"clicks={ad.get('clicks', 0)}, ctr={ad.get('ctr', 0):.2f}%"
+                        f"  - {ad.get('name', '?')}: spend=${_safe_float(ad.get('spend')):.2f}, "
+                        f"clicks={ad.get('clicks', 0)}, ctr={_safe_float(ad.get('ctr')):.2f}%"
                     )
 
     if agent_key == "radar":
@@ -1108,9 +1128,9 @@ GBP DATA:
                 if intel.get("research"):
                     res = intel["research"]
                     if res.get("strengths"):
-                        parts.append(f"    Strengths: {res['strengths'][:200]}")
+                        parts.append(f"    Strengths: {str(res['strengths'])[:200]}")
                     if res.get("weaknesses"):
-                        parts.append(f"    Weaknesses: {res['weaknesses'][:200]}")
+                        parts.append(f"    Weaknesses: {str(res['weaknesses'])[:200]}")
 
     if agent_key == "pulse":
         for ch in ("gsc", "ga"):
@@ -1126,7 +1146,7 @@ GBP DATA:
                     parts.append(
                         f"  - '{q.get('query', '?')}': pos={q.get('position', '?')}, "
                         f"clicks={q.get('clicks', 0)}, impressions={q.get('impressions', 0)}, "
-                        f"ctr={q.get('ctr', 0):.1f}%"
+                        f"ctr={_safe_float(q.get('ctr')):.1f}%"
                     )
             kw_opps = seo_detail.get("keyword_opportunities", [])
             if kw_opps:
@@ -1149,7 +1169,7 @@ GBP DATA:
         if top_posts:
             parts.append(f"\nTOP SOCIAL POSTS ({len(top_posts)}):")
             for p in top_posts[:5]:
-                parts.append(f"  - {p.get('message', '?')[:80]}: engagements={p.get('engagements', 0)}")
+                parts.append(f"  - {str(p.get('message', '?'))[:80]}: engagements={p.get('engagements', 0)}")
 
     if agent_key == "bridge":
         # Lead/conversion data
@@ -1186,6 +1206,8 @@ def run_agent(agent_key: str, *, db, brand: dict, brand_id: int,
     Returns the parsed findings dict, or None on failure.
     """
     import openai
+    import re
+    import time as _time
 
     if agent_key not in AGENT_PROMPTS:
         logger.warning("Unknown agent: %s", agent_key)
@@ -1198,11 +1220,16 @@ def run_agent(agent_key: str, *, db, brand: dict, brand_id: int,
         month = datetime.now().strftime("%Y-%m")
 
     # Build agent-specific data payload
-    data_payload = _build_agent_data(
-        agent_key, analysis_summary, brand,
-        campaigns=campaigns, gbp_ctx=gbp_ctx, gbp_audit=gbp_audit,
-        competitor_intel=competitor_intel, crm_data=crm_data,
-    )
+    try:
+        data_payload = _build_agent_data(
+            agent_key, analysis_summary, brand,
+            campaigns=campaigns, gbp_ctx=gbp_ctx, gbp_audit=gbp_audit,
+            competitor_intel=competitor_intel, crm_data=crm_data,
+        )
+    except Exception as e:
+        logger.exception("Data build failed for %s: %s", agent_key, e)
+        db.log_agent_activity(brand_id, agent_key, f"{config['role']} analysis error", f"Data build: {str(e)[:80]}", "completed")
+        return None
 
     # Load agent-specific memories
     memory_context = ""
@@ -1244,21 +1271,40 @@ Reference the actual business name, services, and area. No generic output."""
     is_retry = " (retry)" if feedback else ""
     db.log_agent_activity(brand_id, agent_key, f"Running {config['role']} analysis{is_retry}", f"Month: {month}", "in_progress")
 
-    try:
-        client = openai.OpenAI(api_key=api_key)
-        resp = client.chat.completions.create(
-            model=_pick_model(brand, config["model_purpose"]),
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            temperature=0.3,
-            max_tokens=2000,
-        )
-        raw = resp.choices[0].message.content.strip()
+    model = _pick_model(brand, config["model_purpose"])
 
+    # Retry with backoff for transient errors (rate limits, server errors)
+    max_attempts = 2
+    for attempt in range(max_attempts):
+        try:
+            client = openai.OpenAI(api_key=api_key)
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+                temperature=0.3,
+                max_tokens=2000,
+            )
+            raw = resp.choices[0].message.content.strip()
+            break  # success
+        except (openai.RateLimitError, openai.APITimeoutError, openai.APIConnectionError) as e:
+            if attempt < max_attempts - 1:
+                wait = 3 * (attempt + 1)
+                logger.warning("Agent %s transient error (attempt %d), retrying in %ds: %s", agent_key, attempt + 1, wait, e)
+                _time.sleep(wait)
+                continue
+            logger.exception("Agent %s failed after %d attempts: %s", agent_key, max_attempts, e)
+            db.log_agent_activity(brand_id, agent_key, f"{config['role']} analysis error", f"API: {str(e)[:80]}", "completed")
+            return None
+        except Exception as e:
+            logger.exception("Agent %s OpenAI call failed: %s", agent_key, e)
+            db.log_agent_activity(brand_id, agent_key, f"{config['role']} analysis error", f"API: {str(e)[:80]}", "completed")
+            return None
+
+    try:
         # Parse JSON from response
-        import re
         # Strip markdown fences
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[-1]
@@ -1279,17 +1325,20 @@ Reference the actual business name, services, and area. No generic output."""
         summary = result.get("summary", "")
 
         for f in findings:
-            db.save_agent_finding(
-                brand_id=brand_id,
-                agent_key=agent_key,
-                month=month,
-                severity=f.get("severity", "info"),
-                title=f.get("title", ""),
-                detail=f.get("detail", ""),
-                action=f.get("action", ""),
-                extra_json=json.dumps({k: v for k, v in f.items()
-                                       if k not in ("severity", "title", "detail", "action")}),
-            )
+            try:
+                extra = {k: v for k, v in f.items() if k not in ("severity", "title", "detail", "action")}
+                db.save_agent_finding(
+                    brand_id=brand_id,
+                    agent_key=agent_key,
+                    month=month,
+                    severity=f.get("severity", "info"),
+                    title=str(f.get("title", ""))[:200],
+                    detail=str(f.get("detail", "")),
+                    action=str(f.get("action", "")),
+                    extra_json=json.dumps(extra, default=str),
+                )
+            except Exception as save_err:
+                logger.warning("Failed to save finding for %s: %s", agent_key, save_err)
 
         # Save agent memory if provided
         memory_note = result.get("memory")
@@ -1298,8 +1347,8 @@ Reference the actual business name, services, and area. No generic output."""
                 from webapp.ai_assistant import save_memory_with_embedding
                 save_memory_with_embedding(
                     db, brand_id, "insight",
-                    f"{config['name']}: {memory_note[:60]}",
-                    memory_note, api_key,
+                    f"{config['name']}: {str(memory_note)[:60]}",
+                    str(memory_note), api_key,
                 )
             except Exception as e:
                 logger.debug("Memory save failed for %s: %s", agent_key, e)
@@ -1323,19 +1372,41 @@ Reference the actual business name, services, and area. No generic output."""
         return result
 
     except Exception as e:
-        logger.exception("Agent %s failed: %s", agent_key, e)
-        db.log_agent_activity(brand_id, agent_key, f"{config['role']} analysis error", str(e)[:100], "completed")
+        logger.exception("Agent %s post-processing failed: %s", agent_key, e)
+        db.log_agent_activity(brand_id, agent_key, f"{config['role']} analysis error", f"Parse: {str(e)[:80]}", "completed")
         return None
 
 
+_VALID_MODELS = {
+    "gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-4.1-mini", "gpt-4.1", "o3-mini", "o4-mini",
+}
+
+# Quality tier → model mapping
+_TIER_MODELS = {
+    "efficient": {"analysis": "gpt-4o-mini", "ads": "gpt-4o-mini", "chat": "gpt-4o-mini", "images": "gpt-4o-mini"},
+    "balanced":  {"analysis": "gpt-4o-mini", "ads": "gpt-4o",      "chat": "gpt-4o-mini", "images": "gpt-4o"},
+    "premium":   {"analysis": "gpt-4.1",     "ads": "gpt-4.1",     "chat": "gpt-4.1",     "images": "gpt-4o"},
+}
+
+
 def _pick_model(brand: dict, purpose: str) -> str:
-    """Pick AI model, mirroring client_portal._pick_ai_model."""
+    """Pick AI model. Checks quality tier first, then per-purpose field, then default."""
+    # Check quality tier
+    tier = (brand.get("ai_quality_tier") or "").strip().lower()
+    if tier in _TIER_MODELS:
+        return _TIER_MODELS[tier].get(purpose, "gpt-4o-mini")
+
+    # Fall back to per-purpose brand setting
     purpose_key = f"openai_model_{purpose}"
-    return (
-        brand.get(purpose_key)
-        or brand.get("openai_model")
-        or "gpt-4o-mini"
-    )
+    model = (brand.get(purpose_key) or "").strip()
+    if model and model in _VALID_MODELS:
+        return model
+
+    model = (brand.get("openai_model") or "").strip()
+    if model and model in _VALID_MODELS:
+        return model
+
+    return "gpt-4o-mini"
 
 
 # ---------------------------------------------------------------------------

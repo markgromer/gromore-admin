@@ -3130,22 +3130,20 @@ def client_save_openai():
     brand_id = session["client_brand_id"]
 
     api_key = request.form.get("openai_api_key", "").strip()
-    model = request.form.get("openai_model", "").strip()
-    model_chat = request.form.get("openai_model_chat", "").strip()
-    model_images = request.form.get("openai_model_images", "").strip()
-    model_analysis = request.form.get("openai_model_analysis", "").strip()
-    model_ads = request.form.get("openai_model_ads", "").strip()
+    quality_tier = request.form.get("ai_quality_tier", "").strip().lower()
 
-    for key, value in {
-        "openai_model": model,
-        "openai_model_chat": model_chat,
-        "openai_model_images": model_images,
-        "openai_model_analysis": model_analysis,
-        "openai_model_ads": model_ads,
-    }.items():
-        if value not in ALLOWED_AI_MODELS:
-            value = "gpt-4o-mini"
-        db.update_brand_text_field(brand_id, key, value)
+    # Save quality tier
+    if quality_tier in ("efficient", "balanced", "premium"):
+        db.update_brand_text_field(brand_id, "ai_quality_tier", quality_tier)
+
+        # Also update the per-purpose model fields so other features (chat, blog, etc.) pick them up
+        _tier_map = {
+            "efficient": {"openai_model": "gpt-4o-mini", "openai_model_chat": "gpt-4o-mini", "openai_model_images": "gpt-4o-mini", "openai_model_analysis": "gpt-4o-mini", "openai_model_ads": "gpt-4o-mini"},
+            "balanced":  {"openai_model": "gpt-4o-mini", "openai_model_chat": "gpt-4o-mini", "openai_model_images": "gpt-4o",      "openai_model_analysis": "gpt-4o-mini", "openai_model_ads": "gpt-4o"},
+            "premium":   {"openai_model": "gpt-4.1",     "openai_model_chat": "gpt-4.1",     "openai_model_images": "gpt-4o",      "openai_model_analysis": "gpt-4.1",     "openai_model_ads": "gpt-4.1"},
+        }
+        for field, model_val in _tier_map[quality_tier].items():
+            db.update_brand_text_field(brand_id, field, model_val)
 
     # Only update key if user actually entered something (don't blank it on empty submit)
     if api_key:
@@ -3155,6 +3153,25 @@ def client_save_openai():
         db.update_brand_text_field(brand_id, "openai_api_key", api_key)
 
     flash("AI settings saved.", "success")
+    return redirect(url_for("client.client_settings"))
+
+
+@client_bp.route("/settings/agent-context", methods=["POST"])
+@client_login_required
+def client_save_agent_context():
+    """Save per-agent custom instructions."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    valid_agents = {"scout", "penny", "ace", "radar", "hawk", "pulse", "spark", "bridge"}
+    context = {}
+    for agent_key in valid_agents:
+        val = (request.form.get(f"agent_ctx_{agent_key}") or "").strip()[:1000]
+        if val:
+            context[agent_key] = val
+
+    db.update_brand_text_field(brand_id, "agent_context", json.dumps(context))
+    flash("Team instructions saved.", "success")
     return redirect(url_for("client.client_settings"))
 
 

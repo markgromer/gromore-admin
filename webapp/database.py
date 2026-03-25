@@ -724,6 +724,8 @@ class WebDB:
             ("wp_username", "TEXT DEFAULT ''"),
             ("wp_app_password", "TEXT DEFAULT ''"),
             ("crm_avg_service_price", "REAL DEFAULT 0"),
+            ("ai_quality_tier", "TEXT DEFAULT 'balanced'"),
+            ("agent_context", "TEXT DEFAULT '{}'"),
         ]
         for col_name, col_def in new_brand_cols:
             if col_name not in brand_columns:
