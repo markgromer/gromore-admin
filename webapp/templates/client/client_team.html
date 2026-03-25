@@ -726,8 +726,9 @@ function runTeam() {
     const status = document.getElementById('run-status');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Running...';
-    status.textContent = 'This takes 30-90 seconds. Your team is analyzing your data...';
+    status.textContent = 'Starting your team run...';
 
+    // Kick off the background run
     fetch('{{ url_for("client.client_team_run") }}', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -735,34 +736,88 @@ function runTeam() {
     })
     .then(r => r.json())
     .then(data => {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-play-circle"></i> Run My Team';
-        if (data.success) {
-            const qa = data.qa || {};
-            let statusMsg = `Done - ${data.total_findings} findings from ${data.agents_ran.length} agents.`;
-            if (qa.overall_grade && qa.overall_grade !== 'N/A') {
-                statusMsg += ` Warren's grade: ${qa.overall_grade}.`;
-                if (qa.killed > 0) statusMsg += ` ${qa.killed} killed.`;
-                if (qa.reworked > 0) statusMsg += ` ${qa.reworked} sent back for rework.`;
-                if (qa.retried_agents && qa.retried_agents.length > 0) {
-                    statusMsg += ` Retried: ${qa.retried_agents.join(', ')}.`;
-                }
-                statusMsg += ` ${qa.shipped || 0} shipped.`;
-            }
-            status.textContent = statusMsg;
-            loadFindings();
-            loadTeamData();
-        } else {
+        if (data.status === 'running' || (data.success && data.status === 'running')) {
+            pollRunStatus();
+        } else if (data.success === false) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-play-circle"></i> Run My Team';
             status.textContent = data.error || 'Something went wrong.';
         }
-        setTimeout(() => { status.textContent = ''; }, 8000);
     })
     .catch(err => {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-play-circle"></i> Run My Team';
-        status.textContent = 'Network error. Try again.';
-        console.error('Run team error:', err);
+        status.textContent = 'Failed to start. Try again.';
+        console.error('Run team start error:', err);
     });
+}
+
+function pollRunStatus() {
+    const btn = document.getElementById('run-team-btn');
+    const status = document.getElementById('run-status');
+    let pollCount = 0;
+    const maxPolls = 120; // 4 minutes max at 2s interval
+
+    const phases = [
+        'Agents are analyzing your data...',
+        'Chief is running quality checks...',
+        'Warren is reviewing the team output...',
+        'Finishing up...',
+    ];
+
+    const interval = setInterval(() => {
+        pollCount++;
+        // Rotate status messages
+        const phase = phases[Math.min(Math.floor(pollCount / 8), phases.length - 1)];
+        const dots = '.'.repeat((pollCount % 3) + 1);
+        status.textContent = phase.replace('...', dots);
+
+        fetch('{{ url_for("client.client_team_run_status") }}')
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'running') {
+                    // Still going, keep polling
+                    return;
+                }
+
+                // Done or error - stop polling
+                clearInterval(interval);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-play-circle"></i> Run My Team';
+
+                if (data.status === 'done' && data.success) {
+                    const qa = data.qa || {};
+                    let statusMsg = `Done - ${data.total_findings} findings from ${data.agents_ran.length} agents.`;
+                    if (qa.overall_grade && qa.overall_grade !== 'N/A') {
+                        statusMsg += ` Warren's grade: ${qa.overall_grade}.`;
+                        if (qa.killed > 0) statusMsg += ` ${qa.killed} killed.`;
+                        if (qa.reworked > 0) statusMsg += ` ${qa.reworked} sent back for rework.`;
+                        if (qa.retried_agents && qa.retried_agents.length > 0) {
+                            statusMsg += ` Retried: ${qa.retried_agents.join(', ')}.`;
+                        }
+                        statusMsg += ` ${qa.shipped || 0} shipped.`;
+                    }
+                    status.textContent = statusMsg;
+                    loadFindings();
+                    loadTeamData();
+                } else {
+                    status.textContent = data.error || 'Run completed with errors.';
+                }
+                setTimeout(() => { status.textContent = ''; }, 10000);
+            })
+            .catch(err => {
+                // Network hiccup on poll - don't stop, just try again
+                console.warn('Poll error:', err);
+            });
+
+        if (pollCount >= maxPolls) {
+            clearInterval(interval);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-play-circle"></i> Run My Team';
+            status.textContent = 'Run is taking longer than expected. Check back in a minute.';
+            setTimeout(() => { status.textContent = ''; }, 8000);
+        }
+    }, 2000);
 }
 
 function timeAgo(dateStr) {

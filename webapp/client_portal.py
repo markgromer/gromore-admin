@@ -9,6 +9,8 @@ import os
 import json
 import re
 import time
+import threading
+import logging
 from functools import wraps
 from datetime import datetime
 
@@ -5433,10 +5435,67 @@ def client_dismiss_finding(finding_id):
     return jsonify({"success": True})
 
 
+# ── Background agent run tracker ──
+_agent_runs = {}  # brand_id -> {"status": "running"|"done"|"error", "result": {...}, "started": float}
+_agent_runs_lock = threading.Lock()
+
+_logger = logging.getLogger(__name__)
+
+
+def _run_agents_background(app, brand_id, brand, api_key, month):
+    """Run the full agent pipeline in a background thread."""
+    with app.app_context():
+        try:
+            db = app.db
+            db.clear_agent_findings(brand_id, month)
+
+            from webapp.agent_brains import run_all_agents
+            results = run_all_agents(db, brand, brand_id, api_key, month=month)
+
+            ran = [k for k, v in results.items() if v is not None and k != "_qa"]
+            skipped = [k for k, v in results.items() if v is None and k != "_qa"]
+            post_qa_findings = db.get_agent_findings(brand_id, month=month, limit=200)
+            total_findings = len(post_qa_findings)
+
+            qa = results.get("_qa", {})
+            warren = qa.get("warren", {})
+            qa_report = qa.get("qa_report", {})
+            retried = qa.get("retried_agents", [])
+            applied = warren.get("applied", {})
+
+            with _agent_runs_lock:
+                _agent_runs[brand_id] = {
+                    "status": "done",
+                    "result": {
+                        "success": True,
+                        "agents_ran": ran,
+                        "agents_skipped": skipped,
+                        "total_findings": total_findings,
+                        "qa": {
+                            "overall_grade": warren.get("overall_grade", "N/A"),
+                            "overall_notes": warren.get("overall_notes", qa_report.get("team_notes", "")),
+                            "shipped": applied.get("shipped", 0),
+                            "killed": applied.get("killed", 0),
+                            "reworked": applied.get("rework", 0),
+                            "retried_agents": retried,
+                            "pre_test_issues": len(qa_report.get("pre_test_issues", [])),
+                            "chief_reviews": len(qa_report.get("chief_reviews", [])),
+                        },
+                    },
+                }
+        except Exception as e:
+            _logger.exception("Background agent run failed for brand %s: %s", brand_id, e)
+            with _agent_runs_lock:
+                _agent_runs[brand_id] = {
+                    "status": "error",
+                    "result": {"success": False, "error": str(e)[:200]},
+                }
+
+
 @client_bp.route("/team/run", methods=["POST"])
 @client_login_required
 def client_team_run():
-    """Trigger an agent run for the current brand. Runs all eligible agents."""
+    """Kick off agent run in background thread. Returns immediately."""
     db = _get_db()
     brand_id = session["client_brand_id"]
     brand = db.get_brand(brand_id)
@@ -5450,41 +5509,51 @@ def client_team_run():
     month = request.get_json(silent=True) or {}
     month = month.get("month") or datetime.now().strftime("%Y-%m")
 
-    # Clear old findings for fresh run
-    db.clear_agent_findings(brand_id, month)
+    # Check if already running
+    with _agent_runs_lock:
+        existing = _agent_runs.get(brand_id, {})
+        if existing.get("status") == "running":
+            elapsed = time.time() - existing.get("started", 0)
+            if elapsed < 300:  # 5 min safety cap
+                return jsonify({"success": True, "status": "running", "elapsed": int(elapsed)})
 
-    from webapp.agent_brains import run_all_agents
-    results = run_all_agents(db, brand, brand_id, api_key, month=month)
+    # Start background run
+    with _agent_runs_lock:
+        _agent_runs[brand_id] = {"status": "running", "started": time.time(), "result": None}
 
-    ran = [k for k, v in results.items() if v is not None and k != "_qa"]
-    skipped = [k for k, v in results.items() if v is None and k != "_qa"]
+    app = current_app._get_current_object()
+    t = threading.Thread(
+        target=_run_agents_background,
+        args=(app, brand_id, brand, api_key, month),
+        daemon=True,
+    )
+    t.start()
 
-    # Count findings AFTER full QA pipeline (rejected/killed ones are already dismissed)
-    post_qa_findings = db.get_agent_findings(brand_id, month=month, limit=200)
-    total_findings = len(post_qa_findings)
+    return jsonify({"success": True, "status": "running"})
 
-    qa = results.get("_qa", {})
-    warren = qa.get("warren", {})
-    qa_report = qa.get("qa_report", {})
-    retried = qa.get("retried_agents", [])
-    applied = warren.get("applied", {})
 
-    return jsonify({
-        "success": True,
-        "agents_ran": ran,
-        "agents_skipped": skipped,
-        "total_findings": total_findings,
-        "qa": {
-            "overall_grade": warren.get("overall_grade", "N/A"),
-            "overall_notes": warren.get("overall_notes", qa_report.get("team_notes", "")),
-            "shipped": applied.get("shipped", 0),
-            "killed": applied.get("killed", 0),
-            "reworked": applied.get("rework", 0),
-            "retried_agents": retried,
-            "pre_test_issues": len(qa_report.get("pre_test_issues", [])),
-            "chief_reviews": len(qa_report.get("chief_reviews", [])),
-        },
-    })
+@client_bp.route("/team/run/status", methods=["GET"])
+@client_login_required
+def client_team_run_status():
+    """Poll for agent run completion."""
+    brand_id = session["client_brand_id"]
+
+    with _agent_runs_lock:
+        run = _agent_runs.get(brand_id)
+
+    if not run:
+        return jsonify({"status": "idle"})
+
+    if run["status"] == "running":
+        elapsed = time.time() - run.get("started", 0)
+        return jsonify({"status": "running", "elapsed": int(elapsed)})
+
+    # Done or error - return result and clear
+    result = run.get("result", {})
+    with _agent_runs_lock:
+        _agent_runs.pop(brand_id, None)
+
+    return jsonify({"status": run["status"], **result})
 
 
 # ── Drip Unsubscribe (public, no auth) ──
