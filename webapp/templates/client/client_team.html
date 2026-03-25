@@ -348,6 +348,36 @@
         color: #9ca3af;
         margin-top: 6px;
     }
+    .train-q-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .train-q-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        font-size: .84rem;
+        color: #374151;
+        line-height: 1.4;
+        background: #f8fafc;
+        border-radius: 8px;
+        padding: 8px 12px;
+        border-left: 3px solid #6366f1;
+    }
+    .train-q-num {
+        flex-shrink: 0;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: #6366f1;
+        color: #fff;
+        font-size: .72rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
     .hire-btn {
         display: inline-flex;
         align-items: center;
@@ -617,10 +647,11 @@
             <!-- Step 2: Train -->
             <div class="hire-step" id="hire-step-2">
                 <p style="font-size:.88rem;color:#4b5563;margin-bottom:16px;">
-                    Tell this agent about your business so they can do better work. What should they know about your goals, customers, services, or preferences?
+                    <span id="train-guidance">Tell this agent about your business so they can do better work.</span>
                 </p>
-                <label class="train-label">Training Instructions (optional)</label>
-                <textarea class="train-textarea" id="train-textarea" placeholder="e.g. We're a plumbing company in Phoenix. Our highest-margin service is whole-home repipes. Most leads come from Google. Our target customer is homeowners 35-65."></textarea>
+                <div id="train-questions" style="margin-bottom:14px;"></div>
+                <label class="train-label" id="train-label">Training Instructions (optional)</label>
+                <textarea class="train-textarea" id="train-textarea" placeholder=""></textarea>
                 <div class="train-hint">You can always update this later in Settings > Team Instructions.</div>
                 <div class="train-progress" id="train-progress">
                     <div class="train-progress-bar" id="train-progress-bar"></div>
@@ -694,6 +725,109 @@ const AGENT_ICONS = {
 const SEV_ICONS = {
     critical: 'bi-exclamation-triangle-fill', warning: 'bi-exclamation-circle-fill',
     positive: 'bi-check-circle-fill', info: 'bi-info-circle-fill'
+};
+
+const TRAIN_GUIDANCE = {
+    scout: {
+        intro: "Scout analyzes your paid ad performance. Help them understand your ad strategy so they can spot what's working and what's wasting money.",
+        questions: [
+            "What platforms are you running ads on? (Google, Meta, both?)",
+            "What's your most important campaign or service to advertise?",
+            "What does a good lead cost for your business? Any CPA targets?",
+            "Are there services or areas you do NOT want advertised?",
+        ],
+        placeholder: "e.g. We run Google Ads and Meta. Our bread and butter is emergency plumbing, but we're trying to grow our repipe business. A good lead costs us under $45. Don't run ads for drain cleaning, margins are too thin.",
+    },
+    penny: {
+        intro: "Penny watches your ad spend like a hawk. Tell her about your budget goals so she can flag waste and find savings.",
+        questions: [
+            "What's your monthly ad budget across all platforms?",
+            "Any budget split between platforms? (e.g. 70% Google, 30% Meta)",
+            "What's your target cost per lead or cost per acquisition?",
+            "Are there months where you scale up or pull back spending?",
+        ],
+        placeholder: "e.g. We spend about $3,000/mo total. Roughly $2,000 on Google, $1,000 on Meta. Target CPA is $40. We ramp up in spring and cut back Dec-Jan.",
+    },
+    ace: {
+        intro: "Ace reviews your ad creative - headlines, descriptions, images. Tell them what resonates with your customers so they can sharpen your messaging.",
+        questions: [
+            "What tone works best for your customers? (professional, friendly, urgent?)",
+            "What offers or hooks have worked well in the past?",
+            "Any phrases, slogans, or selling points you always want included?",
+            "What should your ads NEVER say?",
+        ],
+        placeholder: "e.g. Our customers respond to trust and speed. 'Same-day service' and 'Licensed & insured since 2003' always perform well. Never use the word 'cheap'. Our main hook is the free inspection offer.",
+    },
+    radar: {
+        intro: "Radar monitors your online reputation - reviews, ratings, and local presence. Help them understand your review landscape.",
+        questions: [
+            "What's your current Google star rating, roughly?",
+            "Do you actively ask customers for reviews? How?",
+            "Any recurring complaints or themes in negative reviews?",
+            "Are there other review sites that matter for your industry? (Yelp, BBB, Angi?)",
+        ],
+        placeholder: "e.g. We're at 4.6 stars with about 180 reviews. We text customers a review link after each job. Biggest complaint is scheduling delays during busy season. Yelp matters for us too.",
+    },
+    hawk: {
+        intro: "Hawk keeps tabs on your competitors. Tell them who you're up against so they can track the right businesses.",
+        questions: [
+            "Who are your top 2-3 competitors in your area?",
+            "What are they doing well that concerns you?",
+            "Where do you think you beat them?",
+            "Any competitors running aggressive ads or undercutting on price?",
+        ],
+        placeholder: "e.g. Main competitors are Roto-Rooter, Jones Plumbing, and AZ Pipe Pros. Roto-Rooter dominates on Google Ads spend. Jones has more reviews than us. We beat them all on response time and warranty coverage.",
+    },
+    pulse: {
+        intro: "Pulse tracks your organic search rankings, website traffic, and SEO performance. Help them understand your online presence.",
+        questions: [
+            "What search terms do you most want to rank for?",
+            "Do you have a blog or publish content regularly?",
+            "What pages on your site generate the most leads?",
+            "Any SEO work done previously? What worked or didn't?",
+        ],
+        placeholder: "e.g. We want to rank for 'emergency plumber Phoenix' and 'repipe specialist Scottsdale'. We have a blog but haven't posted in months. Our water heater page gets the most traffic. Had an SEO agency before but they just built spammy backlinks.",
+    },
+    spark: {
+        intro: "Spark creates content for your brand - blog posts, social media, email. Give them your voice so everything sounds like you.",
+        questions: [
+            "How would you describe your brand's personality in 3 words?",
+            "What topics does your audience care about most?",
+            "Any content formats that work well? (how-to posts, before/after, tips?)",
+            "What should Spark never write about or never say?",
+        ],
+        placeholder: "e.g. Our brand is honest, helpful, no-BS. Customers love our 'is it worth repairing?' posts. Before/after photos get great engagement on social. Never use scare tactics or make people feel dumb for asking questions.",
+    },
+    bridge: {
+        intro: "Bridge connects your marketing to your sales pipeline. Help them understand how leads flow through your business.",
+        questions: [
+            "How do leads typically contact you? (phone, form, chat?)",
+            "Do you use a CRM? Which one?",
+            "What's your average close rate from lead to paying customer?",
+            "What's your average job value or service ticket?",
+        ],
+        placeholder: "e.g. Most leads call us directly. We use ServiceTitan as our CRM. Close rate is about 60% for standard calls, 80% for emergencies. Average ticket is $350 for repairs, $8,000 for repipes.",
+    },
+    chief: {
+        intro: "Chief is your QA manager - they review every finding before you see it. Tell them your standards so they filter out the noise.",
+        questions: [
+            "What kind of recommendations do you find most valuable?",
+            "Anything you're tired of hearing from marketing tools? (generic advice, obvious stuff?)",
+            "How specific do you need recommendations to be before they're useful?",
+            "Any topics that are off the table or not relevant to your business?",
+        ],
+        placeholder: "e.g. I only want to see stuff I can actually act on this week. Tired of 'optimize your landing page' without specifics. If it's not backed by real data from MY account, don't show it. Don't bother me with social media stuff, we don't do that.",
+    },
+    warren: {
+        intro: "Warren is your senior strategist and team lead. Help him understand your big-picture business goals.",
+        questions: [
+            "What's the #1 thing you want marketing to achieve this quarter?",
+            "Are you trying to grow, maintain, or shift your business focus?",
+            "What does success look like for you in 90 days?",
+            "Anything important happening in your business soon? (new service, expansion, slow season?)",
+        ],
+        placeholder: "e.g. Main goal is hitting 50 leads/month by June. We're expanding into Scottsdale and need to build presence there. Success in 90 days means a full pipeline and booked out 2 weeks ahead. Launching a new water treatment service in April.",
+    },
 };
 
 // Desk positions in the isometric grid (x%, y% of floor)
@@ -799,6 +933,7 @@ function openHireModal(agentKey) {
         // Already hired but not trained
         document.getElementById('hire-step-2').classList.add('active');
         document.getElementById('train-textarea').value = '';
+        populateTrainStep(agentKey, agent.name);
     } else {
         // Already fully onboarded, show info
         document.getElementById('hire-step-3').classList.add('active');
@@ -812,6 +947,28 @@ function openHireModal(agentKey) {
 function closeHireModal() {
     document.getElementById('hire-modal-backdrop').classList.remove('show');
     currentHireAgent = null;
+}
+
+function populateTrainStep(agentKey, agentName) {
+    const g = TRAIN_GUIDANCE[agentKey];
+    const guidanceEl = document.getElementById('train-guidance');
+    const questionsEl = document.getElementById('train-questions');
+    const textarea = document.getElementById('train-textarea');
+    const label = document.getElementById('train-label');
+
+    if (g) {
+        guidanceEl.textContent = g.intro;
+        label.textContent = 'Your answers for ' + agentName;
+        textarea.placeholder = g.placeholder;
+        questionsEl.innerHTML = '<div class="train-q-list">' +
+            g.questions.map((q, i) => `<div class="train-q-item"><span class="train-q-num">${i+1}</span>${q}</div>`).join('') +
+            '</div>';
+    } else {
+        guidanceEl.textContent = 'Tell ' + agentName + ' about your business so they can do better work.';
+        label.textContent = 'Training Instructions (optional)';
+        textarea.placeholder = '';
+        questionsEl.innerHTML = '';
+    }
 }
 
 function confirmHire() {
@@ -835,6 +992,8 @@ function confirmHire() {
             document.querySelectorAll('.hire-step').forEach(s => s.classList.remove('active'));
             document.getElementById('hire-step-2').classList.add('active');
             document.getElementById('train-textarea').value = '';
+            const hiredAgent = AGENTS.find(a => a.key === currentHireAgent);
+            populateTrainStep(currentHireAgent, hiredAgent ? hiredAgent.name : currentHireAgent);
         } else {
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-person-plus"></i> Hire This Agent';
