@@ -1,4 +1,16 @@
-{% extends "client/client_base.html" %}
+"""Rewrite client_team.html with redesigned team roster layout."""
+import re
+
+PATH = "webapp/templates/client/client_team.html"
+
+# Read current file to extract TRAIN_GUIDANCE and other data we need to preserve
+with open(PATH, "r", encoding="utf-8") as f:
+    old = f.read()
+
+# Extract everything from TRAIN_GUIDANCE to the end of that object
+# We'll just preserve it inline in the new file
+
+new_content = r'''{% extends "client/client_base.html" %}
 {% block title %}Your Team{% endblock %}
 
 {% block content %}
@@ -545,7 +557,7 @@ const SEV_ICONS = {
     positive: 'bi-check-circle-fill', info: 'bi-info-circle-fill'
 };
 
-const TRAIN_GUIDANCE = {
+''' + r'''const TRAIN_GUIDANCE = {
     scout: {
         intro: "Scout analyzes your paid ad performance. Help them understand your ad strategy so they can spot what's working and what's wasting money.",
         questions: [
@@ -1268,3 +1280,10 @@ loadFindings();
 setInterval(loadTeamData, 30000);
 </script>
 {% endblock %}
+'''
+
+with open(PATH, "w", encoding="utf-8") as f:
+    f.write(new_content)
+
+lines = new_content.count('\n') + 1
+print(f"Done. Wrote {lines} lines to {PATH}")
