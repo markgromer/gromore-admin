@@ -1,281 +1,241 @@
-{% extends "client/client_base.html" %}
+﻿{% extends "client/client_base.html" %}
 {% block title %}Your Team{% endblock %}
 
 {% block content %}
 <style>
-    .team-hero {
-        background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 50%, #2563eb 100%);
+    /* â”€â”€ Office Scene â”€â”€ */
+    .office-wrap {
+        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #1e293b 100%);
         border-radius: 16px;
-        padding: 32px;
-        margin-bottom: 28px;
-        color: #fff;
-        position: relative;
-        overflow: hidden;
-    }
-    .team-hero::after {
-        content: '';
-        position: absolute;
-        top: -40%;
-        right: -10%;
-        width: 300px;
-        height: 300px;
-        background: rgba(255,255,255,0.06);
-        border-radius: 50%;
-    }
-    .team-hero h2 {
-        font-size: 1.5rem;
-        font-weight: 700;
-        margin-bottom: 6px;
-    }
-    .team-hero p {
-        font-size: 0.95rem;
-        opacity: 0.85;
-        margin: 0;
-    }
-    .team-stats {
-        display: flex;
-        gap: 24px;
-        margin-top: 18px;
-    }
-    .team-stat {
-        text-align: center;
-    }
-    .team-stat .stat-val {
-        font-size: 1.6rem;
-        font-weight: 700;
-    }
-    .team-stat .stat-lbl {
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        opacity: 0.7;
-    }
-
-    .agent-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-        gap: 20px;
-        margin-bottom: 32px;
-    }
-    .agent-card {
-        background: #fff;
-        border: 1px solid #e5e7eb;
-        border-radius: 14px;
         padding: 24px;
-        transition: box-shadow 0.2s, border-color 0.2s;
+        margin-bottom: 28px;
         position: relative;
+        overflow: hidden;
+        min-height: 420px;
     }
-    .agent-card:hover {
-        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-        border-color: #c7d2fe;
-    }
-    .agent-card.working {
-        border-color: #7c3aed;
-        box-shadow: 0 0 0 1px #7c3aed20, 0 4px 16px rgba(124,58,237,0.12);
-    }
-
-    .agent-header {
+    .office-header {
         display: flex;
         align-items: center;
-        gap: 14px;
-        margin-bottom: 14px;
-    }
-    .agent-avatar {
-        width: 52px;
-        height: 52px;
-        border-radius: 14px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.5rem;
-        color: #fff;
-        flex-shrink: 0;
-        position: relative;
-    }
-    .agent-avatar .pulse-ring {
-        position: absolute;
-        inset: -4px;
-        border-radius: 18px;
-        border: 2px solid currentColor;
-        opacity: 0;
-        animation: none;
-    }
-    .agent-card.working .agent-avatar .pulse-ring {
-        animation: agentPulse 2s ease-in-out infinite;
-        opacity: 1;
-    }
-    @keyframes agentPulse {
-        0% { transform: scale(1); opacity: 0.6; }
-        50% { transform: scale(1.15); opacity: 0; }
-        100% { transform: scale(1); opacity: 0; }
-    }
-
-    .agent-name {
-        font-size: 1.1rem;
-        font-weight: 700;
-        color: #1f2937;
-        margin: 0;
-    }
-    .agent-role {
-        font-size: 0.8rem;
-        color: #6b7280;
-        margin: 0;
-    }
-
-    .agent-status {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        padding: 3px 10px;
-        border-radius: 20px;
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-    }
-    .status-dot {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-    }
-    .status-working .status-dot { background: #7c3aed; }
-    .status-working { background: #ede9fe; color: #7c3aed; }
-    .status-idle .status-dot { background: #10b981; }
-    .status-idle { background: #d1fae5; color: #059669; }
-    .status-standby .status-dot { background: #f59e0b; }
-    .status-standby { background: #fef3c7; color: #d97706; }
-
-    .agent-desc {
-        font-size: 0.88rem;
-        color: #4b5563;
-        line-height: 1.5;
-        margin-bottom: 14px;
-    }
-
-    .agent-current {
-        background: #f9fafb;
-        border-radius: 10px;
-        padding: 12px 14px;
-        margin-bottom: 14px;
-        min-height: 52px;
-    }
-    .agent-current-label {
-        font-size: 0.7rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: #9ca3af;
-        margin-bottom: 4px;
-        font-weight: 600;
-    }
-    .agent-current-text {
-        font-size: 0.85rem;
-        color: #374151;
-    }
-    .agent-current-text.typing::after {
-        content: '';
-        display: inline-block;
-        width: 3px;
-        height: 14px;
-        background: #7c3aed;
-        margin-left: 4px;
-        animation: blink 1s step-end infinite;
-        vertical-align: middle;
-    }
-    @keyframes blink {
-        50% { opacity: 0; }
-    }
-
-    .agent-skills {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-    }
-    .agent-skill {
-        font-size: 0.72rem;
-        background: #f3f4f6;
-        color: #6b7280;
-        padding: 3px 8px;
-        border-radius: 6px;
-        font-weight: 500;
-    }
-
-    /* Activity feed */
-    .activity-section {
-        margin-top: 8px;
-    }
-    .activity-section h4 {
-        font-size: 1rem;
-        font-weight: 700;
-        color: #1f2937;
+        justify-content: space-between;
         margin-bottom: 16px;
+        position: relative;
+        z-index: 2;
     }
-    .activity-feed {
-        background: #fff;
-        border: 1px solid #e5e7eb;
-        border-radius: 14px;
-        overflow: hidden;
-    }
-    .activity-item {
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
-        padding: 14px 18px;
-        border-bottom: 1px solid #f3f4f6;
-        transition: background 0.15s;
-    }
-    .activity-item:last-child { border-bottom: none; }
-    .activity-item:hover { background: #fafbfc; }
-    .activity-icon {
-        width: 32px;
-        height: 32px;
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.85rem;
+    .office-header h2 {
+        font-size: 1.3rem;
+        font-weight: 700;
         color: #fff;
-        flex-shrink: 0;
-        margin-top: 2px;
+        margin: 0;
     }
-    .activity-body {
-        flex: 1;
-        min-width: 0;
+    .office-header p {
+        font-size: .85rem;
+        color: rgba(255,255,255,.5);
+        margin: 4px 0 0;
     }
-    .activity-agent {
-        font-weight: 600;
-        color: #374151;
-        font-size: 0.85rem;
+    .office-stats {
+        display: flex;
+        gap: 20px;
     }
-    .activity-action {
-        color: #6b7280;
-        font-size: 0.85rem;
-    }
-    .activity-detail {
-        font-size: 0.82rem;
-        color: #9ca3af;
-        margin-top: 2px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    .activity-time {
-        font-size: 0.72rem;
-        color: #d1d5db;
-        white-space: nowrap;
-        margin-top: 3px;
-    }
-    .empty-feed {
-        padding: 40px;
+    .office-stat {
         text-align: center;
-        color: #9ca3af;
+        color: #fff;
     }
-    .empty-feed i {
-        font-size: 2rem;
-        display: block;
-        margin-bottom: 8px;
+    .office-stat .os-val {
+        font-size: 1.4rem;
+        font-weight: 700;
+    }
+    .office-stat .os-lbl {
+        font-size: .68rem;
+        text-transform: uppercase;
+        letter-spacing: .4px;
+        opacity: .5;
     }
 
-    /* Run button */
+    /* Isometric floor */
+    .office-floor {
+        position: relative;
+        width: 100%;
+        height: 340px;
+        transform: perspective(800px) rotateX(35deg) rotateZ(-15deg);
+        transform-style: preserve-3d;
+        margin: 0 auto;
+        max-width: 900px;
+    }
+    .floor-grid {
+        position: absolute;
+        inset: 0;
+        background:
+            linear-gradient(90deg, rgba(99,102,241,.08) 1px, transparent 1px),
+            linear-gradient(0deg, rgba(99,102,241,.08) 1px, transparent 1px);
+        background-size: 60px 60px;
+        border-radius: 8px;
+        border: 1px solid rgba(99,102,241,.1);
+    }
+
+    /* Desk unit */
+    .desk-slot {
+        position: absolute;
+        width: 100px;
+        height: 70px;
+        cursor: pointer;
+        transition: transform .2s, filter .2s;
+        transform-style: preserve-3d;
+    }
+    .desk-slot:hover { transform: translateY(-4px); filter: brightness(1.1); }
+
+    .desk-base {
+        position: absolute;
+        bottom: 0;
+        left: 10px;
+        right: 10px;
+        height: 28px;
+        background: #374151;
+        border-radius: 4px;
+        box-shadow: 0 4px 0 #1f2937, 0 6px 12px rgba(0,0,0,.3);
+    }
+    .desk-base::before {
+        content: '';
+        position: absolute;
+        top: -3px;
+        left: -2px;
+        right: -2px;
+        height: 6px;
+        background: #4b5563;
+        border-radius: 3px 3px 0 0;
+    }
+    /* Monitor */
+    .desk-monitor {
+        position: absolute;
+        bottom: 28px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 36px;
+        height: 26px;
+        background: #1e293b;
+        border: 2px solid #475569;
+        border-radius: 3px;
+        box-shadow: 0 0 8px rgba(99,102,241,.3);
+    }
+    .desk-monitor.active { border-color: #6366f1; box-shadow: 0 0 12px rgba(99,102,241,.6); }
+    .desk-monitor::after {
+        content: '';
+        position: absolute;
+        bottom: -6px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 8px;
+        height: 5px;
+        background: #475569;
+        border-radius: 0 0 2px 2px;
+    }
+
+    /* Agent character (voxel-style) */
+    .desk-agent {
+        position: absolute;
+        bottom: 32px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        transition: opacity .3s, transform .3s;
+    }
+    .desk-agent.hidden { opacity: 0; transform: translateX(-50%) scale(0.5); pointer-events: none; }
+    .agent-head {
+        width: 16px;
+        height: 16px;
+        border-radius: 4px;
+        position: relative;
+        z-index: 1;
+    }
+    .agent-head::before {
+        content: '';
+        position: absolute;
+        top: 4px;
+        left: 3px;
+        width: 3px;
+        height: 3px;
+        background: rgba(255,255,255,.8);
+        border-radius: 1px;
+        box-shadow: 7px 0 0 rgba(255,255,255,.8);
+    }
+    .agent-body {
+        width: 20px;
+        height: 14px;
+        border-radius: 3px;
+        margin-top: -2px;
+    }
+
+    /* Working animation */
+    .desk-slot.working .desk-agent {
+        animation: agentBob 1.5s ease-in-out infinite;
+    }
+    @keyframes agentBob {
+        0%, 100% { transform: translateX(-50%) translateY(0); }
+        50% { transform: translateX(-50%) translateY(-3px); }
+    }
+    .desk-slot.working .desk-monitor {
+        animation: monitorGlow 2s ease-in-out infinite;
+    }
+    @keyframes monitorGlow {
+        0%, 100% { box-shadow: 0 0 8px rgba(99,102,241,.4); }
+        50% { box-shadow: 0 0 20px rgba(99,102,241,.8); }
+    }
+
+    /* Nameplate */
+    .desk-nameplate {
+        position: absolute;
+        top: -16px;
+        left: 50%;
+        transform: translateX(-50%) rotateX(-35deg) rotateZ(15deg);
+        font-size: .65rem;
+        font-weight: 700;
+        color: #fff;
+        text-align: center;
+        white-space: nowrap;
+        text-shadow: 0 1px 3px rgba(0,0,0,.5);
+    }
+    .desk-nameplate .np-role {
+        font-size: .55rem;
+        font-weight: 400;
+        opacity: .6;
+        display: block;
+    }
+
+    /* Empty desk state */
+    .desk-slot.empty .desk-monitor { opacity: .3; border-color: #334155; box-shadow: none; }
+    .desk-slot.empty .desk-base { opacity: .4; }
+    .desk-slot.empty .desk-nameplate { opacity: .3; }
+    .desk-hire-badge {
+        position: absolute;
+        top: -8px;
+        right: -4px;
+        background: #f59e0b;
+        color: #000;
+        font-size: .6rem;
+        font-weight: 800;
+        padding: 2px 6px;
+        border-radius: 8px;
+        text-transform: uppercase;
+        letter-spacing: .3px;
+        transform: rotateX(-35deg) rotateZ(15deg);
+        animation: hirePulse 2s ease-in-out infinite;
+        cursor: pointer;
+    }
+    @keyframes hirePulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,.4); }
+        50% { box-shadow: 0 0 0 6px rgba(245,158,11,0); }
+    }
+
+    /* Hero actions row */
+    .team-hero-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 16px;
+        position: relative;
+        z-index: 2;
+    }
     .run-team-btn {
         display: inline-flex;
         align-items: center;
@@ -293,183 +253,405 @@
     .run-team-btn:hover { opacity: 0.9; transform: translateY(-1px); }
     .run-team-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
     .run-team-btn .spinner-border { width: 16px; height: 16px; border-width: 2px; }
-    .team-hero-actions { margin-top: 18px; }
 
-    /* Findings section */
-    .findings-section { margin-bottom: 32px; }
-    .findings-header {
+    /* â”€â”€ Hire/Train Modal â”€â”€ */
+    .hire-modal-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.6);
+        z-index: 1050;
+        backdrop-filter: blur(4px);
+    }
+    .hire-modal-backdrop.show { display: flex; align-items: center; justify-content: center; }
+    .hire-modal {
+        background: #fff;
+        border-radius: 16px;
+        width: 460px;
+        max-width: 95vw;
+        max-height: 85vh;
+        overflow-y: auto;
+        box-shadow: 0 24px 80px rgba(0,0,0,.3);
+        position: relative;
+    }
+    .hire-modal-head {
+        padding: 24px 24px 0;
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        gap: 14px;
+    }
+    .hire-modal-avatar {
+        width: 56px;
+        height: 56px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: #fff;
+    }
+    .hire-modal-head h3 { font-size: 1.2rem; font-weight: 700; margin: 0; }
+    .hire-modal-head p { font-size: .85rem; color: #6b7280; margin: 2px 0 0; }
+    .hire-modal-close {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        background: none;
+        border: none;
+        font-size: 1.2rem;
+        color: #9ca3af;
+        cursor: pointer;
+    }
+    .hire-modal-body { padding: 20px 24px 24px; }
+    .hire-modal-desc {
+        font-size: .9rem;
+        color: #4b5563;
+        line-height: 1.55;
         margin-bottom: 16px;
     }
-    .findings-header h4 {
-        font-size: 1rem;
-        font-weight: 700;
-        color: #1f2937;
-        margin: 0;
-    }
-    .findings-filters {
+    .hire-modal-skills {
         display: flex;
-        gap: 8px;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 20px;
     }
-    .filter-pill {
-        font-size: 0.75rem;
-        font-weight: 600;
-        padding: 4px 12px;
-        border-radius: 20px;
-        border: 1px solid #e5e7eb;
-        background: #fff;
+    .hire-modal-skills span {
+        font-size: .72rem;
+        background: #f3f4f6;
         color: #6b7280;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-weight: 500;
+    }
+    .hire-step { display: none; }
+    .hire-step.active { display: block; }
+    .train-textarea {
+        width: 100%;
+        min-height: 100px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 12px;
+        font-size: .88rem;
+        resize: vertical;
+        font-family: inherit;
+    }
+    .train-textarea:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.1); }
+    .train-label {
+        font-size: .82rem;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 8px;
+        display: block;
+    }
+    .train-hint {
+        font-size: .78rem;
+        color: #9ca3af;
+        margin-top: 6px;
+    }
+    .hire-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 24px;
+        border-radius: 10px;
+        font-size: .9rem;
+        font-weight: 600;
+        border: none;
         cursor: pointer;
-        transition: all 0.15s;
+        transition: all .15s;
+    }
+    .hire-btn-primary {
+        background: linear-gradient(135deg, #7c3aed, #4f46e5);
+        color: #fff;
+    }
+    .hire-btn-primary:hover { opacity: .9; }
+    .hire-btn-secondary {
+        background: #f3f4f6;
+        color: #374151;
+    }
+    .hire-btn-secondary:hover { background: #e5e7eb; }
+    .hire-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .hire-step-actions { display: flex; gap: 10px; margin-top: 20px; }
+
+    /* Train progress animation */
+    .train-progress {
+        height: 6px;
+        background: #e5e7eb;
+        border-radius: 3px;
+        overflow: hidden;
+        margin-top: 16px;
+        display: none;
+    }
+    .train-progress.active { display: block; }
+    .train-progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #7c3aed, #4f46e5);
+        border-radius: 3px;
+        width: 0;
+        transition: width 1.5s ease-out;
+    }
+    .train-status {
+        font-size: .82rem;
+        color: #6b7280;
+        margin-top: 8px;
+        display: none;
+    }
+    .train-status.active { display: block; }
+
+    /* â”€â”€ Agent Cards Grid â”€â”€ */
+    .agent-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 20px;
+        margin-bottom: 32px;
+    }
+    .agent-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        padding: 24px;
+        transition: box-shadow 0.2s, border-color 0.2s;
+        position: relative;
+    }
+    .agent-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.08); border-color: #c7d2fe; }
+    .agent-card.working { border-color: #7c3aed; box-shadow: 0 0 0 1px #7c3aed20, 0 4px 16px rgba(124,58,237,0.12); }
+    .agent-card.not-hired { opacity: .55; filter: grayscale(.5); }
+    .agent-card.not-hired:hover { opacity: .8; filter: grayscale(.2); }
+
+    .agent-header { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+    .agent-avatar {
+        width: 52px; height: 52px; border-radius: 14px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.5rem; color: #fff; flex-shrink: 0; position: relative;
+    }
+    .agent-avatar .pulse-ring {
+        position: absolute; inset: -4px; border-radius: 18px;
+        border: 2px solid currentColor; opacity: 0; animation: none;
+    }
+    .agent-card.working .agent-avatar .pulse-ring { animation: agentCardPulse 2s ease-in-out infinite; opacity: 1; }
+    @keyframes agentCardPulse {
+        0% { transform: scale(1); opacity: 0.6; }
+        50% { transform: scale(1.15); opacity: 0; }
+        100% { transform: scale(1); opacity: 0; }
+    }
+    .agent-name { font-size: 1.1rem; font-weight: 700; color: #1f2937; margin: 0; }
+    .agent-role { font-size: 0.8rem; color: #6b7280; margin: 0; }
+    .agent-status {
+        display: inline-flex; align-items: center; gap: 6px;
+        font-size: 0.75rem; font-weight: 600; padding: 3px 10px;
+        border-radius: 20px; text-transform: uppercase; letter-spacing: 0.3px;
+    }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; }
+    .status-working .status-dot { background: #7c3aed; }
+    .status-working { background: #ede9fe; color: #7c3aed; }
+    .status-idle .status-dot { background: #10b981; }
+    .status-idle { background: #d1fae5; color: #059669; }
+    .status-standby .status-dot { background: #f59e0b; }
+    .status-standby { background: #fef3c7; color: #d97706; }
+    .status-available .status-dot { background: #9ca3af; }
+    .status-available { background: #f3f4f6; color: #9ca3af; }
+
+    .agent-desc { font-size: 0.88rem; color: #4b5563; line-height: 1.5; margin-bottom: 14px; }
+    .agent-current {
+        background: #f9fafb; border-radius: 10px; padding: 12px 14px;
+        margin-bottom: 14px; min-height: 52px;
+    }
+    .agent-current-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; margin-bottom: 4px; font-weight: 600; }
+    .agent-current-text { font-size: 0.85rem; color: #374151; }
+    .agent-current-text.typing::after {
+        content: ''; display: inline-block; width: 3px; height: 14px;
+        background: #7c3aed; margin-left: 4px;
+        animation: blink 1s step-end infinite; vertical-align: middle;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+    .agent-skills { display: flex; flex-wrap: wrap; gap: 6px; }
+    .agent-skill { font-size: 0.72rem; background: #f3f4f6; color: #6b7280; padding: 3px 8px; border-radius: 6px; font-weight: 500; }
+    .agent-hire-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+        color: #fff; border: none; padding: 6px 14px; border-radius: 8px;
+        font-size: .78rem; font-weight: 600; cursor: pointer;
+        transition: opacity .15s; margin-top: 12px;
+    }
+    .agent-hire-btn:hover { opacity: .9; }
+
+    /* Findings & Activity (unchanged) */
+    .findings-section { margin-bottom: 32px; }
+    .findings-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .findings-header h4 { font-size: 1rem; font-weight: 700; color: #1f2937; margin: 0; }
+    .findings-filters { display: flex; gap: 8px; }
+    .filter-pill {
+        font-size: 0.75rem; font-weight: 600; padding: 4px 12px; border-radius: 20px;
+        border: 1px solid #e5e7eb; background: #fff; color: #6b7280; cursor: pointer; transition: all 0.15s;
     }
     .filter-pill:hover { border-color: #c7d2fe; color: #4f46e5; }
     .filter-pill.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
-
     .finding-card {
-        background: #fff;
-        border: 1px solid #e5e7eb;
-        border-radius: 12px;
-        padding: 18px 20px;
-        margin-bottom: 12px;
-        display: flex;
-        gap: 14px;
-        align-items: flex-start;
-        transition: border-color 0.15s;
+        background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+        padding: 18px 20px; margin-bottom: 12px; display: flex; gap: 14px;
+        align-items: flex-start; transition: border-color 0.15s;
     }
     .finding-card:hover { border-color: #c7d2fe; }
     .finding-card.sev-critical { border-left: 4px solid #ef4444; }
     .finding-card.sev-warning { border-left: 4px solid #f59e0b; }
     .finding-card.sev-positive { border-left: 4px solid #10b981; }
     .finding-card.sev-info { border-left: 4px solid #3b82f6; }
-
     .finding-sev-icon {
-        width: 32px;
-        height: 32px;
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.9rem;
-        flex-shrink: 0;
+        width: 32px; height: 32px; border-radius: 8px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 0.9rem; flex-shrink: 0;
     }
     .sev-critical .finding-sev-icon { background: #fef2f2; color: #ef4444; }
     .sev-warning .finding-sev-icon { background: #fffbeb; color: #f59e0b; }
     .sev-positive .finding-sev-icon { background: #ecfdf5; color: #10b981; }
     .sev-info .finding-sev-icon { background: #eff6ff; color: #3b82f6; }
-
     .finding-body { flex: 1; min-width: 0; }
-    .finding-title {
-        font-size: 0.9rem;
-        font-weight: 600;
-        color: #1f2937;
-        margin-bottom: 4px;
-    }
-    .finding-agent {
-        font-size: 0.72rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.4px;
-        margin-bottom: 4px;
-    }
-    .finding-detail {
-        font-size: 0.85rem;
-        color: #4b5563;
-        line-height: 1.5;
-        margin-bottom: 6px;
-    }
-    .finding-action {
-        font-size: 0.82rem;
-        color: #7c3aed;
-        font-weight: 500;
-    }
+    .finding-title { font-size: 0.9rem; font-weight: 600; color: #1f2937; margin-bottom: 4px; }
+    .finding-agent { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
+    .finding-detail { font-size: 0.85rem; color: #4b5563; line-height: 1.5; margin-bottom: 6px; }
+    .finding-action { font-size: 0.82rem; color: #7c3aed; font-weight: 500; }
     .finding-action i { margin-right: 4px; }
-    .finding-dismiss {
-        background: none;
-        border: none;
-        color: #d1d5db;
-        cursor: pointer;
-        font-size: 1rem;
-        padding: 4px;
-        flex-shrink: 0;
-    }
+    .finding-dismiss { background: none; border: none; color: #d1d5db; cursor: pointer; font-size: 1rem; padding: 4px; flex-shrink: 0; }
     .finding-dismiss:hover { color: #9ca3af; }
-
-    .findings-empty {
-        text-align: center;
-        padding: 40px;
-        color: #9ca3af;
-        background: #fff;
-        border: 1px solid #e5e7eb;
-        border-radius: 12px;
-    }
+    .findings-empty { text-align: center; padding: 40px; color: #9ca3af; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; }
     .findings-empty i { font-size: 2rem; display: block; margin-bottom: 8px; }
-
     .finding-count-badge {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        background: #ef4444;
-        color: #fff;
-        font-size: 0.65rem;
-        font-weight: 700;
-        min-width: 20px;
-        height: 20px;
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0 5px;
+        position: absolute; top: 10px; right: 10px; background: #ef4444; color: #fff;
+        font-size: 0.65rem; font-weight: 700; min-width: 20px; height: 20px; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center; padding: 0 5px;
     }
     .finding-count-badge.count-0 { display: none; }
     .finding-count-badge.sev-warning { background: #f59e0b; }
     .finding-count-badge.sev-positive { background: #10b981; }
 
+    .activity-section { margin-top: 8px; }
+    .activity-section h4 { font-size: 1rem; font-weight: 700; color: #1f2937; margin-bottom: 16px; }
+    .activity-feed { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; overflow: hidden; }
+    .activity-item {
+        display: flex; align-items: flex-start; gap: 12px; padding: 14px 18px;
+        border-bottom: 1px solid #f3f4f6; transition: background 0.15s;
+    }
+    .activity-item:last-child { border-bottom: none; }
+    .activity-item:hover { background: #fafbfc; }
+    .activity-icon {
+        width: 32px; height: 32px; border-radius: 8px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 0.85rem; color: #fff; flex-shrink: 0; margin-top: 2px;
+    }
+    .activity-body { flex: 1; min-width: 0; }
+    .activity-agent { font-weight: 600; color: #374151; font-size: 0.85rem; }
+    .activity-action { color: #6b7280; font-size: 0.85rem; }
+    .activity-detail {
+        font-size: 0.82rem; color: #9ca3af; margin-top: 2px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .activity-time { font-size: 0.72rem; color: #d1d5db; white-space: nowrap; margin-top: 3px; }
+    .empty-feed { padding: 40px; text-align: center; color: #9ca3af; }
+    .empty-feed i { font-size: 2rem; display: block; margin-bottom: 8px; }
+
     @media (max-width: 768px) {
         .agent-grid { grid-template-columns: 1fr; }
-        .team-stats { gap: 16px; }
-        .team-stats .stat-val { font-size: 1.2rem; }
+        .office-floor { height: 240px; transform: perspective(600px) rotateX(30deg) rotateZ(-10deg); }
+        .desk-slot { transform: scale(.8); }
+        .office-stats { gap: 12px; }
+        .office-header { flex-direction: column; align-items: flex-start; gap: 12px; }
         .findings-header { flex-direction: column; gap: 10px; align-items: flex-start; }
     }
 </style>
 
-<!-- Hero -->
-<div class="team-hero">
-    <h2><i class="bi bi-robot me-2"></i>Your AI Team</h2>
-    <p>Ten specialists working around the clock on {{ brand_name }}'s marketing, with built-in quality control.</p>
-    <div class="team-stats">
-        <div class="team-stat">
-            <div class="stat-val" id="stat-active">-</div>
-            <div class="stat-lbl">Working Now</div>
+<!-- â•â•â• 3D OFFICE SCENE â•â•â• -->
+<div class="office-wrap">
+    <div class="office-header">
+        <div>
+            <h2><i class="bi bi-building me-2"></i>{{ brand_name }} HQ</h2>
+            <p>Your AI marketing team - hire agents, train them on your business, put them to work.</p>
         </div>
-        <div class="team-stat">
-            <div class="stat-val" id="stat-tasks">-</div>
-            <div class="stat-lbl">Tasks Today</div>
-        </div>
-        <div class="team-stat">
-            <div class="stat-val" id="stat-findings">-</div>
-            <div class="stat-lbl">Findings</div>
-        </div>
-        <div class="team-stat">
-            <div class="stat-val" id="stat-total">-</div>
-            <div class="stat-lbl">Total Actions</div>
+        <div class="office-stats">
+            <div class="office-stat">
+                <div class="os-val" id="stat-hired">0</div>
+                <div class="os-lbl">Hired</div>
+            </div>
+            <div class="office-stat">
+                <div class="os-val" id="stat-active">0</div>
+                <div class="os-lbl">Working</div>
+            </div>
+            <div class="office-stat">
+                <div class="os-val" id="stat-findings">-</div>
+                <div class="os-lbl">Findings</div>
+            </div>
         </div>
     </div>
+
     <div class="team-hero-actions">
         <button class="run-team-btn" id="run-team-btn" onclick="runTeam()">
             <i class="bi bi-play-circle"></i> Run My Team
         </button>
-        <span id="run-status" style="margin-left:12px;font-size:0.85rem;opacity:0.85;"></span>
+        <span id="run-status" style="margin-left:12px;font-size:0.85rem;opacity:0.85;color:#fff;"></span>
+    </div>
+
+    <div class="office-floor">
+        <div class="floor-grid"></div>
+        <div id="office-desks">
+            <!-- Desks placed by JS -->
+        </div>
     </div>
 </div>
 
-<!-- Agent Grid -->
-<div class="agent-grid" id="agent-grid">
-    <!-- Filled by JS -->
+<!-- â•â•â• HIRE/TRAIN MODAL â•â•â• -->
+<div class="hire-modal-backdrop" id="hire-modal-backdrop">
+    <div class="hire-modal">
+        <button class="hire-modal-close" onclick="closeHireModal()"><i class="bi bi-x-lg"></i></button>
+        <div class="hire-modal-head" id="hire-modal-head"></div>
+        <div class="hire-modal-body">
+            <!-- Step 1: Hire -->
+            <div class="hire-step active" id="hire-step-1">
+                <div class="hire-modal-desc" id="hire-modal-desc"></div>
+                <div class="hire-modal-skills" id="hire-modal-skills"></div>
+                <div class="hire-step-actions">
+                    <button class="hire-btn hire-btn-primary" id="hire-btn-confirm" onclick="confirmHire()">
+                        <i class="bi bi-person-plus"></i> Hire This Agent
+                    </button>
+                    <button class="hire-btn hire-btn-secondary" onclick="closeHireModal()">Not Now</button>
+                </div>
+            </div>
+            <!-- Step 2: Train -->
+            <div class="hire-step" id="hire-step-2">
+                <p style="font-size:.88rem;color:#4b5563;margin-bottom:16px;">
+                    Tell this agent about your business so they can do better work. What should they know about your goals, customers, services, or preferences?
+                </p>
+                <label class="train-label">Training Instructions (optional)</label>
+                <textarea class="train-textarea" id="train-textarea" placeholder="e.g. We're a plumbing company in Phoenix. Our highest-margin service is whole-home repipes. Most leads come from Google. Our target customer is homeowners 35-65."></textarea>
+                <div class="train-hint">You can always update this later in Settings > Team Instructions.</div>
+                <div class="train-progress" id="train-progress">
+                    <div class="train-progress-bar" id="train-progress-bar"></div>
+                </div>
+                <div class="train-status" id="train-status"></div>
+                <div class="hire-step-actions">
+                    <button class="hire-btn hire-btn-primary" id="train-btn-confirm" onclick="confirmTrain()">
+                        <i class="bi bi-check-lg"></i> Complete Training
+                    </button>
+                    <button class="hire-btn hire-btn-secondary" onclick="skipTrain()">Skip for Now</button>
+                </div>
+            </div>
+            <!-- Step 3: Done -->
+            <div class="hire-step" id="hire-step-3">
+                <div style="text-align:center;padding:20px 0;">
+                    <div style="font-size:3rem;margin-bottom:12px;">&#127881;</div>
+                    <h4 style="font-weight:700;margin-bottom:8px;" id="hire-done-title">Agent Hired!</h4>
+                    <p style="font-size:.88rem;color:#6b7280;" id="hire-done-msg">They're at their desk and ready to work.</p>
+                    <button class="hire-btn hire-btn-primary" onclick="closeHireModal()" style="margin-top:16px;">
+                        <i class="bi bi-arrow-right"></i> Back to Office
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
-<!-- Findings Section -->
+<!-- â•â•â• AGENT CARDS â•â•â• -->
+<div class="agent-grid" id="agent-grid"></div>
+
+<!-- â•â•â• FINDINGS â•â•â• -->
 <div class="findings-section" id="findings-section">
     <div class="findings-header">
         <h4><i class="bi bi-exclamation-diamond me-2"></i>Agent Findings</h4>
@@ -482,11 +664,11 @@
         </div>
     </div>
     <div id="findings-list">
-        <div class="findings-empty"><i class="bi bi-robot"></i>No findings yet. Hit "Run My Team" to get your first analysis.</div>
+        <div class="findings-empty"><i class="bi bi-robot"></i>No findings yet. Hire agents and hit "Run My Team" to start.</div>
     </div>
 </div>
 
-<!-- Activity Feed -->
+<!-- â•â•â• ACTIVITY FEED â•â•â• -->
 <div class="activity-section">
     <h4><i class="bi bi-activity me-2"></i>Recent Activity</h4>
     <div class="activity-feed" id="activity-feed">
@@ -496,66 +678,276 @@
 
 <script>
 const AGENTS = {{ agents_json | safe }};
+let hiredAgents = {{ hired_agents_json | safe }};
 
 const AGENT_COLORS = {
-    warren:  '#7c3aed',
-    scout:   '#2563eb',
-    penny:   '#059669',
-    ace:     '#e11d48',
-    radar:   '#f59e0b',
-    hawk:    '#6366f1',
-    pulse:   '#0891b2',
-    spark:   '#d946ef',
-    bridge:  '#ea580c',
-    chief:   '#0f172a'
+    warren: '#7c3aed', scout: '#2563eb', penny: '#059669', ace: '#e11d48',
+    radar: '#f59e0b', hawk: '#6366f1', pulse: '#0891b2', spark: '#d946ef',
+    bridge: '#ea580c', chief: '#0f172a'
 };
-
 const AGENT_ICONS = {
-    warren:  'bi-stars',
-    scout:   'bi-graph-up-arrow',
-    penny:   'bi-piggy-bank',
-    ace:     'bi-pencil-square',
-    radar:   'bi-shield-check',
-    hawk:    'bi-binoculars',
-    pulse:   'bi-bar-chart-line',
-    spark:   'bi-lightbulb',
-    bridge:  'bi-diagram-3',
-    chief:   'bi-clipboard-check'
+    warren: 'bi-stars', scout: 'bi-graph-up-arrow', penny: 'bi-piggy-bank',
+    ace: 'bi-pencil-square', radar: 'bi-shield-check', hawk: 'bi-binoculars',
+    pulse: 'bi-bar-chart-line', spark: 'bi-lightbulb', bridge: 'bi-diagram-3',
+    chief: 'bi-clipboard-check'
+};
+const SEV_ICONS = {
+    critical: 'bi-exclamation-triangle-fill', warning: 'bi-exclamation-circle-fill',
+    positive: 'bi-check-circle-fill', info: 'bi-info-circle-fill'
 };
 
-const SEV_ICONS = {
-    critical: 'bi-exclamation-triangle-fill',
-    warning:  'bi-exclamation-circle-fill',
-    positive: 'bi-check-circle-fill',
-    info:     'bi-info-circle-fill'
-};
+// Desk positions in the isometric grid (x%, y% of floor)
+const DESK_POSITIONS = [
+    { key: 'warren', x: 42, y: 8 },   // Warren gets the corner office
+    { key: 'scout',  x: 10, y: 30 },
+    { key: 'penny',  x: 30, y: 30 },
+    { key: 'ace',    x: 55, y: 30 },
+    { key: 'radar',  x: 75, y: 30 },
+    { key: 'hawk',   x: 10, y: 60 },
+    { key: 'pulse',  x: 30, y: 60 },
+    { key: 'spark',  x: 55, y: 60 },
+    { key: 'bridge', x: 75, y: 60 },
+    { key: 'chief',  x: 42, y: 85 },  // Chief near the door, QA checkpoint
+];
 
 let allFindings = [];
 let currentFilter = 'all';
+let currentHireAgent = null;
 
+// â”€â”€ OFFICE RENDERING â”€â”€
+function renderOffice(latestData) {
+    const container = document.getElementById('office-desks');
+    let html = '';
+    const latest = latestData || {};
+
+    DESK_POSITIONS.forEach(pos => {
+        const agent = AGENTS.find(a => a.key === pos.key);
+        if (!agent) return;
+        const color = AGENT_COLORS[pos.key] || '#6b7280';
+        const isHired = !!hiredAgents[pos.key];
+        const isTrained = isHired && hiredAgents[pos.key].trained;
+        const agentLatest = latest[pos.key];
+        const isWorking = agentLatest && agentLatest.status === 'in_progress';
+        const isEmpty = !isHired;
+        const classes = [
+            'desk-slot',
+            isEmpty ? 'empty' : '',
+            isWorking ? 'working' : '',
+        ].filter(Boolean).join(' ');
+
+        html += `<div class="${classes}" style="left:${pos.x}%;top:${pos.y}%;" onclick="openHireModal('${pos.key}')" title="${agent.name} - ${agent.role}">`;
+        html += `<div class="desk-nameplate"><span>${agent.name}</span><span class="np-role">${agent.role}</span></div>`;
+
+        // Agent character (only if hired)
+        html += `<div class="desk-agent ${isEmpty ? 'hidden' : ''}">`;
+        html += `<div class="agent-head" style="background:${color};"></div>`;
+        html += `<div class="agent-body" style="background:${color};opacity:.7;"></div>`;
+        html += `</div>`;
+
+        // Monitor
+        html += `<div class="desk-monitor ${isWorking ? 'active' : ''}"></div>`;
+        // Desk
+        html += `<div class="desk-base"></div>`;
+
+        // Hire badge for empty desks
+        if (isEmpty) {
+            html += `<div class="desk-hire-badge">HIRE</div>`;
+        }
+
+        html += `</div>`;
+    });
+
+    container.innerHTML = html;
+
+    // Update stats
+    const hiredCount = Object.keys(hiredAgents).length;
+    document.getElementById('stat-hired').textContent = hiredCount + '/' + AGENTS.length;
+}
+
+// â”€â”€ HIRE MODAL â”€â”€
+function openHireModal(agentKey) {
+    const agent = AGENTS.find(a => a.key === agentKey);
+    if (!agent) return;
+    currentHireAgent = agentKey;
+
+    const color = AGENT_COLORS[agentKey] || '#6b7280';
+    const icon = AGENT_ICONS[agentKey] || 'bi-robot';
+    const isHired = !!hiredAgents[agentKey];
+    const isTrained = isHired && hiredAgents[agentKey].trained;
+
+    // Header
+    document.getElementById('hire-modal-head').innerHTML = `
+        <div class="hire-modal-avatar" style="background:${color}"><i class="bi ${icon}"></i></div>
+        <div>
+            <h3>${agent.name}</h3>
+            <p>${agent.role}</p>
+        </div>`;
+
+    document.getElementById('hire-modal-desc').textContent = agent.description;
+    document.getElementById('hire-modal-skills').innerHTML =
+        agent.skills.map(s => `<span>${s}</span>`).join('');
+
+    // Reset steps
+    document.querySelectorAll('.hire-step').forEach(s => s.classList.remove('active'));
+
+    if (!isHired) {
+        // Show hire step
+        document.getElementById('hire-step-1').classList.add('active');
+        document.getElementById('hire-btn-confirm').disabled = false;
+        document.getElementById('hire-btn-confirm').innerHTML = '<i class="bi bi-person-plus"></i> Hire This Agent';
+    } else if (!isTrained) {
+        // Already hired but not trained
+        document.getElementById('hire-step-2').classList.add('active');
+        document.getElementById('train-textarea').value = '';
+    } else {
+        // Already fully onboarded, show info
+        document.getElementById('hire-step-3').classList.add('active');
+        document.getElementById('hire-done-title').textContent = agent.name + ' is on your team';
+        document.getElementById('hire-done-msg').textContent = 'Trained and ready. They are actively working on your account.';
+    }
+
+    document.getElementById('hire-modal-backdrop').classList.add('show');
+}
+
+function closeHireModal() {
+    document.getElementById('hire-modal-backdrop').classList.remove('show');
+    currentHireAgent = null;
+}
+
+function confirmHire() {
+    if (!currentHireAgent) return;
+    const btn = document.getElementById('hire-btn-confirm');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Hiring...';
+
+    fetch('{{ url_for("client.client_team_hire") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({ agent_key: currentHireAgent }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            hiredAgents = data.hired_agents;
+            renderOffice();
+            loadTeamData();
+            // Move to training step
+            document.querySelectorAll('.hire-step').forEach(s => s.classList.remove('active'));
+            document.getElementById('hire-step-2').classList.add('active');
+            document.getElementById('train-textarea').value = '';
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-person-plus"></i> Hire This Agent';
+        }
+    })
+    .catch(() => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-person-plus"></i> Hire This Agent';
+    });
+}
+
+function confirmTrain() {
+    if (!currentHireAgent) return;
+    const btn = document.getElementById('train-btn-confirm');
+    const notes = document.getElementById('train-textarea').value.trim();
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Training...';
+
+    // Show progress
+    const progress = document.getElementById('train-progress');
+    const bar = document.getElementById('train-progress-bar');
+    const statusEl = document.getElementById('train-status');
+    progress.classList.add('active');
+    statusEl.classList.add('active');
+
+    const phases = [
+        'Reading your business profile...',
+        'Learning your industry...',
+        'Calibrating analysis style...',
+        'Finalizing training...',
+    ];
+    let phase = 0;
+    statusEl.textContent = phases[0];
+    bar.style.width = '10%';
+
+    const phaseInterval = setInterval(() => {
+        phase++;
+        if (phase < phases.length) {
+            statusEl.textContent = phases[phase];
+            bar.style.width = (25 * (phase + 1)) + '%';
+        }
+    }, 600);
+
+    fetch('{{ url_for("client.client_team_train") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({ agent_key: currentHireAgent, training_notes: notes }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        clearInterval(phaseInterval);
+        bar.style.width = '100%';
+        statusEl.textContent = 'Training complete!';
+
+        if (data.success) {
+            hiredAgents = data.hired_agents;
+            renderOffice();
+            loadTeamData();
+            setTimeout(() => {
+                progress.classList.remove('active');
+                statusEl.classList.remove('active');
+                document.querySelectorAll('.hire-step').forEach(s => s.classList.remove('active'));
+                document.getElementById('hire-step-3').classList.add('active');
+                const agent = AGENTS.find(a => a.key === currentHireAgent);
+                document.getElementById('hire-done-title').textContent = (agent ? agent.name : 'Agent') + ' is ready!';
+                document.getElementById('hire-done-msg').textContent = 'They just sat down at their desk. Run your team to put them to work.';
+            }, 800);
+        }
+    })
+    .catch(() => {
+        clearInterval(phaseInterval);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-lg"></i> Complete Training';
+        progress.classList.remove('active');
+        statusEl.classList.remove('active');
+    });
+}
+
+function skipTrain() {
+    // Train with empty notes - still marks as trained
+    document.getElementById('train-textarea').value = '';
+    confirmTrain();
+}
+
+// â”€â”€ AGENT CARDS â”€â”€
 function renderAgentCard(agent, findingCounts) {
     const color = AGENT_COLORS[agent.key] || '#6b7280';
     const icon  = AGENT_ICONS[agent.key]  || 'bi-robot';
+    const isHired = !!hiredAgents[agent.key];
+    const isTrained = isHired && hiredAgents[agent.key].trained;
     const latest = agent.latest;
     const isWorking = latest && latest.status === 'in_progress';
-    const statusClass = isWorking ? 'working' : (latest ? 'idle' : 'standby');
-    const statusLabel = isWorking ? 'Working' : (latest ? 'Idle' : 'Standby');
-    const currentText = isWorking
-        ? latest.action
-        : (latest ? `Last: ${latest.action}` : 'Awaiting first task');
+
+    let statusClass, statusLabel;
+    if (!isHired) { statusClass = 'available'; statusLabel = 'Available'; }
+    else if (isWorking) { statusClass = 'working'; statusLabel = 'Working'; }
+    else if (latest) { statusClass = 'idle'; statusLabel = 'Idle'; }
+    else { statusClass = 'standby'; statusLabel = 'Standby'; }
+
+    const currentText = !isHired
+        ? 'Not hired yet - click to recruit'
+        : (isWorking ? latest.action : (latest ? `Last: ${latest.action}` : 'Awaiting first task'));
 
     const counts = findingCounts[agent.key] || { critical: 0, warning: 0, positive: 0, info: 0, total: 0 };
     let badgeHtml = '';
-    if (counts.critical > 0) {
-        badgeHtml = `<span class="finding-count-badge">${counts.critical}</span>`;
-    } else if (counts.warning > 0) {
-        badgeHtml = `<span class="finding-count-badge sev-warning">${counts.warning}</span>`;
-    } else if (counts.positive > 0) {
-        badgeHtml = `<span class="finding-count-badge sev-positive">${counts.positive}</span>`;
-    }
+    if (counts.critical > 0) badgeHtml = `<span class="finding-count-badge">${counts.critical}</span>`;
+    else if (counts.warning > 0) badgeHtml = `<span class="finding-count-badge sev-warning">${counts.warning}</span>`;
+    else if (counts.positive > 0) badgeHtml = `<span class="finding-count-badge sev-positive">${counts.positive}</span>`;
+
+    const cardClass = isWorking ? 'working' : (!isHired ? 'not-hired' : '');
 
     return `
-    <div class="agent-card ${isWorking ? 'working' : ''}" data-agent="${agent.key}">
+    <div class="agent-card ${cardClass}" data-agent="${agent.key}" onclick="openHireModal('${agent.key}')" style="cursor:pointer;">
         ${badgeHtml}
         <div class="agent-header">
             <div class="agent-avatar" style="background:${color}">
@@ -581,14 +973,15 @@ function renderAgentCard(agent, findingCounts) {
         <div class="agent-skills">
             ${agent.skills.map(s => `<span class="agent-skill">${s}</span>`).join('')}
         </div>
+        ${!isHired ? '<button class="agent-hire-btn" onclick="event.stopPropagation();openHireModal(\'' + agent.key + '\')"><i class="bi bi-person-plus"></i> Hire</button>' : ''}
     </div>`;
 }
 
+// â”€â”€ FINDINGS â”€â”€
 function renderFinding(f) {
     const agentColor = AGENT_COLORS[f.agent_key] || '#6b7280';
     const agentName = (AGENTS.find(a => a.key === f.agent_key) || {}).name || f.agent_key;
     const sevIcon = SEV_ICONS[f.severity] || 'bi-info-circle';
-
     return `
     <div class="finding-card sev-${f.severity}" data-severity="${f.severity}" data-agent="${f.agent_key}" data-id="${f.id}">
         <div class="finding-sev-icon"><i class="bi ${sevIcon}"></i></div>
@@ -598,7 +991,7 @@ function renderFinding(f) {
             <div class="finding-detail">${escapeHtml(f.detail)}</div>
             ${f.action ? `<div class="finding-action"><i class="bi bi-arrow-right-circle"></i>${escapeHtml(f.action)}</div>` : ''}
         </div>
-        <button class="finding-dismiss" onclick="dismissFinding(${f.id}, this)" title="Dismiss">
+        <button class="finding-dismiss" onclick="event.stopPropagation();dismissFinding(${f.id}, this)" title="Dismiss">
             <i class="bi bi-x-lg"></i>
         </button>
     </div>`;
@@ -613,14 +1006,9 @@ function escapeHtml(text) {
 
 function renderFindings(findings) {
     const list = document.getElementById('findings-list');
-    const filtered = currentFilter === 'all'
-        ? findings
-        : findings.filter(f => f.severity === currentFilter);
-
+    const filtered = currentFilter === 'all' ? findings : findings.filter(f => f.severity === currentFilter);
     if (!filtered.length) {
-        const msg = findings.length > 0
-            ? `No ${currentFilter} findings.`
-            : 'No findings yet. Hit "Run My Team" to get your first analysis.';
+        const msg = findings.length > 0 ? `No ${currentFilter} findings.` : 'No findings yet. Hire agents and hit "Run My Team" to start.';
         list.innerHTML = `<div class="findings-empty"><i class="bi bi-robot"></i>${msg}</div>`;
         return;
     }
@@ -645,11 +1033,7 @@ function dismissFinding(id, btn) {
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
     })
     .then(r => r.json())
-    .then(() => {
-        card.remove();
-        allFindings = allFindings.filter(f => f.id !== id);
-        updateFindingsStat();
-    })
+    .then(() => { card.remove(); allFindings = allFindings.filter(f => f.id !== id); updateFindingsStat(); })
     .catch(() => { card.style.opacity = '1'; });
 }
 
@@ -657,16 +1041,9 @@ function updateFindingsStat() {
     const critical = allFindings.filter(f => f.severity === 'critical').length;
     const warning = allFindings.filter(f => f.severity === 'warning').length;
     const el = document.getElementById('stat-findings');
-    if (critical > 0) {
-        el.textContent = critical;
-        el.style.color = '#fca5a5';
-    } else if (warning > 0) {
-        el.textContent = warning;
-        el.style.color = '#fcd34d';
-    } else {
-        el.textContent = allFindings.length;
-        el.style.color = '';
-    }
+    if (critical > 0) { el.textContent = critical; el.style.color = '#fca5a5'; }
+    else if (warning > 0) { el.textContent = warning; el.style.color = '#fcd34d'; }
+    else { el.textContent = allFindings.length; el.style.color = ''; }
 }
 
 function loadFindings() {
@@ -676,11 +1053,9 @@ function loadFindings() {
             allFindings = data.findings || [];
             renderFindings(allFindings);
             updateFindingsStat();
-            // Re-render agent cards with fresh counts
             const counts = buildFindingCounts(allFindings);
             const grid = document.getElementById('agent-grid');
             if (grid.children.length > 0) {
-                // Update badges only, don't re-render whole grid to avoid flicker
                 for (const agent of AGENTS) {
                     const card = grid.querySelector(`[data-agent="${agent.key}"]`);
                     if (!card) continue;
@@ -688,22 +1063,14 @@ function loadFindings() {
                     const c = counts[agent.key] || { critical: 0, warning: 0, total: 0 };
                     if (c.critical > 0) {
                         if (!badge) { badge = document.createElement('span'); badge.className = 'finding-count-badge'; card.prepend(badge); }
-                        badge.textContent = c.critical;
-                        badge.className = 'finding-count-badge';
-                        badge.style.display = '';
+                        badge.textContent = c.critical; badge.className = 'finding-count-badge'; badge.style.display = '';
                     } else if (c.warning > 0) {
                         if (!badge) { badge = document.createElement('span'); badge.className = 'finding-count-badge'; card.prepend(badge); }
-                        badge.textContent = c.warning;
-                        badge.className = 'finding-count-badge sev-warning';
-                        badge.style.display = '';
+                        badge.textContent = c.warning; badge.className = 'finding-count-badge sev-warning'; badge.style.display = '';
                     } else if (c.total > 0) {
                         if (!badge) { badge = document.createElement('span'); badge.className = 'finding-count-badge'; card.prepend(badge); }
-                        badge.textContent = c.total;
-                        badge.className = 'finding-count-badge sev-positive';
-                        badge.style.display = '';
-                    } else if (badge) {
-                        badge.style.display = 'none';
-                    }
+                        badge.textContent = c.total; badge.className = 'finding-count-badge sev-positive'; badge.style.display = '';
+                    } else if (badge) { badge.style.display = 'none'; }
                 }
             }
         })
@@ -720,18 +1087,23 @@ document.getElementById('findings-filters').addEventListener('click', function(e
     renderFindings(allFindings);
 });
 
-// CSRF token for POST requests
 var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
-// Run My Team
+// â”€â”€ RUN TEAM â”€â”€
 function runTeam() {
+    const hiredCount = Object.keys(hiredAgents).length;
+    if (hiredCount === 0) {
+        document.getElementById('run-status').textContent = 'Hire at least one agent first!';
+        setTimeout(() => { document.getElementById('run-status').textContent = ''; }, 4000);
+        return;
+    }
+
     const btn = document.getElementById('run-team-btn');
     const status = document.getElementById('run-status');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Running...';
     status.textContent = 'Starting your team run...';
 
-    // Kick off the background run
     fetch('{{ url_for("client.client_team_run") }}', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
@@ -751,7 +1123,6 @@ function runTeam() {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-play-circle"></i> Run My Team';
         status.textContent = 'Failed to start. Try again.';
-        console.error('Run team start error:', err);
     });
 }
 
@@ -759,8 +1130,7 @@ function pollRunStatus() {
     const btn = document.getElementById('run-team-btn');
     const status = document.getElementById('run-status');
     let pollCount = 0;
-    const maxPolls = 120; // 4 minutes max at 2s interval
-
+    const maxPolls = 120;
     const phases = [
         'Agents are analyzing your data...',
         'Chief is running quality checks...',
@@ -770,20 +1140,17 @@ function pollRunStatus() {
 
     const interval = setInterval(() => {
         pollCount++;
-        // Rotate status messages
         const phase = phases[Math.min(Math.floor(pollCount / 8), phases.length - 1)];
         const dots = '.'.repeat((pollCount % 3) + 1);
         status.textContent = phase.replace('...', dots);
 
+        // Update office to show working state
+        if (pollCount === 2) renderOffice({ _all_working: true });
+
         fetch('{{ url_for("client.client_team_run_status") }}')
             .then(r => r.json())
             .then(data => {
-                if (data.status === 'running') {
-                    // Still going, keep polling
-                    return;
-                }
-
-                // Done or error - stop polling
+                if (data.status === 'running') return;
                 clearInterval(interval);
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-play-circle"></i> Run My Team';
@@ -792,12 +1159,9 @@ function pollRunStatus() {
                     const qa = data.qa || {};
                     let statusMsg = `Done - ${data.total_findings} findings from ${data.agents_ran.length} agents.`;
                     if (qa.overall_grade && qa.overall_grade !== 'N/A') {
-                        statusMsg += ` Warren's grade: ${qa.overall_grade}.`;
+                        statusMsg += ` Grade: ${qa.overall_grade}.`;
                         if (qa.killed > 0) statusMsg += ` ${qa.killed} killed.`;
-                        if (qa.reworked > 0) statusMsg += ` ${qa.reworked} sent back for rework.`;
-                        if (qa.retried_agents && qa.retried_agents.length > 0) {
-                            statusMsg += ` Retried: ${qa.retried_agents.join(', ')}.`;
-                        }
+                        if (qa.reworked > 0) statusMsg += ` ${qa.reworked} reworked.`;
                         statusMsg += ` ${qa.shipped || 0} shipped.`;
                     }
                     status.textContent = statusMsg;
@@ -808,21 +1172,19 @@ function pollRunStatus() {
                 }
                 setTimeout(() => { status.textContent = ''; }, 10000);
             })
-            .catch(err => {
-                // Network hiccup on poll - don't stop, just try again
-                console.warn('Poll error:', err);
-            });
+            .catch(() => {});
 
         if (pollCount >= maxPolls) {
             clearInterval(interval);
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-play-circle"></i> Run My Team';
-            status.textContent = 'Run is taking longer than expected. Check back in a minute.';
+            status.textContent = 'Taking longer than expected. Check back in a minute.';
             setTimeout(() => { status.textContent = ''; }, 8000);
         }
     }, 2000);
 }
 
+// â”€â”€ ACTIVITY & DATA â”€â”€
 function timeAgo(dateStr) {
     if (!dateStr) return '';
     const now = new Date();
@@ -836,7 +1198,7 @@ function timeAgo(dateStr) {
 
 function renderActivity(items) {
     if (!items || items.length === 0) {
-        return '<div class="empty-feed"><i class="bi bi-check-circle"></i>No activity yet. Your team will start logging work as they take action on your account.</div>';
+        return '<div class="empty-feed"><i class="bi bi-check-circle"></i>No activity yet. Your team will start logging work once you run them.</div>';
     }
     return items.map(item => {
         const agent = AGENTS.find(a => a.key === item.agent_key) || {};
@@ -844,9 +1206,7 @@ function renderActivity(items) {
         const icon  = AGENT_ICONS[item.agent_key]  || 'bi-robot';
         return `
         <div class="activity-item">
-            <div class="activity-icon" style="background:${color}">
-                <i class="bi ${icon}"></i>
-            </div>
+            <div class="activity-icon" style="background:${color}"><i class="bi ${icon}"></i></div>
             <div class="activity-body">
                 <span class="activity-agent">${agent.name || item.agent_key}</span>
                 <span class="activity-action">${item.action}</span>
@@ -862,40 +1222,48 @@ function loadTeamData() {
     fetch('{{ url_for("client.client_team_data") }}')
         .then(r => r.json())
         .then(data => {
+            // Update hired state from server
+            if (data.hired_agents) hiredAgents = data.hired_agents;
+
             const agents = data.agents || AGENTS;
+            const latestMap = {};
             agents.forEach(a => {
                 if (data.latest && data.latest[a.key]) {
                     a.latest = data.latest[a.key];
+                    latestMap[a.key] = data.latest[a.key];
                 }
             });
 
-            document.getElementById('agent-grid').innerHTML =
-                agents.map(a => renderAgentCard(a, findingCounts)).join('');
+            // Render office with latest status
+            renderOffice(latestMap);
+
+            // Render agent cards
+            document.getElementById('agent-grid').innerHTML = agents.map(a => renderAgentCard(a, findingCounts)).join('');
 
             const working = agents.filter(a => a.latest && a.latest.status === 'in_progress').length;
             document.getElementById('stat-active').textContent = working;
-            document.getElementById('stat-tasks').textContent = data.today_count || 0;
-            document.getElementById('stat-total').textContent = data.total_count || 0;
 
-            document.getElementById('activity-feed').innerHTML =
-                renderActivity(data.activity || []);
+            document.getElementById('activity-feed').innerHTML = renderActivity(data.activity || []);
         })
         .catch(err => {
             console.error('Team data error:', err);
-            document.getElementById('agent-grid').innerHTML =
-                AGENTS.map(a => renderAgentCard(a, {})).join('');
+            renderOffice();
+            document.getElementById('agent-grid').innerHTML = AGENTS.map(a => renderAgentCard(a, {})).join('');
             document.getElementById('stat-active').textContent = '0';
-            document.getElementById('stat-tasks').textContent = '0';
-            document.getElementById('stat-total').textContent = '0';
             document.getElementById('activity-feed').innerHTML =
-                '<div class="empty-feed"><i class="bi bi-check-circle"></i>No activity yet. Your team will start logging work as they take action on your account.</div>';
+                '<div class="empty-feed"><i class="bi bi-check-circle"></i>No activity yet.</div>';
         });
 }
 
-// Load on page ready
+// Close modal on backdrop click
+document.getElementById('hire-modal-backdrop').addEventListener('click', function(e) {
+    if (e.target === this) closeHireModal();
+});
+
+// â”€â”€ INIT â”€â”€
+renderOffice();
 loadTeamData();
 loadFindings();
-// Poll every 30s
 setInterval(loadTeamData, 30000);
 </script>
 {% endblock %}

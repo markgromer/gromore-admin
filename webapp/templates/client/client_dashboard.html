@@ -638,6 +638,62 @@ function fmtInt(v) {
         html += '<h3>W.A.R.R.E.N.\'s Call <span>- ' + esc(month) + '</span></h3>';
         html += '<div style="font-size:.78rem;font-weight:700;color:rgba(255,255,255,.55);letter-spacing:.03em;margin-bottom:.5rem;">Weighted Analysis for Revenue, Reach, Engagement &amp; Navigation</div>';
         html += '<div class="warren-call-body">' + esc(warrenSummary) + '</div>';
+
+        // WARREN Briefing: latest findings overview
+        var wb = d.warren_briefing;
+        if (wb && wb.total_findings > 0) {
+            html += '<div class="warren-briefing-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,.12);">';
+            html += '<div style="text-align:center;"><div style="font-size:1.6rem;font-weight:800;">' + wb.total_findings + '</div><div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;opacity:.6;">Total Findings</div></div>';
+            if (wb.critical_count > 0) html += '<div style="text-align:center;"><div style="font-size:1.6rem;font-weight:800;color:#fca5a5;">' + wb.critical_count + '</div><div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;opacity:.6;">Critical</div></div>';
+            if (wb.warning_count > 0) html += '<div style="text-align:center;"><div style="font-size:1.6rem;font-weight:800;color:#fcd34d;">' + wb.warning_count + '</div><div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;opacity:.6;">Warnings</div></div>';
+            if (wb.positive_count > 0) html += '<div style="text-align:center;"><div style="font-size:1.6rem;font-weight:800;color:#86efac;">' + wb.positive_count + '</div><div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;opacity:.6;">Wins</div></div>';
+            html += '</div>';
+
+            // Top issues summary
+            var briefItems = [];
+            (wb.top_critical || []).forEach(function(f) { briefItems.push({sev: 'critical', title: f.title, agent: f.agent}); });
+            (wb.top_warnings || []).forEach(function(f) { briefItems.push({sev: 'warning', title: f.title, agent: f.agent}); });
+            if (briefItems.length > 0) {
+                html += '<div style="margin-top:1rem;">';
+                var agentNames = {scout:'Scout',penny:'Penny',ace:'Ace',radar:'Radar',hawk:'Hawk',pulse:'Pulse',spark:'Spark',bridge:'Bridge',warren:'Warren',chief:'Chief'};
+                briefItems.slice(0, 4).forEach(function(item) {
+                    var dotColor = item.sev === 'critical' ? '#ef4444' : '#f59e0b';
+                    html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:.85rem;">';
+                    html += '<span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0;"></span>';
+                    html += '<span style="opacity:.6;font-size:.72rem;font-weight:600;text-transform:uppercase;min-width:50px;">' + esc(agentNames[item.agent] || item.agent) + '</span>';
+                    html += '<span style="color:rgba(255,255,255,.85);">' + esc(item.title) + '</span>';
+                    html += '</div>';
+                });
+                html += '</div>';
+            }
+
+            // Wins
+            if (wb.top_wins && wb.top_wins.length > 0) {
+                html += '<div style="margin-top:.75rem;">';
+                wb.top_wins.slice(0, 2).forEach(function(w) {
+                    html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:.85rem;">';
+                    html += '<span style="width:8px;height:8px;border-radius:50%;background:#10b981;flex-shrink:0;"></span>';
+                    html += '<span style="color:rgba(255,255,255,.85);">' + esc(w.title) + '</span>';
+                    html += '</div>';
+                });
+                html += '</div>';
+            }
+
+            html += '<div style="margin-top:1rem;"><a href="/client/team" style="color:#a5b4fc;font-size:.82rem;font-weight:600;text-decoration:none;">View all findings <i class="bi bi-arrow-right"></i></a></div>';
+        }
+
+        // Team status bar
+        var ts = d.team_status;
+        if (ts) {
+            html += '<div style="display:flex;align-items:center;gap:16px;margin-top:1.25rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,.12);font-size:.82rem;">';
+            html += '<span style="opacity:.6;"><i class="bi bi-people me-1"></i>Team:</span>';
+            html += '<span>' + ts.trained + '/' + ts.total_available + ' agents active</span>';
+            if (ts.trained < ts.total_available) {
+                html += '<a href="/client/team" style="color:#a5b4fc;font-weight:600;text-decoration:none;margin-left:auto;">Hire more agents <i class="bi bi-arrow-right"></i></a>';
+            }
+            html += '</div>';
+        }
+
         html += '</div>';
 
         // Team Agent Alerts (loaded async below)

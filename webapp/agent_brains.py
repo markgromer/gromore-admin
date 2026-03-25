@@ -1947,7 +1947,24 @@ def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
         "bridge": has_analytics or has_crm,
     }
 
+    # Filter by hired agents (if hiring is configured)
+    hired_agents = {}
+    try:
+        hired_agents = json.loads(brand.get("hired_agents") or "{}")
+    except (json.JSONDecodeError, TypeError):
+        pass
+
     for agent_key, eligible in agent_eligibility.items():
+        # Skip if not hired (when hiring system is active)
+        if hired_agents and agent_key not in hired_agents:
+            db.log_agent_activity(
+                brand_id, agent_key,
+                "Skipped - not hired yet",
+                "", "completed",
+            )
+            results[agent_key] = None
+            continue
+
         if not eligible:
             db.log_agent_activity(
                 brand_id, agent_key,

@@ -416,6 +416,46 @@ def client_dashboard_data():
             except Exception:
                 dashboard_data["sng"] = {"connected": False}
 
+            # WARREN briefing: latest agent findings + action plans
+            try:
+                latest_findings = db.get_agent_findings(brand_id, month=month, limit=50)
+                briefing_critical = [f for f in latest_findings if f.get("severity") == "critical"]
+                briefing_warning = [f for f in latest_findings if f.get("severity") == "warning"]
+                briefing_positive = [f for f in latest_findings if f.get("severity") == "positive"]
+
+                dashboard_data["warren_briefing"] = {
+                    "total_findings": len(latest_findings),
+                    "critical_count": len(briefing_critical),
+                    "warning_count": len(briefing_warning),
+                    "positive_count": len(briefing_positive),
+                    "top_critical": [
+                        {"title": f.get("title", ""), "detail": f.get("detail", ""), "agent": f.get("agent_key", "")}
+                        for f in briefing_critical[:3]
+                    ],
+                    "top_warnings": [
+                        {"title": f.get("title", ""), "detail": f.get("detail", ""), "agent": f.get("agent_key", "")}
+                        for f in briefing_warning[:3]
+                    ],
+                    "top_wins": [
+                        {"title": f.get("title", ""), "detail": f.get("detail", ""), "agent": f.get("agent_key", "")}
+                        for f in briefing_positive[:3]
+                    ],
+                }
+            except Exception:
+                dashboard_data["warren_briefing"] = None
+
+            # Hired agents count for dashboard team status
+            try:
+                hired_agents = json.loads(brand.get("hired_agents") or "{}")
+                active_count = len([a for a in hired_agents.values() if a.get("trained")])
+                dashboard_data["team_status"] = {
+                    "hired": len(hired_agents),
+                    "trained": active_count,
+                    "total_available": len(AGENT_ROSTER),
+                }
+            except Exception:
+                dashboard_data["team_status"] = None
+
             _log_agent("scout", "Analyzed campaign performance", f"Scanned {len(campaigns_data.get('google', []))} Google + {len(campaigns_data.get('meta', []))} Meta campaigns")
             _log_agent("warren", "Built dashboard briefing", f"Month: {month}")
             return jsonify({"dashboard": dashboard_data, "error": ""})
@@ -5391,10 +5431,13 @@ def client_team():
     if not brand:
         abort(404)
 
+    hired_agents = json.loads(brand.get("hired_agents") or "{}")
+
     return render_template(
         "client/client_team.html",
         brand=brand,
         agents_json=json.dumps(AGENT_ROSTER),
+        hired_agents_json=json.dumps(hired_agents),
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
 
@@ -5404,9 +5447,12 @@ def client_team():
 def client_team_data():
     db = _get_db()
     brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
 
     latest = db.get_agent_latest(brand_id)
     activity = db.get_agent_activity(brand_id, limit=30)
+
+    hired_agents = json.loads((brand or {}).get("hired_agents") or "{}")
 
     # Count today's tasks
     today_str = datetime.now().strftime("%Y-%m-%d")
@@ -5423,7 +5469,71 @@ def client_team_data():
         "activity": activity,
         "today_count": today_count,
         "total_count": total_count,
+        "hired_agents": hired_agents,
     })
+
+
+@client_bp.route("/team/hire", methods=["POST"])
+@client_login_required
+def client_team_hire():
+    """Hire (activate) an agent for this brand."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"success": False, "error": "Brand not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    agent_key = data.get("agent_key", "")
+    valid_keys = {a["key"] for a in AGENT_ROSTER}
+    if agent_key not in valid_keys:
+        return jsonify({"success": False, "error": "Unknown agent"}), 400
+
+    hired = json.loads(brand.get("hired_agents") or "{}")
+    if agent_key in hired:
+        return jsonify({"success": True, "already": True, "hired_agents": hired})
+
+    hired[agent_key] = {
+        "hired_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "trained": False,
+        "training_complete": None,
+    }
+    db.update_brand(brand_id, hired_agents=json.dumps(hired))
+    return jsonify({"success": True, "hired_agents": hired})
+
+
+@client_bp.route("/team/train", methods=["POST"])
+@client_login_required
+def client_team_train():
+    """Mark an agent as trained (user provided context/instructions)."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"success": False, "error": "Brand not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    agent_key = data.get("agent_key", "")
+    training_notes = data.get("training_notes", "")
+
+    hired = json.loads(brand.get("hired_agents") or "{}")
+    if agent_key not in hired:
+        return jsonify({"success": False, "error": "Agent not hired yet"}), 400
+
+    hired[agent_key]["trained"] = True
+    hired[agent_key]["training_complete"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if training_notes:
+        hired[agent_key]["training_notes"] = training_notes
+
+    db.update_brand(brand_id, hired_agents=json.dumps(hired))
+
+    # Also save training notes as agent context
+    if training_notes:
+        agent_ctx = json.loads(brand.get("agent_context") or "{}")
+        agent_ctx[agent_key] = training_notes
+        db.update_brand(brand_id, agent_context=json.dumps(agent_ctx))
+
+    return jsonify({"success": True, "hired_agents": hired})
 
 
 @client_bp.route("/team/findings")
