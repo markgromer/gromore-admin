@@ -1285,7 +1285,7 @@ Reference the actual business name, services, and area. No generic output."""
                     {"role": "user", "content": user_message},
                 ],
                 temperature=0.3,
-                max_tokens=2000,
+                **_completion_kwargs(model),
             )
             raw = resp.choices[0].message.content.strip()
             break  # success
@@ -1409,6 +1409,17 @@ def _pick_model(brand: dict, purpose: str) -> str:
     return "gpt-4o-mini"
 
 
+def _completion_kwargs(model: str, limit: int = 2000) -> dict:
+    """Return the correct token-limit kwarg for the model.
+
+    Reasoning models (o-series) and gpt-4.1+ require max_completion_tokens;
+    older chat models use max_tokens.
+    """
+    if model.startswith("o") or "4.1" in model:
+        return {"max_completion_tokens": limit}
+    return {"max_tokens": limit}
+
+
 # ---------------------------------------------------------------------------
 # Multi-stage QA pipeline: structural tests -> rule tests -> Chief LLM -> Warren
 # ---------------------------------------------------------------------------
@@ -1510,14 +1521,15 @@ Don't re-flag things the pre-tests already caught unless you have additional con
 
     try:
         client = openai.OpenAI(api_key=api_key)
+        chief_model = _pick_model(brand, "analysis")
         resp = client.chat.completions.create(
-            model=_pick_model(brand, "analysis"),
+            model=chief_model,
             messages=[
                 {"role": "system", "content": CHIEF_PROMPT},
                 {"role": "user", "content": user_message},
             ],
             temperature=0.2,
-            max_tokens=2000,
+            **_completion_kwargs(chief_model),
         )
         raw = resp.choices[0].message.content.strip()
 
@@ -1663,14 +1675,15 @@ Remember - you own everything that ships. Be decisive."""
 
     try:
         client = openai.OpenAI(api_key=api_key)
+        warren_model = _pick_model(brand, "analysis")
         resp = client.chat.completions.create(
-            model=_pick_model(brand, "analysis"),
+            model=warren_model,
             messages=[
                 {"role": "system", "content": WARREN_ORCHESTRATION_PROMPT},
                 {"role": "user", "content": user_message},
             ],
             temperature=0.2,
-            max_tokens=2000,
+            **_completion_kwargs(warren_model),
         )
         raw = resp.choices[0].message.content.strip()
 
