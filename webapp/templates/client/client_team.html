@@ -642,7 +642,7 @@ function dismissFinding(id, btn) {
     card.style.opacity = '0.4';
     fetch(`{{ url_for("client.client_team_findings") }}`.replace('/findings', `/findings/${id}/dismiss`), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
     })
     .then(r => r.json())
     .then(() => {
@@ -720,6 +720,9 @@ document.getElementById('findings-filters').addEventListener('click', function(e
     renderFindings(allFindings);
 });
 
+// CSRF token for POST requests
+var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
 // Run My Team
 function runTeam() {
     const btn = document.getElementById('run-team-btn');
@@ -731,7 +734,7 @@ function runTeam() {
     // Kick off the background run
     fetch('{{ url_for("client.client_team_run") }}', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
         body: JSON.stringify({}),
     })
     .then(r => r.json())
