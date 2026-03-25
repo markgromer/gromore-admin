@@ -135,7 +135,10 @@
     }
 
     function renderResults(data){
+        console.log('[GM-ASSESS] raw response:', JSON.stringify(data).substring(0,500));
         const r=data.data||data.results||data;
+        console.log('[GM-ASSESS] parsed r:', JSON.stringify(r).substring(0,500));
+        console.log('[GM-ASSESS] overall_score:', r.overall_score, 'seo.title:', (r.website_seo||r.seo||{}).title, 'gbp.skipped:', (r.gbp||{}).skipped);
         const overall=r.overall_score||0;
         const gbp=r.gbp||{};
         const seo=r.website_seo||r.seo||{};
@@ -229,8 +232,11 @@
         animateSteps();
 
         try{
+            console.log('[GM-ASSESS] Posting to:', API, 'data:', JSON.stringify(data));
             var resp=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+            console.log('[GM-ASSESS] Response status:', resp.status);
             var json=await resp.json();
+            console.log('[GM-ASSESS] Response json.ok:', json.ok, 'keys:', Object.keys(json));
             if(json.ok){
                 document.getElementById('gmAssessLoading').classList.add('d-none');
                 document.getElementById('gmAssessResults').classList.remove('d-none');
@@ -242,6 +248,7 @@
                 btn.disabled=false;btn.textContent='Run My Free Assessment';
             }
         }catch(err){
+            console.error('[GM-ASSESS] Error:', err);
             document.getElementById('gmAssessLoading').classList.add('d-none');
             document.getElementById('gmAssessForm').classList.remove('d-none');
             alert.innerHTML='<div class="alert alert-danger py-2">Connection error. Please try again.</div>';

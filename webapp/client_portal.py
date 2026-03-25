@@ -5318,6 +5318,20 @@ def public_signup():
 
 # ── Public AI Assessment (no auth, cross-origin JSON) ──
 
+@client_bp.route("/assess-widget", methods=["GET"])
+def assess_widget():
+    """Serve the assessment widget HTML so WordPress can load it via script tag."""
+    import os
+    tpl = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "client", "assessment_form.html")
+    with open(tpl, encoding="utf-8") as f:
+        html = f.read()
+    resp = make_response(html)
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Cache-Control"] = "no-cache, max-age=300"
+    return resp
+
+
 @client_bp.route("/assess-ping", methods=["GET"])
 def assess_ping():
     """Simple ping to verify the assessment module is loaded."""
