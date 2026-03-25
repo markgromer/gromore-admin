@@ -950,6 +950,7 @@ class WebDB:
             "google_drive_folder_id", "google_drive_sheet_id",
             "google_maps_api_key", "google_place_id",
             "wp_site_url", "wp_username", "wp_app_password",
+            "hired_agents", "agent_context",
         }
         if field not in allowed:
             raise ValueError(f"Cannot update field: {field}")

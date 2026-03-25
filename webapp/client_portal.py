@@ -5433,6 +5433,15 @@ def client_team():
 
     hired_agents = json.loads(brand.get("hired_agents") or "{}")
 
+    # Warren is always hired - he's the team lead
+    if "warren" not in hired_agents:
+        hired_agents["warren"] = {
+            "hired_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "trained": True,
+            "training_complete": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        db.update_brand_text_field(brand_id, "hired_agents", json.dumps(hired_agents))
+
     return render_template(
         "client/client_team.html",
         brand=brand,
@@ -5498,7 +5507,7 @@ def client_team_hire():
         "trained": False,
         "training_complete": None,
     }
-    db.update_brand(brand_id, hired_agents=json.dumps(hired))
+    db.update_brand_text_field(brand_id, "hired_agents", json.dumps(hired))
     return jsonify({"success": True, "hired_agents": hired})
 
 
@@ -5525,13 +5534,13 @@ def client_team_train():
     if training_notes:
         hired[agent_key]["training_notes"] = training_notes
 
-    db.update_brand(brand_id, hired_agents=json.dumps(hired))
+    db.update_brand_text_field(brand_id, "hired_agents", json.dumps(hired))
 
     # Also save training notes as agent context
     if training_notes:
         agent_ctx = json.loads(brand.get("agent_context") or "{}")
         agent_ctx[agent_key] = training_notes
-        db.update_brand(brand_id, agent_context=json.dumps(agent_ctx))
+        db.update_brand_text_field(brand_id, "agent_context", json.dumps(agent_ctx))
 
     return jsonify({"success": True, "hired_agents": hired})
 
