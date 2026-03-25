@@ -437,7 +437,7 @@
 <!-- Hero -->
 <div class="team-hero">
     <h2><i class="bi bi-robot me-2"></i>Your AI Team</h2>
-    <p>Nine specialists working around the clock on {{ brand_name }}'s marketing.</p>
+    <p>Ten specialists working around the clock on {{ brand_name }}'s marketing, with built-in quality control.</p>
     <div class="team-stats">
         <div class="team-stat">
             <div class="stat-val" id="stat-active">-</div>
@@ -506,7 +506,8 @@ const AGENT_COLORS = {
     hawk:    '#6366f1',
     pulse:   '#0891b2',
     spark:   '#d946ef',
-    bridge:  '#ea580c'
+    bridge:  '#ea580c',
+    chief:   '#0f172a'
 };
 
 const AGENT_ICONS = {
@@ -518,7 +519,8 @@ const AGENT_ICONS = {
     hawk:    'bi-binoculars',
     pulse:   'bi-bar-chart-line',
     spark:   'bi-lightbulb',
-    bridge:  'bi-diagram-3'
+    bridge:  'bi-diagram-3',
+    chief:   'bi-clipboard-check'
 };
 
 const SEV_ICONS = {
@@ -736,7 +738,14 @@ function runTeam() {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-play-circle"></i> Run My Team';
         if (data.success) {
-            status.textContent = `Done - ${data.total_findings} findings from ${data.agents_ran.length} agents.`;
+            const qa = data.qa || {};
+            let statusMsg = `Done - ${data.total_findings} findings from ${data.agents_ran.length} agents.`;
+            if (qa.team_grade && qa.team_grade !== 'N/A') {
+                statusMsg += ` Quality grade: ${qa.team_grade}.`;
+                if (qa.rejected > 0) statusMsg += ` Chief rejected ${qa.rejected} weak findings.`;
+                if (qa.flagged > 0) statusMsg += ` ${qa.flagged} flagged for review.`;
+            }
+            status.textContent = statusMsg;
             loadFindings();
             loadTeamData();
         } else {

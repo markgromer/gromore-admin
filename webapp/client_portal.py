@@ -5353,6 +5353,13 @@ AGENT_ROSTER = [
         "description": "Connects your marketing to your revenue. Tracks leads from first click to closed deal, monitors your CRM pipeline, and makes sure no opportunity slips through the cracks.",
         "skills": ["CRM", "Lead Tracking", "Pipeline", "Conversion Tracking"],
     },
+    {
+        "key": "chief",
+        "name": "Chief",
+        "role": "Quality Control",
+        "description": "Reviews every finding from the rest of the team before you see it. Rejects generic advice, catches unsupported claims, and makes sure every recommendation is specific, actionable, and worth your time.",
+        "skills": ["QA Review", "Finding Validation", "Severity Grading", "Copy Standards"],
+    },
 ]
 
 
@@ -5449,18 +5456,27 @@ def client_team_run():
     from webapp.agent_brains import run_all_agents
     results = run_all_agents(db, brand, brand_id, api_key, month=month)
 
-    ran = [k for k, v in results.items() if v is not None]
-    skipped = [k for k, v in results.items() if v is None]
+    ran = [k for k, v in results.items() if v is not None and k != "_qa"]
+    skipped = [k for k, v in results.items() if v is None and k != "_qa"]
 
-    total_findings = sum(
-        len(v.get("findings", [])) for v in results.values() if v
-    )
+    # Count findings AFTER QA review (rejected ones are already dismissed)
+    post_qa_findings = db.get_agent_findings(brand_id, month=month, limit=200)
+    total_findings = len(post_qa_findings)
+
+    qa = results.get("_qa", {})
 
     return jsonify({
         "success": True,
         "agents_ran": ran,
         "agents_skipped": skipped,
         "total_findings": total_findings,
+        "qa": {
+            "team_grade": qa.get("team_grade", "N/A"),
+            "team_notes": qa.get("team_notes", ""),
+            "rejected": qa.get("rejected", 0),
+            "flagged": qa.get("flagged", 0),
+            "downgraded": qa.get("downgraded", 0),
+        },
     })
 
 

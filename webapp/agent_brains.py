@@ -70,6 +70,12 @@ AGENT_CONFIGS = {
         "schedule_hours": 12,
         "model_purpose": "analysis",
     },
+    "chief": {
+        "name": "Chief",
+        "role": "Quality Control",
+        "schedule_hours": 0,   # only runs as part of team run
+        "model_purpose": "analysis",
+    },
 }
 
 
@@ -508,6 +514,85 @@ OUTPUT FORMAT (strict JSON):
 Return ONLY valid JSON. No markdown fences."""
 
 
+# ---------------------------------------------------------------------------
+# QA Agent - reviews all other agents' output before it ships
+# ---------------------------------------------------------------------------
+
+CHIEF_PROMPT = """You are Chief, the quality control officer inside GroMore.
+Your job: review every finding from the other AI agents and reject anything lazy, generic, or wrong.
+
+You are the LAST line of defense before findings reach the client. If you let garbage through,
+the client loses trust in the entire platform. Be ruthless.
+
+REJECTION CRITERIA (auto-reject if ANY of these apply):
+
+1. GENERIC COPY - Any ad copy suggestion that could apply to literally any business:
+   - "Call Today for a Free Quote" = REJECT
+   - "Professional and Reliable Service" = REJECT
+   - "Your Trusted Local [Industry]" = REJECT
+   - "Quality Service at Affordable Prices" = REJECT
+   - If the suggestion doesn't name the actual business, service, or area = REJECT
+
+2. VAGUE ADVICE - Recommendations without specifics:
+   - "Consider increasing your budget" (how much?) = REJECT
+   - "Your CTR could be improved" (what's wrong with the creative?) = REJECT
+   - "Monitor this closely" (that's not advice) = REJECT
+   - "Test new approaches" (which approaches?) = REJECT
+
+3. UNSUPPORTED CLAIMS - Numbers or claims not backed by the data:
+   - Agent says "CPA is too high" but no CPA data was provided = REJECT
+   - Agent says "competitors are outspending you" with zero competitor spend data = REJECT
+   - Any dollar figure or percentage that can't be traced to the input data = FLAG
+
+4. CONTRADICTIONS - Agents giving conflicting advice:
+   - Scout says "scale this campaign" while Penny says "cut its budget" = FLAG both
+   - One agent says performance is great while another says it's failing = FLAG
+
+5. SEVERITY INFLATION - Marking things critical when they're not:
+   - An info-level observation marked critical = DOWNGRADE
+   - A positive finding marked as warning = FIX
+   - Everything marked critical (cry wolf) = REJECT the weakest ones
+
+6. AI COPY TELLS - Output that reads like obvious AI writing:
+   - Em dashes (use regular dashes instead)
+   - "Leverage", "harness", "elevate", "supercharge", "unlock"
+   - "In today's competitive landscape" or similar filler openings
+   - Bullet points that all start with the same grammatical structure
+   - Any suggestion using "Don't miss out!" or fake urgency
+
+7. MISSING CONTEXT - Agent ignoring critical brand context:
+   - Budget recommendation that exceeds monthly_budget = REJECT
+   - Suggesting services the brand doesn't offer = REJECT
+   - Copy suggestions that ignore the brand's industry/voice = FLAG
+
+REVIEW PROCESS:
+For each finding across all agents, assign one of:
+- PASS: Good finding, specific, actionable, data-backed. Ship it.
+- FLAG: Mostly good but has a fixable issue. Include your correction note.
+- REJECT: Fails quality bar. Remove it entirely.
+- DOWNGRADE: Wrong severity. Include the correct severity level.
+
+OUTPUT FORMAT (strict JSON):
+{
+  "reviews": [
+    {
+      "agent_key": "agent who produced this",
+      "finding_index": 0,
+      "verdict": "pass|flag|reject|downgrade",
+      "reason": "why (only needed for flag/reject/downgrade)",
+      "corrected_severity": "only for downgrade verdicts",
+      "corrected_text": "only for flag - your suggested fix for the detail or action"
+    }
+  ],
+  "team_grade": "A|B|C|D|F",
+  "team_notes": "2-3 sentence summary of overall team output quality",
+  "worst_offender": "agent_key of whichever agent had the most issues (or null if all clean)",
+  "memory": "pattern to watch for next time (or null)"
+}
+
+Return ONLY valid JSON. No markdown fences.
+Be honest and harsh. A team that ships 3 great findings beats one that ships 8 mediocre ones."""
+
 AGENT_PROMPTS = {
     "scout": SCOUT_PROMPT,
     "penny": PENNY_PROMPT,
@@ -869,6 +954,213 @@ def _pick_model(brand: dict, purpose: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# QA review - Chief reviews all agent output before it ships
+# ---------------------------------------------------------------------------
+
+def run_qa_review(db, brand: dict, brand_id: int, api_key: str,
+                  agent_results: Dict[str, Any], month: str = None) -> Dict[str, Any]:
+    """
+    Run Chief's QA review on all agent results.
+    Modifies the findings in the DB: rejects get deleted, flags get annotated,
+    downgrades get severity-corrected.
+    Returns QA summary dict.
+    """
+    import openai
+    import re
+
+    if not month:
+        month = datetime.now().strftime("%Y-%m")
+
+    # Build the review payload - all findings from all agents
+    review_items = []
+    for agent_key, result in agent_results.items():
+        if not result or not result.get("findings"):
+            continue
+        for i, finding in enumerate(result["findings"]):
+            review_items.append({
+                "agent_key": agent_key,
+                "agent_name": AGENT_CONFIGS.get(agent_key, {}).get("name", agent_key),
+                "finding_index": i,
+                "severity": finding.get("severity", "info"),
+                "title": finding.get("title", ""),
+                "detail": finding.get("detail", ""),
+                "action": finding.get("action", ""),
+            })
+
+    if not review_items:
+        logger.info("QA: No findings to review for brand %s", brand_id)
+        db.log_agent_activity(brand_id, "chief", "QA review skipped", "No findings from team", "completed")
+        return {"team_grade": "N/A", "team_notes": "No findings to review.", "reviews": []}
+
+    # Brand context for Chief
+    brand_context = (
+        f"Business: {brand.get('display_name', 'Unknown')}, "
+        f"Industry: {brand.get('industry', 'Unknown')}, "
+        f"Services: {brand.get('primary_services', 'N/A')}, "
+        f"Area: {brand.get('service_area', 'N/A')}, "
+        f"Budget: ${brand.get('monthly_budget', 0)}/mo"
+    )
+
+    user_message = f"""Review the following {len(review_items)} findings from our agent team for {brand.get('display_name', 'this business')}.
+
+BRAND CONTEXT: {brand_context}
+
+FINDINGS TO REVIEW:
+{json.dumps(review_items, indent=2)}
+
+Grade each finding. Be strict. Reject anything generic, vague, or unsupported.
+A finding that wastes the client's time is worse than no finding at all."""
+
+    db.log_agent_activity(brand_id, "chief", "Running QA review", f"Reviewing {len(review_items)} findings", "in_progress")
+
+    try:
+        client = openai.OpenAI(api_key=api_key)
+        resp = client.chat.completions.create(
+            model=_pick_model(brand, "analysis"),
+            messages=[
+                {"role": "system", "content": CHIEF_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0.2,
+            max_tokens=2000,
+        )
+        raw = resp.choices[0].message.content.strip()
+
+        # Parse JSON
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[-1]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+            raw = raw.strip()
+
+        json_match = re.search(r'\{.*\}', raw, re.DOTALL)
+        if not json_match:
+            logger.warning("Chief returned non-JSON: %s", raw[:200])
+            db.log_agent_activity(brand_id, "chief", "QA review failed", "Non-JSON response", "completed")
+            return {"team_grade": "?", "team_notes": "QA review failed to parse.", "reviews": []}
+
+        qa_result = json.loads(json_match.group())
+        reviews = qa_result.get("reviews", [])
+
+        # Apply QA verdicts to the database
+        rejected_count = 0
+        flagged_count = 0
+        downgraded_count = 0
+        passed_count = 0
+
+        # Get current findings from DB to match against
+        db_findings = db.get_agent_findings(brand_id, month=month, limit=200)
+
+        for review in reviews:
+            verdict = review.get("verdict", "pass")
+            r_agent = review.get("agent_key", "")
+            r_index = review.get("finding_index", -1)
+
+            # Match this review to a DB finding
+            # Find the nth finding from this agent
+            agent_findings = [f for f in db_findings if f.get("agent_key") == r_agent]
+            if r_index < 0 or r_index >= len(agent_findings):
+                continue
+            db_finding = agent_findings[r_index]
+            finding_id = db_finding.get("id")
+            if not finding_id:
+                continue
+
+            if verdict == "reject":
+                # Remove it entirely
+                db.dismiss_agent_finding(finding_id, brand_id)
+                rejected_count += 1
+
+            elif verdict == "downgrade":
+                corrected_sev = review.get("corrected_severity", "info")
+                reason = review.get("reason", "")
+                # Update severity and add QA note
+                try:
+                    conn = db._conn()
+                    conn.execute(
+                        """UPDATE agent_findings
+                           SET severity = ?, extra_json = json_set(
+                               COALESCE(extra_json, '{}'), '$.qa_note', ?
+                           )
+                           WHERE id = ? AND brand_id = ?""",
+                        (corrected_sev, f"Downgraded by Chief: {reason}", finding_id, brand_id),
+                    )
+                    conn.commit()
+                except Exception as e:
+                    logger.debug("QA downgrade failed for finding %s: %s", finding_id, e)
+                downgraded_count += 1
+
+            elif verdict == "flag":
+                reason = review.get("reason", "")
+                corrected = review.get("corrected_text", "")
+                note = f"Chief flagged: {reason}"
+                if corrected:
+                    note += f" | Suggested: {corrected}"
+                try:
+                    conn = db._conn()
+                    conn.execute(
+                        """UPDATE agent_findings
+                           SET extra_json = json_set(
+                               COALESCE(extra_json, '{}'), '$.qa_note', ?
+                           )
+                           WHERE id = ? AND brand_id = ?""",
+                        (note, finding_id, brand_id),
+                    )
+                    conn.commit()
+                except Exception as e:
+                    logger.debug("QA flag failed for finding %s: %s", finding_id, e)
+                flagged_count += 1
+
+            else:
+                passed_count += 1
+
+        team_grade = qa_result.get("team_grade", "?")
+        team_notes = qa_result.get("team_notes", "")
+        worst = qa_result.get("worst_offender")
+
+        summary_parts = [f"Grade: {team_grade}"]
+        summary_parts.append(f"{passed_count} passed, {rejected_count} rejected, {flagged_count} flagged, {downgraded_count} downgraded")
+        if worst:
+            summary_parts.append(f"Worst: {worst}")
+
+        db.log_agent_activity(
+            brand_id, "chief",
+            f"QA review complete - Team grade: {team_grade}",
+            " | ".join(summary_parts),
+            "completed",
+        )
+
+        # Save QA memory
+        memory_note = qa_result.get("memory")
+        if memory_note:
+            try:
+                from webapp.ai_assistant import save_memory_with_embedding
+                save_memory_with_embedding(
+                    db, brand_id, "insight",
+                    f"Chief QA: {memory_note[:60]}",
+                    memory_note, api_key,
+                )
+            except Exception:
+                pass
+
+        return {
+            "team_grade": team_grade,
+            "team_notes": team_notes,
+            "worst_offender": worst,
+            "passed": passed_count,
+            "rejected": rejected_count,
+            "flagged": flagged_count,
+            "downgraded": downgraded_count,
+            "reviews": reviews,
+        }
+
+    except Exception as e:
+        logger.exception("Chief QA failed: %s", e)
+        db.log_agent_activity(brand_id, "chief", "QA review error", str(e)[:100], "completed")
+        return {"team_grade": "?", "team_notes": f"QA review failed: {str(e)[:80]}", "reviews": []}
+
+
+# ---------------------------------------------------------------------------
 # Full team run - execute all relevant agents for a brand
 # ---------------------------------------------------------------------------
 
@@ -978,5 +1270,18 @@ def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
         except Exception as e:
             logger.exception("Agent %s crashed: %s", agent_key, e)
             results[agent_key] = None
+
+    # ── QA Review: Chief reviews all findings before they ship ──
+    agents_with_findings = {k: v for k, v in results.items() if v and v.get("findings")}
+    if agents_with_findings:
+        try:
+            qa_summary = run_qa_review(
+                db, brand, brand_id, api_key,
+                agents_with_findings, month=month,
+            )
+            results["_qa"] = qa_summary
+        except Exception as e:
+            logger.exception("QA review crashed: %s", e)
+            results["_qa"] = {"team_grade": "?", "team_notes": "QA review failed."}
 
     return results
