@@ -21,6 +21,22 @@ logger = logging.getLogger(__name__)
 # Agent registry
 # ---------------------------------------------------------------------------
 
+
+def _eligibility_detail(agent_key):
+    """Return a user-friendly explanation of what data an agent needs."""
+    reasons = {
+        "scout": "Scout needs ad campaign data to analyze. Connect your Google Ads or Meta Ads account in Settings.",
+        "penny": "Penny needs ad campaign data to monitor budgets. Connect your Google Ads or Meta Ads account in Settings.",
+        "ace": "Ace needs active ad campaigns to write copy for. Connect your Google Ads or Meta Ads account in Settings.",
+        "radar": "Radar needs your Google Business Profile connected to manage your reputation. Link it in Settings.",
+        "hawk": "Hawk needs competitors added to track. Add competitors on the Competitors page.",
+        "pulse": "Pulse needs Google Search Console or Google Analytics data. Connect one of them in Settings.",
+        "spark": "Spark needs Google Search Console or Google Analytics data to inform content. Connect one of them in Settings.",
+        "bridge": "Bridge needs Google Analytics or CRM data connected to track leads. Set that up in Settings.",
+    }
+    return reasons.get(agent_key, f"{agent_key.title()} needs a data source connected to work.")
+
+
 AGENT_CONFIGS = {
     "scout": {
         "name": "Scout",
@@ -1966,11 +1982,28 @@ def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
             continue
 
         if not eligible:
+            agent_cfg = AGENT_CONFIGS.get(agent_key, {})
+            agent_name = agent_cfg.get("name", agent_key.title())
+            agent_role = agent_cfg.get("role", "")
+            skip_reason = _eligibility_detail(agent_key)
             db.log_agent_activity(
                 brand_id, agent_key,
-                f"Skipped - no {AGENT_CONFIGS[agent_key]['role'].lower()} data connected",
+                f"Skipped - no {agent_role.lower()} data connected",
                 "", "completed",
             )
+            # Save an info finding so the user knows what to connect
+            try:
+                db.save_agent_finding(
+                    brand_id=brand_id,
+                    agent_key=agent_key,
+                    month=month,
+                    severity="info",
+                    title=f"{agent_name} needs data to get started",
+                    detail=skip_reason,
+                    action=f"Go to Settings and connect the required data source so {agent_name} can start working.",
+                )
+            except Exception:
+                pass
             results[agent_key] = None
             continue
 
