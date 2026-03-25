@@ -740,10 +740,14 @@ function runTeam() {
         if (data.success) {
             const qa = data.qa || {};
             let statusMsg = `Done - ${data.total_findings} findings from ${data.agents_ran.length} agents.`;
-            if (qa.team_grade && qa.team_grade !== 'N/A') {
-                statusMsg += ` Quality grade: ${qa.team_grade}.`;
-                if (qa.rejected > 0) statusMsg += ` Chief rejected ${qa.rejected} weak findings.`;
-                if (qa.flagged > 0) statusMsg += ` ${qa.flagged} flagged for review.`;
+            if (qa.overall_grade && qa.overall_grade !== 'N/A') {
+                statusMsg += ` Warren's grade: ${qa.overall_grade}.`;
+                if (qa.killed > 0) statusMsg += ` ${qa.killed} killed.`;
+                if (qa.reworked > 0) statusMsg += ` ${qa.reworked} sent back for rework.`;
+                if (qa.retried_agents && qa.retried_agents.length > 0) {
+                    statusMsg += ` Retried: ${qa.retried_agents.join(', ')}.`;
+                }
+                statusMsg += ` ${qa.shipped || 0} shipped.`;
             }
             status.textContent = statusMsg;
             loadFindings();

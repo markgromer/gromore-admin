@@ -5459,11 +5459,15 @@ def client_team_run():
     ran = [k for k, v in results.items() if v is not None and k != "_qa"]
     skipped = [k for k, v in results.items() if v is None and k != "_qa"]
 
-    # Count findings AFTER QA review (rejected ones are already dismissed)
+    # Count findings AFTER full QA pipeline (rejected/killed ones are already dismissed)
     post_qa_findings = db.get_agent_findings(brand_id, month=month, limit=200)
     total_findings = len(post_qa_findings)
 
     qa = results.get("_qa", {})
+    warren = qa.get("warren", {})
+    qa_report = qa.get("qa_report", {})
+    retried = qa.get("retried_agents", [])
+    applied = warren.get("applied", {})
 
     return jsonify({
         "success": True,
@@ -5471,11 +5475,14 @@ def client_team_run():
         "agents_skipped": skipped,
         "total_findings": total_findings,
         "qa": {
-            "team_grade": qa.get("team_grade", "N/A"),
-            "team_notes": qa.get("team_notes", ""),
-            "rejected": qa.get("rejected", 0),
-            "flagged": qa.get("flagged", 0),
-            "downgraded": qa.get("downgraded", 0),
+            "overall_grade": warren.get("overall_grade", "N/A"),
+            "overall_notes": warren.get("overall_notes", qa_report.get("team_notes", "")),
+            "shipped": applied.get("shipped", 0),
+            "killed": applied.get("killed", 0),
+            "reworked": applied.get("rework", 0),
+            "retried_agents": retried,
+            "pre_test_issues": len(qa_report.get("pre_test_issues", [])),
+            "chief_reviews": len(qa_report.get("chief_reviews", [])),
         },
     })
 

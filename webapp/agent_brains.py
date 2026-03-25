@@ -80,6 +80,132 @@ AGENT_CONFIGS = {
 
 
 # ---------------------------------------------------------------------------
+# Agent quality specifications - Chief's reference for grading each agent
+# ---------------------------------------------------------------------------
+
+AGENT_QUALITY_SPECS = {
+    "scout": {
+        "required_fields": ["severity", "title", "detail", "action", "campaign", "platform"],
+        "max_findings": 8,
+        "min_findings": 1,
+        "severity_max": {"critical": 3},
+        "detail_needs_numbers": True,
+        "must_reference_data": True,  # must cite actual campaign names/metrics from input
+        "banned_phrases": [
+            "monitor closely", "consider adjusting", "keep an eye on",
+            "optimize your campaigns", "could be improved", "may want to",
+            "leverage", "harness", "elevate", "supercharge", "unlock",
+            "in today's competitive landscape", "don't miss out",
+        ],
+        "specificity": "Must reference actual campaign names and include specific metrics (spend, CPA, CTR, conversions).",
+    },
+    "penny": {
+        "required_fields": ["severity", "title", "detail", "action"],
+        "max_findings": 6,
+        "min_findings": 1,
+        "severity_max": {"critical": 2},
+        "detail_needs_numbers": True,
+        "must_reference_data": True,
+        "banned_phrases": [
+            "consider increasing", "consider decreasing", "keep an eye on",
+            "optimize your budget", "could be improved", "may want to",
+            "leverage", "harness", "elevate", "supercharge", "unlock",
+        ],
+        "budget_constraint": True,  # recommendations must respect monthly_budget
+        "specificity": "Must include specific dollar amounts. Tell them exactly how much to move and where.",
+    },
+    "ace": {
+        "required_fields": ["severity", "title", "detail", "action"],
+        "max_findings": 6,
+        "min_findings": 1,
+        "severity_max": {"critical": 2},
+        "detail_needs_numbers": False,  # creative agent, less number-dependent
+        "must_reference_data": False,
+        "brand_specificity": True,  # copy MUST mention the actual business, services, or area
+        "banned_phrases": [
+            "call today for a free quote", "professional and reliable",
+            "your trusted local", "quality service at affordable prices",
+            "don't miss out", "act now", "limited time offer",
+            "leverage", "harness", "elevate", "supercharge", "unlock",
+            "in today's competitive landscape", "take your business to the next level",
+        ],
+        "specificity": "Ad copy must name the actual business, specific services, and service area. Generic CTAs are auto-rejected.",
+    },
+    "radar": {
+        "required_fields": ["severity", "title", "detail", "action"],
+        "max_findings": 6,
+        "min_findings": 1,
+        "severity_max": {"critical": 2},
+        "detail_needs_numbers": True,  # should cite rating, review count
+        "must_reference_data": True,
+        "banned_phrases": [
+            "monitor your reviews", "respond to all reviews",
+            "leverage", "harness", "elevate", "supercharge", "unlock",
+            "in today's competitive landscape",
+        ],
+        "specificity": "Must reference actual review data, ratings, or GBP profile details. Response templates must be business-specific.",
+    },
+    "hawk": {
+        "required_fields": ["severity", "title", "detail"],
+        "max_findings": 6,
+        "min_findings": 1,
+        "severity_max": {"critical": 2},
+        "detail_needs_numbers": True,
+        "must_reference_data": True,
+        "banned_phrases": [
+            "stay ahead of the competition", "competitive advantage",
+            "leverage", "harness", "elevate", "supercharge", "unlock",
+            "in today's competitive landscape",
+        ],
+        "specificity": "Must reference actual competitor names and specific differences. No generic competitive advice.",
+    },
+    "pulse": {
+        "required_fields": ["severity", "title", "detail", "action"],
+        "max_findings": 8,
+        "min_findings": 1,
+        "severity_max": {"critical": 3},
+        "detail_needs_numbers": True,
+        "must_reference_data": True,
+        "banned_phrases": [
+            "optimize for seo", "improve your rankings", "focus on keywords",
+            "leverage", "harness", "elevate", "supercharge", "unlock",
+            "in today's competitive landscape",
+        ],
+        "specificity": "Must reference actual keywords, positions, or traffic numbers from the data.",
+    },
+    "spark": {
+        "required_fields": ["severity", "title", "detail"],
+        "max_findings": 6,
+        "min_findings": 1,
+        "severity_max": {"critical": 1},
+        "detail_needs_numbers": False,
+        "must_reference_data": False,
+        "brand_specificity": True,
+        "banned_phrases": [
+            "create engaging content", "post consistently",
+            "leverage", "harness", "elevate", "supercharge", "unlock",
+            "in today's competitive landscape", "take your business to the next level",
+        ],
+        "specificity": "Content ideas must be tied to actual search data or social performance. Must be specific to the business/industry.",
+    },
+    "bridge": {
+        "required_fields": ["severity", "title", "detail", "action"],
+        "max_findings": 6,
+        "min_findings": 1,
+        "severity_max": {"critical": 2},
+        "detail_needs_numbers": True,
+        "must_reference_data": True,
+        "banned_phrases": [
+            "improve your conversion rate", "nurture your leads",
+            "leverage", "harness", "elevate", "supercharge", "unlock",
+            "in today's competitive landscape",
+        ],
+        "specificity": "Must reference actual conversion/lead data and connect ad spend to outcomes with specific numbers.",
+    },
+}
+
+
+# ---------------------------------------------------------------------------
 # Specialized system prompts - this is the real IP
 # ---------------------------------------------------------------------------
 
@@ -519,58 +645,48 @@ Return ONLY valid JSON. No markdown fences."""
 # ---------------------------------------------------------------------------
 
 CHIEF_PROMPT = """You are Chief, the quality control officer inside GroMore.
-Your job: review every finding from the other AI agents and reject anything lazy, generic, or wrong.
+Your job: review every finding from the other AI agents and catch anything lazy, generic, or wrong.
 
-You are the LAST line of defense before findings reach the client. If you let garbage through,
-the client loses trust in the entire platform. Be ruthless.
+Automated tests already catch structural and rule-based problems (banned phrases, missing numbers,
+severity flooding, budget violations). Those results are included below as PRE-TEST RESULTS.
+Your job is the NUANCED review that code can't do:
 
-REJECTION CRITERIA (auto-reject if ANY of these apply):
+FOCUS AREAS (these are YOUR domain - the automated tests don't catch these):
 
-1. GENERIC COPY - Any ad copy suggestion that could apply to literally any business:
-   - "Call Today for a Free Quote" = REJECT
-   - "Professional and Reliable Service" = REJECT
-   - "Your Trusted Local [Industry]" = REJECT
-   - "Quality Service at Affordable Prices" = REJECT
-   - If the suggestion doesn't name the actual business, service, or area = REJECT
-
-2. VAGUE ADVICE - Recommendations without specifics:
-   - "Consider increasing your budget" (how much?) = REJECT
-   - "Your CTR could be improved" (what's wrong with the creative?) = REJECT
-   - "Monitor this closely" (that's not advice) = REJECT
-   - "Test new approaches" (which approaches?) = REJECT
-
-3. UNSUPPORTED CLAIMS - Numbers or claims not backed by the data:
-   - Agent says "CPA is too high" but no CPA data was provided = REJECT
-   - Agent says "competitors are outspending you" with zero competitor spend data = REJECT
-   - Any dollar figure or percentage that can't be traced to the input data = FLAG
-
-4. CONTRADICTIONS - Agents giving conflicting advice:
+1. CONTRADICTIONS across agents:
    - Scout says "scale this campaign" while Penny says "cut its budget" = FLAG both
    - One agent says performance is great while another says it's failing = FLAG
+   - Review the full set of findings for internal consistency
 
-5. SEVERITY INFLATION - Marking things critical when they're not:
-   - An info-level observation marked critical = DOWNGRADE
-   - A positive finding marked as warning = FIX
-   - Everything marked critical (cry wolf) = REJECT the weakest ones
+2. UNSUPPORTED CLAIMS - Numbers or claims not backed by the data:
+   - Agent claims "CPA is too high" but no CPA data was provided = FLAG
+   - Agent claims "competitors are outspending you" with zero competitor spend data = FLAG
+   - Any dollar figure or percentage that can't be traced to the input data = FLAG
 
-6. AI COPY TELLS - Output that reads like obvious AI writing:
-   - Em dashes (use regular dashes instead)
-   - "Leverage", "harness", "elevate", "supercharge", "unlock"
-   - "In today's competitive landscape" or similar filler openings
-   - Bullet points that all start with the same grammatical structure
-   - Any suggestion using "Don't miss out!" or fake urgency
+3. CREATIVE QUALITY (especially Ace's ad copy):
+   - Is the copy actually compelling? Would you click on it?
+   - Does it differentiate this business from competitors?
+   - Is the tone right for the industry?
 
-7. MISSING CONTEXT - Agent ignoring critical brand context:
-   - Budget recommendation that exceeds monthly_budget = REJECT
-   - Suggesting services the brand doesn't offer = REJECT
-   - Copy suggestions that ignore the brand's industry/voice = FLAG
+4. ACTIONABILITY - Is the "action" actually something the client can do?
+   - "Improve your landing page" is vague. "Add a phone number above the fold on your service page" is specific.
+   - Actions must be concrete, not directional
 
-REVIEW PROCESS:
-For each finding across all agents, assign one of:
-- PASS: Good finding, specific, actionable, data-backed. Ship it.
-- FLAG: Mostly good but has a fixable issue. Include your correction note.
-- REJECT: Fails quality bar. Remove it entirely.
-- DOWNGRADE: Wrong severity. Include the correct severity level.
+5. SEVERITY ACCURACY - Is the severity level justified?
+   - Critical = immediate revenue impact, needs action today
+   - Warning = should address this week
+   - Info = worth knowing, low urgency
+   - Positive = good news worth celebrating
+
+6. MISSING CONTEXT - Agent ignoring critical brand context:
+   - Suggesting services the brand doesn't offer = FLAG
+   - Copy that ignores the brand's industry or voice = FLAG
+
+For each finding, assign one of:
+- PASS: Good finding. Ship it.
+- FLAG: Has an issue Chief caught. Include your note.
+- REJECT: Fails quality bar entirely. Remove it.
+- DOWNGRADE: Wrong severity. Include the correct level.
 
 OUTPUT FORMAT (strict JSON):
 {
@@ -581,17 +697,17 @@ OUTPUT FORMAT (strict JSON):
       "verdict": "pass|flag|reject|downgrade",
       "reason": "why (only needed for flag/reject/downgrade)",
       "corrected_severity": "only for downgrade verdicts",
-      "corrected_text": "only for flag - your suggested fix for the detail or action"
+      "corrected_text": "only for flag - your suggested fix"
     }
   ],
-  "team_grade": "A|B|C|D|F",
-  "team_notes": "2-3 sentence summary of overall team output quality",
-  "worst_offender": "agent_key of whichever agent had the most issues (or null if all clean)",
+  "contradictions": ["description of any cross-agent contradictions found"],
+  "team_notes": "2-3 sentence summary of team output quality",
+  "worst_offender": "agent_key of whichever agent had the most issues (or null)",
   "memory": "pattern to watch for next time (or null)"
 }
 
 Return ONLY valid JSON. No markdown fences.
-Be honest and harsh. A team that ships 3 great findings beats one that ships 8 mediocre ones."""
+Be honest and harsh. Three great findings beat eight mediocre ones."""
 
 AGENT_PROMPTS = {
     "scout": SCOUT_PROMPT,
@@ -603,6 +719,260 @@ AGENT_PROMPTS = {
     "spark": SPARK_PROMPT,
     "bridge": BRIDGE_PROMPT,
 }
+
+
+# ---------------------------------------------------------------------------
+# QA Tests - structural and rule-based (no LLM cost)
+# ---------------------------------------------------------------------------
+
+import re as _re
+
+
+def _run_structural_tests(agent_results: Dict[str, Any]) -> List[Dict]:
+    """
+    Validate agent output structure against AGENT_QUALITY_SPECS.
+    Returns a list of issues found.
+    """
+    issues = []
+
+    for agent_key, result in agent_results.items():
+        if not result or agent_key.startswith("_"):
+            continue
+        spec = AGENT_QUALITY_SPECS.get(agent_key)
+        if not spec:
+            continue
+
+        findings = result.get("findings", [])
+
+        # Check finding count
+        if len(findings) > spec.get("max_findings", 99):
+            issues.append({
+                "agent_key": agent_key,
+                "finding_index": -1,
+                "test": "too_many_findings",
+                "detail": f"{len(findings)} findings exceeds max of {spec['max_findings']}",
+                "auto_action": "flag",
+            })
+
+        # Check severity distribution
+        sev_counts = {}
+        for f in findings:
+            sev = f.get("severity", "info")
+            sev_counts[sev] = sev_counts.get(sev, 0) + 1
+
+        for sev, max_count in spec.get("severity_max", {}).items():
+            if sev_counts.get(sev, 0) > max_count:
+                issues.append({
+                    "agent_key": agent_key,
+                    "finding_index": -1,
+                    "test": "severity_flood",
+                    "detail": f"{sev_counts[sev]} {sev} findings exceeds cap of {max_count}",
+                    "auto_action": "downgrade_weakest",
+                })
+
+        # Check required fields per finding
+        required = spec.get("required_fields", [])
+        for i, f in enumerate(findings):
+            missing = [fld for fld in required if not f.get(fld)]
+            if missing:
+                issues.append({
+                    "agent_key": agent_key,
+                    "finding_index": i,
+                    "test": "missing_fields",
+                    "detail": f"Missing: {', '.join(missing)}",
+                    "auto_action": "flag",
+                })
+
+            # Valid severity check
+            if f.get("severity") not in ("critical", "warning", "info", "positive"):
+                issues.append({
+                    "agent_key": agent_key,
+                    "finding_index": i,
+                    "test": "invalid_severity",
+                    "detail": f"Invalid severity: {f.get('severity')}",
+                    "auto_action": "flag",
+                })
+
+            # Title length
+            title = f.get("title", "")
+            if len(title) > 80:
+                issues.append({
+                    "agent_key": agent_key,
+                    "finding_index": i,
+                    "test": "title_too_long",
+                    "detail": f"Title is {len(title)} chars (max 80)",
+                    "auto_action": "flag",
+                })
+
+    return issues
+
+
+def _run_rule_tests(agent_results: Dict[str, Any], brand: dict) -> List[Dict]:
+    """
+    Content-quality checks using rules and regex (no LLM).
+    Returns a list of issues found.
+    """
+    issues = []
+    brand_name = (brand.get("display_name") or "").lower()
+    services = (brand.get("primary_services") or "").lower()
+    area = (brand.get("service_area") or "").lower()
+    monthly_budget = brand.get("monthly_budget") or 0
+
+    for agent_key, result in agent_results.items():
+        if not result or agent_key.startswith("_"):
+            continue
+        spec = AGENT_QUALITY_SPECS.get(agent_key)
+        if not spec:
+            continue
+
+        findings = result.get("findings", [])
+        banned = [p.lower() for p in spec.get("banned_phrases", [])]
+
+        for i, f in enumerate(findings):
+            text_fields = " ".join([
+                f.get("title", ""), f.get("detail", ""), f.get("action", ""),
+            ]).lower()
+
+            # Banned phrase scan
+            for phrase in banned:
+                if phrase in text_fields:
+                    issues.append({
+                        "agent_key": agent_key,
+                        "finding_index": i,
+                        "test": "banned_phrase",
+                        "detail": f"Contains banned phrase: '{phrase}'",
+                        "auto_action": "reject",
+                    })
+                    break  # one banned phrase is enough to reject
+
+            # AI writing tells - em dashes
+            raw_text = f.get("title", "") + " " + f.get("detail", "") + " " + f.get("action", "")
+            if "\u2014" in raw_text or "\u2013" in raw_text:
+                issues.append({
+                    "agent_key": agent_key,
+                    "finding_index": i,
+                    "test": "ai_tell_emdash",
+                    "detail": "Contains em dash or en dash - obvious AI tell",
+                    "auto_action": "flag",
+                })
+
+            # Numbers check - detail should contain actual data points
+            if spec.get("detail_needs_numbers"):
+                detail = f.get("detail", "")
+                has_number = bool(_re.search(r'\d+\.?\d*', detail))
+                if not has_number:
+                    issues.append({
+                        "agent_key": agent_key,
+                        "finding_index": i,
+                        "test": "no_numbers",
+                        "detail": "Detail has no metrics or numbers - likely vague",
+                        "auto_action": "flag",
+                    })
+
+            # Brand specificity check (for creative agents)
+            if spec.get("brand_specificity"):
+                has_brand_ref = False
+                if brand_name and brand_name in text_fields:
+                    has_brand_ref = True
+                elif services:
+                    for svc in services.split(","):
+                        if svc.strip() and svc.strip() in text_fields:
+                            has_brand_ref = True
+                            break
+                elif area and area in text_fields:
+                    has_brand_ref = True
+                if not has_brand_ref and brand_name:
+                    issues.append({
+                        "agent_key": agent_key,
+                        "finding_index": i,
+                        "test": "not_brand_specific",
+                        "detail": "Copy doesn't reference the business name, services, or area",
+                        "auto_action": "flag",
+                    })
+
+            # Budget constraint check
+            if spec.get("budget_constraint") and monthly_budget > 0:
+                numbers = _re.findall(r'\$[\d,]+(?:\.\d+)?', f.get("action", "") + " " + f.get("detail", ""))
+                for num_str in numbers:
+                    try:
+                        val = float(num_str.replace("$", "").replace(",", ""))
+                        if val > monthly_budget * 1.5:
+                            issues.append({
+                                "agent_key": agent_key,
+                                "finding_index": i,
+                                "test": "exceeds_budget",
+                                "detail": f"Recommends {num_str} but monthly budget is ${monthly_budget}",
+                                "auto_action": "reject",
+                            })
+                            break
+                    except ValueError:
+                        pass
+
+        # Check for repetitive sentence structure (AI tell)
+        if len(findings) >= 3:
+            first_words = []
+            for f in findings:
+                action = (f.get("action") or "").strip()
+                if action:
+                    first_words.append(action.split()[0].lower() if action.split() else "")
+            if first_words and len(set(first_words)) == 1 and len(first_words) >= 3:
+                issues.append({
+                    "agent_key": agent_key,
+                    "finding_index": -1,
+                    "test": "repetitive_structure",
+                    "detail": f"All {len(first_words)} actions start with '{first_words[0]}' - AI writing pattern",
+                    "auto_action": "flag",
+                })
+
+    return issues
+
+
+# ---------------------------------------------------------------------------
+# Warren orchestration prompt - he's the boss, he decides what ships
+# ---------------------------------------------------------------------------
+
+WARREN_ORCHESTRATION_PROMPT = """You are W.A.R.R.E.N. (Weighted Analysis for Revenue, Reach, Engagement & Navigation).
+You are the BOSS. You are responsible for ALL output that reaches the client. Period.
+
+Chief (your QA officer) has reviewed the team's findings and run quality tests.
+Now YOU decide the final fate of every finding.
+
+YOUR DECISION RULES:
+1. You own every finding that ships. If bad work reaches the client, it's YOUR failure.
+2. Revenue impact comes first. Findings that save or make the client money get priority.
+3. Three great findings beat eight mediocre ones. Cut aggressively.
+4. Structural/rule test failures are objective. If a finding has a banned phrase or no data, that's a real problem.
+5. Chief's LLM review catches nuance - contradictions, vague advice, creative quality. Trust it but verify.
+6. REWORK is expensive (another API call per agent). Only use it when the finding has real potential but bad execution.
+7. KILL anything generic, vague, or not worth the client's attention.
+8. SHIP findings that passed QA or have only cosmetic issues.
+
+DECISIONS (one per finding):
+- SHIP: goes to client as-is
+- KILL: removed entirely
+- REWORK: send back to the agent with your specific feedback
+
+For REWORK, you MUST include a feedback_note telling the agent exactly what to fix.
+Group rework decisions by agent - if 3 of an agent's 5 findings need rework, rework the whole agent.
+
+OUTPUT FORMAT (strict JSON):
+{
+  "decisions": [
+    {
+      "agent_key": "scout",
+      "finding_index": 0,
+      "decision": "ship|kill|rework",
+      "reason": "brief reason",
+      "feedback_note": "only for rework - specific instructions for the agent"
+    }
+  ],
+  "agents_to_retry": ["ace"],
+  "overall_grade": "A|B|C|D|F",
+  "overall_notes": "1-2 sentence summary of team output quality"
+}
+
+Return ONLY valid JSON. No markdown fences.
+Be decisive. Every finding you ship has your name on it."""
 
 
 # ---------------------------------------------------------------------------
@@ -808,9 +1178,11 @@ def run_agent(agent_key: str, *, db, brand: dict, brand_id: int,
               api_key: str, month: str = None,
               analysis_summary: dict = None, campaigns: dict = None,
               gbp_ctx: dict = None, gbp_audit: dict = None,
-              competitor_intel: list = None, crm_data: dict = None) -> Optional[Dict]:
+              competitor_intel: list = None, crm_data: dict = None,
+              feedback: str = None) -> Optional[Dict]:
     """
     Run a single agent's analysis for a brand.
+    If feedback is provided, this is a retry - the agent gets QA notes to fix.
     Returns the parsed findings dict, or None on failure.
     """
     import openai
@@ -856,8 +1228,21 @@ def run_agent(agent_key: str, *, db, brand: dict, brand_id: int,
 
 Run your full analysis now."""
 
+    # If this is a retry, inject QA feedback
+    if feedback:
+        user_message += f"""
+
+IMPORTANT - THIS IS A RETRY. Your previous output was reviewed and sent back.
+W.A.R.R.E.N. (the boss) flagged these issues with your last attempt:
+
+{feedback}
+
+Fix ALL of these issues. Be more specific. Use actual numbers from the data.
+Reference the actual business name, services, and area. No generic output."""
+
     # Log in-progress
-    db.log_agent_activity(brand_id, agent_key, f"Running {config['role']} analysis", f"Month: {month}", "in_progress")
+    is_retry = " (retry)" if feedback else ""
+    db.log_agent_activity(brand_id, agent_key, f"Running {config['role']} analysis{is_retry}", f"Month: {month}", "in_progress")
 
     try:
         client = openai.OpenAI(api_key=api_key)
@@ -954,27 +1339,38 @@ def _pick_model(brand: dict, purpose: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# QA review - Chief reviews all agent output before it ships
+# Multi-stage QA pipeline: structural tests -> rule tests -> Chief LLM -> Warren
 # ---------------------------------------------------------------------------
 
 def run_qa_review(db, brand: dict, brand_id: int, api_key: str,
                   agent_results: Dict[str, Any], month: str = None) -> Dict[str, Any]:
     """
-    Run Chief's QA review on all agent results.
-    Modifies the findings in the DB: rejects get deleted, flags get annotated,
-    downgrades get severity-corrected.
-    Returns QA summary dict.
+    Multi-stage QA review:
+      1. Structural tests (code) - validate output schema
+      2. Rule-based tests (code) - banned phrases, numbers, specificity
+      3. Chief LLM review - nuanced quality (contradictions, creative quality, actionability)
+    Returns compiled QA report for Warren to review.
     """
     import openai
-    import re
 
     if not month:
         month = datetime.now().strftime("%Y-%m")
 
-    # Build the review payload - all findings from all agents
+    # Stage 1: Structural tests
+    structural_issues = _run_structural_tests(agent_results)
+    logger.info("QA Stage 1 (structural): %d issues found", len(structural_issues))
+
+    # Stage 2: Rule-based tests
+    rule_issues = _run_rule_tests(agent_results, brand)
+    logger.info("QA Stage 2 (rules): %d issues found", len(rule_issues))
+
+    # Combine pre-test results
+    all_pre_issues = structural_issues + rule_issues
+
+    # Build the review payload for Chief
     review_items = []
     for agent_key, result in agent_results.items():
-        if not result or not result.get("findings"):
+        if not result or not result.get("findings") or agent_key.startswith("_"):
             continue
         for i, finding in enumerate(result["findings"]):
             review_items.append({
@@ -990,9 +1386,14 @@ def run_qa_review(db, brand: dict, brand_id: int, api_key: str,
     if not review_items:
         logger.info("QA: No findings to review for brand %s", brand_id)
         db.log_agent_activity(brand_id, "chief", "QA review skipped", "No findings from team", "completed")
-        return {"team_grade": "N/A", "team_notes": "No findings to review.", "reviews": []}
+        return {
+            "pre_test_issues": all_pre_issues,
+            "chief_reviews": [],
+            "team_notes": "No findings to review.",
+            "worst_offender": None,
+        }
 
-    # Brand context for Chief
+    # Stage 3: Chief LLM review
     brand_context = (
         f"Business: {brand.get('display_name', 'Unknown')}, "
         f"Industry: {brand.get('industry', 'Unknown')}, "
@@ -1001,17 +1402,40 @@ def run_qa_review(db, brand: dict, brand_id: int, api_key: str,
         f"Budget: ${brand.get('monthly_budget', 0)}/mo"
     )
 
+    # Format pre-test results for Chief
+    pre_test_summary = "None - all findings passed structural and rule tests."
+    if all_pre_issues:
+        pre_test_lines = []
+        for issue in all_pre_issues:
+            idx_str = f"finding #{issue['finding_index']}" if issue['finding_index'] >= 0 else "overall"
+            pre_test_lines.append(
+                f"  - {issue['agent_key']} {idx_str}: [{issue['test']}] {issue['detail']} (auto: {issue['auto_action']})"
+            )
+        pre_test_summary = "\n".join(pre_test_lines)
+
     user_message = f"""Review the following {len(review_items)} findings from our agent team for {brand.get('display_name', 'this business')}.
 
 BRAND CONTEXT: {brand_context}
 
+PRE-TEST RESULTS (automated structural and rule checks):
+{pre_test_summary}
+
 FINDINGS TO REVIEW:
 {json.dumps(review_items, indent=2)}
 
-Grade each finding. Be strict. Reject anything generic, vague, or unsupported.
-A finding that wastes the client's time is worse than no finding at all."""
+Focus on nuance that automated tests miss: contradictions, unsupported claims, creative quality, actionability.
+Don't re-flag things the pre-tests already caught unless you have additional context."""
 
-    db.log_agent_activity(brand_id, "chief", "Running QA review", f"Reviewing {len(review_items)} findings", "in_progress")
+    db.log_agent_activity(
+        brand_id, "chief", "Running multi-stage QA",
+        f"{len(review_items)} findings, {len(all_pre_issues)} pre-test issues",
+        "in_progress",
+    )
+
+    chief_reviews = []
+    chief_notes = ""
+    worst_offender = None
+    chief_memory = None
 
     try:
         client = openai.OpenAI(api_key=api_key)
@@ -1033,131 +1457,304 @@ A finding that wastes the client's time is worse than no finding at all."""
                 raw = raw[:-3]
             raw = raw.strip()
 
-        json_match = re.search(r'\{.*\}', raw, re.DOTALL)
-        if not json_match:
+        json_match = _re.search(r'\{.*\}', raw, _re.DOTALL)
+        if json_match:
+            qa_result = json.loads(json_match.group())
+            chief_reviews = qa_result.get("reviews", [])
+            chief_notes = qa_result.get("team_notes", "")
+            worst_offender = qa_result.get("worst_offender")
+            chief_memory = qa_result.get("memory")
+        else:
             logger.warning("Chief returned non-JSON: %s", raw[:200])
-            db.log_agent_activity(brand_id, "chief", "QA review failed", "Non-JSON response", "completed")
-            return {"team_grade": "?", "team_notes": "QA review failed to parse.", "reviews": []}
 
-        qa_result = json.loads(json_match.group())
-        reviews = qa_result.get("reviews", [])
+    except Exception as e:
+        logger.exception("Chief LLM review failed: %s", e)
 
-        # Apply QA verdicts to the database
-        rejected_count = 0
-        flagged_count = 0
-        downgraded_count = 0
-        passed_count = 0
+    db.log_agent_activity(
+        brand_id, "chief",
+        f"QA complete: {len(all_pre_issues)} pre-test issues, {len(chief_reviews)} LLM reviews",
+        chief_notes[:100] if chief_notes else "Review done",
+        "completed",
+    )
 
-        # Get current findings from DB to match against
-        db_findings = db.get_agent_findings(brand_id, month=month, limit=200)
+    # Save Chief's memory
+    if chief_memory:
+        try:
+            from webapp.ai_assistant import save_memory_with_embedding
+            save_memory_with_embedding(
+                db, brand_id, "insight",
+                f"Chief QA: {chief_memory[:60]}",
+                chief_memory, api_key,
+            )
+        except Exception:
+            pass
 
-        for review in reviews:
-            verdict = review.get("verdict", "pass")
-            r_agent = review.get("agent_key", "")
-            r_index = review.get("finding_index", -1)
+    return {
+        "pre_test_issues": all_pre_issues,
+        "chief_reviews": chief_reviews,
+        "team_notes": chief_notes,
+        "worst_offender": worst_offender,
+    }
 
-            # Match this review to a DB finding
-            # Find the nth finding from this agent
-            agent_findings = [f for f in db_findings if f.get("agent_key") == r_agent]
-            if r_index < 0 or r_index >= len(agent_findings):
-                continue
-            db_finding = agent_findings[r_index]
-            finding_id = db_finding.get("id")
-            if not finding_id:
-                continue
 
-            if verdict == "reject":
-                # Remove it entirely
-                db.dismiss_agent_finding(finding_id, brand_id)
-                rejected_count += 1
+# ---------------------------------------------------------------------------
+# Warren orchestration - the boss reviews Chief's report and decides
+# ---------------------------------------------------------------------------
 
-            elif verdict == "downgrade":
-                corrected_sev = review.get("corrected_severity", "info")
-                reason = review.get("reason", "")
-                # Update severity and add QA note
-                try:
-                    conn = db._conn()
-                    conn.execute(
-                        """UPDATE agent_findings
-                           SET severity = ?, extra_json = json_set(
-                               COALESCE(extra_json, '{}'), '$.qa_note', ?
-                           )
-                           WHERE id = ? AND brand_id = ?""",
-                        (corrected_sev, f"Downgraded by Chief: {reason}", finding_id, brand_id),
-                    )
-                    conn.commit()
-                except Exception as e:
-                    logger.debug("QA downgrade failed for finding %s: %s", finding_id, e)
-                downgraded_count += 1
+def warren_orchestrate(db, brand: dict, brand_id: int, api_key: str,
+                       agent_results: Dict[str, Any], qa_report: Dict[str, Any],
+                       month: str = None) -> Dict[str, Any]:
+    """
+    Warren reviews Chief's QA report and makes final decisions on every finding.
+    Returns dict with decisions, agents_to_retry, and the results of applying those decisions.
+    """
+    import openai
 
-            elif verdict == "flag":
-                reason = review.get("reason", "")
-                corrected = review.get("corrected_text", "")
-                note = f"Chief flagged: {reason}"
-                if corrected:
-                    note += f" | Suggested: {corrected}"
+    if not month:
+        month = datetime.now().strftime("%Y-%m")
+
+    pre_issues = qa_report.get("pre_test_issues", [])
+    chief_reviews = qa_report.get("chief_reviews", [])
+
+    # Build the briefing for Warren
+    finding_list = []
+    for agent_key, result in agent_results.items():
+        if not result or not result.get("findings") or agent_key.startswith("_"):
+            continue
+        for i, finding in enumerate(result["findings"]):
+            entry = {
+                "agent_key": agent_key,
+                "finding_index": i,
+                "severity": finding.get("severity", "info"),
+                "title": finding.get("title", ""),
+                "detail": finding.get("detail", "")[:200],
+                "action": finding.get("action", "")[:200],
+            }
+
+            # Attach pre-test issues for this finding
+            related_pre = [
+                iss for iss in pre_issues
+                if iss["agent_key"] == agent_key and iss["finding_index"] in (i, -1)
+            ]
+            if related_pre:
+                entry["pre_test_flags"] = [
+                    f"[{iss['test']}] {iss['detail']} (auto: {iss['auto_action']})"
+                    for iss in related_pre
+                ]
+
+            # Attach Chief's review for this finding
+            related_chief = [
+                r for r in chief_reviews
+                if r.get("agent_key") == agent_key and r.get("finding_index") == i
+            ]
+            if related_chief:
+                cr = related_chief[0]
+                entry["chief_verdict"] = cr.get("verdict", "pass")
+                if cr.get("reason"):
+                    entry["chief_reason"] = cr["reason"]
+
+            finding_list.append(entry)
+
+    if not finding_list:
+        return {
+            "decisions": [],
+            "agents_to_retry": [],
+            "overall_grade": "N/A",
+            "overall_notes": "No findings to review.",
+            "applied": {"shipped": 0, "killed": 0, "rework": 0},
+        }
+
+    brand_context = (
+        f"Business: {brand.get('display_name', 'Unknown')}, "
+        f"Industry: {brand.get('industry', 'Unknown')}, "
+        f"Budget: ${brand.get('monthly_budget', 0)}/mo"
+    )
+
+    user_message = f"""You have {len(finding_list)} findings from the team for {brand.get('display_name', 'this business')}.
+
+BRAND: {brand_context}
+
+Chief's overall notes: {qa_report.get('team_notes', 'None')}
+Pre-test issues: {len(pre_issues)} found
+Chief worst offender: {qa_report.get('worst_offender', 'None')}
+
+FINDINGS WITH QA ANNOTATIONS:
+{json.dumps(finding_list, indent=2)}
+
+Review each finding. Make the call: SHIP, KILL, or REWORK.
+Remember - you own everything that ships. Be decisive."""
+
+    db.log_agent_activity(
+        brand_id, "warren", "Reviewing team output",
+        f"{len(finding_list)} findings to judge",
+        "in_progress",
+    )
+
+    try:
+        client = openai.OpenAI(api_key=api_key)
+        resp = client.chat.completions.create(
+            model=_pick_model(brand, "analysis"),
+            messages=[
+                {"role": "system", "content": WARREN_ORCHESTRATION_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0.2,
+            max_tokens=2000,
+        )
+        raw = resp.choices[0].message.content.strip()
+
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[-1]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+            raw = raw.strip()
+
+        json_match = _re.search(r'\{.*\}', raw, _re.DOTALL)
+        if not json_match:
+            logger.warning("Warren returned non-JSON: %s", raw[:200])
+            db.log_agent_activity(brand_id, "warren", "Review failed", "Non-JSON response", "completed")
+            # Fallback: ship everything that Chief passed, kill what Chief rejected
+            return _fallback_decisions(db, brand_id, agent_results, qa_report, month)
+
+        warren_result = json.loads(json_match.group())
+
+    except Exception as e:
+        logger.exception("Warren orchestration failed: %s", e)
+        db.log_agent_activity(brand_id, "warren", "Review error", str(e)[:100], "completed")
+        return _fallback_decisions(db, brand_id, agent_results, qa_report, month)
+
+    # Apply Warren's decisions to the database
+    decisions = warren_result.get("decisions", [])
+    agents_to_retry = warren_result.get("agents_to_retry", [])
+    overall_grade = warren_result.get("overall_grade", "?")
+    overall_notes = warren_result.get("overall_notes", "")
+
+    shipped = 0
+    killed = 0
+    rework_count = 0
+    rework_feedback = {}  # agent_key -> list of feedback notes
+
+    db_findings = db.get_agent_findings(brand_id, month=month, limit=200)
+
+    for dec in decisions:
+        d_agent = dec.get("agent_key", "")
+        d_index = dec.get("finding_index", -1)
+        decision = dec.get("decision", "ship")
+
+        agent_findings = [f for f in db_findings if f.get("agent_key") == d_agent]
+        if d_index < 0 or d_index >= len(agent_findings):
+            continue
+        db_finding = agent_findings[d_index]
+        finding_id = db_finding.get("id")
+        if not finding_id:
+            continue
+
+        if decision == "kill":
+            db.dismiss_agent_finding(finding_id, brand_id)
+            killed += 1
+
+        elif decision == "rework":
+            # Dismiss the current finding - it will be replaced on retry
+            db.dismiss_agent_finding(finding_id, brand_id)
+            rework_count += 1
+            note = dec.get("feedback_note", dec.get("reason", "Improve quality and specificity"))
+            rework_feedback.setdefault(d_agent, []).append(note)
+
+        else:  # ship
+            # Add Warren's approval stamp
+            reason = dec.get("reason", "")
+            if reason:
                 try:
                     conn = db._conn()
                     conn.execute(
                         """UPDATE agent_findings
                            SET extra_json = json_set(
-                               COALESCE(extra_json, '{}'), '$.qa_note', ?
+                               COALESCE(extra_json, '{}'), '$.warren_note', ?
                            )
                            WHERE id = ? AND brand_id = ?""",
-                        (note, finding_id, brand_id),
+                        (f"Approved: {reason}", finding_id, brand_id),
                     )
                     conn.commit()
-                except Exception as e:
-                    logger.debug("QA flag failed for finding %s: %s", finding_id, e)
-                flagged_count += 1
+                except Exception:
+                    pass
+            shipped += 1
 
+    summary = f"Grade: {overall_grade} | {shipped} shipped, {killed} killed, {rework_count} rework"
+    db.log_agent_activity(
+        brand_id, "warren",
+        f"Team review complete - {overall_grade}",
+        summary,
+        "completed",
+    )
+
+    return {
+        "decisions": decisions,
+        "agents_to_retry": agents_to_retry,
+        "rework_feedback": rework_feedback,
+        "overall_grade": overall_grade,
+        "overall_notes": overall_notes,
+        "applied": {"shipped": shipped, "killed": killed, "rework": rework_count},
+    }
+
+
+def _fallback_decisions(db, brand_id: int, agent_results: Dict, qa_report: Dict,
+                        month: str) -> Dict[str, Any]:
+    """
+    Fallback if Warren's LLM call fails: use Chief's verdicts and pre-test auto-actions.
+    Ships passes, kills rejects and banned-phrase hits, flags everything else.
+    """
+    pre_issues = qa_report.get("pre_test_issues", [])
+    chief_reviews = qa_report.get("chief_reviews", [])
+
+    db_findings = db.get_agent_findings(brand_id, month=month, limit=200)
+    shipped = 0
+    killed = 0
+
+    # Build a lookup of issues by (agent_key, finding_index)
+    issue_map = {}
+    for iss in pre_issues:
+        key = (iss["agent_key"], iss["finding_index"])
+        issue_map.setdefault(key, []).append(iss)
+
+    chief_map = {}
+    for r in chief_reviews:
+        key = (r.get("agent_key", ""), r.get("finding_index", -1))
+        chief_map[key] = r
+
+    for agent_key, result in agent_results.items():
+        if not result or not result.get("findings") or agent_key.startswith("_"):
+            continue
+        agent_db = [f for f in db_findings if f.get("agent_key") == agent_key]
+
+        for i, finding in enumerate(result["findings"]):
+            if i >= len(agent_db):
+                break
+            finding_id = agent_db[i].get("id")
+            if not finding_id:
+                continue
+
+            # Check for auto-reject from pre-tests
+            related = issue_map.get((agent_key, i), []) + issue_map.get((agent_key, -1), [])
+            auto_reject = any(iss["auto_action"] == "reject" for iss in related)
+
+            # Check Chief's verdict
+            chief_r = chief_map.get((agent_key, i), {})
+            chief_reject = chief_r.get("verdict") == "reject"
+
+            if auto_reject or chief_reject:
+                db.dismiss_agent_finding(finding_id, brand_id)
+                killed += 1
             else:
-                passed_count += 1
+                shipped += 1
 
-        team_grade = qa_result.get("team_grade", "?")
-        team_notes = qa_result.get("team_notes", "")
-        worst = qa_result.get("worst_offender")
-
-        summary_parts = [f"Grade: {team_grade}"]
-        summary_parts.append(f"{passed_count} passed, {rejected_count} rejected, {flagged_count} flagged, {downgraded_count} downgraded")
-        if worst:
-            summary_parts.append(f"Worst: {worst}")
-
-        db.log_agent_activity(
-            brand_id, "chief",
-            f"QA review complete - Team grade: {team_grade}",
-            " | ".join(summary_parts),
-            "completed",
-        )
-
-        # Save QA memory
-        memory_note = qa_result.get("memory")
-        if memory_note:
-            try:
-                from webapp.ai_assistant import save_memory_with_embedding
-                save_memory_with_embedding(
-                    db, brand_id, "insight",
-                    f"Chief QA: {memory_note[:60]}",
-                    memory_note, api_key,
-                )
-            except Exception:
-                pass
-
-        return {
-            "team_grade": team_grade,
-            "team_notes": team_notes,
-            "worst_offender": worst,
-            "passed": passed_count,
-            "rejected": rejected_count,
-            "flagged": flagged_count,
-            "downgraded": downgraded_count,
-            "reviews": reviews,
-        }
-
-    except Exception as e:
-        logger.exception("Chief QA failed: %s", e)
-        db.log_agent_activity(brand_id, "chief", "QA review error", str(e)[:100], "completed")
-        return {"team_grade": "?", "team_notes": f"QA review failed: {str(e)[:80]}", "reviews": []}
+    return {
+        "decisions": [],
+        "agents_to_retry": [],
+        "rework_feedback": {},
+        "overall_grade": "?",
+        "overall_notes": "Warren review failed - used fallback (Chief + pre-test auto-actions).",
+        "applied": {"shipped": shipped, "killed": killed, "rework": 0},
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1271,17 +1868,79 @@ def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
             logger.exception("Agent %s crashed: %s", agent_key, e)
             results[agent_key] = None
 
-    # ── QA Review: Chief reviews all findings before they ship ──
+    # ── QA Pipeline: Chief multi-test → Warren orchestration → retry loop ──
     agents_with_findings = {k: v for k, v in results.items() if v and v.get("findings")}
     if agents_with_findings:
         try:
-            qa_summary = run_qa_review(
+            # Step 1: Chief runs multi-stage QA (structural + rules + LLM)
+            qa_report = run_qa_review(
                 db, brand, brand_id, api_key,
                 agents_with_findings, month=month,
             )
-            results["_qa"] = qa_summary
+
+            # Step 2: Warren reviews Chief's report and makes final decisions
+            warren_result = warren_orchestrate(
+                db, brand, brand_id, api_key,
+                agents_with_findings, qa_report, month=month,
+            )
+
+            # Step 3: Retry loop - re-run agents Warren flagged for rework (max 1 retry)
+            rework_feedback = warren_result.get("rework_feedback", {})
+            retry_results = {}
+
+            for retry_agent, feedback_notes in rework_feedback.items():
+                if retry_agent not in agent_eligibility or not agent_eligibility.get(retry_agent):
+                    continue
+                combined_feedback = "\n".join(f"- {note}" for note in feedback_notes)
+                logger.info("Retrying agent %s with Warren's feedback", retry_agent)
+
+                # Clear the old (now-dismissed) findings and run again with feedback
+                db.clear_agent_findings(brand_id, month, agent_key=retry_agent)
+                try:
+                    retry_result = run_agent(
+                        retry_agent, db=db, brand=brand, brand_id=brand_id,
+                        api_key=api_key, month=month,
+                        analysis_summary=analysis_summary, campaigns=campaigns,
+                        gbp_ctx=gbp_ctx, gbp_audit=gbp_audit_result,
+                        competitor_intel=competitor_intel, crm_data=crm_data,
+                        feedback=combined_feedback,
+                    )
+                    if retry_result and retry_result.get("findings"):
+                        retry_results[retry_agent] = retry_result
+                        results[retry_agent] = retry_result  # update main results
+                except Exception as e:
+                    logger.exception("Retry of %s failed: %s", retry_agent, e)
+
+            # Step 4: Quick QA pass on retried output (structural + rules only, no LLM)
+            if retry_results:
+                retry_structural = _run_structural_tests(retry_results)
+                retry_rules = _run_rule_tests(retry_results, brand)
+                retry_issues = retry_structural + retry_rules
+
+                # Auto-reject findings that still fail after retry
+                db_findings_post = db.get_agent_findings(brand_id, month=month, limit=200)
+                for issue in retry_issues:
+                    if issue["auto_action"] == "reject":
+                        agent_db = [f for f in db_findings_post if f.get("agent_key") == issue["agent_key"]]
+                        idx = issue["finding_index"]
+                        if 0 <= idx < len(agent_db):
+                            fid = agent_db[idx].get("id")
+                            if fid:
+                                db.dismiss_agent_finding(fid, brand_id)
+
+                logger.info("Post-retry QA: %d issues on retried output", len(retry_issues))
+
+            results["_qa"] = {
+                "qa_report": qa_report,
+                "warren": warren_result,
+                "retried_agents": list(rework_feedback.keys()),
+            }
+
         except Exception as e:
-            logger.exception("QA review crashed: %s", e)
-            results["_qa"] = {"team_grade": "?", "team_notes": "QA review failed."}
+            logger.exception("QA pipeline crashed: %s", e)
+            results["_qa"] = {
+                "overall_grade": "?",
+                "overall_notes": f"QA pipeline failed: {str(e)[:80]}",
+            }
 
     return results
