@@ -1,0 +1,521 @@
+{% extends "client_base.html" %}
+{% block title %}Tasks{% endblock %}
+
+{% block content %}
+<style>
+    .tasks-header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+        border-radius: 16px;
+        padding: 2rem 2.25rem;
+        margin-bottom: 1.5rem;
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+    }
+    .tasks-header::before {
+        content: '';
+        position: absolute;
+        top: -30%; right: -5%;
+        width: 250px; height: 250px;
+        background: radial-gradient(circle, rgba(129,140,248,.15) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    .tasks-header h3 { font-weight: 800; font-size: 1.35rem; margin-bottom: .15rem; position: relative; color: #fff !important; }
+    .tasks-header p  { opacity: .7; font-size: .88rem; margin: 0; position: relative; }
+    .tasks-header .btn-create-task {
+        position: relative;
+        background: rgba(255,255,255,.15);
+        border: 1px solid rgba(255,255,255,.25);
+        color: #fff; border-radius: 10px;
+        padding: 8px 20px; font-weight: 600; font-size: .88rem;
+    }
+    .tasks-header .btn-create-task:hover { background: rgba(255,255,255,.25); color: #fff; }
+
+    /* Filters */
+    .task-filters { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .task-filters .btn {
+        font-size: .8rem; padding: 5px 14px; border-radius: 20px;
+        font-weight: 600; border: 1px solid #d1d5db; background: #fff; color: #374151;
+    }
+    .task-filters .btn.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+
+    /* Task cards */
+    .task-card {
+        background: #fff;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
+        padding: 1rem 1.25rem;
+        cursor: pointer;
+        transition: box-shadow .2s, border-color .2s;
+    }
+    .task-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.06); border-color: #c7d2fe; }
+    .task-card.done { opacity: .55; }
+    .task-card .task-title { font-weight: 700; font-size: .95rem; margin-bottom: 4px; }
+    .task-card .task-desc { font-size: .82rem; color: #64748b; margin-bottom: 6px; }
+    .task-card .task-meta { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
+    .task-card .task-meta span { font-size: .75rem; color: #94a3b8; }
+
+    .priority-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .priority-dot.urgent  { background: #ef4444; }
+    .priority-dot.high    { background: #f59e0b; }
+    .priority-dot.normal  { background: #3b82f6; }
+    .priority-dot.low     { background: #94a3b8; }
+
+    .status-pill {
+        font-size: .7rem; font-weight: 600;
+        padding: 2px 10px; border-radius: 20px;
+        text-transform: uppercase; letter-spacing: .03em;
+    }
+    .status-pill.open        { background: #dbeafe; color: #1e40af; }
+    .status-pill.in_progress { background: #fef3c7; color: #92400e; }
+    .status-pill.done        { background: #d1fae5; color: #065f46; }
+    .status-pill.cancelled   { background: #f1f5f9; color: #64748b; }
+
+    .source-badge {
+        font-size: .68rem; padding: 2px 8px; border-radius: 12px;
+        background: #ede9fe; color: #7c3aed; font-weight: 600;
+    }
+    .source-badge.manual { background: #f1f5f9; color: #475569; }
+
+    /* Modal forms */
+    .task-modal .modal-content { border-radius: 16px; border: none; }
+    .task-modal .modal-header { border-bottom: 1px solid #f1f5f9; padding: 1.25rem 1.5rem; }
+    .task-modal .modal-body { padding: 1.5rem; }
+    .task-modal .form-label { font-weight: 600; font-size: .85rem; color: #374151; }
+    .task-modal .form-control, .task-modal .form-select {
+        border-radius: 10px; border: 1px solid #d1d5db; font-size: .9rem;
+    }
+
+    /* Step checklist */
+    .step-list { list-style: none; padding: 0; margin: 0; }
+    .step-list li {
+        display: flex; align-items: center; gap: .6rem;
+        padding: 8px 0; border-bottom: 1px solid #f1f5f9;
+        font-size: .9rem;
+    }
+    .step-list li:last-child { border-bottom: none; }
+    .step-list li.done-step span { text-decoration: line-through; color: #94a3b8; }
+    .step-list input[type="checkbox"] { width: 18px; height: 18px; accent-color: #4f46e5; flex-shrink: 0; }
+
+    .add-step-row { display: flex; gap: .5rem; margin-top: .5rem; }
+    .add-step-row input { flex: 1; }
+
+    .empty-tasks {
+        text-align: center; color: #94a3b8; padding: 4rem 1rem;
+    }
+    .empty-tasks i { font-size: 3rem; margin-bottom: .75rem; display: block; }
+</style>
+
+<div class="tasks-header d-flex justify-content-between align-items-center">
+    <div>
+        <h3><i class="bi bi-list-task me-2"></i>Tasks</h3>
+        <p>Manage and assign work across your team.</p>
+    </div>
+    {% if current_role in ('owner', 'manager') %}
+    <button class="btn btn-create-task" onclick="openCreateTask()">
+        <i class="bi bi-plus-lg me-1"></i> New Task
+    </button>
+    {% endif %}
+</div>
+
+<!-- Filters -->
+<div class="task-filters">
+    <button class="btn active" data-filter="all">All</button>
+    <button class="btn" data-filter="open">Open</button>
+    <button class="btn" data-filter="in_progress">In Progress</button>
+    <button class="btn" data-filter="done">Done</button>
+    <button class="btn" data-filter="mine">My Tasks</button>
+</div>
+
+<!-- Task List -->
+<div id="taskList" class="d-flex flex-column gap-3">
+    <!-- Rendered by JS -->
+</div>
+<div id="emptyTasks" class="empty-tasks d-none">
+    <i class="bi bi-clipboard2-check"></i>
+    <p>No tasks yet. Create one to get started.</p>
+</div>
+
+<!-- Create Task Modal -->
+<div class="modal fade task-modal" id="createTaskModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold">Create Task</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Title</label>
+                    <input type="text" id="newTitle" class="form-control" placeholder="What needs to be done?">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Description</label>
+                    <textarea id="newDesc" class="form-control" rows="2" placeholder="Optional details..."></textarea>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Priority</label>
+                        <select id="newPriority" class="form-select">
+                            <option value="normal" selected>Normal</option>
+                            <option value="low">Low</option>
+                            <option value="high">High</option>
+                            <option value="urgent">Urgent</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Assign To</label>
+                        <select id="newAssign" class="form-select">
+                            <option value="">Unassigned</option>
+                            {% for u in users %}
+                            <option value="{{ u.id }}">{{ u.display_name }} ({{ u.role or 'owner' }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Due Date</label>
+                        <input type="date" id="newDue" class="form-control">
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <label class="form-label">Steps</label>
+                    <ul class="step-list" id="newSteps"></ul>
+                    <div class="add-step-row">
+                        <input type="text" id="newStepText" class="form-control form-control-sm" placeholder="Add a step...">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="addNewStep()">Add</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-0">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-primary" onclick="submitCreateTask()" style="background:#4f46e5;border-color:#4f46e5;">Create Task</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Task Detail Modal -->
+<div class="modal fade task-modal" id="taskDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="detailTitle">Task</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="detailBody">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const allTasks = {{ tasks|tojson }};
+const allUsers = {{ users|tojson }};
+const currentUserId = {{ current_user_id }};
+const currentRole = "{{ current_role }}";
+let activeFilter = "all";
+
+// ── Render ──
+
+function renderTasks() {
+    const list = document.getElementById("taskList");
+    const empty = document.getElementById("emptyTasks");
+    let filtered = allTasks;
+
+    if (activeFilter === "mine") {
+        filtered = allTasks.filter(t => t.assigned_to == currentUserId);
+    } else if (activeFilter !== "all") {
+        filtered = allTasks.filter(t => t.status === activeFilter);
+    }
+
+    if (!filtered.length) {
+        list.innerHTML = "";
+        empty.classList.remove("d-none");
+        return;
+    }
+    empty.classList.add("d-none");
+
+    // Sort: urgent first, then by created_at desc
+    const priOrder = {urgent: 0, high: 1, normal: 2, low: 3};
+    filtered.sort((a, b) => {
+        if (a.status === "done" && b.status !== "done") return 1;
+        if (b.status === "done" && a.status !== "done") return -1;
+        const pa = priOrder[a.priority] ?? 2;
+        const pb = priOrder[b.priority] ?? 2;
+        if (pa !== pb) return pa - pb;
+        return (b.created_at || "").localeCompare(a.created_at || "");
+    });
+
+    list.innerHTML = filtered.map(t => {
+        const assignee = allUsers.find(u => u.id == t.assigned_to);
+        const assignName = assignee ? assignee.display_name : "Unassigned";
+        const steps = parseSteps(t.steps_json);
+        const doneSteps = steps.filter(s => s.done).length;
+        const stepInfo = steps.length ? `${doneSteps}/${steps.length} steps` : "";
+        const srcBadge = t.source === "agent_finding"
+            ? `<span class="source-badge">Agent Finding</span>`
+            : (t.source === "manual" ? "" : `<span class="source-badge manual">${t.source || ""}</span>`);
+
+        return `
+        <div class="task-card ${t.status === 'done' ? 'done' : ''}" onclick="openTaskDetail(${t.id})">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="task-title">
+                        <span class="priority-dot ${t.priority}"></span>
+                        ${esc(t.title)}
+                    </div>
+                    ${t.description ? `<div class="task-desc">${esc(t.description).substring(0, 120)}</div>` : ""}
+                </div>
+                <span class="status-pill ${t.status}">${statusLabel(t.status)}</span>
+            </div>
+            <div class="task-meta mt-2">
+                <span><i class="bi bi-person"></i> ${esc(assignName)}</span>
+                ${stepInfo ? `<span><i class="bi bi-check2-square"></i> ${stepInfo}</span>` : ""}
+                ${t.due_date ? `<span><i class="bi bi-calendar3"></i> ${t.due_date}</span>` : ""}
+                ${srcBadge}
+            </div>
+        </div>`;
+    }).join("");
+}
+
+function statusLabel(s) {
+    const labels = {open: "Open", in_progress: "In Progress", done: "Done", cancelled: "Cancelled"};
+    return labels[s] || s;
+}
+
+function parseSteps(json) {
+    if (!json) return [];
+    try { return JSON.parse(json); } catch { return []; }
+}
+
+function esc(s) {
+    if (!s) return "";
+    const d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+// ── Filters ──
+
+document.querySelectorAll(".task-filters .btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+        document.querySelectorAll(".task-filters .btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        activeFilter = btn.dataset.filter;
+        renderTasks();
+    });
+});
+
+// ── Create Task ──
+
+const newStepsList = [];
+
+function openCreateTask() {
+    newStepsList.length = 0;
+    document.getElementById("newTitle").value = "";
+    document.getElementById("newDesc").value = "";
+    document.getElementById("newPriority").value = "normal";
+    document.getElementById("newAssign").value = "";
+    document.getElementById("newDue").value = "";
+    document.getElementById("newSteps").innerHTML = "";
+    document.getElementById("newStepText").value = "";
+    new bootstrap.Modal(document.getElementById("createTaskModal")).show();
+}
+
+function addNewStep() {
+    const input = document.getElementById("newStepText");
+    const text = input.value.trim();
+    if (!text) return;
+    newStepsList.push({text, done: false});
+    input.value = "";
+    renderNewSteps();
+}
+
+document.getElementById("newStepText").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); addNewStep(); }
+});
+
+function renderNewSteps() {
+    const ul = document.getElementById("newSteps");
+    ul.innerHTML = newStepsList.map((s, i) => `
+        <li>
+            <span>${esc(s.text)}</span>
+            <button class="btn btn-sm btn-link text-danger p-0 ms-auto" onclick="newStepsList.splice(${i},1);renderNewSteps();">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </li>
+    `).join("");
+}
+
+async function submitCreateTask() {
+    const title = document.getElementById("newTitle").value.trim();
+    if (!title) { alert("Title is required"); return; }
+    const body = {
+        title,
+        description: document.getElementById("newDesc").value.trim(),
+        priority: document.getElementById("newPriority").value,
+        assigned_to: document.getElementById("newAssign").value || null,
+        due_date: document.getElementById("newDue").value,
+        steps: newStepsList,
+    };
+    const resp = await fetch("{{ url_for('client.client_task_create') }}", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (data.success) {
+        bootstrap.Modal.getInstance(document.getElementById("createTaskModal")).hide();
+        location.reload();
+    } else {
+        alert(data.error || "Failed to create task");
+    }
+}
+
+// ── Task Detail ──
+
+async function openTaskDetail(taskId) {
+    const resp = await fetch(`/client/tasks/${taskId}`);
+    const data = await resp.json();
+    if (!data.task) return;
+    const t = data.task;
+    const users = data.users || [];
+    const steps = parseSteps(t.steps_json);
+    const canEdit = currentRole !== "staff" || t.assigned_to == currentUserId;
+    const canManage = currentRole === "owner" || currentRole === "manager";
+
+    document.getElementById("detailTitle").textContent = t.title;
+
+    let html = "";
+
+    // Status + priority row
+    html += `<div class="d-flex gap-2 align-items-center mb-3">
+        <span class="status-pill ${t.status}">${statusLabel(t.status)}</span>
+        <span class="priority-dot ${t.priority}"></span>
+        <span style="font-size:.85rem;color:#64748b;">${t.priority} priority</span>
+    </div>`;
+
+    // Description
+    if (t.description) {
+        html += `<p style="font-size:.9rem;color:#475569;margin-bottom:1rem;">${esc(t.description)}</p>`;
+    }
+
+    // Meta row
+    const assignee = users.find(u => u.id == t.assigned_to);
+    html += `<div class="row g-3 mb-3">
+        <div class="col-md-4">
+            <label class="form-label" style="font-size:.8rem;color:#94a3b8;">Assigned To</label>`;
+    if (canManage) {
+        html += `<select class="form-select form-select-sm" id="detailAssign" onchange="updateTaskField(${t.id},'assigned_to',this.value)">
+            <option value="">Unassigned</option>`;
+        users.forEach(u => {
+            html += `<option value="${u.id}" ${u.id == t.assigned_to ? "selected" : ""}>${esc(u.name)} (${u.role})</option>`;
+        });
+        html += `</select>`;
+    } else {
+        html += `<div style="font-size:.9rem;font-weight:600;">${assignee ? esc(assignee.name) : "Unassigned"}</div>`;
+    }
+    html += `</div>
+        <div class="col-md-4">
+            <label class="form-label" style="font-size:.8rem;color:#94a3b8;">Due Date</label>`;
+    if (canManage) {
+        html += `<input type="date" class="form-control form-control-sm" value="${t.due_date || ""}" onchange="updateTaskField(${t.id},'due_date',this.value)">`;
+    } else {
+        html += `<div style="font-size:.9rem;">${t.due_date || "No due date"}</div>`;
+    }
+    html += `</div>
+        <div class="col-md-4">
+            <label class="form-label" style="font-size:.8rem;color:#94a3b8;">Status</label>`;
+    if (canEdit) {
+        html += `<select class="form-select form-select-sm" onchange="updateTaskField(${t.id},'status',this.value)">
+            <option value="open" ${t.status==='open'?'selected':''}>Open</option>
+            <option value="in_progress" ${t.status==='in_progress'?'selected':''}>In Progress</option>
+            <option value="done" ${t.status==='done'?'selected':''}>Done</option>
+            ${canManage ? '<option value="cancelled" ' + (t.status==='cancelled'?'selected':'') + '>Cancelled</option>' : ''}
+        </select>`;
+    } else {
+        html += `<span class="status-pill ${t.status}">${statusLabel(t.status)}</span>`;
+    }
+    html += `</div></div>`;
+
+    // Steps checklist
+    if (steps.length) {
+        html += `<label class="form-label" style="font-size:.8rem;color:#94a3b8;">Steps</label>
+        <ul class="step-list" id="detailSteps">`;
+        steps.forEach((s, i) => {
+            html += `<li class="${s.done ? 'done-step' : ''}">
+                <input type="checkbox" ${s.done ? 'checked' : ''} ${canEdit ? `onchange="toggleStep(${t.id},${i},this.checked)"` : 'disabled'}>
+                <span>${esc(s.text)}</span>
+            </li>`;
+        });
+        html += `</ul>`;
+    }
+
+    // Source info
+    if (t.source === "agent_finding") {
+        html += `<div class="mt-3"><span class="source-badge">Created from Agent Finding</span></div>`;
+    }
+
+    // Delete button
+    if (canManage) {
+        html += `<div class="mt-4 pt-3 border-top d-flex justify-content-end">
+            <button class="btn btn-sm btn-outline-danger" onclick="deleteTask(${t.id})">
+                <i class="bi bi-trash3 me-1"></i>Delete Task
+            </button>
+        </div>`;
+    }
+
+    document.getElementById("detailBody").innerHTML = html;
+    new bootstrap.Modal(document.getElementById("taskDetailModal")).show();
+}
+
+async function updateTaskField(taskId, field, value) {
+    const body = {};
+    body[field] = value;
+    await fetch(`/client/tasks/${taskId}/update`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(body),
+    });
+    // Update local data
+    const t = allTasks.find(t => t.id === taskId);
+    if (t) t[field] = value;
+    renderTasks();
+}
+
+async function toggleStep(taskId, stepIndex, checked) {
+    const t = allTasks.find(t => t.id === taskId);
+    if (!t) return;
+    const steps = parseSteps(t.steps_json);
+    if (steps[stepIndex]) steps[stepIndex].done = checked;
+    const updatedJson = JSON.stringify(steps);
+    t.steps_json = updatedJson;
+    await fetch(`/client/tasks/${taskId}/update`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({steps_json: updatedJson}),
+    });
+    // Re-render the detail step visually
+    const li = document.querySelectorAll("#detailSteps li")[stepIndex];
+    if (li) {
+        if (checked) li.classList.add("done-step");
+        else li.classList.remove("done-step");
+    }
+    renderTasks();
+}
+
+async function deleteTask(taskId) {
+    if (!confirm("Delete this task?")) return;
+    const resp = await fetch(`/client/tasks/${taskId}/delete`, {method: "POST"});
+    const data = await resp.json();
+    if (data.success) {
+        bootstrap.Modal.getInstance(document.getElementById("taskDetailModal")).hide();
+        location.reload();
+    }
+}
+
+// Init
+renderTasks();
+</script>
+{% endblock %}

@@ -100,6 +100,12 @@ def client_login_required(f):
     return decorated
 
 
+def _require_role(*allowed_roles):
+    """Check that current user has one of the allowed roles."""
+    role = session.get("client_role", "owner")
+    return role in allowed_roles
+
+
 # ── Feature gate (before_request on blueprint) ──
 
 # Map route function names → feature flag keys.
@@ -206,6 +212,7 @@ def client_login():
             session["client_brand_id"] = user["brand_id"]
             session["client_name"] = user["display_name"]
             session["client_brand_name"] = user["brand_name"]
+            session["client_role"] = user.get("role", "owner")
             db.update_client_user_login(user["id"])
             return redirect(url_for("client.client_dashboard"))
         flash("Invalid email or password", "error")
@@ -6089,6 +6096,295 @@ def _cors_json(payload, status=200):
     resp.status_code = status
     resp.headers["Access-Control-Allow-Origin"] = "*"
     return resp
+
+
+# ═══════════════════════════════════════════════════════════
+# STAFF MANAGEMENT
+# ═══════════════════════════════════════════════════════════
+
+@client_bp.route("/staff")
+@client_login_required
+def client_staff():
+    if not _require_role("owner", "manager"):
+        abort(403)
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    users = db.get_client_users_for_brand(brand_id)
+    return render_template(
+        "client/client_staff.html",
+        brand=brand,
+        users=users,
+        brand_name=session.get("client_brand_name", ""),
+        current_user_id=session["client_user_id"],
+        current_role=session.get("client_role", "owner"),
+    )
+
+
+@client_bp.route("/staff/invite", methods=["POST"])
+@client_login_required
+def client_staff_invite():
+    if not _require_role("owner"):
+        return jsonify({"error": "Only the owner can invite staff"}), 403
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    email = request.form.get("email", "").strip().lower()
+    name = request.form.get("name", "").strip()
+    role = request.form.get("role", "staff")
+    if role not in ("manager", "staff"):
+        role = "staff"
+    if not email or not name:
+        flash("Email and name are required.", "error")
+        return redirect(url_for("client.client_staff"))
+
+    # Generate temp password
+    import secrets
+    temp_password = secrets.token_urlsafe(10)
+    user_id = db.create_client_user(
+        brand_id, email, temp_password, name,
+        role=role, invited_by=session["client_user_id"],
+    )
+    if not user_id:
+        flash("That email is already in use.", "error")
+        return redirect(url_for("client.client_staff"))
+
+    # Send invite email
+    try:
+        from webapp.email_sender import send_staff_invite_email
+        brand_name = session.get("client_brand_name", "")
+        send_staff_invite_email(current_app.config, email, name, brand_name, temp_password, role)
+        flash(f"Invited {name} as {role}. Login credentials sent to {email}.", "success")
+    except Exception:
+        flash(f"Invited {name} as {role}. Temp password: {temp_password} (email failed to send)", "warning")
+
+    return redirect(url_for("client.client_staff"))
+
+
+@client_bp.route("/staff/<int:user_id>/role", methods=["POST"])
+@client_login_required
+def client_staff_update_role(user_id):
+    if not _require_role("owner"):
+        return jsonify({"error": "Only the owner can change roles"}), 403
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    # Verify user belongs to this brand
+    user = db.get_client_user(user_id)
+    if not user or user["brand_id"] != brand_id:
+        abort(404)
+    if user_id == session["client_user_id"]:
+        return jsonify({"error": "Cannot change your own role"}), 400
+    role = request.form.get("role", "staff")
+    if role not in ("owner", "manager", "staff"):
+        role = "staff"
+    db.update_client_user_role(user_id, role)
+    flash(f"Updated {user['display_name']} to {role}.", "success")
+    return redirect(url_for("client.client_staff"))
+
+
+@client_bp.route("/staff/<int:user_id>/toggle", methods=["POST"])
+@client_login_required
+def client_staff_toggle(user_id):
+    if not _require_role("owner"):
+        return jsonify({"error": "Only the owner can deactivate staff"}), 403
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    user = db.get_client_user(user_id)
+    if not user or user["brand_id"] != brand_id:
+        abort(404)
+    if user_id == session["client_user_id"]:
+        flash("You can't deactivate yourself.", "error")
+        return redirect(url_for("client.client_staff"))
+    db.toggle_client_user_active(user_id)
+    status = "deactivated" if user["is_active"] else "reactivated"
+    flash(f"{user['display_name']} has been {status}.", "success")
+    return redirect(url_for("client.client_staff"))
+
+
+# ═══════════════════════════════════════════════════════════
+# TASK SYSTEM
+# ═══════════════════════════════════════════════════════════
+
+@client_bp.route("/tasks")
+@client_login_required
+def client_tasks():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    role = session.get("client_role", "owner")
+    user_id = session["client_user_id"]
+
+    # Staff only see their own tasks
+    if role == "staff":
+        tasks = db.get_brand_tasks(brand_id, assigned_to=user_id)
+    else:
+        tasks = db.get_brand_tasks(brand_id)
+
+    users = db.get_client_users_for_brand(brand_id)
+    return render_template(
+        "client/client_tasks.html",
+        brand=brand,
+        tasks=tasks,
+        users=[u for u in users if u["is_active"]],
+        brand_name=session.get("client_brand_name", ""),
+        current_role=role,
+        current_user_id=user_id,
+    )
+
+
+@client_bp.route("/tasks/create", methods=["POST"])
+@client_login_required
+def client_task_create():
+    if not _require_role("owner", "manager"):
+        return jsonify({"error": "Staff cannot create tasks"}), 403
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    data = request.get_json() or {}
+    title = (data.get("title") or "").strip()
+    if not title:
+        return jsonify({"error": "Title is required"}), 400
+    steps = data.get("steps", [])
+    steps_json = json.dumps([
+        {"text": s.get("text", ""), "done": False}
+        for s in steps if s.get("text", "").strip()
+    ])
+    task_id = db.create_brand_task(
+        brand_id,
+        title=title,
+        description=(data.get("description") or "").strip(),
+        steps_json=steps_json,
+        priority=data.get("priority", "normal"),
+        source=data.get("source", "manual"),
+        source_ref=data.get("source_ref", ""),
+        assigned_to=data.get("assigned_to") or None,
+        created_by=session["client_user_id"],
+        due_date=data.get("due_date", ""),
+    )
+    return jsonify({"success": True, "task_id": task_id})
+
+
+@client_bp.route("/tasks/<int:task_id>")
+@client_login_required
+def client_task_detail(task_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    task = db.get_brand_task(task_id, brand_id)
+    if not task:
+        abort(404)
+    role = session.get("client_role", "owner")
+    if role == "staff" and task.get("assigned_to") != session["client_user_id"]:
+        abort(403)
+    users = db.get_client_users_for_brand(brand_id)
+    return jsonify({
+        "task": task,
+        "users": [{"id": u["id"], "name": u["display_name"], "role": u.get("role", "owner")} for u in users if u["is_active"]],
+    })
+
+
+@client_bp.route("/tasks/<int:task_id>/update", methods=["POST"])
+@client_login_required
+def client_task_update(task_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    task = db.get_brand_task(task_id, brand_id)
+    if not task:
+        abort(404)
+    role = session.get("client_role", "owner")
+    data = request.get_json() or {}
+
+    # Staff can only update status and check off steps on their own tasks
+    if role == "staff":
+        if task.get("assigned_to") != session["client_user_id"]:
+            abort(403)
+        allowed_fields = {}
+        if "status" in data:
+            allowed_fields["status"] = data["status"]
+            if data["status"] == "done":
+                allowed_fields["completed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if "steps_json" in data:
+            allowed_fields["steps_json"] = data["steps_json"]
+        if allowed_fields:
+            db.update_brand_task(task_id, brand_id, **allowed_fields)
+    else:
+        fields = {}
+        for key in ("title", "description", "status", "priority", "assigned_to", "due_date", "steps_json"):
+            if key in data:
+                fields[key] = data[key]
+        if data.get("status") == "done":
+            fields["completed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if fields:
+            db.update_brand_task(task_id, brand_id, **fields)
+
+    return jsonify({"success": True})
+
+
+@client_bp.route("/tasks/<int:task_id>/delete", methods=["POST"])
+@client_login_required
+def client_task_delete(task_id):
+    if not _require_role("owner", "manager"):
+        return jsonify({"error": "Staff cannot delete tasks"}), 403
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    db.delete_brand_task(task_id, brand_id)
+    return jsonify({"success": True})
+
+
+@client_bp.route("/tasks/from-finding", methods=["POST"])
+@client_login_required
+def client_task_from_finding():
+    """Create a task from an agent finding."""
+    if not _require_role("owner", "manager"):
+        return jsonify({"error": "Staff cannot create tasks"}), 403
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    data = request.get_json() or {}
+    finding_id = data.get("finding_id")
+    if not finding_id:
+        return jsonify({"error": "finding_id required"}), 400
+
+    # Get the finding
+    conn = db._conn()
+    row = conn.execute(
+        "SELECT * FROM agent_findings WHERE id = ? AND brand_id = ?",
+        (finding_id, brand_id),
+    ).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"error": "Finding not found"}), 404
+    finding = dict(row)
+
+    agent_names = {
+        "scout": "Scout", "penny": "Penny", "ace": "Ace", "radar": "Radar",
+        "hawk": "Hawk", "pulse": "Pulse", "spark": "Spark", "bridge": "Bridge",
+        "warren": "Warren", "chief": "Chief",
+    }
+    agent_name = agent_names.get(finding["agent_key"], finding["agent_key"])
+
+    title = data.get("title") or finding["title"]
+    description = f"From {agent_name}: {finding['detail']}"
+    steps = []
+    if finding.get("action"):
+        steps.append({"text": finding["action"], "done": False})
+    # Add any extra steps from the request
+    for s in data.get("steps", []):
+        if s.get("text", "").strip():
+            steps.append({"text": s["text"], "done": False})
+
+    priority_map = {"critical": "urgent", "warning": "high", "positive": "normal", "info": "low"}
+    priority = priority_map.get(finding["severity"], "normal")
+
+    task_id = db.create_brand_task(
+        brand_id,
+        title=title,
+        description=description,
+        steps_json=json.dumps(steps),
+        priority=priority,
+        source="agent_finding",
+        source_ref=str(finding_id),
+        assigned_to=data.get("assigned_to") or None,
+        created_by=session["client_user_id"],
+        due_date=data.get("due_date", ""),
+    )
+    return jsonify({"success": True, "task_id": task_id})
 
 
 # ── Helper ──

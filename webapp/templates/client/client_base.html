@@ -950,6 +950,16 @@
                 <i class="bi bi-robot"></i> Your Team
             </a>
             {% endif %}
+            {% if feature_on('staff') and session.get('client_role', 'owner') in ('owner', 'manager') %}
+            <a href="{{ url_for('client.client_staff') }}" class="{% if request.endpoint == 'client.client_staff' %}active{% endif %}">
+                <i class="bi bi-people"></i> Staff
+            </a>
+            {% endif %}
+            {% if feature_on('tasks') %}
+            <a href="{{ url_for('client.client_tasks') }}" class="{% if request.endpoint in ('client.client_tasks',) %}active{% endif %}">
+                <i class="bi bi-list-task"></i> Tasks
+            </a>
+            {% endif %}
 
             <div class="nav-section-label">Settings</div>
             {% if feature_on('connections') %}

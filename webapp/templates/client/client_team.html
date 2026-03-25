@@ -3,7 +3,7 @@
 
 {% block content %}
 <style>
-    /* â”€â”€ OFFICE SCENE â”€â”€ */
+    /* ── OFFICE SCENE ── */
     .office-wrap {
         background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
         border-radius: 20px;
@@ -18,12 +18,12 @@
     .office-stat .os-val { font-size: 1.6rem; font-weight: 700; color: #fff; line-height: 1; }
     .office-stat .os-lbl { font-size: 0.7rem; text-transform: uppercase; color: rgba(255,255,255,.45); letter-spacing: 1px; margin-top: 2px; }
 
-    /* â”€â”€ OFFICE FLOOR (background image) â”€â”€ */
+    /* ── OFFICE FLOOR (background image) ── */
     .office-floor {
         position: relative;
         width: 100%;
-        aspect-ratio: 1400 / 932;
-        background: url('/static/sprites/office_web.jpg') center / cover no-repeat;
+        aspect-ratio: 1147 / 765;
+        background: url('/static/sprites/office.png') center / cover no-repeat;
         border-radius: 14px;
         overflow: hidden;
         box-shadow: 0 6px 32px rgba(0,0,0,.45), inset 0 0 80px rgba(0,0,0,.2);
@@ -31,19 +31,30 @@
     }
     #office-desks { position: absolute; inset: 0; }
 
-    /* â”€â”€ AGENT SPRITES â”€â”€ */
+    /* ── EQUIPMENT overlays ── */
+    .office-equip {
+        position: absolute;
+        pointer-events: none;
+        z-index: 1;
+        image-rendering: auto;
+    }
+    .office-equip img { width: 100%; height: 100%; object-fit: contain; }
+
+    /* ── AGENT SPRITES (individual images) ── */
     .agent-sprite {
         position: absolute;
-        width: 90px;
-        height: 90px;
-        background-image: url('/static/sprites/robots_web.png');
-        background-repeat: no-repeat;
         cursor: pointer;
         transition: filter .3s, transform .3s;
         z-index: 2;
         image-rendering: auto;
     }
-    .agent-sprite:hover { transform: scale(1.2); z-index: 10; }
+    .agent-sprite img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        pointer-events: none;
+    }
+    .agent-sprite:hover { transform: scale(1.15); z-index: 10; }
     .agent-sprite.empty { filter: grayscale(1) brightness(.5) opacity(.3); }
     .agent-sprite.working {
         animation: agentGlow 1.5s ease-in-out infinite alternate;
@@ -54,7 +65,7 @@
         100% { filter: drop-shadow(0 0 14px rgba(59,130,246,.9)) brightness(1.1); }
     }
 
-    /* â”€â”€ NAMEPLATE â”€â”€ */
+    /* ── NAMEPLATE ── */
     .desk-nameplate {
         position: absolute;
         bottom: -28px;
@@ -80,7 +91,7 @@
         opacity: .7;
     }
 
-    /* â”€â”€ HIRE BADGE â”€â”€ */
+    /* ── HIRE BADGE ── */
     .desk-hire-badge {
         position: absolute;
         bottom: -8px;
@@ -103,7 +114,7 @@
         50% { transform: translateX(-50%) scale(1.1); }
     }
 
-    /* â”€â”€ STATUS INDICATOR â”€â”€ */
+    /* ── STATUS INDICATOR ── */
     .agent-status-dot {
         position: absolute;
         top: -4px;
@@ -430,6 +441,12 @@
     .finding-agent { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
     .finding-detail { font-size: 0.85rem; color: #4b5563; line-height: 1.5; margin-bottom: 6px; }
     .finding-action { font-size: 0.82rem; color: #7c3aed; font-weight: 500; }
+    .finding-assign-btn {
+        background: none; border: 1px solid #c7d2fe; color: #4f46e5;
+        font-size: 0.72rem; font-weight: 600; padding: 3px 10px;
+        border-radius: 8px; cursor: pointer; white-space: nowrap;
+    }
+    .finding-assign-btn:hover { background: #4f46e5; color: #fff; }
     .finding-action i { margin-right: 4px; }
     .finding-dismiss { background: none; border: none; color: #d1d5db; cursor: pointer; font-size: 1rem; padding: 4px; flex-shrink: 0; }
     .finding-dismiss:hover { color: #9ca3af; }
@@ -724,37 +741,32 @@ const TRAIN_GUIDANCE = {
 // Desk positions in the office (x%, y% of floor)
 // Desk positions on the office background image (% of container)
 // Mapped to visible desk/workstation areas in office_web.jpg
+// ── State vars ──
+let allFindings = [];
+let currentFilter = 'all';
+
+// Desk positions on the new office background (% of container)
+// Mapped to the visible desk/station areas in office.png (1147x765)
 const DESK_POSITIONS = [
-    { key: 'warren', x: 68, y: 10 },   // Corner office area, top-right
-    { key: 'scout',  x: 35, y: 42 },   // Center desk cluster
-    { key: 'penny',  x: 48, y: 23 },   // Center desk, top area
-    { key: 'ace',    x: 78, y: 32 },   // Right side near boards
-    { key: 'radar',  x: 5,  y: 12 },   // Back-left window desks
-    { key: 'hawk',   x: 18, y: 22 },   // Second window desk
-    { key: 'pulse',  x: 55, y: 38 },   // Center-right desk cluster
-    { key: 'spark',  x: 8,  y: 35 },   // Left middle area
-    { key: 'bridge', x: 58, y: 55 },   // Lower right desk area
-    { key: 'chief',  x: 38, y: 62 },   // Near entrance, overseeing
+    { key: 'warren', x: 74, y: 8,  w: 80, h: 80 },    // Top-right analysis desk
+    { key: 'scout',  x: 18, y: 50, w: 70, h: 70 },    // Back-left desk row
+    { key: 'penny',  x: 30, y: 50, w: 70, h: 70 },    // Back-left desk row, second
+    { key: 'ace',    x: 42, y: 50, w: 70, h: 70 },    // Back-left desk row, third
+    { key: 'radar',  x: 7,  y: 65, w: 70, h: 70 },    // Front-left desk row
+    { key: 'hawk',   x: 20, y: 65, w: 70, h: 70 },    // Front-left desk row, second
+    { key: 'pulse',  x: 32, y: 65, w: 70, h: 70 },    // Front-left desk row, third
+    { key: 'spark',  x: 46, y: 18, w: 70, h: 70 },    // Center-top desk area
+    { key: 'bridge', x: 60, y: 42, w: 70, h: 70 },    // Meeting table area
+    { key: 'chief',  x: 78, y: 62, w: 70, h: 70 },    // Bottom-right solo desk
 ];
 
-// Robot sprite sheet: 4x4 grid, 1200x1200 native, displayed at 90x90
-// background-size: 360px 360px (1200/300 * 90 = 360)
-// Each cell = 90px in display
-const SPRITE_MAP = {
-    warren: { col: 3, row: 0 },  // Conductor in suit
-    scout:  { col: 2, row: 1 },  // Briefcase, on the move
-    penny:  { col: 2, row: 0 },  // At desk with computer
-    ace:    { col: 3, row: 1 },  // Painting at easel
-    radar:  { col: 0, row: 1 },  // At whiteboard, analyzing
-    hawk:   { col: 0, row: 3 },  // At bookshelf, research
-    pulse:  { col: 1, row: 2 },  // At desk with papers
-    spark:  { col: 1, row: 0 },  // Presenting
-    bridge: { col: 2, row: 2 },  // At microphone, connecting
-    chief:  { col: 3, row: 3 },  // At desk reviewing
-};
-
-const SPRITE_SIZE = 90;
-const SHEET_COLS = 4;
+// Equipment decoration positions (% of container)
+const EQUIP_POSITIONS = [
+    { src: 'plant1',     x: 32, y: 6,  w: 30, h: 30 },
+    { src: 'plant2',     x: 62, y: 74, w: 28, h: 28 },
+    { src: 'plant3',     x: 0,  y: 43, w: 28, h: 28 },
+    { src: 'watercooler', x: 42, y: 32, w: 30, h: 50 },
+];
 
 function renderOffice(latestData) {
     const container = document.getElementById('office-desks');
@@ -762,19 +774,21 @@ function renderOffice(latestData) {
     let html = '';
     const latest = latestData || {};
 
+    // Equipment decorations
+    EQUIP_POSITIONS.forEach(eq => {
+        html += `<div class="office-equip" style="left:${eq.x}%;top:${eq.y}%;width:${eq.w}px;height:${eq.h}px;">
+            <img src="/static/sprites/equipment/${eq.src}.png" alt="">
+        </div>`;
+    });
+
+    // Agent sprites
     DESK_POSITIONS.forEach((pos) => {
         const agent = AGENTS.find(a => a.key === pos.key);
         if (!agent) return;
-        const color = AGENT_COLORS[pos.key] || '#6b7280';
         const isHired = !!hiredAgents[pos.key];
         const agentLatest = latest[pos.key];
         const isWorking = agentLatest && agentLatest.status === 'in_progress';
         const isEmpty = !isHired;
-        const sprite = SPRITE_MAP[pos.key] || { col: 0, row: 0 };
-
-        const bgSize = SPRITE_SIZE * SHEET_COLS;
-        const bgX = -(sprite.col * SPRITE_SIZE);
-        const bgY = -(sprite.row * SPRITE_SIZE);
 
         const classes = [
             'agent-sprite',
@@ -783,19 +797,17 @@ function renderOffice(latestData) {
         ].filter(Boolean).join(' ');
 
         html += `<div class="${classes}" data-agent="${pos.key}"
-            style="left:${pos.x}%;top:${pos.y}%;width:${SPRITE_SIZE}px;height:${SPRITE_SIZE}px;background-size:${bgSize}px ${bgSize}px;background-position:${bgX}px ${bgY}px;"
+            style="left:${pos.x}%;top:${pos.y}%;width:${pos.w}px;height:${pos.h}px;"
             onclick="openHireModal('${pos.key}')"
-            title="${agent.name} - ${agent.role}">`;
+            title="${agent.name} - ${agent.role}">
+            <img src="/static/sprites/agents/${pos.key}.png" alt="${agent.name}">`;
 
-        // Status dot
         if (isHired) {
             html += `<div class="agent-status-dot ${isWorking ? 'working' : 'hired'}"></div>`;
         }
 
-        // Nameplate
         html += `<div class="desk-nameplate"><span>${agent.name}</span><span class="np-role">${agent.role}</span></div>`;
 
-        // Hire badge for empty desks
         if (isEmpty) {
             html += `<div class="desk-hire-badge">HIRE</div>`;
         }
@@ -1059,6 +1071,9 @@ function renderFinding(f) {
             <div class="finding-detail">${escapeHtml(f.detail)}</div>
             ${f.action ? `<div class="finding-action"><i class="bi bi-arrow-right-circle"></i>${escapeHtml(f.action)}</div>` : ''}
         </div>
+        <button class="finding-assign-btn" onclick="event.stopPropagation();createTaskFromFinding(${f.id})" title="Create Task">
+            <i class="bi bi-clipboard-plus"></i> Task
+        </button>
         <button class="finding-dismiss" onclick="event.stopPropagation();dismissFinding(${f.id}, this)" title="Dismiss">
             <i class="bi bi-x-lg"></i>
         </button>
@@ -1112,6 +1127,26 @@ function updateFindingsStat() {
     if (critical > 0) { el.textContent = critical; el.style.color = '#fca5a5'; }
     else if (warning > 0) { el.textContent = warning; el.style.color = '#fcd34d'; }
     else { el.textContent = allFindings.length; el.style.color = ''; }
+}
+
+function createTaskFromFinding(findingId) {
+    var finding = allFindings.find(function(f) { return f.id === findingId; });
+    var title = finding ? finding.title : 'Task from finding';
+    var body = { finding_id: findingId, title: title };
+    fetch('/client/tasks/from-finding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify(body),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            alert('Task created! Go to Tasks to assign it to a team member.');
+        } else {
+            alert(data.error || 'Failed to create task');
+        }
+    })
+    .catch(function() { alert('Failed to create task'); });
 }
 
 function loadFindings() {

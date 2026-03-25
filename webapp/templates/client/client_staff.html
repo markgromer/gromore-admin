@@ -1,0 +1,186 @@
+{% extends "client_base.html" %}
+{% block title %}Staff Management{% endblock %}
+
+{% block content %}
+<style>
+    .staff-header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+        border-radius: 16px;
+        padding: 2rem 2.25rem;
+        margin-bottom: 1.5rem;
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+    }
+    .staff-header::before {
+        content: '';
+        position: absolute;
+        top: -30%; right: -5%;
+        width: 250px; height: 250px;
+        background: radial-gradient(circle, rgba(129,140,248,.15) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    .staff-header h3 { font-weight: 800; font-size: 1.35rem; margin-bottom: .15rem; position: relative; color: #fff !important; }
+    .staff-header p  { opacity: .7; font-size: .88rem; margin: 0; position: relative; }
+
+    .staff-card {
+        background: #fff;
+        border-radius: 14px;
+        border: 1px solid #e5e7eb;
+        padding: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        transition: box-shadow .2s;
+    }
+    .staff-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.06); }
+    .staff-card.inactive { opacity: .5; }
+    .staff-avatar {
+        width: 48px; height: 48px;
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 700; font-size: 1.1rem; color: #fff;
+        flex-shrink: 0;
+    }
+    .avatar-owner   { background: #4f46e5; }
+    .avatar-manager { background: #059669; }
+    .avatar-staff   { background: #d97706; }
+    .staff-meta { flex: 1; min-width: 0; }
+    .staff-meta h6 { margin: 0 0 2px; font-weight: 700; font-size: .95rem; }
+    .staff-meta small { color: #64748b; }
+    .role-badge {
+        font-size: .72rem; font-weight: 600;
+        padding: 3px 10px; border-radius: 20px;
+        text-transform: uppercase; letter-spacing: .03em;
+    }
+    .role-badge.owner   { background: #ede9fe; color: #5b21b6; }
+    .role-badge.manager { background: #d1fae5; color: #065f46; }
+    .role-badge.staff   { background: #fef3c7; color: #92400e; }
+
+    .invite-form {
+        background: #fff;
+        border-radius: 14px;
+        border: 1px solid #e5e7eb;
+        padding: 1.5rem;
+    }
+    .invite-form h5 { font-weight: 700; margin-bottom: 1rem; }
+    .invite-form .form-label { font-weight: 600; font-size: .85rem; color: #374151; }
+    .invite-form .form-control, .invite-form .form-select {
+        border-radius: 10px; border: 1px solid #d1d5db;
+        font-size: .9rem;
+    }
+    .btn-invite {
+        background: #4f46e5; color: #fff; border: none;
+        border-radius: 10px; padding: 10px 24px;
+        font-weight: 600; font-size: .9rem;
+    }
+    .btn-invite:hover { background: #4338ca; color: #fff; }
+
+    .staff-actions .btn { font-size: .78rem; padding: 4px 10px; border-radius: 8px; }
+</style>
+
+<div class="staff-header">
+    <h3><i class="bi bi-people me-2"></i>Staff Management</h3>
+    <p>Invite team members and manage their access to your portal.</p>
+</div>
+
+<div class="row g-4">
+    <!-- Staff List -->
+    <div class="col-lg-7">
+        <div class="d-flex flex-column gap-3">
+            {% for user in users %}
+            <div class="staff-card {% if not user.is_active %}inactive{% endif %}">
+                <div class="staff-avatar avatar-{{ user.role or 'staff' }}">
+                    {{ (user.display_name or '?')[0]|upper }}
+                </div>
+                <div class="staff-meta">
+                    <h6>
+                        {{ user.display_name }}
+                        {% if user.id == current_user_id %}<small class="text-muted">(you)</small>{% endif %}
+                    </h6>
+                    <small>{{ user.email }}</small>
+                    {% if not user.is_active %}
+                    <span class="badge bg-secondary ms-1" style="font-size:.65rem;">Inactive</span>
+                    {% endif %}
+                </div>
+                <span class="role-badge {{ user.role or 'owner' }}">{{ (user.role or 'owner') }}</span>
+
+                {% if current_role == 'owner' and user.id != current_user_id %}
+                <div class="staff-actions d-flex gap-1">
+                    <!-- Role change dropdown -->
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" style="font-size:.78rem;">
+                            Role
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            {% for r in ['owner', 'manager', 'staff'] %}
+                            {% if r != (user.role or 'owner') %}
+                            <li>
+                                <form method="POST" action="{{ url_for('client.client_staff_update_role', user_id=user.id) }}" style="display:inline;">
+                                    <button class="dropdown-item" type="submit" name="role" value="{{ r }}">{{ r|capitalize }}</button>
+                                </form>
+                            </li>
+                            {% endif %}
+                            {% endfor %}
+                        </ul>
+                    </div>
+
+                    <!-- Toggle active -->
+                    <form method="POST" action="{{ url_for('client.client_staff_toggle', user_id=user.id) }}">
+                        <button class="btn btn-sm {% if user.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}" type="submit">
+                            {% if user.is_active %}Deactivate{% else %}Reactivate{% endif %}
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            {% if not users %}
+            <div class="text-center text-muted py-4">
+                <i class="bi bi-person-plus" style="font-size:2rem;"></i>
+                <p class="mt-2">No staff members yet. Invite your first team member.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Invite Form -->
+    <div class="col-lg-5">
+        {% if current_role == 'owner' %}
+        <div class="invite-form">
+            <h5><i class="bi bi-person-plus me-2"></i>Invite Team Member</h5>
+            <form method="POST" action="{{ url_for('client.client_staff_invite') }}">
+                <div class="mb-3">
+                    <label class="form-label">Name</label>
+                    <input type="text" name="name" class="form-control" placeholder="Jane Smith" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Email</label>
+                    <input type="email" name="email" class="form-control" placeholder="jane@example.com" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Role</label>
+                    <select name="role" class="form-select">
+                        <option value="manager">Manager - Near-full access</option>
+                        <option value="staff" selected>Staff - Limited access with task list</option>
+                    </select>
+                </div>
+                <div class="small text-muted mb-3">
+                    <strong>Manager:</strong> Can view all data, create campaigns, and manage tasks.<br>
+                    <strong>Staff:</strong> Can only see assigned tasks and mark them complete.
+                </div>
+                <button type="submit" class="btn btn-invite w-100">
+                    <i class="bi bi-send me-1"></i> Send Invite
+                </button>
+            </form>
+        </div>
+        {% else %}
+        <div class="invite-form text-center text-muted py-4">
+            <i class="bi bi-lock" style="font-size:2rem;"></i>
+            <p class="mt-2">Only the account owner can invite new team members.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

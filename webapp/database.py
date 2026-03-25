@@ -655,6 +655,34 @@ class WebDB:
             ON agent_findings(brand_id, month, dismissed);
         """)
 
+        # ── Brand tasks table ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS brand_tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                steps_json TEXT DEFAULT '[]',
+                status TEXT DEFAULT 'open',
+                priority TEXT DEFAULT 'normal',
+                source TEXT DEFAULT 'manual',
+                source_ref TEXT DEFAULT '',
+                assigned_to INTEGER DEFAULT NULL,
+                created_by INTEGER DEFAULT NULL,
+                due_date TEXT DEFAULT '',
+                completed_at TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+                FOREIGN KEY (assigned_to) REFERENCES client_users(id) ON DELETE SET NULL,
+                FOREIGN KEY (created_by) REFERENCES client_users(id) ON DELETE SET NULL
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_brand_tasks_brand
+            ON brand_tasks(brand_id, status, assigned_to);
+        """)
+
         conn.commit()
 
         # ── Seed default feature flags ──
@@ -674,6 +702,8 @@ class WebDB:
             ("post_scheduler",  "Post Scheduler",   "Social media post scheduling",      "beta",  "business", 130),
             ("competitor_intel","Competitor Intel",  "Competitor analysis tools",         "beta",  "business", 140),
             ("your_team",       "Your Team",         "AI agent team dashboard",           "all",   "business", 145),
+            ("staff",           "Staff",             "Manage team members and roles",     "all",   "business", 146),
+            ("tasks",           "Tasks",             "Task management and assignment",    "all",   "business", 147),
             ("connections",     "Connections",       "Platform connection settings",      "all",   "settings", 150),
             ("feedback",        "Feedback",          "Submit feedback to the team",       "all",   "settings", 160),
             ("help",            "Help",              "Help documentation and support",    "all",   "settings", 170),
@@ -764,6 +794,8 @@ class WebDB:
         new_cu_cols = [
             ("password_reset_token", "TEXT DEFAULT ''"),
             ("reset_token_expires", "TEXT DEFAULT ''"),
+            ("role", "TEXT DEFAULT 'owner'"),
+            ("invited_by", "INTEGER DEFAULT NULL"),
         ]
         for col_name, col_def in new_cu_cols:
             if col_name not in cu_columns:
@@ -1297,13 +1329,13 @@ class WebDB:
         conn.close()
         return dict(row) if row else None
 
-    def create_client_user(self, brand_id, email, password, display_name):
+    def create_client_user(self, brand_id, email, password, display_name, role="owner", invited_by=None):
         conn = self._conn()
         password_hash = generate_password_hash(password)
         try:
             conn.execute(
-                "INSERT INTO client_users (brand_id, email, password_hash, display_name) VALUES (?, ?, ?, ?)",
-                (brand_id, email, password_hash, display_name),
+                "INSERT INTO client_users (brand_id, email, password_hash, display_name, role, invited_by) VALUES (?, ?, ?, ?, ?, ?)",
+                (brand_id, email, password_hash, display_name, role, invited_by),
             )
             conn.commit()
             row = conn.execute("SELECT id FROM client_users WHERE email = ?", (email,)).fetchone()
@@ -3073,5 +3105,106 @@ class WebDB:
                 "DELETE FROM agent_findings WHERE brand_id = ? AND month = ? AND dismissed = 0",
                 (brand_id, month),
             )
+        conn.commit()
+        conn.close()
+
+    # ── Client User Roles ──
+
+    def update_client_user_role(self, client_user_id, role):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE client_users SET role = ? WHERE id = ?",
+            (role, client_user_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def update_client_user_profile(self, client_user_id, display_name, email):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE client_users SET display_name = ?, email = ? WHERE id = ?",
+            (display_name, email, client_user_id),
+        )
+        conn.commit()
+        conn.close()
+
+    # ── Brand Tasks ──
+
+    def create_brand_task(self, brand_id, title, description="", steps_json="[]",
+                          priority="normal", source="manual", source_ref="",
+                          assigned_to=None, created_by=None, due_date=""):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO brand_tasks
+               (brand_id, title, description, steps_json, priority, source,
+                source_ref, assigned_to, created_by, due_date)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (brand_id, title, description, steps_json, priority, source,
+             source_ref, assigned_to, created_by, due_date),
+        )
+        conn.commit()
+        task_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.close()
+        return task_id
+
+    def get_brand_tasks(self, brand_id, status=None, assigned_to=None, limit=100):
+        conn = self._conn()
+        sql = "SELECT t.*, u.display_name AS assignee_name FROM brand_tasks t LEFT JOIN client_users u ON t.assigned_to = u.id WHERE t.brand_id = ?"
+        params = [brand_id]
+        if status:
+            sql += " AND t.status = ?"
+            params.append(status)
+        if assigned_to is not None:
+            sql += " AND t.assigned_to = ?"
+            params.append(assigned_to)
+        sql += " ORDER BY CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END, t.created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = conn.execute(sql, params).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_brand_task(self, task_id, brand_id):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT t.*, u.display_name AS assignee_name FROM brand_tasks t LEFT JOIN client_users u ON t.assigned_to = u.id WHERE t.id = ? AND t.brand_id = ?",
+            (task_id, brand_id),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def update_brand_task(self, task_id, brand_id, **fields):
+        conn = self._conn()
+        allowed = {"title", "description", "steps_json", "status", "priority",
+                    "assigned_to", "due_date", "completed_at"}
+        sets = []
+        params = []
+        for k, v in fields.items():
+            if k in allowed:
+                sets.append(f"{k} = ?")
+                params.append(v)
+        if not sets:
+            conn.close()
+            return
+        sets.append("updated_at = datetime('now')")
+        params.extend([task_id, brand_id])
+        conn.execute(
+            f"UPDATE brand_tasks SET {', '.join(sets)} WHERE id = ? AND brand_id = ?",
+            params,
+        )
+        conn.commit()
+        conn.close()
+
+    def update_task_steps(self, task_id, brand_id, steps_json):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE brand_tasks SET steps_json = ?, updated_at = datetime('now') WHERE id = ? AND brand_id = ?",
+            (steps_json, task_id, brand_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def delete_brand_task(self, task_id, brand_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM brand_tasks WHERE id = ? AND brand_id = ?", (task_id, brand_id))
         conn.commit()
         conn.close()

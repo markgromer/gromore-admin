@@ -247,6 +247,59 @@ def send_beta_activation_email(app_config, tester, temp_password, login_url):
         server.sendmail(from_email, email, msg.as_string())
 
 
+def send_staff_invite_email(app_config, email, name, brand_name, temp_password, role):
+    """
+    Send a staff invite email with temporary login credentials.
+    """
+    smtp_host = app_config.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = app_config.get("SMTP_PORT", 587)
+    smtp_user = app_config.get("SMTP_USER", "")
+    smtp_password = app_config.get("SMTP_PASSWORD", "")
+    from_name = app_config.get("SMTP_FROM_NAME", "GroMore")
+    from_email = app_config.get("SMTP_FROM_EMAIL", smtp_user)
+
+    if not smtp_user or not smtp_password:
+        raise ValueError("SMTP not configured.")
+
+    role_label = role.capitalize()
+    subject = f"You've been invited to {brand_name} on GroMore"
+
+    html = f"""
+    <div style="font-family:Inter,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+        <h2 style="color:#4f46e5;">Welcome to GroMore</h2>
+        <p>Hi {name},</p>
+        <p>You've been added as a <strong>{role_label}</strong> for <strong>{brand_name}</strong> on GroMore.</p>
+        <p>Here are your temporary login credentials:</p>
+        <div style="background:#f8f9fa;border-radius:10px;padding:16px;margin:20px 0;">
+            <p style="margin:4px 0;"><strong>Email:</strong> {email}</p>
+            <p style="margin:4px 0;"><strong>Temporary Password:</strong> {temp_password}</p>
+        </div>
+        <p>Please log in and change your password as soon as possible.</p>
+        <p style="color:#999;font-size:.8em;margin-top:24px;">- The GroMore Team</p>
+    </div>
+    """
+
+    text = (
+        f"Hi {name},\n\n"
+        f"You've been added as a {role_label} for {brand_name} on GroMore.\n\n"
+        f"Email: {email}\nTemporary Password: {temp_password}\n\n"
+        f"Please log in and change your password as soon as possible.\n\n"
+        f"- The GroMore Team"
+    )
+
+    with smtplib.SMTP(smtp_host, smtp_port) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{from_name} <{from_email}>"
+        msg["To"] = email
+        msg.attach(MIMEText(text, "plain"))
+        msg.attach(MIMEText(html, "html"))
+        server.sendmail(from_email, email, msg.as_string())
+
+
 def send_password_reset_email(app_config, email, name, reset_url):
     """
     Send a password reset link to a client user.
