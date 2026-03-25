@@ -29,3 +29,10 @@ Thumbs.db
 
 # Design docs (local only)
 *.rtf
+
+# Large original sprites (only commit web-optimized versions)
+webapp/static/sprites/office.png
+webapp/static/sprites/robots.png
+
+# Temp splice files
+temp_*.txt

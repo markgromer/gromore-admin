@@ -3,456 +3,120 @@
 
 {% block content %}
 <style>
-    /* -- Office Scene -- */
+    /* â”€â”€ OFFICE SCENE â”€â”€ */
     .office-wrap {
-        background: linear-gradient(135deg, #1a1c2e 0%, #252840 50%, #1e2035 100%);
-        border-radius: 16px;
-        padding: 24px;
-        margin-bottom: 28px;
-        position: relative;
-        overflow: hidden;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        border-radius: 20px;
+        padding: 28px 32px 20px;
+        margin-bottom: 32px;
+        box-shadow: 0 4px 24px rgba(0,0,0,.35);
     }
-    .office-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 16px;
-        position: relative;
-        z-index: 2;
-    }
-    .office-header h2 { font-size: 1.3rem; font-weight: 700; color: #fff; margin: 0; }
-    .office-header p { font-size: .85rem; color: rgba(255,255,255,.5); margin: 4px 0 0; }
-    .office-stats { display: flex; gap: 20px; }
-    .office-stat { text-align: center; color: #fff; }
-    .office-stat .os-val { font-size: 1.4rem; font-weight: 700; }
-    .office-stat .os-lbl { font-size: .68rem; text-transform: uppercase; letter-spacing: .4px; opacity: .5; }
+    .office-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+    .office-header h2 { color: #fff; margin: 0; font-size: 1.4rem; }
+    .office-header p { color: rgba(255,255,255,.6); margin: 4px 0 0; font-size: 0.85rem; }
+    .office-stats { display: flex; gap: 24px; text-align: center; }
+    .office-stat .os-val { font-size: 1.6rem; font-weight: 700; color: #fff; line-height: 1; }
+    .office-stat .os-lbl { font-size: 0.7rem; text-transform: uppercase; color: rgba(255,255,255,.45); letter-spacing: 1px; margin-top: 2px; }
 
-    /* 2.5D isometric container */
+    /* â”€â”€ OFFICE FLOOR (background image) â”€â”€ */
     .office-floor {
         position: relative;
         width: 100%;
-        min-height: 500px;
-        margin: 0 auto;
-        max-width: 1000px;
-        perspective: 900px;
+        aspect-ratio: 1400 / 932;
+        background: url('/static/sprites/office_web.jpg') center / cover no-repeat;
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 6px 32px rgba(0,0,0,.45), inset 0 0 80px rgba(0,0,0,.2);
+        margin-top: 10px;
     }
-    .office-room {
-        position: relative;
-        width: 100%;
-        min-height: 500px;
-        transform: rotateX(55deg) rotateZ(-35deg);
-        transform-style: preserve-3d;
-        transform-origin: 50% 50%;
+    #office-desks { position: absolute; inset: 0; }
+
+    /* â”€â”€ AGENT SPRITES â”€â”€ */
+    .agent-sprite {
+        position: absolute;
+        width: 90px;
+        height: 90px;
+        background-image: url('/static/sprites/robots_web.png');
+        background-repeat: no-repeat;
+        cursor: pointer;
+        transition: filter .3s, transform .3s;
+        z-index: 2;
+        image-rendering: auto;
+    }
+    .agent-sprite:hover { transform: scale(1.2); z-index: 10; }
+    .agent-sprite.empty { filter: grayscale(1) brightness(.5) opacity(.3); }
+    .agent-sprite.working {
+        animation: agentGlow 1.5s ease-in-out infinite alternate;
+        filter: drop-shadow(0 0 8px rgba(59,130,246,.7));
+    }
+    @keyframes agentGlow {
+        0% { filter: drop-shadow(0 0 6px rgba(59,130,246,.5)); }
+        100% { filter: drop-shadow(0 0 14px rgba(59,130,246,.9)) brightness(1.1); }
     }
 
-    /* Floor surface - carpet tile grid */
-    .floor-surface {
-        position: absolute; inset: 0;
-        background:
-            repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(0,0,0,.06) 39px, rgba(0,0,0,.06) 40px),
-            repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(0,0,0,.06) 39px, rgba(0,0,0,.06) 40px),
-            linear-gradient(135deg, #5b6a82 0%, #4e5d74 50%, #566478 100%);
-        border-radius: 4px;
-    }
-
-    /* Back wall */
-    .wall-back {
-        position: absolute; top: -80px; left: 0; right: 0; height: 80px;
-        background: linear-gradient(180deg, #d4c9b8 0%, #c9bca8 70%, #b8aa96 100%);
-        transform-origin: bottom center; transform: rotateX(-90deg);
-        border-bottom: 3px solid #a89880;
-    }
-    /* Left wall */
-    .wall-left {
-        position: absolute; top: 0; left: -80px; bottom: 0; width: 80px;
-        background: linear-gradient(90deg, #c9bca8 0%, #d4c9b8 100%);
-        transform-origin: right center; transform: rotateY(90deg);
-        border-right: 3px solid #a89880;
-    }
-
-    /* Windows - city view */
-    .iso-window {
-        position: absolute; height: 44px; width: 70px;
-        background: linear-gradient(180deg, #87ceeb 0%, #5ba3d9 40%, #4a8bc2 100%);
-        border: 3px solid #8a9ab0; border-radius: 2px; overflow: hidden;
-        box-shadow: inset 0 0 10px rgba(0,0,0,.1);
-    }
-    .iso-window::before {
-        content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 16px;
-        background: linear-gradient(180deg, transparent, rgba(76,153,76,.5));
-        border-top: 1px solid #5a8a5a;
-    }
-    .iso-window::after {
-        content: ''; position: absolute; top: 6px; left: 15px;
-        width: 6px; height: 12px; background: rgba(180,200,220,.4);
-        box-shadow: 12px 0 0 rgba(180,200,220,.3), 24px -2px 0 rgba(180,200,220,.35);
-        border-radius: 1px;
-    }
-    .wall-left .iso-window { left: 10px; width: 55px; }
-
-    /* Whiteboard */
-    .iso-whiteboard {
-        position: absolute; top: 12px; width: 90px; height: 44px;
-        background: #f5f5f0; border: 3px solid #9ca3af; border-radius: 2px; overflow: hidden;
-    }
-    .iso-whiteboard::before {
-        content: 'TEAMWORK'; position: absolute; top: 3px; left: 50%; transform: translateX(-50%);
-        font-size: 5px; font-weight: 800; color: #2563eb; letter-spacing: .5px;
-    }
-    .iso-whiteboard::after {
-        content: ''; position: absolute; top: 13px; left: 8px;
-        width: 12px; height: 6px; background: #ef4444;
-        box-shadow: 16px 0 0 #22c55e, 32px 0 0 #f59e0b, 48px 0 0 #3b82f6,
-                    0 10px 0 #8b5cf6, 16px 10px 0 #ec4899, 32px 10px 0 #14b8a6, 48px 10px 0 #f97316;
-        border-radius: 1px;
-    }
-
-    /* Motivational poster */
-    .iso-poster {
-        position: absolute; top: 8px; width: 50px; height: 40px;
-        background: #78350f; border: 2px solid #92400e; border-radius: 2px; overflow: hidden;
-    }
-    .iso-poster::before {
-        content: 'WORK HARD'; position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
-        font-size: 4px; font-weight: 800; color: #fbbf24; white-space: nowrap;
-    }
-    .iso-poster::after {
-        content: '& BE NICE'; position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
-        font-size: 3.5px; font-weight: 600; color: #fde68a; white-space: nowrap;
-    }
-
-    /* Clock */
-    .iso-clock {
-        position: absolute; top: 14px; width: 22px; height: 22px;
-        background: #fff; border: 2px solid #94a3b8; border-radius: 50%;
-    }
-    .clock-hand-m { position: absolute; bottom: 50%; left: 50%; width: 1px; height: 7px; background: #1f2937; transform-origin: bottom center; animation: clockMinute 60s linear infinite; }
-    .clock-hand-h { position: absolute; bottom: 50%; left: 50%; width: 1.5px; height: 5px; background: #1f2937; transform-origin: bottom center; animation: clockHour 3600s linear infinite; }
-    @keyframes clockMinute { to { transform: rotate(360deg); } }
-    @keyframes clockHour { to { transform: rotate(360deg); } }
-
-    /* Manager's office - glass partition top-right */
-    .manager-office {
-        position: absolute; top: 0; right: 0; width: 220px; height: 160px;
-        border-left: 3px solid rgba(148,163,184,.5);
-        border-bottom: 3px solid rgba(148,163,184,.5);
-        background: linear-gradient(135deg, rgba(139,92,246,.03), rgba(99,102,241,.02));
-        z-index: 1;
-    }
-    .manager-office::before {
-        content: "MANAGER'S OFFICE"; position: absolute; top: -14px; left: 8px;
-        font-size: 5.5px; font-weight: 800; letter-spacing: 1px; color: rgba(255,255,255,.7);
-        background: rgba(0,0,0,.4); padding: 2px 6px; border-radius: 2px;
-    }
-    .manager-office::after {
-        content: ''; position: absolute; top: 0; left: -1px; bottom: 0; width: 3px;
-        background: linear-gradient(180deg, rgba(255,255,255,.2) 0%, transparent 30%, rgba(255,255,255,.1) 60%, transparent 100%);
-    }
-    .manager-desk {
-        position: absolute; top: 30px; right: 30px; width: 80px; height: 50px;
-        background: linear-gradient(135deg, #78350f, #92400e); border-radius: 3px; box-shadow: 0 3px 0 #451a03;
-    }
-    .manager-desk::before {
-        content: ''; position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
-        width: 28px; height: 18px; background: #0f172a; border: 2px solid #475569; border-radius: 2px;
-        box-shadow: 0 0 6px rgba(99,102,241,.3);
-    }
-    .manager-chair {
-        position: absolute; top: 55px; right: 45px; width: 30px; height: 22px;
-        background: #1f2937; border-radius: 12px 12px 4px 4px; box-shadow: 0 2px 0 #111827;
-    }
-    .manager-credenza {
-        position: absolute; top: 8px; right: 10px; width: 60px; height: 20px;
-        background: linear-gradient(180deg, #78350f, #6b3410); border-radius: 2px; box-shadow: 0 2px 0 #451a03;
-    }
-    .manager-credenza::after {
-        content: ''; position: absolute; top: -6px; left: 10px;
-        width: 8px; height: 8px; background: #3b82f6; border-radius: 50%;
-        box-shadow: 14px 0 0 4px #94a3b8, 14px 0 0 #cbd5e1;
-    }
-
-    /* Filing cabinet */
-    .iso-cabinet {
-        position: absolute; width: 20px; height: 36px;
-        background: linear-gradient(180deg, #64748b, #475569); border-radius: 2px; box-shadow: 0 2px 0 #334155;
-    }
-    .iso-cabinet::before {
-        content: ''; position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
-        width: 12px; height: 2px; background: #94a3b8; box-shadow: 0 8px 0 #94a3b8, 0 16px 0 #94a3b8;
-    }
-    .iso-cabinet::after {
-        content: 'STORAGE'; position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
-        font-size: 3.5px; font-weight: 700; color: rgba(255,255,255,.4); white-space: nowrap;
-    }
-
-    /* Coat rack */
-    .iso-coatrack {
-        position: absolute; width: 6px; height: 30px;
-        background: linear-gradient(180deg, #78350f, #92400e); border-radius: 3px 3px 0 0;
-    }
-    .iso-coatrack::before {
-        content: ''; position: absolute; top: 0; left: -5px; width: 16px; height: 3px;
-        background: #78350f; border-radius: 2px;
-    }
-
-    /* Printer */
-    .iso-printer {
-        position: absolute; width: 28px; height: 22px;
-        background: linear-gradient(180deg, #e5e7eb, #d1d5db); border-radius: 3px; border: 1px solid #9ca3af; box-shadow: 0 2px 0 #9ca3af;
-    }
-    .iso-printer::before {
-        content: ''; position: absolute; top: 3px; left: 4px; width: 14px; height: 8px; background: #1f2937; border-radius: 1px;
-    }
-    .iso-printer::after {
-        content: ''; position: absolute; bottom: -3px; left: 8px; width: 12px; height: 4px; background: #f3f4f6; border-radius: 0 0 1px 1px;
-    }
-
-    /* Sideboard along back wall */
-    .iso-sideboard {
-        position: absolute; height: 20px;
-        background: linear-gradient(180deg, #92400e, #78350f); border-radius: 2px; box-shadow: 0 2px 0 #451a03;
-    }
-    .iso-sideboard .side-plant {
-        position: absolute; top: -10px; width: 10px; height: 12px;
-        background: #22c55e; border-radius: 50% 50% 0 0; border-bottom: 4px solid #92400e;
-    }
-    .iso-sideboard .side-frame {
-        position: absolute; top: -8px; width: 8px; height: 10px;
-        border: 1.5px solid #94a3b8; background: #dbeafe; border-radius: 1px;
-    }
-
-    /* Break area items */
-    .iso-cooler { position: absolute; width: 14px; z-index: 2; }
-    .iso-cooler-tank {
-        width: 14px; height: 18px; background: linear-gradient(180deg, #bfdbfe, #93c5fd);
-        border: 1px solid #60a5fa; border-radius: 3px 3px 0 0;
-    }
-    .iso-cooler-tank::before {
-        content: ''; position: absolute; bottom: 6px; left: 3px; right: 3px; height: 3px;
-        background: rgba(255,255,255,.3); border-radius: 2px; animation: waterBubble 4s ease-in-out infinite;
-    }
-    @keyframes waterBubble { 0%,100% { transform: translateY(0); opacity:.3; } 50% { transform: translateY(-2px); opacity:.7; } }
-    .iso-cooler-base { width: 16px; height: 10px; background: #e5e7eb; border-radius: 0 0 2px 2px; margin-left: -1px; }
-
-    .iso-coffee {
-        position: absolute; width: 18px; height: 16px;
-        background: linear-gradient(180deg, #1f2937, #374151); border-radius: 2px; box-shadow: 0 1px 0 #111827;
-    }
-    .iso-coffee::before {
-        content: ''; position: absolute; top: 2px; left: 3px; width: 6px; height: 5px; background: #78350f; border-radius: 1px;
-    }
-    .iso-break-table {
-        position: absolute; width: 36px; height: 36px;
-        background: linear-gradient(135deg, #78350f, #6b3410); border-radius: 50%; box-shadow: 0 3px 0 #451a03;
-    }
-    .iso-break-table::before {
-        content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
-        width: 10px; height: 10px; background: #22c55e; border-radius: 50%; border: 2px solid #92400e;
-    }
-    .iso-break-chair {
-        position: absolute; width: 16px; height: 16px;
-        background: #334155; border-radius: 50%; box-shadow: 0 1px 0 #1f2937;
-    }
-
-    /* Bulletin board */
-    .iso-bulletin {
-        position: absolute; width: 40px; height: 30px;
-        background: #b45309; border: 2px solid #92400e; border-radius: 2px;
-    }
-    .iso-bulletin::before {
-        content: ''; position: absolute; top: 4px; left: 4px;
-        width: 8px; height: 6px; background: #fde68a;
-        box-shadow: 12px 0 0 #bfdbfe, 24px 0 0 #fecaca, 6px 10px 0 #d1fae5, 18px 10px 0 #e9d5ff;
-        border-radius: 1px;
-    }
-
-    /* Plants */
-    .iso-plant { position: absolute; z-index: 3; }
-    .iso-plant-pot {
-        width: 14px; height: 10px; background: linear-gradient(180deg, #92400e, #78350f);
-        border-radius: 2px 2px 4px 4px; margin: 0 auto;
-    }
-    .iso-plant-leaves { display: flex; gap: 1px; justify-content: center; margin-bottom: -2px; }
-    .iso-plant-leaf {
-        width: 7px; height: 14px; background: #22c55e;
-        border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; animation: plantSway 5s ease-in-out infinite;
-    }
-    .iso-plant-leaf:nth-child(1) { transform: rotate(-20deg); animation-delay: 0s; }
-    .iso-plant-leaf:nth-child(2) { transform: rotate(0deg); height: 18px; animation-delay: .5s; }
-    .iso-plant-leaf:nth-child(3) { transform: rotate(20deg); animation-delay: 1s; }
-    @keyframes plantSway { 0%,100% { transform: rotate(var(--r,0deg)); } 50% { transform: rotate(calc(var(--r,0deg) + 5deg)); } }
-    .iso-palm { position: absolute; z-index: 3; }
-    .iso-palm-trunk { width: 4px; height: 20px; background: linear-gradient(180deg, #78350f, #92400e); margin: 0 auto; }
-    .iso-palm-top { width: 24px; height: 16px; background: radial-gradient(ellipse, #22c55e 40%, #16a34a 70%, transparent 71%); margin: 0 auto -4px; }
-    .iso-palm-pot { width: 16px; height: 12px; background: #475569; border-radius: 3px 3px 5px 5px; margin: 0 auto; }
-
-    /* Desk unit - cubicle style */
-    .desk-slot {
-        position: absolute; width: 90px; height: 70px;
-        cursor: pointer; transition: transform .2s, filter .2s; z-index: 4;
-    }
-    .desk-slot:hover { transform: translateY(-4px) scale(1.03); filter: brightness(1.15); z-index: 10; }
-
-    /* Cubicle dividers */
-    .cubicle-panel-back {
-        position: absolute; bottom: 22px; left: 0; right: 0; height: 18px;
-        background: linear-gradient(180deg, #6b7280, #4b5563); border-radius: 1px; box-shadow: 0 1px 0 #374151;
-    }
-    .cubicle-panel-side {
-        position: absolute; bottom: 22px; left: 0; width: 4px; height: 18px;
-        background: linear-gradient(90deg, #9ca3af, #6b7280); border-radius: 1px 0 0 1px;
-    }
-
-    /* Desk surface */
-    .desk-base {
-        position: absolute; bottom: 8px; left: 6px; right: 6px; height: 14px;
-        background: linear-gradient(135deg, #c2956a, #a8805a); border-radius: 2px;
-        box-shadow: 0 3px 0 #8b6b47, 0 5px 8px rgba(0,0,0,.3);
-    }
-    .desk-base::before {
-        content: ''; position: absolute; top: 0; right: 2px; width: 16px; height: 14px;
-        background: linear-gradient(180deg, #9ca3af, #6b7280); border-radius: 1px; box-shadow: 0 3px 0 #4b5563;
-    }
-    .desk-base::after {
-        content: ''; position: absolute; top: -4px; left: 6px; width: 5px; height: 5px;
-        background: #fff; border-radius: 50%; border: 1px solid #d1d5db; box-shadow: inset 0 -2px 0 #92400e;
-    }
-
-    /* Chair */
-    .desk-chair {
-        position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
-        width: 22px; height: 14px; background: #1f2937; border-radius: 10px 10px 4px 4px;
-        z-index: -1; box-shadow: 0 2px 0 #111827;
-    }
-    .desk-chair::before {
-        content: ''; position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
-        width: 18px; height: 10px; background: #1f2937; border-radius: 4px 4px 0 0;
-    }
-    .desk-chair::after {
-        content: ''; position: absolute; bottom: -3px; left: 50%; transform: translateX(-50%);
-        width: 6px; height: 3px; background: #374151; border-radius: 0 0 2px 2px;
-    }
-
-    /* Monitor */
-    .desk-monitor {
-        position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%);
-        width: 28px; height: 20px; background: #0f172a; border: 2px solid #475569; border-radius: 2px;
-        box-shadow: 0 0 6px rgba(99,102,241,.15); overflow: hidden;
-    }
-    .desk-monitor.active { border-color: #6366f1; box-shadow: 0 0 14px rgba(99,102,241,.5); }
-    .desk-monitor.active::before {
-        content: ''; position: absolute; top: 3px; left: 3px; right: 3px; height: 2px;
-        background: #6366f1; box-shadow: 0 4px 0 #818cf8, 0 8px 0 #a78bfa;
-        animation: screenScroll 2s linear infinite;
-    }
-    @keyframes screenScroll { 0% { transform: translateY(0); opacity:1; } 80% { transform: translateY(-3px); opacity:.6; } 100% { transform: translateY(0); opacity:1; } }
-    .desk-monitor::after {
-        content: ''; position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%);
-        width: 6px; height: 3px; background: #475569; border-radius: 0 0 1px 1px;
-    }
-
-    .desk-keyboard {
-        position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%);
-        width: 18px; height: 6px; background: #1f2937; border-radius: 1px; border: 1px solid #374151;
-    }
-    .desk-phone {
-        position: absolute; bottom: 20px; left: 10px; width: 10px; height: 8px;
-        background: #1f2937; border-radius: 1px; border: 1px solid #374151;
-    }
-    .desk-phone::before {
-        content: ''; position: absolute; top: -3px; left: 1px; width: 8px; height: 3px;
-        background: #374151; border-radius: 2px;
-    }
-    .desk-postit { position: absolute; bottom: 38px; width: 7px; height: 7px; border-radius: 1px; }
-    .desk-plant-sm {
-        position: absolute; bottom: 22px; right: 8px; width: 8px; height: 10px;
-        background: #22c55e; border-radius: 50% 50% 0 0; border-bottom: 3px solid #92400e;
-    }
-
-    /* Agent character */
-    .desk-agent {
-        position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
-        display: flex; flex-direction: column; align-items: center;
-        transition: opacity .3s, transform .3s;
-    }
-    .desk-agent.hidden { opacity: 0; transform: translateX(-50%) scale(0.5); pointer-events: none; }
-    .agent-head {
-        width: 14px; height: 14px; border-radius: 50%;
-        position: relative; z-index: 1; border: 1px solid rgba(255,255,255,.2);
-    }
-    .agent-head::before {
-        content: ''; position: absolute; top: 4px; left: 2px; width: 3px; height: 3px;
-        background: rgba(255,255,255,.9); border-radius: 50%; box-shadow: 5px 0 0 rgba(255,255,255,.9);
-    }
-    .agent-head::after {
-        content: ''; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
-        width: 4px; height: 1.5px; border-bottom: 1.5px solid rgba(255,255,255,.5); border-radius: 0 0 3px 3px;
-    }
-    .agent-body {
-        width: 18px; height: 12px; border-radius: 3px 3px 2px 2px; margin-top: -2px; position: relative;
-    }
-    .agent-body::before, .agent-body::after {
-        content: ''; position: absolute; top: 2px; width: 4px; height: 7px;
-        border-radius: 2px; background: inherit; opacity: .9;
-    }
-    .agent-body::before { left: -3px; transform: rotate(5deg); }
-    .agent-body::after { right: -3px; transform: rotate(-5deg); }
-    .agent-accessory {
-        position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
-        font-size: 9px; line-height: 1; z-index: 2; filter: drop-shadow(0 1px 2px rgba(0,0,0,.3));
-    }
-
-    /* Working animations */
-    .desk-slot.working .desk-agent { animation: agentBob 1.5s ease-in-out infinite; }
-    .desk-slot.working .agent-body::before { animation: armType 0.4s ease-in-out infinite alternate; }
-    .desk-slot.working .agent-body::after { animation: armType 0.4s ease-in-out infinite alternate-reverse; }
-    @keyframes agentBob { 0%,100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-2px); } }
-    @keyframes armType { 0% { transform: rotate(5deg) translateY(0); } 100% { transform: rotate(-5deg) translateY(-2px); } }
-    .desk-slot.working .desk-monitor { animation: monitorGlow 2s ease-in-out infinite; }
-    @keyframes monitorGlow { 0%,100% { box-shadow: 0 0 8px rgba(99,102,241,.4); } 50% { box-shadow: 0 0 20px rgba(99,102,241,.8); } }
-
-    /* Idle breathing */
-    .desk-slot:not(.empty):not(.working) .desk-agent { animation: agentBreathe 4s ease-in-out infinite; }
-    @keyframes agentBreathe { 0%,100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.02); } }
-    .desk-slot:not(.empty):not(.working) .agent-head { animation: agentLook 8s ease-in-out infinite; }
-    @keyframes agentLook { 0%,85%,100% { transform: rotate(0); } 90% { transform: rotate(6deg); } 95% { transform: rotate(-4deg); } }
-
-    /* Nameplate - counter-rotate for readability */
+    /* â”€â”€ NAMEPLATE â”€â”€ */
     .desk-nameplate {
-        position: absolute; top: -16px; left: 50%;
-        transform: translateX(-50%) rotateZ(35deg) rotateX(-55deg);
-        font-size: .6rem; font-weight: 700; color: #fff; text-align: center;
-        white-space: nowrap; text-shadow: 0 1px 4px rgba(0,0,0,.8);
-        background: rgba(0,0,0,.45); padding: 1px 6px; border-radius: 3px; pointer-events: none;
+        position: absolute;
+        bottom: -28px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0,0,0,.75);
+        backdrop-filter: blur(6px);
+        color: #fff;
+        padding: 3px 10px;
+        border-radius: 6px;
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-align: center;
+        white-space: nowrap;
+        pointer-events: none;
+        z-index: 5;
+        line-height: 1.3;
     }
-    .desk-nameplate .np-role { font-size: .5rem; font-weight: 400; opacity: .6; display: block; }
+    .desk-nameplate .np-role {
+        display: block;
+        font-weight: 400;
+        font-size: 0.55rem;
+        opacity: .7;
+    }
 
-    /* Empty desk */
-    .desk-slot.empty .desk-monitor { opacity: .2; border-color: #334155; box-shadow: none; }
-    .desk-slot.empty .desk-monitor::before { display: none; }
-    .desk-slot.empty .desk-base { opacity: .4; }
-    .desk-slot.empty .desk-chair { opacity: .3; }
-    .desk-slot.empty .cubicle-panel-back { opacity: .4; }
-    .desk-slot.empty .cubicle-panel-side { opacity: .4; }
-    .desk-slot.empty .desk-keyboard { opacity: .2; }
-    .desk-slot.empty .desk-phone { opacity: .2; }
-    .desk-slot.empty .desk-plant-sm { opacity: .2; }
-    .desk-slot.empty .desk-nameplate { opacity: .25; background: none; }
+    /* â”€â”€ HIRE BADGE â”€â”€ */
     .desk-hire-badge {
-        position: absolute; top: -8px; right: -4px;
-        background: #f59e0b; color: #000; font-size: .55rem; font-weight: 800;
-        padding: 2px 6px; border-radius: 6px; text-transform: uppercase;
-        letter-spacing: .3px; animation: hirePulse 2s ease-in-out infinite;
-        cursor: pointer; z-index: 5;
-        transform: rotateZ(35deg) rotateX(-55deg);
+        position: absolute;
+        bottom: -8px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: linear-gradient(135deg, #f59e0b, #f97316);
+        color: #fff;
+        font-size: 0.6rem;
+        font-weight: 800;
+        letter-spacing: 1px;
+        padding: 3px 12px;
+        border-radius: 10px;
+        cursor: pointer;
+        z-index: 6;
+        animation: hirePulse 2s ease-in-out infinite;
+        box-shadow: 0 2px 8px rgba(245,158,11,.5);
     }
-    @keyframes hirePulse { 0%,100% { box-shadow: 0 0 0 0 rgba(245,158,11,.4); } 50% { box-shadow: 0 0 0 6px rgba(245,158,11,0); } }
-    .desk-slot.empty:hover::before {
-        content: ''; position: absolute; inset: -4px;
-        border: 2px dashed rgba(245,158,11,.3); border-radius: 6px;
-        animation: hireRingPulse 1.5s ease-in-out infinite;
+    @keyframes hirePulse {
+        0%, 100% { transform: translateX(-50%) scale(1); }
+        50% { transform: translateX(-50%) scale(1.1); }
     }
-    @keyframes hireRingPulse { 0%,100% { opacity: .4; } 50% { opacity: .8; } }
+
+    /* â”€â”€ STATUS INDICATOR â”€â”€ */
+    .agent-status-dot {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid rgba(0,0,0,.4);
+        z-index: 6;
+    }
+    .agent-status-dot.hired { background: #10b981; }
+    .agent-status-dot.working { background: #3b82f6; animation: statusBlink 1s infinite; }
+    @keyframes statusBlink { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
     /* Hero actions row */
     .team-hero-actions {
         display: flex;
@@ -806,16 +470,15 @@
     .empty-feed i { font-size: 2rem; display: block; margin-bottom: 8px; }
 
 
+
     @media (max-width: 768px) {
         .agent-grid { grid-template-columns: 1fr; }
-        .office-floor { min-height: 340px; }
-        .office-room { transform: rotateX(55deg) rotateZ(-35deg) scale(.75); transform-origin: 50% 30%; }
-        .desk-slot { transform: scale(.85); }
+        .office-floor { min-height: 240px; }
+        .agent-sprite { width: 60px !important; height: 60px !important; }
         .office-stats { gap: 12px; }
         .office-header { flex-direction: column; align-items: flex-start; gap: 12px; }
         .findings-header { flex-direction: column; gap: 10px; align-items: flex-start; }
-        .manager-office { width: 160px; height: 120px; }
-        .wall-back, .wall-left { display: none; }
+        .desk-nameplate { font-size: 0.55rem; bottom: -22px; }
     }
 </style>
 
@@ -850,99 +513,9 @@
     </div>
 
     <div class="office-floor">
-        <div class="office-room">
-            <div class="floor-surface"></div>
-
-            <!-- Back wall -->
-            <div class="wall-back">
-                <div class="iso-window" style="left:20px;top:14px;"></div>
-                <div class="iso-window" style="left:120px;top:14px;"></div>
-                <div class="iso-whiteboard" style="left:220px;"></div>
-                <div class="iso-poster" style="right:140px;"></div>
-                <div class="iso-clock" style="left:340px;">
-                    <div class="clock-hand-m"></div>
-                    <div class="clock-hand-h"></div>
-                </div>
-                <div class="iso-window" style="right:30px;top:14px;"></div>
-            </div>
-
-            <!-- Left wall -->
-            <div class="wall-left">
-                <div class="iso-window" style="top:30px;"></div>
-                <div class="iso-window" style="top:160px;"></div>
-            </div>
-
-            <!-- Manager's office (top-right, glass wall) -->
-            <div class="manager-office">
-                <div class="manager-credenza"></div>
-                <div class="manager-desk"></div>
-                <div class="manager-chair"></div>
-            </div>
-
-            <!-- Sideboard under back wall windows -->
-            <div class="iso-sideboard" style="top:8px;left:10px;width:140px;">
-                <span class="side-plant" style="left:10px;"></span>
-                <span class="side-frame" style="left:30px;"></span>
-                <span class="side-plant" style="left:55px;"></span>
-                <span class="side-frame" style="left:80px;"></span>
-                <span class="side-plant" style="right:10px;"></span>
-            </div>
-
-            <!-- Filing cabinet + coat rack near storage door -->
-            <div class="iso-cabinet" style="top:10px;left:200px;"></div>
-            <div class="iso-coatrack" style="top:14px;left:230px;"></div>
-
-            <!-- Printer area -->
-            <div class="iso-printer" style="top:70px;left:10px;"></div>
-
-            <!-- Plants scattered -->
-            <div class="iso-palm" style="top:10px;left:175px;">
-                <div class="iso-palm-top"></div>
-                <div class="iso-palm-trunk"></div>
-                <div class="iso-palm-pot"></div>
-            </div>
-            <div class="iso-plant" style="top:110px;left:10px;">
-                <div class="iso-plant-leaves" style="--r:-15deg;">
-                    <div class="iso-plant-leaf"></div><div class="iso-plant-leaf"></div><div class="iso-plant-leaf"></div>
-                </div>
-                <div class="iso-plant-pot"></div>
-            </div>
-            <div class="iso-palm" style="top:0;right:10px;">
-                <div class="iso-palm-top"></div>
-                <div class="iso-palm-trunk"></div>
-                <div class="iso-palm-pot"></div>
-            </div>
-            <div class="iso-plant" style="bottom:80px;right:10px;">
-                <div class="iso-plant-leaves" style="--r:10deg;">
-                    <div class="iso-plant-leaf"></div><div class="iso-plant-leaf"></div><div class="iso-plant-leaf"></div>
-                </div>
-                <div class="iso-plant-pot"></div>
-            </div>
-            <div class="iso-plant" style="bottom:20px;left:160px;">
-                <div class="iso-plant-leaves" style="--r:-10deg;">
-                    <div class="iso-plant-leaf"></div><div class="iso-plant-leaf"></div><div class="iso-plant-leaf"></div>
-                </div>
-                <div class="iso-plant-pot"></div>
-            </div>
-
-            <!-- Break area (bottom-right) -->
-            <div class="iso-cooler" style="bottom:60px;right:80px;">
-                <div class="iso-cooler-tank"></div>
-                <div class="iso-cooler-base"></div>
-            </div>
-            <div class="iso-coffee" style="bottom:60px;right:55px;"></div>
-            <div class="iso-break-table" style="bottom:20px;right:50px;"></div>
-            <div class="iso-break-chair" style="bottom:10px;right:40px;"></div>
-            <div class="iso-break-chair" style="bottom:30px;right:30px;"></div>
-            <div class="iso-break-chair" style="bottom:10px;right:70px;"></div>
-
-            <!-- Bulletin board near break area -->
-            <div class="iso-bulletin" style="bottom:100px;right:30px;"></div>
-
-            <!-- Desks placed by JS -->
-            <div id="office-desks"></div>
-        </div>
+        <div id="office-desks"></div>
     </div>
+</div>
 </div>
 
 <!-- â•â•â• HIRE/TRAIN MODAL â•â•â• -->
@@ -1149,89 +722,84 @@ const TRAIN_GUIDANCE = {
 };
 
 // Desk positions in the office (x%, y% of floor)
+// Desk positions on the office background image (% of container)
+// Mapped to visible desk/workstation areas in office_web.jpg
 const DESK_POSITIONS = [
-    { key: 'warren', x: 56, y: 6 },   // Manager's office
-    { key: 'scout',  x: 5,  y: 26 },  // Row 1
-    { key: 'penny',  x: 25, y: 26 },
-    { key: 'ace',    x: 5,  y: 44 },  // Row 2
-    { key: 'radar',  x: 25, y: 44 },
-    { key: 'hawk',   x: 5,  y: 62 },  // Row 3
-    { key: 'pulse',  x: 25, y: 62 },
-    { key: 'spark',  x: 45, y: 26 },  // Right column
-    { key: 'bridge', x: 45, y: 44 },
-    { key: 'chief',  x: 5,  y: 80 },  // Asst Manager desk, front
+    { key: 'warren', x: 68, y: 10 },   // Corner office area, top-right
+    { key: 'scout',  x: 35, y: 42 },   // Center desk cluster
+    { key: 'penny',  x: 48, y: 23 },   // Center desk, top area
+    { key: 'ace',    x: 78, y: 32 },   // Right side near boards
+    { key: 'radar',  x: 5,  y: 12 },   // Back-left window desks
+    { key: 'hawk',   x: 18, y: 22 },   // Second window desk
+    { key: 'pulse',  x: 55, y: 38 },   // Center-right desk cluster
+    { key: 'spark',  x: 8,  y: 35 },   // Left middle area
+    { key: 'bridge', x: 58, y: 55 },   // Lower right desk area
+    { key: 'chief',  x: 38, y: 62 },   // Near entrance, overseeing
 ];
 
-const AGENT_AVATARS = {
-    warren: { accessory: '\u2B50', bodyBorder: '1px solid rgba(255,255,255,.2)' },
-    scout:  { accessory: '\uD83D\uDCC8', bodyBorder: 'none' },
-    penny:  { accessory: '\uD83D\uDCB0', bodyBorder: 'none' },
-    ace:    { accessory: '\u270F\uFE0F', bodyBorder: 'none' },
-    radar:  { accessory: '\uD83D\uDEE1\uFE0F', bodyBorder: 'none' },
-    hawk:   { accessory: '\uD83D\uDD2D', bodyBorder: 'none' },
-    pulse:  { accessory: '\uD83D\uDCCA', bodyBorder: 'none' },
-    spark:  { accessory: '\uD83D\uDCA1', bodyBorder: 'none' },
-    bridge: { accessory: '\uD83D\uDD17', bodyBorder: 'none' },
-    chief:  { accessory: '\uD83D\uDCCB', bodyBorder: '1px solid rgba(255,255,255,.15)' },
+// Robot sprite sheet: 4x4 grid, 1200x1200 native, displayed at 90x90
+// background-size: 360px 360px (1200/300 * 90 = 360)
+// Each cell = 90px in display
+const SPRITE_MAP = {
+    warren: { col: 3, row: 0 },  // Conductor in suit
+    scout:  { col: 2, row: 1 },  // Briefcase, on the move
+    penny:  { col: 2, row: 0 },  // At desk with computer
+    ace:    { col: 3, row: 1 },  // Painting at easel
+    radar:  { col: 0, row: 1 },  // At whiteboard, analyzing
+    hawk:   { col: 0, row: 3 },  // At bookshelf, research
+    pulse:  { col: 1, row: 2 },  // At desk with papers
+    spark:  { col: 1, row: 0 },  // Presenting
+    bridge: { col: 2, row: 2 },  // At microphone, connecting
+    chief:  { col: 3, row: 3 },  // At desk reviewing
 };
 
-const POSTIT_COLORS = ['#fde68a','#bfdbfe','#fecaca','#d1fae5','#e9d5ff','#fed7aa'];
+const SPRITE_SIZE = 90;
+const SHEET_COLS = 4;
 
 function renderOffice(latestData) {
     const container = document.getElementById('office-desks');
+    if (!container) return;
     let html = '';
     const latest = latestData || {};
 
-    DESK_POSITIONS.forEach((pos, idx) => {
+    DESK_POSITIONS.forEach((pos) => {
         const agent = AGENTS.find(a => a.key === pos.key);
         if (!agent) return;
         const color = AGENT_COLORS[pos.key] || '#6b7280';
-        const avatar = AGENT_AVATARS[pos.key] || {};
         const isHired = !!hiredAgents[pos.key];
-        const isTrained = isHired && hiredAgents[pos.key].trained;
         const agentLatest = latest[pos.key];
         const isWorking = agentLatest && agentLatest.status === 'in_progress';
         const isEmpty = !isHired;
+        const sprite = SPRITE_MAP[pos.key] || { col: 0, row: 0 };
+
+        const bgSize = SPRITE_SIZE * SHEET_COLS;
+        const bgX = -(sprite.col * SPRITE_SIZE);
+        const bgY = -(sprite.row * SPRITE_SIZE);
+
         const classes = [
-            'desk-slot',
+            'agent-sprite',
             isEmpty ? 'empty' : '',
             isWorking ? 'working' : '',
         ].filter(Boolean).join(' ');
-        const postit1 = POSTIT_COLORS[idx % POSTIT_COLORS.length];
-        const postit2 = POSTIT_COLORS[(idx + 3) % POSTIT_COLORS.length];
 
-        html += `<div class="${classes}" data-agent="${pos.key}" style="left:${pos.x}%;top:${pos.y}%;" onclick="openHireModal('${pos.key}')" title="${agent.name} - ${agent.role}">`;
+        html += `<div class="${classes}" data-agent="${pos.key}"
+            style="left:${pos.x}%;top:${pos.y}%;width:${SPRITE_SIZE}px;height:${SPRITE_SIZE}px;background-size:${bgSize}px ${bgSize}px;background-position:${bgX}px ${bgY}px;"
+            onclick="openHireModal('${pos.key}')"
+            title="${agent.name} - ${agent.role}">`;
+
+        // Status dot
+        if (isHired) {
+            html += `<div class="agent-status-dot ${isWorking ? 'working' : 'hired'}"></div>`;
+        }
+
+        // Nameplate
         html += `<div class="desk-nameplate"><span>${agent.name}</span><span class="np-role">${agent.role}</span></div>`;
 
-        // Agent character
-        html += `<div class="desk-agent ${isEmpty ? 'hidden' : ''}">`;
-        if (avatar.accessory) {
-            html += `<div class="agent-accessory">${avatar.accessory}</div>`;
-        }
-        html += `<div class="agent-head" style="background:${color};"></div>`;
-        html += `<div class="agent-body" style="background:${color};opacity:.8;${avatar.bodyBorder ? 'border:'+avatar.bodyBorder+';' : ''}"></div>`;
-        html += `</div>`;
-
-        // Cubicle panels
-        html += `<div class="cubicle-panel-back"></div>`;
-        html += `<div class="cubicle-panel-side"></div>`;
-        // Monitor + keyboard + phone
-        html += `<div class="desk-monitor ${isWorking ? 'active' : ''}"></div>`;
-        html += `<div class="desk-keyboard"></div>`;
-        html += `<div class="desk-phone"></div>`;
-        // Post-it notes
-        html += `<div class="desk-postit" style="left:65px;background:${postit1};"></div>`;
-        html += `<div class="desk-postit" style="left:72px;background:${postit2};"></div>`;
-        // Small plant
-        html += `<div class="desk-plant-sm"></div>`;
-        // Chair
-        html += `<div class="desk-chair"></div>`;
-        // Desk surface
-        html += `<div class="desk-base"></div>`;
-
+        // Hire badge for empty desks
         if (isEmpty) {
             html += `<div class="desk-hire-badge">HIRE</div>`;
         }
+
         html += `</div>`;
     });
 
@@ -1240,8 +808,6 @@ function renderOffice(latestData) {
     const hiredCount = Object.keys(hiredAgents).length;
     document.getElementById('stat-hired').textContent = hiredCount + '/' + AGENTS.length;
 }
-
-// â”€â”€ HIRE MODAL â”€â”€
 function openHireModal(agentKey) {
     const agent = AGENTS.find(a => a.key === agentKey);
     if (!agent) return;
