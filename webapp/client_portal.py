@@ -266,6 +266,19 @@ def client_logout():
     return redirect(url_for("client.client_login"))
 
 
+# ── Agent Activity Helper ──
+
+def _log_agent(agent_key, action, detail="", status="completed"):
+    """Log an agent activity for the current brand. Non-blocking, best-effort."""
+    try:
+        brand_id = session.get("client_brand_id")
+        if brand_id:
+            db = _get_db()
+            db.log_agent_activity(brand_id, agent_key, action, detail, status)
+    except Exception:
+        pass
+
+
 # ── Dashboard ──
 
 @client_bp.route("/")
@@ -401,6 +414,8 @@ def client_dashboard_data():
             except Exception:
                 dashboard_data["sng"] = {"connected": False}
 
+            _log_agent("scout", "Analyzed campaign performance", f"Scanned {len(campaigns_data.get('google', []))} Google + {len(campaigns_data.get('meta', []))} Meta campaigns")
+            _log_agent("warren", "Built dashboard briefing", f"Month: {month}")
             return jsonify({"dashboard": dashboard_data, "error": ""})
         else:
             return jsonify({"dashboard": None, "error": "No data available for this month."})
@@ -813,6 +828,7 @@ def client_coaching_start():
         reply = (reply or "").strip()
         if reply:
             db.add_ai_chat_message(brand_id, month, "assistant", reply)
+            _log_agent("warren", f"Started {topic} coaching session", f"Month: {month}")
         return jsonify({"reply": reply})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -911,6 +927,7 @@ def _client_assistant_chat_handler(payload):
         assistant_reply = (assistant_reply or "").strip()
         if assistant_reply:
             db.add_ai_chat_message(brand_id, month, "assistant", assistant_reply)
+            _log_agent("warren", "Responded to strategy question", user_message[:60])
 
         return jsonify({"reply": assistant_reply})
     except Exception as e:
@@ -997,6 +1014,8 @@ def client_ad_builder_generate():
         if not facebook_ads:
             flash("AI generation failed. Check that your OpenAI key is configured in Settings.", "error")
             return redirect(url_for("client.client_ad_builder", month=month))
+
+    _log_agent("ace", f"Generated {platform} ad copy", strategy or "default strategy")
 
     # Auto-save ad package to Drive
     try:
@@ -1323,10 +1342,11 @@ def client_campaign_generate():
         from flask import current_app
         current_app.logger.exception("Campaign plan generation failed")
         result = {"success": False, "error": f"Plan generation error: {exc}"}
+
+    if result.get("success"):
+        _log_agent("scout", f"Generated {platform} campaign plan", f"{service} in {location}, ${monthly_budget}/mo")
+        _log_agent("penny", "Reviewed campaign budget", f"${monthly_budget}/mo for {platform}")
     return jsonify(result)
-
-
-@client_bp.route("/campaigns/new/launch", methods=["POST"])
 @client_login_required
 def client_campaign_launch():
     db = _get_db()
@@ -1361,6 +1381,8 @@ def client_campaign_launch():
         current_app.logger.exception("Campaign launch failed")
         result = {"success": False, "error": f"Launch error: {exc}"}
 
+    if result.get("success"):
+        _log_agent("scout", f"Launched {platform} campaign", plan.get("campaign_name", ""))
     return jsonify(result)
 
 
@@ -1790,6 +1812,7 @@ def client_competitor_refresh(competitor_id):
         flash(f"Intel refreshed for '{comp['name']}' with issues: {'; '.join(scan_errors[:3])}", "warning")
     else:
         flash(f"Intel refreshed for '{comp['name']}'.", "success")
+    _log_agent("hawk", "Refreshed competitor intel", comp.get("name", ""))
     return redirect(url_for("client.client_competitors"))
 
 
@@ -3630,6 +3653,9 @@ def client_gbp_audit():
     except Exception:
         current_app.logger.exception("GBP audit error")
 
+    if audit:
+        _log_agent("radar", "Completed GBP audit", brand.get("display_name", ""))
+
     return render_template(
         "client_gbp_audit.html",
         brand=brand,
@@ -4593,6 +4619,8 @@ Return ONLY valid JSON, no markdown code fences."""
 
         result = json.loads(json_match.group())
         result["ok"] = True
+        _log_agent("spark", "Wrote blog post", result.get("title", topic or title)[:80])
+        _log_agent("pulse", "Optimized blog SEO", result.get("seo_title", "")[:80])
         return jsonify(result)
     except json.JSONDecodeError:
         return jsonify(ok=False, error="AI returned invalid format. Try again.")
@@ -4754,6 +4782,7 @@ def client_crm_data():
         data["free_quotes"] = r.get("free_quotes", [])
 
     # Revenue intelligence
+    _log_agent("bridge", "Pulled CRM data", f"{data['kpis'].get('active_clients', 0)} active clients")
     try:
         if do_sync:
             # Full sync: sample clients, get real payments, cache results
@@ -5256,6 +5285,119 @@ def client_feedback_submit():
     db.create_beta_feedback(brand_id, client_user_id, category, rating, message, page)
     flash("Thanks for your feedback!", "success")
     return redirect(url_for("client.client_feedback"))
+
+
+# ── Your Team (AI Agents) ──
+
+AGENT_ROSTER = [
+    {
+        "key": "warren",
+        "name": "W.A.R.R.E.N.",
+        "role": "Chief Strategist",
+        "description": "Your senior marketing strategist. Analyzes every data point across all channels, spots what matters, and tells you the single most important move to make right now.",
+        "skills": ["Strategy", "Data Analysis", "Decision Making", "Budget Planning"],
+    },
+    {
+        "key": "scout",
+        "name": "Scout",
+        "role": "Campaign Analyst",
+        "description": "Watches your Google and Meta campaigns 24/7. Flags underperformers before they waste budget, identifies winners worth scaling, and tracks every dollar in and out.",
+        "skills": ["Google Ads", "Meta Ads", "Performance Tracking", "ROI Analysis"],
+    },
+    {
+        "key": "penny",
+        "name": "Penny",
+        "role": "Budget Guardian",
+        "description": "Keeps your ad spend on track. Monitors daily pacing, catches overspend before it happens, spots wasted budget on bad placements, and makes sure every dollar works hard.",
+        "skills": ["Budget Pacing", "Waste Detection", "Spend Alerts", "Cost Optimization"],
+    },
+    {
+        "key": "ace",
+        "name": "Ace",
+        "role": "Ad Copywriter",
+        "description": "Writes headlines that stop the scroll. Generates ad copy, tests variations, and learns what language your audience responds to so every ad gets sharper over time.",
+        "skills": ["Headlines", "Ad Copy", "A/B Variations", "Call to Action"],
+    },
+    {
+        "key": "radar",
+        "name": "Radar",
+        "role": "Reputation Manager",
+        "description": "Guards your online reputation. Monitors Google Business reviews, tracks your star rating, flags negative reviews for response, and keeps your local presence strong.",
+        "skills": ["Reviews", "Google Business", "Local SEO", "Reputation Alerts"],
+    },
+    {
+        "key": "hawk",
+        "name": "Hawk",
+        "role": "Competitive Intel",
+        "description": "Keeps one eye on your competitors at all times. Tracks their ad activity, website changes, review counts, and market positioning so you always know what you're up against.",
+        "skills": ["Competitor Tracking", "Market Analysis", "Ad Monitoring", "Positioning"],
+    },
+    {
+        "key": "pulse",
+        "name": "Pulse",
+        "role": "SEO & Analytics",
+        "description": "Your organic growth engine. Tracks search rankings, monitors website traffic patterns, identifies keyword opportunities, and measures what content drives real leads.",
+        "skills": ["SEO", "Google Analytics", "Search Console", "Keyword Tracking"],
+    },
+    {
+        "key": "spark",
+        "name": "Spark",
+        "role": "Content Creator",
+        "description": "Creates content that brings people to your business. Writes blog posts, social captions, and email content tuned to your brand voice and your audience's interests.",
+        "skills": ["Blog Writing", "Social Media", "Email Copy", "Brand Voice"],
+    },
+    {
+        "key": "bridge",
+        "name": "Bridge",
+        "role": "Lead Manager",
+        "description": "Connects your marketing to your revenue. Tracks leads from first click to closed deal, monitors your CRM pipeline, and makes sure no opportunity slips through the cracks.",
+        "skills": ["CRM", "Lead Tracking", "Pipeline", "Conversion Tracking"],
+    },
+]
+
+
+@client_bp.route("/team")
+@client_login_required
+def client_team():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    return render_template(
+        "client/client_team.html",
+        brand=brand,
+        agents_json=json.dumps(AGENT_ROSTER),
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/team/data")
+@client_login_required
+def client_team_data():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    latest = db.get_agent_latest(brand_id)
+    activity = db.get_agent_activity(brand_id, limit=30)
+
+    # Count today's tasks
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    today_count = sum(
+        1 for a in activity if a.get("created_at", "").startswith(today_str)
+    )
+    total_count = db._conn().execute(
+        "SELECT COUNT(*) FROM agent_activity WHERE brand_id = ?", (brand_id,)
+    ).fetchone()[0]
+
+    return jsonify({
+        "agents": AGENT_ROSTER,
+        "latest": latest,
+        "activity": activity,
+        "today_count": today_count,
+        "total_count": total_count,
+    })
 
 
 # ── Drip Unsubscribe (public, no auth) ──

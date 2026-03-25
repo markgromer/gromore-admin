@@ -615,6 +615,24 @@ class WebDB:
             );
         """)
 
+        # ── AI Agent activity table ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS agent_activity (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                agent_key TEXT NOT NULL,
+                action TEXT NOT NULL,
+                detail TEXT DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'completed',
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_agent_activity_brand
+            ON agent_activity(brand_id, created_at DESC);
+        """)
+
         conn.commit()
 
         # ── Seed default feature flags ──
@@ -633,6 +651,7 @@ class WebDB:
             ("gbp",             "Google Profile",   "Google Business Profile manager",   "all",   "business", 120),
             ("post_scheduler",  "Post Scheduler",   "Social media post scheduling",      "beta",  "business", 130),
             ("competitor_intel","Competitor Intel",  "Competitor analysis tools",         "beta",  "business", 140),
+            ("your_team",       "Your Team",         "AI agent team dashboard",           "all",   "business", 145),
             ("connections",     "Connections",       "Platform connection settings",      "all",   "settings", 150),
             ("feedback",        "Feedback",          "Submit feedback to the team",       "all",   "settings", 160),
             ("help",            "Help",              "Help documentation and support",    "all",   "settings", 170),
@@ -2930,3 +2949,44 @@ class WebDB:
         ).fetchone()
         conn.close()
         return dict(row) if row else None
+
+    # ── Agent activity helpers ──
+
+    def log_agent_activity(self, brand_id, agent_key, action, detail="", status="completed"):
+        conn = self._conn()
+        conn.execute(
+            "INSERT INTO agent_activity (brand_id, agent_key, action, detail, status) VALUES (?,?,?,?,?)",
+            (brand_id, agent_key, action, detail, status),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_agent_activity(self, brand_id, limit=50, agent_key=None):
+        conn = self._conn()
+        if agent_key:
+            rows = conn.execute(
+                "SELECT * FROM agent_activity WHERE brand_id = ? AND agent_key = ? ORDER BY created_at DESC LIMIT ?",
+                (brand_id, agent_key, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM agent_activity WHERE brand_id = ? ORDER BY created_at DESC LIMIT ?",
+                (brand_id, limit),
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_agent_latest(self, brand_id):
+        """Get the most recent activity per agent for a brand."""
+        conn = self._conn()
+        rows = conn.execute("""
+            SELECT a.* FROM agent_activity a
+            INNER JOIN (
+                SELECT agent_key, MAX(id) as max_id
+                FROM agent_activity WHERE brand_id = ?
+                GROUP BY agent_key
+            ) latest ON a.id = latest.max_id
+            ORDER BY a.created_at DESC
+        """, (brand_id,)).fetchall()
+        conn.close()
+        return {r["agent_key"]: dict(r) for r in rows}
