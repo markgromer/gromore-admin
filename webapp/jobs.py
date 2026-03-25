@@ -98,3 +98,43 @@ def sync_sng_revenue_all():
 
     flash(f"SNG revenue synced: {synced} brands, {skipped} skipped", "success" if synced > 0 else "info")
     return redirect(url_for("dashboard"))
+
+
+@jobs_bp.route("/run-agents", methods=["POST"])
+def run_agents_all():
+    """Batch run AI agent analysis for all brands with OpenAI keys.
+    Can be triggered manually from admin or via Render cron."""
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    db = current_app.db
+    month = request.form.get("month", datetime.now().strftime("%Y-%m"))
+    brands = db.get_all_brands()
+
+    from webapp.agent_brains import run_all_agents
+
+    ran = 0
+    skipped = 0
+    total_findings = 0
+    for brand in brands:
+        api_key = brand.get("openai_api_key")
+        if not api_key:
+            skipped += 1
+            continue
+        try:
+            # Clear old findings for the month before re-running
+            db.clear_agent_findings(brand["id"], month)
+            results = run_all_agents(db, brand, brand["id"], api_key, month=month)
+            count = sum(
+                len(r.get("findings", [])) for r in results.values() if r
+            )
+            total_findings += count
+            ran += 1
+        except Exception:
+            skipped += 1
+
+    flash(
+        f"Agent run complete: {ran} brands analyzed, {total_findings} findings, {skipped} skipped",
+        "success" if ran > 0 else "info",
+    )
+    return redirect(url_for("dashboard"))

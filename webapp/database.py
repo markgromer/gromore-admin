@@ -633,6 +633,28 @@ class WebDB:
             ON agent_activity(brand_id, created_at DESC);
         """)
 
+        # ── Agent findings table ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS agent_findings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                agent_key TEXT NOT NULL,
+                month TEXT NOT NULL,
+                severity TEXT NOT NULL DEFAULT 'info',
+                title TEXT NOT NULL DEFAULT '',
+                detail TEXT DEFAULT '',
+                action TEXT DEFAULT '',
+                extra_json TEXT DEFAULT '{}',
+                dismissed INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_agent_findings_brand_month
+            ON agent_findings(brand_id, month, dismissed);
+        """)
+
         conn.commit()
 
         # ── Seed default feature flags ──
@@ -2990,3 +3012,62 @@ class WebDB:
         """, (brand_id,)).fetchall()
         conn.close()
         return {r["agent_key"]: dict(r) for r in rows}
+
+    # ── Agent findings helpers ──
+
+    def save_agent_finding(self, brand_id, agent_key, month, severity, title,
+                           detail="", action="", extra_json="{}"):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO agent_findings
+               (brand_id, agent_key, month, severity, title, detail, action, extra_json)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (brand_id, agent_key, month, severity, title, detail, action, extra_json),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_agent_findings(self, brand_id, month=None, agent_key=None,
+                           severity=None, dismissed=False, limit=50):
+        conn = self._conn()
+        sql = "SELECT * FROM agent_findings WHERE brand_id = ? AND dismissed = ?"
+        params = [brand_id, 1 if dismissed else 0]
+        if month:
+            sql += " AND month = ?"
+            params.append(month)
+        if agent_key:
+            sql += " AND agent_key = ?"
+            params.append(agent_key)
+        if severity:
+            sql += " AND severity = ?"
+            params.append(severity)
+        sql += " ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 WHEN 'positive' THEN 2 ELSE 3 END, created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = conn.execute(sql, params).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def dismiss_agent_finding(self, finding_id, brand_id):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE agent_findings SET dismissed = 1 WHERE id = ? AND brand_id = ?",
+            (finding_id, brand_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def clear_agent_findings(self, brand_id, month, agent_key=None):
+        """Clear old findings before a fresh agent run."""
+        conn = self._conn()
+        if agent_key:
+            conn.execute(
+                "DELETE FROM agent_findings WHERE brand_id = ? AND month = ? AND agent_key = ? AND dismissed = 0",
+                (brand_id, month, agent_key),
+            )
+        else:
+            conn.execute(
+                "DELETE FROM agent_findings WHERE brand_id = ? AND month = ? AND dismissed = 0",
+                (brand_id, month),
+            )
+        conn.commit()
+        conn.close()

@@ -105,6 +105,72 @@
         line-height: 1.4;
     }
 
+    /* -- Team Alerts -- */
+    .team-alerts {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 16px rgba(15,23,42,.05);
+    }
+    .team-alerts-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: .85rem;
+    }
+    .team-alerts-header h5 {
+        font-weight: 800;
+        font-size: .9rem;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        background: linear-gradient(135deg, #7c3aed, #4f46e5);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin: 0;
+    }
+    .alert-item {
+        display: flex;
+        align-items: flex-start;
+        gap: .75rem;
+        padding: .75rem 0;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    .alert-item:last-child { border-bottom: none; }
+    .alert-sev {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: .8rem;
+        flex-shrink: 0;
+    }
+    .alert-sev.sev-critical { background: #fef2f2; color: #ef4444; }
+    .alert-sev.sev-warning { background: #fffbeb; color: #f59e0b; }
+    .alert-sev.sev-positive { background: #ecfdf5; color: #10b981; }
+    .alert-sev.sev-info { background: #eff6ff; color: #3b82f6; }
+    .alert-agent {
+        font-size: .7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        color: #7c3aed;
+    }
+    .alert-title {
+        font-size: .88rem;
+        font-weight: 600;
+        color: #1f2937;
+    }
+    .alert-detail {
+        font-size: .82rem;
+        color: #64748b;
+        line-height: 1.4;
+    }
+
     /* -- This Week's Moves (Campaign Table) -- */
     .moves-section {
         background: #fff;
@@ -422,6 +488,7 @@ function fmtInt(v) {
 
             if (data.dashboard) {
                 renderDashboard(data.dashboard);
+                loadTeamAlerts();
 
                 if (!sessionStorage.getItem('warren_greeted')) {
                     sessionStorage.setItem('warren_greeted', '1');
@@ -461,6 +528,49 @@ function fmtInt(v) {
         document.getElementById('dashError').style.display = 'block';
         document.getElementById('dashErrorMsg').textContent = 'Something went wrong loading your data. Please refresh.';
     });
+    function loadTeamAlerts() {
+        fetch('{{ url_for("client.client_team_findings") }}')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var findings = (data.findings || []).filter(function(f) {
+                    return f.severity === 'critical' || f.severity === 'warning';
+                }).slice(0, 5);
+                if (!findings.length) return;
+                var slot = document.getElementById('team-alerts-slot');
+                if (!slot) return;
+                var sevIcons = {
+                    critical: 'bi-exclamation-triangle-fill',
+                    warning: 'bi-exclamation-circle-fill',
+                    positive: 'bi-check-circle-fill',
+                    info: 'bi-info-circle-fill'
+                };
+                var agentNames = {
+                    scout: 'Scout', penny: 'Penny', ace: 'Ace', radar: 'Radar',
+                    hawk: 'Hawk', pulse: 'Pulse', spark: 'Spark', bridge: 'Bridge', warren: 'Warren'
+                };
+                var html = '<div class="team-alerts">';
+                html += '<div class="team-alerts-header">';
+                html += '<h5><i class="bi bi-robot me-1"></i>Team Alerts</h5>';
+                html += '<a href="/client/team" class="btn btn-sm btn-outline-primary" style="font-size:.78rem;">View All <i class="bi bi-arrow-right"></i></a>';
+                html += '</div>';
+                findings.forEach(function(f) {
+                    var icon = sevIcons[f.severity] || 'bi-info-circle';
+                    var name = agentNames[f.agent_key] || f.agent_key;
+                    html += '<div class="alert-item">';
+                    html += '<div class="alert-sev sev-' + f.severity + '"><i class="bi ' + icon + '"></i></div>';
+                    html += '<div>';
+                    html += '<div class="alert-agent">' + esc(name) + '</div>';
+                    html += '<div class="alert-title">' + esc(f.title) + '</div>';
+                    html += '<div class="alert-detail">' + esc(f.detail) + '</div>';
+                    html += '</div>';
+                    html += '</div>';
+                });
+                html += '</div>';
+                slot.innerHTML = html;
+            })
+            .catch(function() {});
+    }
+
     function computeVerdict(camp, targetCpa) {
         var spend = parseFloat(camp.spend) || 0;
         var leads = parseFloat(camp.conversions) || 0;
@@ -529,6 +639,9 @@ function fmtInt(v) {
         html += '<div style="font-size:.78rem;font-weight:700;color:rgba(255,255,255,.55);letter-spacing:.03em;margin-bottom:.5rem;">Weighted Analysis for Revenue, Reach, Engagement &amp; Navigation</div>';
         html += '<div class="warren-call-body">' + esc(warrenSummary) + '</div>';
         html += '</div>';
+
+        // Team Agent Alerts (loaded async below)
+        html += '<div id="team-alerts-slot"></div>';
 
         // Performance Snapshot
         if (d.kpi_status && d.kpi_status.length) {
@@ -825,6 +938,42 @@ function toggleMovesRows(platform, btn) {
         {% endif %}
     </div>
 </div>
+
+<!-- Team Alerts slot (Jinja path) -->
+<div id="team-alerts-slot-jinja"></div>
+<script>
+(function() {
+    fetch('{{ url_for("client.client_team_findings") }}')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var findings = (data.findings || []).filter(function(f) {
+                return f.severity === 'critical' || f.severity === 'warning';
+            }).slice(0, 5);
+            if (!findings.length) return;
+            var slot = document.getElementById('team-alerts-slot-jinja');
+            if (!slot) return;
+            var sevIcons = { critical: 'bi-exclamation-triangle-fill', warning: 'bi-exclamation-circle-fill' };
+            var agentNames = {
+                scout: 'Scout', penny: 'Penny', ace: 'Ace', radar: 'Radar',
+                hawk: 'Hawk', pulse: 'Pulse', spark: 'Spark', bridge: 'Bridge', warren: 'Warren'
+            };
+            function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+            var html = '<div class="team-alerts">';
+            html += '<div class="team-alerts-header"><h5><i class="bi bi-robot me-1"></i>Team Alerts</h5>';
+            html += '<a href="/client/team" class="btn btn-sm btn-outline-primary" style="font-size:.78rem;">View All <i class="bi bi-arrow-right"></i></a></div>';
+            findings.forEach(function(f) {
+                var icon = sevIcons[f.severity] || 'bi-info-circle';
+                html += '<div class="alert-item"><div class="alert-sev sev-' + f.severity + '"><i class="bi ' + icon + '"></i></div>';
+                html += '<div><div class="alert-agent">' + esc(agentNames[f.agent_key] || f.agent_key) + '</div>';
+                html += '<div class="alert-title">' + esc(f.title) + '</div>';
+                html += '<div class="alert-detail">' + esc(f.detail) + '</div></div></div>';
+            });
+            html += '</div>';
+            slot.innerHTML = html;
+        })
+        .catch(function() {});
+})();
+</script>
 
 {% if dashboard.kpi_status %}
 <div class="perf-snapshot">

@@ -275,10 +275,162 @@
         margin-bottom: 8px;
     }
 
+    /* Run button */
+    .run-team-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: linear-gradient(135deg, #7c3aed, #4f46e5);
+        color: #fff;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.2s, transform 0.15s;
+    }
+    .run-team-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .run-team-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .run-team-btn .spinner-border { width: 16px; height: 16px; border-width: 2px; }
+    .team-hero-actions { margin-top: 18px; }
+
+    /* Findings section */
+    .findings-section { margin-bottom: 32px; }
+    .findings-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+    }
+    .findings-header h4 {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0;
+    }
+    .findings-filters {
+        display: flex;
+        gap: 8px;
+    }
+    .filter-pill {
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 4px 12px;
+        border-radius: 20px;
+        border: 1px solid #e5e7eb;
+        background: #fff;
+        color: #6b7280;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .filter-pill:hover { border-color: #c7d2fe; color: #4f46e5; }
+    .filter-pill.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+
+    .finding-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 18px 20px;
+        margin-bottom: 12px;
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+        transition: border-color 0.15s;
+    }
+    .finding-card:hover { border-color: #c7d2fe; }
+    .finding-card.sev-critical { border-left: 4px solid #ef4444; }
+    .finding-card.sev-warning { border-left: 4px solid #f59e0b; }
+    .finding-card.sev-positive { border-left: 4px solid #10b981; }
+    .finding-card.sev-info { border-left: 4px solid #3b82f6; }
+
+    .finding-sev-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.9rem;
+        flex-shrink: 0;
+    }
+    .sev-critical .finding-sev-icon { background: #fef2f2; color: #ef4444; }
+    .sev-warning .finding-sev-icon { background: #fffbeb; color: #f59e0b; }
+    .sev-positive .finding-sev-icon { background: #ecfdf5; color: #10b981; }
+    .sev-info .finding-sev-icon { background: #eff6ff; color: #3b82f6; }
+
+    .finding-body { flex: 1; min-width: 0; }
+    .finding-title {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 4px;
+    }
+    .finding-agent {
+        font-size: 0.72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-bottom: 4px;
+    }
+    .finding-detail {
+        font-size: 0.85rem;
+        color: #4b5563;
+        line-height: 1.5;
+        margin-bottom: 6px;
+    }
+    .finding-action {
+        font-size: 0.82rem;
+        color: #7c3aed;
+        font-weight: 500;
+    }
+    .finding-action i { margin-right: 4px; }
+    .finding-dismiss {
+        background: none;
+        border: none;
+        color: #d1d5db;
+        cursor: pointer;
+        font-size: 1rem;
+        padding: 4px;
+        flex-shrink: 0;
+    }
+    .finding-dismiss:hover { color: #9ca3af; }
+
+    .findings-empty {
+        text-align: center;
+        padding: 40px;
+        color: #9ca3af;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+    }
+    .findings-empty i { font-size: 2rem; display: block; margin-bottom: 8px; }
+
+    .finding-count-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: #ef4444;
+        color: #fff;
+        font-size: 0.65rem;
+        font-weight: 700;
+        min-width: 20px;
+        height: 20px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 5px;
+    }
+    .finding-count-badge.count-0 { display: none; }
+    .finding-count-badge.sev-warning { background: #f59e0b; }
+    .finding-count-badge.sev-positive { background: #10b981; }
+
     @media (max-width: 768px) {
         .agent-grid { grid-template-columns: 1fr; }
         .team-stats { gap: 16px; }
         .team-stats .stat-val { font-size: 1.2rem; }
+        .findings-header { flex-direction: column; gap: 10px; align-items: flex-start; }
     }
 </style>
 
@@ -296,15 +448,42 @@
             <div class="stat-lbl">Tasks Today</div>
         </div>
         <div class="team-stat">
+            <div class="stat-val" id="stat-findings">-</div>
+            <div class="stat-lbl">Findings</div>
+        </div>
+        <div class="team-stat">
             <div class="stat-val" id="stat-total">-</div>
             <div class="stat-lbl">Total Actions</div>
         </div>
+    </div>
+    <div class="team-hero-actions">
+        <button class="run-team-btn" id="run-team-btn" onclick="runTeam()">
+            <i class="bi bi-play-circle"></i> Run My Team
+        </button>
+        <span id="run-status" style="margin-left:12px;font-size:0.85rem;opacity:0.85;"></span>
     </div>
 </div>
 
 <!-- Agent Grid -->
 <div class="agent-grid" id="agent-grid">
     <!-- Filled by JS -->
+</div>
+
+<!-- Findings Section -->
+<div class="findings-section" id="findings-section">
+    <div class="findings-header">
+        <h4><i class="bi bi-exclamation-diamond me-2"></i>Agent Findings</h4>
+        <div class="findings-filters" id="findings-filters">
+            <span class="filter-pill active" data-filter="all">All</span>
+            <span class="filter-pill" data-filter="critical">Critical</span>
+            <span class="filter-pill" data-filter="warning">Warning</span>
+            <span class="filter-pill" data-filter="positive">Positive</span>
+            <span class="filter-pill" data-filter="info">Info</span>
+        </div>
+    </div>
+    <div id="findings-list">
+        <div class="findings-empty"><i class="bi bi-robot"></i>No findings yet. Hit "Run My Team" to get your first analysis.</div>
+    </div>
 </div>
 
 <!-- Activity Feed -->
@@ -342,7 +521,17 @@ const AGENT_ICONS = {
     bridge:  'bi-diagram-3'
 };
 
-function renderAgentCard(agent) {
+const SEV_ICONS = {
+    critical: 'bi-exclamation-triangle-fill',
+    warning:  'bi-exclamation-circle-fill',
+    positive: 'bi-check-circle-fill',
+    info:     'bi-info-circle-fill'
+};
+
+let allFindings = [];
+let currentFilter = 'all';
+
+function renderAgentCard(agent, findingCounts) {
     const color = AGENT_COLORS[agent.key] || '#6b7280';
     const icon  = AGENT_ICONS[agent.key]  || 'bi-robot';
     const latest = agent.latest;
@@ -353,8 +542,19 @@ function renderAgentCard(agent) {
         ? latest.action
         : (latest ? `Last: ${latest.action}` : 'Awaiting first task');
 
+    const counts = findingCounts[agent.key] || { critical: 0, warning: 0, positive: 0, info: 0, total: 0 };
+    let badgeHtml = '';
+    if (counts.critical > 0) {
+        badgeHtml = `<span class="finding-count-badge">${counts.critical}</span>`;
+    } else if (counts.warning > 0) {
+        badgeHtml = `<span class="finding-count-badge sev-warning">${counts.warning}</span>`;
+    } else if (counts.positive > 0) {
+        badgeHtml = `<span class="finding-count-badge sev-positive">${counts.positive}</span>`;
+    }
+
     return `
     <div class="agent-card ${isWorking ? 'working' : ''}" data-agent="${agent.key}">
+        ${badgeHtml}
         <div class="agent-header">
             <div class="agent-avatar" style="background:${color}">
                 <div class="pulse-ring" style="color:${color}"></div>
@@ -380,6 +580,176 @@ function renderAgentCard(agent) {
             ${agent.skills.map(s => `<span class="agent-skill">${s}</span>`).join('')}
         </div>
     </div>`;
+}
+
+function renderFinding(f) {
+    const agentColor = AGENT_COLORS[f.agent_key] || '#6b7280';
+    const agentName = (AGENTS.find(a => a.key === f.agent_key) || {}).name || f.agent_key;
+    const sevIcon = SEV_ICONS[f.severity] || 'bi-info-circle';
+
+    return `
+    <div class="finding-card sev-${f.severity}" data-severity="${f.severity}" data-agent="${f.agent_key}" data-id="${f.id}">
+        <div class="finding-sev-icon"><i class="bi ${sevIcon}"></i></div>
+        <div class="finding-body">
+            <div class="finding-agent" style="color:${agentColor}">${agentName}</div>
+            <div class="finding-title">${escapeHtml(f.title)}</div>
+            <div class="finding-detail">${escapeHtml(f.detail)}</div>
+            ${f.action ? `<div class="finding-action"><i class="bi bi-arrow-right-circle"></i>${escapeHtml(f.action)}</div>` : ''}
+        </div>
+        <button class="finding-dismiss" onclick="dismissFinding(${f.id}, this)" title="Dismiss">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>`;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function renderFindings(findings) {
+    const list = document.getElementById('findings-list');
+    const filtered = currentFilter === 'all'
+        ? findings
+        : findings.filter(f => f.severity === currentFilter);
+
+    if (!filtered.length) {
+        const msg = findings.length > 0
+            ? `No ${currentFilter} findings.`
+            : 'No findings yet. Hit "Run My Team" to get your first analysis.';
+        list.innerHTML = `<div class="findings-empty"><i class="bi bi-robot"></i>${msg}</div>`;
+        return;
+    }
+    list.innerHTML = filtered.map(f => renderFinding(f)).join('');
+}
+
+function buildFindingCounts(findings) {
+    const counts = {};
+    for (const f of findings) {
+        if (!counts[f.agent_key]) counts[f.agent_key] = { critical: 0, warning: 0, positive: 0, info: 0, total: 0 };
+        counts[f.agent_key][f.severity] = (counts[f.agent_key][f.severity] || 0) + 1;
+        counts[f.agent_key].total++;
+    }
+    return counts;
+}
+
+function dismissFinding(id, btn) {
+    const card = btn.closest('.finding-card');
+    card.style.opacity = '0.4';
+    fetch(`{{ url_for("client.client_team_findings") }}`.replace('/findings', `/findings/${id}/dismiss`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+    })
+    .then(r => r.json())
+    .then(() => {
+        card.remove();
+        allFindings = allFindings.filter(f => f.id !== id);
+        updateFindingsStat();
+    })
+    .catch(() => { card.style.opacity = '1'; });
+}
+
+function updateFindingsStat() {
+    const critical = allFindings.filter(f => f.severity === 'critical').length;
+    const warning = allFindings.filter(f => f.severity === 'warning').length;
+    const el = document.getElementById('stat-findings');
+    if (critical > 0) {
+        el.textContent = critical;
+        el.style.color = '#fca5a5';
+    } else if (warning > 0) {
+        el.textContent = warning;
+        el.style.color = '#fcd34d';
+    } else {
+        el.textContent = allFindings.length;
+        el.style.color = '';
+    }
+}
+
+function loadFindings() {
+    fetch('{{ url_for("client.client_team_findings") }}')
+        .then(r => r.json())
+        .then(data => {
+            allFindings = data.findings || [];
+            renderFindings(allFindings);
+            updateFindingsStat();
+            // Re-render agent cards with fresh counts
+            const counts = buildFindingCounts(allFindings);
+            const grid = document.getElementById('agent-grid');
+            if (grid.children.length > 0) {
+                // Update badges only, don't re-render whole grid to avoid flicker
+                for (const agent of AGENTS) {
+                    const card = grid.querySelector(`[data-agent="${agent.key}"]`);
+                    if (!card) continue;
+                    let badge = card.querySelector('.finding-count-badge');
+                    const c = counts[agent.key] || { critical: 0, warning: 0, total: 0 };
+                    if (c.critical > 0) {
+                        if (!badge) { badge = document.createElement('span'); badge.className = 'finding-count-badge'; card.prepend(badge); }
+                        badge.textContent = c.critical;
+                        badge.className = 'finding-count-badge';
+                        badge.style.display = '';
+                    } else if (c.warning > 0) {
+                        if (!badge) { badge = document.createElement('span'); badge.className = 'finding-count-badge'; card.prepend(badge); }
+                        badge.textContent = c.warning;
+                        badge.className = 'finding-count-badge sev-warning';
+                        badge.style.display = '';
+                    } else if (c.total > 0) {
+                        if (!badge) { badge = document.createElement('span'); badge.className = 'finding-count-badge'; card.prepend(badge); }
+                        badge.textContent = c.total;
+                        badge.className = 'finding-count-badge sev-positive';
+                        badge.style.display = '';
+                    } else if (badge) {
+                        badge.style.display = 'none';
+                    }
+                }
+            }
+        })
+        .catch(err => console.error('Findings load error:', err));
+}
+
+// Filter pill clicks
+document.getElementById('findings-filters').addEventListener('click', function(e) {
+    const pill = e.target.closest('.filter-pill');
+    if (!pill) return;
+    document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    currentFilter = pill.dataset.filter;
+    renderFindings(allFindings);
+});
+
+// Run My Team
+function runTeam() {
+    const btn = document.getElementById('run-team-btn');
+    const status = document.getElementById('run-status');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Running...';
+    status.textContent = 'This takes 30-90 seconds. Your team is analyzing your data...';
+
+    fetch('{{ url_for("client.client_team_run") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-circle"></i> Run My Team';
+        if (data.success) {
+            status.textContent = `Done - ${data.total_findings} findings from ${data.agents_ran.length} agents.`;
+            loadFindings();
+            loadTeamData();
+        } else {
+            status.textContent = data.error || 'Something went wrong.';
+        }
+        setTimeout(() => { status.textContent = ''; }, 8000);
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-circle"></i> Run My Team';
+        status.textContent = 'Network error. Try again.';
+        console.error('Run team error:', err);
+    });
 }
 
 function timeAgo(dateStr) {
@@ -409,7 +779,7 @@ function renderActivity(items) {
             <div class="activity-body">
                 <span class="activity-agent">${agent.name || item.agent_key}</span>
                 <span class="activity-action">${item.action}</span>
-                ${item.detail ? `<div class="activity-detail" title="${item.detail}">${item.detail}</div>` : ''}
+                ${item.detail ? `<div class="activity-detail" title="${escapeHtml(item.detail)}">${escapeHtml(item.detail)}</div>` : ''}
             </div>
             <div class="activity-time">${timeAgo(item.created_at)}</div>
         </div>`;
@@ -417,10 +787,10 @@ function renderActivity(items) {
 }
 
 function loadTeamData() {
+    const findingCounts = buildFindingCounts(allFindings);
     fetch('{{ url_for("client.client_team_data") }}')
         .then(r => r.json())
         .then(data => {
-            // Merge latest activity into agent definitions
             const agents = data.agents || AGENTS;
             agents.forEach(a => {
                 if (data.latest && data.latest[a.key]) {
@@ -428,25 +798,21 @@ function loadTeamData() {
                 }
             });
 
-            // Render cards
             document.getElementById('agent-grid').innerHTML =
-                agents.map(a => renderAgentCard(a)).join('');
+                agents.map(a => renderAgentCard(a, findingCounts)).join('');
 
-            // Stats
             const working = agents.filter(a => a.latest && a.latest.status === 'in_progress').length;
             document.getElementById('stat-active').textContent = working;
             document.getElementById('stat-tasks').textContent = data.today_count || 0;
             document.getElementById('stat-total').textContent = data.total_count || 0;
 
-            // Activity feed
             document.getElementById('activity-feed').innerHTML =
                 renderActivity(data.activity || []);
         })
         .catch(err => {
             console.error('Team data error:', err);
-            // Still render cards from static data
             document.getElementById('agent-grid').innerHTML =
-                AGENTS.map(a => renderAgentCard(a)).join('');
+                AGENTS.map(a => renderAgentCard(a, {})).join('');
             document.getElementById('stat-active').textContent = '0';
             document.getElementById('stat-tasks').textContent = '0';
             document.getElementById('stat-total').textContent = '0';
@@ -455,8 +821,10 @@ function loadTeamData() {
         });
 }
 
-// Load on page ready, then poll every 30s
+// Load on page ready
 loadTeamData();
+loadFindings();
+// Poll every 30s
 setInterval(loadTeamData, 30000);
 </script>
 {% endblock %}

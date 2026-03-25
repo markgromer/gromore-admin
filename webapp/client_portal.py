@@ -5400,6 +5400,70 @@ def client_team_data():
     })
 
 
+@client_bp.route("/team/findings")
+@client_login_required
+def client_team_findings():
+    """Get agent findings for the current month."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+    agent_key = request.args.get("agent")
+    severity = request.args.get("severity")
+
+    findings = db.get_agent_findings(
+        brand_id, month=month, agent_key=agent_key,
+        severity=severity, limit=50,
+    )
+    return jsonify({"findings": findings, "month": month})
+
+
+@client_bp.route("/team/findings/<int:finding_id>/dismiss", methods=["POST"])
+@client_login_required
+def client_dismiss_finding(finding_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    db.dismiss_agent_finding(finding_id, brand_id)
+    return jsonify({"success": True})
+
+
+@client_bp.route("/team/run", methods=["POST"])
+@client_login_required
+def client_team_run():
+    """Trigger an agent run for the current brand. Runs all eligible agents."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"success": False, "error": "Brand not found"}), 404
+
+    api_key = _get_openai_api_key(brand)
+    if not api_key:
+        return jsonify({"success": False, "error": "No OpenAI API key configured."}), 400
+
+    month = request.get_json(silent=True) or {}
+    month = month.get("month") or datetime.now().strftime("%Y-%m")
+
+    # Clear old findings for fresh run
+    db.clear_agent_findings(brand_id, month)
+
+    from webapp.agent_brains import run_all_agents
+    results = run_all_agents(db, brand, brand_id, api_key, month=month)
+
+    ran = [k for k, v in results.items() if v is not None]
+    skipped = [k for k, v in results.items() if v is None]
+
+    total_findings = sum(
+        len(v.get("findings", [])) for v in results.values() if v
+    )
+
+    return jsonify({
+        "success": True,
+        "agents_ran": ran,
+        "agents_skipped": skipped,
+        "total_findings": total_findings,
+    })
+
+
 # ── Drip Unsubscribe (public, no auth) ──
 
 @client_bp.route("/unsubscribe/<int:enrollment_id>")

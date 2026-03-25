@@ -103,9 +103,16 @@
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <strong>Brands</strong>
-                <a href="{{ url_for('brand_new') }}" class="btn btn-sm btn-primary">
-                    <i class="bi bi-plus-lg"></i> Add Brand
-                </a>
+                <div class="d-flex gap-2">
+                    <form method="POST" action="{{ url_for('jobs.run_agents_all') }}" class="d-inline">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary" title="Run AI agents for all brands">
+                            <i class="bi bi-robot"></i> Run Agents
+                        </button>
+                    </form>
+                    <a href="{{ url_for('brand_new') }}" class="btn btn-sm btn-primary">
+                        <i class="bi bi-plus-lg"></i> Add Brand
+                    </a>
+                </div>
             </div>
             <div class="card-body p-0">
                 {% if brands %}
