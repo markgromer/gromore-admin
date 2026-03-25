@@ -151,13 +151,18 @@
         html+='</div>';
 
         // GBP section
-        const gbpScore=gbp.score||0; const gbpG=gradeFor(gbpScore);
-        html+='<div class="section-card"><h6>Google Business Profile <span class="grade-badge '+gbpG.cls+' float-end">'+gbpScore+'/100</span></h6>';
-        if(gbp.name) html+='<p class="small mb-1"><strong>Found:</strong> '+_esc(gbp.name)+'</p>';
-        if(gbp.rating) html+='<p class="small mb-1">Rating: '+gbp.rating+' stars ('+( gbp.review_count||0)+' reviews)</p>';
-        if(gbp.missing&&gbp.missing.length) html+='<p class="small mb-0 text-danger">Missing: '+gbp.missing.join(', ')+'</p>';
-        if(!gbp.name&&!gbp.found) html+='<p class="small mb-0 text-muted">No Google Business Profile found. This is a major missed opportunity for local visibility.</p>';
-        html+='</div>';
+        if(!gbp.skipped){
+            const gbpScore=gbp.score||0; const gbpG=gradeFor(gbpScore);
+            html+='<div class="section-card"><h6>Google Business Profile <span class="grade-badge '+gbpG.cls+' float-end">'+gbpScore+'/100</span></h6>';
+            if(gbp.name) html+='<p class="small mb-1"><strong>Found:</strong> '+_esc(gbp.name)+'</p>';
+            if(gbp.rating) html+='<p class="small mb-1">Rating: '+gbp.rating+' stars ('+(gbp.review_count||0)+' reviews)</p>';
+            if(gbp.missing&&gbp.missing.length) html+='<p class="small mb-0 text-danger">Missing: '+gbp.missing.join(', ')+'</p>';
+            if(!gbp.name&&!gbp.found) html+='<p class="small mb-0 text-muted">No Google Business Profile found. This is a major missed opportunity for local visibility.</p>';
+            html+='</div>';
+        } else {
+            html+='<div class="section-card"><h6>Google Business Profile <span class="grade-badge grade-c float-end">Pending</span></h6>';
+            html+='<p class="small mb-0 text-muted">GBP analysis coming soon. If you don\'t have one yet, claim yours free at <a href="https://business.google.com" target="_blank">business.google.com</a>.</p></div>';
+        }
 
         // SEO section
         const seoScore=seo.score||0; const seoG=gradeFor(seoScore);
@@ -169,11 +174,16 @@
         html+='</div>';
 
         // Ads section
-        const adsScore=ads.score||0; const adsG=gradeFor(adsScore);
-        html+='<div class="section-card"><h6>Ad Presence <span class="grade-badge '+adsG.cls+' float-end">'+adsScore+'/100</span></h6>';
-        html+='<p class="small mb-0">Active Meta ads found: '+(ads.active_count||0)+'</p>';
-        if(ads.active_count===0) html+='<p class="small mb-0 text-muted">No active Facebook/Instagram ads detected. Paid social could help you reach more local customers.</p>';
-        html+='</div>';
+        if(!ads.skipped){
+            const adsScore=ads.score||0; const adsG=gradeFor(adsScore);
+            html+='<div class="section-card"><h6>Ad Presence <span class="grade-badge '+adsG.cls+' float-end">'+adsScore+'/100</span></h6>';
+            html+='<p class="small mb-0">Active Meta ads found: '+(ads.active_count||0)+'</p>';
+            if(ads.active_count===0) html+='<p class="small mb-0 text-muted">No active Facebook/Instagram ads detected. Paid social could help you reach more local customers.</p>';
+            html+='</div>';
+        } else {
+            html+='<div class="section-card"><h6>Ad Presence <span class="grade-badge grade-c float-end">Pending</span></h6>';
+            html+='<p class="small mb-0 text-muted">Ad presence analysis coming soon. We\'ll check if you or your competitors are running Facebook/Instagram ads.</p></div>';
+        }
 
         // Benchmarks section
         if(bench.industry){
@@ -195,9 +205,9 @@
 
         // CTA
         html+='<div class="text-center mt-4 p-3" style="background:#e8f4fd;border-radius:.5rem">';
-        html+='<h6 class="fw-bold mb-1">Want us to fix these issues for you?</h6>';
-        html+='<p class="small text-muted mb-2">GroMore manages Google Ads, Meta Ads, SEO, and your Google Business Profile - all from one dashboard.</p>';
-        html+='<a href="https://gromore.com/pricing" class="btn btn-primary btn-sm" target="_blank">See Plans</a>';
+        html+='<h6 class="fw-bold mb-1">Want to fix these issues?</h6>';
+        html+='<p class="small text-muted mb-2">GroMore manages Google Ads, Meta Ads, SEO, and your Google Business Profile from one AI dashboard.</p>';
+        html+='<a href="https://gromore.media/pricing" class="btn btn-primary btn-sm" target="_blank">Get Started - $297/mo Founders Rate</a>';
         html+='</div>';
 
         document.getElementById('gmAssessResults').innerHTML=html;

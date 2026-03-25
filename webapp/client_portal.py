@@ -5409,8 +5409,11 @@ def _run_assessment():
             })
             scores.append(comp["score"])
         else:
+            gbp_data["skipped"] = True
             gbp_data["findings"].append({"label": "Could not load Google Business Profile data", "pass": False})
-            scores.append(0)
+    elif not api_key:
+        gbp_data["skipped"] = True
+        gbp_data["findings"].append({"label": "GBP check coming soon - claim yours at business.google.com", "pass": False})
     else:
         gbp_data["findings"].append({"label": "No Google Business Profile found - this is costing you leads", "pass": False})
         scores.append(0)
@@ -5496,19 +5499,16 @@ def _run_assessment():
                     titles = s.get("titles", [])
                     if titles:
                         ad_data["findings"].append({"label": f"Ad: \"{titles[0][:60]}\"", "pass": True})
+            scores.append(ad_data["score"])
         else:
             ad_data["active_count"] = 0
             ad_data["findings"].append({"label": "No Facebook ad activity found", "pass": False})
             ad_data["score"] = 10
+            scores.append(ad_data["score"])
     else:
         ad_data["active_count"] = 0
-        if not facebook_url:
-            ad_data["findings"].append({"label": "No Facebook page provided - unable to check ad activity", "pass": False})
-        else:
-            ad_data["findings"].append({"label": "Ad library check unavailable", "pass": False})
-        ad_data["score"] = 0
-
-    scores.append(ad_data["score"])
+        ad_data["skipped"] = True
+        ad_data["findings"].append({"label": "Ad presence check coming soon", "pass": False})
     results["ad_presence"] = ad_data
 
     # ── 4. Industry Benchmarks ──
