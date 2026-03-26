@@ -1396,6 +1396,9 @@ def client_campaign_generate():
         _log_agent("scout", f"Generated {platform} campaign plan", f"{service} in {location}, ${monthly_budget}/mo")
         _log_agent("penny", "Reviewed campaign budget", f"${monthly_budget}/mo for {platform}")
     return jsonify(result)
+
+
+@client_bp.route("/campaigns/new/launch", methods=["POST"])
 @client_login_required
 def client_campaign_launch():
     db = _get_db()
