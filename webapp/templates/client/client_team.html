@@ -75,7 +75,8 @@
     position: relative;
     width: 100%;
     aspect-ratio: 1147 / 765;
-    background: url('/static/sprites/office.png') center/cover no-repeat;
+        min-height: 320px;
+        background: #d9dce6 url('/static/sprites/office.png') center top/100% 100% no-repeat;
     border-radius: 12px 12px 0 0;
     overflow: hidden;
     image-rendering: auto;
@@ -617,7 +618,7 @@
 // ══════════════════════════════════════
 const AGENTS = {{ agents_json | safe }};
 let hiredAgents = {{ hired_agents_json | safe }};
-var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
 const AGENT_COLORS = {
     warren:'#7c3aed', scout:'#2563eb', penny:'#059669', ace:'#e11d48',
@@ -657,12 +658,7 @@ const GATHER_SPOTS = {
 const BOUNDS = { minX: 5, maxX: 92, minY: 10, maxY: 82 };
 
 // Equipment decoration positions
-const EQUIP_POSITIONS = [
-    {key:'plant1',      x:8,  y:12, w:40, h:50},
-    {key:'plant2',      x:55, y:7,  w:40, h:50},
-    {key:'plant3',      x:85, y:22, w:40, h:50},
-    {key:'watercooler', x:92, y:44, w:40, h:55},
-];
+const EQUIP_POSITIONS = [];
 
 const TRAIN_GUIDANCE = {
     scout: {
@@ -782,6 +778,7 @@ let currentHireAgent = null;
 // ══════════════════════════════════════
 function initOffice() {
     const floor = document.getElementById('office-floor');
+    if (!floor) return;
 
     // Equipment decorations
     EQUIP_POSITIONS.forEach(eq => {
