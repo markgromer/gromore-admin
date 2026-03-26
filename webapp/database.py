@@ -998,6 +998,7 @@ class WebDB:
 
     def update_brand_text_field(self, brand_id, field, value):
         allowed = {
+            "website",
             "brand_voice", "active_offers", "target_audience", "competitors",
             "reporting_notes", "call_tracking_number",
             "crm_type", "crm_api_key", "crm_webhook_url", "crm_pipeline_id", "crm_server_url",

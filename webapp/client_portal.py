@@ -1659,7 +1659,7 @@ def client_campaign_preflight():
 
     # Check 7: Destination URL for Meta ads
     if platform == "meta":
-        website_url = (brand.get("website_url") or "").strip()
+        website_url = ((brand.get("website_url") or brand.get("website") or "")).strip()
         if not website_url:
             checks.append({
                 "status": "fail",
@@ -1724,7 +1724,7 @@ def client_my_business():
             db.update_brand_text_field(brand_id, "active_offers", active_offers)
             db.update_brand_text_field(brand_id, "target_audience", target_audience)
             db.update_brand_text_field(brand_id, "reporting_notes", reporting_notes)
-            db.update_brand_text_field(brand_id, "website_url", website_url)
+            db.update_brand_text_field(brand_id, "website", website_url)
             flash("Brand profile updated.", "success")
 
         elif section == "targets":
@@ -1757,7 +1757,7 @@ def client_my_business():
         brand.get("brand_voice"),
         brand.get("active_offers"),
         brand.get("target_audience"),
-        brand.get("website_url"),
+        brand.get("website_url") or brand.get("website"),
         len(competitors) > 0,
     ]
     target_fields = [

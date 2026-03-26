@@ -412,7 +412,7 @@
                             Website URL
                         </label>
                         <input type="text" name="website_url" maxlength="500"
-                               value="{{ brand.website_url or '' }}"
+                               value="{{ brand.website_url or brand.website or '' }}"
                                placeholder="e.g. https://yourbusiness.com">
                         <div class="field-help">Used as the destination URL for Meta ads and landing-page links in generated campaigns.</div>
                     </div>
