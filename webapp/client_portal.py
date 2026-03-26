@@ -1657,6 +1657,18 @@ def client_campaign_preflight():
     else:
         checks.append({"status": "pass", "label": "Location Targeting", "detail": location})
 
+    # Check 7: Destination URL for Meta ads
+    if platform == "meta":
+        website_url = (brand.get("website_url") or "").strip()
+        if not website_url:
+            checks.append({
+                "status": "fail",
+                "label": "Website URL",
+                "detail": "No website URL is set on My Business. Add one before publishing Meta ads.",
+            })
+        else:
+            checks.append({"status": "pass", "label": "Website URL", "detail": website_url})
+
     # Determine overall verdict
     statuses = [c["status"] for c in checks]
     if "fail" in statuses:
@@ -1706,11 +1718,13 @@ def client_my_business():
             active_offers = request.form.get("active_offers", "")[:1000].strip()
             target_audience = request.form.get("target_audience", "")[:2000].strip()
             reporting_notes = request.form.get("reporting_notes", "")[:1000].strip()
+            website_url = request.form.get("website_url", "")[:500].strip()
 
             db.update_brand_text_field(brand_id, "brand_voice", brand_voice)
             db.update_brand_text_field(brand_id, "active_offers", active_offers)
             db.update_brand_text_field(brand_id, "target_audience", target_audience)
             db.update_brand_text_field(brand_id, "reporting_notes", reporting_notes)
+            db.update_brand_text_field(brand_id, "website_url", website_url)
             flash("Brand profile updated.", "success")
 
         elif section == "targets":
@@ -1743,6 +1757,7 @@ def client_my_business():
         brand.get("brand_voice"),
         brand.get("active_offers"),
         brand.get("target_audience"),
+        brand.get("website_url"),
         len(competitors) > 0,
     ]
     target_fields = [
