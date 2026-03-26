@@ -5378,6 +5378,13 @@ AGENT_ROSTER = [
         "skills": ["Budget Pacing", "Waste Detection", "Spend Alerts", "Cost Optimization"],
     },
     {
+        "key": "atlas",
+        "name": "Atlas",
+        "role": "Market Forecaster",
+        "description": "Forecasts demand and performance using your historical results, seasonality, competition signals, and current market trends. Helps you plan ad spend so you do not waste budget in slow periods and you capture busy periods.",
+        "skills": ["Forecasting", "Seasonality", "Market Trends", "Budget Strategy"],
+    },
+    {
         "key": "ace",
         "name": "Ace",
         "role": "Ad Copywriter",
@@ -5421,10 +5428,10 @@ AGENT_ROSTER = [
     },
     {
         "key": "chief",
-        "name": "Chief",
-        "role": "Quality Control",
-        "description": "Reviews every finding from the rest of the team before you see it. Rejects generic advice, catches unsupported claims, and makes sure every recommendation is specific, actionable, and worth your time.",
-        "skills": ["QA Review", "Finding Validation", "Severity Grading", "Copy Standards"],
+        "name": "Weave",
+        "role": "MAP Orchestrator",
+        "description": "Takes feedback from the rest of the team, links related issues, maps KPI dependencies, and turns clutter into a Minimal Actionable Process so one fix does not quietly break another.",
+        "skills": ["Cross-Agent Synthesis", "KPI Impact Mapping", "Action Prioritization", "Context Weaving"],
     },
 ]
 
@@ -5622,7 +5629,8 @@ def _run_agents_background(app, brand_id, brand, api_key, month):
                             "reworked": applied.get("rework", 0),
                             "retried_agents": retried,
                             "pre_test_issues": len(qa_report.get("pre_test_issues", [])),
-                            "chief_reviews": len(qa_report.get("chief_reviews", [])),
+                            "weave_reviews": len(qa_report.get("weave_reviews") or qa_report.get("chief_reviews", [])),
+                            "chief_reviews": len(qa_report.get("weave_reviews") or qa_report.get("chief_reviews", [])),
                         },
                     },
                 }
@@ -6355,7 +6363,7 @@ def client_task_from_finding():
     agent_names = {
         "scout": "Scout", "penny": "Penny", "ace": "Ace", "radar": "Radar",
         "hawk": "Hawk", "pulse": "Pulse", "spark": "Spark", "bridge": "Bridge",
-        "warren": "Warren", "chief": "Chief",
+        "warren": "Warren", "chief": "Weave",
     }
     agent_name = agent_names.get(finding["agent_key"], finding["agent_key"])
 

@@ -655,6 +655,31 @@ class WebDB:
             ON agent_findings(brand_id, month, dismissed);
         """)
 
+        # ── Agent forecasts table (for backtesting and accuracy scoring) ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS agent_forecasts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                agent_key TEXT NOT NULL,
+                created_month TEXT NOT NULL,
+                target_month TEXT NOT NULL,
+                forecast_json TEXT NOT NULL DEFAULT '{}',
+                method TEXT NOT NULL DEFAULT 'seasonal_naive',
+                features_json TEXT NOT NULL DEFAULT '{}',
+                actual_json TEXT NOT NULL DEFAULT '{}',
+                scored_at TEXT DEFAULT '',
+                mae REAL DEFAULT NULL,
+                mape REAL DEFAULT NULL,
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(brand_id, agent_key, target_month),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_agent_forecasts_brand_target
+            ON agent_forecasts(brand_id, target_month);
+        """)
+
         # ── Brand tasks table ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS brand_tasks (
@@ -3105,6 +3130,64 @@ class WebDB:
                 "DELETE FROM agent_findings WHERE brand_id = ? AND month = ? AND dismissed = 0",
                 (brand_id, month),
             )
+        conn.commit()
+        conn.close()
+
+    # ── Agent forecast helpers ──
+
+    def upsert_agent_forecast(
+        self,
+        *,
+        brand_id: int,
+        agent_key: str,
+        created_month: str,
+        target_month: str,
+        forecast_json: str,
+        method: str = "seasonal_naive",
+        features_json: str = "{}",
+    ):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO agent_forecasts
+               (brand_id, agent_key, created_month, target_month, forecast_json, method, features_json, updated_at)
+               VALUES (?,?,?,?,?,?,?, datetime('now'))
+               ON CONFLICT(brand_id, agent_key, target_month)
+               DO UPDATE SET
+                   created_month=excluded.created_month,
+                   forecast_json=excluded.forecast_json,
+                   method=excluded.method,
+                   features_json=excluded.features_json,
+                   updated_at=datetime('now')""",
+            (brand_id, agent_key, created_month, target_month, forecast_json, method, features_json),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_agent_forecast(self, *, brand_id: int, agent_key: str, target_month: str):
+        conn = self._conn()
+        row = conn.execute(
+            """SELECT * FROM agent_forecasts
+               WHERE brand_id = ? AND agent_key = ? AND target_month = ?""",
+            (brand_id, agent_key, target_month),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def score_agent_forecast(
+        self,
+        *,
+        forecast_id: int,
+        actual_json: str,
+        mae: float = None,
+        mape: float = None,
+    ):
+        conn = self._conn()
+        conn.execute(
+            """UPDATE agent_forecasts
+               SET actual_json = ?, mae = ?, mape = ?, scored_at = datetime('now'), updated_at = datetime('now')
+               WHERE id = ?""",
+            (actual_json, mae, mape, forecast_id),
+        )
         conn.commit()
         conn.close()
 

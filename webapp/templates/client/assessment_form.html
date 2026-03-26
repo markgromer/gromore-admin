@@ -114,7 +114,20 @@
 
 <script>
 (function(){
-    const API='https://gromore-admin.onrender.com/client/assess';
+    const API=resolveApiEndpoint();
+
+    function resolveApiEndpoint(){
+        var wrap=document.getElementById('gmAssessWrap');
+        var cfg=window.GM_ASSESS_CONFIG||{};
+        var explicit=cfg.api||window.GM_ASSESS_API||(wrap&&wrap.dataset?wrap.dataset.api:'');
+        if(explicit) return explicit;
+        try{
+            if(document.currentScript&&document.currentScript.src){
+                return new URL('/client/assess',document.currentScript.src).toString();
+            }
+        }catch(err){}
+        return '/client/assess';
+    }
 
     function gradeFor(score){
         if(score>=80) return {cls:'grade-a',label:'A'};
@@ -123,6 +136,10 @@
         return {cls:'grade-d',label:'D'};
     }
     function ringCls(score){return score>=70?'good':score>=40?'ok':'bad';}
+    function _num(v,fallback){var n=Number(v);return Number.isFinite(n)?n:fallback;}
+    function _safeText(v){return _esc(v==null?'':String(v));}
+    function _safeList(v){return Array.isArray(v)?v.filter(function(item){return typeof item==='string'&&item.trim();}).map(_safeText):[];}
+    function _fmtMetric(v,fallback){var text=v==null||v===''?(fallback||'n/a'):String(v);return _safeText(text);}
 
     function animateSteps(){
         const ids=['step-gbp','step-seo','step-ads','step-bench','step-ai'];
@@ -139,13 +156,14 @@
         const r=data.data||data.results||data;
         console.log('[GM-ASSESS] parsed r:', JSON.stringify(r).substring(0,500));
         console.log('[GM-ASSESS] overall_score:', r.overall_score, 'seo.title:', (r.website_seo||r.seo||{}).title, 'gbp.skipped:', (r.gbp||{}).skipped);
-        const overall=r.overall_score||0;
+        const overall=_num(r.overall_score,0);
         const gbp=r.gbp||{};
         const seo=r.website_seo||r.seo||{};
         const ads=r.ad_presence||r.ads||{};
         const bench=r.benchmarks||{};
-        const recs=r.recommendations||[];
+        const recs=Array.isArray(r.recommendations)?r.recommendations:[];
         const g=gradeFor(overall);
+        const missingFields=_safeList(gbp.missing);
 
         let html='<div class="text-center mb-4">';
         html+='<div class="score-ring '+ringCls(overall)+'">'+overall+'</div>';
@@ -155,11 +173,11 @@
 
         // GBP section
         if(!gbp.skipped){
-            const gbpScore=gbp.score||0; const gbpG=gradeFor(gbpScore);
+            const gbpScore=_num(gbp.score,0); const gbpG=gradeFor(gbpScore);
             html+='<div class="section-card"><h6>Google Business Profile <span class="grade-badge '+gbpG.cls+' float-end">'+gbpScore+'/100</span></h6>';
-            if(gbp.name) html+='<p class="small mb-1"><strong>Found:</strong> '+_esc(gbp.name)+'</p>';
-            if(gbp.rating) html+='<p class="small mb-1">Rating: '+gbp.rating+' stars ('+(gbp.review_count||0)+' reviews)</p>';
-            if(gbp.missing&&gbp.missing.length) html+='<p class="small mb-0 text-danger">Missing: '+gbp.missing.join(', ')+'</p>';
+            if(gbp.name) html+='<p class="small mb-1"><strong>Found:</strong> '+_safeText(gbp.name)+'</p>';
+            if(gbp.rating) html+='<p class="small mb-1">Rating: '+_fmtMetric(gbp.rating,'0')+' stars ('+_num(gbp.review_count,0)+' reviews)</p>';
+            if(missingFields.length) html+='<p class="small mb-0 text-danger">Missing: '+missingFields.join(', ')+'</p>';
             if(!gbp.name&&!gbp.found) html+='<p class="small mb-0 text-muted">No Google Business Profile found. This is a major missed opportunity for local visibility.</p>';
             html+='</div>';
         } else {
@@ -168,20 +186,20 @@
         }
 
         // SEO section
-        const seoScore=seo.score||0; const seoG=gradeFor(seoScore);
+        const seoScore=_num(seo.score,0); const seoG=gradeFor(seoScore);
         html+='<div class="section-card"><h6>Website SEO <span class="grade-badge '+seoG.cls+' float-end">'+seoScore+'/100</span></h6>';
-        if(seo.title) html+='<p class="small mb-1"><strong>Title:</strong> '+_esc(seo.title)+'</p>';
-        if(seo.description) html+='<p class="small mb-1"><strong>Meta:</strong> '+_esc(seo.description).substring(0,120)+'...</p>';
-        if(seo.scanned) html+='<p class="small mb-0">SSL: '+(seo.ssl?'Yes':'No')+' | H1 tag: '+(seo.has_h1?'Yes':'Missing')+' | H2 tags: '+(seo.h2_count||0)+'</p>';
+        if(seo.title) html+='<p class="small mb-1"><strong>Title:</strong> '+_safeText(seo.title)+'</p>';
+        if(seo.description) html+='<p class="small mb-1"><strong>Meta:</strong> '+_safeText(seo.description).substring(0,120)+'...</p>';
+        if(seo.scanned) html+='<p class="small mb-0">SSL: '+(seo.ssl?'Yes':'No')+' | H1 tag: '+(seo.has_h1?'Yes':'Missing')+' | H2 tags: '+_num(seo.h2_count,0)+'</p>';
         if(!seo.scanned) html+='<p class="small mb-0 text-muted">No website provided or could not be scanned.</p>';
         html+='</div>';
 
         // Ads section
         if(!ads.skipped){
-            const adsScore=ads.score||0; const adsG=gradeFor(adsScore);
+            const adsScore=_num(ads.score,0); const adsG=gradeFor(adsScore);
             html+='<div class="section-card"><h6>Ad Presence <span class="grade-badge '+adsG.cls+' float-end">'+adsScore+'/100</span></h6>';
-            html+='<p class="small mb-0">Active Meta ads found: '+(ads.active_count||0)+'</p>';
-            if(ads.active_count===0) html+='<p class="small mb-0 text-muted">No active Facebook/Instagram ads detected. Paid social could help you reach more local customers.</p>';
+            html+='<p class="small mb-0">Active Meta ads found: '+_num(ads.active_count,0)+'</p>';
+            if(_num(ads.active_count,0)===0) html+='<p class="small mb-0 text-muted">No active Facebook/Instagram ads detected. Paid social could help you reach more local customers.</p>';
             html+='</div>';
         } else {
             html+='<div class="section-card"><h6>Ad Presence <span class="grade-badge grade-c float-end">Pending</span></h6>';
@@ -190,9 +208,9 @@
 
         // Benchmarks section
         if(bench.industry){
-            html+='<div class="section-card"><h6>Industry Benchmarks: '+_esc(bench.industry).replace(/_/g,' ')+'</h6>';
-            if(bench.google_ads) html+='<p class="small mb-1"><strong>Google Ads avg:</strong> CTR '+bench.google_ads.ctr+'% | CPC $'+bench.google_ads.cpc+' | Conv. rate '+bench.google_ads.conversion_rate+'%</p>';
-            if(bench.meta_ads) html+='<p class="small mb-0"><strong>Meta Ads avg:</strong> CTR '+bench.meta_ads.ctr+'% | CPC $'+bench.meta_ads.cpc+' | CPM $'+bench.meta_ads.cpm+'</p>';
+            html+='<div class="section-card"><h6>Industry Benchmarks: '+_safeText(bench.industry).replace(/_/g,' ')+'</h6>';
+            if(bench.google_ads) html+='<p class="small mb-1"><strong>Google Ads avg:</strong> CTR '+_fmtMetric(bench.google_ads.ctr)+'% | CPC $'+_fmtMetric(bench.google_ads.cpc)+' | Conv. rate '+_fmtMetric(bench.google_ads.conversion_rate)+'%</p>';
+            if(bench.meta_ads) html+='<p class="small mb-0"><strong>Meta Ads avg:</strong> CTR '+_fmtMetric(bench.meta_ads.ctr)+'% | CPC $'+_fmtMetric(bench.meta_ads.cpc)+' | CPM $'+_fmtMetric(bench.meta_ads.cpm)+'</p>';
             html+='</div>';
         }
 
@@ -200,9 +218,9 @@
         if(recs.length){
             html+='<h6 class="fw-bold mt-3 mb-2">Recommendations</h6>';
             recs.forEach(function(r){
-                const pri=r.priority||'medium';
+                const pri=['high','medium','low'].indexOf(r.priority)>=0?r.priority:'medium';
                 const col=pri==='high'?'danger':pri==='medium'?'warning':'info';
-                html+='<div class="rec-item"><span class="badge bg-'+col+' me-2">'+pri+'</span><strong>'+_esc(r.title||'')+'</strong><br><small class="text-muted">'+_esc(r.detail||r.description||'')+'</small></div>';
+                html+='<div class="rec-item"><span class="badge bg-'+col+' me-2">'+_safeText(pri)+'</span><strong>'+_safeText(r.title||'')+'</strong><br><small class="text-muted">'+_safeText(r.detail||r.description||'')+'</small></div>';
             });
         }
 
@@ -217,6 +235,12 @@
     }
 
     function _esc(s){var d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
+    async function _readJsonResponse(resp){
+        var raw=await resp.text();
+        if(!raw) return {json:null,raw:''};
+        try{return {json:JSON.parse(raw),raw:raw};}
+        catch(err){return {json:null,raw:raw};}
+    }
 
     document.getElementById('gmAssessForm').addEventListener('submit',async function(e){
         e.preventDefault();
@@ -233,9 +257,16 @@
 
         try{
             console.log('[GM-ASSESS] Posting to:', API, 'data:', JSON.stringify(data));
-            var resp=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+            var resp=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(data)});
             console.log('[GM-ASSESS] Response status:', resp.status);
-            var json=await resp.json();
+            var parsed=await _readJsonResponse(resp);
+            var json=parsed.json;
+            if(!resp.ok){
+                throw new Error((json&&json.error)||parsed.raw.slice(0,200)||'Assessment failed. Please try again.');
+            }
+            if(!json||typeof json!=='object'){
+                throw new Error('Unexpected response format from assessment service.');
+            }
             console.log('[GM-ASSESS] Response json.ok:', json.ok, 'keys:', Object.keys(json));
             if(json.ok){
                 document.getElementById('gmAssessLoading').classList.add('d-none');
@@ -244,14 +275,14 @@
             } else {
                 document.getElementById('gmAssessLoading').classList.add('d-none');
                 document.getElementById('gmAssessForm').classList.remove('d-none');
-                alert.innerHTML='<div class="alert alert-danger py-2">'+(json.error||'Assessment failed. Please try again.')+'</div>';
+                alert.innerHTML='<div class="alert alert-danger py-2">'+_safeText(json.error||'Assessment failed. Please try again.')+'</div>';
                 btn.disabled=false;btn.textContent='Run My Free Assessment';
             }
         }catch(err){
             console.error('[GM-ASSESS] Error:', err);
             document.getElementById('gmAssessLoading').classList.add('d-none');
             document.getElementById('gmAssessForm').classList.remove('d-none');
-            alert.innerHTML='<div class="alert alert-danger py-2">Connection error. Please try again.</div>';
+            alert.innerHTML='<div class="alert alert-danger py-2">'+_safeText(err&&err.message?err.message:'Connection error. Please try again.')+'</div>';
             btn.disabled=false;btn.textContent='Run My Free Assessment';
         }
     });

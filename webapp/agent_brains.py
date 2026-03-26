@@ -33,6 +33,7 @@ def _eligibility_detail(agent_key):
         "pulse": "Pulse needs Google Search Console or Google Analytics data. Connect one of them in Settings.",
         "spark": "Spark needs Google Search Console or Google Analytics data to inform content. Connect one of them in Settings.",
         "bridge": "Bridge needs Google Analytics or CRM data connected to track leads. Set that up in Settings.",
+        "atlas": "Atlas needs historical performance data to forecast. Import prior months (CSV) or connect your APIs and run reports for past months so it can learn seasonality.",
     }
     return reasons.get(agent_key, f"{agent_key.title()} needs a data source connected to work.")
 
@@ -86,9 +87,15 @@ AGENT_CONFIGS = {
         "schedule_hours": 12,
         "model_purpose": "analysis",
     },
+    "atlas": {
+        "name": "Atlas",
+        "role": "Market Forecaster",
+        "schedule_hours": 24,
+        "model_purpose": "analysis",
+    },
     "chief": {
-        "name": "Chief",
-        "role": "Quality Control",
+        "name": "Weave",
+        "role": "MAP Orchestrator",
         "schedule_hours": 0,   # only runs as part of team run
         "model_purpose": "analysis",
     },
@@ -96,7 +103,7 @@ AGENT_CONFIGS = {
 
 
 # ---------------------------------------------------------------------------
-# Agent quality specifications - Chief's reference for grading each agent
+# Agent quality specifications - Weave's reference for grading each agent
 # ---------------------------------------------------------------------------
 
 AGENT_QUALITY_SPECS = {
@@ -218,7 +225,74 @@ AGENT_QUALITY_SPECS = {
         ],
         "specificity": "Must reference actual conversion/lead data and connect ad spend to outcomes with specific numbers.",
     },
+        "atlas": {
+                "required_fields": ["severity", "title", "detail", "action"],
+                "max_findings": 6,
+                "min_findings": 1,
+                "severity_max": {"critical": 2},
+                "detail_needs_numbers": True,
+                "must_reference_data": True,
+                "banned_phrases": [
+                        "keep an eye on", "monitor closely", "could be improved", "may want to",
+                        "leverage", "harness", "elevate", "supercharge", "unlock",
+                        "in today's competitive landscape",
+                ],
+                "specificity": "Must include a next-month forecast with numeric ranges and a concrete budget plan in dollars.",
+        },
 }
+
+
+ATLAS_PROMPT = """You are Atlas, a market forecaster inside GroMore.
+Your job: use (1) historical performance data, (2) current month performance, (3) competition signals, and (4) lightweight market/trend signals to forecast next-month performance and translate it into a budget strategy.
+
+WHAT YOU MUST DO:
+1. Forecast next month (target_month) for:
+     - paid_leads (Meta + Google Ads results)
+     - paid_spend
+     - blended_cpa (paid_spend / paid_leads)
+     Provide a P50 forecast and a reasonable low/high range.
+2. Give a budget plan that avoids waste in slow periods and captures demand in busy periods.
+     - Use exact dollar changes and a clear reallocation plan.
+     - Include triggers for mid-month adjustment (if leads/spend are off pace).
+3. Explain the drivers behind the forecast (seasonality, momentum, auction pressure, organic demand).
+4. Provide a validation plan: what to check weekly, and what data would improve the forecast.
+
+RULES:
+- Use the numbers provided in the input. Do not invent metrics.
+- If the data is thin (less than 9 months), say confidence is low and keep the plan conservative.
+- No vague advice. Every finding must be actionable.
+- Do NOT use em dashes.
+
+OUTPUT FORMAT (strict JSON):
+{
+    "findings": [
+        {
+            "severity": "critical|warning|info|positive",
+            "title": "short headline",
+            "detail": "1-2 sentences with specific numbers and ranges",
+            "action": "one-line summary of what to do",
+            "steps": ["first concrete step", "second concrete step", "third concrete step"],
+            "impact_estimate": "dollar/lead impact if possible"
+        }
+    ],
+    "forecast": {
+        "created_month": "YYYY-MM",
+        "target_month": "YYYY-MM",
+        "confidence": "high|medium|low",
+        "metrics": {
+            "paid_leads": {"p50": number_or_null, "low": number_or_null, "high": number_or_null},
+            "paid_spend": {"p50": number_or_null, "low": number_or_null, "high": number_or_null},
+            "blended_cpa": {"p50": number_or_null, "low": number_or_null, "high": number_or_null}
+        },
+        "drivers": ["string"],
+        "assumptions": ["string"],
+        "validation_plan": ["string"]
+    },
+    "summary": "2-3 sentence overall forecast + plan",
+    "memory": "one key forecasting learning to remember (or null)"
+}
+
+Return ONLY valid JSON. No markdown fences. Max 6 findings."""
 
 
 # ---------------------------------------------------------------------------
@@ -674,8 +748,8 @@ Return ONLY valid JSON. No markdown fences."""
 # QA Agent - reviews all other agents' output before it ships
 # ---------------------------------------------------------------------------
 
-CHIEF_PROMPT = """You are Chief, the quality control officer inside GroMore.
-Your job: review every finding from the other AI agents and catch anything lazy, generic, or wrong.
+CHIEF_PROMPT = """You are Weave, the context-weaving MAP orchestrator inside GroMore.
+Your job: review every finding from the other AI agents, identify what belongs together, and turn clutter into clear, minimal actionable processes without letting low-quality recommendations through.
 
 Automated tests already catch structural and rule-based problems (banned phrases, missing numbers,
 severity flooding, budget violations). Those results are included below as PRE-TEST RESULTS.
@@ -702,19 +776,24 @@ FOCUS AREAS (these are YOUR domain - the automated tests don't catch these):
    - "Improve your landing page" is vague. "Add a phone number above the fold on your service page" is specific.
    - Actions must be concrete, not directional
 
-5. SEVERITY ACCURACY - Is the severity level justified?
+5. CROSS-KPI DEPENDENCIES - Which findings should be linked because one move affects another KPI?
+    - If Scout wants budget shifted and Pulse shows the landing page is weak, connect them
+    - If one fix improves lead volume but could hurt CPA, rankings, or close rate, note the tradeoff
+    - Group related findings into a minimal actionable process when appropriate
+
+6. SEVERITY ACCURACY - Is the severity level justified?
    - Critical = immediate revenue impact, needs action today
    - Warning = should address this week
    - Info = worth knowing, low urgency
    - Positive = good news worth celebrating
 
-6. MISSING CONTEXT - Agent ignoring critical brand context:
+7. MISSING CONTEXT - Agent ignoring critical brand context:
    - Suggesting services the brand doesn't offer = FLAG
    - Copy that ignores the brand's industry or voice = FLAG
 
 For each finding, assign one of:
 - PASS: Good finding. Ship it.
-- FLAG: Has an issue Chief caught. Include your note.
+- FLAG: Has an issue Weave caught. Include your note.
 - REJECT: Fails quality bar entirely. Remove it.
 - DOWNGRADE: Wrong severity. Include the correct level.
 
@@ -748,6 +827,7 @@ AGENT_PROMPTS = {
     "pulse": PULSE_PROMPT,
     "spark": SPARK_PROMPT,
     "bridge": BRIDGE_PROMPT,
+    "atlas": ATLAS_PROMPT,
 }
 
 
@@ -964,7 +1044,7 @@ def _run_rule_tests(agent_results: Dict[str, Any], brand: dict) -> List[Dict]:
 WARREN_ORCHESTRATION_PROMPT = """You are W.A.R.R.E.N. (Weighted Analysis for Revenue, Reach, Engagement & Navigation).
 You are the BOSS. You are responsible for ALL output that reaches the client. Period.
 
-Chief (your QA officer) has reviewed the team's findings and run quality tests.
+Weave (your QA orchestrator) has reviewed the team's findings and run quality tests.
 Now YOU decide the final fate of every finding.
 
 YOUR DECISION RULES:
@@ -972,7 +1052,7 @@ YOUR DECISION RULES:
 2. Revenue impact comes first. Findings that save or make the client money get priority.
 3. Three great findings beat eight mediocre ones. Cut aggressively.
 4. Structural/rule test failures are objective. If a finding has a banned phrase or no data, that's a real problem.
-5. Chief's LLM review catches nuance - contradictions, vague advice, creative quality. Trust it but verify.
+5. Weave's LLM review catches nuance - contradictions, vague advice, creative quality. Trust it but verify.
 6. REWORK is expensive (another API call per agent). Only use it when the finding has real potential but bad execution.
 7. KILL anything generic, vague, or not worth the client's attention.
 8. SHIP findings that passed QA or have only cosmetic issues.
@@ -1031,6 +1111,7 @@ def _safe_float(val, default=0.0):
 
 
 def _build_agent_data(agent_key: str, analysis_summary: dict, brand: dict,
+                      db=None, brand_id: int = None,
                       campaigns: dict = None, gbp_ctx: dict = None,
                       gbp_audit: dict = None, competitor_intel: list = None,
                       crm_data: dict = None) -> str:
@@ -1232,6 +1313,110 @@ GBP DATA:
         else:
             parts.append("\nCRM: Not connected. This is a data gap.")
 
+    if agent_key == "atlas":
+        try:
+            from webapp.forecasting import build_paid_kpi_series, seasonal_forecast_next_month, month_add
+
+            created_month = (analysis_summary or {}).get("period", {}).get("month") or datetime.now().strftime("%Y-%m")
+            target_month = month_add(created_month, 1)
+            series = build_paid_kpi_series(brand=brand, months_back=36)
+            forecasts = seasonal_forecast_next_month(series=series, target_month=target_month)
+
+            parts.append("\nHISTORICAL PAID KPIs (monthly, best-effort):")
+            if series:
+                for p in series[-24:]:
+                    parts.append(
+                        f"  - {p.get('month')}: paid_leads={p.get('paid_leads')}, paid_spend={p.get('paid_spend')}, blended_cpa={p.get('blended_cpa')}"
+                    )
+            else:
+                parts.append("  - No historical series available.")
+
+            parts.append("\nSEASONAL BASELINE FORECAST (computed):")
+            pl = forecasts.get("paid_leads")
+            ps = forecasts.get("paid_spend")
+            cpa = forecasts.get("blended_cpa")
+
+            def _forecast_value(metric, key):
+                if metric is None:
+                    return None
+                if isinstance(metric, dict):
+                    return metric.get(key)
+                return getattr(metric, key, None)
+
+            parts.append(f"- created_month: {created_month}")
+            parts.append(f"- target_month: {target_month}")
+            parts.append(f"- paid_leads: p50={_forecast_value(pl, 'p50')}, low={_forecast_value(pl, 'low')}, high={_forecast_value(pl, 'high')}")
+            parts.append(f"- paid_spend: p50={_forecast_value(ps, 'p50')}, low={_forecast_value(ps, 'low')}, high={_forecast_value(ps, 'high')}")
+            parts.append(f"- blended_cpa: p50={_forecast_value(cpa, 'p50')}, low={_forecast_value(cpa, 'low')}, high={_forecast_value(cpa, 'high')}")
+
+            # Recent forecast accuracy (if available)
+            if db and brand_id:
+                try:
+                    conn = db._conn()
+                    rows = conn.execute(
+                        """SELECT target_month, mae, mape, scored_at
+                           FROM agent_forecasts
+                           WHERE brand_id = ? AND agent_key = ? AND scored_at != ''
+                           ORDER BY target_month DESC
+                           LIMIT 6""",
+                        (brand_id, "atlas"),
+                    ).fetchall()
+                    conn.close()
+                    if rows:
+                        parts.append("\nRECENT FORECAST SCORECARD (latest scored):")
+                        for r in rows:
+                            parts.append(
+                                f"  - {r['target_month']}: MAE={r['mae']}, MAPE={r['mape']}, scored_at={r['scored_at']}"
+                            )
+                except Exception:
+                    pass
+
+            # Market/trend signals (best-effort web search snippets)
+            try:
+                from concurrent.futures import ThreadPoolExecutor, TimeoutError
+                from webapp.ai_assistant import _execute_web_search
+
+                def _bounded_web_search(query: str, timeout_seconds: int = 4) -> str:
+                    try:
+                        with ThreadPoolExecutor(max_workers=1) as executor:
+                            future = executor.submit(_execute_web_search, query)
+                            result = future.result(timeout=timeout_seconds)
+                        return (result or "Search returned no results.")[:900]
+                    except TimeoutError:
+                        return "Search timed out before results were available."
+                    except Exception:
+                        return "Search unavailable."
+
+                industry = (brand.get("industry") or "home services").strip()
+                area = (brand.get("service_area") or "").strip()
+                q1 = f"{industry} demand trend next 90 days {area}".strip()
+                q2 = f"consumer spending outlook home services next 90 days".strip()
+                parts.append("\nMARKET SIGNALS (best-effort web search snippets):")
+                parts.append(f"- Query: {q1}\n{_bounded_web_search(q1)}")
+                parts.append(f"\n- Query: {q2}\n{_bounded_web_search(q2)}")
+            except Exception:
+                parts.append("\nMARKET SIGNALS: Unavailable (web search failed).")
+
+            # Competition / auction pressure signals from current analysis
+            try:
+                k = (analysis_summary or {}).get("kpis", {}) or {}
+                g_cpc = (k.get("google_ads") or {}).get("cpc")
+                m_cpc = (k.get("meta") or {}).get("cpc")
+                g_mom = ((k.get("google_ads") or {}).get("mom") or {}).get("spend_pct")
+                parts.append("\nCOMPETITION / AUCTION SIGNALS (from your data):")
+                parts.append(f"- Current Google Ads CPC: {g_cpc}")
+                parts.append(f"- Current Meta CPC: {m_cpc}")
+                parts.append(f"- Current Google Ads spend MoM %: {g_mom}")
+                cw = (analysis_summary or {}).get("competitor_watch") or {}
+                if cw:
+                    parts.append("\nCOMPETITOR WATCH (from analytics):")
+                    parts.append(json.dumps(cw, indent=2)[:1200])
+            except Exception:
+                pass
+
+        except Exception as e:
+            parts.append(f"\nFORECASTING CONTEXT ERROR: {str(e)[:120]}")
+
     return "\n".join(parts)
 
 
@@ -1268,6 +1453,7 @@ def run_agent(agent_key: str, *, db, brand: dict, brand_id: int,
     try:
         data_payload = _build_agent_data(
             agent_key, analysis_summary, brand,
+            db=db, brand_id=brand_id,
             campaigns=campaigns, gbp_ctx=gbp_ctx, gbp_audit=gbp_audit,
             competitor_intel=competitor_intel, crm_data=crm_data,
         )
@@ -1369,6 +1555,25 @@ Reference the actual business name, services, and area. No generic output."""
         findings = result.get("findings", [])
         summary = result.get("summary", "")
 
+        # Save forecast payload (Atlas only) for backtesting
+        if agent_key == "atlas":
+            try:
+                forecast_payload = result.get("forecast") or {}
+                target_month = str(forecast_payload.get("target_month") or "").strip()
+                created_month = str(forecast_payload.get("created_month") or month).strip()
+                if target_month:
+                    db.upsert_agent_forecast(
+                        brand_id=brand_id,
+                        agent_key=agent_key,
+                        created_month=created_month,
+                        target_month=target_month,
+                        forecast_json=json.dumps(forecast_payload, default=str),
+                        method="seasonal_naive+llm",
+                        features_json=json.dumps({"has_market_signals": True}, default=str),
+                    )
+            except Exception as save_err:
+                logger.debug("Failed to save forecast payload: %s", save_err)
+
         for f in findings:
             try:
                 extra = {k: v for k, v in f.items() if k not in ("severity", "title", "detail", "action")}
@@ -1466,7 +1671,7 @@ def _completion_kwargs(model: str, limit: int = 2000) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Multi-stage QA pipeline: structural tests -> rule tests -> Chief LLM -> Warren
+# Multi-stage QA pipeline: structural tests -> rule tests -> Weave LLM -> Warren
 # ---------------------------------------------------------------------------
 
 def run_qa_review(db, brand: dict, brand_id: int, api_key: str,
@@ -1475,7 +1680,7 @@ def run_qa_review(db, brand: dict, brand_id: int, api_key: str,
     Multi-stage QA review:
       1. Structural tests (code) - validate output schema
       2. Rule-based tests (code) - banned phrases, numbers, specificity
-      3. Chief LLM review - nuanced quality (contradictions, creative quality, actionability)
+    3. Weave LLM review - nuanced quality (contradictions, creative quality, actionability)
     Returns compiled QA report for Warren to review.
     """
     import openai
@@ -1494,7 +1699,7 @@ def run_qa_review(db, brand: dict, brand_id: int, api_key: str,
     # Combine pre-test results
     all_pre_issues = structural_issues + rule_issues
 
-    # Build the review payload for Chief
+    # Build the review payload for Weave
     review_items = []
     for agent_key, result in agent_results.items():
         if not result or not result.get("findings") or agent_key.startswith("_"):
@@ -1515,12 +1720,13 @@ def run_qa_review(db, brand: dict, brand_id: int, api_key: str,
         db.log_agent_activity(brand_id, "chief", "QA review skipped", "No findings from team", "completed")
         return {
             "pre_test_issues": all_pre_issues,
+            "weave_reviews": [],
             "chief_reviews": [],
             "team_notes": "No findings to review.",
             "worst_offender": None,
         }
 
-    # Stage 3: Chief LLM review
+    # Stage 3: Weave LLM review
     brand_context = (
         f"Business: {brand.get('display_name', 'Unknown')}, "
         f"Industry: {brand.get('industry', 'Unknown')}, "
@@ -1529,7 +1735,7 @@ def run_qa_review(db, brand: dict, brand_id: int, api_key: str,
         f"Budget: ${brand.get('monthly_budget', 0)}/mo"
     )
 
-    # Format pre-test results for Chief
+    # Format pre-test results for Weave
     pre_test_summary = "None - all findings passed structural and rule tests."
     if all_pre_issues:
         pre_test_lines = []
@@ -1593,10 +1799,10 @@ Don't re-flag things the pre-tests already caught unless you have additional con
             worst_offender = qa_result.get("worst_offender")
             chief_memory = qa_result.get("memory")
         else:
-            logger.warning("Chief returned non-JSON: %s", raw[:200])
+            logger.warning("Weave returned non-JSON: %s", raw[:200])
 
     except Exception as e:
-        logger.exception("Chief LLM review failed: %s", e)
+        logger.exception("Weave LLM review failed: %s", e)
 
     db.log_agent_activity(
         brand_id, "chief",
@@ -1605,13 +1811,13 @@ Don't re-flag things the pre-tests already caught unless you have additional con
         "completed",
     )
 
-    # Save Chief's memory
+    # Save Weave's memory
     if chief_memory:
         try:
             from webapp.ai_assistant import save_memory_with_embedding
             save_memory_with_embedding(
                 db, brand_id, "insight",
-                f"Chief QA: {chief_memory[:60]}",
+                f"Weave QA: {chief_memory[:60]}",
                 chief_memory, api_key,
             )
         except Exception:
@@ -1619,6 +1825,7 @@ Don't re-flag things the pre-tests already caught unless you have additional con
 
     return {
         "pre_test_issues": all_pre_issues,
+        "weave_reviews": chief_reviews,
         "chief_reviews": chief_reviews,
         "team_notes": chief_notes,
         "worst_offender": worst_offender,
@@ -1626,14 +1833,14 @@ Don't re-flag things the pre-tests already caught unless you have additional con
 
 
 # ---------------------------------------------------------------------------
-# Warren orchestration - the boss reviews Chief's report and decides
+# Warren orchestration - the boss reviews Weave's report and decides
 # ---------------------------------------------------------------------------
 
 def warren_orchestrate(db, brand: dict, brand_id: int, api_key: str,
                        agent_results: Dict[str, Any], qa_report: Dict[str, Any],
                        month: str = None) -> Dict[str, Any]:
     """
-    Warren reviews Chief's QA report and makes final decisions on every finding.
+    Warren reviews Weave's QA report and makes final decisions on every finding.
     Returns dict with decisions, agents_to_retry, and the results of applying those decisions.
     """
     import openai
@@ -1642,7 +1849,7 @@ def warren_orchestrate(db, brand: dict, brand_id: int, api_key: str,
         month = datetime.now().strftime("%Y-%m")
 
     pre_issues = qa_report.get("pre_test_issues", [])
-    chief_reviews = qa_report.get("chief_reviews", [])
+    chief_reviews = qa_report.get("weave_reviews") or qa_report.get("chief_reviews", [])
 
     # Build the briefing for Warren
     finding_list = []
@@ -1670,7 +1877,7 @@ def warren_orchestrate(db, brand: dict, brand_id: int, api_key: str,
                     for iss in related_pre
                 ]
 
-            # Attach Chief's review for this finding
+            # Attach Weave's review for this finding
             related_chief = [
                 r for r in chief_reviews
                 if r.get("agent_key") == agent_key and r.get("finding_index") == i
@@ -1702,9 +1909,9 @@ def warren_orchestrate(db, brand: dict, brand_id: int, api_key: str,
 
 BRAND: {brand_context}
 
-Chief's overall notes: {qa_report.get('team_notes', 'None')}
+Weave's overall notes: {qa_report.get('team_notes', 'None')}
 Pre-test issues: {len(pre_issues)} found
-Chief worst offender: {qa_report.get('worst_offender', 'None')}
+Weave worst offender: {qa_report.get('worst_offender', 'None')}
 
 FINDINGS WITH QA ANNOTATIONS:
 {json.dumps(finding_list, indent=2)}
@@ -1742,7 +1949,7 @@ Remember - you own everything that ships. Be decisive."""
         if not json_match:
             logger.warning("Warren returned non-JSON: %s", raw[:200])
             db.log_agent_activity(brand_id, "warren", "Review failed", "Non-JSON response", "completed")
-            # Fallback: ship everything that Chief passed, kill what Chief rejected
+            # Fallback: ship everything that Weave passed, kill what Weave rejected
             return _fallback_decisions(db, brand_id, agent_results, qa_report, month)
 
         warren_result = json.loads(json_match.group())
@@ -1829,11 +2036,11 @@ Remember - you own everything that ships. Be decisive."""
 def _fallback_decisions(db, brand_id: int, agent_results: Dict, qa_report: Dict,
                         month: str) -> Dict[str, Any]:
     """
-    Fallback if Warren's LLM call fails: use Chief's verdicts and pre-test auto-actions.
+    Fallback if Warren's LLM call fails: use Weave's verdicts and pre-test auto-actions.
     Ships passes, kills rejects and banned-phrase hits, flags everything else.
     """
     pre_issues = qa_report.get("pre_test_issues", [])
-    chief_reviews = qa_report.get("chief_reviews", [])
+    chief_reviews = qa_report.get("weave_reviews") or qa_report.get("chief_reviews", [])
 
     db_findings = db.get_agent_findings(brand_id, month=month, limit=200)
     shipped = 0
@@ -1866,7 +2073,7 @@ def _fallback_decisions(db, brand_id: int, agent_results: Dict, qa_report: Dict,
             related = issue_map.get((agent_key, i), []) + issue_map.get((agent_key, -1), [])
             auto_reject = any(iss["auto_action"] == "reject" for iss in related)
 
-            # Check Chief's verdict
+            # Check Weave's verdict
             chief_r = chief_map.get((agent_key, i), {})
             chief_reject = chief_r.get("verdict") == "reject"
 
@@ -1881,7 +2088,7 @@ def _fallback_decisions(db, brand_id: int, agent_results: Dict, qa_report: Dict,
         "agents_to_retry": [],
         "rework_feedback": {},
         "overall_grade": "?",
-        "overall_notes": "Warren review failed - used fallback (Chief + pre-test auto-actions).",
+        "overall_notes": "Warren review failed - used fallback (Weave + pre-test auto-actions).",
         "applied": {"shipped": shipped, "killed": killed, "rework": 0},
     }
 
@@ -1920,6 +2127,12 @@ def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
     except Exception as e:
         logger.warning("Analysis build failed for brand %s: %s", brand_id, e)
         db.log_agent_activity(brand_id, "system", f"Analysis build error: {e}", "", "completed")
+
+    # Score any due Atlas forecasts for this month (best-effort)
+    try:
+        _score_due_atlas_forecast(db, brand, brand_id, month, analysis_summary)
+    except Exception:
+        pass
 
     try:
         from webapp.campaign_manager import list_all_campaigns
@@ -1975,7 +2188,18 @@ def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
         "pulse": has_seo or has_analytics,
         "spark": has_seo or has_analytics,
         "bridge": has_analytics or has_crm,
+        "atlas": False,
     }
+
+    # Atlas eligibility: needs enough historical data to forecast seasonality
+    try:
+        from webapp.forecasting import available_months_for_client
+
+        slug = brand.get("slug")
+        months_avail = available_months_for_client(slug, limit=24) if slug else []
+        agent_eligibility["atlas"] = len(months_avail) >= 9 and analysis_summary is not None
+    except Exception:
+        agent_eligibility["atlas"] = bool(analysis_summary)
 
     # Filter by hired agents (if hiring is configured)
     hired_agents = {}
@@ -2034,17 +2258,17 @@ def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
             logger.exception("Agent %s crashed: %s", agent_key, e)
             results[agent_key] = None
 
-    # ── QA Pipeline: Chief multi-test → Warren orchestration → retry loop ──
+    # ── QA Pipeline: Weave multi-test → Warren orchestration → retry loop ──
     agents_with_findings = {k: v for k, v in results.items() if v and v.get("findings")}
     if agents_with_findings:
         try:
-            # Step 1: Chief runs multi-stage QA (structural + rules + LLM)
+            # Step 1: Weave runs multi-stage QA (structural + rules + LLM)
             qa_report = run_qa_review(
                 db, brand, brand_id, api_key,
                 agents_with_findings, month=month,
             )
 
-            # Step 2: Warren reviews Chief's report and makes final decisions
+            # Step 2: Warren reviews Weave's report and makes final decisions
             warren_result = warren_orchestrate(
                 db, brand, brand_id, api_key,
                 agents_with_findings, qa_report, month=month,
@@ -2110,3 +2334,145 @@ def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
             }
 
     return results
+
+
+def _score_due_atlas_forecast(db, brand: dict, brand_id: int, month: str, analysis_summary: Optional[dict]):
+    """If Atlas previously forecasted this target month, score it against actuals.
+
+    Stores MAE/MAPE in agent_forecasts and writes a scorecard finding into agent_findings.
+    Best-effort: failures should not break agent runs.
+    """
+    if not analysis_summary:
+        return
+
+    try:
+        rec = db.get_agent_forecast(brand_id=brand_id, agent_key="atlas", target_month=month)
+        if not rec:
+            return
+        if (rec.get("scored_at") or "").strip():
+            return
+
+        # Actuals from current analysis_summary
+        k = (analysis_summary.get("kpis") or {})
+        meta_spend = (k.get("meta") or {}).get("spend")
+        google_spend = (k.get("google_ads") or {}).get("spend")
+        meta_leads = (k.get("meta") or {}).get("results")
+        google_leads = (k.get("google_ads") or {}).get("results")
+
+        actual_spend = 0.0
+        for v in (meta_spend, google_spend):
+            try:
+                if v is not None:
+                    actual_spend += float(v)
+            except (TypeError, ValueError):
+                pass
+        actual_spend = actual_spend if actual_spend > 0 else None
+
+        actual_leads = 0.0
+        for v in (meta_leads, google_leads):
+            try:
+                if v is not None:
+                    actual_leads += float(v)
+            except (TypeError, ValueError):
+                pass
+        actual_leads = actual_leads if actual_leads > 0 else None
+
+        actual_cpa = None
+        if actual_spend is not None and actual_leads is not None and actual_leads > 0:
+            actual_cpa = round(actual_spend / actual_leads, 2)
+
+        # Forecast values
+        fjson = rec.get("forecast_json") or "{}"
+        try:
+            forecast = json.loads(fjson)
+        except Exception:
+            forecast = {}
+
+        metrics = (forecast.get("metrics") or {})
+        pred_leads = ((metrics.get("paid_leads") or {}).get("p50"))
+        pred_spend = ((metrics.get("paid_spend") or {}).get("p50"))
+
+        def _to_float(v):
+            try:
+                if v is None or v == "":
+                    return None
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        pred_leads_f = _to_float(pred_leads)
+        pred_spend_f = _to_float(pred_spend)
+
+        abs_errors = []
+        pct_errors = []
+
+        if actual_leads is not None and pred_leads_f is not None:
+            abs_errors.append(abs(actual_leads - pred_leads_f))
+            if actual_leads > 0:
+                pct_errors.append(abs(actual_leads - pred_leads_f) / actual_leads)
+
+        if actual_spend is not None and pred_spend_f is not None:
+            abs_errors.append(abs(actual_spend - pred_spend_f))
+            if actual_spend > 0:
+                pct_errors.append(abs(actual_spend - pred_spend_f) / actual_spend)
+
+        mae = round(sum(abs_errors) / len(abs_errors), 4) if abs_errors else None
+        mape = round((sum(pct_errors) / len(pct_errors)) * 100, 2) if pct_errors else None
+
+        actual_payload = {
+            "target_month": month,
+            "paid_leads": actual_leads,
+            "paid_spend": actual_spend,
+            "blended_cpa": actual_cpa,
+        }
+
+        db.score_agent_forecast(
+            forecast_id=rec["id"],
+            actual_json=json.dumps(actual_payload, default=str),
+            mae=mae,
+            mape=mape,
+        )
+
+        # Write an in-app scorecard finding for transparency
+        severity = "info"
+        if mape is not None:
+            if mape <= 15:
+                severity = "positive"
+            elif mape <= 30:
+                severity = "info"
+            else:
+                severity = "warning"
+
+        detail_bits = []
+        if pred_leads_f is not None and actual_leads is not None:
+            err = round(((actual_leads - pred_leads_f) / actual_leads) * 100, 1) if actual_leads else None
+            detail_bits.append(f"Paid leads: predicted {pred_leads_f} vs actual {actual_leads} (error {err}%)")
+        if pred_spend_f is not None and actual_spend is not None:
+            err = round(((actual_spend - pred_spend_f) / actual_spend) * 100, 1) if actual_spend else None
+            detail_bits.append(f"Paid spend: predicted ${pred_spend_f:,.0f} vs actual ${actual_spend:,.0f} (error {err}%)")
+        if mape is not None:
+            detail_bits.append(f"MAPE: {mape}%")
+
+        detail = "; ".join(detail_bits) if detail_bits else "Forecast scored, but not enough numeric data was available to compute errors."
+
+        db.save_agent_finding(
+            brand_id=brand_id,
+            agent_key="atlas",
+            month=month,
+            severity=severity,
+            title=f"Forecast scorecard for {month}",
+            detail=detail,
+            action="Use this scorecard to improve next month's budget plan and forecasting assumptions.",
+            extra_json=json.dumps({"mae": mae, "mape": mape, "forecast_id": rec.get("id")}, default=str),
+        )
+
+        db.log_agent_activity(
+            brand_id,
+            "atlas",
+            "Scored forecast",
+            f"target={month}, mape={mape}",
+            "completed",
+        )
+
+    except Exception as exc:
+        logger.debug("Atlas forecast scoring failed: %s", exc)

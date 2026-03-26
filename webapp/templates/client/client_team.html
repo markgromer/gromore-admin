@@ -75,8 +75,11 @@
     position: relative;
     width: 100%;
     aspect-ratio: 1147 / 765;
-        min-height: 320px;
-        background: #d9dce6 url('/static/sprites/office.png') center top/100% 100% no-repeat;
+    min-height: 320px;
+    background:
+        radial-gradient(circle at 20% 18%, rgba(255,255,255,.22) 0, rgba(255,255,255,0) 24%),
+        radial-gradient(circle at 78% 26%, rgba(255,255,255,.16) 0, rgba(255,255,255,0) 20%),
+        linear-gradient(180deg, #dfe5ee 0%, #d1d9e6 100%);
     border-radius: 12px 12px 0 0;
     overflow: hidden;
     image-rendering: auto;
@@ -657,9 +660,6 @@ const GATHER_SPOTS = {
 // Walk bounds
 const BOUNDS = { minX: 5, maxX: 92, minY: 10, maxY: 82 };
 
-// Equipment decoration positions
-const EQUIP_POSITIONS = [];
-
 const TRAIN_GUIDANCE = {
     scout: {
         intro: "Scout analyzes your paid ad performance. Help them understand your ad strategy so they can spot what's working and what's wasting money.",
@@ -742,14 +742,14 @@ const TRAIN_GUIDANCE = {
         placeholder: "e.g. Most leads call us directly. We use ServiceTitan as our CRM. Close rate is about 60% for standard calls, 80% for emergencies. Average ticket is $350 for repairs, $8,000 for repipes.",
     },
     chief: {
-        intro: "Chief is your QA manager - they review every finding before you see it. Tell them your standards so they filter out the noise.",
+        intro: "Weave pulls threads from every agent, groups related issues, and turns them into a Minimal Actionable Process. Tell them how you want tradeoffs and cross-KPI impacts handled.",
         questions: [
-            "What kind of recommendations do you find most valuable?",
-            "Anything you're tired of hearing from marketing tools? (generic advice, obvious stuff?)",
-            "How specific do you need recommendations to be before they're useful?",
-            "Any topics that are off the table or not relevant to your business?",
+            "When multiple issues are related, do you want one master process or separate action items?",
+            "Which KPIs matter most when tradeoffs appear? (leads, CPA, close rate, revenue, rankings?)",
+            "Do you prefer the fewest highest-impact actions, or a fuller checklist with dependencies called out?",
+            "Are there constraints Weave should protect when linking recommendations across agents?",
         ],
-        placeholder: "e.g. I only want to see stuff I can actually act on this week. Tired of 'optimize your landing page' without specifics. If it's not backed by real data from MY account, don't show it. Don't bother me with social media stuff, we don't do that.",
+        placeholder: "e.g. Give me the smallest set of actions that moves leads and revenue without spiking CPA. If Scout and Pulse are pointing to the same root issue, combine it into one process. Call out cross-effects before recommending anything that could hurt close rate or rankings.",
     },
     warren: {
         intro: "Warren is your senior strategist and team lead. Help him understand your big-picture business goals.",
@@ -779,18 +779,6 @@ let currentHireAgent = null;
 function initOffice() {
     const floor = document.getElementById('office-floor');
     if (!floor) return;
-
-    // Equipment decorations
-    EQUIP_POSITIONS.forEach(eq => {
-        const img = document.createElement('img');
-        img.className = 'office-equip';
-        img.src = '/static/sprites/equipment/' + eq.key + '.png';
-        img.style.left = eq.x + '%';
-        img.style.top = eq.y + '%';
-        img.style.width = eq.w + 'px';
-        img.style.height = eq.h + 'px';
-        floor.appendChild(img);
-    });
 
     // Create agent sprites
     AGENTS.forEach(agent => {
@@ -834,11 +822,9 @@ function initOffice() {
             badge.textContent = 'HIRE';
             el.appendChild(badge);
         } else {
-            // Random starting position for idle wandering
-            const sx = BOUNDS.minX + Math.random() * (BOUNDS.maxX - BOUNDS.minX);
-            const sy = BOUNDS.minY + Math.random() * (BOUNDS.maxY - BOUNDS.minY);
-            el.style.left = sx + '%';
-            el.style.top = sy + '%';
+            // Start hired agents at their desks so the office reads clearly.
+            el.style.left = desk.x + '%';
+            el.style.top = desk.y + '%';
 
             // Status dot
             const sdot = document.createElement('div');
@@ -932,16 +918,16 @@ function walkTo(agent, x, y, onArrive) {
 function scheduleNextMove(agent) {
     if (isInSequence || !agent.hired) return;
 
-    const delay = 3000 + Math.random() * 5000;
+    const delay = 12000 + Math.random() * 12000;
     agent.moveTimeout = setTimeout(function() {
         if (isInSequence || agent.state === 'working') return;
 
-        // 25% chance to chat with nearby agent
-        if (Math.random() < 0.25 && tryChat(agent)) return;
+        // Keep idle motion occasional so the map does not feel chaotic.
+        if (Math.random() < 0.12 && tryChat(agent)) return;
 
-        // Walk to random spot
-        const x = BOUNDS.minX + Math.random() * (BOUNDS.maxX - BOUNDS.minX);
-        const y = BOUNDS.minY + Math.random() * (BOUNDS.maxY - BOUNDS.minY);
+        // Take a small wander near the desk rather than roaming the whole office.
+        const x = Math.min(BOUNDS.maxX, Math.max(BOUNDS.minX, agent.deskX + (Math.random() * 10 - 5)));
+        const y = Math.min(BOUNDS.maxY, Math.max(BOUNDS.minY, agent.deskY + (Math.random() * 8 - 4)));
 
         walkTo(agent, x, y, function() {
             scheduleNextMove(agent);
@@ -1574,7 +1560,7 @@ function pollRunStatus() {
     var maxPolls = 120;
     var phases = [
         'Agents are analyzing your data',
-        'Chief is running quality checks',
+        'Weave is linking the team output',
         'Warren is reviewing the team output',
         'Finishing up',
     ];

@@ -546,7 +546,7 @@ function fmtInt(v) {
                 };
                 var agentNames = {
                     scout: 'Scout', penny: 'Penny', ace: 'Ace', radar: 'Radar',
-                    hawk: 'Hawk', pulse: 'Pulse', spark: 'Spark', bridge: 'Bridge', warren: 'Warren', chief: 'Chief'
+                    hawk: 'Hawk', pulse: 'Pulse', spark: 'Spark', bridge: 'Bridge', warren: 'Warren', chief: 'Weave'
                 };
                 var html = '<div class="team-alerts">';
                 html += '<div class="team-alerts-header">';
@@ -655,7 +655,7 @@ function fmtInt(v) {
             (wb.top_warnings || []).forEach(function(f) { briefItems.push({sev: 'warning', title: f.title, agent: f.agent}); });
             if (briefItems.length > 0) {
                 html += '<div style="margin-top:1rem;">';
-                var agentNames = {scout:'Scout',penny:'Penny',ace:'Ace',radar:'Radar',hawk:'Hawk',pulse:'Pulse',spark:'Spark',bridge:'Bridge',warren:'Warren',chief:'Chief'};
+                var agentNames = {scout:'Scout',penny:'Penny',ace:'Ace',radar:'Radar',hawk:'Hawk',pulse:'Pulse',spark:'Spark',bridge:'Bridge',warren:'Warren',chief:'Weave'};
                 briefItems.slice(0, 4).forEach(function(item) {
                     var dotColor = item.sev === 'critical' ? '#ef4444' : '#f59e0b';
                     html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:.85rem;">';
@@ -1011,7 +1011,7 @@ function toggleMovesRows(platform, btn) {
             var sevIcons = { critical: 'bi-exclamation-triangle-fill', warning: 'bi-exclamation-circle-fill' };
             var agentNames = {
                 scout: 'Scout', penny: 'Penny', ace: 'Ace', radar: 'Radar',
-                hawk: 'Hawk', pulse: 'Pulse', spark: 'Spark', bridge: 'Bridge', warren: 'Warren', chief: 'Chief'
+                hawk: 'Hawk', pulse: 'Pulse', spark: 'Spark', bridge: 'Bridge', warren: 'Warren', chief: 'Weave'
             };
             function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
             var html = '<div class="team-alerts">';
