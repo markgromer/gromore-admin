@@ -61,6 +61,33 @@ def _clean_customer_id(raw):
     return re.sub(r"\D", "", str(raw or ""))
 
 
+def _clean_meta_account_id(raw):
+    value = str(raw or "").strip()
+    if value.lower().startswith("act_"):
+        value = value[4:]
+    return re.sub(r"\D", "", value)
+
+
+def _parse_meta_error(resp):
+    """Extract a short human-readable error from a Meta Graph response."""
+    try:
+        data = resp.json()
+        err = data.get("error", {})
+        message = err.get("message") or err.get("error_user_msg") or err.get("error_user_title")
+        if message:
+            code = err.get("code")
+            subcode = err.get("error_subcode")
+            suffix = []
+            if code:
+                suffix.append(f"code {code}")
+            if subcode:
+                suffix.append(f"subcode {subcode}")
+            return f"{message} ({', '.join(suffix)})" if suffix else message
+    except (ValueError, AttributeError):
+        pass
+    return resp.text[:300]
+
+
 def _month_range(month: str):
     """Return (start, end) as YYYY-MM-DD for a YYYY-MM month string."""
     try:
@@ -1412,7 +1439,7 @@ def _resolve_ad_image(db, brand_id, ad_copy):
 
 def launch_meta_campaign(db, brand, plan, changed_by):
     """Create a Meta campaign from an AI-generated plan."""
-    account_id = brand.get("meta_ad_account_id", "")
+    account_id = _clean_meta_account_id(brand.get("meta_ad_account_id", ""))
     token, conn = _get_tokens(db, brand["id"], "meta")
 
     if not token or not account_id:
@@ -1427,13 +1454,31 @@ def launch_meta_campaign(db, brand, plan, changed_by):
     if not page_id:
         return {"success": False, "error": "No Facebook Page linked. Go to Connections and connect your Facebook Page before launching Meta ads."}
 
+    website_url = (brand.get("website_url") or "").strip()
+    if not website_url:
+        return {"success": False, "error": "No website URL is set for this brand. Add it in Business Settings before launching Meta ads."}
+    if not re.match(r"^https?://", website_url, re.I):
+        website_url = f"https://{website_url.lstrip('/')}"
+
+    requested_objective = plan.get("objective", "OUTCOME_LEADS")
+    requested_pixel_id = (plan.get("pixel_id") or "").strip()
+    objective = requested_objective
+    pixel_id = requested_pixel_id
+    launch_notes = []
+
+    # Website lead campaigns need a valid conversion object. If none is configured,
+    # fall back to website traffic instead of creating an empty campaign shell.
+    if objective == "OUTCOME_LEADS" and not pixel_id:
+        objective = "OUTCOME_TRAFFIC"
+        launch_notes.append("Lead Generation was switched to Website Traffic because no Meta Pixel was selected.")
+
     # Step 1: Create campaign
     camp_resp = requests.post(
         f"https://graph.facebook.com/v21.0/act_{account_id}/campaigns",
         data={
             "access_token": token,
             "name": plan.get("campaign_name", "New Campaign"),
-            "objective": plan.get("objective", "OUTCOME_LEADS"),
+            "objective": objective,
             "status": "PAUSED",  # Always start paused
             "special_ad_categories": "[]",
             "is_adset_budget_sharing_enabled": "false",
@@ -1442,7 +1487,7 @@ def launch_meta_campaign(db, brand, plan, changed_by):
     )
 
     if camp_resp.status_code != 200:
-        return {"success": False, "error": f"Failed to create campaign: {camp_resp.text[:300]}"}
+        return {"success": False, "error": f"Failed to create campaign: {_parse_meta_error(camp_resp)}"}
 
     campaign_id = camp_resp.json().get("id", "")
 
@@ -1451,7 +1496,6 @@ def launch_meta_campaign(db, brand, plan, changed_by):
     created_adsets = []
 
     # Map objective to optimization goal
-    objective = plan.get("objective", "OUTCOME_LEADS")
     opt_goal_map = {
         "OUTCOME_LEADS": "LEAD_GENERATION",
         "OUTCOME_AWARENESS": "REACH",
@@ -1460,6 +1504,10 @@ def launch_meta_campaign(db, brand, plan, changed_by):
         "OUTCOME_SALES": "OFFSITE_CONVERSIONS",
     }
     opt_goal = opt_goal_map.get(objective, "LEAD_GENERATION")
+
+    adset_errors = []
+    creative_errors = []
+    created_ads = 0
 
     for adset_plan in plan.get("ad_sets", []):
         location = plan.get("location_targeting", "")
@@ -1546,7 +1594,6 @@ def launch_meta_campaign(db, brand, plan, changed_by):
         }
 
         # Pixel / conversion tracking
-        pixel_id = plan.get("pixel_id", "")
         if pixel_id and objective in ("OUTCOME_SALES", "OUTCOME_LEADS"):
             adset_data["promoted_object"] = json.dumps({"pixel_id": pixel_id, "custom_event_type": "LEAD" if objective == "OUTCOME_LEADS" else "PURCHASE"})
 
@@ -1593,9 +1640,9 @@ def launch_meta_campaign(db, brand, plan, changed_by):
                     "description": copy.get("description", ""),
                     "call_to_action": {
                         "type": copy.get("call_to_action", "LEARN_MORE"),
-                        "value": {"link": brand.get("website_url", "https://example.com")},
+                        "value": {"link": website_url},
                     },
-                    "link": brand.get("website_url", "https://example.com"),
+                    "link": website_url,
                 }
                 if image_hash:
                     link_data["image_hash"] = image_hash
@@ -1614,7 +1661,9 @@ def launch_meta_campaign(db, brand, plan, changed_by):
                     data=creative_data, timeout=30,
                 )
                 if creative_resp.status_code != 200:
-                    logger.warning("Failed to create ad creative: %s", creative_resp.text[:300])
+                    error_text = _parse_meta_error(creative_resp)
+                    logger.warning("Failed to create ad creative: %s", error_text)
+                    creative_errors.append(f"{ad_name}: {error_text}")
                     continue
 
                 creative_id = creative_resp.json().get("id", "")
@@ -1632,22 +1681,52 @@ def launch_meta_campaign(db, brand, plan, changed_by):
                     data=ad_data, timeout=30,
                 )
                 if ad_resp.status_code != 200:
-                    logger.warning("Failed to create ad: %s", ad_resp.text[:300])
+                    error_text = _parse_meta_error(ad_resp)
+                    logger.warning("Failed to create ad: %s", error_text)
+                    creative_errors.append(f"{ad_name}: {error_text}")
+                else:
+                    created_ads += 1
+        else:
+            error_text = _parse_meta_error(adset_resp)
+            logger.warning("Failed to create ad set '%s': %s", adset_plan.get("name", "Ad Set"), error_text)
+            adset_errors.append(f"{adset_plan.get('name', 'Ad Set')}: {error_text}")
+
+    if not created_adsets:
+        return {
+            "success": False,
+            "error": "Campaign was created in Meta, but no ad sets could be created. " + (adset_errors[0] if adset_errors else "Check your objective, pixel, and targeting settings."),
+            "campaign_id": campaign_id,
+        }
+
+    if created_adsets and created_ads == 0:
+        detail = creative_errors[0] if creative_errors else "Meta rejected all ad creative for this launch."
+        return {
+            "success": False,
+            "error": f"Campaign and ad set were created, but no ads could be created. {detail}",
+            "campaign_id": campaign_id,
+        }
 
     _log_change(db, brand["id"], "meta", campaign_id, plan.get("campaign_name", ""),
                 "campaign_created", {
                     "campaign_name": plan.get("campaign_name"),
                     "strategy": plan.get("strategy", "custom"),
                     "daily_budget": plan.get("daily_budget"),
+                    "objective": objective,
                     "ad_sets": [a["name"] for a in created_adsets],
+                    "ad_count": created_ads,
+                    "notes": launch_notes,
                 }, changed_by)
+
+    message = "Campaign created and paused. Review it in the campaigns list, then enable it when ready."
+    if launch_notes:
+        message = f"{message} {' '.join(launch_notes)}"
 
     return {
         "success": True,
         "campaign_id": campaign_id,
         "campaign_name": plan.get("campaign_name", ""),
         "status": "PAUSED",
-        "message": "Campaign created and paused. Review it in the campaigns list, then enable it when ready.",
+        "message": message,
     }
 
 

@@ -289,8 +289,8 @@
                 <div class="col-md-6 meta-only" style="display:none;">
                     <label class="form-label fw-semibold">Objective</label>
                     <select id="campaignObjective" class="form-select">
-                        <option value="OUTCOME_LEADS">Lead Generation</option>
                         <option value="OUTCOME_TRAFFIC">Website Traffic</option>
+                        <option value="OUTCOME_LEADS">Lead Generation</option>
                         <option value="OUTCOME_AWARENESS">Brand Awareness</option>
                         <option value="OUTCOME_ENGAGEMENT">Engagement</option>
                     </select>
@@ -305,7 +305,7 @@
                         {% endfor %}
                         {% endif %}
                     </select>
-                    <div class="form-text">Attach a pixel to track conversions from your ads.</div>
+                    <div class="form-text">Attach a pixel for conversion-based lead campaigns. Without one, Meta launches will use Website Traffic.</div>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-semibold">Strategy Notes <span class="text-muted fw-normal">(optional)</span></label>

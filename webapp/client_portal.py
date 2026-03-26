@@ -1630,7 +1630,7 @@ def client_campaign_preflight():
     total_ads = 0
     empty_groups = 0
     for g in groups:
-        ads = g.get("ads", [])
+        ads = g.get("ads", []) if platform == "google" else g.get("ad_copy", [])
         total_ads += len(ads)
         if not ads:
             empty_groups += 1
@@ -1638,6 +1638,17 @@ def client_campaign_preflight():
         checks.append({"status": "warn", "label": "Ad Coverage", "detail": f"{empty_groups} group(s) have no ads. Consider adding at least one ad per group."})
     elif total_ads > 0:
         checks.append({"status": "pass", "label": "Ad Coverage", "detail": f"{total_ads} ad(s) across all groups."})
+
+    # Check 5b: Meta objective requirements
+    if platform == "meta":
+        objective = (plan.get("objective") or "OUTCOME_TRAFFIC").strip()
+        pixel_id = (plan.get("pixel_id") or "").strip()
+        if objective == "OUTCOME_LEADS" and not pixel_id:
+            checks.append({
+                "status": "warn",
+                "label": "Meta Lead Tracking",
+                "detail": "Lead Generation is selected without a Meta Pixel. Launch will fall back to Website Traffic so the ad set can be created.",
+            })
 
     # Check 6: Location
     location = plan.get("location_targeting", "").strip()
