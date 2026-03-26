@@ -5592,7 +5592,7 @@ _agent_runs_lock = threading.Lock()
 _logger = logging.getLogger(__name__)
 
 
-def _run_agents_background(app, brand_id, brand, api_key, month):
+def _run_agents_background(app, brand_id, brand, api_key, month, instructions=""):
     """Run the full agent pipeline in a background thread."""
     with app.app_context():
         try:
@@ -5600,7 +5600,7 @@ def _run_agents_background(app, brand_id, brand, api_key, month):
             db.clear_agent_findings(brand_id, month)
 
             from webapp.agent_brains import run_all_agents
-            results = run_all_agents(db, brand, brand_id, api_key, month=month)
+            results = run_all_agents(db, brand, brand_id, api_key, month=month, warren_instructions=instructions)
 
             ran = [k for k, v in results.items() if v is not None and k != "_qa"]
             skipped = [k for k, v in results.items() if v is None and k != "_qa"]
@@ -5631,6 +5631,9 @@ def _run_agents_background(app, brand_id, brand, api_key, month):
                             "pre_test_issues": len(qa_report.get("pre_test_issues", [])),
                             "weave_reviews": len(qa_report.get("weave_reviews") or qa_report.get("chief_reviews", [])),
                             "chief_reviews": len(qa_report.get("weave_reviews") or qa_report.get("chief_reviews", [])),
+                            "map_groups": len(qa_report.get("map_groups") or []),
+                            "task_plan": len(warren.get("task_plan") or []),
+                            "focus_message": warren.get("focus_message", ""),
                         },
                     },
                 }
@@ -5657,8 +5660,9 @@ def client_team_run():
     if not api_key:
         return jsonify({"success": False, "error": "No OpenAI API key configured."}), 400
 
-    month = request.get_json(silent=True) or {}
-    month = month.get("month") or datetime.now().strftime("%Y-%m")
+    payload = request.get_json(silent=True) or {}
+    month = payload.get("month") or datetime.now().strftime("%Y-%m")
+    instructions = (payload.get("instructions") or "").strip()
 
     # Check if already running
     with _agent_runs_lock:
@@ -5675,7 +5679,7 @@ def client_team_run():
     app = current_app._get_current_object()
     t = threading.Thread(
         target=_run_agents_background,
-        args=(app, brand_id, brand, api_key, month),
+        args=(app, brand_id, brand, api_key, month, instructions),
         daemon=True,
     )
     t.start()

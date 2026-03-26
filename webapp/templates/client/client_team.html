@@ -69,6 +69,12 @@
 .warren-textarea:focus { outline: none; border-color: rgba(124,58,237,.5); box-shadow: 0 0 0 2px rgba(124,58,237,.15); }
 .warren-textarea::placeholder { color: rgba(255,255,255,.3); }
 .warren-brief-hint { font-size: 0.72rem; color: rgba(255,255,255,.35); margin-top: 6px; }
+.warren-note {
+    margin-top: 12px;
+    font-size: 0.82rem;
+    color: rgba(255,255,255,.78);
+    max-width: 720px;
+}
 
 /* ── OFFICE FLOOR ── */
 .office-floor {
@@ -458,6 +464,151 @@
 .finding-dismiss:hover { color: #9ca3af; }
 .findings-empty { text-align: center; padding: 40px; color: #9ca3af; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; }
 .findings-empty i { font-size: 2rem; display: block; margin-bottom: 8px; }
+
+.command-desk {
+    margin-top: 18px;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #334155 100%);
+    color: #fff;
+    border-radius: 16px;
+    padding: 22px;
+    border: 1px solid rgba(255,255,255,.08);
+}
+.command-desk-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+.command-desk-head h4 {
+    margin: 0 0 6px;
+    font-size: 1rem;
+    font-weight: 800;
+    color: #fff;
+}
+.command-desk-head p {
+    margin: 0;
+    font-size: 0.84rem;
+    color: rgba(255,255,255,.72);
+    max-width: 700px;
+}
+.command-desk-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.command-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    text-decoration: none;
+    font-size: 0.82rem;
+    font-weight: 700;
+    border: 1px solid rgba(255,255,255,.16);
+    color: #fff;
+    background: rgba(255,255,255,.08);
+}
+.command-btn:hover { color: #fff; background: rgba(255,255,255,.14); }
+.command-grid {
+    display: grid;
+    grid-template-columns: 1.15fr .85fr;
+    gap: 16px;
+}
+.command-panel {
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 14px;
+    padding: 16px;
+}
+.command-panel h5 {
+    margin: 0 0 10px;
+    font-size: 0.85rem;
+    font-weight: 800;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,.72);
+}
+.command-focus {
+    font-size: 1rem;
+    line-height: 1.55;
+    font-weight: 600;
+    color: #f8fafc;
+}
+.command-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.command-item {
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 12px;
+    padding: 14px;
+}
+.command-item-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+.command-item-title {
+    font-size: 0.92rem;
+    font-weight: 800;
+    color: #fff;
+}
+.command-item-meta {
+    font-size: 0.74rem;
+    color: rgba(255,255,255,.62);
+    margin-top: 3px;
+}
+.command-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    white-space: nowrap;
+}
+.command-pill.warren { background: rgba(124,58,237,.24); color: #ddd6fe; }
+.command-pill.weave { background: rgba(15,23,42,.7); color: #e2e8f0; }
+.command-item-detail {
+    font-size: 0.84rem;
+    line-height: 1.55;
+    color: rgba(255,255,255,.8);
+}
+.command-steps {
+    margin: 10px 0 0;
+    padding-left: 18px;
+    color: #f8fafc;
+    font-size: 0.82rem;
+}
+.command-steps li { margin-bottom: 6px; }
+.findings-secondary {
+    margin-top: 18px;
+}
+.findings-toggle {
+    border: 1px solid #dbe1ea;
+    background: #fff;
+    color: #0f172a;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+.findings-toggle:hover { background: #f8fafc; }
+.findings-secondary.is-collapsed #findings-list,
+.findings-secondary.is-collapsed #findings-filters {
+    display: none;
+}
+.findings-secondary.is-collapsed .findings-header {
+    margin-bottom: 0;
+}
 .finding-count-badge {
     position: absolute; top: 10px; right: 10px; background: #ef4444; color: #fff;
     font-size: 0.65rem; font-weight: 700; min-width: 20px; height: 20px; border-radius: 10px;
@@ -501,6 +652,8 @@
     .team-stats { gap: 14px; }
     .team-header { flex-direction: column; gap: 10px; }
     .findings-header { flex-direction: column; gap: 10px; align-items: flex-start; }
+    .command-grid { grid-template-columns: 1fr; }
+    .command-desk-head { flex-direction: column; }
 }
 @media (max-width: 480px) {
     .office-sprite { width: 40px; height: 40px; }
@@ -512,7 +665,7 @@
     <div class="team-header">
         <div>
             <h2><i class="bi bi-building me-2"></i>{{ brand_name }} HQ</h2>
-            <p>Your AI marketing team, hard at work.</p>
+            <p>Brief Warren, then let him direct the team.</p>
         </div>
         <div class="team-stats">
             <div class="team-stat"><div class="ts-val" id="stat-hired">0</div><div class="ts-lbl">Hired</div></div>
@@ -522,7 +675,7 @@
     </div>
     <div class="team-hero-actions">
         <button class="run-team-btn" id="run-team-btn" onclick="runTeam()">
-            <i class="bi bi-play-circle"></i> Run My Team
+            <i class="bi bi-play-circle"></i> Send To Warren
         </button>
         <button class="warren-brief-toggle" id="warren-brief-toggle" onclick="toggleWarrenBrief()">
             <img src="/static/sprites/agents/warren.png" alt="Warren"> Brief Warren
@@ -533,8 +686,40 @@
         <textarea class="warren-textarea" id="warren-instructions" placeholder="Give Warren specific focus areas for this run, e.g. 'Focus on reducing CPA. Check if competitors changed their ads. Look for new keyword gaps.'"></textarea>
         <div class="warren-brief-hint">Optional - Warren will share this with the team before they get to work.</div>
     </div>
+    <div class="warren-note">Use Warren as your command layer. He should hand you the fewest high-impact moves, while the rest of the team stays in the background unless you want the detail.</div>
     <div class="office-floor" id="office-floor">
         <div class="sequence-banner" id="sequence-banner"></div>
+    </div>
+</div>
+
+<div class="command-desk" id="command-desk">
+    <div class="command-desk-head">
+        <div>
+            <h4><i class="bi bi-stars me-2"></i>Warren Command Desk</h4>
+            <p id="command-desk-subtitle">Warren should simplify what matters, Weave should bundle related work, and the rest of the team should stay behind the curtain unless you need the raw feed.</p>
+        </div>
+        <div class="command-desk-actions">
+            <a class="command-btn" href="{{ url_for('client.client_tasks') }}"><i class="bi bi-list-check"></i>Open Tasks</a>
+            <a class="command-btn" href="{{ url_for('client.client_actions') }}"><i class="bi bi-compass"></i>Mission Control</a>
+        </div>
+    </div>
+    <div class="command-grid">
+        <div class="command-panel">
+            <h5>Warren's Focus</h5>
+            <div class="command-focus" id="command-focus">No simplified plan yet. Brief Warren and run him to turn the team's work into a clear order of operations.</div>
+        </div>
+        <div class="command-panel">
+            <h5>Weave MAPs</h5>
+            <div class="command-stack" id="weave-map-list">
+                <div class="command-item"><div class="command-item-detail">Weave will group related findings into a few minimal actionable processes here.</div></div>
+            </div>
+        </div>
+    </div>
+    <div class="command-panel" style="margin-top:16px;">
+        <h5>Warren's Priority Tasks</h5>
+        <div class="command-stack" id="warren-task-list">
+            <div class="command-item"><div class="command-item-detail">Warren's step-by-step task plan will appear here after a run.</div></div>
+        </div>
     </div>
 </div>
 
@@ -591,9 +776,13 @@
 <div class="agent-grid" id="agent-grid"></div>
 
 <!-- ── FINDINGS ── -->
-<div class="findings-section" id="findings-section">
+<div class="findings-section findings-secondary is-collapsed" id="findings-section">
     <div class="findings-header">
-        <h4><i class="bi bi-exclamation-diamond me-2"></i>Agent Findings</h4>
+        <div>
+            <h4><i class="bi bi-exclamation-diamond me-2"></i>Raw Team Feed</h4>
+            <div style="font-size:.8rem;color:#64748b;">Secondary detail from the team. Use this when you want the evidence behind Warren's plan.</div>
+        </div>
+        <button class="findings-toggle" id="findings-toggle" type="button"><i class="bi bi-chevron-down me-1"></i>Show Raw Feed</button>
         <div class="findings-filters" id="findings-filters">
             <span class="filter-pill active" data-filter="all">All</span>
             <span class="filter-pill" data-filter="critical">Critical</span>
@@ -603,7 +792,7 @@
         </div>
     </div>
     <div id="findings-list">
-        <div class="findings-empty"><i class="bi bi-robot"></i>No findings yet. Hire agents and hit "Run My Team" to start.</div>
+        <div class="findings-empty"><i class="bi bi-robot"></i>No raw findings yet. Brief Warren and send him to work.</div>
     </div>
 </div>
 
@@ -1155,7 +1344,7 @@ function openHireModal(agentKey) {
     } else {
         document.getElementById('hire-step-3').classList.add('active');
         document.getElementById('hire-done-title').textContent = agent.name + ' is on your team';
-        document.getElementById('hire-done-msg').textContent = 'Trained and ready. Click Run My Team to put them to work.';
+        document.getElementById('hire-done-msg').textContent = 'Trained and ready. Brief Warren and send him to work.';
     }
 
     document.getElementById('hire-modal-backdrop').classList.add('show');
@@ -1402,11 +1591,65 @@ function renderFinding(f) {
     '</div>';
 }
 
+function splitFindings(findings) {
+    var command = [];
+    var raw = [];
+    findings.forEach(function(f) {
+        if (f.agent_key === 'warren' || f.agent_key === 'chief') command.push(f);
+        else raw.push(f);
+    });
+    return {command: command, raw: raw};
+}
+
+function renderCommandItem(f) {
+    var extra = parseFindingExtra(f);
+    var steps = Array.isArray(extra.steps) ? extra.steps : [];
+    var meta = [];
+    if (extra.estimated_effort) meta.push(extra.estimated_effort);
+    if (extra.pace) meta.push('pace: ' + extra.pace);
+    if (extra.skill_level) meta.push('level: ' + extra.skill_level);
+    return '<div class="command-item">' +
+        '<div class="command-item-top">' +
+            '<div>' +
+                '<div class="command-item-title">' + escapeHtml(f.title) + '</div>' +
+                (meta.length ? '<div class="command-item-meta">' + escapeHtml(meta.join(' - ')) + '</div>' : '') +
+            '</div>' +
+            '<span class="command-pill ' + (f.agent_key === 'warren' ? 'warren' : 'weave') + '">' + (f.agent_key === 'warren' ? 'Warren' : 'Weave') + '</span>' +
+        '</div>' +
+        '<div class="command-item-detail">' + escapeHtml(f.detail) + '</div>' +
+        (f.action ? '<div class="finding-action" style="margin-top:10px;"><i class="bi bi-arrow-right-circle"></i>' + escapeHtml(f.action) + '</div>' : '') +
+        (steps.length ? '<ol class="command-steps">' + steps.map(function(step) { return '<li>' + escapeHtml(step) + '</li>'; }).join('') + '</ol>' : '') +
+    '</div>';
+}
+
+function renderCommandDesk(findings) {
+    var focusEl = document.getElementById('command-focus');
+    var weaveEl = document.getElementById('weave-map-list');
+    var taskEl = document.getElementById('warren-task-list');
+    var subtitleEl = document.getElementById('command-desk-subtitle');
+    var weave = findings.filter(function(f) { return f.agent_key === 'chief'; });
+    var warren = findings.filter(function(f) { return f.agent_key === 'warren'; });
+    var lead = warren[0] || weave[0];
+
+    if (!lead) {
+        focusEl.textContent = 'No simplified plan yet. Brief Warren and send him to work so he can build a short, ordered action plan.';
+        weaveEl.innerHTML = '<div class="command-item"><div class="command-item-detail">Weave will group related findings into a few minimal actionable processes here.</div></div>';
+        taskEl.innerHTML = '<div class="command-item"><div class="command-item-detail">Warren\'s step-by-step task plan will appear here after a run.</div></div>';
+        subtitleEl.textContent = 'Warren should simplify what matters, Weave should bundle related work, and the rest of the team should stay behind the curtain unless you need the raw feed.';
+        return;
+    }
+
+    focusEl.textContent = lead.detail || lead.action || lead.title;
+    subtitleEl.textContent = 'Interact here first. Warren decides the order of operations, Weave connects dependencies, and the raw team feed stays secondary.';
+    weaveEl.innerHTML = weave.length ? weave.slice(0, 3).map(renderCommandItem).join('') : '<div class="command-item"><div class="command-item-detail">No Weave MAPs were produced in the last run.</div></div>';
+    taskEl.innerHTML = warren.length ? warren.slice(0, 4).map(renderCommandItem).join('') : '<div class="command-item"><div class="command-item-detail">No Warren task plan was produced in the last run.</div></div>';
+}
+
 function renderFindings(findings) {
     var list = document.getElementById('findings-list');
     var filtered = currentFilter === 'all' ? findings : findings.filter(function(f) { return f.severity === currentFilter; });
     if (!filtered.length) {
-        var msg = findings.length > 0 ? 'No ' + currentFilter + ' findings.' : 'No findings yet. Hire agents and hit "Run My Team" to start.';
+        var msg = findings.length > 0 ? 'No ' + currentFilter + ' raw findings.' : 'No raw findings yet. Brief Warren and send him to work.';
         list.innerHTML = '<div class="findings-empty"><i class="bi bi-robot"></i>' + msg + '</div>';
         return;
     }
@@ -1472,7 +1715,9 @@ function loadFindings() {
         .then(function(r) { return r.json(); })
         .then(function(data) {
             allFindings = data.findings || [];
-            renderFindings(allFindings);
+            var groups = splitFindings(allFindings);
+            renderCommandDesk(groups.command);
+            renderFindings(groups.raw);
             updateFindingsStat();
         })
         .catch(function(err) { console.error('Findings load error:', err); });
@@ -1485,7 +1730,15 @@ document.getElementById('findings-filters').addEventListener('click', function(e
     document.querySelectorAll('.filter-pill').forEach(function(p) { p.classList.remove('active'); });
     pill.classList.add('active');
     currentFilter = pill.dataset.filter;
-    renderFindings(allFindings);
+    renderFindings(splitFindings(allFindings).raw);
+});
+
+document.getElementById('findings-toggle').addEventListener('click', function() {
+    var section = document.getElementById('findings-section');
+    var collapsed = section.classList.toggle('is-collapsed');
+    this.innerHTML = collapsed
+        ? '<i class="bi bi-chevron-down me-1"></i>Show Raw Feed'
+        : '<i class="bi bi-chevron-up me-1"></i>Hide Raw Feed';
 });
 
 // ══════════════════════════════════════
@@ -1539,7 +1792,7 @@ function fireRunApi() {
         } else if (data.success === false) {
             var btn = document.getElementById('run-team-btn');
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-play-circle"></i> Run My Team';
+            btn.innerHTML = '<i class="bi bi-play-circle"></i> Send To Warren';
             status.textContent = data.error || 'Something went wrong.';
             resumeIdle();
         }
@@ -1547,7 +1800,7 @@ function fireRunApi() {
     .catch(function() {
         var btn = document.getElementById('run-team-btn');
         btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-play-circle"></i> Run My Team';
+        btn.innerHTML = '<i class="bi bi-play-circle"></i> Send To Warren';
         status.textContent = 'Failed to start. Try again.';
         resumeIdle();
     });
@@ -1577,7 +1830,7 @@ function pollRunStatus() {
                 if (data.status === 'running') return;
                 clearInterval(interval);
                 btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-play-circle"></i> Run My Team';
+                btn.innerHTML = '<i class="bi bi-play-circle"></i> Send To Warren';
 
                 if (data.status === 'done' && data.success) {
                     var qa = data.qa || {};
@@ -1587,6 +1840,13 @@ function pollRunStatus() {
                         if (qa.killed > 0) statusMsg += ' ' + qa.killed + ' killed.';
                         if (qa.reworked > 0) statusMsg += ' ' + qa.reworked + ' reworked.';
                         statusMsg += ' ' + (qa.shipped || 0) + ' shipped.';
+                    }
+                    if (qa.map_groups > 0 || qa.task_plan > 0) {
+                        statusMsg += ' Weave grouped this into ' + (qa.map_groups || 0) + ' MAPs.';
+                        statusMsg += ' Warren built ' + (qa.task_plan || 0) + ' priority tasks.';
+                    }
+                    if (qa.focus_message) {
+                        statusMsg += ' ' + qa.focus_message;
                     }
                     status.textContent = statusMsg;
                     hideBanner();
@@ -1606,7 +1866,7 @@ function pollRunStatus() {
         if (pollCount >= maxPolls) {
             clearInterval(interval);
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-play-circle"></i> Run My Team';
+            btn.innerHTML = '<i class="bi bi-play-circle"></i> Send To Warren';
             status.textContent = 'Taking longer than expected. Check back in a minute.';
             resumeIdle();
             setTimeout(function() { status.textContent = ''; }, 8000);

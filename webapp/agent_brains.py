@@ -809,6 +809,16 @@ OUTPUT FORMAT (strict JSON):
       "corrected_text": "only for flag - your suggested fix"
     }
   ],
+    "map_groups": [
+        {
+            "title": "short process title",
+            "summary": "1-2 sentences explaining the shared root issue or opportunity",
+            "priority": "now|next|later",
+            "combined_action": "single action statement that rolls multiple findings into one move",
+            "steps": ["step 1", "step 2", "step 3"],
+            "affected_agents": ["scout", "pulse"]
+        }
+    ],
   "contradictions": ["description of any cross-agent contradictions found"],
   "team_notes": "2-3 sentence summary of team output quality",
   "worst_offender": "agent_key of whichever agent had the most issues (or null)",
@@ -816,7 +826,8 @@ OUTPUT FORMAT (strict JSON):
 }
 
 Return ONLY valid JSON. No markdown fences.
-Be honest and harsh. Three great findings beat eight mediocre ones."""
+Be honest and harsh. Three great findings beat eight mediocre ones.
+Do not create more than 4 map_groups. Your job is compression, not completeness."""
 
 AGENT_PROMPTS = {
     "scout": SCOUT_PROMPT,
@@ -1077,12 +1088,26 @@ OUTPUT FORMAT (strict JSON):
     }
   ],
   "agents_to_retry": ["ace"],
+    "task_plan": [
+        {
+            "title": "short task title",
+            "priority": "urgent|high|normal|low",
+            "why_now": "why this matters right now",
+            "estimated_effort": "15-20 min|30-45 min|1-2 hours",
+            "pace": "slow|steady|fast",
+            "skill_level": "beginner|intermediate|advanced",
+            "agents_covered": ["scout", "pulse"],
+            "steps": ["step 1", "step 2", "step 3"]
+        }
+    ],
+    "focus_message": "1-2 sentence motivational simplification message for the client",
   "overall_grade": "A|B|C|D|F",
   "overall_notes": "1-2 sentence summary of team output quality"
 }
 
 Return ONLY valid JSON. No markdown fences.
-Be decisive. Every finding you ship has your name on it."""
+Be decisive. Every finding you ship has your name on it.
+Convert noise into a small, ordered plan. Default to 2-4 tasks. Only exceed 4 if execution_profile says the client is moving fast."""
 
 
 # ---------------------------------------------------------------------------
@@ -1670,12 +1695,258 @@ def _completion_kwargs(model: str, limit: int = 2000) -> dict:
     return {"max_tokens": limit}
 
 
+def _infer_execution_profile(db, brand_id: int, instructions: str = "") -> Dict[str, Any]:
+    """Infer how aggressively the plan should be packaged for this client."""
+    profile = {
+        "skill_level": "beginner",
+        "pace": "slow",
+        "max_tasks": 2,
+        "max_steps_per_task": 3,
+        "difficulty": "easy wins",
+        "reason": "Low recent completion volume, so keep the plan tight and easy to execute.",
+    }
+
+    try:
+        conn = db._conn()
+        rows = conn.execute(
+            """SELECT status, priority
+               FROM brand_tasks
+               WHERE brand_id = ?
+               ORDER BY created_at DESC
+               LIMIT 80""",
+            (brand_id,),
+        ).fetchall()
+        conn.close()
+
+        open_count = 0
+        recent_done = 0
+        recent_high = 0
+        for row in rows:
+            status = (row["status"] or "open").strip().lower()
+            if status == "done":
+                recent_done += 1
+                if (row["priority"] or "").strip().lower() in ("urgent", "high"):
+                    recent_high += 1
+            else:
+                open_count += 1
+
+        if recent_done >= 8 and open_count <= 5:
+            profile.update({
+                "skill_level": "advanced",
+                "pace": "fast",
+                "max_tasks": 5,
+                "max_steps_per_task": 5,
+                "difficulty": "stretch work",
+                "reason": "The client is closing tasks quickly and keeping backlog under control.",
+            })
+        elif recent_done >= 3 and open_count <= 8:
+            profile.update({
+                "skill_level": "intermediate",
+                "pace": "steady",
+                "max_tasks": 3,
+                "max_steps_per_task": 4,
+                "difficulty": "moderate lift",
+                "reason": "The client is moving steadily, so give a compact but meaningful plan.",
+            })
+        elif recent_high >= 2:
+            profile.update({
+                "skill_level": "intermediate",
+                "pace": "steady",
+                "max_tasks": 3,
+                "max_steps_per_task": 4,
+                "difficulty": "moderate lift",
+                "reason": "The client has finished some higher-priority work recently.",
+            })
+    except Exception:
+        pass
+
+    instruction_text = (instructions or "").lower()
+    if any(token in instruction_text for token in ("start small", "slow", "simple", "light", "easy")):
+        profile.update({
+            "pace": "slow",
+            "max_tasks": min(profile["max_tasks"], 2),
+            "max_steps_per_task": min(profile["max_steps_per_task"], 3),
+            "difficulty": "easy wins",
+            "reason": "The client asked for a slower or simpler plan.",
+        })
+    elif any(token in instruction_text for token in ("move fast", "aggressive", "push", "advanced", "harder")):
+        profile.update({
+            "pace": "fast",
+            "max_tasks": max(profile["max_tasks"], 4),
+            "max_steps_per_task": max(profile["max_steps_per_task"], 4),
+            "difficulty": "stretch work",
+            "reason": "The client asked for a faster or more aggressive pace.",
+        })
+        if profile["skill_level"] == "beginner":
+            profile["skill_level"] = "intermediate"
+
+    return profile
+
+
+def _clean_steps(steps: Any, *, limit: int = 5) -> List[str]:
+    cleaned = []
+    if not isinstance(steps, list):
+        return cleaned
+    for step in steps:
+        if not isinstance(step, str):
+            continue
+        text = step.strip()
+        if not text or text in cleaned:
+            continue
+        cleaned.append(text)
+        if len(cleaned) >= limit:
+            break
+    return cleaned
+
+
+def _upsert_generated_task(db, brand_id: int, *, source_ref: str, title: str,
+                           description: str, steps: List[str], priority: str = "normal"):
+    conn = db._conn()
+    existing = conn.execute(
+        "SELECT id, status FROM brand_tasks WHERE brand_id = ? AND source = 'warren_plan' AND source_ref = ? LIMIT 1",
+        (brand_id, source_ref),
+    ).fetchone()
+    steps_json = json.dumps([{"text": step, "done": False} for step in steps], default=str)
+
+    if existing:
+        if (existing["status"] or "").strip().lower() == "done":
+            conn.close()
+            return
+        conn.execute(
+            """UPDATE brand_tasks
+               SET title = ?, description = ?, steps_json = ?, priority = ?, updated_at = datetime('now')
+               WHERE id = ? AND brand_id = ?""",
+            (title, description, steps_json, priority, existing["id"], brand_id),
+        )
+    else:
+        conn.execute(
+            """INSERT INTO brand_tasks
+               (brand_id, title, description, steps_json, priority, source, source_ref)
+               VALUES (?, ?, ?, ?, ?, 'warren_plan', ?)""",
+            (brand_id, title, description, steps_json, priority, source_ref),
+        )
+    conn.commit()
+    conn.close()
+
+
+def _publish_simplified_plan(db, brand_id: int, month: str,
+                             qa_report: Dict[str, Any], warren_result: Dict[str, Any],
+                             execution_profile: Dict[str, Any]):
+    """Save Weave and Warren synthesis back into findings and tasks."""
+    map_groups = qa_report.get("map_groups") or []
+    task_plan = warren_result.get("task_plan") or []
+    active_task_refs = set()
+    if not task_plan and map_groups:
+        task_plan = [
+            {
+                "title": group.get("title") or f"Priority task {idx + 1}",
+                "priority": "high" if (group.get("priority") or "").strip().lower() == "now" else "normal",
+                "why_now": group.get("summary") or qa_report.get("team_notes") or "",
+                "estimated_effort": "15-20 min" if execution_profile.get("pace") == "slow" else "30-45 min",
+                "pace": execution_profile.get("pace", "steady"),
+                "skill_level": execution_profile.get("skill_level", "beginner"),
+                "agents_covered": group.get("affected_agents") or [],
+                "steps": group.get("steps") or [],
+            }
+            for idx, group in enumerate(map_groups[:execution_profile.get("max_tasks", 3)])
+        ]
+
+    for idx, group in enumerate(map_groups[:4], start=1):
+        title = (group.get("title") or f"Weave MAP {idx}").strip()
+        summary = (group.get("summary") or qa_report.get("team_notes") or "").strip()
+        action = (group.get("combined_action") or "Follow Warren's simplified task plan.").strip()
+        steps = _clean_steps(group.get("steps"), limit=execution_profile.get("max_steps_per_task", 4))
+        priority = (group.get("priority") or "next").strip().lower()
+        severity = "warning" if priority == "now" else "info"
+        extra = {
+            "steps": steps,
+            "affected_agents": group.get("affected_agents") or [],
+            "priority": priority,
+            "execution_profile": execution_profile,
+        }
+        db.save_agent_finding(
+            brand_id=brand_id,
+            agent_key="chief",
+            month=month,
+            severity=severity,
+            title=title,
+            detail=summary,
+            action=action,
+            extra_json=json.dumps(extra, default=str),
+        )
+
+    for idx, task in enumerate(task_plan[:execution_profile.get("max_tasks", 3)], start=1):
+        title = (task.get("title") or f"Priority task {idx}").strip()
+        why_now = (task.get("why_now") or warren_result.get("focus_message") or warren_result.get("overall_notes") or "").strip()
+        steps = _clean_steps(task.get("steps"), limit=execution_profile.get("max_steps_per_task", 4))
+        if not steps and title:
+            steps = [title]
+        priority = (task.get("priority") or "normal").strip().lower()
+        severity_map = {"urgent": "critical", "high": "warning", "normal": "info", "low": "positive"}
+        effort = (task.get("estimated_effort") or "").strip()
+        pace = (task.get("pace") or execution_profile.get("pace") or "steady").strip().lower()
+        skill = (task.get("skill_level") or execution_profile.get("skill_level") or "beginner").strip().lower()
+        detail_bits = [why_now]
+        if effort:
+            detail_bits.append(f"Estimated effort: {effort}.")
+        detail_bits.append(f"Paced for a {pace} {skill} operator.")
+        detail = " ".join(bit for bit in detail_bits if bit)
+        extra = {
+            "steps": steps,
+            "agents_covered": task.get("agents_covered") or [],
+            "estimated_effort": effort,
+            "pace": pace,
+            "skill_level": skill,
+            "execution_profile": execution_profile,
+        }
+        db.save_agent_finding(
+            brand_id=brand_id,
+            agent_key="warren",
+            month=month,
+            severity=severity_map.get(priority, "info"),
+            title=title,
+            detail=detail,
+            action=steps[0] if steps else (task.get("why_now") or "Open Tasks and work this plan."),
+            extra_json=json.dumps(extra, default=str),
+        )
+        _upsert_generated_task(
+            db,
+            brand_id,
+            source_ref=f"{month}:warren:{idx}",
+            title=title,
+            description=why_now,
+            steps=steps,
+            priority=priority if priority in ("urgent", "high", "normal", "low") else "normal",
+        )
+        active_task_refs.add(f"{month}:warren:{idx}")
+
+    try:
+        conn = db._conn()
+        stale_rows = conn.execute(
+            """SELECT id, source_ref, status FROM brand_tasks
+               WHERE brand_id = ? AND source = 'warren_plan' AND source_ref LIKE ?""",
+            (brand_id, f"{month}:warren:%"),
+        ).fetchall()
+        stale_ids = [
+            row["id"] for row in stale_rows
+            if row["source_ref"] not in active_task_refs and (row["status"] or "open").strip().lower() != "done"
+        ]
+        if stale_ids:
+            conn.executemany("DELETE FROM brand_tasks WHERE id = ? AND brand_id = ?", [(task_id, brand_id) for task_id in stale_ids])
+            conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Multi-stage QA pipeline: structural tests -> rule tests -> Weave LLM -> Warren
 # ---------------------------------------------------------------------------
 
 def run_qa_review(db, brand: dict, brand_id: int, api_key: str,
-                  agent_results: Dict[str, Any], month: str = None) -> Dict[str, Any]:
+                  agent_results: Dict[str, Any], month: str = None,
+                  execution_profile: Dict[str, Any] = None,
+                  warren_instructions: str = "") -> Dict[str, Any]:
     """
     Multi-stage QA review:
       1. Structural tests (code) - validate output schema
@@ -1687,6 +1958,7 @@ def run_qa_review(db, brand: dict, brand_id: int, api_key: str,
 
     if not month:
         month = datetime.now().strftime("%Y-%m")
+    execution_profile = execution_profile or {}
 
     # Stage 1: Structural tests
     structural_issues = _run_structural_tests(agent_results)
@@ -1722,6 +1994,7 @@ def run_qa_review(db, brand: dict, brand_id: int, api_key: str,
             "pre_test_issues": all_pre_issues,
             "weave_reviews": [],
             "chief_reviews": [],
+            "map_groups": [],
             "team_notes": "No findings to review.",
             "worst_offender": None,
         }
@@ -1756,6 +2029,12 @@ PRE-TEST RESULTS (automated structural and rule checks):
 FINDINGS TO REVIEW:
 {json.dumps(review_items, indent=2)}
 
+EXECUTION PROFILE:
+{json.dumps(execution_profile, indent=2)}
+
+WARREN BRIEF:
+{warren_instructions or 'None provided.'}
+
 Focus on nuance that automated tests miss: contradictions, unsupported claims, creative quality, actionability.
 Don't re-flag things the pre-tests already caught unless you have additional context."""
 
@@ -1769,6 +2048,7 @@ Don't re-flag things the pre-tests already caught unless you have additional con
     chief_notes = ""
     worst_offender = None
     chief_memory = None
+    map_groups = []
 
     try:
         client = openai.OpenAI(api_key=api_key)
@@ -1798,6 +2078,7 @@ Don't re-flag things the pre-tests already caught unless you have additional con
             chief_notes = qa_result.get("team_notes", "")
             worst_offender = qa_result.get("worst_offender")
             chief_memory = qa_result.get("memory")
+            map_groups = qa_result.get("map_groups", [])
         else:
             logger.warning("Weave returned non-JSON: %s", raw[:200])
 
@@ -1827,6 +2108,7 @@ Don't re-flag things the pre-tests already caught unless you have additional con
         "pre_test_issues": all_pre_issues,
         "weave_reviews": chief_reviews,
         "chief_reviews": chief_reviews,
+        "map_groups": map_groups,
         "team_notes": chief_notes,
         "worst_offender": worst_offender,
     }
@@ -1838,7 +2120,9 @@ Don't re-flag things the pre-tests already caught unless you have additional con
 
 def warren_orchestrate(db, brand: dict, brand_id: int, api_key: str,
                        agent_results: Dict[str, Any], qa_report: Dict[str, Any],
-                       month: str = None) -> Dict[str, Any]:
+                       month: str = None,
+                       execution_profile: Dict[str, Any] = None,
+                       warren_instructions: str = "") -> Dict[str, Any]:
     """
     Warren reviews Weave's QA report and makes final decisions on every finding.
     Returns dict with decisions, agents_to_retry, and the results of applying those decisions.
@@ -1847,6 +2131,7 @@ def warren_orchestrate(db, brand: dict, brand_id: int, api_key: str,
 
     if not month:
         month = datetime.now().strftime("%Y-%m")
+    execution_profile = execution_profile or {}
 
     pre_issues = qa_report.get("pre_test_issues", [])
     chief_reviews = qa_report.get("weave_reviews") or qa_report.get("chief_reviews", [])
@@ -1894,6 +2179,8 @@ def warren_orchestrate(db, brand: dict, brand_id: int, api_key: str,
         return {
             "decisions": [],
             "agents_to_retry": [],
+            "task_plan": [],
+            "focus_message": "",
             "overall_grade": "N/A",
             "overall_notes": "No findings to review.",
             "applied": {"shipped": 0, "killed": 0, "rework": 0},
@@ -1912,6 +2199,15 @@ BRAND: {brand_context}
 Weave's overall notes: {qa_report.get('team_notes', 'None')}
 Pre-test issues: {len(pre_issues)} found
 Weave worst offender: {qa_report.get('worst_offender', 'None')}
+
+WEAVE MAP GROUPS:
+{json.dumps(qa_report.get('map_groups', []), indent=2)}
+
+EXECUTION PROFILE:
+{json.dumps(execution_profile, indent=2)}
+
+WARREN BRIEF:
+{warren_instructions or 'None provided.'}
 
 FINDINGS WITH QA ANNOTATIONS:
 {json.dumps(finding_list, indent=2)}
@@ -1962,6 +2258,8 @@ Remember - you own everything that ships. Be decisive."""
     # Apply Warren's decisions to the database
     decisions = warren_result.get("decisions", [])
     agents_to_retry = warren_result.get("agents_to_retry", [])
+    task_plan = warren_result.get("task_plan", [])
+    focus_message = warren_result.get("focus_message", "")
     overall_grade = warren_result.get("overall_grade", "?")
     overall_notes = warren_result.get("overall_notes", "")
 
@@ -2027,6 +2325,8 @@ Remember - you own everything that ships. Be decisive."""
         "decisions": decisions,
         "agents_to_retry": agents_to_retry,
         "rework_feedback": rework_feedback,
+        "task_plan": task_plan,
+        "focus_message": focus_message,
         "overall_grade": overall_grade,
         "overall_notes": overall_notes,
         "applied": {"shipped": shipped, "killed": killed, "rework": rework_count},
@@ -2087,6 +2387,8 @@ def _fallback_decisions(db, brand_id: int, agent_results: Dict, qa_report: Dict,
         "decisions": [],
         "agents_to_retry": [],
         "rework_feedback": {},
+        "task_plan": [],
+        "focus_message": "",
         "overall_grade": "?",
         "overall_notes": "Warren review failed - used fallback (Weave + pre-test auto-actions).",
         "applied": {"shipped": shipped, "killed": killed, "rework": 0},
@@ -2098,7 +2400,7 @@ def _fallback_decisions(db, brand_id: int, agent_results: Dict, qa_report: Dict,
 # ---------------------------------------------------------------------------
 
 def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
-                   month: str = None) -> Dict[str, Any]:
+                   month: str = None, warren_instructions: str = "") -> Dict[str, Any]:
     """
     Run all applicable agents for a brand.
     Returns dict of {agent_key: result_or_none}.
@@ -2107,6 +2409,7 @@ def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
         month = datetime.now().strftime("%Y-%m")
 
     results = {}
+    execution_profile = _infer_execution_profile(db, brand_id, warren_instructions)
 
     # Build shared data once
     analysis_summary = None
@@ -2266,12 +2569,16 @@ def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
             qa_report = run_qa_review(
                 db, brand, brand_id, api_key,
                 agents_with_findings, month=month,
+                execution_profile=execution_profile,
+                warren_instructions=warren_instructions,
             )
 
             # Step 2: Warren reviews Weave's report and makes final decisions
             warren_result = warren_orchestrate(
                 db, brand, brand_id, api_key,
                 agents_with_findings, qa_report, month=month,
+                execution_profile=execution_profile,
+                warren_instructions=warren_instructions,
             )
 
             # Step 3: Retry loop - re-run agents Warren flagged for rework (max 1 retry)
@@ -2320,10 +2627,20 @@ def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
 
                 logger.info("Post-retry QA: %d issues on retried output", len(retry_issues))
 
+            _publish_simplified_plan(
+                db,
+                brand_id,
+                month,
+                qa_report,
+                warren_result,
+                execution_profile,
+            )
+
             results["_qa"] = {
                 "qa_report": qa_report,
                 "warren": warren_result,
                 "retried_agents": list(rework_feedback.keys()),
+                "execution_profile": execution_profile,
             }
 
         except Exception as e:
