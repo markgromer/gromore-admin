@@ -1458,22 +1458,39 @@ def launch_meta_campaign(db, brand, plan, changed_by):
         return {"success": False, "error": f"Missing Meta Ads configuration: {', '.join(missing)}. Use Save as Draft to keep this plan."}
 
     page_id = (brand.get("facebook_page_id") or "").strip()
+    page_access_token = None
     if not page_id:
         # Auto-detect from Meta token
         try:
             pages_resp = requests.get(
                 "https://graph.facebook.com/v21.0/me/accounts",
-                params={"access_token": token, "fields": "id,name"},
+                params={"access_token": token, "fields": "id,name,access_token"},
                 timeout=15,
             )
             if pages_resp.status_code == 200:
                 pages = pages_resp.json().get("data", [])
                 if pages:
                     page_id = pages[0]["id"]
+                    page_access_token = pages[0].get("access_token")
                     db.update_brand_api_field(brand["id"], "facebook_page_id", page_id)
                     logger.info("Auto-detected Facebook Page ID %s for brand %s", page_id, brand.get("id"))
         except Exception as e:
             logger.warning("Facebook page auto-detect failed: %s", e)
+    else:
+        # Get page access token for the stored page_id
+        try:
+            pages_resp = requests.get(
+                "https://graph.facebook.com/v21.0/me/accounts",
+                params={"access_token": token, "fields": "id,access_token"},
+                timeout=15,
+            )
+            if pages_resp.status_code == 200:
+                for p in pages_resp.json().get("data", []):
+                    if p["id"] == page_id:
+                        page_access_token = p.get("access_token")
+                        break
+        except Exception as e:
+            logger.warning("Failed to get page access token: %s", e)
     if not page_id:
         return {"success": False, "error": "No Facebook Page linked. Go to Connections and connect your Facebook Page before launching Meta ads."}
 
@@ -1762,8 +1779,11 @@ def launch_meta_campaign(db, brand, plan, changed_by):
                 if primary_hash:
                     link_data["image_hash"] = primary_hash
 
+                # Use page access token for creative creation if available
+                creative_token = page_access_token or token
+
                 creative_data = {
-                    "access_token": token,
+                    "access_token": creative_token,
                     "name": ad_name,
                     "object_story_spec": json.dumps({
                         "page_id": page_id,
@@ -1794,7 +1814,7 @@ def launch_meta_campaign(db, brand, plan, changed_by):
                         asset_feed["descriptions"] = asset_descs
 
                     creative_data = {
-                        "access_token": token,
+                        "access_token": creative_token,
                         "name": ad_name,
                         "object_story_spec": json.dumps({
                             "page_id": page_id,
@@ -1813,8 +1833,8 @@ def launch_meta_campaign(db, brand, plan, changed_by):
                 )
                 if creative_resp.status_code != 200:
                     error_text = _parse_meta_error(creative_resp)
-                    logger.warning("Failed to create ad creative: %s", error_text)
-                    creative_errors.append(f"{ad_name}: {error_text}")
+                    logger.warning("Failed to create ad creative: %s | page_id=%s | Raw: %s", error_text, page_id, creative_resp.text[:500])
+                    creative_errors.append(f"{ad_name}: {error_text} (page_id={page_id})")
                     continue
 
                 creative_id = creative_resp.json().get("id", "")
