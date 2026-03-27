@@ -1510,21 +1510,25 @@ def launch_meta_campaign(db, brand, plan, changed_by):
     created_ads = 0
 
     for adset_plan in plan.get("ad_sets", []):
-        location = plan.get("location_targeting", "")
+        location = (plan.get("location_targeting", "") or "").strip()
         radius = adset_plan.get("radius_miles", 25)
 
-        # Build targeting spec
-        targeting = {
-            "age_min": adset_plan.get("age_min", 25),
-            "age_max": adset_plan.get("age_max", 65),
-            "geo_locations": {
-                "location_types": ["home"],
-                "custom_locations": [{
+        # Build a conservative targeting spec that avoids invalid placement and geo combos.
+        geo_locations = {}
+        if location:
+            if re.fullmatch(r"\d{5}", location):
+                geo_locations["zips"] = [{"key": location}]
+            else:
+                geo_locations["custom_locations"] = [{
                     "address_string": location,
                     "radius": radius,
                     "distance_unit": "mile",
-                }] if location else [],
-            },
+                }]
+
+        targeting = {
+            "age_min": adset_plan.get("age_min", 25),
+            "age_max": adset_plan.get("age_max", 65),
+            "geo_locations": geo_locations,
         }
 
         # Gender targeting: 1=male, 2=female, omit for all
@@ -1557,30 +1561,8 @@ def launch_meta_campaign(db, brand, plan, changed_by):
             if resolved_interests:
                 targeting["flexible_spec"] = [{"interests": resolved_interests}]
 
-        # Placement targeting
-        placements = adset_plan.get("placements", [])
-        if placements:
-            publisher_platforms = set()
-            fb_positions = []
-            ig_positions = []
-            for p in placements:
-                if p.startswith("facebook_"):
-                    publisher_platforms.add("facebook")
-                    pos = p.replace("facebook_", "")
-                    fb_positions.append(pos)
-                elif p.startswith("instagram_"):
-                    publisher_platforms.add("instagram")
-                    pos = p.replace("instagram_", "")
-                    ig_positions.append(pos)
-                elif p == "audience_network":
-                    publisher_platforms.add("audience_network")
-                elif p == "messenger":
-                    publisher_platforms.add("messenger")
-            targeting["publisher_platforms"] = list(publisher_platforms)
-            if fb_positions:
-                targeting["facebook_positions"] = fb_positions
-            if ig_positions:
-                targeting["instagram_positions"] = ig_positions
+        # Use automatic placements for launch reliability. Meta rejects many manual
+        # placement combinations unless additional fields are provided.
 
         adset_data = {
             "access_token": token,
@@ -1592,6 +1574,8 @@ def launch_meta_campaign(db, brand, plan, changed_by):
             "status": "PAUSED",
             "targeting": json.dumps(targeting),
         }
+        if objective in ("OUTCOME_TRAFFIC", "OUTCOME_LEADS"):
+            adset_data["destination_type"] = "WEBSITE"
 
         # Pixel / conversion tracking
         if pixel_id and objective in ("OUTCOME_SALES", "OUTCOME_LEADS"):
