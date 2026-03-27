@@ -1518,13 +1518,15 @@ def launch_meta_campaign(db, brand, plan, changed_by):
         geo_locations = {}
         if location:
             if re.fullmatch(r"\d{5}", location):
-                geo_locations["zips"] = [{"key": location}]
+                geo_locations["zips"] = [{"key": f"US:{location}"}]
             else:
                 geo_locations["custom_locations"] = [{
                     "address_string": location,
                     "radius": radius,
                     "distance_unit": "mile",
                 }]
+        else:
+            geo_locations = {"countries": ["US"]}
 
         targeting = {
             "age_min": adset_plan.get("age_min", 25),
@@ -1590,7 +1592,7 @@ def launch_meta_campaign(db, brand, plan, changed_by):
         retried_without_geo = False
         if adset_resp.status_code != 200 and targeting.get("geo_locations"):
             fallback_targeting = dict(targeting)
-            fallback_targeting.pop("geo_locations", None)
+            fallback_targeting["geo_locations"] = {"countries": ["US"]}
             fallback_data = dict(adset_data)
             fallback_data["targeting"] = json.dumps(fallback_targeting)
             retry_resp = requests.post(
