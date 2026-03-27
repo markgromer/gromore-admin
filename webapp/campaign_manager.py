@@ -73,7 +73,7 @@ def _parse_meta_error(resp):
     try:
         data = resp.json()
         err = data.get("error", {})
-        message = err.get("message") or err.get("error_user_msg") or err.get("error_user_title")
+        message = err.get("error_user_msg") or err.get("message") or err.get("error_user_title")
         if message:
             code = err.get("code")
             subcode = err.get("error_subcode")
@@ -82,17 +82,17 @@ def _parse_meta_error(resp):
                 suffix.append(f"code {code}")
             if subcode:
                 suffix.append(f"subcode {subcode}")
-            # Include error_data for debugging
-            error_data = err.get("error_data", "")
-            blame = err.get("blame_field_specs", "")
-            detail = error_data or blame
+            # Include blame fields for debugging
+            blame = err.get("error_data", "") or ""
+            if not blame:
+                blame = str(err.get("blame_field_specs", "") or "")
             base = f"{message} ({', '.join(suffix)})" if suffix else message
-            if detail:
-                base += f" [detail: {detail}]"
+            if blame and blame != "":
+                base += f" [blame: {blame}]"
             return base
     except (ValueError, AttributeError):
         pass
-    return resp.text[:300]
+    return resp.text[:500]
 
 
 def _month_range(month: str):
@@ -1486,9 +1486,8 @@ def launch_meta_campaign(db, brand, plan, changed_by):
             "access_token": token,
             "name": plan.get("campaign_name", "New Campaign"),
             "objective": objective,
-            "status": "PAUSED",  # Always start paused
+            "status": "PAUSED",
             "special_ad_categories": "[]",
-            "is_adset_budget_sharing_enabled": "false",
         },
         timeout=30,
     )
@@ -1499,7 +1498,7 @@ def launch_meta_campaign(db, brand, plan, changed_by):
     campaign_id = camp_resp.json().get("id", "")
 
     # Step 2: Create ad sets
-    daily_cents = str(int(float(plan.get("daily_budget", 50)) * 100))
+    daily_cents = int(float(plan.get("daily_budget", 50)) * 100)
     created_adsets = []
 
     # Map objective to optimization goal
@@ -1653,10 +1652,18 @@ def launch_meta_campaign(db, brand, plan, changed_by):
                 "age_max": 65,
                 "geo_locations": {"countries": ["US"]},
             }
-            minimal_data = dict(adset_data)
-            minimal_data["targeting"] = json.dumps(minimal_targeting)
-            # Also remove destination_type in case it's the culprit
-            minimal_data.pop("destination_type", None)
+            minimal_data = {
+                "access_token": token,
+                "campaign_id": campaign_id,
+                "name": adset_plan.get("name", "Ad Set"),
+                "billing_event": "IMPRESSIONS",
+                "optimization_goal": opt_goal,
+                "daily_budget": daily_cents,
+                "status": "PAUSED",
+                "targeting": json.dumps(minimal_targeting),
+            }
+            if objective in ("OUTCOME_TRAFFIC", "OUTCOME_LEADS"):
+                minimal_data["destination_type"] = "WEBSITE"
             retry_resp2 = requests.post(
                 f"https://graph.facebook.com/v21.0/act_{account_id}/adsets",
                 data=minimal_data, timeout=30,
@@ -1667,7 +1674,7 @@ def launch_meta_campaign(db, brand, plan, changed_by):
                     f"Ad set '{adset_plan.get('name', 'Ad Set')}' was created with minimal targeting due to Meta validation errors."
                 )
             else:
-                logger.warning("Ultra-minimal ad set also failed: %s", _parse_meta_error(retry_resp2))
+                logger.warning("Ultra-minimal ad set also failed: %s | Raw: %s", _parse_meta_error(retry_resp2), retry_resp2.text[:500])
 
         if adset_resp.status_code == 200:
             adset_id = adset_resp.json().get("id", "")
@@ -1755,15 +1762,22 @@ def launch_meta_campaign(db, brand, plan, changed_by):
                     created_ads += 1
         else:
             error_text = _parse_meta_error(adset_resp)
-            logger.warning("Failed to create ad set '%s': %s", adset_plan.get("name", "Ad Set"), error_text)
+            # Also log the full raw body for debugging
+            logger.warning("Failed to create ad set '%s': %s | Raw: %s", adset_plan.get("name", "Ad Set"), error_text, adset_resp.text[:500])
             if retried_without_geo:
-                error_text = f"{error_text} (Meta also rejected the fallback without location targeting)"
+                error_text = f"{error_text} (also failed with US-wide targeting)"
             adset_errors.append(f"{adset_plan.get('name', 'Ad Set')}: {error_text}")
 
     if not created_adsets:
+        # Include raw response for debugging
+        raw_hint = ""
+        try:
+            raw_hint = " | Raw: " + adset_resp.text[:300]
+        except Exception:
+            pass
         return {
             "success": False,
-            "error": "Campaign was created in Meta, but no ad sets could be created. " + (adset_errors[0] if adset_errors else "Check your objective, pixel, and targeting settings."),
+            "error": "Campaign was created in Meta, but no ad sets could be created. " + (adset_errors[0] if adset_errors else "Check your objective, pixel, and targeting settings.") + raw_hint,
             "campaign_id": campaign_id,
         }
 
