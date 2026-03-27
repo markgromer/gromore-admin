@@ -1508,6 +1508,7 @@ def launch_meta_campaign(db, brand, plan, changed_by):
     adset_errors = []
     creative_errors = []
     created_ads = 0
+    launch_notes = list(launch_notes)
 
     for adset_plan in plan.get("ad_sets", []):
         location = (plan.get("location_targeting", "") or "").strip()
@@ -1585,6 +1586,23 @@ def launch_meta_campaign(db, brand, plan, changed_by):
             f"https://graph.facebook.com/v21.0/act_{account_id}/adsets",
             data=adset_data, timeout=30,
         )
+
+        retried_without_geo = False
+        if adset_resp.status_code != 200 and targeting.get("geo_locations"):
+            fallback_targeting = dict(targeting)
+            fallback_targeting.pop("geo_locations", None)
+            fallback_data = dict(adset_data)
+            fallback_data["targeting"] = json.dumps(fallback_targeting)
+            retry_resp = requests.post(
+                f"https://graph.facebook.com/v21.0/act_{account_id}/adsets",
+                data=fallback_data, timeout=30,
+            )
+            if retry_resp.status_code == 200:
+                adset_resp = retry_resp
+                retried_without_geo = True
+                launch_notes.append(
+                    f"Location targeting for '{adset_plan.get('name', 'Ad Set')}' was skipped because Meta rejected the selected location."
+                )
 
         if adset_resp.status_code == 200:
             adset_id = adset_resp.json().get("id", "")
@@ -1673,6 +1691,8 @@ def launch_meta_campaign(db, brand, plan, changed_by):
         else:
             error_text = _parse_meta_error(adset_resp)
             logger.warning("Failed to create ad set '%s': %s", adset_plan.get("name", "Ad Set"), error_text)
+            if retried_without_geo:
+                error_text = f"{error_text} (Meta also rejected the fallback without location targeting)"
             adset_errors.append(f"{adset_plan.get('name', 'Ad Set')}: {error_text}")
 
     if not created_adsets:
