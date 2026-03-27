@@ -1459,6 +1459,22 @@ def launch_meta_campaign(db, brand, plan, changed_by):
 
     page_id = (brand.get("facebook_page_id") or "").strip()
     if not page_id:
+        # Auto-detect from Meta token
+        try:
+            pages_resp = requests.get(
+                "https://graph.facebook.com/v21.0/me/accounts",
+                params={"access_token": token, "fields": "id,name"},
+                timeout=15,
+            )
+            if pages_resp.status_code == 200:
+                pages = pages_resp.json().get("data", [])
+                if pages:
+                    page_id = pages[0]["id"]
+                    db.update_brand_api_field(brand["id"], "facebook_page_id", page_id)
+                    logger.info("Auto-detected Facebook Page ID %s for brand %s", page_id, brand.get("id"))
+        except Exception as e:
+            logger.warning("Facebook page auto-detect failed: %s", e)
+    if not page_id:
         return {"success": False, "error": "No Facebook Page linked. Go to Connections and connect your Facebook Page before launching Meta ads."}
 
     website_url = ((brand.get("website_url") or brand.get("website") or "")).strip()
