@@ -105,6 +105,11 @@
     /* Image handling */
     .ad-image-preview { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 2px solid #e5e7eb; }
     .ad-image-slot { display: inline-flex; align-items: center; gap: .5rem; margin-top: .5rem; }
+    .ad-images-group { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: .5rem; }
+    .ad-ratio-slot { flex: 1; min-width: 160px; padding: .6rem; border: 1px dashed #cbd5e1; border-radius: 8px; text-align: center; }
+    .ad-ratio-slot .ratio-label { font-size: .72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: .35rem; }
+    .ad-ratio-slot .ratio-hint { font-size: .68rem; color: #94a3b8; margin-bottom: .4rem; }
+    .ad-ratio-slot .ad-image-preview { width: auto; height: 64px; max-width: 100%; }
     .drive-thumb { width: 100px; height: 100px; object-fit: cover; border-radius: 8px; cursor: pointer; border: 2px solid transparent; transition: all .15s; }
     .drive-thumb:hover { border-color: #3b82f6; transform: scale(1.05); }
     .drive-thumb.picked { border-color: #10b981; box-shadow: 0 0 0 2px #10b981; }
@@ -616,10 +621,16 @@ function buildPlanFromUI() {
                     description: (adCard.querySelector('.meta-desc') || {}).value || '',
                     call_to_action: (adCard.querySelector('.meta-cta') || {}).value || 'LEARN_MORE',
                 };
-                const fileId = adCard.dataset.driveFileId;
-                if (fileId) ad.drive_file_id = fileId;
-                var uploadedUrl = adCard.dataset.uploadedImageUrl;
-                if (uploadedUrl) ad.uploaded_image_url = uploadedUrl;
+                // Collect images for all three aspect ratios
+                ['square', 'landscape', 'story'].forEach(function(ratio) {
+                    var driveKey = adCard.dataset['drive_' + ratio];
+                    var uploadKey = adCard.dataset['upload_' + ratio];
+                    if (driveKey) ad['drive_' + ratio] = driveKey;
+                    if (uploadKey) ad['upload_' + ratio] = uploadKey;
+                });
+                // Backward compat: set drive_file_id from square
+                if (ad.drive_square) ad.drive_file_id = ad.drive_square;
+                if (ad.upload_square) ad.uploaded_image_url = ad.upload_square;
                 adset.ad_copy.push(ad);
             });
             plan.ad_sets.push(adset);
@@ -862,13 +873,15 @@ function addInterestBtn(adSetIdx) {
 function handleAdImageUpload(input) {
     var file = input.files && input.files[0];
     if (!file) return;
+    var ratioSlot = input.closest('.ad-ratio-slot') || input.closest('.ad-image-slot');
+    var ratio = ratioSlot ? ratioSlot.dataset.ratio : 'square';
     var adCard = input.closest('.ad-card');
-    var slot = input.closest('.ad-image-slot');
     var formData = new FormData();
     formData.append('image', file);
     formData.append('csrf_token', csrfToken);
 
-    slot.innerHTML = '<div class="text-muted" style="font-size:.82rem;"><i class="bi bi-arrow-repeat spin"></i> Uploading...</div>';
+    var btnArea = ratioSlot.querySelector('.ratio-btn-area');
+    if (btnArea) btnArea.innerHTML = '<div class="text-muted" style="font-size:.82rem;"><i class="bi bi-arrow-repeat spin"></i> Uploading...</div>';
 
     fetch('{{ url_for("client.client_campaign_upload_image") }}', {
         method: 'POST',
@@ -877,23 +890,24 @@ function handleAdImageUpload(input) {
     .then(function(r) { return r.json(); })
     .then(function(data) {
         if (data.success) {
-            adCard.dataset.uploadedImageUrl = data.url;
-            adCard.dataset.driveFileId = '';
-            slot.innerHTML = '<img src="' + escHtml(data.url) + '" class="ad-image-preview" alt="Ad image">' +
-                '<button class="btn btn-sm btn-outline-danger" onclick="clearAdImage(this)"><i class="bi bi-x"></i> Remove</button>';
+            adCard.dataset['upload_' + ratio] = data.url;
+            adCard.dataset['drive_' + ratio] = '';
+            if (btnArea) btnArea.innerHTML = '<img src="' + escHtml(data.url) + '" class="ad-image-preview" alt="' + ratio + '">' +
+                '<button class="btn btn-sm btn-outline-danger mt-1" onclick="clearRatioImage(this,\'' + ratio + '\')"><i class="bi bi-x"></i> Remove</button>';
         } else {
-            slot.innerHTML = '<div class="text-danger" style="font-size:.82rem;">Upload failed: ' + escHtml(data.error || 'Unknown error') + '</div>' +
-                '<div class="d-flex gap-2 flex-wrap mt-1">' +
-                '<button class="btn btn-sm btn-outline-primary" onclick="pickImageForAd(this)"><i class="bi bi-google me-1"></i> From Google Drive</button>' +
-                '<label class="btn btn-sm btn-outline-secondary mb-0"><i class="bi bi-upload me-1"></i> Upload Image<input type="file" class="d-none ad-image-upload" accept="image/*" onchange="handleAdImageUpload(this)"></label></div>';
+            if (btnArea) btnArea.innerHTML = renderRatioButtons(ratio);
         }
     })
     .catch(function() {
-        slot.innerHTML = '<div class="text-danger" style="font-size:.82rem;">Upload failed.</div>' +
-            '<div class="d-flex gap-2 flex-wrap mt-1">' +
-            '<button class="btn btn-sm btn-outline-primary" onclick="pickImageForAd(this)"><i class="bi bi-google me-1"></i> From Google Drive</button>' +
-            '<label class="btn btn-sm btn-outline-secondary mb-0"><i class="bi bi-upload me-1"></i> Upload Image<input type="file" class="d-none ad-image-upload" accept="image/*" onchange="handleAdImageUpload(this)"></label></div>';
+        if (btnArea) btnArea.innerHTML = renderRatioButtons(ratio);
     });
+}
+
+function renderRatioButtons(ratio) {
+    return '<div class="d-flex gap-1 flex-wrap justify-content-center">' +
+        '<button class="btn btn-sm btn-outline-primary py-0 px-1" style="font-size:.72rem;" onclick="pickImageForAd(this,\'' + ratio + '\')"><i class="bi bi-google"></i> Drive</button>' +
+        '<label class="btn btn-sm btn-outline-secondary py-0 px-1 mb-0" style="font-size:.72rem;"><i class="bi bi-upload"></i> Upload<input type="file" class="d-none ad-image-upload" accept="image/*" onchange="handleAdImageUpload(this)"></label>' +
+        '</div>';
 }
 
 /* ══════════════════════════════════════════════
@@ -904,7 +918,14 @@ function addAd(adSetIdx, data) {
     const adNum = container.querySelectorAll('.ad-card').length + 1;
     const isGoogle = selectedPlatform === 'google';
 
-    let html = '<div class="ad-card" data-drive-file-id="' + ((data && data.drive_file_id) || '') + '">';
+    let html = '<div class="ad-card"' +
+        ' data-drive_square="' + escHtml((data && data.drive_square) || (data && data.drive_file_id) || '') + '"' +
+        ' data-drive_landscape="' + escHtml((data && data.drive_landscape) || '') + '"' +
+        ' data-drive_story="' + escHtml((data && data.drive_story) || '') + '"' +
+        ' data-upload_square="' + escHtml((data && data.upload_square) || (data && data.uploaded_image_url) || '') + '"' +
+        ' data-upload_landscape="' + escHtml((data && data.upload_landscape) || '') + '"' +
+        ' data-upload_story="' + escHtml((data && data.upload_story) || '') + '"' +
+        '>';
     html += '<div class="ad-card-header" onclick="this.nextElementSibling.classList.toggle(\'collapsed\')">';
     html += '<span style="font-size:.88rem;font-weight:600;"><i class="bi bi-file-earmark-text me-1"></i> Ad ' + adNum + '</span>';
     html += '<button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="event.stopPropagation();this.closest(\'.ad-card\').remove();updateAdSetCount(' + adSetIdx + ')" title="Remove ad"><i class="bi bi-x"></i></button>';
@@ -957,22 +978,40 @@ function addAd(adSetIdx, data) {
         html += '<input type="text" class="form-control form-control-sm meta-desc" value="' + escHtml((data && data.description) || '') + '" placeholder="Short supporting text">';
         html += '</div>';
 
-        // Image from Drive or Upload
-        html += '<div class="ad-image-slot">';
-        html += '<div class="mb-1" style="font-size:.78rem;color:#64748b;font-weight:600;">Ad Image <span class="fw-normal">(Recommended: 1080x1080 for Feed, 1080x1920 for Stories/Reels)</span></div>';
-        if (data && data.drive_file_id) {
-            html += '<img src="' + thumbnailUrl(data.drive_file_id) + '" class="ad-image-preview" alt="Ad image">';
-            html += '<button class="btn btn-sm btn-outline-secondary" onclick="pickImageForAd(this)"><i class="bi bi-pencil"></i> Change</button>';
-            html += '<button class="btn btn-sm btn-outline-danger" onclick="clearAdImage(this)"><i class="bi bi-x"></i></button>';
-        } else if (data && data.uploaded_image_url) {
-            html += '<img src="' + escHtml(data.uploaded_image_url) + '" class="ad-image-preview" alt="Ad image">';
-            html += '<button class="btn btn-sm btn-outline-danger" onclick="clearAdImage(this)"><i class="bi bi-x"></i> Remove</button>';
-        } else {
-            html += '<div class="d-flex gap-2 flex-wrap">';
-            html += '<button class="btn btn-sm btn-outline-primary" onclick="pickImageForAd(this)"><i class="bi bi-google me-1"></i> From Google Drive</button>';
-            html += '<label class="btn btn-sm btn-outline-secondary mb-0"><i class="bi bi-upload me-1"></i> Upload Image<input type="file" class="d-none ad-image-upload" accept="image/*" onchange="handleAdImageUpload(this)"></label>';
+        // Ad Images - three aspect ratios
+        html += '<div class="mb-1" style="font-size:.78rem;color:#64748b;font-weight:600;">Ad Images</div>';
+        html += '<div class="ad-images-group">';
+
+        var ratios = [
+            {key: 'square', label: '1:1 Feed', hint: '1080 x 1080'},
+            {key: 'landscape', label: '1.91:1 Landscape', hint: '1200 x 628'},
+            {key: 'story', label: '9:16 Story / Reel', hint: '1080 x 1920'},
+        ];
+        ratios.forEach(function(r) {
+            var hasDrive = data && data['drive_' + r.key];
+            var hasUpload = data && data['upload_' + r.key];
+            // Fallback: old single-image fields map to square
+            if (r.key === 'square' && !hasDrive && !hasUpload && data) {
+                hasDrive = data.drive_file_id || '';
+                hasUpload = data.uploaded_image_url || '';
+            }
+            html += '<div class="ad-ratio-slot" data-ratio="' + r.key + '">';
+            html += '<div class="ratio-label">' + r.label + '</div>';
+            html += '<div class="ratio-hint">' + r.hint + '</div>';
+            html += '<div class="ratio-btn-area">';
+            if (hasDrive) {
+                html += '<img src="' + thumbnailUrl(hasDrive) + '" class="ad-image-preview" alt="' + r.key + '">';
+                html += '<button class="btn btn-sm btn-outline-secondary mt-1" onclick="pickImageForAd(this,\'' + r.key + '\')"><i class="bi bi-pencil"></i></button>';
+                html += '<button class="btn btn-sm btn-outline-danger mt-1" onclick="clearRatioImage(this,\'' + r.key + '\')"><i class="bi bi-x"></i></button>';
+            } else if (hasUpload) {
+                html += '<img src="' + escHtml(hasUpload) + '" class="ad-image-preview" alt="' + r.key + '">';
+                html += '<button class="btn btn-sm btn-outline-danger mt-1" onclick="clearRatioImage(this,\'' + r.key + '\')"><i class="bi bi-x"></i> Remove</button>';
+            } else {
+                html += renderRatioButtons(r.key);
+            }
             html += '</div>';
-        }
+            html += '</div>';
+        });
         html += '</div>';
     }
 
@@ -998,6 +1037,7 @@ function addDescInput(btn) {
    Drive Image Picker (reused from original)
    ══════════════════════════════════════════════ */
 let activeImageSlot = null;
+let activeImageRatio = 'square';
 let pickedFileId = '';
 let pickedThumb = '';
 let driveFolderStack = [];
@@ -1006,8 +1046,9 @@ function thumbnailUrl(fileId) {
     return '{{ url_for("client.client_drive_thumbnail", file_id="__FID__") }}'.replace('__FID__', fileId);
 }
 
-function pickImageForAd(btn) {
-    activeImageSlot = btn.closest('.ad-image-slot');
+function pickImageForAd(btn, ratio) {
+    activeImageSlot = btn.closest('.ad-ratio-slot') || btn.closest('.ad-image-slot');
+    activeImageRatio = ratio || 'square';
     pickedFileId = '';
     pickedThumb = '';
     document.getElementById('drivePickConfirm').disabled = true;
@@ -1016,21 +1057,41 @@ function pickImageForAd(btn) {
     new bootstrap.Modal(document.getElementById('drivePickerModal')).show();
 }
 
+function clearRatioImage(btn, ratio) {
+    var ratioSlot = btn.closest('.ad-ratio-slot');
+    var adCard = btn.closest('.ad-card');
+    adCard.dataset['upload_' + ratio] = '';
+    adCard.dataset['drive_' + ratio] = '';
+    var btnArea = ratioSlot.querySelector('.ratio-btn-area');
+    if (btnArea) btnArea.innerHTML = renderRatioButtons(ratio);
+}
+
 function clearAdImage(btn) {
+    var ratioSlot = btn.closest('.ad-ratio-slot');
+    if (ratioSlot) {
+        var ratio = ratioSlot.dataset.ratio || 'square';
+        clearRatioImage(btn, ratio);
+        return;
+    }
     const slot = btn.closest('.ad-image-slot');
     const adCard = slot.closest('.ad-card');
     adCard.dataset.driveFileId = '';
-    slot.innerHTML = '<button class="btn btn-sm btn-outline-primary" onclick="pickImageForAd(this)"><i class="bi bi-image me-1"></i> Add Image from Drive</button>';
+    slot.innerHTML = '<button class="btn btn-sm btn-outline-primary" onclick="pickImageForAd(this,\'square\')"><i class="bi bi-image me-1"></i> Add Image from Drive</button>';
 }
 
 function confirmImagePick() {
     if (!pickedFileId || !activeImageSlot) return;
-    const adCard = activeImageSlot.closest('.ad-card');
-    adCard.dataset.driveFileId = pickedFileId;
-    activeImageSlot.innerHTML =
-        '<img src="' + pickedThumb + '" class="ad-image-preview" alt="Ad image">' +
-        '<button class="btn btn-sm btn-outline-secondary" onclick="pickImageForAd(this)"><i class="bi bi-pencil"></i> Change</button>' +
-        '<button class="btn btn-sm btn-outline-danger" onclick="clearAdImage(this)"><i class="bi bi-x"></i></button>';
+    var adCard = activeImageSlot.closest('.ad-card');
+    var ratio = activeImageRatio;
+    adCard.dataset['drive_' + ratio] = pickedFileId;
+    adCard.dataset['upload_' + ratio] = '';
+    var btnArea = activeImageSlot.querySelector('.ratio-btn-area');
+    if (btnArea) {
+        btnArea.innerHTML =
+            '<img src="' + pickedThumb + '" class="ad-image-preview" alt="' + ratio + '">' +
+            '<button class="btn btn-sm btn-outline-secondary mt-1" onclick="pickImageForAd(this,\'' + ratio + '\')"><i class="bi bi-pencil"></i></button>' +
+            '<button class="btn btn-sm btn-outline-danger mt-1" onclick="clearRatioImage(this,\'' + ratio + '\')"><i class="bi bi-x"></i></button>';
+    }
     bootstrap.Modal.getInstance(document.getElementById('drivePickerModal')).hide();
 }
 

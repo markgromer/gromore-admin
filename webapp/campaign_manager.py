@@ -1703,28 +1703,50 @@ def launch_meta_campaign(db, brand, plan, changed_by):
             })
 
             # Step 3: Create ad creative + ad for each ad copy variation
-            page_id = (brand.get("facebook_page_id") or "").strip()
             for idx, copy in enumerate(adset_plan.get("ad_copy", [])):
                 ad_name = f"{adset_plan.get('name', 'Ad Set')} - Ad {idx + 1}"
 
-                # If this ad has an image from Drive, upload it to Meta
-                image_hash = None
-                img_bytes = _resolve_ad_image(db, brand["id"], copy)
+                # Resolve images for all three aspect ratios
+                ratio_hashes = {}  # ratio -> image_hash
+                for ratio in ("square", "landscape", "story"):
+                    img_bytes = None
+                    # Check ratio-specific Drive file
+                    drive_id = (copy.get(f"drive_{ratio}") or "").strip()
+                    if drive_id:
+                        try:
+                            from webapp.google_drive import download_file
+                            img_bytes, _mime = download_file(db, brand["id"], drive_id)
+                        except Exception as exc:
+                            logger.warning("Failed to download Drive image %s for %s: %s", drive_id, ratio, exc)
+                    # Check ratio-specific uploaded file
+                    if not img_bytes:
+                        upload_url = (copy.get(f"upload_{ratio}") or "").strip()
+                        if upload_url:
+                            import os
+                            static_root = os.path.join(os.path.dirname(os.path.dirname(__file__)), "webapp", "static")
+                            local_path = os.path.join(static_root, upload_url.lstrip("/static/"))
+                            if os.path.exists(local_path):
+                                with open(local_path, "rb") as f:
+                                    img_bytes = f.read()
+                    # Fallback: old single-image fields for square
+                    if not img_bytes and ratio == "square":
+                        img_bytes = _resolve_ad_image(db, brand["id"], copy)
+                        if not img_bytes:
+                            uploaded_url = (copy.get("uploaded_image_url") or "").strip()
+                            if uploaded_url:
+                                import os
+                                static_root = os.path.join(os.path.dirname(os.path.dirname(__file__)), "webapp", "static")
+                                local_path = os.path.join(static_root, uploaded_url.lstrip("/static/"))
+                                if os.path.exists(local_path):
+                                    with open(local_path, "rb") as f:
+                                        img_bytes = f.read()
+                    if img_bytes:
+                        h = _upload_image_to_meta(account_id, token, img_bytes)
+                        if h:
+                            ratio_hashes[ratio] = h
 
-                # Also check for directly uploaded image
-                if not img_bytes:
-                    uploaded_url = copy.get("uploaded_image_url", "")
-                    if uploaded_url:
-                        import os
-                        # uploaded_url is a relative static path like /static/uploads/campaign_images/xxx.jpg
-                        static_root = os.path.join(os.path.dirname(os.path.dirname(__file__)), "webapp", "static")
-                        local_path = os.path.join(static_root, uploaded_url.lstrip("/static/"))
-                        if os.path.exists(local_path):
-                            with open(local_path, "rb") as f:
-                                img_bytes = f.read()
-
-                if img_bytes:
-                    image_hash = _upload_image_to_meta(account_id, token, img_bytes)
+                # Use the first available hash as primary image
+                primary_hash = ratio_hashes.get("square") or ratio_hashes.get("landscape") or ratio_hashes.get("story")
 
                 # Build object_story_spec (required for Meta ads)
                 link_data = {
@@ -1737,8 +1759,8 @@ def launch_meta_campaign(db, brand, plan, changed_by):
                     },
                     "link": website_url,
                 }
-                if image_hash:
-                    link_data["image_hash"] = image_hash
+                if primary_hash:
+                    link_data["image_hash"] = primary_hash
 
                 creative_data = {
                     "access_token": token,
@@ -1748,6 +1770,42 @@ def launch_meta_campaign(db, brand, plan, changed_by):
                         "link_data": link_data,
                     }),
                 }
+
+                # If multiple aspect ratios uploaded, use asset_feed_spec for multi-placement optimization
+                if len(ratio_hashes) > 1:
+                    asset_images = []
+                    for r_key, r_hash in ratio_hashes.items():
+                        asset_images.append({"hash": r_hash})
+                    asset_bodies = [{"text": copy.get("primary_text", "")}]
+                    asset_titles = [{"text": copy.get("headline", "")}]
+                    asset_descs = [{"text": copy.get("description", "")}] if copy.get("description") else []
+                    asset_cta = [{"type": copy.get("call_to_action", "LEARN_MORE"), "value": {"link": website_url}}]
+                    asset_link = [{"website_url": website_url}]
+
+                    asset_feed = {
+                        "images": asset_images,
+                        "bodies": asset_bodies,
+                        "titles": asset_titles,
+                        "call_to_actions": asset_cta,
+                        "link_urls": asset_link,
+                        "ad_formats": ["SINGLE_IMAGE"],
+                    }
+                    if asset_descs:
+                        asset_feed["descriptions"] = asset_descs
+
+                    creative_data = {
+                        "access_token": token,
+                        "name": ad_name,
+                        "object_story_spec": json.dumps({
+                            "page_id": page_id,
+                            "link_data": {
+                                "message": copy.get("primary_text", ""),
+                                "link": website_url,
+                                "call_to_action": {"type": copy.get("call_to_action", "LEARN_MORE"), "value": {"link": website_url}},
+                            },
+                        }),
+                        "asset_feed_spec": json.dumps(asset_feed),
+                    }
 
                 creative_resp = requests.post(
                     f"https://graph.facebook.com/v21.0/act_{account_id}/adcreatives",
