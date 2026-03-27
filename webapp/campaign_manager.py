@@ -1459,38 +1459,33 @@ def launch_meta_campaign(db, brand, plan, changed_by):
 
     page_id = (brand.get("facebook_page_id") or "").strip()
     page_access_token = None
-    if not page_id:
-        # Auto-detect from Meta token
-        try:
-            pages_resp = requests.get(
-                "https://graph.facebook.com/v21.0/me/accounts",
-                params={"access_token": token, "fields": "id,name,access_token"},
-                timeout=15,
-            )
-            if pages_resp.status_code == 200:
-                pages = pages_resp.json().get("data", [])
-                if pages:
-                    page_id = pages[0]["id"]
-                    page_access_token = pages[0].get("access_token")
-                    db.update_brand_api_field(brand["id"], "facebook_page_id", page_id)
-                    logger.info("Auto-detected Facebook Page ID %s for brand %s", page_id, brand.get("id"))
-        except Exception as e:
-            logger.warning("Facebook page auto-detect failed: %s", e)
-    else:
-        # Get page access token for the stored page_id
-        try:
-            pages_resp = requests.get(
-                "https://graph.facebook.com/v21.0/me/accounts",
-                params={"access_token": token, "fields": "id,access_token"},
-                timeout=15,
-            )
-            if pages_resp.status_code == 200:
-                for p in pages_resp.json().get("data", []):
+
+    # Always fetch pages from Meta to get the page access token and validate/fix the page_id
+    try:
+        pages_resp = requests.get(
+            "https://graph.facebook.com/v21.0/me/accounts",
+            params={"access_token": token, "fields": "id,name,access_token"},
+            timeout=15,
+        )
+        if pages_resp.status_code == 200:
+            pages = pages_resp.json().get("data", [])
+            if pages:
+                # If stored page_id is numeric and matches one of the pages, use it
+                matched = None
+                for p in pages:
                     if p["id"] == page_id:
-                        page_access_token = p.get("access_token")
+                        matched = p
                         break
-        except Exception as e:
-            logger.warning("Failed to get page access token: %s", e)
+                if not matched:
+                    # Stored value is missing, wrong, or a slug - use first available page
+                    matched = pages[0]
+                    logger.info("Replacing stored page_id '%s' with numeric ID %s", page_id, matched["id"])
+                page_id = matched["id"]
+                page_access_token = matched.get("access_token")
+                # Save the correct numeric ID
+                db.update_brand_api_field(brand["id"], "facebook_page_id", page_id)
+    except Exception as e:
+        logger.warning("Facebook page lookup failed: %s", e)
     if not page_id:
         return {"success": False, "error": "No Facebook Page linked. Go to Connections and connect your Facebook Page before launching Meta ads."}
 
