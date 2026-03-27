@@ -1488,6 +1488,7 @@ def launch_meta_campaign(db, brand, plan, changed_by):
             "objective": objective,
             "status": "PAUSED",
             "special_ad_categories": "[]",
+            "is_adset_budget_sharing_enabled": "false",
         },
         timeout=30,
     )
