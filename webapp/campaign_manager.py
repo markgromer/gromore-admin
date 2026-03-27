@@ -82,7 +82,14 @@ def _parse_meta_error(resp):
                 suffix.append(f"code {code}")
             if subcode:
                 suffix.append(f"subcode {subcode}")
-            return f"{message} ({', '.join(suffix)})" if suffix else message
+            # Include error_data for debugging
+            error_data = err.get("error_data", "")
+            blame = err.get("blame_field_specs", "")
+            detail = error_data or blame
+            base = f"{message} ({', '.join(suffix)})" if suffix else message
+            if detail:
+                base += f" [detail: {detail}]"
+            return base
     except (ValueError, AttributeError):
         pass
     return resp.text[:300]
@@ -1514,23 +1521,54 @@ def launch_meta_campaign(db, brand, plan, changed_by):
         location = (plan.get("location_targeting", "") or "").strip()
         radius = adset_plan.get("radius_miles", 25)
 
-        # Build a conservative targeting spec that avoids invalid placement and geo combos.
-        geo_locations = {}
+        # Resolve location via Meta Targeting Search API for valid geo keys
+        geo_locations = {"countries": ["US"]}  # safe default
         if location:
+            loc_type = "adgeolocation" if not re.fullmatch(r"\d{5}", location) else "adgeolocation"
+            loc_params = {
+                "access_token": token,
+                "type": loc_type,
+                "q": location,
+                "limit": 1,
+            }
             if re.fullmatch(r"\d{5}", location):
-                geo_locations["zips"] = [{"key": f"US:{location}"}]
+                loc_params["location_types"] = '["zip"]'
             else:
-                geo_locations["custom_locations"] = [{
-                    "address_string": location,
-                    "radius": radius,
-                    "distance_unit": "mile",
-                }]
-        else:
-            geo_locations = {"countries": ["US"]}
+                loc_params["location_types"] = '["city","region"]'
+            try:
+                loc_resp = requests.get(
+                    "https://graph.facebook.com/v21.0/search",
+                    params=loc_params, timeout=15,
+                )
+                if loc_resp.status_code == 200:
+                    loc_data = loc_resp.json().get("data", [])
+                    if loc_data:
+                        loc_hit = loc_data[0]
+                        loc_hit_type = loc_hit.get("type", "")
+                        if loc_hit_type == "zip":
+                            geo_locations = {"zips": [{"key": loc_hit["key"]}]}
+                        elif loc_hit_type == "city":
+                            geo_locations = {"cities": [{"key": loc_hit["key"], "radius": int(radius), "distance_unit": "mile"}]}
+                        elif loc_hit_type == "region":
+                            geo_locations = {"regions": [{"key": loc_hit["key"]}]}
+                        else:
+                            geo_locations = {"cities": [{"key": loc_hit["key"], "radius": int(radius), "distance_unit": "mile"}]}
+                        logger.info("Resolved location '%s' -> type=%s key=%s", location, loc_hit_type, loc_hit.get("key"))
+                    else:
+                        logger.warning("Meta location search returned no results for '%s'", location)
+                        launch_notes.append(f"Could not resolve location '{location}' - using US-wide targeting.")
+                else:
+                    logger.warning("Meta location search failed for '%s': %s", location, loc_resp.text[:200])
+            except Exception as e:
+                logger.warning("Meta location search error for '%s': %s", location, e)
+
+        # Force numeric types for targeting fields
+        age_min = int(adset_plan.get("age_min", 25) or 25)
+        age_max = int(adset_plan.get("age_max", 65) or 65)
 
         targeting = {
-            "age_min": adset_plan.get("age_min", 25),
-            "age_max": adset_plan.get("age_max", 65),
+            "age_min": age_min,
+            "age_max": age_max,
             "geo_locations": geo_locations,
         }
 
@@ -1544,28 +1582,29 @@ def launch_meta_campaign(db, brand, plan, changed_by):
         # Interest/detailed targeting
         interests = adset_plan.get("interests", [])
         if interests:
-            # Interests need {id, name} pairs - use search API to resolve names to IDs
             resolved_interests = []
             for interest_name in interests:
-                search_resp = requests.get(
-                    "https://graph.facebook.com/v21.0/search",
-                    params={
-                        "access_token": token,
-                        "type": "adinterest",
-                        "q": interest_name,
-                        "limit": 1,
-                    },
-                    timeout=15,
-                )
-                if search_resp.status_code == 200:
-                    data = search_resp.json().get("data", [])
-                    if data:
-                        resolved_interests.append({"id": data[0]["id"], "name": data[0]["name"]})
+                try:
+                    search_resp = requests.get(
+                        "https://graph.facebook.com/v21.0/search",
+                        params={
+                            "access_token": token,
+                            "type": "adinterest",
+                            "q": interest_name,
+                            "limit": 1,
+                        },
+                        timeout=15,
+                    )
+                    if search_resp.status_code == 200:
+                        data = search_resp.json().get("data", [])
+                        if data:
+                            resolved_interests.append({"id": str(data[0]["id"]), "name": data[0]["name"]})
+                except Exception:
+                    pass
             if resolved_interests:
                 targeting["flexible_spec"] = [{"interests": resolved_interests}]
 
-        # Use automatic placements for launch reliability. Meta rejects many manual
-        # placement combinations unless additional fields are provided.
+        logger.info("Ad set targeting: %s", json.dumps(targeting))
 
         adset_data = {
             "access_token": token,
@@ -1589,8 +1628,9 @@ def launch_meta_campaign(db, brand, plan, changed_by):
             data=adset_data, timeout=30,
         )
 
+        # Fallback 1: retry with US-wide geo if location targeting was rejected
         retried_without_geo = False
-        if adset_resp.status_code != 200 and targeting.get("geo_locations"):
+        if adset_resp.status_code != 200 and geo_locations != {"countries": ["US"]}:
             fallback_targeting = dict(targeting)
             fallback_targeting["geo_locations"] = {"countries": ["US"]}
             fallback_data = dict(adset_data)
@@ -1603,8 +1643,31 @@ def launch_meta_campaign(db, brand, plan, changed_by):
                 adset_resp = retry_resp
                 retried_without_geo = True
                 launch_notes.append(
-                    f"Location targeting for '{adset_plan.get('name', 'Ad Set')}' was skipped because Meta rejected the selected location."
+                    f"Location targeting for '{adset_plan.get('name', 'Ad Set')}' was simplified to US-wide."
                 )
+
+        # Fallback 2: ultra-minimal targeting (just geo + age) if still failing
+        if adset_resp.status_code != 200:
+            minimal_targeting = {
+                "age_min": 18,
+                "age_max": 65,
+                "geo_locations": {"countries": ["US"]},
+            }
+            minimal_data = dict(adset_data)
+            minimal_data["targeting"] = json.dumps(minimal_targeting)
+            # Also remove destination_type in case it's the culprit
+            minimal_data.pop("destination_type", None)
+            retry_resp2 = requests.post(
+                f"https://graph.facebook.com/v21.0/act_{account_id}/adsets",
+                data=minimal_data, timeout=30,
+            )
+            if retry_resp2.status_code == 200:
+                adset_resp = retry_resp2
+                launch_notes.append(
+                    f"Ad set '{adset_plan.get('name', 'Ad Set')}' was created with minimal targeting due to Meta validation errors."
+                )
+            else:
+                logger.warning("Ultra-minimal ad set also failed: %s", _parse_meta_error(retry_resp2))
 
         if adset_resp.status_code == 200:
             adset_id = adset_resp.json().get("id", "")
