@@ -1303,7 +1303,7 @@ def launch_google_campaign(db, brand, plan, changed_by):
                                 "headlines": headline_assets,
                                 "descriptions": desc_assets,
                             },
-                            "finalUrls": [brand.get("website_url", "https://example.com")],
+                            "finalUrls": [brand.get("website_url") or brand.get("website") or "https://example.com"],
                         },
                         "status": "ENABLED",
                     }
@@ -1454,7 +1454,7 @@ def launch_meta_campaign(db, brand, plan, changed_by):
     if not page_id:
         return {"success": False, "error": "No Facebook Page linked. Go to Connections and connect your Facebook Page before launching Meta ads."}
 
-    website_url = (brand.get("website_url") or "").strip()
+    website_url = ((brand.get("website_url") or brand.get("website") or "")).strip()
     if not website_url:
         return {"success": False, "error": "No website URL is set for this brand. Add it in Business Settings before launching Meta ads."}
     if not re.match(r"^https?://", website_url, re.I):
