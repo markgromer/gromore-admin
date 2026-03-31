@@ -1192,6 +1192,31 @@ def create_app():
         flash("Client login removed", "success")
         return redirect(url_for("brand_detail", brand_id=cu["brand_id"]))
 
+    @app.route("/client-users/<int:client_user_id>/resend-login", methods=["POST"])
+    @login_required
+    def client_user_resend_login(client_user_id):
+        cu = db.get_client_user(client_user_id)
+        if not cu:
+            abort(404)
+        brand = db.get_brand(cu["brand_id"])
+        if not brand:
+            abort(404)
+        import secrets as _secrets
+        temp_password = _secrets.token_urlsafe(10)
+        db.update_client_user_password(client_user_id, temp_password)
+        portal_url = (app.config.get("APP_URL", "") or request.host_url.rstrip("/"))
+        login_url = f"{portal_url}/client/login"
+        try:
+            from webapp.email_sender import send_client_login_email
+            send_client_login_email(
+                app.config, cu["email"], cu["display_name"],
+                temp_password, login_url, brand["display_name"],
+            )
+            flash(f"Login email sent to {cu['email']}", "success")
+        except Exception as e:
+            flash(f"Password was reset but email failed to send: {e}", "error")
+        return redirect(url_for("brand_detail", brand_id=cu["brand_id"]))
+
     # ── Brand API field save (AJAX) ──
     @app.route("/brands/<int:brand_id>/api-field", methods=["POST"])
     @login_required

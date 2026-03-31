@@ -347,3 +347,58 @@ def send_password_reset_email(app_config, email, name, reset_url):
         msg.attach(MIMEText(text, "plain"))
         msg.attach(MIMEText(html, "html"))
         server.sendmail(from_email, email, msg.as_string())
+
+
+def send_client_login_email(app_config, email, name, temp_password, login_url, brand_name):
+    """
+    Send (or re-send) client portal login credentials.
+    """
+    smtp_host = app_config.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = app_config.get("SMTP_PORT", 587)
+    smtp_user = app_config.get("SMTP_USER", "")
+    smtp_password = app_config.get("SMTP_PASSWORD", "")
+    from_name = app_config.get("SMTP_FROM_NAME", "GroMore")
+    from_email = app_config.get("SMTP_FROM_EMAIL", smtp_user)
+
+    if not smtp_user or not smtp_password:
+        raise ValueError("SMTP not configured.")
+
+    subject = f"Your {brand_name} Client Portal Login"
+
+    html = f"""
+    <div style="font-family:Inter,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+        <h2 style="color:#4f46e5;">Your Client Portal Login</h2>
+        <p>Hi {name or 'there'},</p>
+        <p>Here are your login credentials for the <strong>{brand_name}</strong> client portal:</p>
+        <div style="background:#f8f9fa;border-radius:10px;padding:16px;margin:20px 0;">
+            <p style="margin:4px 0;"><strong>Email:</strong> {email}</p>
+            <p style="margin:4px 0;"><strong>Temporary Password:</strong> {temp_password}</p>
+        </div>
+        <div style="text-align:center;margin:28px 0;">
+            <a href="{login_url}" style="display:inline-block;padding:12px 32px;background:#4f46e5;color:#fff;border-radius:10px;text-decoration:none;font-weight:600;">Sign In</a>
+        </div>
+        <p style="font-size:.85em;color:#666;">Please change your password after signing in. If you didn't expect this email, you can safely ignore it.</p>
+        <p style="color:#999;font-size:.8em;margin-top:24px;">- The GroMore Team</p>
+    </div>
+    """
+
+    text = (
+        f"Hi {name or 'there'},\n\n"
+        f"Here are your login credentials for the {brand_name} client portal:\n\n"
+        f"Email: {email}\nTemporary Password: {temp_password}\n\n"
+        f"Sign in at: {login_url}\n\n"
+        f"Please change your password after signing in.\n\n"
+        f"- The GroMore Team"
+    )
+
+    with smtplib.SMTP(smtp_host, smtp_port) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{from_name} <{from_email}>"
+        msg["To"] = email
+        msg.attach(MIMEText(text, "plain"))
+        msg.attach(MIMEText(html, "html"))
+        server.sendmail(from_email, email, msg.as_string())
