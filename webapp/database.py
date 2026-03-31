@@ -1006,6 +1006,7 @@ class WebDB:
             "crm_type", "crm_api_key", "crm_webhook_url", "crm_pipeline_id", "crm_server_url",
             "openai_api_key", "openai_model",
             "openai_model_chat", "openai_model_images", "openai_model_analysis", "openai_model_ads",
+            "ai_quality_tier",
             "logo_path", "logo_variants", "brand_colors",
             "google_drive_folder_id", "google_drive_sheet_id",
             "google_maps_api_key", "google_place_id",
