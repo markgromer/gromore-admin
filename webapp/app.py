@@ -53,7 +53,16 @@ def create_app():
 
     # Jinja filters
     import json as _json
-    app.jinja_env.filters["from_json"] = lambda s: _json.loads(s) if s else []
+
+    def _safe_from_json(s):
+        if not s:
+            return []
+        try:
+            return _json.loads(s)
+        except (ValueError, TypeError):
+            return {}
+
+    app.jinja_env.filters["from_json"] = _safe_from_json
 
     # Storage paths for uploads + generated reports
     # Local/dev uses repo folders. Render uses persisted disk under /data.
@@ -183,8 +192,13 @@ def create_app():
             resp.status_code = 500
             resp.headers["Access-Control-Allow-Origin"] = "*"
             return resp
-        flash(f"Something went wrong: {str(e)[:200]}", "error")
-        return redirect(request.referrer or url_for("dashboard"))
+        try:
+            flash(f"Something went wrong: {str(e)[:200]}", "error")
+            if "client_user_id" in session:
+                return redirect(url_for("client.client_dashboard"))
+            return redirect(request.referrer or url_for("dashboard"))
+        except Exception:
+            return "Internal server error", 500
 
     # Exempt OAuth callback routes from CSRF (external redirects have no token)
     csrf.exempt(google_bp)

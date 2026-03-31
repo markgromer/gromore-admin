@@ -3173,16 +3173,21 @@ def client_settings():
     has_full_drive = "auth/drive " in (scopes + " ") or scopes.endswith("auth/drive")
     drive_scoped = has_full_drive or ("spreadsheets" in scopes)
 
-    return render_template(
-        "client_settings.html",
-        brand=brand,
-        google_connected=(google_conn.get("status") == "connected"),
-        meta_connected=(meta_conn.get("status") == "connected"),
-        drive_scoped=drive_scoped,
-        google_conn=google_conn,
-        meta_conn=meta_conn,
-        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
-    )
+    try:
+        return render_template(
+            "client_settings.html",
+            brand=brand,
+            google_connected=(google_conn.get("status") == "connected"),
+            meta_connected=(meta_conn.get("status") == "connected"),
+            drive_scoped=drive_scoped,
+            google_conn=google_conn,
+            meta_conn=meta_conn,
+            brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+        )
+    except Exception:
+        current_app.logger.exception("client_settings render error for brand %s", brand_id)
+        flash("Settings page failed to load. The error has been logged.", "error")
+        return redirect(url_for("client.client_dashboard"))
 
 
 @client_bp.route("/settings/ads-id", methods=["POST"])
