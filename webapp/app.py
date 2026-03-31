@@ -178,10 +178,13 @@ def create_app():
     def _handle_500(e):
         import traceback, logging
         logging.getLogger(__name__).error("[500] %s", traceback.format_exc())
-        resp = jsonify({"ok": False, "error": f"Server error: {str(e)[:200]}"})
-        resp.status_code = 500
-        resp.headers["Access-Control-Allow-Origin"] = "*"
-        return resp
+        if request.accept_mimetypes.best == 'application/json' or request.is_json:
+            resp = jsonify({"ok": False, "error": f"Server error: {str(e)[:200]}"})
+            resp.status_code = 500
+            resp.headers["Access-Control-Allow-Origin"] = "*"
+            return resp
+        flash(f"Something went wrong: {str(e)[:200]}", "error")
+        return redirect(request.referrer or url_for("dashboard"))
 
     # Exempt OAuth callback routes from CSRF (external redirects have no token)
     csrf.exempt(google_bp)
@@ -1629,26 +1632,31 @@ def create_app():
                     db.save_setting("wp_app_password", wp_app_password)
                 flash("WordPress settings saved", "success")
             elif section == "openai":
-                key = request.form.get("openai_api_key", "").strip()
-                if key:
-                    db.save_setting("openai_api_key", key)
-                    app.config["OPENAI_API_KEY"] = db.get_setting("openai_api_key", "")
-                # Chat model
-                model_sel = request.form.get("openai_model", "").strip()
-                model_custom = request.form.get("openai_model_custom", "").strip()
-                model_val = model_custom if model_sel == "custom" and model_custom else (model_sel or "gpt-4o-mini")
-                db.save_setting("openai_model", model_val)
-                app.config["OPENAI_MODEL"] = model_val
-                # Competitor analysis model
-                comp_sel = request.form.get("openai_model_competitor", "").strip()
-                comp_custom = request.form.get("openai_model_competitor_custom", "").strip()
-                comp_val = comp_custom if comp_sel == "custom" and comp_custom else comp_sel
-                db.save_setting("openai_model_competitor", comp_val)
-                # System prompt
-                prompt = request.form.get("ai_chat_system_prompt", "").strip()
-                db.save_setting("ai_chat_system_prompt", prompt)
-                app.config["AI_CHAT_SYSTEM_PROMPT"] = prompt
-                flash("OpenAI settings saved", "success")
+                try:
+                    key = request.form.get("openai_api_key", "").strip()
+                    if key:
+                        db.save_setting("openai_api_key", key)
+                        app.config["OPENAI_API_KEY"] = db.get_setting("openai_api_key", "")
+                    # Chat model
+                    model_sel = request.form.get("openai_model", "").strip()
+                    model_custom = request.form.get("openai_model_custom", "").strip()
+                    model_val = model_custom if model_sel == "custom" and model_custom else (model_sel or "gpt-4o-mini")
+                    db.save_setting("openai_model", model_val)
+                    app.config["OPENAI_MODEL"] = model_val
+                    # Competitor analysis model
+                    comp_sel = request.form.get("openai_model_competitor", "").strip()
+                    comp_custom = request.form.get("openai_model_competitor_custom", "").strip()
+                    comp_val = comp_custom if comp_sel == "custom" and comp_custom else comp_sel
+                    db.save_setting("openai_model_competitor", comp_val)
+                    # System prompt
+                    prompt = request.form.get("ai_chat_system_prompt", "").strip()
+                    db.save_setting("ai_chat_system_prompt", prompt)
+                    app.config["AI_CHAT_SYSTEM_PROMPT"] = prompt
+                    flash("OpenAI settings saved", "success")
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error("OpenAI settings save failed: %s", e)
+                    flash(f"Failed to save OpenAI settings: {e}", "error")
             elif section == "branding":
                 db.save_setting("agency_name", request.form.get("agency_name", "").strip())
                 db.save_setting("agency_logo_url", request.form.get("agency_logo_url", "").strip())
