@@ -1044,6 +1044,12 @@
         {% endif %}
         {% endwith %}
 
+        {% if session.get('client_admin_impersonating') %}
+        <div style="background:#f59e0b;color:#000;padding:8px 16px;border-radius:10px;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;font-size:.88rem;font-weight:600;">
+            <span><i class="bi bi-eye"></i> Viewing as {{ session.get('client_name', 'client') }}</span>
+            <a href="{{ url_for('client_impersonate_stop') }}" style="color:#000;background:rgba(0,0,0,.12);padding:4px 14px;border-radius:8px;text-decoration:none;font-size:.82rem;"><i class="bi bi-arrow-left"></i> Back to Admin</a>
+        </div>
+        {% endif %}
         {% block content %}{% endblock %}
     </div>
 

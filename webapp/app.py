@@ -1217,6 +1217,38 @@ def create_app():
             flash(f"Password was reset but email failed to send: {e}", "error")
         return redirect(url_for("brand_detail", brand_id=cu["brand_id"]))
 
+    @app.route("/client-users/<int:client_user_id>/impersonate", methods=["POST"])
+    @login_required
+    def client_user_impersonate(client_user_id):
+        cu = db.get_client_user(client_user_id)
+        if not cu:
+            abort(404)
+        brand = db.get_brand(cu["brand_id"])
+        if not brand:
+            abort(404)
+        session["client_user_id"] = cu["id"]
+        session["client_brand_id"] = cu["brand_id"]
+        session["client_name"] = cu["display_name"]
+        session["client_brand_name"] = brand["display_name"]
+        session["client_role"] = cu.get("role", "owner")
+        session["client_admin_impersonating"] = True
+        session["client_admin_return_brand_id"] = cu["brand_id"]
+        return redirect(url_for("client.client_dashboard"))
+
+    @app.route("/client-impersonate/stop")
+    @login_required
+    def client_impersonate_stop():
+        brand_id = session.pop("client_admin_return_brand_id", None)
+        session.pop("client_user_id", None)
+        session.pop("client_brand_id", None)
+        session.pop("client_name", None)
+        session.pop("client_brand_name", None)
+        session.pop("client_role", None)
+        session.pop("client_admin_impersonating", None)
+        if brand_id:
+            return redirect(url_for("brand_detail", brand_id=brand_id))
+        return redirect(url_for("dashboard"))
+
     # ── Brand API field save (AJAX) ──
     @app.route("/brands/<int:brand_id>/api-field", methods=["POST"])
     @login_required

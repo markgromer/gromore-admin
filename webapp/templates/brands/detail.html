@@ -239,6 +239,9 @@
                                     </form>
                                 </td>
                                 <td class="text-nowrap">
+                                    <form method="POST" action="{{ url_for('client_user_impersonate', client_user_id=cu.id) }}" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-outline-info" title="View client dashboard"><i class="bi bi-eye"></i></button>
+                                    </form>
                                     <form method="POST" action="{{ url_for('client_user_resend_login', client_user_id=cu.id) }}" class="d-inline">
                                         <button type="submit" class="btn btn-sm btn-outline-primary" title="Re-send login email"><i class="bi bi-envelope-arrow-up"></i></button>
                                     </form>
