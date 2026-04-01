@@ -147,7 +147,11 @@ def run_agents_all():
 def _verify_cron_secret():
     """Check Bearer token or X-Cron-Secret header against CRON_SECRET env var.
     Returns True if authorized, False otherwise."""
-    cron_secret = os.environ.get("CRON_SECRET", "")
+    cron_secret = (
+        os.environ.get("CRON_SECRET", "")
+        or os.environ.get("SECRET_KEY", "")
+        or current_app.config.get("SECRET_KEY", "")
+    )
     if not cron_secret:
         return False
     auth_header = request.headers.get("Authorization", "")
@@ -161,8 +165,8 @@ def _verify_cron_secret():
 @jobs_bp.route("/cron/run-agents", methods=["POST"])
 def cron_run_agents():
     """Cron-triggered agent runs for all brands. No session needed.
-    Auth via CRON_SECRET env var (Bearer token or X-Cron-Secret header).
-    Add to Render cron: curl -X POST -H 'Authorization: Bearer $CRON_SECRET' https://yourapp/cron/run-agents
+    Auth via CRON_SECRET if present, otherwise falls back to SECRET_KEY.
+    Supports Bearer token or X-Cron-Secret header.
     """
     if not _verify_cron_secret():
         return jsonify({"error": "unauthorized"}), 401

@@ -7,8 +7,6 @@ services:
     envVars:
       - key: SECRET_KEY
         generateValue: true
-      - key: CRON_SECRET
-        generateValue: true
       - key: DATABASE_PATH
         value: /data/database/webapp.db
       - key: FLASK_DEBUG

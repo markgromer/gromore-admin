@@ -297,6 +297,10 @@ def create_app():
         session.clear()
         return redirect(url_for("login"))
 
+    @app.route("/health")
+    def health_check():
+        return jsonify({"ok": True, "service": "gromore-admin"}), 200
+
     # ── Dashboard ──
     @app.route("/")
     @login_required
