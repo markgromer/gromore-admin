@@ -3366,8 +3366,9 @@ def client_titan_launch():
         abort(404)
 
     try:
-        _get_titan_launch_config(current_app.config)
+        titan_cfg = _get_titan_launch_config(current_app.config)
     except RuntimeError as exc:
+        current_app.logger.error("Titan launch config error: %s", exc)
         flash(str(exc), "error")
         return redirect(url_for("client.client_settings"))
 
@@ -3394,13 +3395,36 @@ def client_titan_launch():
         return redirect(url_for("client.client_settings"))
 
     next_path = request.args.get("next") or "/"
-    titan_url, _payload = build_titan_launch_url(
+    titan_url, payload = build_titan_launch_url(
         current_app.config,
         user,
         brand,
         next_path=next_path,
         lifetime_seconds=300,
     )
+
+    # Log every launch so we can verify the redirect target
+    current_app.logger.info(
+        "Titan launch: user=%s brand=%s target=%s issuer=%s",
+        email, brand_id,
+        titan_url.split("?")[0],  # log path only, not token
+        payload.get("issuer"),
+    )
+
+    # ?preview=1 shows the URL instead of redirecting (owner/admin only)
+    if request.args.get("preview") == "1" and session.get("client_role") in ("owner", "manager"):
+        from markupsafe import escape
+        return (
+            f"<html><body style='font-family:monospace;padding:2rem;'>"
+            f"<h3>Titan Launch Preview</h3>"
+            f"<p><strong>Redirect target:</strong></p>"
+            f"<pre style='word-break:break-all;background:#f5f5f5;padding:1rem;'>{escape(titan_url)}</pre>"
+            f"<p><strong>Payload claims:</strong></p>"
+            f"<pre style='background:#f5f5f5;padding:1rem;'>{escape(json.dumps({k: v for k, v in payload.items() if k != 'nonce'}, indent=2))}</pre>"
+            f"<p><a href='{escape(titan_url)}'>Proceed to Titan</a></p>"
+            f"</body></html>"
+        )
+
     return redirect(titan_url)
 
 
