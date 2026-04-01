@@ -1,8 +1,12 @@
 """
 Background jobs blueprint - report generation triggers, scheduled tasks.
 """
-from flask import Blueprint, current_app, flash, redirect, url_for, session, request
+from flask import Blueprint, current_app, flash, redirect, url_for, session, request, jsonify
 from datetime import datetime
+import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 jobs_bp = Blueprint("jobs", __name__)
 
@@ -138,3 +142,63 @@ def run_agents_all():
         "success" if ran > 0 else "info",
     )
     return redirect(url_for("dashboard"))
+
+
+def _verify_cron_secret():
+    """Check Bearer token or X-Cron-Secret header against CRON_SECRET env var.
+    Returns True if authorized, False otherwise."""
+    cron_secret = os.environ.get("CRON_SECRET", "")
+    if not cron_secret:
+        return False
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer ") and auth_header[7:] == cron_secret:
+        return True
+    if request.headers.get("X-Cron-Secret", "") == cron_secret:
+        return True
+    return False
+
+
+@jobs_bp.route("/cron/run-agents", methods=["POST"])
+def cron_run_agents():
+    """Cron-triggered agent runs for all brands. No session needed.
+    Auth via CRON_SECRET env var (Bearer token or X-Cron-Secret header).
+    Add to Render cron: curl -X POST -H 'Authorization: Bearer $CRON_SECRET' https://yourapp/cron/run-agents
+    """
+    if not _verify_cron_secret():
+        return jsonify({"error": "unauthorized"}), 401
+
+    db = current_app.db
+    month = datetime.now().strftime("%Y-%m")
+    brands = db.get_all_brands()
+
+    from webapp.agent_brains import run_all_agents
+
+    ran = 0
+    skipped = 0
+    total_findings = 0
+    errors = []
+    for brand in brands:
+        api_key = brand.get("openai_api_key")
+        if not api_key:
+            skipped += 1
+            continue
+        try:
+            db.clear_agent_findings(brand["id"], month)
+            results = run_all_agents(db, brand, brand["id"], api_key, month=month)
+            count = sum(
+                len(r.get("findings", [])) for r in results.values() if r
+            )
+            total_findings += count
+            ran += 1
+        except Exception as e:
+            skipped += 1
+            errors.append(f"{brand.get('display_name', '?')}: {str(e)[:80]}")
+
+    logger.info("Cron agent run: %d brands, %d findings, %d skipped", ran, total_findings, skipped)
+    return jsonify({
+        "ok": True,
+        "ran": ran,
+        "skipped": skipped,
+        "total_findings": total_findings,
+        "errors": errors[:10],
+    })

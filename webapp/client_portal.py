@@ -5619,6 +5619,35 @@ def client_dismiss_finding(finding_id):
     return jsonify({"success": True})
 
 
+@client_bp.route("/team/findings/<int:finding_id>/vote", methods=["POST"])
+@client_login_required
+def client_vote_finding(finding_id):
+    """Thumbs up/down on a finding. vote: 1 or -1, feedback: optional text."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    payload = request.get_json(silent=True) or {}
+    vote = payload.get("vote", 0)
+    if vote not in (1, -1):
+        return jsonify({"success": False, "error": "vote must be 1 or -1"}), 400
+    feedback = (payload.get("feedback") or "")[:500]
+    db.vote_agent_finding(finding_id, brand_id, vote, feedback)
+    return jsonify({"success": True})
+
+
+@client_bp.route("/team/findings/<int:finding_id>/status", methods=["POST"])
+@client_login_required
+def client_update_finding_status(finding_id):
+    """Move a finding through lifecycle: new -> acknowledged -> in_progress -> done."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    payload = request.get_json(silent=True) or {}
+    new_status = payload.get("status", "")
+    if new_status not in ("acknowledged", "in_progress", "done", "dismissed"):
+        return jsonify({"success": False, "error": "Invalid status"}), 400
+    db.update_finding_status(finding_id, brand_id, new_status)
+    return jsonify({"success": True})
+
+
 # ── Background agent run tracker ──
 _agent_runs = {}  # brand_id -> {"status": "running"|"done"|"error", "result": {...}, "started": float}
 _agent_runs_lock = threading.Lock()
@@ -5633,8 +5662,23 @@ def _run_agents_background(app, brand_id, brand, api_key, month, instructions=""
             db = app.db
             db.clear_agent_findings(brand_id, month)
 
+            def _on_progress(stage, detail=""):
+                """Update the shared run dict with live progress."""
+                with _agent_runs_lock:
+                    run = _agent_runs.get(brand_id)
+                    if not run:
+                        return
+                    progress = run.setdefault("progress", [])
+                    progress.append({"stage": stage, "detail": detail})
+                    run["current_stage"] = stage
+                    run["current_detail"] = detail
+
             from webapp.agent_brains import run_all_agents
-            results = run_all_agents(db, brand, brand_id, api_key, month=month, warren_instructions=instructions)
+            results = run_all_agents(
+                db, brand, brand_id, api_key,
+                month=month, warren_instructions=instructions,
+                progress_callback=_on_progress,
+            )
 
             ran = [k for k, v in results.items() if v is not None and k != "_qa"]
             skipped = [k for k, v in results.items() if v is None and k != "_qa"]
@@ -5735,7 +5779,13 @@ def client_team_run_status():
 
     if run["status"] == "running":
         elapsed = time.time() - run.get("started", 0)
-        return jsonify({"status": "running", "elapsed": int(elapsed)})
+        return jsonify({
+            "status": "running",
+            "elapsed": int(elapsed),
+            "current_stage": run.get("current_stage", ""),
+            "current_detail": run.get("current_detail", ""),
+            "progress": run.get("progress", []),
+        })
 
     # Done or error - return result and clear
     result = run.get("result", {})

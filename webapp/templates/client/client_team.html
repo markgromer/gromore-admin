@@ -658,6 +658,99 @@
 @media (max-width: 480px) {
     .office-sprite { width: 40px; height: 40px; }
 }
+
+/* ── VOTE BUTTONS ── */
+.finding-votes {
+    display: flex; gap: 4px; align-items: center; flex-shrink: 0;
+}
+.vote-btn {
+    background: none; border: 1px solid #e5e7eb; color: #9ca3af;
+    width: 30px; height: 30px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 0.85rem; transition: all .15s;
+}
+.vote-btn:hover { border-color: #c7d2fe; color: #4f46e5; }
+.vote-btn.voted-up { background: #ecfdf5; border-color: #10b981; color: #059669; }
+.vote-btn.voted-down { background: #fef2f2; border-color: #ef4444; color: #dc2626; }
+
+/* ── FINDING STATUS ── */
+.finding-status-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 0.68rem; font-weight: 700; padding: 2px 8px;
+    border-radius: 6px; text-transform: uppercase; letter-spacing: .3px;
+    cursor: pointer; transition: all .15s; white-space: nowrap;
+}
+.finding-status-badge.status-new { background: #eff6ff; color: #3b82f6; }
+.finding-status-badge.status-acknowledged { background: #fef3c7; color: #d97706; }
+.finding-status-badge.status-in_progress { background: #ede9fe; color: #7c3aed; }
+.finding-status-badge.status-done { background: #ecfdf5; color: #059669; }
+.finding-status-badge.status-dismissed { background: #f3f4f6; color: #9ca3af; }
+.finding-status-menu {
+    position: absolute; top: 100%; right: 0; z-index: 100;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.12); padding: 4px; min-width: 140px;
+    display: none;
+}
+.finding-status-menu.open { display: block; }
+.finding-status-option {
+    display: block; width: 100%; padding: 7px 12px; border: none;
+    background: none; text-align: left; font-size: 0.82rem; color: #374151;
+    border-radius: 6px; cursor: pointer;
+}
+.finding-status-option:hover { background: #f3f4f6; }
+.finding-meta-row {
+    display: flex; align-items: center; gap: 8px; margin-top: 6px; position: relative;
+}
+
+/* ── FEEDBACK MODAL ── */
+.feedback-modal-backdrop {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.5); z-index: 1060; backdrop-filter: blur(3px);
+}
+.feedback-modal-backdrop.show { display: flex; align-items: center; justify-content: center; }
+.feedback-modal {
+    background: #fff; border-radius: 14px; width: 420px;
+    max-width: 92vw; padding: 24px; box-shadow: 0 16px 60px rgba(0,0,0,.25);
+}
+.feedback-modal h4 { font-size: 1rem; font-weight: 700; margin: 0 0 12px; }
+.feedback-modal textarea {
+    width: 100%; min-height: 80px; border: 1px solid #e5e7eb;
+    border-radius: 10px; padding: 10px 12px; font-size: .88rem;
+    resize: vertical; font-family: inherit;
+}
+.feedback-modal textarea:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.1); }
+.feedback-modal-actions { display: flex; gap: 10px; margin-top: 14px; justify-content: flex-end; }
+.feedback-modal .hire-btn { font-size: .85rem; }
+
+/* ── PROGRESS TRACKER ── */
+.run-progress-bar {
+    display: none; background: rgba(255,255,255,.08); border-radius: 10px;
+    padding: 10px 14px; margin-bottom: 14px; position: relative; z-index: 2;
+}
+.run-progress-bar.active { display: block; }
+.progress-agents {
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+}
+.progress-agent {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 0.72rem; font-weight: 600; padding: 3px 10px;
+    border-radius: 8px; background: rgba(255,255,255,.08);
+    color: rgba(255,255,255,.4); transition: all .3s;
+}
+.progress-agent.working {
+    background: rgba(124,58,237,.3); color: #ddd6fe;
+    animation: progressPulse 1.2s infinite;
+}
+.progress-agent.done { background: rgba(16,185,129,.2); color: #6ee7b7; }
+.progress-agent.error { background: rgba(239,68,68,.2); color: #fca5a5; }
+.progress-agent i { font-size: 0.65rem; }
+.progress-stage {
+    font-size: 0.78rem; color: rgba(255,255,255,.6); margin-top: 6px;
+}
+@keyframes progressPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .6; }
+}
 </style>
 
 <!-- ── OFFICE SCENE ── -->
@@ -687,6 +780,10 @@
         <div class="warren-brief-hint">Optional - Warren will share this with the team before they get to work.</div>
     </div>
     <div class="warren-note">Use Warren as your command layer. He should hand you the fewest high-impact moves, while the rest of the team stays in the background unless you want the detail.</div>
+    <div class="run-progress-bar" id="run-progress-bar">
+        <div class="progress-agents" id="progress-agents"></div>
+        <div class="progress-stage" id="progress-stage"></div>
+    </div>
     <div class="office-floor" id="office-floor">
         <div class="sequence-banner" id="sequence-banner"></div>
     </div>
@@ -768,6 +865,21 @@
                     </button>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── FEEDBACK MODAL ── -->
+<div class="feedback-modal-backdrop" id="feedback-modal-backdrop">
+    <div class="feedback-modal">
+        <h4><i class="bi bi-chat-left-text me-2"></i>What was wrong with this finding?</h4>
+        <p style="font-size:.84rem;color:#6b7280;margin-bottom:12px;" id="feedback-finding-title"></p>
+        <textarea id="feedback-text" placeholder="Tell us what was off - too vague, wrong data, not relevant, etc."></textarea>
+        <div class="feedback-modal-actions">
+            <button class="hire-btn hire-btn-secondary" onclick="closeFeedbackModal()">Cancel</button>
+            <button class="hire-btn hire-btn-primary" id="feedback-submit-btn" onclick="submitFeedback()">
+                <i class="bi bi-send"></i> Submit
+            </button>
         </div>
     </div>
 </div>
@@ -1577,6 +1689,13 @@ function renderFinding(f) {
     if (steps.length) {
         stepsHtml = '<ol class="finding-steps">' + steps.map(function(s) { return '<li>' + escapeHtml(s) + '</li>'; }).join('') + '</ol>';
     }
+
+    var findingStatus = f.status || 'new';
+    var statusLabels = {new:'New', acknowledged:'Seen', in_progress:'Working', done:'Done', dismissed:'Dismissed'};
+    var userVote = f.user_vote || 0;
+    var upClass = userVote > 0 ? ' voted-up' : '';
+    var downClass = userVote < 0 ? ' voted-down' : '';
+
     return '<div class="finding-card sev-' + f.severity + '" data-severity="' + f.severity + '" data-agent="' + f.agent_key + '" data-id="' + f.id + '">' +
         '<div class="finding-sev-icon"><i class="bi ' + sevIcon + '"></i></div>' +
         '<div class="finding-body">' +
@@ -1585,6 +1704,15 @@ function renderFinding(f) {
             '<div class="finding-detail">' + escapeHtml(f.detail) + '</div>' +
             (f.action ? '<div class="finding-action"><i class="bi bi-arrow-right-circle"></i>' + escapeHtml(f.action) + '</div>' : '') +
             stepsHtml +
+            '<div class="finding-meta-row">' +
+                '<span class="finding-status-badge status-' + findingStatus + '" onclick="event.stopPropagation();toggleStatusMenu(this,' + f.id + ')">' +
+                    (statusLabels[findingStatus] || 'New') +
+                '</span>' +
+                '<div class="finding-votes">' +
+                    '<button class="vote-btn' + upClass + '" onclick="event.stopPropagation();voteFinding(' + f.id + ',1,this)" title="Useful"><i class="bi bi-hand-thumbs-up"></i></button>' +
+                    '<button class="vote-btn' + downClass + '" onclick="event.stopPropagation();voteFinding(' + f.id + ',-1,this)" title="Not helpful"><i class="bi bi-hand-thumbs-down"></i></button>' +
+                '</div>' +
+            '</div>' +
         '</div>' +
         '<button class="finding-assign-btn" onclick="event.stopPropagation();createTaskFromFinding(' + f.id + ')" title="Create Task"><i class="bi bi-clipboard-plus"></i> Task</button>' +
         '<button class="finding-dismiss" onclick="event.stopPropagation();dismissFinding(' + f.id + ', this)" title="Dismiss"><i class="bi bi-x-lg"></i></button>' +
@@ -1758,6 +1886,9 @@ function runTeam() {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Running...';
     status.textContent = 'Assembling the team...';
 
+    // Initialize real-time progress bar
+    initProgressBar();
+
     // Get Warren instructions
     var instructions = '';
     var instrField = document.getElementById('warren-instructions');
@@ -1811,26 +1942,32 @@ function pollRunStatus() {
     var status = document.getElementById('run-status');
     var pollCount = 0;
     var maxPolls = 120;
-    var phases = [
-        'Agents are analyzing your data',
-        'Weave is linking the team output',
-        'Warren is reviewing the team output',
-        'Finishing up',
-    ];
+    var lastProgressLen = 0;
 
     var interval = setInterval(function() {
         pollCount++;
-        var phase = phases[Math.min(Math.floor(pollCount / 8), phases.length - 1)];
         var dots = '.'.repeat((pollCount % 3) + 1);
-        status.textContent = phase + dots;
 
         fetch('{{ url_for("client.client_team_run_status") }}')
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                if (data.status === 'running') return;
+                if (data.status === 'running') {
+                    // Update progress bar from real-time data
+                    if (data.progress && data.progress.length > lastProgressLen) {
+                        updateProgressBar({progress: data.progress.slice(lastProgressLen)});
+                        lastProgressLen = data.progress.length;
+                    }
+                    if (data.current_stage) {
+                        status.textContent = (data.current_detail || data.current_stage) + dots;
+                    } else {
+                        status.textContent = 'Working' + dots;
+                    }
+                    return;
+                }
                 clearInterval(interval);
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-play-circle"></i> Send To Warren';
+                hideProgressBar();
 
                 if (data.status === 'done' && data.success) {
                     var qa = data.qa || {};
@@ -1868,6 +2005,7 @@ function pollRunStatus() {
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-play-circle"></i> Send To Warren';
             status.textContent = 'Taking longer than expected. Check back in a minute.';
+            hideProgressBar();
             resumeIdle();
             setTimeout(function() { status.textContent = ''; }, 8000);
         }
@@ -1979,6 +2117,204 @@ function loadTeamData() {
 document.getElementById('hire-modal-backdrop').addEventListener('click', function(e) {
     if (e.target === this) closeHireModal();
 });
+document.getElementById('feedback-modal-backdrop').addEventListener('click', function(e) {
+    if (e.target === this) closeFeedbackModal();
+});
+
+// ══════════════════════════════════════
+//  VOTE + STATUS + FEEDBACK
+// ══════════════════════════════════════
+var pendingFeedbackId = null;
+
+function voteFinding(id, vote, btn) {
+    var card = btn.closest('.finding-card');
+    var votes = card.querySelectorAll('.vote-btn');
+    votes.forEach(function(v) { v.className = 'vote-btn'; });
+
+    if (vote < 0) {
+        // Downvote: open feedback modal first
+        pendingFeedbackId = id;
+        var finding = allFindings.find(function(f) { return f.id === id; });
+        document.getElementById('feedback-finding-title').textContent = finding ? finding.title : '';
+        document.getElementById('feedback-text').value = '';
+        document.getElementById('feedback-modal-backdrop').classList.add('show');
+        btn.classList.add('voted-down');
+        return;
+    }
+
+    // Upvote: send immediately
+    btn.classList.add('voted-up');
+    fetch('/client/team/findings/' + id + '/vote', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({vote: 1, feedback: ''}),
+    }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data.success) {
+            var f = allFindings.find(function(ff) { return ff.id === id; });
+            if (f) f.user_vote = 1;
+        }
+    });
+}
+
+function closeFeedbackModal() {
+    document.getElementById('feedback-modal-backdrop').classList.remove('show');
+    pendingFeedbackId = null;
+}
+
+function submitFeedback() {
+    if (!pendingFeedbackId) return;
+    var text = document.getElementById('feedback-text').value.trim();
+    var submitBtn = document.getElementById('feedback-submit-btn');
+    submitBtn.disabled = true;
+
+    fetch('/client/team/findings/' + pendingFeedbackId + '/vote', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({vote: -1, feedback: text}),
+    }).then(function(r) { return r.json(); }).then(function(data) {
+        submitBtn.disabled = false;
+        if (data.success) {
+            var f = allFindings.find(function(ff) { return ff.id === pendingFeedbackId; });
+            if (f) { f.user_vote = -1; f.user_feedback = text; }
+        }
+        closeFeedbackModal();
+    }).catch(function() {
+        submitBtn.disabled = false;
+        closeFeedbackModal();
+    });
+}
+
+function toggleStatusMenu(badge, findingId) {
+    // Close any open menus first
+    document.querySelectorAll('.finding-status-menu.open').forEach(function(m) { m.remove(); });
+
+    var statuses = ['new', 'acknowledged', 'in_progress', 'done', 'dismissed'];
+    var labels = {new:'New', acknowledged:'Seen', in_progress:'Working On It', done:'Done', dismissed:'Dismiss'};
+
+    var menu = document.createElement('div');
+    menu.className = 'finding-status-menu open';
+    statuses.forEach(function(s) {
+        var opt = document.createElement('button');
+        opt.className = 'finding-status-option';
+        opt.textContent = labels[s];
+        opt.onclick = function(e) {
+            e.stopPropagation();
+            updateFindingStatus(findingId, s, badge);
+            menu.remove();
+        };
+        menu.appendChild(opt);
+    });
+
+    badge.parentElement.appendChild(menu);
+
+    // Close on outside click
+    setTimeout(function() {
+        document.addEventListener('click', function closeMenu() {
+            menu.remove();
+            document.removeEventListener('click', closeMenu);
+        }, {once: true});
+    }, 10);
+}
+
+function updateFindingStatus(id, status, badge) {
+    fetch('/client/team/findings/' + id + '/status', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({status: status}),
+    }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data.success) {
+            var labels = {new:'New', acknowledged:'Seen', in_progress:'Working', done:'Done', dismissed:'Dismissed'};
+            badge.className = 'finding-status-badge status-' + status;
+            badge.textContent = labels[status] || status;
+
+            var f = allFindings.find(function(ff) { return ff.id === id; });
+            if (f) f.status = status;
+
+            // If dismissed, fade and remove
+            if (status === 'dismissed') {
+                var card = badge.closest('.finding-card');
+                if (card) {
+                    card.style.opacity = '0.3';
+                    setTimeout(function() { card.remove(); }, 500);
+                    allFindings = allFindings.filter(function(ff) { return ff.id !== id; });
+                    updateFindingsStat();
+                }
+            }
+        }
+    });
+}
+
+// ══════════════════════════════════════
+//  REAL-TIME PROGRESS BAR
+// ══════════════════════════════════════
+var progressState = {};
+
+function initProgressBar() {
+    var bar = document.getElementById('run-progress-bar');
+    var agentsEl = document.getElementById('progress-agents');
+    bar.classList.add('active');
+    progressState = {};
+
+    // Build pills for all hired agents
+    var hired = AGENTS.filter(function(a) { return !!hiredAgents[a.key]; });
+    agentsEl.innerHTML = hired.map(function(a) {
+        return '<span class="progress-agent" id="prog-' + a.key + '" data-agent="' + a.key + '">' +
+            '<i class="bi ' + (AGENT_ICONS[a.key] || 'bi-robot') + '"></i> ' + a.name +
+        '</span>';
+    }).join('');
+
+    document.getElementById('progress-stage').textContent = 'Starting...';
+}
+
+function updateProgressBar(data) {
+    if (!data.progress || !data.progress.length) return;
+
+    var stageEl = document.getElementById('progress-stage');
+
+    data.progress.forEach(function(event) {
+        var stage = typeof event === 'object' ? event.stage : event.split(':')[0];
+        var detail = typeof event === 'object' ? (event.detail || '') : event.split(':').slice(1).join(':');
+
+        if (stage === 'gathering') {
+            stageEl.textContent = 'Gathering data...';
+        } else if (stage === 'agent_start') {
+            var agentEl = document.getElementById('prog-' + detail);
+            if (agentEl) agentEl.className = 'progress-agent working';
+            var agentName = (AGENTS.find(function(a) { return a.key === detail; }) || {}).name || detail;
+            stageEl.textContent = agentName + ' is analyzing...';
+        } else if (stage === 'agent_done') {
+            var doneParts = detail.split(':');
+            var agentKey = doneParts[0];
+            var count = doneParts[1] || '0';
+            var doneEl = document.getElementById('prog-' + agentKey);
+            if (doneEl) {
+                if (count === 'error') {
+                    doneEl.className = 'progress-agent error';
+                } else {
+                    doneEl.className = 'progress-agent done';
+                    if (count && count !== '0') doneEl.textContent += ' (' + count + ')';
+                }
+            }
+        } else if (stage === 'qa_start') {
+            stageEl.textContent = 'Weave reviewing quality...';
+        } else if (stage === 'qa_done') {
+            stageEl.textContent = 'Weave review complete.';
+        } else if (stage === 'warren_start') {
+            stageEl.textContent = 'Warren making final decisions...';
+        } else if (stage === 'warren_done') {
+            stageEl.textContent = 'Warren review complete.';
+        } else if (stage === 'retry_start') {
+            var retryEl = document.getElementById('prog-' + detail);
+            if (retryEl) retryEl.className = 'progress-agent working';
+            stageEl.textContent = 'Retrying ' + detail + ' with feedback...';
+        }
+    });
+}
+
+function hideProgressBar() {
+    var bar = document.getElementById('run-progress-bar');
+    setTimeout(function() { bar.classList.remove('active'); }, 3000);
+}
 
 // ══════════════════════════════════════
 //  INIT

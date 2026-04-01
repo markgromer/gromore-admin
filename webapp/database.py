@@ -790,6 +790,19 @@ class WebDB:
                 conn.execute(f"ALTER TABLE brands ADD COLUMN {col_name} {col_def}")
         conn.commit()
 
+        # ── agent_findings migrations ──
+        af_columns = {r[1] for r in conn.execute("PRAGMA table_info(agent_findings)").fetchall()}
+        new_af_cols = [
+            ("status", "TEXT DEFAULT 'new'"),           # new|acknowledged|in_progress|done|dismissed
+            ("user_vote", "INTEGER DEFAULT 0"),          # 1=thumbs up, -1=thumbs down, 0=no vote
+            ("user_feedback", "TEXT DEFAULT ''"),         # why they voted down
+            ("outcome_note", "TEXT DEFAULT ''"),          # retrospective: what happened after acting
+        ]
+        for col_name, col_def in new_af_cols:
+            if col_name not in af_columns:
+                conn.execute(f"ALTER TABLE agent_findings ADD COLUMN {col_name} {col_def}")
+        conn.commit()
+
         # ── campaign_strategies migrations ──
         cs_columns = {r[1] for r in conn.execute("PRAGMA table_info(campaign_strategies)").fetchall()}
         new_cs_cols = [
@@ -3122,20 +3135,82 @@ class WebDB:
         conn.close()
 
     def clear_agent_findings(self, brand_id, month, agent_key=None):
-        """Clear old findings before a fresh agent run."""
+        """Clear old findings before a fresh agent run.
+        Preserves findings the user has interacted with (voted, acknowledged, in progress, done)."""
         conn = self._conn()
+        preserve = "AND (user_vote = 0 OR user_vote IS NULL) AND (status IS NULL OR status = 'new')"
         if agent_key:
             conn.execute(
-                "DELETE FROM agent_findings WHERE brand_id = ? AND month = ? AND agent_key = ? AND dismissed = 0",
+                f"DELETE FROM agent_findings WHERE brand_id = ? AND month = ? AND agent_key = ? AND dismissed = 0 {preserve}",
                 (brand_id, month, agent_key),
             )
         else:
             conn.execute(
-                "DELETE FROM agent_findings WHERE brand_id = ? AND month = ? AND dismissed = 0",
+                f"DELETE FROM agent_findings WHERE brand_id = ? AND month = ? AND dismissed = 0 {preserve}",
                 (brand_id, month),
             )
         conn.commit()
         conn.close()
+
+    def vote_agent_finding(self, finding_id, brand_id, vote, feedback=""):
+        """Record a thumbs-up (+1) or thumbs-down (-1) on a finding."""
+        conn = self._conn()
+        conn.execute(
+            "UPDATE agent_findings SET user_vote = ?, user_feedback = ? WHERE id = ? AND brand_id = ?",
+            (vote, (feedback or "")[:500], finding_id, brand_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def update_finding_status(self, finding_id, brand_id, status):
+        """Move a finding through its lifecycle: new -> acknowledged -> in_progress -> done -> dismissed."""
+        conn = self._conn()
+        conn.execute(
+            "UPDATE agent_findings SET status = ? WHERE id = ? AND brand_id = ?",
+            (status, finding_id, brand_id),
+        )
+        if status == "dismissed":
+            conn.execute(
+                "UPDATE agent_findings SET dismissed = 1 WHERE id = ? AND brand_id = ?",
+                (finding_id, brand_id),
+            )
+        conn.commit()
+        conn.close()
+
+    def save_finding_outcome(self, finding_id, brand_id, outcome_note):
+        """Store what happened after a finding was acted on (retrospective)."""
+        conn = self._conn()
+        conn.execute(
+            "UPDATE agent_findings SET outcome_note = ? WHERE id = ? AND brand_id = ?",
+            ((outcome_note or "")[:1000], finding_id, brand_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_finding_feedback_for_agent(self, brand_id, agent_key, limit=20):
+        """Get recent user feedback (thumbs down + reasons) for an agent, used in next run."""
+        conn = self._conn()
+        rows = conn.execute(
+            """SELECT title, user_feedback, outcome_note, user_vote
+               FROM agent_findings
+               WHERE brand_id = ? AND agent_key = ? AND user_vote != 0
+               ORDER BY created_at DESC LIMIT ?""",
+            (brand_id, agent_key, limit),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_acted_findings_for_retrospective(self, brand_id, month):
+        """Get findings that were acted on (done/acknowledged) for retrospective analysis."""
+        conn = self._conn()
+        rows = conn.execute(
+            """SELECT * FROM agent_findings
+               WHERE brand_id = ? AND month = ? AND status IN ('done', 'in_progress')
+               ORDER BY agent_key, created_at""",
+            (brand_id, month),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
 
     # ── Agent forecast helpers ──
 

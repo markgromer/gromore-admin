@@ -29,10 +29,10 @@ def _eligibility_detail(agent_key):
         "penny": "Penny needs ad campaign data to monitor budgets. Connect your Google Ads or Meta Ads account in Settings.",
         "ace": "Ace needs active ad campaigns to write copy for. Connect your Google Ads or Meta Ads account in Settings.",
         "radar": "Radar needs your Google Business Profile connected to manage your reputation. Link it in Settings.",
-        "hawk": "Hawk needs competitors added to track. Add competitors on the Competitors page.",
+        "hawk": "Hawk needs competitor tracking or a Google Business Profile connected. Add competitors or link your GBP in Settings.",
         "pulse": "Pulse needs Google Search Console or Google Analytics data. Connect one of them in Settings.",
-        "spark": "Spark needs Google Search Console or Google Analytics data to inform content. Connect one of them in Settings.",
-        "bridge": "Bridge needs Google Analytics or CRM data connected to track leads. Set that up in Settings.",
+        "spark": "Spark needs Search Console, Analytics, or ad campaign data to inform content. Connect at least one in Settings.",
+        "bridge": "Bridge needs Analytics, CRM, or ad campaign data connected to track leads. Set that up in Settings.",
         "atlas": "Atlas needs historical performance data to forecast. Import prior months (CSV) or connect your APIs and run reports for past months so it can learn seasonality.",
     }
     return reasons.get(agent_key, f"{agent_key.title()} needs a data source connected to work.")
@@ -780,6 +780,11 @@ FOCUS AREAS (these are YOUR domain - the automated tests don't catch these):
     - If Scout wants budget shifted and Pulse shows the landing page is weak, connect them
     - If one fix improves lead volume but could hurt CPA, rankings, or close rate, note the tradeoff
     - Group related findings into a minimal actionable process when appropriate
+    - CROSS-AGENT SYNTHESIS: Actively look for correlated signals across agents:
+      * Same keyword showing up in Scout (CPC data) and Pulse (organic rankings) = opportunity
+      * Penny flags waste in a campaign that Scout already says to KILL = combined evidence
+      * Radar sees review complaints about a service that Ace is actively advertising = risk
+      Surface these connections explicitly in map_groups. This is your unique value - no single agent sees the full picture.
 
 6. SEVERITY ACCURACY - Is the severity level justified?
    - Critical = immediate revenue impact, needs action today
@@ -1076,6 +1081,16 @@ DECISIONS (one per finding):
 For REWORK, you MUST include a feedback_note telling the agent exactly what to fix.
 Group rework decisions by agent - if 3 of an agent's 5 findings need rework, rework the whole agent.
 
+COMMAND DESK OUTPUT RULES:
+Your focus_message is the SINGLE most important thing the client should do this month. One sentence. Direct.
+Your task_plan is an ordered hit list. Default 2-4 tasks. Each task must connect to revenue or savings.
+Think of it as: "If the client does NOTHING ELSE, these 3 things move the needle."
+
+RETROSPECTIVE AWARENESS:
+If USER_FEEDBACK is provided, it contains past findings the client voted on (liked or disliked) and
+outcomes from previous recommendations. Use this to calibrate. If they hated vague SEO advice, don't
+ship vague SEO advice this time. If a previous budget shift recommendation worked, note that pattern.
+
 OUTPUT FORMAT (strict JSON):
 {
   "decisions": [
@@ -1100,7 +1115,7 @@ OUTPUT FORMAT (strict JSON):
             "steps": ["step 1", "step 2", "step 3"]
         }
     ],
-    "focus_message": "1-2 sentence motivational simplification message for the client",
+    "focus_message": "One direct sentence. The single highest-impact move this month.",
   "overall_grade": "A|B|C|D|F",
   "overall_notes": "1-2 sentence summary of team output quality"
 }
@@ -1487,6 +1502,25 @@ def run_agent(agent_key: str, *, db, brand: dict, brand_id: int,
         db.log_agent_activity(brand_id, agent_key, f"{config['role']} analysis error", f"Data build: {str(e)[:80]}", "completed")
         return None
 
+    # Build data-availability note so agent knows what data it has / is missing
+    data_sources = {
+        "Ad Campaigns": bool(campaigns and any(campaigns.values())),
+        "Google Analytics": bool(analysis_summary and (analysis_summary.get("kpis", {}) or {}).get("ga")),
+        "Search Console (SEO)": bool(analysis_summary and (analysis_summary.get("kpis", {}) or {}).get("gsc")),
+        "Google Business Profile": bool(gbp_ctx and not (gbp_ctx or {}).get("error")),
+        "Competitor Intel": bool(competitor_intel and len(competitor_intel) > 0),
+        "CRM / Revenue": bool(crm_data),
+    }
+    available = [k for k, v in data_sources.items() if v]
+    missing = [k for k, v in data_sources.items() if not v]
+    data_note = ""
+    if missing:
+        data_note = (
+            f"\n\nDATA AVAILABILITY: You have {', '.join(available) if available else 'limited data'}."
+            f" Missing: {', '.join(missing)}."
+            " Focus analysis on what you CAN see. Note any gaps that limit your confidence."
+        )
+
     # Load agent-specific memories
     memory_context = ""
     try:
@@ -1504,10 +1538,30 @@ def run_agent(agent_key: str, *, db, brand: dict, brand_id: int,
     except Exception as e:
         logger.debug("Memory recall failed for %s: %s", agent_key, e)
 
+    # Load user feedback from prior runs (votes, notes) so the agent can learn
+    user_feedback_context = ""
+    try:
+        past_feedback = db.get_finding_feedback_for_agent(brand_id, agent_key, limit=15)
+        if past_feedback:
+            fb_lines = []
+            for fb in past_feedback:
+                vote_label = "LIKED" if fb.get("user_vote", 0) > 0 else "DISLIKED"
+                line = f"- {vote_label}: \"{fb.get('title', '')}\""
+                if fb.get("user_feedback"):
+                    line += f" | User note: {fb['user_feedback']}"
+                if fb.get("outcome_note"):
+                    line += f" | Outcome: {fb['outcome_note']}"
+                fb_lines.append(line)
+            user_feedback_context = "\n\nUSER FEEDBACK ON YOUR PAST FINDINGS (learn from this):\n" + "\n".join(fb_lines)
+    except Exception as e:
+        logger.debug("User feedback load failed for %s: %s", agent_key, e)
+
     user_message = f"""Analyze the following data for {brand.get('display_name', 'this business')} ({month}).
 
 {data_payload}
+{data_note}
 {memory_context}
+{user_feedback_context}
 
 Run your full analysis now."""
 
@@ -2192,6 +2246,23 @@ def warren_orchestrate(db, brand: dict, brand_id: int, api_key: str,
         f"Budget: ${brand.get('monthly_budget', 0)}/mo"
     )
 
+    # Aggregate user feedback across all agents for Warren's awareness
+    user_feedback_section = ""
+    try:
+        all_feedback = []
+        for ak in agent_results.keys():
+            fb = db.get_finding_feedback_for_agent(brand_id, ak, limit=10)
+            for f in fb:
+                vote_label = "LIKED" if f.get("user_vote", 0) > 0 else "DISLIKED"
+                line = f"  [{ak}] {vote_label}: \"{f.get('title', '')}\""
+                if f.get("user_feedback"):
+                    line += f" - {f['user_feedback']}"
+                all_feedback.append(line)
+        if all_feedback:
+            user_feedback_section = "\n\nUSER FEEDBACK FROM PAST RUNS (use this to calibrate quality):\n" + "\n".join(all_feedback[:30])
+    except Exception:
+        pass
+
     user_message = f"""You have {len(finding_list)} findings from the team for {brand.get('display_name', 'this business')}.
 
 BRAND: {brand_context}
@@ -2211,6 +2282,7 @@ WARREN BRIEF:
 
 FINDINGS WITH QA ANNOTATIONS:
 {json.dumps(finding_list, indent=2)}
+{user_feedback_section}
 
 Review each finding. Make the call: SHIP, KILL, or REWORK.
 Remember - you own everything that ships. Be decisive."""
@@ -2400,9 +2472,11 @@ def _fallback_decisions(db, brand_id: int, agent_results: Dict, qa_report: Dict,
 # ---------------------------------------------------------------------------
 
 def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
-                   month: str = None, warren_instructions: str = "") -> Dict[str, Any]:
+                   month: str = None, warren_instructions: str = "",
+                   progress_callback=None) -> Dict[str, Any]:
     """
     Run all applicable agents for a brand.
+    progress_callback(stage, detail) is called after each agent/step completes.
     Returns dict of {agent_key: result_or_none}.
     """
     if not month:
@@ -2410,6 +2484,15 @@ def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
 
     results = {}
     execution_profile = _infer_execution_profile(db, brand_id, warren_instructions)
+
+    def _emit(stage, detail=""):
+        if progress_callback:
+            try:
+                progress_callback(stage, detail)
+            except Exception:
+                pass
+
+    _emit("gathering", "Building analysis data")
 
     # Build shared data once
     analysis_summary = None
@@ -2487,10 +2570,10 @@ def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
         "penny": has_campaigns,
         "ace": has_campaigns,
         "radar": has_gbp,
-        "hawk": has_competitors,
+        "hawk": has_competitors or has_gbp,  # Can still give positioning recs from GBP profile alone
         "pulse": has_seo or has_analytics,
-        "spark": has_seo or has_analytics,
-        "bridge": has_analytics or has_crm,
+        "spark": has_seo or has_analytics or has_campaigns,  # Can suggest content from ad data
+        "bridge": has_analytics or has_crm or has_campaigns,  # Can analyze lead flow from ads
         "atlas": False,
     }
 
@@ -2548,6 +2631,7 @@ def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
             results[agent_key] = None
             continue
 
+        _emit("agent_start", agent_key)
         try:
             result = run_agent(
                 agent_key, db=db, brand=brand, brand_id=brand_id,
@@ -2557,29 +2641,36 @@ def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
                 competitor_intel=competitor_intel, crm_data=crm_data,
             )
             results[agent_key] = result
+            finding_count = len(result.get("findings", [])) if result else 0
+            _emit("agent_done", f"{agent_key}:{finding_count}")
         except Exception as e:
             logger.exception("Agent %s crashed: %s", agent_key, e)
             results[agent_key] = None
+            _emit("agent_done", f"{agent_key}:error")
 
     # ── QA Pipeline: Weave multi-test → Warren orchestration → retry loop ──
     agents_with_findings = {k: v for k, v in results.items() if v and v.get("findings")}
     if agents_with_findings:
         try:
             # Step 1: Weave runs multi-stage QA (structural + rules + LLM)
+            _emit("qa_start", "Weave reviewing quality")
             qa_report = run_qa_review(
                 db, brand, brand_id, api_key,
                 agents_with_findings, month=month,
                 execution_profile=execution_profile,
                 warren_instructions=warren_instructions,
             )
+            _emit("qa_done", "Weave review complete")
 
             # Step 2: Warren reviews Weave's report and makes final decisions
+            _emit("warren_start", "Warren making final decisions")
             warren_result = warren_orchestrate(
                 db, brand, brand_id, api_key,
                 agents_with_findings, qa_report, month=month,
                 execution_profile=execution_profile,
                 warren_instructions=warren_instructions,
             )
+            _emit("warren_done", "Warren review complete")
 
             # Step 3: Retry loop - re-run agents Warren flagged for rework (max 1 retry)
             rework_feedback = warren_result.get("rework_feedback", {})
@@ -2590,6 +2681,7 @@ def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
                     continue
                 combined_feedback = "\n".join(f"- {note}" for note in feedback_notes)
                 logger.info("Retrying agent %s with Warren's feedback", retry_agent)
+                _emit("retry_start", retry_agent)
 
                 # Clear the old (now-dismissed) findings and run again with feedback
                 db.clear_agent_findings(brand_id, month, agent_key=retry_agent)
