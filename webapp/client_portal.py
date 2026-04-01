@@ -3204,6 +3204,18 @@ def client_save_ads_id():
     return redirect(url_for("client.client_settings"))
 
 
+@client_bp.route("/settings/facebook-page", methods=["POST"])
+@client_login_required
+def client_save_facebook_page_id():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    raw = (request.form.get("facebook_page_id") or "").strip()
+    db.update_brand_api_field(brand_id, "facebook_page_id", raw)
+    flash("Facebook Page reference saved.", "success")
+    return redirect(url_for("client.client_settings"))
+
+
 @client_bp.route("/settings/openai", methods=["POST"])
 @client_login_required
 def client_save_openai():
