@@ -158,6 +158,10 @@
     <!-- Sidebar Nav -->
     <div class="col-md-3 help-sidebar">
         <div class="help-nav">
+            <a href="#connections-overview" class="{{ 'active' if active_topic == 'connections-overview' }}">
+                <span class="nav-icon"><i class="bi bi-diagram-3"></i></span>
+                Connections Overview
+            </a>
             <a href="#google-ads" class="{{ 'active' if active_topic == 'google-ads' }}">
                 <span class="nav-icon"><i class="bi bi-google"></i></span>
                 Google Ads Setup
@@ -186,6 +190,18 @@
                 <span class="nav-icon"><i class="bi bi-cpu"></i></span>
                 OpenAI API Key
             </a>
+            <a href="#google-maps" class="{{ 'active' if active_topic == 'google-maps' }}">
+                <span class="nav-icon"><i class="bi bi-pin-map"></i></span>
+                Google Maps API
+            </a>
+            <a href="#google-drive" class="{{ 'active' if active_topic == 'google-drive' }}">
+                <span class="nav-icon"><i class="bi bi-folder2-open"></i></span>
+                Google Drive
+            </a>
+            <a href="#wordpress" class="{{ 'active' if active_topic == 'wordpress' }}">
+                <span class="nav-icon"><i class="bi bi-wordpress"></i></span>
+                WordPress
+            </a>
             <a href="#reading-reports" class="{{ 'active' if active_topic == 'reading-reports' }}">
                 <span class="nav-icon"><i class="bi bi-file-earmark-bar-graph"></i></span>
                 Reading Your Reports
@@ -207,6 +223,115 @@
 
     <!-- Content -->
     <div class="col-md-9">
+
+        <!-- Connections Overview -->
+        <div class="help-topic" id="connections-overview">
+            <h4><i class="bi bi-diagram-3 text-primary"></i> Connections Overview</h4>
+            <p class="topic-desc">Here is every connection this platform can use, what it unlocks, and whether you need it. The more you connect, the smarter your dashboard, reports, and AI-generated ads become.</p>
+
+            <p>All connections are managed on your <a href="{{ url_for('client.client_settings') }}">Settings / Connections</a> page.</p>
+
+            <h5><i class="bi bi-stars me-1" style="color:#6366f1;"></i> Core Connections (Strongly Recommended)</h5>
+            <p>These are the connections that power the main features of the platform. You can run without them, but you will be missing significant value.</p>
+
+            <table class="table table-sm" style="font-size:.88rem;">
+                <thead>
+                    <tr><th style="width:22%;">Connection</th><th style="width:18%;">Setup Method</th><th>What It Unlocks</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><i class="bi bi-google me-1 text-primary"></i> <strong>Google Account</strong></td>
+                        <td>OAuth (one click)</td>
+                        <td>Required for Google Ads, GA4, Search Console, and Google Drive. One sign-in connects all Google services. Go to Settings > Connections > "Connect Google Account."</td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-megaphone me-1 text-primary"></i> <strong>Google Ads</strong></td>
+                        <td>Google OAuth + Customer ID</td>
+                        <td>Pull campaign performance data (spend, clicks, conversions, search terms). Create and launch campaigns directly from the dashboard. Needed for Google Ads sections of your reports. Enter your 10-digit Customer ID (format: XXX-XXX-XXXX) after connecting Google.</td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-meta me-1" style="color:#0081FB;"></i> <strong>Meta (Facebook) Account</strong></td>
+                        <td>OAuth (one click)</td>
+                        <td>Pull Facebook and Instagram ad performance. Create and launch Meta campaigns. View ad set and individual ad breakdowns. Go to Settings > Connections > "Connect Meta Account," then select your ad account.</td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-cpu me-1" style="color:#6366f1;"></i> <strong>OpenAI API Key</strong></td>
+                        <td>Manual key paste</td>
+                        <td>Powers all AI features: Ad Builder, W.A.R.R.E.N. coaching, campaign plan generation, report insights, action plans, and blog content creation. Without this key, AI features are disabled. Costs go to your own OpenAI billing. <strong>Add at least $10 in credits to start</strong> - most users spend $2-5/month. <a href="#openai">Full setup guide below.</a></td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-graph-up me-1 text-success"></i> <strong>Google Analytics (GA4)</strong></td>
+                        <td>Auto-detected via Google OAuth</td>
+                        <td>Website traffic, user behavior, traffic sources, and conversion tracking. Once you connect your Google account, your GA4 properties are detected automatically. Just make sure the GA4 tracking code is installed on your website.</td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-search me-1 text-success"></i> <strong>Google Search Console</strong></td>
+                        <td>Auto-detected via Google OAuth</td>
+                        <td>See what keywords your site ranks for in organic search, click-through rates, average position, and which pages get the most search traffic. The AI uses this data to generate better ad keywords and copy. Detected automatically when you connect Google.</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h5 class="mt-4"><i class="bi bi-lightning-charge me-1" style="color:#f59e0b;"></i> Power Connections (Optional, High Value)</h5>
+            <p>These add significant depth to what the platform can do for you. Each one is optional, but they make the system meaningfully smarter.</p>
+
+            <table class="table table-sm" style="font-size:.88rem;">
+                <thead>
+                    <tr><th style="width:22%;">Connection</th><th style="width:18%;">Setup Method</th><th>What It Unlocks</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><i class="bi bi-pin-map me-1 text-warning"></i> <strong>Google Maps API</strong></td>
+                        <td>Manual API key</td>
+                        <td>Powers the <strong>Local Rank Heatmap</strong> - a visual grid showing where your business ranks in Google Maps search results across your service area. Also used for competitor intelligence: see how you stack up against nearby competitors at every point on the map. Requires a Google Place ID (searchable in Settings) to link to your Google Business Profile. <a href="#google-maps">Full setup guide below.</a></td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-folder2-open me-1" style="color:#4285f4;"></i> <strong>Google Drive</strong></td>
+                        <td>Enabled via Google OAuth</td>
+                        <td>Auto-export reports and ad copy to a shared Google Drive folder. Sync action plans to a Google Sheet so you can track progress. Ad Builder results get saved to Drive automatically. Enter your Drive Folder ID and optionally a Sheet ID on the Connections page. <a href="#google-drive">Full setup guide below.</a></td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-bullseye me-1 text-danger"></i> <strong>Facebook Pixel</strong></td>
+                        <td>Code installed on your website</td>
+                        <td>Tracks what visitors do after clicking your Facebook/Instagram ads (form submissions, purchases, calls). Without it, Meta cannot optimize your campaigns for conversions and will fall back to optimizing for traffic only. <a href="#conversion-tracking">Setup guide below.</a></td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-telephone me-1 text-info"></i> <strong>Call Tracking</strong></td>
+                        <td>Third-party service or Google Ads call extensions</td>
+                        <td>Track which ads and keywords drive phone calls. Without call tracking, phone leads are invisible in your data, and reports undercount your actual results. <a href="#call-tracking">Setup guide below.</a></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h5 class="mt-4"><i class="bi bi-plug me-1 text-secondary"></i> Additional Integrations</h5>
+            <p>Nice-to-haves that connect the platform to your other tools.</p>
+
+            <table class="table table-sm" style="font-size:.88rem;">
+                <thead>
+                    <tr><th style="width:22%;">Connection</th><th style="width:18%;">Setup Method</th><th>What It Unlocks</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><i class="bi bi-wordpress me-1" style="color:#21759b;"></i> <strong>WordPress</strong></td>
+                        <td>Site URL + App Password</td>
+                        <td>Publish AI-generated blog posts directly to your WordPress site without copy-pasting. The AI writes SEO-optimized content and pushes it to your site as a draft or published post. <a href="#wordpress">Full setup guide below.</a></td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-people me-1 text-secondary"></i> <strong>CRM (Sweep and Go)</strong></td>
+                        <td>API token + org slug</td>
+                        <td>Pull client and revenue data from your CRM. Enables revenue-based reporting and ROI calculations. Currently supports Sweep and Go. Enter your API token and organization slug on the Connections page.</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="tip-box mt-3">
+                <i class="bi bi-lightbulb me-1"></i> <strong>Where to start:</strong> Connect your Google Account and Meta Account first - that covers Google Ads, GA4, Search Console, and Facebook Ads in two clicks. Then add your OpenAI API key ($10 in credits) to unlock the AI features. Everything else can be added later as you need it.
+            </div>
+
+            <div class="step-callout mt-2">
+                <strong>How data flows:</strong> Connected accounts feed into your monthly reports automatically. The AI uses this data to write smarter ad copy, build better campaign plans, and give you targeted recommendations. The more connections you have, the more specific and useful everything becomes. An Ad Builder with Search Console data generates keywords from your actual rankings. Without it, the AI has to guess.
+            </div>
+        </div>
 
         <!-- Google Ads Setup -->
         <div class="help-topic" id="google-ads">
@@ -479,10 +604,11 @@
             <ol>
                 <li>Go to <a href="https://platform.openai.com/account/billing" target="_blank" rel="noopener" class="ext-link">platform.openai.com/account/billing <i class="bi bi-box-arrow-up-right"></i></a></li>
                 <li>Click "Add payment method" and enter a credit card</li>
-                <li>Set a monthly usage limit to control costs (e.g., $20/month is plenty for most users)</li>
+                <li><strong>Add at least $10 in credits</strong> - this is enough to run the platform for weeks. Most users spend $2-5/month total.</li>
+                <li>Set a monthly usage limit to cap costs (e.g., $20/month is plenty for even heavy usage)</li>
             </ol>
             <div class="tip-box">
-                <i class="bi bi-lightbulb me-1"></i> <strong>Cost guidance:</strong> GPT-4o Mini costs roughly $0.15 per 1M input tokens. A typical Ad Builder generation or report analysis costs under $0.01. Most users spend less than $5/month.
+                <i class="bi bi-lightbulb me-1"></i> <strong>Cost breakdown:</strong> A single Ad Builder generation costs about $0.01-0.03. A full campaign plan with proofreading costs $0.02-0.05. A monthly report analysis costs $0.01-0.02. Even generating ads every day, you are unlikely to spend more than $5/month. The $10 starting credit gives you plenty of room.
             </div>
 
             <h5>Choosing a Model</h5>
@@ -494,6 +620,131 @@
                 <li><strong>GPT-4.1 / GPT-4.1 Mini</strong> - latest generation models. Best quality and speed.</li>
                 <li><strong>o3-mini / o4-mini</strong> - reasoning models that "think" before answering. Best for complex analysis.</li>
             </ul>
+        </div>
+
+        <!-- Google Maps API -->
+        <div class="help-topic" id="google-maps">
+            <h4><i class="bi bi-pin-map text-warning"></i> Google Maps API</h4>
+            <p class="topic-desc">Power the Local Rank Heatmap and competitor intelligence features. See exactly where your business shows up (and where it doesn't) across your entire service area.</p>
+
+            <h5>What This Connection Does</h5>
+            <ul>
+                <li><strong>Local Rank Heatmap:</strong> Scans a grid of points across your service area and checks where your business ranks in Google Maps results for your target keywords. You get a visual heatmap showing green (top 3), yellow (page 1), and red (not ranking) for every point.</li>
+                <li><strong>Competitor Intel:</strong> See which competitors show up at each grid point. Identify which areas they dominate and where you have opportunity.</li>
+                <li><strong>GMB Monitoring:</strong> Track your Google Business Profile visibility over time. Spot ranking drops before they cost you leads.</li>
+            </ul>
+
+            <h5>Getting a Google Maps API Key</h5>
+            <ol>
+                <li>Go to the <a href="https://console.cloud.google.com/" target="_blank" rel="noopener" class="ext-link">Google Cloud Console <i class="bi bi-box-arrow-up-right"></i></a> and sign in with your Google account</li>
+                <li>Create a new project (or select an existing one). Name it something like "GroMore Maps"</li>
+                <li>Go to "APIs & Services" > "Library" in the left sidebar</li>
+                <li>Search for and enable these two APIs:
+                    <ul>
+                        <li><strong>Places API</strong> - required for rank checking and place lookups</li>
+                        <li><strong>Maps JavaScript API</strong> - required for rendering the heatmap</li>
+                    </ul>
+                </li>
+                <li>Go to "APIs & Services" > "Credentials"</li>
+                <li>Click "Create Credentials" > "API Key"</li>
+                <li>Copy the key and paste it into the Google Maps API Key field on your <a href="{{ url_for('client.client_settings') }}">Connections</a> page</li>
+            </ol>
+
+            <h5>Setting Up Billing for Google Cloud</h5>
+            <ol>
+                <li>In the Cloud Console, go to "Billing" in the left sidebar</li>
+                <li>Link a billing account to your project</li>
+                <li>Google gives you <strong>$200/month in free Maps API usage</strong> - this covers thousands of heatmap scans. Most users never exceed the free tier.</li>
+            </ol>
+            <div class="tip-box">
+                <i class="bi bi-lightbulb me-1"></i> <strong>Cost note:</strong> A single heatmap scan with a 7x7 grid uses about 50 Places API calls, costing roughly $0.80. With Google's $200 free monthly credit, you can run around 250 scans per month at zero cost.
+            </div>
+
+            <h5>Linking Your Google Business Profile</h5>
+            <ol>
+                <li>On the <a href="{{ url_for('client.client_settings') }}">Connections</a> page, look for the "Google Place ID" field</li>
+                <li>Use the search tool to find your business by name</li>
+                <li>Select your listing from the results - this links the heatmap scans to your specific business</li>
+            </ol>
+            <div class="warning-box">
+                <i class="bi bi-exclamation-triangle me-1"></i> <strong>Important:</strong> Without a Place ID, heatmap scans cannot identify your business in the results. Make sure you have a claimed and verified Google Business Profile at <a href="https://business.google.com" target="_blank" rel="noopener" class="ext-link">business.google.com <i class="bi bi-box-arrow-up-right"></i></a> first.
+            </div>
+
+            <h5>Restricting Your API Key (Recommended)</h5>
+            <p>For security, restrict your API key so it can only be used by your dashboard:</p>
+            <ol>
+                <li>In the Cloud Console, go to "Credentials" and click on your API key</li>
+                <li>Under "API restrictions," select "Restrict key" and check only "Places API" and "Maps JavaScript API"</li>
+                <li>Click "Save"</li>
+            </ol>
+        </div>
+
+        <!-- Google Drive -->
+        <div class="help-topic" id="google-drive">
+            <h4><i class="bi bi-folder2-open" style="color:#4285f4;"></i> Google Drive Integration</h4>
+            <p class="topic-desc">Auto-export reports, ad copy, and action plans to your Google Drive. Keep everything organized and shareable.</p>
+
+            <h5>What This Connection Does</h5>
+            <ul>
+                <li><strong>Report exports:</strong> Monthly reports and ad copy get saved to a shared Drive folder automatically</li>
+                <li><strong>Action plan sync:</strong> Your action plans can sync to a Google Sheet so you can check off items and track progress</li>
+                <li><strong>Ad creatives:</strong> Images selected in the Ad Builder are stored and pulled from Drive for campaign launches</li>
+            </ul>
+
+            <h5>Setup</h5>
+            <ol>
+                <li>Make sure you have connected your Google account first (Settings > Connections > "Connect Google Account")</li>
+                <li>Create a folder in your Google Drive where you want exports to go (e.g., "GroMore Reports")</li>
+                <li>Open that folder in Drive and copy the <strong>folder ID</strong> from the URL - it is the long string after <code>/folders/</code> in the address bar</li>
+                <li>Paste the folder ID into the "Google Drive Folder ID" field on your <a href="{{ url_for('client.client_settings') }}">Connections</a> page</li>
+                <li>(Optional) If you want action plans synced to a Sheet, create a Google Sheet, copy its ID from the URL, and paste it into the "Google Sheet ID" field</li>
+            </ol>
+            <div class="step-callout">
+                <strong>Finding IDs in URLs:</strong><br>
+                Drive folder: <code>https://drive.google.com/drive/folders/<strong>ABC123...</strong></code> - copy the bold part<br>
+                Google Sheet: <code>https://docs.google.com/spreadsheets/d/<strong>ABC123...</strong>/edit</code> - copy the bold part
+            </div>
+        </div>
+
+        <!-- WordPress -->
+        <div class="help-topic" id="wordpress">
+            <h4><i class="bi bi-wordpress" style="color:#21759b;"></i> WordPress Connection</h4>
+            <p class="topic-desc">Publish AI-generated blog posts directly to your WordPress website. No copy-pasting needed.</p>
+
+            <h5>What This Connection Does</h5>
+            <ul>
+                <li>The AI writes SEO-optimized blog content based on your business, services, and target audience</li>
+                <li>Posts get pushed directly to your WordPress site as drafts (or published, your choice)</li>
+                <li>Saves time on content marketing - go from idea to published post in minutes</li>
+            </ul>
+
+            <h5>Requirements</h5>
+            <ul>
+                <li>A self-hosted WordPress site (wordpress.org, not wordpress.com free tier)</li>
+                <li>WordPress REST API must be enabled (it is by default on most hosts)</li>
+                <li>An Application Password (built into WordPress 5.6+)</li>
+            </ul>
+
+            <h5>Creating an Application Password</h5>
+            <ol>
+                <li>Log into your WordPress admin dashboard</li>
+                <li>Go to <strong>Users > Profile</strong> (or click "Edit" on your user)</li>
+                <li>Scroll down to the <strong>"Application Passwords"</strong> section</li>
+                <li>Enter a name (e.g., "GroMore") and click "Add New Application Password"</li>
+                <li>Copy the generated password immediately - it is only shown once. It will look like <code>xxxx xxxx xxxx xxxx xxxx xxxx</code> (with spaces)</li>
+            </ol>
+
+            <h5>Connecting</h5>
+            <ol>
+                <li>Go to your <a href="{{ url_for('client.client_settings') }}">Connections</a> page</li>
+                <li>Enter your <strong>WordPress Site URL</strong> (e.g., https://yourdomain.com)</li>
+                <li>Enter your <strong>WordPress Username</strong> (the one you log in with)</li>
+                <li>Enter the <strong>Application Password</strong> you just created</li>
+                <li>Save - the platform will test the connection</li>
+            </ol>
+            <div class="warning-box">
+                <i class="bi bi-exclamation-triangle me-1"></i> <strong>Not seeing "Application Passwords"?</strong> Some security plugins (like Wordfence or iThemes) can disable this feature. Check your security plugin settings, or ask your web host for help enabling it.
+            </div>
         </div>
 
         <!-- Reading Reports -->

@@ -324,6 +324,15 @@
     <!-- Ad Sets / Ad Groups Container -->
     <div id="adSetsContainer"></div>
 
+    <!-- Quality Scorecard (populated after AI generation) -->
+    <div id="qualityScorecard" style="display:none;" class="builder-panel mb-3">
+        <div class="builder-panel-header" onclick="togglePanel('scorecardBody')">
+            <h6><i class="bi bi-shield-check me-2"></i> Ad Quality Scorecard</h6>
+            <i class="bi bi-chevron-down" id="scorecardBody-chevron"></i>
+        </div>
+        <div class="builder-panel-body" id="scorecardBody"></div>
+    </div>
+
     <!-- Add Ad Set / Ad Group Button -->
     <button class="add-btn mb-3" id="addAdSetBtn" onclick="addAdSet()">
         <i class="bi bi-plus-circle me-1"></i>
@@ -1189,6 +1198,7 @@ function aiGenerate() {
         hideLoading();
         if (data.success) {
             loadPlanIntoBuilder(data.plan);
+            renderScorecard(data.scorecard, data.copy_warnings, data.cliche_warnings);
         } else {
             alert('Error: ' + (data.error || 'Failed to generate plan.'));
         }

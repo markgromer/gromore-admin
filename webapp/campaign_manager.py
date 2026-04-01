@@ -19,6 +19,190 @@ logger = logging.getLogger(__name__)
 
 GOOGLE_ADS_API_VERSION = "v19"
 
+# Words the proofreader bans - enforce in code, not just prompts
+_CLICHE_WORDS = [
+    "transform", "unlock", "elevate", "game-changer", "game changer",
+    "don't miss out", "act now", "say goodbye to", "revolutionize",
+    "cutting-edge", "cutting edge", "best-in-class", "world-class",
+    "synergy", "leverage", "empower", "unleash", "supercharge",
+]
+
+
+def _validate_plan_copy(plan):
+    """Check character limits and clichés in a campaign plan.
+
+    Returns a dict with 'warnings' (list of human-readable issues) and
+    'fixes_applied' (count of auto-fixed items like truncated headlines).
+    Does NOT silently truncate - flags violations for the user.
+    """
+    warnings = []
+    fixes = 0
+    platform = plan.get("platform", "")
+
+    headline_limit = 30 if platform == "google" else 40
+    desc_limit = 90
+
+    # Google ad groups
+    for ag in plan.get("ad_groups", []):
+        ag_name = ag.get("name", "Ad Group")
+        for i, h in enumerate(ag.get("headlines", [])):
+            if len(h) > headline_limit:
+                warnings.append(
+                    f'{ag_name}: headline {i+1} is {len(h)} chars '
+                    f'(limit {headline_limit}): "{h}"'
+                )
+        for i, d in enumerate(ag.get("descriptions", [])):
+            if len(d) > desc_limit:
+                warnings.append(
+                    f'{ag_name}: description {i+1} is {len(d)} chars '
+                    f'(limit {desc_limit}): "{d}"'
+                )
+
+    # Meta ad sets
+    for adset in plan.get("ad_sets", []):
+        set_name = adset.get("name", "Ad Set")
+        for i, copy in enumerate(adset.get("ad_copy", [])):
+            hl = copy.get("headline", "")
+            if len(hl) > headline_limit:
+                warnings.append(
+                    f'{set_name} ad {i+1}: headline is {len(hl)} chars '
+                    f'(limit {headline_limit}): "{hl}"'
+                )
+            desc = copy.get("description", "")
+            if desc and len(desc) > desc_limit:
+                warnings.append(
+                    f'{set_name} ad {i+1}: description is {len(desc)} chars '
+                    f'(limit {desc_limit}): "{desc}"'
+                )
+
+    return {"warnings": warnings, "fixes_applied": fixes}
+
+
+def _scan_cliches(plan):
+    """Scan ad copy for banned cliché words/phrases. Returns list of findings."""
+    findings = []
+
+    def _check(text, location):
+        if not text:
+            return
+        lower = text.lower()
+        for cliche in _CLICHE_WORDS:
+            if cliche in lower:
+                findings.append(f'{location}: contains "{cliche}" - "{text[:60]}"')
+
+    for ag in plan.get("ad_groups", []):
+        ag_name = ag.get("name", "Ad Group")
+        for i, h in enumerate(ag.get("headlines", [])):
+            _check(h, f"{ag_name} headline {i+1}")
+        for i, d in enumerate(ag.get("descriptions", [])):
+            _check(d, f"{ag_name} description {i+1}")
+
+    for adset in plan.get("ad_sets", []):
+        set_name = adset.get("name", "Ad Set")
+        for i, copy in enumerate(adset.get("ad_copy", [])):
+            _check(copy.get("headline", ""), f"{set_name} ad {i+1} headline")
+            _check(copy.get("primary_text", ""), f"{set_name} ad {i+1} primary text")
+            _check(copy.get("description", ""), f"{set_name} ad {i+1} description")
+
+    return findings
+
+
+def _build_quality_scorecard(plan):
+    """Score a campaign plan on concrete quality checks.
+
+    Returns a dict: {score: int 0-100, checks: [{name, passed, detail}], grade: str}
+    """
+    checks = []
+    platform = plan.get("platform", "")
+    headline_limit = 30 if platform == "google" else 40
+
+    # Collect all headlines and descriptions
+    all_headlines = []
+    all_descriptions = []
+    all_primary_texts = []
+
+    for ag in plan.get("ad_groups", []):
+        all_headlines.extend(ag.get("headlines", []))
+        all_descriptions.extend(ag.get("descriptions", []))
+    for adset in plan.get("ad_sets", []):
+        for copy in adset.get("ad_copy", []):
+            if copy.get("headline"):
+                all_headlines.append(copy["headline"])
+            if copy.get("description"):
+                all_descriptions.append(copy["description"])
+            if copy.get("primary_text"):
+                all_primary_texts.append(copy["primary_text"])
+
+    # Check 1: Character limits
+    over_limit = sum(1 for h in all_headlines if len(h) > headline_limit)
+    over_desc = sum(1 for d in all_descriptions if len(d) > 90)
+    limit_ok = over_limit == 0 and over_desc == 0
+    checks.append({
+        "name": "Character Limits",
+        "passed": limit_ok,
+        "detail": "All copy within limits" if limit_ok else f"{over_limit} headlines and {over_desc} descriptions over limit",
+    })
+
+    # Check 2: No clichés
+    cliches = _scan_cliches(plan)
+    checks.append({
+        "name": "No Clichés",
+        "passed": len(cliches) == 0,
+        "detail": "Clean copy" if not cliches else f"{len(cliches)} cliché(s) found",
+    })
+
+    # Check 3: Headline diversity (no near-duplicates)
+    dupes = 0
+    seen_lower = set()
+    for h in all_headlines:
+        key = h.lower().strip()
+        if key in seen_lower:
+            dupes += 1
+        seen_lower.add(key)
+    checks.append({
+        "name": "Headline Diversity",
+        "passed": dupes == 0,
+        "detail": "All headlines unique" if dupes == 0 else f"{dupes} duplicate headline(s)",
+    })
+
+    # Check 4: Has location reference
+    location = (plan.get("location_targeting") or "").lower()
+    loc_parts = [p.strip() for p in re.split(r"[,\s]+", location) if len(p.strip()) > 2]
+    loc_found = 0
+    if loc_parts:
+        for h in all_headlines:
+            if any(p in h.lower() for p in loc_parts):
+                loc_found += 1
+    loc_ok = loc_found >= 2 or not loc_parts
+    checks.append({
+        "name": "Location in Copy",
+        "passed": loc_ok,
+        "detail": f"{loc_found} headline(s) mention location" if loc_parts else "No location set to check",
+    })
+
+    # Check 5: Rationale present
+    has_rationale = bool((plan.get("rationale") or "").strip())
+    checks.append({
+        "name": "Strategy Rationale",
+        "passed": has_rationale,
+        "detail": "Rationale provided" if has_rationale else "Missing strategy rationale",
+    })
+
+    # Check 6: Minimum ad volume
+    total_ads = len(all_headlines) if platform == "google" else len(all_primary_texts) or len(all_headlines)
+    min_ads = 3
+    checks.append({
+        "name": "Ad Volume",
+        "passed": total_ads >= min_ads,
+        "detail": f"{total_ads} ad element(s)" if total_ads >= min_ads else f"Only {total_ads} ad element(s), expected at least {min_ads}",
+    })
+
+    passed = sum(1 for c in checks if c["passed"])
+    score = int((passed / len(checks)) * 100) if checks else 0
+    grade = "A" if score >= 90 else "B" if score >= 70 else "C" if score >= 50 else "D"
+
+    return {"score": score, "grade": grade, "checks": checks}
+
 
 def _parse_google_error(resp):
     """Extract a human-readable error from a Google Ads API error response."""
@@ -896,6 +1080,11 @@ RULES for rewriting:
 
 Return the FULL JSON plan with only the ad copy improved. No commentary, no markdown fences, just valid JSON."""
 
+    # Scale token limit based on plan complexity
+    ad_count = sum(len(ag.get("headlines", [])) for ag in plan.get("ad_groups", []))
+    ad_count += sum(len(s.get("ad_copy", [])) for s in plan.get("ad_sets", []))
+    max_tokens = max(3000, min(8000, ad_count * 400))
+
     try:
         response = client.chat.completions.create(
             model=model,
@@ -904,7 +1093,7 @@ Return the FULL JSON plan with only the ad copy improved. No commentary, no mark
                 {"role": "user", "content": json.dumps(plan)},
             ],
             temperature=0.4,
-            max_tokens=3000,
+            max_tokens=max_tokens,
         )
         text = response.choices[0].message.content.strip()
         if text.startswith("```"):
@@ -918,8 +1107,8 @@ Return the FULL JSON plan with only the ad copy improved. No commentary, no mark
         reviewed["platform"] = plan.get("platform", "")
         reviewed["strategy"] = plan.get("strategy", "")
         return reviewed
-    except Exception:
-        logger.info("Proofreader pass failed, using original plan")
+    except Exception as exc:
+        logger.warning("Proofreader pass failed (%s), using original plan", exc)
         return plan
 
 
@@ -970,7 +1159,15 @@ def generate_campaign_plan(brand, service, location, monthly_budget,
                 plan["platform"] = platform
                 plan["strategy"] = strategy_type
                 plan = _proofread_campaign_plan(plan, brand)
-                return {"success": True, "plan": plan}
+                validation = _validate_plan_copy(plan)
+                cliches = _scan_cliches(plan)
+                scorecard = _build_quality_scorecard(plan)
+                result = {"success": True, "plan": plan, "scorecard": scorecard}
+                if validation["warnings"]:
+                    result["copy_warnings"] = validation["warnings"]
+                if cliches:
+                    result["cliche_warnings"] = cliches
+                return result
 
             except json.JSONDecodeError:
                 return {"success": False, "error": "AI returned invalid plan format. Please try again."}
@@ -982,6 +1179,18 @@ def generate_campaign_plan(brand, service, location, monthly_budget,
     brand_name = brand.get("display_name", brand.get("name", ""))
     brand_ctx = _brand_context_block(brand)
     daily = round(float(monthly_budget) / 30, 2)
+
+    # Load knowledge base for generic path too
+    knowledge = ""
+    try:
+        from webapp.ad_knowledge import build_ad_knowledge_context
+        from flask import current_app
+        _db = getattr(current_app, "db", None)
+        if _db:
+            fmt = "search_rsa" if platform == "google" else "feed"
+            knowledge = build_ad_knowledge_context(_db, platform, fmt, industry=industry)
+    except Exception:
+        pass
 
     if platform == "google":
         prompt = f"""Create a Google Ads Search campaign plan for a {industry} business.
@@ -1083,7 +1292,7 @@ Requirements:
                         "The client's brand identity and competitive landscape are included "
                         "in the prompt - use them to make ad copy specific, not generic. "
                         "Return ONLY valid JSON, no markdown."
-                    ),
+                    ) + ("\n\n" + knowledge if knowledge else ""),
                 },
                 {"role": "user", "content": prompt},
             ],
@@ -1102,7 +1311,15 @@ Requirements:
         plan = json.loads(text)
         plan["platform"] = platform
         plan = _proofread_campaign_plan(plan, brand)
-        return {"success": True, "plan": plan}
+        validation = _validate_plan_copy(plan)
+        cliches = _scan_cliches(plan)
+        scorecard = _build_quality_scorecard(plan)
+        result = {"success": True, "plan": plan, "scorecard": scorecard}
+        if validation["warnings"]:
+            result["copy_warnings"] = validation["warnings"]
+        if cliches:
+            result["cliche_warnings"] = cliches
+        return result
 
     except json.JSONDecodeError:
         return {"success": False, "error": "AI returned invalid plan format. Please try again."}
@@ -1297,6 +1514,20 @@ def launch_google_campaign(db, brand, plan, changed_by):
         descriptions = ag_plan.get("descriptions", [])[:4]
 
         if headlines and descriptions:
+            # Log any truncations so they're visible
+            for i, h in enumerate(headlines):
+                if len(h) > 30:
+                    logger.warning(
+                        "Headline %d in '%s' truncated: '%s' (%d chars -> 30)",
+                        i + 1, ag_plan.get("name", "Ad Group"), h, len(h),
+                    )
+            for i, d in enumerate(descriptions):
+                if len(d) > 90:
+                    logger.warning(
+                        "Description %d in '%s' truncated: '%s' (%d chars -> 90)",
+                        i + 1, ag_plan.get("name", "Ad Group"), d, len(d),
+                    )
+
             # Build RSA asset structure
             headline_assets = [{"text": h[:30]} for h in headlines]
             desc_assets = [{"text": d[:90]} for d in descriptions]
@@ -1896,11 +2127,19 @@ def launch_meta_campaign(db, brand, plan, changed_by):
     if launch_notes:
         message = f"{message} {' '.join(launch_notes)}"
 
+    # Surface targeting fallbacks prominently so the user knows
+    targeting_degraded = any(
+        "US-wide" in n or "minimal targeting" in n for n in launch_notes
+    )
+
     return {
         "success": True,
         "campaign_id": campaign_id,
         "campaign_name": plan.get("campaign_name", ""),
         "status": "PAUSED",
+        "message": message,
+        "launch_notes": launch_notes,
+        "targeting_degraded": targeting_degraded,
         "message": message,
     }
 
