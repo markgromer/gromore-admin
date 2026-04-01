@@ -273,6 +273,7 @@ def pull_api_data_for_brand(brand, connections, month):
                     page_token,
                     start_date,
                     end_date,
+                    user_access_token=token,
                 )
         except Exception as e:
             errors.append(f"Facebook organic pull failed: {str(e)}")
@@ -1034,7 +1035,7 @@ def _pull_meta(ad_account_id, access_token, start_date, end_date):
     }
 
 
-def _pull_meta_organic(page_id, access_token, start_date, end_date):
+def _pull_meta_organic(page_id, access_token, start_date, end_date, user_access_token=None):
     """Pull organic Facebook Page insights using the Graph API.
 
     Returns page-level metrics (followers, reach, engagement) and
@@ -1046,28 +1047,38 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
     log.info("_pull_meta_organic: page_id=%s, range=%s to %s, token_len=%d", page_id, start_date, end_date, len(access_token or ""))
 
     # ── Page-level info (followers, fan count) ──
-    page_resp = requests.get(
-        base,
-        params={
-            "access_token": access_token,
-            "fields": "name,fan_count,followers_count,about,category,website",
-        },
-        timeout=15,
-    )
     page_info = {}
-    if page_resp.status_code == 200:
+    tokens_to_try = []
+    for candidate in (access_token, user_access_token):
+        if candidate and candidate not in tokens_to_try:
+            tokens_to_try.append(candidate)
+
+    for token_candidate in tokens_to_try:
+        page_resp = requests.get(
+            base,
+            params={
+                "access_token": token_candidate,
+                "fields": "name,fan_count,followers_count,about,category,website",
+            },
+            timeout=15,
+        )
+        if page_resp.status_code != 200:
+            log.warning("FB page info request failed (%s): %s", page_resp.status_code, page_resp.text[:200])
+            continue
+
         d = page_resp.json()
         if "error" in d:
             log.warning("FB page info error for %s: %s", page_id, d["error"].get("message", d["error"]))
-        else:
-            page_info = {
-                "name": d.get("name", ""),
-                "fans": d.get("fan_count", 0),
-                "followers": d.get("followers_count", 0),
-                "category": d.get("category", ""),
-            }
-    else:
-        log.warning("FB page info request failed (%s): %s", page_resp.status_code, page_resp.text[:200])
+            continue
+
+        page_info = {
+            "name": d.get("name", ""),
+            "fans": d.get("fan_count", 0),
+            "followers": d.get("followers_count", 0),
+            "category": d.get("category", ""),
+        }
+        if page_info.get("name") or page_info.get("followers") or page_info.get("fans"):
+            break
 
     # ── Page Insights (aggregated metrics for the period) ──
     # Note: Graph API date filters behave like [since, until), so advance
@@ -1077,104 +1088,102 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
     since_ts = int(_dt.strptime(start_date, "%Y-%m-%d").timestamp())
     until_ts = int((_dt.strptime(end_date, "%Y-%m-%d") + _td(days=1)).timestamp())
 
-    metrics = [
-        "page_impressions",
-        "page_impressions_organic",
-        "page_impressions_unique",
-        "page_engaged_users",
-        "page_post_engagements",
-        "page_fan_adds",
-        "page_fan_removes",
-        "page_views_total",
-    ]
+    metric_periods = {
+        "page_media_view": "day",
+        "page_total_media_view_unique": "day",
+        "page_impressions_organic": "day",
+        "page_post_engagements": "day",
+        "page_actions_post_reactions_total": "day",
+        "page_views_total": "day",
+        "page_daily_follows_unique": "day",
+        "page_daily_unfollows_unique": "day",
+        "page_follows": "day",
+        # Legacy fallbacks for pages that still return them.
+        "page_impressions": "day",
+        "page_impressions_unique": "day",
+        "page_engaged_users": "day",
+        "page_fan_adds": "day",
+        "page_fan_removes": "day",
+    }
 
     insights_data = {}
     insights_status = "not_attempted"
+
+    def _accumulate_metric(metric_name, payload):
+        if "error" in payload:
+            err = payload["error"].get("message", payload["error"])
+            log.warning("FB insight %s error: %s", metric_name, err)
+            return False
+        entries = payload.get("data", [])
+        total = 0
+        for entry in entries:
+            for val in entry.get("values", []):
+                v = val.get("value", 0)
+                if isinstance(v, dict):
+                    total += sum(v.values())
+                elif isinstance(v, (int, float)):
+                    total += v
+        if entries:
+            insights_data[metric_name] = total
+            log.info("  %s = %s", metric_name, total)
+            return True
+        return False
+
     try:
-        insights_resp = requests.get(
-            f"{base}/insights",
-            params={
-                "access_token": access_token,
-                "metric": ",".join(metrics),
-                "period": "day",
-                "since": since_ts,
-                "until": until_ts,
-            },
-            timeout=30,
-        )
-        if insights_resp.status_code == 200:
-            resp_data = insights_resp.json()
-            if "error" in resp_data:
-                log.warning("FB page insights error: %s", resp_data["error"].get("message", resp_data["error"]))
-            data_entries = resp_data.get("data", [])
-            log.info("FB insights returned %d metric entries", len(data_entries))
-            for entry in data_entries:
-                metric_name = entry.get("name", "")
-                # Sum all daily values for the period
-                total = 0
-                for val in entry.get("values", []):
-                    v = val.get("value", 0)
-                    if isinstance(v, dict):
-                        total += sum(v.values())
-                    elif isinstance(v, (int, float)):
-                        total += v
-                insights_data[metric_name] = total
-                log.info("  %s = %s", metric_name, total)
-            if not data_entries:
-                log.warning("FB insights returned 200 but empty data array. Token may lack read_insights permission or page has no data for this period.")
-                insights_status = "empty_response"
-            else:
-                insights_status = "ok"
+        successful_metrics = 0
+        for metric, period in metric_periods.items():
+            try:
+                single_resp = requests.get(
+                    f"{base}/insights",
+                    params={
+                        "access_token": access_token,
+                        "metric": metric,
+                        "period": period,
+                        "since": since_ts,
+                        "until": until_ts,
+                    },
+                    timeout=15,
+                )
+                if single_resp.status_code == 200:
+                    if _accumulate_metric(metric, single_resp.json()):
+                        successful_metrics += 1
+                else:
+                    log.warning("FB single metric %s HTTP %s: %s", metric, single_resp.status_code, single_resp.text[:200])
+            except Exception as exc:
+                log.warning("FB single metric %s exception: %s", metric, exc)
+
+        if successful_metrics:
+            insights_status = "ok"
+        elif page_info.get("followers") or page_info.get("fans"):
+            insights_status = "page_only"
         else:
-            insights_status = f"http_{insights_resp.status_code}"
-            log.warning(
-                "FB page insights HTTP %s: %s",
-                insights_resp.status_code,
-                insights_resp.text[:300],
-            )
-            # Try metrics one at a time as fallback
-            for metric in metrics:
-                try:
-                    single_resp = requests.get(
-                        f"{base}/insights",
-                        params={
-                            "access_token": access_token,
-                            "metric": metric,
-                            "period": "day",
-                            "since": since_ts,
-                            "until": until_ts,
-                        },
-                        timeout=15,
-                    )
-                    if single_resp.status_code == 200:
-                        for entry in single_resp.json().get("data", []):
-                            total = 0
-                            for val in entry.get("values", []):
-                                v = val.get("value", 0)
-                                if isinstance(v, dict):
-                                    total += sum(v.values())
-                                elif isinstance(v, (int, float)):
-                                    total += v
-                            insights_data[entry.get("name", "")] = total
-                    else:
-                        log.warning("FB single metric %s HTTP %s: %s", metric, single_resp.status_code, single_resp.text[:200])
-                except Exception as exc:
-                    log.warning("FB single metric %s exception: %s", metric, exc)
+            insights_status = "empty_response"
     except Exception as e:
         log.warning("FB page insights exception: %s", e)
 
+    follows_total = insights_data.get("page_follows", 0)
+    followers_total = page_info.get("followers", 0) or follows_total
+    fans_total = page_info.get("fans", 0) or follows_total
+    total_impressions = insights_data.get("page_media_view", 0) or insights_data.get("page_impressions", 0)
+    organic_impressions = insights_data.get("page_impressions_organic", 0) or total_impressions
+    reach_total = insights_data.get("page_total_media_view_unique", 0) or insights_data.get("page_impressions_unique", 0) or organic_impressions
+    post_engagements_total = insights_data.get("page_post_engagements", 0) or insights_data.get("page_actions_post_reactions_total", 0)
+    engaged_users_total = insights_data.get("page_engaged_users", 0) or post_engagements_total
+    new_fans_total = insights_data.get("page_daily_follows_unique", 0) or insights_data.get("page_fan_adds", 0)
+    lost_fans_total = insights_data.get("page_daily_unfollows_unique", 0) or insights_data.get("page_fan_removes", 0)
+
     page_metrics = {
-        "followers": page_info.get("followers", 0),
-        "fans": page_info.get("fans", 0),
+        "followers": followers_total,
+        "fans": fans_total,
         "page_name": page_info.get("name", ""),
-        "impressions": insights_data.get("page_impressions", 0),
-        "organic_impressions": insights_data.get("page_impressions_organic", 0) or insights_data.get("page_impressions", 0),
-        "reach": insights_data.get("page_impressions_unique", 0),
-        "engaged_users": insights_data.get("page_engaged_users", 0),
-        "post_engagements": insights_data.get("page_post_engagements", 0),
-        "new_fans": insights_data.get("page_fan_adds", 0),
-        "lost_fans": insights_data.get("page_fan_removes", 0),
-        "net_fans": insights_data.get("page_fan_adds", 0) - insights_data.get("page_fan_removes", 0),
+        "impressions": total_impressions,
+        "organic_impressions": organic_impressions,
+        "reach": reach_total,
+        "engaged_users": engaged_users_total,
+        "post_engagements": post_engagements_total,
+        "new_fans": new_fans_total,
+        "lost_fans": lost_fans_total,
+        "net_fans": new_fans_total - lost_fans_total,
         "page_views": insights_data.get("page_views_total", 0),
         "reactions": insights_data.get("page_actions_post_reactions_total", 0),
         "_debug": {

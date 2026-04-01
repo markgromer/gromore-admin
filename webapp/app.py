@@ -590,7 +590,7 @@ def create_app():
         results["checks"].append({"step": "Meta connection", "status": "OK", "detail": f"Connected as {meta_conn.get('account_name', '?')}"})
 
         # Get token
-        from webapp.api_bridge import _get_meta_token, _get_page_access_token
+        from webapp.api_bridge import _get_meta_token, _get_page_access_token, _resolve_facebook_page_context
         try:
             user_token = _get_meta_token(db, brand_id, meta_conn)
             results["checks"].append({"step": "User token", "status": "OK", "detail": f"Token length: {len(user_token)}"})
@@ -624,8 +624,11 @@ def create_app():
             results["checks"].append({"step": "Page ID", "status": "FAIL", "detail": "No facebook_page_id set on brand"})
             return jsonify(results)
 
-        # Get page token
-        page_token = _get_page_access_token(page_id, user_token)
+        # Resolve page context and get page token
+        resolved_page_id, resolved_page_token = _resolve_facebook_page_context(db, brand_id, page_id, user_token)
+        if resolved_page_id:
+            page_id = resolved_page_id
+        page_token = resolved_page_token or _get_page_access_token(page_id, user_token)
         is_page_token = page_token != user_token
         results["checks"].append({
             "step": "Page access token",
@@ -653,11 +656,14 @@ def create_app():
         until_ts = int((_dt(today.year, today.month, today.day) + timedelta(days=1)).timestamp())
 
         test_metrics = [
-            "page_impressions",
+            "page_media_view",
+            "page_total_media_view_unique",
             "page_impressions_organic",
-            "page_engaged_users",
             "page_post_engagements",
-            "page_fan_adds",
+            "page_actions_post_reactions_total",
+            "page_daily_follows_unique",
+            "page_daily_unfollows_unique",
+            "page_follows",
             "page_views_total",
         ]
         for metric in test_metrics:
