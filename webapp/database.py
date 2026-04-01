@@ -24,6 +24,15 @@ class WebDB:
         conn.execute("PRAGMA busy_timeout = 5000")
         return conn
 
+    def _safe_add_column(self, conn, table_name, col_name, col_def):
+        try:
+            conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_def}")
+        except sqlite3.OperationalError as exc:
+            message = str(exc).lower()
+            if "duplicate column name" in message:
+                return
+            raise
+
     def init(self):
         conn = self._conn()
         conn.executescript("""
@@ -790,7 +799,7 @@ class WebDB:
         ]
         for col_name, col_def in new_brand_cols:
             if col_name not in brand_columns:
-                conn.execute(f"ALTER TABLE brands ADD COLUMN {col_name} {col_def}")
+                self._safe_add_column(conn, "brands", col_name, col_def)
         conn.commit()
 
         # ── agent_findings migrations ──
@@ -803,7 +812,7 @@ class WebDB:
         ]
         for col_name, col_def in new_af_cols:
             if col_name not in af_columns:
-                conn.execute(f"ALTER TABLE agent_findings ADD COLUMN {col_name} {col_def}")
+                self._safe_add_column(conn, "agent_findings", col_name, col_def)
         conn.commit()
 
         # ── campaign_strategies migrations ──
@@ -813,7 +822,7 @@ class WebDB:
         ]
         for col_name, col_def in new_cs_cols:
             if col_name not in cs_columns:
-                conn.execute(f"ALTER TABLE campaign_strategies ADD COLUMN {col_name} {col_def}")
+                self._safe_add_column(conn, "campaign_strategies", col_name, col_def)
         conn.commit()
 
         # ── beta_testers migrations ──
@@ -829,7 +838,7 @@ class WebDB:
         ]
         for col_name, col_def in new_bt_cols:
             if col_name not in bt_columns:
-                conn.execute(f"ALTER TABLE beta_testers ADD COLUMN {col_name} {col_def}")
+                self._safe_add_column(conn, "beta_testers", col_name, col_def)
         conn.commit()
 
         # ── client_users migrations ──
@@ -842,7 +851,7 @@ class WebDB:
         ]
         for col_name, col_def in new_cu_cols:
             if col_name not in cu_columns:
-                conn.execute(f"ALTER TABLE client_users ADD COLUMN {col_name} {col_def}")
+                self._safe_add_column(conn, "client_users", col_name, col_def)
         conn.commit()
 
         # ── Legacy migration: brands.competitors (text) -> competitors table ──
