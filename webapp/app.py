@@ -650,7 +650,7 @@ def create_app():
         today = _date.today()
         first_of_month = today.replace(day=1)
         since_ts = int(_dt(first_of_month.year, first_of_month.month, first_of_month.day).timestamp())
-        until_ts = int(_dt(today.year, today.month, today.day).timestamp())
+        until_ts = int((_dt(today.year, today.month, today.day) + timedelta(days=1)).timestamp())
 
         test_metrics = [
             "page_impressions",

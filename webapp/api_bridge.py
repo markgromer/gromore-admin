@@ -983,10 +983,12 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
         log.warning("FB page info request failed (%s): %s", page_resp.status_code, page_resp.text[:200])
 
     # ── Page Insights (aggregated metrics for the period) ──
-    # Note: page/insights requires "since"/"until" as Unix timestamps
-    from datetime import datetime as _dt
+    # Note: Graph API date filters behave like [since, until), so advance
+    # until by one day to include the full end_date. This matters for
+    # month-to-date pulls on the current day, otherwise today's posts count as zero.
+    from datetime import datetime as _dt, timedelta as _td
     since_ts = int(_dt.strptime(start_date, "%Y-%m-%d").timestamp())
-    until_ts = int(_dt.strptime(end_date, "%Y-%m-%d").timestamp())
+    until_ts = int((_dt.strptime(end_date, "%Y-%m-%d") + _td(days=1)).timestamp())
 
     metrics = [
         "page_impressions",
@@ -1115,47 +1117,56 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
     for ep in date_endpoints:
         ep_name = ep.split("/")[-1]
         try:
-            posts_resp = requests.get(
-                ep,
-                params={
-                    "access_token": access_token,
-                    "fields": basic_post_fields,
-                    "since": since_ts,
-                    "until": until_ts,
-                    "limit": 50,
-                },
-                timeout=30,
-            )
-            if posts_resp.status_code == 200:
+            params = {
+                "access_token": access_token,
+                "fields": basic_post_fields,
+                "since": since_ts,
+                "until": until_ts,
+                "limit": 100,
+            }
+            next_url = ep
+            paged_posts = []
+            page_count = 0
+            while next_url and page_count < 5:
+                posts_resp = requests.get(next_url, params=params if next_url == ep else None, timeout=30)
+                if posts_resp.status_code != 200:
+                    log.info("FB %s (date-filtered) HTTP %s", ep_name, posts_resp.status_code)
+                    paged_posts = []
+                    break
                 posts_data = posts_resp.json()
                 if "error" in posts_data:
                     log.warning("FB %s (date-filtered) error: %s", ep_name, posts_data["error"].get("message", posts_data["error"]))
-                    continue
-                raw_posts = posts_data.get("data", [])
-                log.info("FB %s (date-filtered) returned %d posts for page %s", ep_name, len(raw_posts), page_id)
-                if raw_posts:
+                    paged_posts = []
                     break
-            else:
-                log.info("FB %s (date-filtered) HTTP %s", ep_name, posts_resp.status_code)
-                # Try with simpler fields in case engagement sub-requests caused the failure
-                posts_resp2 = requests.get(
-                    ep,
-                    params={
-                        "access_token": access_token,
-                        "fields": simple_post_fields,
-                        "since": since_ts,
-                        "until": until_ts,
-                        "limit": 50,
-                    },
-                    timeout=30,
-                )
-                if posts_resp2.status_code == 200:
-                    posts_data2 = posts_resp2.json()
-                    if "error" not in posts_data2:
-                        raw_posts = posts_data2.get("data", [])
-                        log.info("FB %s (date-filtered, simple fields) returned %d posts", ep_name, len(raw_posts))
-                        if raw_posts:
-                            break
+                paged_posts.extend(posts_data.get("data", []))
+                next_url = (posts_data.get("paging") or {}).get("next")
+                params = None
+                page_count += 1
+
+            raw_posts = paged_posts
+            log.info("FB %s (date-filtered) returned %d posts for page %s", ep_name, len(raw_posts), page_id)
+            if raw_posts:
+                break
+
+            # Try with simpler fields in case engagement sub-requests caused the failure
+            posts_resp2 = requests.get(
+                ep,
+                params={
+                    "access_token": access_token,
+                    "fields": simple_post_fields,
+                    "since": since_ts,
+                    "until": until_ts,
+                    "limit": 100,
+                },
+                timeout=30,
+            )
+            if posts_resp2.status_code == 200:
+                posts_data2 = posts_resp2.json()
+                if "error" not in posts_data2:
+                    raw_posts = posts_data2.get("data", [])
+                    log.info("FB %s (date-filtered, simple fields) returned %d posts", ep_name, len(raw_posts))
+                    if raw_posts:
+                        break
         except Exception as exc:
             log.warning("FB %s (date-filtered) exception: %s", ep_name, exc)
 
