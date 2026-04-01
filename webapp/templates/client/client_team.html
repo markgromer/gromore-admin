@@ -888,13 +888,13 @@
 <div class="agent-grid" id="agent-grid"></div>
 
 <!-- ── FINDINGS ── -->
-<div class="findings-section findings-secondary is-collapsed" id="findings-section">
+<div class="findings-section findings-secondary" id="findings-section">
     <div class="findings-header">
         <div>
             <h4><i class="bi bi-exclamation-diamond me-2"></i>Raw Team Feed</h4>
             <div style="font-size:.8rem;color:#64748b;">Secondary detail from the team. Use this when you want the evidence behind Warren's plan.</div>
         </div>
-        <button class="findings-toggle" id="findings-toggle" type="button"><i class="bi bi-chevron-down me-1"></i>Show Raw Feed</button>
+        <button class="findings-toggle" id="findings-toggle" type="button"><i class="bi bi-chevron-up me-1"></i>Hide Raw Feed</button>
         <div class="findings-filters" id="findings-filters">
             <span class="filter-pill active" data-filter="all">All</span>
             <span class="filter-pill" data-filter="critical">Critical</span>
@@ -1724,7 +1724,7 @@ function splitFindings(findings) {
     var raw = [];
     findings.forEach(function(f) {
         if (f.agent_key === 'warren' || f.agent_key === 'chief') command.push(f);
-        else raw.push(f);
+        raw.push(f);
     });
     return {command: command, raw: raw};
 }
@@ -1846,9 +1846,20 @@ function loadFindings() {
             var groups = splitFindings(allFindings);
             renderCommandDesk(groups.command);
             renderFindings(groups.raw);
+            syncFindingsPanelState(groups.raw.length);
             updateFindingsStat();
         })
         .catch(function(err) { console.error('Findings load error:', err); });
+}
+
+function syncFindingsPanelState(hasFindings) {
+    var section = document.getElementById('findings-section');
+    var toggle = document.getElementById('findings-toggle');
+    var shouldCollapse = !hasFindings;
+    section.classList.toggle('is-collapsed', shouldCollapse);
+    toggle.innerHTML = shouldCollapse
+        ? '<i class="bi bi-chevron-down me-1"></i>Show Raw Feed'
+        : '<i class="bi bi-chevron-up me-1"></i>Hide Raw Feed';
 }
 
 // Filter pills
