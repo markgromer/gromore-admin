@@ -138,6 +138,12 @@ def create_app():
     # App URL (for OAuth callbacks)
     app.config["APP_URL"] = _cfg("app_url", "APP_URL", "http://localhost:5000")
 
+    # Titan trusted launch
+    app.config["TITAN_BASE_URL"] = db.get_setting("titan_base_url", "") or os.environ.get("TITAN_BASE_URL", "")
+    app.config["TITAN_UPSTREAM_ISSUER"] = db.get_setting("titan_upstream_issuer", "") or os.environ.get("TITAN_UPSTREAM_ISSUER", "")
+    app.config["TITAN_EXTERNAL_APP"] = app.config["TITAN_UPSTREAM_ISSUER"]
+    app.config["TITAN_UPSTREAM_SSO_SECRET"] = db.get_setting("titan_upstream_sso_secret", "") or os.environ.get("TITAN_UPSTREAM_SSO_SECRET", "")
+
     # Optional AI config
     app.config["OPENAI_API_KEY"] = _cfg("openai_api_key", "OPENAI_API_KEY")
     app.config["OPENAI_MODEL"] = _cfg("openai_model", "OPENAI_MODEL", "gpt-4o-mini")
@@ -1646,6 +1652,17 @@ def create_app():
                 db.save_setting("app_url", request.form.get("app_url", "").strip())
                 app.config["APP_URL"] = db.get_setting("app_url", "http://localhost:5000")
                 flash("App URL saved", "success")
+            elif section == "titan":
+                db.save_setting("titan_base_url", request.form.get("titan_base_url", "").strip())
+                db.save_setting("titan_upstream_issuer", request.form.get("titan_upstream_issuer", "").strip())
+                titan_secret = request.form.get("titan_upstream_sso_secret", "").strip()
+                if titan_secret:
+                    db.save_setting("titan_upstream_sso_secret", titan_secret)
+                app.config["TITAN_BASE_URL"] = db.get_setting("titan_base_url", "")
+                app.config["TITAN_UPSTREAM_ISSUER"] = db.get_setting("titan_upstream_issuer", "")
+                app.config["TITAN_EXTERNAL_APP"] = app.config["TITAN_UPSTREAM_ISSUER"]
+                app.config["TITAN_UPSTREAM_SSO_SECRET"] = db.get_setting("titan_upstream_sso_secret", "") or app.config["TITAN_UPSTREAM_SSO_SECRET"]
+                flash("Titan trusted launch settings saved", "success")
             elif section == "wordpress":
                 wp_url = request.form.get("wp_url", "").strip()
                 wp_user = request.form.get("wp_user", "").strip()

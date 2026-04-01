@@ -11,8 +11,13 @@ import re
 import time
 import threading
 import logging
+import base64
+import hashlib
+import hmac
+import uuid
 from functools import wraps
 from datetime import datetime, timedelta
+from urllib.parse import urlencode
 
 from flask import (
     Blueprint, render_template, request, redirect,
@@ -104,6 +109,106 @@ def _require_role(*allowed_roles):
     """Check that current user has one of the allowed roles."""
     role = session.get("client_role", "owner")
     return role in allowed_roles
+
+
+def _to_base64url(value):
+    if isinstance(value, str):
+        value = value.encode("utf-8")
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def _normalize_titan_next_path(next_path, fallback="/"):
+    value = (next_path or "").strip()
+    if not value.startswith("/"):
+        return fallback
+    if value.startswith("//"):
+        return fallback
+    return value
+
+
+def _get_titan_launch_config(config):
+    base_url = (config.get("TITAN_BASE_URL") or "").strip().rstrip("/")
+    issuer = (config.get("TITAN_UPSTREAM_ISSUER") or "").strip()
+    secret = (config.get("TITAN_UPSTREAM_SSO_SECRET") or "").strip()
+
+    missing = []
+    if not base_url:
+        missing.append("TITAN_BASE_URL")
+    if not issuer:
+        missing.append("TITAN_UPSTREAM_ISSUER")
+    if not secret:
+        missing.append("TITAN_UPSTREAM_SSO_SECRET")
+
+    if missing:
+        raise RuntimeError("Missing Titan launch config: " + ", ".join(missing))
+
+    return {
+        "base_url": base_url,
+        "issuer": issuer,
+        "secret": secret,
+    }
+
+
+def _titan_launch_role(client_role):
+    role = (client_role or "").strip().lower()
+    if role == "owner":
+        return "owner"
+    if role == "manager":
+        return "admin"
+    return "member"
+
+
+def build_titan_launch_payload(config, user, brand, lifetime_seconds=300):
+    titan = _get_titan_launch_config(config)
+    now = int(time.time())
+    ttl = max(1, min(int(lifetime_seconds or 300), 300))
+
+    return {
+        "issuer": titan["issuer"],
+        "external_app": titan["issuer"],
+        "external_user_id": str(user.get("id") or "").strip(),
+        "external_brand_id": str(brand.get("id") or "").strip(),
+        "email": (user.get("email") or "").strip().lower(),
+        "display_name": (user.get("display_name") or "").strip(),
+        "role": _titan_launch_role(user.get("role")),
+        "titan_snapshot_id": ((brand.get("titan_snapshot_id") or "").strip() or None),
+        "titan_account_id": ((brand.get("titan_account_id") or "").strip() or None),
+        "ghl_location_id": ((brand.get("titan_ghl_location_id") or "").strip() or None),
+        "iat": now,
+        "exp": now + ttl,
+        "nonce": str(uuid.uuid4()),
+    }
+
+
+def build_titan_sso_token(config, user, brand, lifetime_seconds=300):
+    titan = _get_titan_launch_config(config)
+    payload = build_titan_launch_payload(config, user, brand, lifetime_seconds=lifetime_seconds)
+    encoded_payload = _to_base64url(json.dumps(payload, separators=(",", ":")))
+    signature = _to_base64url(
+        hmac.new(
+            titan["secret"].encode("utf-8"),
+            encoded_payload.encode("utf-8"),
+            hashlib.sha256,
+        ).digest()
+    )
+    return f"{encoded_payload}.{signature}", payload
+
+
+def build_titan_launch_url(config, user, brand, next_path="/", lifetime_seconds=300):
+    titan = _get_titan_launch_config(config)
+    token, payload = build_titan_sso_token(
+        config,
+        user,
+        brand,
+        lifetime_seconds=lifetime_seconds,
+    )
+
+    query = {
+        "token": token,
+        "next": _normalize_titan_next_path(next_path, "/"),
+    }
+
+    return f"{titan['base_url']}/sso/upstream?{urlencode(query)}", payload
 
 
 # ── Feature gate (before_request on blueprint) ──
@@ -3179,6 +3284,11 @@ def client_settings():
             brand=brand,
             google_connected=(google_conn.get("status") == "connected"),
             meta_connected=(meta_conn.get("status") == "connected"),
+            titan_configured=bool(
+                (current_app.config.get("TITAN_BASE_URL") or "").strip()
+                and (current_app.config.get("TITAN_UPSTREAM_ISSUER") or "").strip()
+                and (current_app.config.get("TITAN_UPSTREAM_SSO_SECRET") or "").strip()
+            ),
             drive_scoped=drive_scoped,
             google_conn=google_conn,
             meta_conn=meta_conn,
@@ -3214,6 +3324,57 @@ def client_save_facebook_page_id():
     db.update_brand_api_field(brand_id, "facebook_page_id", raw)
     flash("Facebook Page reference saved.", "success")
     return redirect(url_for("client.client_settings"))
+
+
+@client_bp.route("/settings/titan", methods=["POST"])
+@client_login_required
+def client_save_titan_settings():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    db.update_brand_text_field(brand_id, "titan_snapshot_id", (request.form.get("titan_snapshot_id") or "").strip())
+    db.update_brand_text_field(brand_id, "titan_account_id", (request.form.get("titan_account_id") or "").strip())
+    db.update_brand_text_field(brand_id, "titan_ghl_location_id", (request.form.get("titan_ghl_location_id") or "").strip())
+
+    flash("Titan settings saved.", "success")
+    return redirect(url_for("client.client_settings"))
+
+
+@client_bp.route("/titan/launch")
+@client_login_required
+def client_titan_launch():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    try:
+        _get_titan_launch_config(current_app.config)
+    except RuntimeError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("client.client_settings"))
+
+    user = db.get_client_user(session.get("client_user_id"))
+    if not user:
+        flash("Your client account could not be loaded.", "error")
+        return redirect(url_for("client.client_logout"))
+
+    email = (user.get("email") or "").strip().lower()
+    display_name = (user.get("display_name") or "").strip()
+    if not email or not display_name:
+        flash("Titan launch requires a client user with both email and display name.", "error")
+        return redirect(url_for("client.client_settings"))
+
+    next_path = request.args.get("next") or "/"
+    titan_url, _payload = build_titan_launch_url(
+        current_app.config,
+        user,
+        brand,
+        next_path=next_path,
+        lifetime_seconds=300,
+    )
+    return redirect(titan_url)
 
 
 @client_bp.route("/settings/openai", methods=["POST"])

@@ -960,6 +960,9 @@
                 <i class="bi bi-list-task"></i> Tasks
             </a>
             {% endif %}
+            <a href="{{ url_for('client.client_titan_launch') }}" style="color:#111827; font-weight:600;">
+                <i class="bi bi-box-arrow-up-right"></i> Titan
+            </a>
 
             <div class="nav-section-label">Settings</div>
             {% if feature_on('connections') %}

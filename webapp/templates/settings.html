@@ -115,6 +115,40 @@
         </div>
     </div>
 
+    <!-- Titan Trusted Launch -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-box-arrow-up-right"></i> Titan Trusted Launch</strong></div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="section" value="titan">
+                    <div class="mb-3">
+                        <label class="form-label">Titan Base URL</label>
+                        <input type="url" name="titan_base_url" class="form-control"
+                               value="{{ config.TITAN_BASE_URL }}"
+                               placeholder="https://titan-syndicate.onrender.com">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Upstream Issuer</label>
+                        <input type="text" name="titan_upstream_issuer" class="form-control"
+                               value="{{ config.TITAN_UPSTREAM_ISSUER }}"
+                               placeholder="gromore">
+                    </div>
+                    <div class="mb-3">
+                           <label class="form-label">Titan Upstream SSO Secret</label>
+                           <input type="password" name="titan_upstream_sso_secret" class="form-control"
+                               placeholder="{{ '******  (saved)' if config.TITAN_UPSTREAM_SSO_SECRET else 'Enter shared secret' }}">
+                           <small class="text-muted">Leave blank to keep current. This must match Titan's TITAN_UPSTREAM_SSO_SECRET value exactly.</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Titan Launch Settings</button>
+                          {% if config.TITAN_BASE_URL and config.TITAN_UPSTREAM_SSO_SECRET %}
+                    <span class="badge bg-success ms-2">Configured</span>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- SMTP / Email -->
     <div class="col-lg-6">
         <div class="card">
