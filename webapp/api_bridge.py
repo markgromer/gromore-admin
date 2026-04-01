@@ -260,10 +260,7 @@ def pull_api_data_for_brand(brand, connections, month):
             token = _get_meta_token(db, brand["id"], meta_conn)
             page_token = None
             if page_id:
-                resolved_page_id = _resolve_facebook_page_id(page_id, token)
-                if resolved_page_id and resolved_page_id != page_id:
-                    page_id = resolved_page_id
-                    db.update_brand_api_field(brand["id"], "facebook_page_id", page_id)
+                page_id, page_token = _resolve_facebook_page_context(db, brand["id"], page_id, token)
             # Auto-detect page ID if not stored yet
             if not page_id:
                 page_id, page_token = _auto_detect_facebook_page(db, brand["id"], token)
@@ -286,26 +283,34 @@ def pull_api_data_for_brand(brand, connections, month):
 def _auto_detect_facebook_page(db, brand_id, access_token):
     """Try to find and store the Facebook Page ID from the user's token.
     Returns (page_id, page_access_token) or (None, None)."""
-    import requests
     try:
-        resp = requests.get(
-            "https://graph.facebook.com/v21.0/me/accounts",
-            params={"access_token": access_token, "fields": "id,name,access_token"},
-            timeout=15,
-        )
-        if resp.status_code == 200:
-            pages = resp.json().get("data", [])
-            if pages:
-                page = pages[0]
-                page_id = page["id"]
-                page_token = page.get("access_token", access_token)
-                # Store page ID so we don't have to detect every time
+        pages = _get_accessible_facebook_pages(access_token)
+        if pages:
+            page = pages[0]
+            page_id = str(page.get("id") or "").strip()
+            page_token = page.get("access_token", access_token)
+            if page_id:
                 db.update_brand_api_field(brand_id, "facebook_page_id", page_id)
                 log.info("Auto-detected Facebook Page ID %s for brand %s", page_id, brand_id)
                 return page_id, page_token
     except Exception as e:
         log.warning("Facebook page auto-detect failed: %s", e)
     return None, None
+
+
+def _get_accessible_facebook_pages(user_access_token):
+    """Return Facebook pages available to the connected Meta user token."""
+    import requests
+
+    resp = requests.get(
+        "https://graph.facebook.com/v21.0/me/accounts",
+        params={"access_token": user_access_token, "fields": "id,name,access_token"},
+        timeout=15,
+    )
+    if resp.status_code != 200:
+        log.warning("me/accounts HTTP %s: %s", resp.status_code, resp.text[:200])
+        return []
+    return resp.json().get("data", [])
 
 
 def _resolve_facebook_page_id(page_ref, access_token):
@@ -353,22 +358,54 @@ def _resolve_facebook_page_id(page_ref, access_token):
     return ref
 
 
+def _resolve_facebook_page_context(db, brand_id, page_ref, user_access_token):
+    """Resolve the actual accessible Facebook page ID and page token together."""
+    ref = (page_ref or "").strip()
+
+    try:
+        pages = _get_accessible_facebook_pages(user_access_token)
+    except Exception as e:
+        log.warning("Failed to list accessible Facebook pages: %s", e)
+        pages = []
+
+    if len(pages) == 1:
+        only_page = pages[0]
+        only_page_id = str(only_page.get("id") or "").strip()
+        if only_page_id:
+            if only_page_id != ref:
+                db.update_brand_api_field(brand_id, "facebook_page_id", only_page_id)
+                log.info("Using sole accessible Facebook page %s for brand %s", only_page_id, brand_id)
+            return only_page_id, only_page.get("access_token", user_access_token)
+
+    if ref:
+        for page in pages:
+            page_id = str(page.get("id") or "").strip()
+            if page_id == ref:
+                return page_id, page.get("access_token", user_access_token)
+
+    resolved_ref = _resolve_facebook_page_id(ref, user_access_token) if ref else ""
+    if resolved_ref:
+        for page in pages:
+            page_id = str(page.get("id") or "").strip()
+            if page_id == resolved_ref:
+                if resolved_ref != ref:
+                    db.update_brand_api_field(brand_id, "facebook_page_id", resolved_ref)
+                    log.info("Updated Facebook page ID to %s for brand %s", resolved_ref, brand_id)
+                return resolved_ref, page.get("access_token", user_access_token)
+
+    if resolved_ref:
+        return resolved_ref, None
+    return ref, None
+
+
 def _get_page_access_token(page_id, user_access_token):
     """Exchange a user access token for a page-specific access token.
     Page Insights and post-level insights require the page token."""
     import requests
     try:
         # Method 1: Get page token from /me/accounts
-        resp = requests.get(
-            "https://graph.facebook.com/v21.0/me/accounts",
-            params={
-                "access_token": user_access_token,
-                "fields": "id,name,access_token",
-            },
-            timeout=15,
-        )
-        if resp.status_code == 200:
-            pages = resp.json().get("data", [])
+        pages = _get_accessible_facebook_pages(user_access_token)
+        if pages:
             log.info("me/accounts returned %d pages for page_id=%s", len(pages), page_id)
             for page in pages:
                 log.info("  Page: id=%s name=%s", page.get("id"), page.get("name"))
@@ -380,8 +417,6 @@ def _get_page_access_token(page_id, user_access_token):
                 log.info("  -> Only one page found, using it despite ID mismatch (stored=%s, found=%s)", page_id, pages[0].get("id"))
                 return pages[0].get("access_token", user_access_token)
             log.warning("Page %s not found in me/accounts (%d pages). Token may lack pages_show_list permission.", page_id, len(pages))
-        else:
-            log.warning("me/accounts HTTP %s: %s", resp.status_code, resp.text[:200])
 
         # Method 2: Try getting page token directly via /{page_id}?fields=access_token
         try:

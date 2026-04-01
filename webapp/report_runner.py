@@ -65,6 +65,29 @@ def _brand_to_client_config(brand):
     }
 
 
+def _facebook_organic_has_signal(payload):
+    """Return True when a Facebook organic payload contains real month data."""
+    if not isinstance(payload, dict):
+        return False
+
+    metric_keys = (
+        "followers",
+        "fans",
+        "organic_impressions",
+        "engaged_users",
+        "post_engagements",
+        "page_views",
+        "post_count",
+    )
+    for key in metric_keys:
+        value = payload.get(key)
+        if isinstance(value, (int, float)) and value > 0:
+            return True
+
+    top_posts = payload.get("top_posts")
+    return isinstance(top_posts, list) and len(top_posts) > 0
+
+
 def build_analysis_and_suggestions_for_brand(db, brand, month):
     """Build analysis + suggestions for a brand/month without generating HTML reports."""
     slug = brand["slug"]
@@ -103,6 +126,10 @@ def build_analysis_and_suggestions_for_brand(db, brand, month):
             # Merge: API data wins over CSV (more current from live connection)
             for key in ("google_analytics", "meta_business", "search_console", "google_ads", "facebook_organic"):
                 if key in api_data and api_data[key]:
+                    if key == "facebook_organic" and not _facebook_organic_has_signal(api_data[key]):
+                        existing_facebook = data.get("facebook_organic")
+                        if existing_facebook and _facebook_organic_has_signal(existing_facebook):
+                            continue
                     data[key] = api_data[key]
         except Exception as e:
             api_errors.append(f"API bridge error: {str(e)}")
