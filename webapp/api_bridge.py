@@ -5,9 +5,11 @@ Uses stored OAuth tokens from the web DB instead of credential files.
 Handles automatic token refresh when tokens expire.
 """
 import logging
+import re
 import sys
 from pathlib import Path
 from datetime import datetime, timedelta
+from urllib.parse import urlparse
 
 log = logging.getLogger(__name__)
 
@@ -257,6 +259,11 @@ def pull_api_data_for_brand(brand, connections, month):
         try:
             token = _get_meta_token(db, brand["id"], meta_conn)
             page_token = None
+            if page_id:
+                resolved_page_id = _resolve_facebook_page_id(page_id, token)
+                if resolved_page_id and resolved_page_id != page_id:
+                    page_id = resolved_page_id
+                    db.update_brand_api_field(brand["id"], "facebook_page_id", page_id)
             # Auto-detect page ID if not stored yet
             if not page_id:
                 page_id, page_token = _auto_detect_facebook_page(db, brand["id"], token)
@@ -299,6 +306,51 @@ def _auto_detect_facebook_page(db, brand_id, access_token):
     except Exception as e:
         log.warning("Facebook page auto-detect failed: %s", e)
     return None, None
+
+
+def _resolve_facebook_page_id(page_ref, access_token):
+    """Resolve a stored page reference into a numeric Facebook page ID.
+
+    Accepts a numeric ID, a page URL, or a username/slug.
+    Returns the numeric page ID string when resolvable, otherwise the original value.
+    """
+    import requests
+
+    ref = (page_ref or "").strip()
+    if not ref:
+        return ""
+    if ref.isdigit():
+        return ref
+
+    slug = ref
+    if ref.startswith("http://") or ref.startswith("https://"):
+        try:
+            parsed = urlparse(ref)
+            path = (parsed.path or "").strip("/")
+            slug = path.split("/")[0] if path else ref
+        except Exception:
+            slug = ref
+
+    slug = (slug or "").strip().lstrip("@")
+    slug = re.sub(r"\?.*$", "", slug)
+    if not slug:
+        return ref
+
+    try:
+        resp = requests.get(
+            f"https://graph.facebook.com/v21.0/{slug}",
+            params={"access_token": access_token, "fields": "id,name"},
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if "error" not in data and data.get("id"):
+                log.info("Resolved Facebook page reference '%s' to ID %s", ref, data.get("id"))
+                return str(data.get("id"))
+    except Exception as e:
+        log.warning("Facebook page reference resolution failed for %s: %s", ref, e)
+
+    return ref
 
 
 def _get_page_access_token(page_id, user_access_token):
@@ -1279,6 +1331,20 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date):
 
     # Sort by engagement
     posts.sort(key=lambda x: (x.get("likes", 0) + x.get("comments", 0) + x.get("shares", 0)), reverse=True)
+
+    # Backfill KPI totals from posts when page-level insights are unavailable or invalid.
+    if posts:
+        total_post_impressions = sum(p.get("impressions", 0) or 0 for p in posts)
+        total_post_engagements = sum((p.get("likes", 0) or 0) + (p.get("comments", 0) or 0) + (p.get("shares", 0) or 0) for p in posts)
+        total_post_engaged_users = sum(p.get("engaged_users", 0) or 0 for p in posts)
+        if not page_metrics.get("post_engagements"):
+            page_metrics["post_engagements"] = total_post_engagements
+        if not page_metrics.get("engaged_users"):
+            page_metrics["engaged_users"] = total_post_engaged_users or total_post_engagements
+        if not page_metrics.get("organic_impressions"):
+            page_metrics["organic_impressions"] = total_post_impressions
+        if not page_metrics.get("impressions"):
+            page_metrics["impressions"] = total_post_impressions
 
     # Calculate engagement rate for the period
     total_engagement_rate = 0
