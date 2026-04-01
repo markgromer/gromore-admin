@@ -127,8 +127,17 @@ def _normalize_titan_next_path(next_path, fallback="/"):
 
 
 def _get_titan_launch_config(config):
-    base_url = (config.get("TITAN_BASE_URL") or "").strip().rstrip("/")
+    base_url = (config.get("TITAN_BASE_URL") or "").strip()
+    if base_url and not base_url.lower().startswith(("http://", "https://")):
+        # Make admin entry forgiving (common to paste host without scheme)
+        if base_url.lower().startswith(("localhost", "127.0.0.1")):
+            base_url = "http://" + base_url
+        else:
+            base_url = "https://" + base_url
+    base_url = base_url.rstrip("/")
+
     issuer = (config.get("TITAN_UPSTREAM_ISSUER") or "").strip()
+    external_app = (config.get("TITAN_EXTERNAL_APP") or issuer).strip() or issuer
     secret = (config.get("TITAN_UPSTREAM_SSO_SECRET") or "").strip()
 
     missing = []
@@ -145,6 +154,7 @@ def _get_titan_launch_config(config):
     return {
         "base_url": base_url,
         "issuer": issuer,
+        "external_app": external_app,
         "secret": secret,
     }
 
@@ -163,13 +173,19 @@ def build_titan_launch_payload(config, user, brand, lifetime_seconds=300):
     now = int(time.time())
     ttl = max(1, min(int(lifetime_seconds or 300), 300))
 
+    display_name = (
+        (user.get("display_name") or "").strip()
+        or (user.get("full_name") or "").strip()
+        or (user.get("name") or "").strip()
+    )
+
     return {
         "issuer": titan["issuer"],
-        "external_app": titan["issuer"],
+        "external_app": titan["external_app"],
         "external_user_id": str(user.get("id") or "").strip(),
         "external_brand_id": str(brand.get("id") or "").strip(),
         "email": (user.get("email") or "").strip().lower(),
-        "display_name": (user.get("display_name") or "").strip(),
+        "display_name": display_name,
         "role": _titan_launch_role(user.get("role")),
         "titan_snapshot_id": ((brand.get("titan_snapshot_id") or "").strip() or None),
         "titan_account_id": ((brand.get("titan_account_id") or "").strip() or None),
@@ -3361,7 +3377,18 @@ def client_titan_launch():
         return redirect(url_for("client.client_logout"))
 
     email = (user.get("email") or "").strip().lower()
-    display_name = (user.get("display_name") or "").strip()
+    display_name = (
+        (user.get("display_name") or "").strip()
+        or (user.get("full_name") or "").strip()
+        or (user.get("name") or "").strip()
+    )
+    if not display_name and email:
+        local_part = email.split("@", 1)[0].strip()
+        derived = local_part.replace(".", " ").replace("_", " ").strip().title()
+        if derived:
+            display_name = derived
+            user = dict(user)
+            user["display_name"] = display_name
     if not email or not display_name:
         flash("Titan launch requires a client user with both email and display name.", "error")
         return redirect(url_for("client.client_settings"))

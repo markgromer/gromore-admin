@@ -1658,10 +1658,15 @@ def create_app():
                 titan_secret = request.form.get("titan_upstream_sso_secret", "").strip()
                 if titan_secret:
                     db.save_setting("titan_upstream_sso_secret", titan_secret)
-                app.config["TITAN_BASE_URL"] = db.get_setting("titan_base_url", "")
-                app.config["TITAN_UPSTREAM_ISSUER"] = db.get_setting("titan_upstream_issuer", "")
+                # Reload into app config (preserve env fallback so saving blanks doesn't break live config)
+                app.config["TITAN_BASE_URL"] = db.get_setting("titan_base_url", "") or os.environ.get("TITAN_BASE_URL", "")
+                app.config["TITAN_UPSTREAM_ISSUER"] = db.get_setting("titan_upstream_issuer", "") or os.environ.get("TITAN_UPSTREAM_ISSUER", "")
                 app.config["TITAN_EXTERNAL_APP"] = app.config["TITAN_UPSTREAM_ISSUER"]
-                app.config["TITAN_UPSTREAM_SSO_SECRET"] = db.get_setting("titan_upstream_sso_secret", "") or app.config["TITAN_UPSTREAM_SSO_SECRET"]
+                app.config["TITAN_UPSTREAM_SSO_SECRET"] = (
+                    db.get_setting("titan_upstream_sso_secret", "")
+                    or os.environ.get("TITAN_UPSTREAM_SSO_SECRET", "")
+                    or app.config.get("TITAN_UPSTREAM_SSO_SECRET", "")
+                )
                 flash("Titan trusted launch settings saved", "success")
             elif section == "wordpress":
                 wp_url = request.form.get("wp_url", "").strip()
