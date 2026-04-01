@@ -226,6 +226,15 @@
                            placeholder="Optional GHL location ID">
                 </div>
             </div>
+            <div class="row g-3 mt-1">
+                <div class="col-md-6">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">Titan Email</label>
+                    <input type="email" class="form-control" name="titan_email"
+                           value="{{ brand.titan_email or '' }}"
+                           placeholder="Email for your Titan / GHL account">
+                    <small class="text-muted">If different from your GroMore login. Leave blank to use your GroMore email.</small>
+                </div>
+            </div>
             <div class="mt-3 d-flex flex-wrap gap-2 align-items-center">
                 <button class="btn btn-primary" type="submit">Save Titan Settings</button>
                 <a href="{{ url_for('client.client_titan_launch') }}" class="btn btn-dark {% if not titan_configured %}disabled{% endif %}">

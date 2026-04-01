@@ -785,6 +785,7 @@ class WebDB:
             ("titan_snapshot_id", "TEXT DEFAULT ''"),
             ("titan_account_id", "TEXT DEFAULT ''"),
             ("titan_ghl_location_id", "TEXT DEFAULT ''"),
+            ("titan_email", "TEXT DEFAULT ''"),
             ("business_lat", "REAL DEFAULT 0"),
             ("business_lng", "REAL DEFAULT 0"),
             ("google_place_id", "TEXT DEFAULT ''"),
@@ -1035,7 +1036,7 @@ class WebDB:
             "logo_path", "logo_variants", "brand_colors",
             "google_drive_folder_id", "google_drive_sheet_id",
             "google_maps_api_key", "google_place_id",
-            "titan_snapshot_id", "titan_account_id", "titan_ghl_location_id",
+            "titan_snapshot_id", "titan_account_id", "titan_ghl_location_id", "titan_email",
             "wp_site_url", "wp_username", "wp_app_password",
             "hired_agents", "agent_context",
         }

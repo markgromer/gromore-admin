@@ -184,7 +184,8 @@ def build_titan_launch_payload(config, user, brand, lifetime_seconds=300):
         "external_app": titan["external_app"],
         "external_user_id": str(user.get("id") or "").strip(),
         "external_brand_id": str(brand.get("id") or "").strip(),
-        "email": (user.get("email") or "").strip().lower(),
+        "email": ((brand.get("titan_email") or "").strip().lower()
+                 or (user.get("email") or "").strip().lower()),
         "display_name": display_name,
         "role": _titan_launch_role(user.get("role")),
         "titan_snapshot_id": ((brand.get("titan_snapshot_id") or "").strip() or None),
@@ -3351,6 +3352,7 @@ def client_save_titan_settings():
     db.update_brand_text_field(brand_id, "titan_snapshot_id", (request.form.get("titan_snapshot_id") or "").strip())
     db.update_brand_text_field(brand_id, "titan_account_id", (request.form.get("titan_account_id") or "").strip())
     db.update_brand_text_field(brand_id, "titan_ghl_location_id", (request.form.get("titan_ghl_location_id") or "").strip())
+    db.update_brand_text_field(brand_id, "titan_email", (request.form.get("titan_email") or "").strip().lower())
 
     flash("Titan settings saved.", "success")
     return redirect(url_for("client.client_settings"))
@@ -3377,7 +3379,7 @@ def client_titan_launch():
         flash("Your client account could not be loaded.", "error")
         return redirect(url_for("client.client_logout"))
 
-    email = (user.get("email") or "").strip().lower()
+    email = (brand.get("titan_email") or "").strip().lower() or (user.get("email") or "").strip().lower()
     display_name = (
         (user.get("display_name") or "").strip()
         or (user.get("full_name") or "").strip()
