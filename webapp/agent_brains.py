@@ -2577,13 +2577,12 @@ def run_all_agents(db, brand: dict, brand_id: int, api_key: str,
         "atlas": False,
     }
 
-    # Atlas eligibility: needs enough historical data to forecast seasonality
+    # Atlas eligibility: use any history we can build, including live connected APIs.
     try:
-        from webapp.forecasting import available_months_for_client
+        from webapp.forecasting import build_paid_kpi_series
 
-        slug = brand.get("slug")
-        months_avail = available_months_for_client(slug, limit=24) if slug else []
-        agent_eligibility["atlas"] = len(months_avail) >= 9 and analysis_summary is not None
+        atlas_series = build_paid_kpi_series(brand=brand, months_back=12)
+        agent_eligibility["atlas"] = len(atlas_series) >= 6 and analysis_summary is not None
     except Exception:
         agent_eligibility["atlas"] = bool(analysis_summary)
 

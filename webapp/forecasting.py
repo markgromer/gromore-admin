@@ -33,6 +33,13 @@ def month_now() -> str:
     return datetime.now().strftime("%Y-%m")
 
 
+def _recent_months(*, end_month: str, count: int) -> List[str]:
+    months: List[str] = []
+    for offset in range(max(0, count - 1), -1, -1):
+        months.append(month_add(end_month, -offset))
+    return months
+
+
 def _to_float(v: Any) -> Optional[float]:
     try:
         if v is None or v == "":
@@ -175,14 +182,36 @@ def build_paid_kpi_series(*, brand: dict, months_back: int = 36) -> List[Dict[st
     if not client_id:
         return []
 
-    months = available_months_for_client(client_id, limit=max(12, months_back))
-    months = list(reversed(months))  # ascending
-    if months_back and len(months) > months_back:
-        months = months[-months_back:]
+    stored_months_desc = available_months_for_client(client_id, limit=max(12, months_back))
+    stored_months = list(reversed(stored_months_desc))  # ascending
+    if months_back and len(stored_months) > months_back:
+        stored_months = stored_months[-months_back:]
+
+    months = list(stored_months)
+
+    # Atlas should be able to use live connected APIs for history too, not only
+    # previously stored monthly_data. When stored history is thin, build a small
+    # rolling history directly from the connected sources.
+    if len(months) < min(9, months_back):
+        target_months = _recent_months(end_month=month_now(), count=min(max(months_back, 9), 12))
+        months = sorted(set(months).union(target_months))
 
     series: List[Dict[str, Any]] = []
     for m in months:
         summary = build_analysis_summary_for_month(brand=brand, month=m)
+        if not summary:
+            try:
+                from flask import current_app
+                from webapp.report_runner import build_analysis_and_suggestions_for_brand
+
+                db = current_app.db
+                analysis, _ = build_analysis_and_suggestions_for_brand(db, brand, m)
+                if analysis:
+                    from webapp.ai_assistant import summarize_analysis_for_ai
+
+                    summary = summarize_analysis_for_ai(analysis)
+            except Exception as exc:
+                log.debug("Live history fallback failed for %s %s: %s", client_id, m, exc)
         if not summary:
             continue
         kpis = summary.get("kpis", {}) or {}
