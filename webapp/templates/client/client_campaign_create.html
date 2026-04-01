@@ -1206,6 +1206,48 @@ function aiGenerate() {
     .catch(() => { hideLoading(); alert('Network error.'); });
 }
 
+function renderScorecard(scorecard, copyWarnings, clicheWarnings) {
+    const container = document.getElementById('qualityScorecard');
+    const body = document.getElementById('scorecardBody');
+    if (!scorecard || !scorecard.checks) { container.style.display = 'none'; return; }
+
+    const gradeColor = {A:'#22c55e', B:'#84cc16', C:'#f59e0b', D:'#ef4444'}[scorecard.grade] || '#6b7280';
+
+    let html = '<div class="d-flex align-items-center justify-content-between mb-3">';
+    html += '<div><span style="font-size:2rem;font-weight:700;color:' + gradeColor + '">' + scorecard.grade + '</span>';
+    html += ' <span class="text-muted ms-2">' + scorecard.score + '/100</span></div></div>';
+
+    html += '<div class="row g-2 mb-3">';
+    scorecard.checks.forEach(function(c) {
+        const icon = c.passed ? 'bi-check-circle-fill text-success' : 'bi-x-circle-fill text-danger';
+        html += '<div class="col-md-4 col-6"><div class="d-flex align-items-start gap-2 p-2 rounded" style="background:var(--card-bg,#1e1e2f)">';
+        html += '<i class="bi ' + icon + '" style="margin-top:2px"></i>';
+        html += '<div><strong style="font-size:.85rem">' + c.name + '</strong>';
+        html += '<div class="text-muted" style="font-size:.78rem">' + c.detail + '</div></div>';
+        html += '</div></div>';
+    });
+    html += '</div>';
+
+    // Copy warnings
+    if (copyWarnings && copyWarnings.length) {
+        html += '<div class="mb-2"><strong class="text-warning" style="font-size:.85rem"><i class="bi bi-exclamation-triangle me-1"></i>Copy Warnings</strong>';
+        html += '<ul class="mb-0 mt-1" style="font-size:.8rem;padding-left:1.2rem">';
+        copyWarnings.forEach(function(w) { html += '<li>' + w.replace(/</g,'&lt;') + '</li>'; });
+        html += '</ul></div>';
+    }
+
+    // Cliché warnings
+    if (clicheWarnings && clicheWarnings.length) {
+        html += '<div class="mb-2"><strong class="text-warning" style="font-size:.85rem"><i class="bi bi-chat-left-text me-1"></i>Cliché Alerts</strong>';
+        html += '<ul class="mb-0 mt-1" style="font-size:.8rem;padding-left:1.2rem">';
+        clicheWarnings.forEach(function(w) { html += '<li>' + w.replace(/</g,'&lt;') + '</li>'; });
+        html += '</ul></div>';
+    }
+
+    body.innerHTML = html;
+    container.style.display = '';
+}
+
 function loadPlanIntoBuilder(plan) {
     // Fill campaign settings
     document.getElementById('campaignName').value = plan.campaign_name || '';
