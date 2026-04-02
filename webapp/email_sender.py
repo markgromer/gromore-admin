@@ -188,7 +188,7 @@ def send_beta_activation_email(app_config, tester, temp_password, login_url):
             <h3 style="margin-top:0;"><span style="font-size:1.1em;">&#9312;</span> Accept Facebook Developer Access</h3>
             <p>Before you can sign in with Facebook, you need to accept the tester invitation we sent you:</p>
             <ol style="line-height:1.8;font-size:.9rem;">
-                <li>Go to <a href="https://developers.facebook.com/requests/" style="color:#4f46e5;">developers.facebook.com/requests</a></li>
+                <li>Go to <a href="https://developers.facebook.com/settings/developer/requests/" style="color:#4f46e5;">developers.facebook.com/settings/developer/requests</a></li>
                 <li>Log in with the Facebook account tied to <strong>{tester.get('meta_login_email', email)}</strong></li>
                 <li>You should see a pending tester invitation from <strong>GroMore</strong></li>
                 <li>Click <strong>Accept</strong></li>
@@ -221,7 +221,7 @@ def send_beta_activation_email(app_config, tester, temp_password, login_url):
         f"You're In, {name}!\n\n"
         f"Your GroMore beta account is now active.\n\n"
         f"STEP 1 - Accept Facebook Developer Access:\n"
-        f"Go to https://developers.facebook.com/requests/\n"
+        f"Go to https://developers.facebook.com/settings/developer/requests/\n"
         f"Log in with your Facebook account ({tester.get('meta_login_email', email)})\n"
         f"Accept the tester invitation from GroMore.\n\n"
         f"STEP 2 - Sign In to GroMore:\n"
