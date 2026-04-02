@@ -293,14 +293,14 @@
     /* Loading animation */
     .dash-loader {
         text-align: center;
-        padding: 3rem 1.25rem;
+        padding: 2.25rem 1.25rem;
         background: #fff;
-        border: 1px solid #e2e8f0;
-        border-radius: 14px;
-        box-shadow: 0 10px 28px rgba(15, 23, 42, .06);
+        border: 1px solid #cbd5e1;
+        border-radius: 16px;
+        box-shadow: 0 14px 40px rgba(15, 23, 42, .10);
     }
     .loader-orb {
-        width: 80px; height: 80px;
+        width: 88px; height: 88px;
         margin: 0 auto 1.5rem;
         border-radius: 50%;
         background: linear-gradient(135deg, #6366f1, #4f46e5);
@@ -322,14 +322,18 @@
     }
     @keyframes orbSpin { to { transform: rotate(360deg); } }
     .loader-title { font-weight: 700; font-size: 1.15rem; color: #1a1d2e; margin-bottom: .75rem; }
-    .loader-steps { list-style: none; padding: 0; margin: 0 auto; max-width: 320px; text-align: left; }
+    .loader-steps { list-style: none; padding: 0; margin: 0 auto; max-width: 520px; text-align: left; }
     .loader-steps li {
-        display: flex; align-items: center; gap: 10px;
-        padding: .45rem 0; font-size: .88rem; color: #9ca3af;
-        transition: color .3s;
+        padding: .65rem 0;
+        color: #94a3b8;
+        transition: color .2s;
     }
-    .loader-steps li.active { color: #1a1d2e; font-weight: 600; }
-    .loader-steps li.done { color: #10b981; }
+    .loader-steps li .step-row { display: flex; align-items: flex-start; gap: 10px; }
+    .loader-steps li .step-copy { flex: 1; min-width: 0; }
+    .loader-steps li .step-title { font-size: .9rem; font-weight: 700; line-height: 1.2; color: #334155; }
+    .loader-steps li .step-sub { font-size: .82rem; color: #64748b; margin-top: .1rem; }
+    .loader-steps li.active .step-title { color: #0f172a; }
+    .loader-steps li.done .step-title { color: #10b981; }
     .loader-steps li .step-icon {
         width: 22px; height: 22px; border-radius: 50%;
         display: flex; align-items: center; justify-content: center;
@@ -340,6 +344,34 @@
     .loader-steps li.active .step-icon { background: #6366f1; color: #fff; animation: stepPulse 1s ease-in-out infinite; }
     .loader-steps li.done .step-icon { background: #10b981; color: #fff; }
     @keyframes stepPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.15); } }
+    .loader-steps li .step-progress {
+        margin-left: 32px;
+        margin-top: .5rem;
+        height: 6px;
+        border-radius: 6px;
+        background: rgba(99,102,241,.16);
+        overflow: hidden;
+    }
+    .loader-steps li .step-progress .fill {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #6366f1, #a5b4fc, #6366f1);
+        background-size: 200% 100%;
+        transition: width .55s cubic-bezier(.2,.7,.2,1);
+        animation: loaderShimmer 1.4s ease infinite;
+    }
+    .loader-steps li.done .step-progress { background: rgba(16,185,129,.18); }
+    .loader-steps li.done .step-progress .fill {
+        width: 100%;
+        background: linear-gradient(90deg, #10b981, #34d399, #10b981);
+        background-size: 200% 100%;
+        animation: loaderShimmer 1.4s ease infinite;
+    }
+    .loader-steps li.active .step-progress .fill { width: 72%; }
+    @keyframes loaderShimmer {
+        0%   { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
     .dash-content { display: none; }
     .dash-content.visible { display: block; }
 
@@ -412,11 +444,90 @@
     <div class="loader-orb"></div>
     <div class="loader-title">Preparing your dashboard</div>
     <ul class="loader-steps">
-        <li id="step-connect" class="active"><span class="step-icon"><i class="bi bi-plug"></i></span> Connecting to your ad platforms...</li>
-        <li id="step-google"><span class="step-icon"><i class="bi bi-google"></i></span> Pulling Google Analytics & Ads data...</li>
-        <li id="step-meta"><span class="step-icon"><i class="bi bi-meta"></i></span> Pulling Facebook & Instagram data...</li>
-        <li id="step-analyze"><span class="step-icon"><i class="bi bi-cpu"></i></span> AI analyzing your performance...</li>
-        <li id="step-build"><span class="step-icon"><i class="bi bi-layout-text-sidebar-reverse"></i></span> Building your dashboard...</li>
+        <li id="step-snap" class="active">
+            <div class="step-row">
+                <span class="step-icon"><i class="bi bi-database"></i></span>
+                <div class="step-copy">
+                    <div class="step-title">Loading saved report snapshot</div>
+                    <div class="step-sub">Fast load. No API calls unless you force refresh.</div>
+                </div>
+            </div>
+            <div class="step-progress"><div class="fill"></div></div>
+        </li>
+
+        {% if google_connected and brand.ga4_property_id %}
+        <li id="step-ga">
+            <div class="step-row">
+                <span class="step-icon"><i class="bi bi-google"></i></span>
+                <div class="step-copy">
+                    <div class="step-title">Google Analytics (GA4)</div>
+                    <div class="step-sub">Sessions, conversions, and landing pages.</div>
+                </div>
+            </div>
+            <div class="step-progress"><div class="fill"></div></div>
+        </li>
+        {% endif %}
+
+        {% if google_connected and brand.gsc_site_url %}
+        <li id="step-gsc">
+            <div class="step-row">
+                <span class="step-icon"><i class="bi bi-search"></i></span>
+                <div class="step-copy">
+                    <div class="step-title">Google Search Console</div>
+                    <div class="step-sub">Queries, clicks, and top pages.</div>
+                </div>
+            </div>
+            <div class="step-progress"><div class="fill"></div></div>
+        </li>
+        {% endif %}
+
+        {% if has_google %}
+        <li id="step-gads">
+            <div class="step-row">
+                <span class="step-icon"><i class="bi bi-badge-ad"></i></span>
+                <div class="step-copy">
+                    <div class="step-title">Google Ads performance</div>
+                    <div class="step-sub">Spend, clicks, conversions, and CPA.</div>
+                </div>
+            </div>
+            <div class="step-progress"><div class="fill"></div></div>
+        </li>
+        {% endif %}
+
+        {% if has_meta %}
+        <li id="step-meta">
+            <div class="step-row">
+                <span class="step-icon"><i class="bi bi-meta"></i></span>
+                <div class="step-copy">
+                    <div class="step-title">Meta Ads performance</div>
+                    <div class="step-sub">Spend, leads, CTR, and cost per lead.</div>
+                </div>
+            </div>
+            <div class="step-progress"><div class="fill"></div></div>
+        </li>
+        {% endif %}
+
+        <li id="step-analyze">
+            <div class="step-row">
+                <span class="step-icon"><i class="bi bi-cpu"></i></span>
+                <div class="step-copy">
+                    <div class="step-title">Building KPIs and action plan</div>
+                    <div class="step-sub">ROAS, CPL, lead volume, and top moves.</div>
+                </div>
+            </div>
+            <div class="step-progress"><div class="fill"></div></div>
+        </li>
+
+        <li id="step-build">
+            <div class="step-row">
+                <span class="step-icon"><i class="bi bi-layout-text-sidebar-reverse"></i></span>
+                <div class="step-copy">
+                    <div class="step-title">Rendering dashboard</div>
+                    <div class="step-sub">Charts, cards, and campaign highlights.</div>
+                </div>
+            </div>
+            <div class="step-progress"><div class="fill"></div></div>
+        </li>
     </ul>
 </div>
 
@@ -447,29 +558,54 @@ function fmtInt(v) {
 }
 
 (function() {
-    var steps = ['step-connect', 'step-google', 'step-meta', 'step-analyze', 'step-build'];
+    var stepEls = Array.prototype.slice.call(document.querySelectorAll('#dashLoader .loader-steps > li'));
+    var stepIds = stepEls.map(function(el) { return el.id; }).filter(Boolean);
     var currentStep = 0;
 
+    // If the user is forcing a refresh, reflect that in the loader copy.
+    try {
+        var sp = new URLSearchParams(window.location.search || '');
+        var isRefresh = (sp.get('refresh') === '1' || sp.get('sync') === '1');
+        if (isRefresh) {
+            var snap = document.getElementById('step-snap');
+            if (snap) {
+                var title = snap.querySelector('.step-title');
+                var sub = snap.querySelector('.step-sub');
+                if (title) title.textContent = 'Refreshing reports and campaign snapshots';
+                if (sub) sub.textContent = 'This can take a bit. Pulling fresh data from connected sources.';
+            }
+        }
+    } catch (e) {}
+
     function advanceStep() {
-        if (currentStep >= steps.length) return;
+        if (currentStep >= stepIds.length) return;
         if (currentStep > 0) {
-            var prev = document.getElementById(steps[currentStep - 1]);
+            var prev = document.getElementById(stepIds[currentStep - 1]);
             prev.classList.remove('active');
             prev.classList.add('done');
             prev.querySelector('.step-icon').innerHTML = '<i class="bi bi-check2"></i>';
         }
-        document.getElementById(steps[currentStep]).classList.add('active');
+        document.getElementById(stepIds[currentStep]).classList.add('active');
         currentStep++;
     }
 
+    // Start on the first step and then keep advancing on a schedule.
     advanceStep();
-    [1200, 2800, 4500, 6500].forEach(function(ms) { setTimeout(advanceStep, ms); });
+    var schedule = [900, 1900, 3100, 4500, 6100, 7900, 9800];
+    schedule.slice(0, Math.max(0, stepIds.length - 1)).forEach(function(ms) { setTimeout(advanceStep, ms); });
 
     var month = '{{ month }}';
-    fetch('{{ url_for("client.client_dashboard_data") }}?month=' + encodeURIComponent(month), { credentials: 'same-origin' })
+    var qs = 'month=' + encodeURIComponent(month);
+    try {
+        var sp2 = new URLSearchParams(window.location.search || '');
+        if (sp2.get('refresh') === '1') qs += '&refresh=1';
+        if (sp2.get('sync') === '1') qs += '&sync=1';
+    } catch (e) {}
+
+    fetch('{{ url_for("client.client_dashboard_data") }}?' + qs, { credentials: 'same-origin' })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        steps.forEach(function(id) {
+        stepIds.forEach(function(id) {
             var el = document.getElementById(id);
             el.classList.remove('active');
             el.classList.add('done');
@@ -966,7 +1102,7 @@ function toggleMovesRows(platform, btn) {
     </div>
     {% for action in dashboard.actions[:3] %}
     <div style="display:flex;align-items:start;gap:.85rem;padding:.85rem 0;border-bottom:1px solid #f1f5f9;">
-        <span style="width:36px;height:36px;border-radius:8px;background:{{ action.icon_color|default('#6366f1') }};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0;"><i class="bi {{ action.icon|default('bi-lightning-charge-fill') }}"></i></span>
+        <span data-dyn-bg="{{ action.icon_color|default('#6366f1') }}" style="width:36px;height:36px;border-radius:8px;background:#6366f1;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0;"><i class="bi {{ action.icon|default('bi-lightning-charge-fill') }}"></i></span>
         <div style="flex:1;">
             <div style="font-weight:700;font-size:.9rem;color:#0f172a;">{{ action.mission_name or action.title }}</div>
             <div style="font-size:.82rem;color:#64748b;">{{ action.what }}</div>
@@ -1018,6 +1154,16 @@ function toggleMovesRows(platform, btn) {
 {% endif %}
 
 <script>
+// Apply any dynamic background colors stored on elements.
+(function() {
+    try {
+        document.querySelectorAll('[data-dyn-bg]').forEach(function(el) {
+            var v = el.getAttribute('data-dyn-bg');
+            if (v) el.style.background = v;
+        });
+    } catch (e) {}
+})();
+
 function toggleInsights(btn, itemClass) {
     var container = btn.parentElement;
     var items = container.querySelectorAll('.' + itemClass);

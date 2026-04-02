@@ -534,6 +534,10 @@ def client_dashboard():
     month = request.args.get("month") or datetime.now().strftime("%Y-%m")
 
     # Detect first-run state: no ad accounts connected yet
+    connections = db.get_brand_connections(brand_id) or {}
+    google_connected = (connections.get("google", {}).get("status") == "connected")
+    meta_connected = (connections.get("meta", {}).get("status") == "connected")
+
     has_google, has_meta = _get_ad_connection_status(db, brand)
     first_run = not has_google and not has_meta
 
@@ -548,6 +552,8 @@ def client_dashboard():
         first_run=first_run,
         has_google=has_google,
         has_meta=has_meta,
+        google_connected=google_connected,
+        meta_connected=meta_connected,
         client_name=session.get("client_name", ""),
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
