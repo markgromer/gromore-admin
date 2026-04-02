@@ -22,6 +22,7 @@ from urllib.parse import urlencode
 from flask import (
     Blueprint, render_template, request, redirect,
     url_for, flash, session, abort, jsonify, current_app,
+    make_response,
 )
 
 client_bp = Blueprint(
@@ -30,6 +31,9 @@ client_bp = Blueprint(
     template_folder="templates/client",
     url_prefix="/client",
 )
+
+
+log = logging.getLogger(__name__)
 
 
 ALLOWED_AI_MODELS = {
@@ -335,10 +339,63 @@ def client_login():
             session["client_name"] = user["display_name"]
             session["client_brand_name"] = user["brand_name"]
             session["client_role"] = user.get("role", "owner")
+            # Refresh heavy, API-backed snapshots once per login.
+            # Consumed by the first primary data route the user hits.
+            current_month = datetime.now().strftime("%Y-%m")
+            session["analysis_refresh_month"] = current_month
+            session["campaigns_refresh_month"] = current_month
             db.update_client_user_login(user["id"])
             return redirect(url_for("client.client_dashboard"))
         flash("Invalid email or password", "error")
     return render_template("client_login.html")
+
+
+def _consume_login_refresh_month(session_key: str, month: str) -> bool:
+    """Return True once per login for the target month."""
+    try:
+        refresh_month = session.get(session_key)
+        if refresh_month and refresh_month == month:
+            session.pop(session_key, None)
+            return True
+    except Exception:
+        pass
+    return False
+
+
+_CAMPAIGNS_CACHE_TTL_SECONDS = 6 * 60 * 60
+
+
+def _campaigns_cache_key(brand_id: int, month: str) -> str:
+    return f"campaigns_cache_{brand_id}_{month}"
+
+
+def _get_campaigns_cached(db, brand: dict, month: str, *, force_sync: bool = False) -> dict:
+    from webapp.campaign_manager import list_all_campaigns
+
+    key = _campaigns_cache_key(int(brand.get("id") or 0), month)
+
+    if not force_sync:
+        try:
+            raw = db.get_setting(key, "")
+            if raw:
+                cached = json.loads(raw)
+                cached_at = float(cached.get("cached_at") or 0)
+                campaigns = cached.get("campaigns")
+                if (
+                    isinstance(campaigns, dict)
+                    and cached_at
+                    and (time.time() - cached_at) < _CAMPAIGNS_CACHE_TTL_SECONDS
+                ):
+                    return campaigns
+        except Exception:
+            pass
+
+    campaigns = list_all_campaigns(db, brand, month)
+    try:
+        db.save_setting(key, json.dumps({"cached_at": time.time(), "campaigns": campaigns}, default=str))
+    except Exception:
+        pass
+    return campaigns
 
 
 @client_bp.route("/forgot-password", methods=["GET", "POST"])
@@ -458,14 +515,22 @@ def client_dashboard_data():
     month = request.args.get("month") or datetime.now().strftime("%Y-%m")
 
     try:
-        from webapp.report_runner import build_analysis_and_suggestions_for_brand
+        from webapp.report_runner import get_analysis_and_suggestions_for_brand
         from webapp.client_advisor import build_client_dashboard
-        from webapp.campaign_manager import list_all_campaigns
 
-        analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
+        force_refresh = (request.args.get("refresh") == "1") or _consume_login_refresh_month(
+            "analysis_refresh_month", month
+        )
+        analysis, suggestions = get_analysis_and_suggestions_for_brand(
+            db, brand, month, force_refresh=force_refresh
+        )
+
         campaigns_data = {}
         try:
-            campaigns_data = list_all_campaigns(db, brand, month)
+            force_campaign_sync = (request.args.get("sync") == "1") or _consume_login_refresh_month(
+                "campaigns_refresh_month", month
+            )
+            campaigns_data = _get_campaigns_cached(db, brand, month, force_sync=force_campaign_sync)
         except Exception as exc:
             current_app.logger.exception("Campaign listing failed: %s", exc)
 
@@ -611,10 +676,15 @@ def client_kpis():
     channels = {}
     error = None
     try:
-        from webapp.report_runner import build_analysis_and_suggestions_for_brand
+        from webapp.report_runner import get_analysis_and_suggestions_for_brand
         from webapp.client_advisor import build_client_dashboard
 
-        analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
+        force_refresh = (request.args.get("refresh") == "1") or _consume_login_refresh_month(
+            "analysis_refresh_month", month
+        )
+        analysis, suggestions = get_analysis_and_suggestions_for_brand(
+            db, brand, month, force_refresh=force_refresh
+        )
         if analysis:
             dashboard = build_client_dashboard(analysis, suggestions, brand)
             kpi_data = dashboard.get("kpi_status", [])
@@ -653,10 +723,15 @@ def client_actions():
     error = ""
 
     try:
-        from webapp.report_runner import build_analysis_and_suggestions_for_brand
+        from webapp.report_runner import get_analysis_and_suggestions_for_brand
         from webapp.client_advisor import build_client_dashboard
 
-        analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
+        force_refresh = (request.args.get("refresh") == "1") or _consume_login_refresh_month(
+            "analysis_refresh_month", month
+        )
+        analysis, suggestions = get_analysis_and_suggestions_for_brand(
+            db, brand, month, force_refresh=force_refresh
+        )
         if analysis:
             data = build_client_dashboard(
                 analysis,
@@ -819,10 +894,11 @@ def client_assistant_proactive():
     hint = (request.get_json(silent=True) or {}).get("hint", "")
 
     try:
-        from webapp.report_runner import build_analysis_and_suggestions_for_brand
+        from webapp.report_runner import get_analysis_and_suggestions_for_brand
         from webapp.ai_assistant import chat_with_warren, summarize_analysis_for_ai, DEFAULT_CHAT_SYSTEM_PROMPT
 
-        analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
+        # Do not consume login refresh flags here. Keep this endpoint lightweight.
+        analysis, suggestions = get_analysis_and_suggestions_for_brand(db, brand, month, force_refresh=False)
         summary = summarize_analysis_for_ai(analysis) if isinstance(analysis, dict) else None
 
         has_google, has_meta = _get_ad_connection_status(db, brand)
@@ -914,10 +990,11 @@ def client_coaching_start():
     topic = (request.get_json(silent=True) or {}).get("topic", "general")
 
     try:
-        from webapp.report_runner import build_analysis_and_suggestions_for_brand
+        from webapp.report_runner import get_analysis_and_suggestions_for_brand
         from webapp.ai_assistant import chat_with_warren, summarize_analysis_for_ai, DEFAULT_CHAT_SYSTEM_PROMPT
 
-        analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
+        # Do not consume login refresh flags here. Keep coaching start responsive.
+        analysis, suggestions = get_analysis_and_suggestions_for_brand(db, brand, month, force_refresh=False)
         summary = summarize_analysis_for_ai(analysis) if isinstance(analysis, dict) else None
 
         topic_prompts = {
@@ -1037,14 +1114,15 @@ def _client_assistant_chat_handler(payload):
     db.add_ai_chat_message(brand_id, month, "user", user_message)
 
     try:
-        from webapp.report_runner import build_analysis_and_suggestions_for_brand
+        from webapp.report_runner import get_analysis_and_suggestions_for_brand
         from webapp.ai_assistant import chat_with_warren, summarize_analysis_for_ai
 
         analysis = None
         suggestions = None
         analysis_error = ""
         try:
-            analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
+            # Do not consume login refresh flags here. Keep chat responsive.
+            analysis, suggestions = get_analysis_and_suggestions_for_brand(db, brand, month, force_refresh=False)
         except Exception as e:
             analysis_error = str(e)
 
@@ -1121,8 +1199,11 @@ def client_ad_builder():
     has_data = False
     error = ""
     try:
-        from webapp.report_runner import build_analysis_and_suggestions_for_brand
-        analysis, _ = build_analysis_and_suggestions_for_brand(db, brand, month)
+        from webapp.report_runner import get_analysis_and_suggestions_for_brand
+        force_refresh = (request.args.get("refresh") == "1") or _consume_login_refresh_month(
+            "analysis_refresh_month", month
+        )
+        analysis, _ = get_analysis_and_suggestions_for_brand(db, brand, month, force_refresh=force_refresh)
         has_data = bool(analysis)
     except Exception as e:
         error = str(e)
@@ -1160,8 +1241,8 @@ def client_ad_builder_generate():
     analysis = None
     error = ""
     try:
-        from webapp.report_runner import build_analysis_and_suggestions_for_brand
-        analysis, _ = build_analysis_and_suggestions_for_brand(db, brand, month)
+        from webapp.report_runner import get_analysis_and_suggestions_for_brand
+        analysis, _ = get_analysis_and_suggestions_for_brand(db, brand, month, force_refresh=False)
     except Exception as e:
         error = str(e)
 
@@ -1226,9 +1307,12 @@ def client_campaigns():
 
     month = request.args.get("month") or datetime.now().strftime("%Y-%m")
 
-    from webapp.campaign_manager import list_all_campaigns, get_campaign_recommendations
+    from webapp.campaign_manager import get_campaign_recommendations
 
-    campaigns = list_all_campaigns(db, brand, month)
+    force_campaign_sync = (request.args.get("sync") == "1") or _consume_login_refresh_month(
+        "campaigns_refresh_month", month
+    )
+    campaigns = _get_campaigns_cached(db, brand, month, force_sync=force_campaign_sync)
     recommendations = []
 
     if any(campaigns.values()):
@@ -5184,8 +5268,16 @@ def client_crm_data():
         # Fetch ad spend for ROAS calculation
         rev_month = rev.get("revenue_month") or request.args.get("month") or datetime.now().strftime("%Y-%m")
         try:
-            from webapp.report_runner import build_analysis_and_suggestions_for_brand
-            analysis, _ = build_analysis_and_suggestions_for_brand(db, brand, rev_month)
+            from webapp.report_runner import get_analysis_and_suggestions_for_brand
+
+            force_refresh = (
+                do_sync
+                or (request.args.get("refresh") == "1")
+                or _consume_login_refresh_month("analysis_refresh_month", rev_month)
+            )
+            analysis, _ = get_analysis_and_suggestions_for_brand(
+                db, brand, rev_month, force_refresh=force_refresh
+            )
             if analysis:
                 roas_info = analysis.get("roas", {})
                 data["revenue"]["ad_spend"] = roas_info.get("total_spend", 0)
