@@ -5172,6 +5172,7 @@ def client_save_ghl():
     brand_id = session["client_brand_id"]
 
     api_key = request.form.get("ghl_api_key", "").strip()
+    location_id = request.form.get("ghl_location_id", "").strip()
     pipeline_id = request.form.get("ghl_pipeline_id", "").strip()
 
     db.update_brand_text_field(brand_id, "crm_type", "gohighlevel")
@@ -5179,6 +5180,8 @@ def client_save_ghl():
     if api_key:
         db.update_brand_text_field(brand_id, "crm_api_key", api_key)
 
+    # Location ID is required for PIT + LeadConnector (services.leadconnectorhq.com)
+    db.update_brand_text_field(brand_id, "titan_ghl_location_id", location_id)
     db.update_brand_text_field(brand_id, "crm_pipeline_id", pipeline_id)
 
     flash("GoHighLevel settings saved.", "success")
@@ -5195,7 +5198,7 @@ def client_ghl_test():
         return jsonify(ok=False, error="Brand not found"), 404
 
     if brand.get("crm_type") != "gohighlevel" or not brand.get("crm_api_key"):
-        return jsonify(ok=False, error="GoHighLevel not configured. Save your API key first.")
+        return jsonify(ok=False, error="GoHighLevel not configured. Save your token first.")
 
     from webapp.crm_bridge import ghl_test_connection
     message, error = ghl_test_connection(brand)

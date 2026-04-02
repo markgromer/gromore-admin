@@ -11,6 +11,52 @@ log = logging.getLogger(__name__)
 TIMEOUT = 15
 
 
+GHL_LEADCONNECTOR_BASE = "https://services.leadconnectorhq.com"
+GHL_LEADCONNECTOR_VERSION = "2021-07-28"
+
+
+def _ghl_location_id(brand):
+    return (brand.get("titan_ghl_location_id") or "").strip() or None
+
+
+def _ghl_lc_headers(token):
+    return {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Version": GHL_LEADCONNECTOR_VERSION,
+    }
+
+
+def _parse_ts_ms(value):
+    """Best-effort timestamp parse to epoch-ms."""
+    from datetime import datetime
+
+    if value is None:
+        return 0
+
+    if isinstance(value, (int, float)):
+        ts = int(value)
+        # Heuristic: seconds vs ms
+        return ts * 1000 if ts < 10**12 else ts
+
+    if isinstance(value, str):
+        s = value.strip()
+        if not s:
+            return 0
+        # numeric string
+        if s.isdigit():
+            ts = int(s)
+            return ts * 1000 if ts < 10**12 else ts
+        # ISO-ish
+        try:
+            return int(datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp() * 1000)
+        except (ValueError, TypeError):
+            return 0
+
+    return 0
+
+
 def push_lead(brand, lead_data):
     """
     Push a lead event to the brand's configured CRM.
@@ -47,7 +93,7 @@ def push_lead(brand, lead_data):
 def _push_gohighlevel(brand, lead_data):
     api_key = (brand.get("crm_api_key") or "").strip()
     if not api_key:
-        return False, "GoHighLevel API key not configured"
+        return False, "GoHighLevel token not configured"
 
     pipeline_id = (brand.get("crm_pipeline_id") or "").strip()
 
@@ -848,10 +894,33 @@ def pull_jobber_revenue(brand, month=None):
 
 def ghl_list_pipelines(brand):
     """List all pipelines in the GHL sub-account. Returns (list, error)."""
-    api_key = (brand.get("crm_api_key") or "").strip()
-    if not api_key:
-        return [], "GoHighLevel API key not configured"
-    headers = {"Authorization": f"Bearer {api_key}"}
+    token = (brand.get("crm_api_key") or "").strip()
+    if not token:
+        return [], "GoHighLevel token not configured"
+
+    location_id = _ghl_location_id(brand)
+    if location_id:
+        try:
+            resp = requests.get(
+                f"{GHL_LEADCONNECTOR_BASE}/opportunities/pipelines",
+                params={"locationId": location_id},
+                headers=_ghl_lc_headers(token),
+                timeout=TIMEOUT,
+            )
+            if resp.status_code == 200:
+                payload = resp.json()
+                if isinstance(payload, list):
+                    return payload, None
+                if isinstance(payload, dict):
+                    return payload.get("pipelines", []) or payload.get("data", []) or [], None
+                return [], "Unexpected pipelines response"
+            # If PIT call fails, fall through to legacy endpoint for backward compatibility
+            log.info("GHL LeadConnector pipelines failed (%s), falling back", resp.status_code)
+        except requests.RequestException as exc:
+            log.info("GHL LeadConnector pipelines network error, falling back: %s", exc)
+
+    # Legacy v1 endpoint (API key style)
+    headers = {"Authorization": f"Bearer {token}"}
     try:
         resp = requests.get(
             "https://rest.gohighlevel.com/v1/pipelines/",
@@ -879,9 +948,9 @@ def pull_gohighlevel_revenue(brand, month=None):
     from datetime import datetime
     import calendar
 
-    api_key = (brand.get("crm_api_key") or "").strip()
-    if not api_key:
-        return 0, 0, "GoHighLevel API key not configured"
+    token = (brand.get("crm_api_key") or "").strip()
+    if not token:
+        return 0, 0, "GoHighLevel token not configured"
 
     if not month:
         month = datetime.now().strftime("%Y-%m")
@@ -897,7 +966,105 @@ def pull_gohighlevel_revenue(brand, month=None):
     last_day = calendar.monthrange(year, mon)[1]
     end_ts = int(datetime(year, mon, last_day, 23, 59, 59).timestamp() * 1000)
 
-    headers = {"Authorization": f"Bearer {api_key}"}
+    location_id = _ghl_location_id(brand)
+
+    # Prefer LeadConnector when Location ID is present (PIT-compatible)
+    if location_id:
+        # Resolve pipeline
+        pipeline_id = (brand.get("crm_pipeline_id") or "").strip()
+        if not pipeline_id:
+            pipelines, err = ghl_list_pipelines(brand)
+            if err:
+                return 0, 0, err
+            if not pipelines:
+                return 0, 0, "No pipelines found in GoHighLevel account"
+            first = pipelines[0]
+            pipeline_id = (first.get("id") or first.get("_id") or "").strip()
+
+        total_revenue = 0.0
+        deal_count = 0
+        fetched = 0
+        page = 0
+        limit = 100
+
+        while True:
+            body = {
+                "locationId": location_id,
+                "query": "",
+                "limit": limit,
+                "page": page,
+                "searchAfter": [],
+                "additionalDetails": {
+                    "notes": False,
+                    "tasks": False,
+                    "calendarEvents": False,
+                    "unReadConversations": False,
+                },
+            }
+
+            try:
+                resp = requests.post(
+                    f"{GHL_LEADCONNECTOR_BASE}/opportunities/search",
+                    json=body,
+                    headers=_ghl_lc_headers(token),
+                    timeout=TIMEOUT,
+                )
+            except requests.RequestException as exc:
+                return 0, 0, f"Network error: {exc}"
+
+            if resp.status_code != 200:
+                return 0, 0, f"GHL API error {resp.status_code}: {resp.text[:200]}"
+
+            data = resp.json() if resp.content else {}
+            opportunities = []
+            total = None
+            if isinstance(data, dict):
+                opportunities = data.get("opportunities") or []
+                total = data.get("total")
+            elif isinstance(data, list):
+                opportunities = data
+
+            if not opportunities:
+                break
+
+            fetched += len(opportunities)
+
+            for opp in opportunities:
+                if not isinstance(opp, dict):
+                    continue
+
+                opp_pipeline_id = (opp.get("pipelineId") or opp.get("pipeline_id") or "").strip()
+                if pipeline_id and opp_pipeline_id != pipeline_id:
+                    continue
+
+                status = (opp.get("status") or "").lower()
+                if status not in ("won", "closed"):
+                    continue
+
+                closed_at = (
+                    opp.get("lastStatusChangeAt")
+                    or opp.get("last_status_change_at")
+                    or opp.get("updatedAt")
+                    or opp.get("updated_at")
+                )
+                closed_ms = _parse_ts_ms(closed_at)
+                if start_ts <= closed_ms <= end_ts:
+                    try:
+                        total_revenue += float(opp.get("monetaryValue") or opp.get("monetary_value") or 0)
+                    except (TypeError, ValueError):
+                        pass
+                    deal_count += 1
+
+            if len(opportunities) < limit:
+                break
+            if isinstance(total, (int, float)) and fetched >= int(total):
+                break
+
+            page += 1
+
+        return total_revenue, deal_count, None
+
+    headers = {"Authorization": f"Bearer {token}"}
 
     # Resolve pipeline
     pipeline_id = (brand.get("crm_pipeline_id") or "").strip()
