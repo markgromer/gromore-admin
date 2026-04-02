@@ -104,6 +104,41 @@ def sync_sng_revenue_all():
     return redirect(url_for("dashboard"))
 
 
+@jobs_bp.route("/sync-ghl-revenue", methods=["POST"])
+def sync_ghl_revenue_all():
+    """Batch sync GHL revenue for all brands with GoHighLevel configured."""
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    db = current_app.db
+    brands = db.get_all_brands()
+
+    from webapp.crm_bridge import pull_gohighlevel_revenue
+
+    synced = 0
+    skipped = 0
+    target_month = datetime.now().strftime("%Y-%m")
+    for brand in brands:
+        if brand.get("crm_type") != "gohighlevel" or not brand.get("crm_api_key"):
+            skipped += 1
+            continue
+        try:
+            revenue, deal_count, error = pull_gohighlevel_revenue(brand, target_month)
+            if not error:
+                db.upsert_brand_month_finance(
+                    brand["id"], target_month, revenue, deal_count,
+                    f"GHL sync: {deal_count} deals",
+                )
+                synced += 1
+            else:
+                skipped += 1
+        except Exception:
+            skipped += 1
+
+    flash(f"GHL revenue synced: {synced} brands, {skipped} skipped", "success" if synced > 0 else "info")
+    return redirect(url_for("dashboard"))
+
+
 @jobs_bp.route("/run-agents", methods=["POST"])
 def run_agents_all():
     """Batch run AI agent analysis for all brands with OpenAI keys.

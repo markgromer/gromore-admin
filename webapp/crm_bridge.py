@@ -842,3 +842,112 @@ def pull_jobber_revenue(brand, month=None):
             pass
 
     return total_revenue, len(nodes), None
+
+
+# ── GoHighLevel Revenue Pull ──────────────────────────────────
+
+def ghl_list_pipelines(brand):
+    """List all pipelines in the GHL sub-account. Returns (list, error)."""
+    api_key = (brand.get("crm_api_key") or "").strip()
+    if not api_key:
+        return [], "GoHighLevel API key not configured"
+    headers = {"Authorization": f"Bearer {api_key}"}
+    try:
+        resp = requests.get(
+            "https://rest.gohighlevel.com/v1/pipelines/",
+            headers=headers, timeout=TIMEOUT,
+        )
+        if resp.status_code != 200:
+            return [], f"GHL API error {resp.status_code}: {resp.text[:200]}"
+        return resp.json().get("pipelines", []), None
+    except requests.RequestException as exc:
+        return [], f"Network error: {exc}"
+
+
+def ghl_test_connection(brand):
+    """Quick connection test: list pipelines. Returns (message, error)."""
+    pipelines, error = ghl_list_pipelines(brand)
+    if error:
+        return None, error
+    return f"Connected - {len(pipelines)} pipeline(s) found", None
+
+
+def pull_gohighlevel_revenue(brand, month=None):
+    """Pull won/closed opportunity revenue from GoHighLevel for a given month.
+    Uses the pipeline configured in crm_pipeline_id (or first pipeline if blank).
+    Returns (revenue, deal_count, error_or_None)."""
+    from datetime import datetime
+    import calendar
+
+    api_key = (brand.get("crm_api_key") or "").strip()
+    if not api_key:
+        return 0, 0, "GoHighLevel API key not configured"
+
+    if not month:
+        month = datetime.now().strftime("%Y-%m")
+
+    try:
+        year = int(month[:4])
+        mon = int(month[5:7])
+    except (ValueError, IndexError):
+        return 0, 0, f"Invalid month format: {month}"
+
+    # Epoch-ms range for the target month
+    start_ts = int(datetime(year, mon, 1).timestamp() * 1000)
+    last_day = calendar.monthrange(year, mon)[1]
+    end_ts = int(datetime(year, mon, last_day, 23, 59, 59).timestamp() * 1000)
+
+    headers = {"Authorization": f"Bearer {api_key}"}
+
+    # Resolve pipeline
+    pipeline_id = (brand.get("crm_pipeline_id") or "").strip()
+    if not pipeline_id:
+        pipelines, err = ghl_list_pipelines(brand)
+        if err:
+            return 0, 0, err
+        if not pipelines:
+            return 0, 0, "No pipelines found in GoHighLevel account"
+        pipeline_id = pipelines[0].get("id", "")
+
+    # Fetch opportunities from that pipeline
+    total_revenue = 0.0
+    deal_count = 0
+    page = 1
+
+    while True:
+        try:
+            resp = requests.get(
+                f"https://rest.gohighlevel.com/v1/pipelines/{pipeline_id}/opportunities",
+                headers=headers, timeout=TIMEOUT,
+            )
+        except requests.RequestException as exc:
+            return 0, 0, f"Network error: {exc}"
+
+        if resp.status_code != 200:
+            return 0, 0, f"GHL API error {resp.status_code}: {resp.text[:200]}"
+
+        data = resp.json()
+        opportunities = data.get("opportunities", [])
+
+        for opp in opportunities:
+            status = (opp.get("status") or "").lower()
+            if status not in ("won", "closed"):
+                continue
+            # Check if the opportunity closed within our month
+            closed_at = opp.get("lastStatusChangeAt") or opp.get("updatedAt") or 0
+            if isinstance(closed_at, str):
+                try:
+                    closed_at = int(datetime.fromisoformat(closed_at.replace("Z", "+00:00")).timestamp() * 1000)
+                except (ValueError, TypeError):
+                    closed_at = 0
+            if start_ts <= closed_at <= end_ts:
+                try:
+                    total_revenue += float(opp.get("monetaryValue") or 0)
+                except (TypeError, ValueError):
+                    pass
+                deal_count += 1
+
+        # GHL v1 opportunities endpoint does not paginate - break after first call
+        break
+
+    return total_revenue, deal_count, None

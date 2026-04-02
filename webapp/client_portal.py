@@ -5034,6 +5034,48 @@ def client_sng_test():
     return jsonify(ok=True, message=f"Connected - {count} active clients found")
 
 
+# ── GoHighLevel Settings ──
+
+@client_bp.route("/settings/ghl", methods=["POST"])
+@client_login_required
+def client_save_ghl():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    api_key = request.form.get("ghl_api_key", "").strip()
+    pipeline_id = request.form.get("ghl_pipeline_id", "").strip()
+
+    db.update_brand_text_field(brand_id, "crm_type", "gohighlevel")
+
+    if api_key:
+        db.update_brand_text_field(brand_id, "crm_api_key", api_key)
+
+    db.update_brand_text_field(brand_id, "crm_pipeline_id", pipeline_id)
+
+    flash("GoHighLevel settings saved.", "success")
+    return redirect(url_for("client.client_settings"))
+
+
+@client_bp.route("/crm/ghl/test", methods=["POST"])
+@client_login_required
+def client_ghl_test():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    if brand.get("crm_type") != "gohighlevel" or not brand.get("crm_api_key"):
+        return jsonify(ok=False, error="GoHighLevel not configured. Save your API key first.")
+
+    from webapp.crm_bridge import ghl_test_connection
+    message, error = ghl_test_connection(brand)
+    if error:
+        return jsonify(ok=False, error=error)
+
+    return jsonify(ok=True, message=message)
+
+
 # ── CRM Dashboard Tab ──
 
 @client_bp.route("/crm")
@@ -5045,12 +5087,14 @@ def client_crm():
     if not brand:
         abort(404)
 
-    crm_connected = (brand.get("crm_type") == "sweepandgo" and bool(brand.get("crm_api_key")))
+    crm_type = (brand.get("crm_type") or "").strip().lower()
+    crm_connected = crm_type in ("sweepandgo", "gohighlevel", "jobber") and bool(brand.get("crm_api_key"))
 
     return render_template(
         "client_crm.html",
         brand=brand,
         crm_connected=crm_connected,
+        crm_type=crm_type,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
 

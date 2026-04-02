@@ -1140,6 +1140,22 @@ def create_app():
                 "source": "jobber",
             })
 
+        elif crm_type == "gohighlevel":
+            from webapp.crm_bridge import pull_gohighlevel_revenue
+            revenue, deal_count, error = pull_gohighlevel_revenue(brand, target_month)
+            if error:
+                return jsonify({"ok": False, "error": error}), 400
+            db.upsert_brand_month_finance(brand_id, target_month, revenue, deal_count,
+                                          f"GoHighLevel sync: {deal_count} deals")
+            db.mark_brand_webhook_received(brand_id)
+            return jsonify({
+                "ok": True,
+                "month": target_month,
+                "closed_revenue": revenue,
+                "closed_deals": deal_count,
+                "source": "gohighlevel",
+            })
+
         else:
             return jsonify({"ok": False, "error": f"Revenue pull not supported for CRM type: {crm_type}"}), 400
 
