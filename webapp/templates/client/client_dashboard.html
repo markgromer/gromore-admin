@@ -560,7 +560,9 @@ function fmtInt(v) {
 (function() {
     var stepEls = Array.prototype.slice.call(document.querySelectorAll('#dashLoader .loader-steps > li'));
     var stepIds = stepEls.map(function(el) { return el.id; }).filter(Boolean);
-    var currentStep = 0;
+    var renderHoldMs = 3000;
+    var minShowMs = 900;
+    var startedAt = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
     // If the user is forcing a refresh, reflect that in the loader copy.
     try {
@@ -577,22 +579,46 @@ function fmtInt(v) {
         }
     } catch (e) {}
 
-    function advanceStep() {
-        if (currentStep >= stepIds.length) return;
-        if (currentStep > 0) {
-            var prev = document.getElementById(stepIds[currentStep - 1]);
-            prev.classList.remove('active');
-            prev.classList.add('done');
-            prev.querySelector('.step-icon').innerHTML = '<i class="bi bi-check2"></i>';
+    function setAllRunning() {
+        stepIds.forEach(function(id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.classList.remove('done');
+            el.classList.remove('active');
+        });
+
+        // Everything except the final render step runs concurrently.
+        stepIds.forEach(function(id) {
+            if (id === 'step-build') return;
+            var el = document.getElementById(id);
+            if (el) el.classList.add('active');
+        });
+
+        // Keep render step visually queued until data is loaded.
+        var renderEl = document.getElementById('step-build');
+        if (renderEl) {
+            renderEl.classList.remove('active');
+            renderEl.classList.remove('done');
         }
-        document.getElementById(stepIds[currentStep]).classList.add('active');
-        currentStep++;
     }
 
-    // Start on the first step and then keep advancing on a schedule.
-    advanceStep();
-    var schedule = [900, 1900, 3100, 4500, 6100, 7900, 9800];
-    schedule.slice(0, Math.max(0, stepIds.length - 1)).forEach(function(ms) { setTimeout(advanceStep, ms); });
+    function markDone(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove('active');
+        el.classList.add('done');
+        var icon = el.querySelector('.step-icon');
+        if (icon) icon.innerHTML = '<i class="bi bi-check2"></i>';
+    }
+
+    function markActive(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove('done');
+        el.classList.add('active');
+    }
+
+    setAllRunning();
 
     var month = '{{ month }}';
     var qs = 'month=' + encodeURIComponent(month);
@@ -605,59 +631,78 @@ function fmtInt(v) {
     fetch('{{ url_for("client.client_dashboard_data") }}?' + qs, { credentials: 'same-origin' })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        stepIds.forEach(function(id) {
-            var el = document.getElementById(id);
-            el.classList.remove('active');
-            el.classList.add('done');
-            el.querySelector('.step-icon').innerHTML = '<i class="bi bi-check2"></i>';
-        });
+        // Do not let individual steps "finish" early. Once data is in, complete them together.
+        var finishAll = function() {
+            // Complete all non-render steps quickly.
+            stepIds.forEach(function(id) {
+                if (id === 'step-build') return;
+                markDone(id);
+            });
 
-        setTimeout(function() {
-            document.getElementById('dashLoader').style.display = 'none';
-
-            if (data.error && !data.dashboard) {
-                document.getElementById('dashError').style.display = 'block';
-                document.getElementById('dashErrorMsg').textContent =
-                    'No data available for ' + month + ' yet. Data appears after your reports are generated.';
-                return;
+            // Final render hold.
+            var renderEl = document.getElementById('step-build');
+            if (renderEl) {
+                markActive('step-build');
+                var title = renderEl.querySelector('.step-title');
+                var sub = renderEl.querySelector('.step-sub');
+                if (title) title.textContent = 'Letting the dashboard render';
+                if (sub) sub.textContent = 'Final pass: charts and cards.';
             }
 
-            if (data.dashboard) {
-                renderDashboard(data.dashboard);
+            setTimeout(function() {
+                markDone('step-build');
+                setTimeout(function() {
+                    document.getElementById('dashLoader').style.display = 'none';
 
+                    if (data.error && !data.dashboard) {
+                        document.getElementById('dashError').style.display = 'block';
+                        document.getElementById('dashErrorMsg').textContent =
+                            'No data available for ' + month + ' yet. Data appears after your reports are generated.';
+                        return;
+                    }
 
-                if (!sessionStorage.getItem('warren_greeted')) {
-                    sessionStorage.setItem('warren_greeted', '1');
-                    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
-                    var csrfVal = csrfMeta ? csrfMeta.getAttribute('content') : '';
-                    fetch('{{ url_for("client.client_assistant_proactive") }}', {
-                        method: 'POST',
-                        credentials: 'same-origin',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfVal },
-                        body: JSON.stringify({ hint: '' }),
-                    })
-                    .then(function(r) { return r.json(); })
-                    .then(function(pData) {
-                        if (pData.greeting) {
-                            var logEl = document.getElementById('assistantLog');
-                            if (logEl) {
-                                var div = document.createElement('div');
-                                div.className = 'assistant-bubble assistant';
-                                div.innerHTML = (window.marked ? marked.parse(pData.greeting) : pData.greeting);
-                                logEl.appendChild(div);
-                                logEl.scrollTop = logEl.scrollHeight;
-                                var shell = document.getElementById('globalAssistantShell');
-                                if (shell && shell.classList.contains('assistant-collapsed')) {
-                                    shell.classList.remove('assistant-collapsed');
-                                    localStorage.setItem('clientAssistantCollapsed', '0');
+                    if (data.dashboard) {
+                        renderDashboard(data.dashboard);
+                        if (!sessionStorage.getItem('warren_greeted')) {
+                            sessionStorage.setItem('warren_greeted', '1');
+                            var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+                            var csrfVal = csrfMeta ? csrfMeta.getAttribute('content') : '';
+                            fetch('{{ url_for("client.client_assistant_proactive") }}', {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfVal },
+                                body: JSON.stringify({ hint: '' }),
+                            })
+                            .then(function(r) { return r.json(); })
+                            .then(function(pData) {
+                                if (pData.greeting) {
+                                    var logEl = document.getElementById('assistantLog');
+                                    if (logEl) {
+                                        var div = document.createElement('div');
+                                        div.className = 'assistant-bubble assistant';
+                                        div.innerHTML = (window.marked ? marked.parse(pData.greeting) : pData.greeting);
+                                        logEl.appendChild(div);
+                                        logEl.scrollTop = logEl.scrollHeight;
+                                        var shell = document.getElementById('globalAssistantShell');
+                                        if (shell && shell.classList.contains('assistant-collapsed')) {
+                                            shell.classList.remove('assistant-collapsed');
+                                            localStorage.setItem('clientAssistantCollapsed', '0');
+                                        }
+                                    }
                                 }
-                            }
+                            })
+                            .catch(function() {});
                         }
-                    })
-                    .catch(function() {});
-                }
-            }
-        }, 600);
+                    }
+                }, 250);
+            }, renderHoldMs);
+        };
+
+        // Make sure the loader stays on screen briefly so it reads as "real work".
+        var now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        var elapsed = now - startedAt;
+        var wait = Math.max(0, minShowMs - elapsed);
+        setTimeout(finishAll, wait);
     })
     .catch(function() {
         document.getElementById('dashLoader').style.display = 'none';
