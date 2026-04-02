@@ -3405,11 +3405,17 @@ def client_titan_launch():
         lifetime_seconds=300,
     )
 
+    # Extract token and next from the built URL for POST submission
+    titan_cfg = _get_titan_launch_config(current_app.config)
+    token_str, _ = build_titan_sso_token(current_app.config, user, brand, lifetime_seconds=300)
+    sso_endpoint = f"{titan_cfg['base_url']}/sso/upstream"
+    safe_next = _normalize_titan_next_path(next_path, "/")
+
     # Log every launch so we can verify the redirect target
     current_app.logger.info(
-        "Titan launch: user=%s brand=%s target=%s issuer=%s",
+        "Titan launch: user=%s brand=%s target=%s issuer=%s method=POST",
         email, brand_id,
-        titan_url.split("?")[0],  # log path only, not token
+        sso_endpoint,
         payload.get("issuer"),
     )
 
@@ -3419,15 +3425,27 @@ def client_titan_launch():
         return (
             f"<html><body style='font-family:monospace;padding:2rem;'>"
             f"<h3>Titan Launch Preview</h3>"
-            f"<p><strong>Redirect target:</strong></p>"
-            f"<pre style='word-break:break-all;background:#f5f5f5;padding:1rem;'>{escape(titan_url)}</pre>"
+            f"<p><strong>POST target:</strong></p>"
+            f"<pre style='word-break:break-all;background:#f5f5f5;padding:1rem;'>{escape(sso_endpoint)}</pre>"
+            f"<p><strong>Token (first 80 chars):</strong></p>"
+            f"<pre style='background:#f5f5f5;padding:1rem;'>{escape(token_str[:80])}...</pre>"
             f"<p><strong>Payload claims:</strong></p>"
             f"<pre style='background:#f5f5f5;padding:1rem;'>{escape(json.dumps({k: v for k, v in payload.items() if k != 'nonce'}, indent=2))}</pre>"
-            f"<p><a href='{escape(titan_url)}'>Proceed to Titan</a></p>"
+            f"<p><a href='{escape(titan_url)}'>GET fallback link</a></p>"
             f"</body></html>"
         )
 
-    return redirect(titan_url)
+    # Auto-submitting POST form - standard SSO handoff pattern
+    from markupsafe import escape
+    return (
+        f"<html><body onload=\"document.getElementById('sso').submit()\">"
+        f"<form id=\"sso\" method=\"POST\" action=\"{escape(sso_endpoint)}\">"
+        f"<input type=\"hidden\" name=\"token\" value=\"{escape(token_str)}\">"
+        f"<input type=\"hidden\" name=\"next\" value=\"{escape(safe_next)}\">"
+        f"</form>"
+        f"<noscript><p>Redirecting to Titan... <a href=\"{escape(titan_url)}\">Click here</a> if not redirected.</p></noscript>"
+        f"</body></html>"
+    )
 
 
 @client_bp.route("/settings/openai", methods=["POST"])
