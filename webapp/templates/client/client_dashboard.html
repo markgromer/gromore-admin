@@ -488,7 +488,7 @@ function fmtInt(v) {
 
             if (data.dashboard) {
                 renderDashboard(data.dashboard);
-                loadTeamAlerts();
+
 
                 if (!sessionStorage.getItem('warren_greeted')) {
                     sessionStorage.setItem('warren_greeted', '1');
@@ -528,49 +528,6 @@ function fmtInt(v) {
         document.getElementById('dashError').style.display = 'block';
         document.getElementById('dashErrorMsg').textContent = 'Something went wrong loading your data. Please refresh.';
     });
-    function loadTeamAlerts() {
-        fetch('{{ url_for("client.client_team_findings") }}')
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                var findings = (data.findings || []).filter(function(f) {
-                    return f.severity === 'critical' || f.severity === 'warning';
-                }).slice(0, 5);
-                if (!findings.length) return;
-                var slot = document.getElementById('team-alerts-slot');
-                if (!slot) return;
-                var sevIcons = {
-                    critical: 'bi-exclamation-triangle-fill',
-                    warning: 'bi-exclamation-circle-fill',
-                    positive: 'bi-check-circle-fill',
-                    info: 'bi-info-circle-fill'
-                };
-                var agentNames = {
-                    scout: 'Scout', penny: 'Penny', ace: 'Ace', radar: 'Radar',
-                    hawk: 'Hawk', pulse: 'Pulse', spark: 'Spark', bridge: 'Bridge', warren: 'Warren', chief: 'Weave'
-                };
-                var html = '<div class="team-alerts">';
-                html += '<div class="team-alerts-header">';
-                html += '<h5><i class="bi bi-robot me-1"></i>Team Alerts</h5>';
-                html += '<a href="/client/team" class="btn btn-sm btn-outline-primary" style="font-size:.78rem;">View All <i class="bi bi-arrow-right"></i></a>';
-                html += '</div>';
-                findings.forEach(function(f) {
-                    var icon = sevIcons[f.severity] || 'bi-info-circle';
-                    var name = agentNames[f.agent_key] || f.agent_key;
-                    html += '<div class="alert-item">';
-                    html += '<div class="alert-sev sev-' + f.severity + '"><i class="bi ' + icon + '"></i></div>';
-                    html += '<div>';
-                    html += '<div class="alert-agent">' + esc(name) + '</div>';
-                    html += '<div class="alert-title">' + esc(f.title) + '</div>';
-                    html += '<div class="alert-detail">' + esc(f.detail) + '</div>';
-                    html += '</div>';
-                    html += '</div>';
-                });
-                html += '</div>';
-                slot.innerHTML = html;
-            })
-            .catch(function() {});
-    }
-
     function computeVerdict(camp, targetCpa) {
         var spend = parseFloat(camp.spend) || 0;
         var leads = parseFloat(camp.conversions) || 0;
@@ -639,47 +596,13 @@ function fmtInt(v) {
         html += '<div style="font-size:.78rem;font-weight:700;color:rgba(255,255,255,.55);letter-spacing:.03em;margin-bottom:.5rem;">Weighted Analysis for Revenue, Reach, Engagement &amp; Navigation</div>';
         html += '<div class="warren-call-body">' + esc(warrenSummary) + '</div>';
 
-        // WARREN Briefing: latest findings overview
+        // Compact findings link (details live on Team page)
         var wb = d.warren_briefing;
         if (wb && wb.total_findings > 0) {
-            html += '<div class="warren-briefing-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,.12);">';
-            html += '<div style="text-align:center;"><div style="font-size:1.6rem;font-weight:800;">' + wb.total_findings + '</div><div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;opacity:.6;">Total Findings</div></div>';
-            if (wb.critical_count > 0) html += '<div style="text-align:center;"><div style="font-size:1.6rem;font-weight:800;color:#fca5a5;">' + wb.critical_count + '</div><div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;opacity:.6;">Critical</div></div>';
-            if (wb.warning_count > 0) html += '<div style="text-align:center;"><div style="font-size:1.6rem;font-weight:800;color:#fcd34d;">' + wb.warning_count + '</div><div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;opacity:.6;">Warnings</div></div>';
-            if (wb.positive_count > 0) html += '<div style="text-align:center;"><div style="font-size:1.6rem;font-weight:800;color:#86efac;">' + wb.positive_count + '</div><div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;opacity:.6;">Wins</div></div>';
+            html += '<div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:space-between;">';
+            html += '<span style="font-size:.85rem;color:rgba(255,255,255,.7);"><i class="bi bi-clipboard-data me-1"></i>Your team flagged <strong style="color:#fff;">' + wb.total_findings + ' items</strong> this month</span>';
+            html += '<a href="/client/team" style="color:#a5b4fc;font-size:.82rem;font-weight:600;text-decoration:none;">View details <i class="bi bi-arrow-right"></i></a>';
             html += '</div>';
-
-            // Top issues summary
-            var briefItems = [];
-            (wb.top_critical || []).forEach(function(f) { briefItems.push({sev: 'critical', title: f.title, agent: f.agent}); });
-            (wb.top_warnings || []).forEach(function(f) { briefItems.push({sev: 'warning', title: f.title, agent: f.agent}); });
-            if (briefItems.length > 0) {
-                html += '<div style="margin-top:1rem;">';
-                var agentNames = {scout:'Scout',penny:'Penny',ace:'Ace',radar:'Radar',hawk:'Hawk',pulse:'Pulse',spark:'Spark',bridge:'Bridge',warren:'Warren',chief:'Weave'};
-                briefItems.slice(0, 4).forEach(function(item) {
-                    var dotColor = item.sev === 'critical' ? '#ef4444' : '#f59e0b';
-                    html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:.85rem;">';
-                    html += '<span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0;"></span>';
-                    html += '<span style="opacity:.6;font-size:.72rem;font-weight:600;text-transform:uppercase;min-width:50px;">' + esc(agentNames[item.agent] || item.agent) + '</span>';
-                    html += '<span style="color:rgba(255,255,255,.85);">' + esc(item.title) + '</span>';
-                    html += '</div>';
-                });
-                html += '</div>';
-            }
-
-            // Wins
-            if (wb.top_wins && wb.top_wins.length > 0) {
-                html += '<div style="margin-top:.75rem;">';
-                wb.top_wins.slice(0, 2).forEach(function(w) {
-                    html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:.85rem;">';
-                    html += '<span style="width:8px;height:8px;border-radius:50%;background:#10b981;flex-shrink:0;"></span>';
-                    html += '<span style="color:rgba(255,255,255,.85);">' + esc(w.title) + '</span>';
-                    html += '</div>';
-                });
-                html += '</div>';
-            }
-
-            html += '<div style="margin-top:1rem;"><a href="/client/team" style="color:#a5b4fc;font-size:.82rem;font-weight:600;text-decoration:none;">View all findings <i class="bi bi-arrow-right"></i></a></div>';
         }
 
         // Team status bar
@@ -695,9 +618,6 @@ function fmtInt(v) {
         }
 
         html += '</div>';
-
-        // Team Agent Alerts (loaded async below)
-        html += '<div id="team-alerts-slot"></div>';
 
         // Performance Snapshot
         if (d.kpi_status && d.kpi_status.length) {
@@ -875,27 +795,33 @@ function fmtInt(v) {
             html += '</div>';
         }
 
-        // Highlights & Concerns
+        // Highlights & Concerns (2 each, expandable)
         if ((d.highlights && d.highlights.length) || (d.concerns && d.concerns.length)) {
             html += '<div class="row g-3 mb-4">';
             if (d.highlights && d.highlights.length) {
                 html += '<div class="col-md-6"><div class="perf-snapshot" style="margin-bottom:0;">';
                 html += '<h6 class="mb-3" style="font-weight:700;font-size:.88rem;"><i class="bi bi-check-circle text-success me-1"></i> What\'s Working</h6>';
-                d.highlights.slice(0, 5).forEach(function(h) {
-                    html += '<div class="d-flex align-items-start mb-2">';
+                d.highlights.forEach(function(h, idx) {
+                    html += '<div class="d-flex align-items-start mb-2 hl-item"' + (idx >= 2 ? ' style="display:none;"' : '') + '>';
                     html += '<i class="bi bi-check2 text-success me-2 mt-1" style="font-size:.8rem;"></i>';
                     html += '<span style="font-size:.85rem;color:#334155;">' + esc(h) + '</span></div>';
                 });
+                if (d.highlights.length > 2) {
+                    html += '<button class="btn btn-sm btn-link text-success p-0" style="font-size:.82rem;" onclick="toggleInsights(this,\'hl-item\',\'highlight\')">' + (d.highlights.length - 2) + ' more <i class="bi bi-chevron-down"></i></button>';
+                }
                 html += '</div></div>';
             }
             if (d.concerns && d.concerns.length) {
                 html += '<div class="col-md-6"><div class="perf-snapshot" style="margin-bottom:0;">';
                 html += '<h6 class="mb-3" style="font-weight:700;font-size:.88rem;"><i class="bi bi-exclamation-circle text-warning me-1"></i> Needs Attention</h6>';
-                d.concerns.slice(0, 5).forEach(function(c) {
-                    html += '<div class="d-flex align-items-start mb-2">';
+                d.concerns.forEach(function(c, idx) {
+                    html += '<div class="d-flex align-items-start mb-2 cn-item"' + (idx >= 2 ? ' style="display:none;"' : '') + '>';
                     html += '<i class="bi bi-exclamation-triangle text-warning me-2 mt-1" style="font-size:.8rem;"></i>';
                     html += '<span style="font-size:.85rem;color:#334155;">' + esc(c) + '</span></div>';
                 });
+                if (d.concerns.length > 2) {
+                    html += '<button class="btn btn-sm btn-link text-warning p-0" style="font-size:.82rem;" onclick="toggleInsights(this,\'cn-item\',\'concern\')">' + (d.concerns.length - 2) + ' more <i class="bi bi-chevron-down"></i></button>';
+                }
                 html += '</div></div>';
             }
             html += '</div>';
@@ -957,6 +883,20 @@ function showPlatformTab(platform, btn) {
     btn.classList.add('active');
 }
 
+function toggleInsights(btn, itemClass) {
+    var container = btn.parentElement;
+    var items = container.querySelectorAll('.' + itemClass);
+    var expanded = btn.dataset.expanded === '1';
+    items.forEach(function(el, idx) {
+        if (idx >= 2) el.style.display = expanded ? 'none' : '';
+    });
+    btn.dataset.expanded = expanded ? '0' : '1';
+    var hiddenCount = items.length - 2;
+    btn.innerHTML = expanded
+        ? hiddenCount + ' more <i class="bi bi-chevron-down"></i>'
+        : 'Show fewer <i class="bi bi-chevron-up"></i>';
+}
+
 function toggleMovesRows(platform, btn) {
     var rows = document.querySelectorAll('.moves-row-' + platform);
     var expanded = btn.dataset.expanded === '1';
@@ -995,42 +935,6 @@ function toggleMovesRows(platform, btn) {
     </div>
 </div>
 
-<!-- Team Alerts slot (Jinja path) -->
-<div id="team-alerts-slot-jinja"></div>
-<script>
-(function() {
-    fetch('{{ url_for("client.client_team_findings") }}')
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            var findings = (data.findings || []).filter(function(f) {
-                return f.severity === 'critical' || f.severity === 'warning';
-            }).slice(0, 5);
-            if (!findings.length) return;
-            var slot = document.getElementById('team-alerts-slot-jinja');
-            if (!slot) return;
-            var sevIcons = { critical: 'bi-exclamation-triangle-fill', warning: 'bi-exclamation-circle-fill' };
-            var agentNames = {
-                scout: 'Scout', penny: 'Penny', ace: 'Ace', radar: 'Radar',
-                hawk: 'Hawk', pulse: 'Pulse', spark: 'Spark', bridge: 'Bridge', warren: 'Warren', chief: 'Weave'
-            };
-            function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
-            var html = '<div class="team-alerts">';
-            html += '<div class="team-alerts-header"><h5><i class="bi bi-robot me-1"></i>Team Alerts</h5>';
-            html += '<a href="/client/team" class="btn btn-sm btn-outline-primary" style="font-size:.78rem;">View All <i class="bi bi-arrow-right"></i></a></div>';
-            findings.forEach(function(f) {
-                var icon = sevIcons[f.severity] || 'bi-info-circle';
-                html += '<div class="alert-item"><div class="alert-sev sev-' + f.severity + '"><i class="bi ' + icon + '"></i></div>';
-                html += '<div><div class="alert-agent">' + esc(agentNames[f.agent_key] || f.agent_key) + '</div>';
-                html += '<div class="alert-title">' + esc(f.title) + '</div>';
-                html += '<div class="alert-detail">' + esc(f.detail) + '</div></div></div>';
-            });
-            html += '</div>';
-            slot.innerHTML = html;
-        })
-        .catch(function() {});
-})();
-</script>
-
 {% if dashboard.kpi_status %}
 <div class="perf-snapshot">
     <div class="perf-snapshot-header"><h5>Performance Snapshot</h5></div>
@@ -1054,42 +958,11 @@ function toggleMovesRows(platform, btn) {
 </div>
 {% endif %}
 
-{% if dashboard.highlights or dashboard.concerns %}
-<div class="row g-3 mb-4">
-    {% if dashboard.highlights %}
-    <div class="col-md-6">
-        <div class="perf-snapshot" style="margin-bottom:0;">
-            <h6 class="mb-3" style="font-weight:700;font-size:.88rem;"><i class="bi bi-check-circle text-success me-1"></i> What's Working</h6>
-            {% for h in dashboard.highlights[:5] %}
-            <div class="d-flex align-items-start mb-2">
-                <i class="bi bi-check2 text-success me-2 mt-1" style="font-size: .8rem;"></i>
-                <span style="font-size:.85rem;color:#334155;">{{ h }}</span>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
-    {% if dashboard.concerns %}
-    <div class="col-md-6">
-        <div class="perf-snapshot" style="margin-bottom:0;">
-            <h6 class="mb-3" style="font-weight:700;font-size:.88rem;"><i class="bi bi-exclamation-circle text-warning me-1"></i> Needs Attention</h6>
-            {% for c in dashboard.concerns[:5] %}
-            <div class="d-flex align-items-start mb-2">
-                <i class="bi bi-exclamation-triangle text-warning me-2 mt-1" style="font-size: .8rem;"></i>
-                <span style="font-size:.85rem;color:#334155;">{{ c }}</span>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
-</div>
-{% endif %}
-
 {% if dashboard.actions %}
-<div class="perf-snapshot">
+<div class="perf-snapshot" style="border-left:4px solid #6366f1;">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5 style="font-weight:800;font-size:.9rem;text-transform:uppercase;letter-spacing:.06em;background:linear-gradient(135deg,#1e1b4b,#4f46e5);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:0;">Top Moves This Month</h5>
-        <a href="{{ url_for('client.client_actions', month=month) }}" class="btn btn-sm btn-outline-primary">View All <i class="bi bi-arrow-right"></i></a>
+        <h5 style="font-weight:800;font-size:.9rem;text-transform:uppercase;letter-spacing:.06em;background:linear-gradient(135deg,#1e1b4b,#4f46e5);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:0;"><i class="bi bi-lightning-charge-fill text-primary me-1"></i>Top Moves This Month</h5>
+        <a href="{{ url_for('client.client_actions', month=month) }}" class="btn btn-sm btn-primary">Start Missions <i class="bi bi-arrow-right"></i></a>
     </div>
     {% for action in dashboard.actions[:3] %}
     <div style="display:flex;align-items:start;gap:.85rem;padding:.85rem 0;border-bottom:1px solid #f1f5f9;">
@@ -1106,6 +979,59 @@ function toggleMovesRows(platform, btn) {
     {% endfor %}
 </div>
 {% endif %}
+
+{% if dashboard.highlights or dashboard.concerns %}
+<div class="row g-3 mb-4">
+    {% if dashboard.highlights %}
+    <div class="col-md-6">
+        <div class="perf-snapshot" style="margin-bottom:0;">
+            <h6 class="mb-3" style="font-weight:700;font-size:.88rem;"><i class="bi bi-check-circle text-success me-1"></i> What's Working</h6>
+            {% for h in dashboard.highlights %}
+            <div class="d-flex align-items-start mb-2 hl-item-j"{% if loop.index > 2 %} style="display:none;"{% endif %}>
+                <i class="bi bi-check2 text-success me-2 mt-1" style="font-size: .8rem;"></i>
+                <span style="font-size:.85rem;color:#334155;">{{ h }}</span>
+            </div>
+            {% endfor %}
+            {% if dashboard.highlights|length > 2 %}
+            <button class="btn btn-sm btn-link text-success p-0" style="font-size:.82rem;" onclick="toggleInsights(this,'hl-item-j')">{{ dashboard.highlights|length - 2 }} more <i class="bi bi-chevron-down"></i></button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    {% if dashboard.concerns %}
+    <div class="col-md-6">
+        <div class="perf-snapshot" style="margin-bottom:0;">
+            <h6 class="mb-3" style="font-weight:700;font-size:.88rem;"><i class="bi bi-exclamation-circle text-warning me-1"></i> Needs Attention</h6>
+            {% for c in dashboard.concerns %}
+            <div class="d-flex align-items-start mb-2 cn-item-j"{% if loop.index > 2 %} style="display:none;"{% endif %}>
+                <i class="bi bi-exclamation-triangle text-warning me-2 mt-1" style="font-size: .8rem;"></i>
+                <span style="font-size:.85rem;color:#334155;">{{ c }}</span>
+            </div>
+            {% endfor %}
+            {% if dashboard.concerns|length > 2 %}
+            <button class="btn btn-sm btn-link text-warning p-0" style="font-size:.82rem;" onclick="toggleInsights(this,'cn-item-j')">{{ dashboard.concerns|length - 2 }} more <i class="bi bi-chevron-down"></i></button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<script>
+function toggleInsights(btn, itemClass) {
+    var container = btn.parentElement;
+    var items = container.querySelectorAll('.' + itemClass);
+    var expanded = btn.dataset.expanded === '1';
+    items.forEach(function(el, idx) {
+        if (idx >= 2) el.style.display = expanded ? 'none' : '';
+    });
+    btn.dataset.expanded = expanded ? '0' : '1';
+    var hiddenCount = items.length - 2;
+    btn.innerHTML = expanded
+        ? hiddenCount + ' more <i class="bi bi-chevron-down"></i>'
+        : 'Show fewer <i class="bi bi-chevron-up"></i>';
+}
+</script>
 
 {% else %}
 {% if not error %}
