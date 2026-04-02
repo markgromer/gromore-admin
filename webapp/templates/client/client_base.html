@@ -152,6 +152,32 @@
             letter-spacing: .06em;
             color: var(--text-muted);
             padding: .7rem .55rem .3rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            user-select: none;
+            -webkit-user-select: none;
+            border-radius: 6px;
+            transition: color var(--transition);
+        }
+        .client-sidebar .nav-section-label:hover { color: var(--text-strong); }
+        .client-sidebar .nav-section-label::after {
+            content: '\F282';
+            font-family: 'bootstrap-icons';
+            font-size: .6rem;
+            transition: transform var(--transition);
+        }
+        .client-sidebar .nav-section-label.collapsed::after {
+            transform: rotate(-90deg);
+        }
+        .client-sidebar .nav-section-group {
+            overflow: hidden;
+            max-height: 500px;
+            transition: max-height .25s ease;
+        }
+        .client-sidebar .nav-section-group.collapsed {
+            max-height: 0;
         }
         .client-sidebar .nav-links a {
             color: var(--text-muted);
@@ -1153,15 +1179,11 @@
             <span class="brand-text">{{ client_brand or 'Dashboard' }}</span>
         </div>
         <div class="nav-links">
-            <div class="nav-section-label">Main</div>
+            <div class="nav-section-label" data-section="main">Main</div>
+            <div class="nav-section-group" data-section="main">
             {% if feature_on('dashboard') %}
             <a href="{{ url_for('client.client_dashboard') }}" class="{% if request.endpoint == 'client.client_dashboard' %}active{% endif %}">
                 <i class="bi bi-speedometer2"></i> Overview
-            </a>
-            {% endif %}
-            {% if feature_on('kpis') %}
-            <a href="{{ url_for('client.client_kpis') }}" class="{% if request.endpoint == 'client.client_kpis' %}active{% endif %}">
-                <i class="bi bi-bullseye"></i> KPIs
             </a>
             {% endif %}
             {% if feature_on('campaigns') %}
@@ -1170,8 +1192,13 @@
             </a>
             {% endif %}
             {% if feature_on('quick_launch') %}
-            <a href="{{ url_for('client.client_quick_launch') }}" class="{% if request.endpoint == 'client.client_quick_launch' %}active{% endif %}" style="color:#4f46e5; font-weight:600;">
+            <a href="{{ url_for('client.client_quick_launch') }}" class="{% if request.endpoint == 'client.client_quick_launch' %}active{% endif %}">
                 <i class="bi bi-rocket-takeoff"></i> Quick Launch
+            </a>
+            {% endif %}
+            {% if feature_on('kpis') %}
+            <a href="{{ url_for('client.client_kpis') }}" class="{% if request.endpoint == 'client.client_kpis' %}active{% endif %}">
+                <i class="bi bi-bullseye"></i> KPIs
             </a>
             {% endif %}
             {% if feature_on('missions') %}
@@ -1179,13 +1206,10 @@
                 <i class="bi bi-clipboard2-check"></i> Missions
             </a>
             {% endif %}
-            {% if feature_on('coaching') %}
-            <a href="{{ url_for('client.client_coaching') }}" class="{% if request.endpoint == 'client.client_coaching' %}active{% endif %}" style="color:#059669; font-weight:600;">
-                <i class="bi bi-mortarboard"></i> Coaching
-            </a>
-            {% endif %}
+            </div>
 
-            <div class="nav-section-label">Create</div>
+            <div class="nav-section-label collapsed" data-section="create">Create</div>
+            <div class="nav-section-group collapsed" data-section="create">
             {% if feature_on('ad_builder') %}
             <a href="{{ url_for('client.client_ad_builder') }}" class="{% if request.endpoint in ('client.client_ad_builder', 'client.client_ad_builder_generate') %}active{% endif %}">
                 <i class="bi bi-brush"></i> Ad Builder
@@ -1201,16 +1225,23 @@
                 <i class="bi bi-journal-richtext"></i> Blog
             </a>
             {% endif %}
-
-            <div class="nav-section-label">Business</div>
-            {% if feature_on('my_business') %}
-            <a href="{{ url_for('client.client_my_business') }}" class="{% if request.endpoint == 'client.client_my_business' %}active{% endif %}">
-                <i class="bi bi-building"></i> My Business
+            {% if feature_on('coaching') %}
+            <a href="{{ url_for('client.client_coaching') }}" class="{% if request.endpoint == 'client.client_coaching' %}active{% endif %}">
+                <i class="bi bi-mortarboard"></i> Coaching
             </a>
             {% endif %}
+            </div>
+
+            <div class="nav-section-label collapsed" data-section="business">Business</div>
+            <div class="nav-section-group collapsed" data-section="business">
             {% if feature_on('crm') %}
             <a href="{{ url_for('client.client_crm') }}" class="{% if request.endpoint in ('client.client_crm',) %}active{% endif %}">
                 <i class="bi bi-people"></i> CRM
+            </a>
+            {% endif %}
+            {% if feature_on('my_business') %}
+            <a href="{{ url_for('client.client_my_business') }}" class="{% if request.endpoint == 'client.client_my_business' %}active{% endif %}">
+                <i class="bi bi-building"></i> My Business
             </a>
             {% endif %}
             {% if feature_on('gbp') %}
@@ -1229,13 +1260,13 @@
             </a>
             {% endif %}
             {% if feature_on('your_team') %}
-            <a href="{{ url_for('client.client_team') }}" class="{% if request.endpoint == 'client.client_team' %}active{% endif %}" style="color:#7c3aed; font-weight:600;">
+            <a href="{{ url_for('client.client_team') }}" class="{% if request.endpoint == 'client.client_team' %}active{% endif %}">
                 <i class="bi bi-robot"></i> Your Team
             </a>
             {% endif %}
             {% if feature_on('staff') and session.get('client_role', 'owner') in ('owner', 'manager') %}
             <a href="{{ url_for('client.client_staff') }}" class="{% if request.endpoint == 'client.client_staff' %}active{% endif %}">
-                <i class="bi bi-people"></i> Staff
+                <i class="bi bi-people-fill"></i> Staff
             </a>
             {% endif %}
             {% if feature_on('tasks') %}
@@ -1243,11 +1274,13 @@
                 <i class="bi bi-list-task"></i> Tasks
             </a>
             {% endif %}
-            <a href="{{ url_for('client.client_titan_launch') }}" target="_blank" rel="noopener" style="color:#111827; font-weight:600;">
+            <a href="{{ url_for('client.client_titan_launch') }}" target="_blank" rel="noopener">
                 <i class="bi bi-box-arrow-up-right"></i> Titan
             </a>
+            </div>
 
-            <div class="nav-section-label">Settings</div>
+            <div class="nav-section-label collapsed" data-section="settings">Settings</div>
+            <div class="nav-section-group collapsed" data-section="settings">
             {% if feature_on('connections') %}
             <a href="{{ url_for('client.client_settings') }}" class="{% if request.endpoint == 'client.client_settings' %}active{% endif %}">
                 <i class="bi bi-plug"></i> Connections
@@ -1263,6 +1296,7 @@
                 <i class="bi bi-question-circle"></i> Help
             </a>
             {% endif %}
+            </div>
         </div>
         <div class="sidebar-footer">
             <span class="user-name"><i class="bi bi-person-circle"></i> {{ client_user or '' }}</span>
@@ -1358,7 +1392,59 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
     (function() {
-        document.body.classList.add('has-assistant');
+        // Only claim assistant width if it's expanded
+        var assistantShell = document.getElementById('globalAssistantShell');
+        if (assistantShell && !assistantShell.classList.contains('assistant-collapsed')) {
+            document.body.classList.add('has-assistant');
+        }
+
+        // ── Collapsible sidebar sections ──
+        var sectionLabels = document.querySelectorAll('.nav-section-label[data-section]');
+        var savedSections = {};
+        try { savedSections = JSON.parse(localStorage.getItem('gromore-nav-sections') || '{}'); } catch(e) {}
+
+        sectionLabels.forEach(function(label) {
+            var section = label.getAttribute('data-section');
+            var group = document.querySelector('.nav-section-group[data-section="' + section + '"]');
+            if (!group) return;
+
+            // Auto-expand if the active page is inside this section
+            var hasActive = group.querySelector('a.active');
+
+            // Determine initial state: active page forces open, else check saved preference, else use HTML default
+            if (hasActive) {
+                label.classList.remove('collapsed');
+                group.classList.remove('collapsed');
+            } else if (savedSections[section] !== undefined) {
+                if (savedSections[section]) {
+                    label.classList.remove('collapsed');
+                    group.classList.remove('collapsed');
+                } else {
+                    label.classList.add('collapsed');
+                    group.classList.add('collapsed');
+                }
+            }
+            // else: keep whatever the HTML default is (main open, others collapsed)
+
+            label.addEventListener('click', function() {
+                var isCollapsed = label.classList.contains('collapsed');
+                if (isCollapsed) {
+                    label.classList.remove('collapsed');
+                    group.classList.remove('collapsed');
+                } else {
+                    label.classList.add('collapsed');
+                    group.classList.add('collapsed');
+                }
+                // Save preference
+                try {
+                    var prefs = JSON.parse(localStorage.getItem('gromore-nav-sections') || '{}');
+                    prefs[section] = !label.classList.contains('collapsed');
+                    localStorage.setItem('gromore-nav-sections', JSON.stringify(prefs));
+                } catch(e) {}
+            });
+        });
+
+        // ── Page navigation with loading state ──
         var links = document.querySelectorAll('.client-sidebar .nav-links a');
         links.forEach(function(link) {
             if (link.classList.contains('active')) return;
@@ -1555,11 +1641,17 @@
         }
 
         if (collapseBtn && shell) {
-            var collapsed = localStorage.getItem('clientAssistantCollapsed') === '1';
+            var collapsed = localStorage.getItem('clientAssistantCollapsed') !== '0';
             if (collapsed) shell.classList.add('assistant-collapsed');
             collapseBtn.addEventListener('click', function() {
                 shell.classList.toggle('assistant-collapsed');
-                localStorage.setItem('clientAssistantCollapsed', shell.classList.contains('assistant-collapsed') ? '1' : '0');
+                var isNowCollapsed = shell.classList.contains('assistant-collapsed');
+                localStorage.setItem('clientAssistantCollapsed', isNowCollapsed ? '1' : '0');
+                if (isNowCollapsed) {
+                    document.body.classList.remove('has-assistant');
+                } else {
+                    document.body.classList.add('has-assistant');
+                }
             });
         }
 
