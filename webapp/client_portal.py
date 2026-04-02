@@ -36,6 +36,54 @@ client_bp = Blueprint(
 log = logging.getLogger(__name__)
 
 
+def _warm_client_snapshots_async(*, brand_id: int, month: str) -> None:
+    """Warm heavy caches in the background after login.
+
+    Populates:
+    - analysis + suggestions (monthly_summary)
+    - campaigns list snapshot (settings)
+
+    Best-effort: failures should never block the request.
+    """
+
+    try:
+        app = current_app._get_current_object()
+    except Exception:
+        return
+
+    def _runner():
+        try:
+            with app.app_context():
+                db = getattr(app, "db", None)
+                if not db:
+                    return
+                brand = db.get_brand(brand_id)
+                if not brand:
+                    return
+
+                try:
+                    from webapp.report_runner import get_analysis_and_suggestions_for_brand
+
+                    get_analysis_and_suggestions_for_brand(
+                        db, brand, month, force_refresh=True
+                    )
+                except Exception as exc:
+                    log.info("Warm-up analysis failed (brand=%s month=%s): %s", brand_id, month, exc)
+
+                try:
+                    _get_campaigns_cached(db, brand, month, force_sync=True)
+                except Exception as exc:
+                    log.info("Warm-up campaigns failed (brand=%s month=%s): %s", brand_id, month, exc)
+        except Exception:
+            return
+
+    try:
+        t = threading.Thread(target=_runner, name=f"warmup-{brand_id}-{month}", daemon=True)
+        t.start()
+    except Exception:
+        return
+
+
 ALLOWED_AI_MODELS = {
     "",
     "gpt-4o-mini",
@@ -339,11 +387,14 @@ def client_login():
             session["client_name"] = user["display_name"]
             session["client_brand_name"] = user["brand_name"]
             session["client_role"] = user.get("role", "owner")
-            # Refresh heavy, API-backed snapshots once per login.
-            # Consumed by the first primary data route the user hits.
+
+            # Warm caches in the background so navigation is snappy.
             current_month = datetime.now().strftime("%Y-%m")
-            session["analysis_refresh_month"] = current_month
-            session["campaigns_refresh_month"] = current_month
+            last_warm = session.get("warmup_started_month")
+            if last_warm != current_month:
+                session["warmup_started_month"] = current_month
+                _warm_client_snapshots_async(brand_id=int(user["brand_id"]), month=current_month)
+
             db.update_client_user_login(user["id"])
             return redirect(url_for("client.client_dashboard"))
         flash("Invalid email or password", "error")
@@ -518,18 +569,14 @@ def client_dashboard_data():
         from webapp.report_runner import get_analysis_and_suggestions_for_brand
         from webapp.client_advisor import build_client_dashboard
 
-        force_refresh = (request.args.get("refresh") == "1") or _consume_login_refresh_month(
-            "analysis_refresh_month", month
-        )
+        force_refresh = (request.args.get("refresh") == "1")
         analysis, suggestions = get_analysis_and_suggestions_for_brand(
             db, brand, month, force_refresh=force_refresh
         )
 
         campaigns_data = {}
         try:
-            force_campaign_sync = (request.args.get("sync") == "1") or _consume_login_refresh_month(
-                "campaigns_refresh_month", month
-            )
+            force_campaign_sync = (request.args.get("sync") == "1")
             campaigns_data = _get_campaigns_cached(db, brand, month, force_sync=force_campaign_sync)
         except Exception as exc:
             current_app.logger.exception("Campaign listing failed: %s", exc)
@@ -679,9 +726,7 @@ def client_kpis():
         from webapp.report_runner import get_analysis_and_suggestions_for_brand
         from webapp.client_advisor import build_client_dashboard
 
-        force_refresh = (request.args.get("refresh") == "1") or _consume_login_refresh_month(
-            "analysis_refresh_month", month
-        )
+        force_refresh = (request.args.get("refresh") == "1")
         analysis, suggestions = get_analysis_and_suggestions_for_brand(
             db, brand, month, force_refresh=force_refresh
         )
@@ -726,9 +771,7 @@ def client_actions():
         from webapp.report_runner import get_analysis_and_suggestions_for_brand
         from webapp.client_advisor import build_client_dashboard
 
-        force_refresh = (request.args.get("refresh") == "1") or _consume_login_refresh_month(
-            "analysis_refresh_month", month
-        )
+        force_refresh = (request.args.get("refresh") == "1")
         analysis, suggestions = get_analysis_and_suggestions_for_brand(
             db, brand, month, force_refresh=force_refresh
         )
@@ -1200,9 +1243,7 @@ def client_ad_builder():
     error = ""
     try:
         from webapp.report_runner import get_analysis_and_suggestions_for_brand
-        force_refresh = (request.args.get("refresh") == "1") or _consume_login_refresh_month(
-            "analysis_refresh_month", month
-        )
+        force_refresh = (request.args.get("refresh") == "1")
         analysis, _ = get_analysis_and_suggestions_for_brand(db, brand, month, force_refresh=force_refresh)
         has_data = bool(analysis)
     except Exception as e:
@@ -1309,9 +1350,7 @@ def client_campaigns():
 
     from webapp.campaign_manager import get_campaign_recommendations
 
-    force_campaign_sync = (request.args.get("sync") == "1") or _consume_login_refresh_month(
-        "campaigns_refresh_month", month
-    )
+    force_campaign_sync = (request.args.get("sync") == "1")
     campaigns = _get_campaigns_cached(db, brand, month, force_sync=force_campaign_sync)
     recommendations = []
 
