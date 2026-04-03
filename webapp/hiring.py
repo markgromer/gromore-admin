@@ -990,13 +990,17 @@ def interview_page(token):
     if not interview:
         abort(404)
 
+    brand = db.get_brand(interview["brand_id"])
+    company = (brand or {}).get("display_name", "")
+    common = dict(interview=interview, token=token, brand=brand, company=company)
+
     # Check expiry
     if interview["status"] == "expired":
         return render_template("client/client_hiring_interview.html",
-                               interview=interview, expired=True, completed=False)
+                               expired=True, completed=False, **common)
     if interview["status"] == "completed":
         return render_template("client/client_hiring_interview.html",
-                               interview=interview, expired=False, completed=True)
+                               expired=False, completed=True, **common)
 
     # Check time-based expiry (48h if pending, 72h if in_progress)
     created = datetime.strptime(interview["created_at"], "%Y-%m-%d %H:%M:%S")
@@ -1004,7 +1008,7 @@ def interview_page(token):
         db.update_hiring_interview(interview["id"], status="expired",
                                    expired_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
         return render_template("client/client_hiring_interview.html",
-                               interview=interview, expired=True, completed=False)
+                               expired=True, completed=False, **common)
 
     if interview["status"] == "in_progress" and interview.get("started_at"):
         started = datetime.strptime(interview["started_at"], "%Y-%m-%d %H:%M:%S")
@@ -1012,14 +1016,13 @@ def interview_page(token):
             db.update_hiring_interview(interview["id"], status="expired",
                                        expired_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
             return render_template("client/client_hiring_interview.html",
-                                   interview=interview, expired=True, completed=False)
+                                   expired=True, completed=False, **common)
 
     messages = db.get_hiring_messages(interview["id"])
-    brand = db.get_brand(interview["brand_id"])
 
     return render_template("client/client_hiring_interview.html",
-                           interview=interview, messages=messages,
-                           brand=brand, expired=False, completed=False)
+                           messages=messages,
+                           expired=False, completed=False, **common)
 
 
 @hiring_bp.route("/interview/<token>/start", methods=["POST"])
@@ -1074,7 +1077,7 @@ def interview_respond(token):
         return jsonify({"ok": False, "error": "Interview not active."}), 400
 
     data = request.get_json(silent=True) or {}
-    answer = (data.get("answer") or "").strip()
+    answer = (data.get("answer") or data.get("message") or "").strip()
     if not answer:
         return jsonify({"ok": False, "error": "Please type an answer."}), 400
 

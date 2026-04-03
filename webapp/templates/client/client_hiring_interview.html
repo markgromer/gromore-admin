@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>Interview - {{ brand.name }}</title>
+<title>Interview - {{ company }}</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <style>
     *{box-sizing:border-box;margin:0;padding:0;}
@@ -39,18 +39,18 @@
 </head>
 <body>
 
-{% if status == 'expired' %}
+{% if expired %}
 <div class="end-state">
     <i class="bi bi-clock-history" style="color:#fbbf24;"></i>
     <h3>Interview Expired</h3>
-    <p>This interview link is no longer active. If you believe this is an error, please contact {{ brand.name }} directly.</p>
+    <p>This interview link is no longer active. If you believe this is an error, please contact {{ company }} directly.</p>
 </div>
 
-{% elif status == 'completed' %}
+{% elif completed %}
 <div class="end-state">
     <i class="bi bi-check-circle" style="color:#34d399;"></i>
     <h3>Interview Complete</h3>
-    <p>Thanks for your time! {{ brand.name }} will review your responses and be in touch.</p>
+    <p>Thanks for your time! {{ company }} will review your responses and be in touch.</p>
 </div>
 
 {% else %}
@@ -58,15 +58,15 @@
 <div class="chat-header">
     <div class="indicator"></div>
     <div>
-        <div class="brand">{{ brand.name }}</div>
-        <div class="sub">AI-Powered Interview for {{ job.title }}</div>
+        <div class="brand">{{ company }}</div>
+        <div class="sub">AI-Powered Interview for {{ interview.job_title }}</div>
     </div>
 </div>
 <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
 <div class="chat-body" id="chatBody">
     <!-- Existing messages load here -->
     {% for msg in messages %}
-    <div class="msg msg-{{ msg.role }}">{{ msg.content }}</div>
+    <div class="msg msg-{{ 'warren' if msg.direction == 'outbound' else 'candidate' }}">{{ msg.content }}</div>
     {% endfor %}
 </div>
 <div class="typing" id="typingIndicator"><span></span><span></span><span></span></div>
@@ -84,7 +84,7 @@ const msgInput = document.getElementById('msgInput');
 const sendBtn = document.getElementById('sendBtn');
 const typingEl = document.getElementById('typingIndicator');
 const progressFill = document.getElementById('progressFill');
-let questionCount = {{ messages|selectattr('role', 'equalto', 'warren')|list|length }};
+let questionCount = {{ messages|selectattr('direction', 'equalto', 'outbound')|list|length }};
 let lastQuestionTime = Date.now();
 let isWaiting = false;
 
@@ -172,7 +172,7 @@ function sendMessage() {
             questionCount++;
             updateProgress();
         }
-        if (data.complete) {
+        if (data.completed) {
             addMessage('system', 'Interview complete. Thank you for your time!');
             document.getElementById('chatInput').style.display = 'none';
             progressFill.style.width = '100%';
