@@ -677,6 +677,11 @@ function updateRevenueCards(rev) {
         var baseLabel = rev.subscribed_clients ? 'subscribed clients' : 'clients';
         syncInfo += ' - ' + rev.sample_size + ' of ' + baseClients + ' ' + baseLabel + ' sampled';
     }
+
+    // Surface backend diagnostics when revenue is $0
+    if ((parseFloat(rev.mrr) || 0) === 0 && rev.debug_note) {
+        syncInfo += ' - ' + rev.debug_note;
+    }
     document.getElementById('revSyncedAt').textContent = syncInfo;
     document.getElementById('revMonthLabel').textContent = rev.revenue_month || 'previous month';
 }

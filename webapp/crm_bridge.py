@@ -760,6 +760,26 @@ def sng_sync_revenue(brand, db, max_sample=50, month=None):
                     rev_month = latest_month
                     sample_revenue, sample_payments, diag = alt_revenue, alt_payments, alt_diag
 
+    debug_note = ""
+    try:
+        if sample_ids and (sample_revenue == 0) and isinstance(diag, dict):
+            months_seen = sorted((diag.get("all_payment_months") or {}).keys())
+            statuses_seen = list((diag.get("all_payment_statuses") or {}).keys())
+            first_error = diag.get("first_error")
+
+            if first_error:
+                debug_note = f"SNG sync warning: {first_error}"
+            elif months_seen:
+                debug_note = (
+                    f"SNG sync found payments but none matched month={rev_month} + succeeded status. "
+                    f"Months seen in sample: {', '.join(months_seen[-6:])}. "
+                    f"Statuses seen: {', '.join(statuses_seen[:8])}"
+                )
+            else:
+                debug_note = "SNG sync returned no payments in the sample client_details responses."
+    except Exception:
+        debug_note = ""
+
     # Extrapolate from sample to full subscribed client base
     if sample_size > 0 and subscribed_count > 0:
         scale = subscribed_count / sample_size
@@ -796,6 +816,7 @@ def sng_sync_revenue(brand, db, max_sample=50, month=None):
         "sync_status": "done",
         "data_source": "real_payments_sampled" if sample_size < active_count else "real_payments_full",
         "diagnostics": diag,
+        "debug_note": debug_note,
     }
 
     # Store in brand_month_finance for ROAS pipeline
