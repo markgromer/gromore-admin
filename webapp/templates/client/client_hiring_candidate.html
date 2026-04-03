@@ -3,7 +3,7 @@
 {% block content %}
 <style>
     .cand-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem; }
-    .cand-name { font-size:1.3rem; font-weight:700; margin-bottom:.25rem; }
+    .cand-name { font-size:1.3rem; font-weight:700; margin-bottom:.25rem; color:var(--text, #e2e2f0); }
     .cand-meta { font-size:.8rem; color:var(--text-muted, #8888aa); }
     .cand-actions { display:flex; gap:.5rem; flex-wrap:wrap; }
     .cand-actions button, .cand-actions a { font-size:.8rem; padding:.35rem .85rem; border-radius:6px; cursor:pointer; border:none; text-decoration:none; display:inline-flex; align-items:center; gap:.3rem; }
@@ -82,7 +82,7 @@
         </div>
         {% if interview and interview.status == 'completed' %}
         <div style="font-size:.75rem;color:var(--text-muted);margin-top:.35rem;">Based on {{ messages|length if messages else 0 }} exchanges</div>
-        {% elif interview and interview.status == 'active' %}
+        {% elif interview and interview.status == 'in_progress' %}
         <div style="font-size:.75rem;color:#fbbf24;margin-top:.35rem;">Interview in progress</div>
         {% else %}
         <div style="font-size:.75rem;color:var(--text-muted);margin-top:.35rem;">No interview completed yet</div>
@@ -92,17 +92,14 @@
     <!-- Signal Breakdown -->
     <div class="card-box">
         <h5>Signal Breakdown</h5>
-        {% set signals = candidate.ai_evaluation|default({})|tojson|from_json if candidate.ai_evaluation else {} %}
-        {% set signal_scores = signals.get('signal_scores', {}) if signals is mapping else {} %}
+        {% set signal_scores = candidate.score_breakdown|default('{}')|tojson|safe %}
         {% for signal_name, max_val in [('reliability', 20), ('ownership', 20), ('work_ethic', 20), ('communication_clarity', 20), ('responsiveness', 20)] %}
-        {% set val = signal_scores.get(signal_name, 0) if signal_scores else 0 %}
-        {% set pct = (val / max_val * 100)|int if max_val > 0 else 0 %}
         <div class="signal-row">
-            <span style="width:110px;">{{ signal_name|replace('_', ' ')|title }}</span>
+            <span style="width:110px;color:var(--text, #e2e2f0);">{{ signal_name|replace('_', ' ')|title }}</span>
             <div class="signal-bar-track">
-                <div class="signal-bar-fill {% if pct >= 70 %}fill-high{% elif pct >= 40 %}fill-mid{% else %}fill-low{% endif %}" style="width:{{ pct }}%;"></div>
+                <div class="signal-bar-fill fill-mid" style="width:0%;" data-signal="{{ signal_name }}" data-max="{{ max_val }}"></div>
             </div>
-            <span style="width:40px;text-align:right;font-weight:600;">{{ val }}/{{ max_val }}</span>
+            <span style="width:40px;text-align:right;font-weight:600;color:var(--text, #e2e2f0);" data-signal-val="{{ signal_name }}">0/{{ max_val }}</span>
         </div>
         {% endfor %}
     </div>
@@ -110,21 +107,16 @@
     <!-- Red Flags -->
     <div class="card-box">
         <h5>Red Flags</h5>
-        {% set red_flags = signals.get('red_flags', []) if signals is mapping else [] %}
-        {% if red_flags %}
-            {% for flag in red_flags %}
-            <div class="red-flag"><i class="bi bi-exclamation-triangle-fill"></i> {{ flag }}</div>
-            {% endfor %}
-        {% else %}
-            <div style="color:var(--text-muted);font-size:.8rem;text-align:center;padding:1rem 0;">
-                {% if candidate.ai_score > 0 %}
+        <div id="redFlagsContainer">
+            <div style="color:var(--text-muted, #8888aa);font-size:.8rem;text-align:center;padding:1rem 0;">
+                {% if candidate.ai_score and candidate.ai_score > 0 %}
                 <i class="bi bi-shield-check" style="color:#34d399;font-size:1.2rem;display:block;margin-bottom:.3rem;"></i>
                 No red flags detected
                 {% else %}
                 No interview data yet
                 {% endif %}
             </div>
-        {% endif %}
+        </div>
     </div>
 
     <!-- Application Info -->
@@ -156,17 +148,14 @@
     <div style="max-height:500px;overflow-y:auto;">
         {% for msg in messages %}
         <div class="transcript-msg">
-            <div class="role {% if msg.role == 'warren' %}role-warren{% else %}role-candidate{% endif %}">
-                {% if msg.role == 'warren' %}WARREN{% else %}{{ candidate.name }}{% endif %}
+            <div class="role {% if msg.direction == 'outbound' %}role-warren{% else %}role-candidate{% endif %}">
+                {% if msg.direction == 'outbound' %}WARREN{% else %}{{ candidate.name }}{% endif %}
             </div>
-            <div>{{ msg.content }}</div>
+            <div style="color:var(--text, #e2e2f0);">{{ msg.content }}</div>
             <div class="msg-meta">
-                {{ msg.created_at[:19] }}
-                {% if msg.role == 'candidate' and msg.response_time_s %}
-                · Response time: {{ msg.response_time_s }}s
-                {% endif %}
-                {% if msg.signal_snapshot %}
-                · Signals: {{ msg.signal_snapshot }}
+                {{ msg.sent_at[:19] if msg.sent_at else '' }}
+                {% if msg.direction == 'inbound' and msg.response_time_sec %}
+                · Response time: {{ msg.response_time_sec }}s
                 {% endif %}
             </div>
         </div>
@@ -174,5 +163,37 @@
     </div>
 </div>
 {% endif %}
+
+<script>
+// Parse score_breakdown JSON and populate signal bars + red flags
+(function() {
+    var raw = {{ candidate.score_breakdown|default('{}')|tojson }};
+    var data = {};
+    try { data = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch(e) {}
+
+    // Signal bars
+    document.querySelectorAll('[data-signal]').forEach(function(bar) {
+        var key = bar.getAttribute('data-signal');
+        var max = parseInt(bar.getAttribute('data-max')) || 20;
+        var val = data[key] || 0;
+        var pct = Math.round((val / max) * 100);
+        bar.style.width = pct + '%';
+        bar.className = 'signal-bar-fill ' + (pct >= 70 ? 'fill-high' : pct >= 40 ? 'fill-mid' : 'fill-low');
+        var valEl = document.querySelector('[data-signal-val="' + key + '"]');
+        if (valEl) valEl.textContent = val + '/' + max;
+    });
+
+    // Red flags
+    var flags = data.red_flags || [];
+    if (flags.length) {
+        var container = document.getElementById('redFlagsContainer');
+        var html = '';
+        flags.forEach(function(f) {
+            html += '<div class="red-flag"><i class="bi bi-exclamation-triangle-fill"></i> ' + f + '</div>';
+        });
+        container.innerHTML = html;
+    }
+})();
+</script>
 
 {% endblock %}

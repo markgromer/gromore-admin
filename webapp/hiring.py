@@ -696,7 +696,7 @@ def candidate_detail(candidate_id):
     return render_template("client/client_hiring_candidate.html",
                            brand=brand, candidate=candidate, job=job,
                            interviews=interviews, messages=messages,
-                           latest_interview=latest_interview)
+                           interview=latest_interview)
 
 
 @hiring_bp.route("/candidates/<int:candidate_id>/notes", methods=["POST"])

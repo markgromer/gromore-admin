@@ -45,7 +45,7 @@
 </style>
 
 <div class="hiring-header">
-    <h2 style="margin:0;">Hiring Hub</h2>
+    <h2 style="margin:0;color:var(--text, #e2e2f0);">Hiring Hub</h2>
     <a href="{{ url_for('hiring.create_job') }}" class="btn btn-primary btn-sm" style="display:inline-flex;align-items:center;gap:.35rem;">
         <i class="bi bi-plus-lg"></i> Create Job
     </a>
@@ -75,7 +75,7 @@
 <!-- ─── Candidates List View ─── -->
 {% if view == 'candidates' %}
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-    <h4 style="margin:0;font-size:1rem;">All Candidates</h4>
+    <h4 style="margin:0;font-size:1rem;color:var(--text, #e2e2f0);">All Candidates</h4>
     <form method="GET" action="{{ url_for('hiring.candidates_list') }}" style="display:flex;gap:.5rem;">
         <input type="text" name="q" value="{{ request.args.get('q','') }}" placeholder="Search name or email..." style="padding:.35rem .6rem;background:var(--input-bg,#12121e);border:1px solid var(--border-color,#2d2d3d);border-radius:6px;color:var(--text,#e2e2f0);font-size:.8rem;">
         <button type="submit" class="btn btn-primary btn-sm">Search</button>
@@ -152,7 +152,7 @@
     <!-- Candidates for this job -->
     {% if candidates %}
     <div style="margin-top:1.5rem;">
-        <h5 style="font-size:.9rem;margin-bottom:.75rem;">Candidates ({{ candidates|length }})</h5>
+        <h5 style="font-size:.9rem;margin-bottom:.75rem;color:var(--text, #e2e2f0);">Candidates ({{ candidates|length }})</h5>
         <div style="background:var(--input-bg, #12121e);border-radius:8px;overflow:hidden;">
             {% for c in candidates %}
             <a href="{{ url_for('hiring.candidate_detail', candidate_id=c.id) }}" class="candidate-row" style="text-decoration:none;color:inherit;">
@@ -180,7 +180,7 @@
 
 <!-- Step 1: Quick Start -->
 <div class="job-card" id="quickStartCard">
-    <h4 style="margin-top:0;margin-bottom:.25rem;">Create New Position</h4>
+    <h4 style="margin-top:0;margin-bottom:.25rem;color:var(--text, #e2e2f0);">Create New Position</h4>
     <p style="color:var(--text-muted,#8888aa);font-size:.82rem;margin-bottom:1.25rem;">Tell WARREN the basics and he'll draft the rest. You can edit everything before saving.</p>
     <div class="create-form">
         <div class="form-row">
@@ -213,7 +213,7 @@
 <!-- Step 2: Full Form (hidden until prefill completes or user skips) -->
 <div class="job-card" id="fullFormCard" style="display:none;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-        <h4 style="margin:0;">Position Details</h4>
+        <h4 style="margin:0;color:var(--text, #e2e2f0);">Position Details</h4>
         <span id="prefillBadge" style="display:none;background:linear-gradient(135deg,#7c3aed,#2563eb);color:#fff;padding:3px 10px;border-radius:12px;font-size:.7rem;">WARREN Draft - Edit Anything</span>
     </div>
     <form method="POST" action="{{ url_for('hiring.create_job') }}" class="create-form" id="jobForm">
@@ -272,7 +272,7 @@
             </div>
         </div>
 
-        <h5 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:.9rem;">Screening Criteria (for WARREN's interview)</h5>
+        <h5 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:.9rem;color:var(--text, #e2e2f0);">Screening Criteria (for WARREN's interview)</h5>
         <div class="form-row">
             <div class="full">
                 <label>Must-Haves (what the right candidate absolutely needs)</label>
