@@ -244,6 +244,11 @@
             </button>
         </li>
         <li class="nav-item">
+            <button class="nav-link fw-semibold" data-bs-toggle="tab" data-bs-target="#tabSubscribed" style="font-size:.88rem;">
+                Subscribed <span class="tab-badge bg-primary bg-opacity-10 text-primary" id="tabSubscribedBadge">0</span>
+            </button>
+        </li>
+        <li class="nav-item">
             <button class="nav-link fw-semibold" data-bs-toggle="tab" data-bs-target="#tabInactive" style="font-size:.88rem;">
                 Inactive <span class="tab-badge bg-secondary bg-opacity-10 text-secondary" id="tabInactiveBadge">0</span>
             </button>
@@ -285,6 +290,29 @@
                         <th>Source</th>
                     </tr></thead>
                     <tbody id="clientsTableBody">
+                        <tr><td colspan="7" class="text-center text-muted py-3">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Subscribed Clients Tab -->
+        <div class="tab-pane fade crm-section" style="border-top-left-radius:0; border-top-right-radius:0; margin-top:0; border-top:none;" id="tabSubscribed">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <small class="text-muted">Active clients with a recurring subscription</small>
+            </div>
+            <div class="table-responsive">
+                <table class="table crm-table mb-0">
+                    <thead><tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Service</th>
+                        <th>Frequency</th>
+                        <th>Assigned To</th>
+                        <th>Source</th>
+                    </tr></thead>
+                    <tbody id="subscribedTableBody">
                         <tr><td colspan="7" class="text-center text-muted py-3">Loading...</td></tr>
                     </tbody>
                 </table>
@@ -472,6 +500,13 @@ function loadCrmData() {
         document.getElementById('tabClientsBadge').textContent = (data.clients_pagination || {}).total || clients.length;
         renderClientTable('clientsTableBody', clients, ['first_name+last_name', 'email', 'cell_phone', 'subscription_names', 'cleanup_frequency', 'assigned_to', 'tracking_field']);
 
+        // Subscribed (filter from Active Clients list)
+        var subscribed = clients.filter(function(c) {
+            var s = (c.subscription_names || '').toString().trim();
+            return s && s.toLowerCase() !== 'none';
+        });
+        renderClientTable('subscribedTableBody', subscribed, ['first_name+last_name', 'email', 'cell_phone', 'subscription_names', 'cleanup_frequency', 'assigned_to', 'tracking_field']);
+
         // Inactive
         var inactive = data.inactive || [];
         document.getElementById('tabInactiveBadge').textContent = (data.inactive_pagination || {}).total || inactive.length;
@@ -485,7 +520,8 @@ function loadCrmData() {
 
         // No Subscription
         var noSub = data.no_subscription || [];
-        document.getElementById('tabNoSubBadge').textContent = (data.no_sub_pagination || {}).total || noSub.length;
+        var noSubTotal = (data.no_sub_pagination || {}).total || noSub.length;
+        document.getElementById('tabNoSubBadge').textContent = noSubTotal;
         renderSimpleTable('noSubTableBody', noSub, [
             function(c) { return (c.first_name || '') + ' ' + (c.last_name || ''); },
             function(c) { return c.email || '-'; },
@@ -493,6 +529,11 @@ function loadCrmData() {
             function(c) { return c.type || c.one_time_client ? 'One-time' : 'Recurring'; },
             function(c) { return c.marketing_allowed ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>'; }
         ]);
+
+        // Subscribed badge: active clients minus no-subscription clients (more accurate than filtering page 1)
+        var activeTotal = (k.active_clients || 0);
+        var subscribedTotal = activeTotal && noSubTotal ? Math.max(activeTotal - noSubTotal, 0) : subscribed.length;
+        document.getElementById('tabSubscribedBadge').textContent = subscribedTotal.toLocaleString();
 
         // Leads
         var leads = data.leads || [];
