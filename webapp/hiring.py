@@ -200,6 +200,59 @@ def _send_quo_sms(brand, to_phone, content):
 
 
 # ---------------------------------------------------------------------------
+# WARREN: Job Prefill (smart form draft from minimal input)
+# ---------------------------------------------------------------------------
+
+JOB_PREFILL_PROMPT = """You are WARREN, an AI hiring assistant for local service businesses.
+The business owner wants to create a job posting. They gave you a job title and maybe some notes.
+Your job: fill out the entire job form with smart, realistic defaults they can edit.
+
+Use your knowledge of the industry, the role, and local hiring norms.
+Be practical, not corporate. Think like a small business owner hiring.
+
+RULES:
+- Salary should be realistic annual ranges for the role and region (if they mention hourly, convert to annual for the fields but note the hourly equivalent in benefits)
+- Must-haves should be 3-5 practical, non-obvious requirements (not just "must be reliable")
+- Dealbreakers should be 2-3 real disqualifiers an owner would care about
+- Culture notes should reflect what kind of personality thrives in this role
+- Physical requirements only if the role actually involves physical work
+- No em dashes. Use commas, periods, or colons.
+- Keep each field concise. These are form inputs, not essays.
+
+Return ONLY valid JSON:
+{
+    "title": "Clean job title",
+    "department": "Department name",
+    "job_type": "full-time|part-time|contract",
+    "location": "City, ST (use their input or leave empty)",
+    "remote": "no|yes|hybrid",
+    "salary_min": 35000,
+    "salary_max": 50000,
+    "benefits": "Realistic benefits for this type of role",
+    "must_haves": "3-5 practical must-haves, one per line",
+    "dealbreakers": "2-3 real dealbreakers, one per line",
+    "culture_notes": "What kind of person thrives here",
+    "physical_requirements": "Physical demands if applicable, or empty string"
+}"""
+
+
+def prefill_job_draft(brand, title, location="", owner_notes=""):
+    """Generate a smart form prefill from just a title + optional notes."""
+    api_key = _get_api_key(brand)
+    if not api_key:
+        return None
+    context = {
+        "title": title,
+        "location": location,
+        "owner_notes": owner_notes,
+        "company_name": brand.get("display_name", ""),
+        "industry": brand.get("industry", ""),
+    }
+    model = brand.get("openai_model_ads") or brand.get("openai_model") or "gpt-4o-mini"
+    return _ai_call(api_key, JOB_PREFILL_PROMPT, json.dumps(context), model=model, temperature=0.6)
+
+
+# ---------------------------------------------------------------------------
 # WARREN: Job Posting Generator
 # ---------------------------------------------------------------------------
 
@@ -443,6 +496,21 @@ def create_job():
             "culture_notes": data.get("culture_notes", ""),
             "physical_requirements": data.get("physical_requirements", ""),
         })
+        def _parse_salary(val):
+            """Parse salary from free text: '45000', '45,000', '18/hr', '$52k'."""
+            if not val:
+                return 0
+            val = val.strip().replace("$", "").replace(",", "").lower()
+            try:
+                if "/hr" in val or "/hour" in val:
+                    hourly = float(val.split("/")[0].strip())
+                    return round(hourly * 2080)
+                if val.endswith("k"):
+                    return float(val[:-1]) * 1000
+                return float(val)
+            except (ValueError, TypeError):
+                return 0
+
         job_id = db.create_hiring_job(
             brand_id=brand["id"],
             title=data.get("title", "").strip(),
@@ -453,8 +521,8 @@ def create_job():
             description=data.get("description", "").strip(),
             requirements=data.get("requirements", "[]"),
             nice_to_haves=data.get("nice_to_haves", "[]"),
-            salary_min=float(data.get("salary_min") or 0),
-            salary_max=float(data.get("salary_max") or 0),
+            salary_min=_parse_salary(data.get("salary_min")),
+            salary_max=_parse_salary(data.get("salary_max")),
             benefits=data.get("benefits", "").strip(),
             screening_criteria=screening,
             scheduling_link=data.get("scheduling_link", "").strip(),
@@ -466,6 +534,27 @@ def create_job():
         return redirect(url_for("hiring.job_detail", job_id=job_id))
 
     return render_template("client/client_hiring.html", brand=brand, jobs=[], stats={}, show_create=True)
+
+
+@hiring_bp.route("/jobs/ai-prefill", methods=["POST"])
+def ai_prefill_job():
+    """WARREN drafts form fields from just a title + notes."""
+    brand, user_id = _require_client_login()
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()
+    if not title:
+        return jsonify({"ok": False, "error": "Job title is required."})
+
+    draft = prefill_job_draft(
+        brand,
+        title=title,
+        location=data.get("location", ""),
+        owner_notes=data.get("owner_notes", ""),
+    )
+    if not draft:
+        return jsonify({"ok": False, "error": "No OpenAI key configured. Fill the form manually or add your key in Settings."})
+
+    return jsonify({"ok": True, "draft": draft})
 
 
 @hiring_bp.route("/jobs/<int:job_id>")

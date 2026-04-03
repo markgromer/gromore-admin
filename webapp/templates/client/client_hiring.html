@@ -177,23 +177,60 @@
 
 <!-- ─── Create Job Form (shown via show_create or when no jobs) ─── -->
 {% elif show_create is defined and show_create %}
-<div class="job-card">
-    <h4 style="margin-top:0;margin-bottom:1rem;">Create New Position</h4>
-    <form method="POST" action="{{ url_for('hiring.create_job') }}" class="create-form">
+
+<!-- Step 1: Quick Start -->
+<div class="job-card" id="quickStartCard">
+    <h4 style="margin-top:0;margin-bottom:.25rem;">Create New Position</h4>
+    <p style="color:var(--text-muted,#8888aa);font-size:.82rem;margin-bottom:1.25rem;">Tell WARREN the basics and he'll draft the rest. You can edit everything before saving.</p>
+    <div class="create-form">
         <div class="form-row">
             <div>
                 <label>Job Title *</label>
-                <input type="text" name="title" required placeholder="e.g. Route Technician">
+                <input type="text" id="qsTitle" placeholder="e.g. Route Technician, Office Manager, Crew Lead">
+            </div>
+            <div>
+                <label>Location</label>
+                <input type="text" id="qsLocation" placeholder="e.g. Dallas, TX">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="full">
+                <label>Anything else WARREN should know? (optional)</label>
+                <textarea id="qsNotes" rows="3" placeholder="Part-time, weekends only, needs own truck, bilingual preferred, $18-22/hr range, whatever comes to mind..."></textarea>
+            </div>
+        </div>
+        <div style="display:flex;gap:.75rem;margin-top:.75rem;">
+            <button class="ai-gen-btn" onclick="warrenPrefill()" id="prefillBtn">
+                <span class="spinner"></span>
+                <i class="bi bi-stars"></i> Let WARREN Draft It
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="showFullForm()" style="font-size:.8rem;">Skip, I'll fill it myself</button>
+        </div>
+        <div id="prefillError" style="display:none;color:#fca5a5;font-size:.8rem;margin-top:.5rem;"></div>
+    </div>
+</div>
+
+<!-- Step 2: Full Form (hidden until prefill completes or user skips) -->
+<div class="job-card" id="fullFormCard" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h4 style="margin:0;">Position Details</h4>
+        <span id="prefillBadge" style="display:none;background:linear-gradient(135deg,#7c3aed,#2563eb);color:#fff;padding:3px 10px;border-radius:12px;font-size:.7rem;">WARREN Draft - Edit Anything</span>
+    </div>
+    <form method="POST" action="{{ url_for('hiring.create_job') }}" class="create-form" id="jobForm">
+        <div class="form-row">
+            <div>
+                <label>Job Title *</label>
+                <input type="text" name="title" id="fTitle" required placeholder="e.g. Route Technician">
             </div>
             <div>
                 <label>Department</label>
-                <input type="text" name="department" placeholder="e.g. Operations">
+                <input type="text" name="department" id="fDept" placeholder="e.g. Operations">
             </div>
         </div>
         <div class="form-row three">
             <div>
                 <label>Job Type</label>
-                <select name="job_type">
+                <select name="job_type" id="fJobType">
                     <option value="full-time">Full-time</option>
                     <option value="part-time">Part-time</option>
                     <option value="contract">Contract</option>
@@ -201,11 +238,11 @@
             </div>
             <div>
                 <label>Location</label>
-                <input type="text" name="location" placeholder="e.g. Dallas, TX">
+                <input type="text" name="location" id="fLocation" placeholder="e.g. Dallas, TX">
             </div>
             <div>
                 <label>Remote</label>
-                <select name="remote">
+                <select name="remote" id="fRemote">
                     <option value="no">On-site</option>
                     <option value="yes">Remote</option>
                     <option value="hybrid">Hybrid</option>
@@ -215,49 +252,49 @@
         <div class="form-row">
             <div>
                 <label>Salary Min ($)</label>
-                <input type="number" name="salary_min" placeholder="0" step="1000">
+                <input type="text" name="salary_min" id="fSalaryMin" placeholder="e.g. 40000 or 18/hr" inputmode="numeric">
             </div>
             <div>
                 <label>Salary Max ($)</label>
-                <input type="number" name="salary_max" placeholder="0" step="1000">
+                <input type="text" name="salary_max" id="fSalaryMax" placeholder="e.g. 55000 or 24/hr" inputmode="numeric">
             </div>
         </div>
         <div class="form-row">
             <div class="full">
                 <label>Benefits</label>
-                <textarea name="benefits" rows="2" placeholder="Health insurance, PTO, company vehicle, etc."></textarea>
+                <textarea name="benefits" id="fBenefits" rows="2" placeholder="Health insurance, PTO, company vehicle, etc."></textarea>
             </div>
         </div>
         <div class="form-row">
             <div class="full">
                 <label>Scheduling Link (Calendly, etc.)</label>
-                <input type="url" name="scheduling_link" placeholder="https://calendly.com/yourcompany/interview">
+                <input type="url" name="scheduling_link" id="fSchedLink" placeholder="https://calendly.com/yourcompany/interview">
             </div>
         </div>
 
-        <h5 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:.9rem;">Screening Criteria (for WARREN)</h5>
+        <h5 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:.9rem;">Screening Criteria (for WARREN's interview)</h5>
         <div class="form-row">
             <div class="full">
                 <label>Must-Haves (what the right candidate absolutely needs)</label>
-                <textarea name="must_haves" rows="3" placeholder="Reliable transportation, available weekdays 7am-4pm, comfortable working outdoors in heat..."></textarea>
+                <textarea name="must_haves" id="fMustHaves" rows="3" placeholder="Reliable transportation, available weekdays 7am-4pm..."></textarea>
             </div>
         </div>
         <div class="form-row">
             <div class="full">
                 <label>Dealbreakers (instant disqualifiers)</label>
-                <textarea name="dealbreakers" rows="2" placeholder="No-shows, can't pass background check, not available on Mondays..."></textarea>
+                <textarea name="dealbreakers" id="fDealbreakers" rows="2" placeholder="No-shows, can't pass background check..."></textarea>
             </div>
         </div>
         <div class="form-row">
             <div class="full">
                 <label>Culture / Personality Notes</label>
-                <textarea name="culture_notes" rows="2" placeholder="Works independently, doesn't need hand-holding, respects customers' property..."></textarea>
+                <textarea name="culture_notes" id="fCulture" rows="2" placeholder="Works independently, doesn't need hand-holding..."></textarea>
             </div>
         </div>
         <div class="form-row">
             <div class="full">
                 <label>Physical Requirements</label>
-                <textarea name="physical_requirements" rows="2" placeholder="Able to lift 30 lbs, comfortable walking 3-5 miles per day, works outdoors rain or shine..."></textarea>
+                <textarea name="physical_requirements" id="fPhysical" rows="2" placeholder="Able to lift 30 lbs, works outdoors rain or shine..."></textarea>
             </div>
         </div>
 
@@ -323,6 +360,74 @@ function generatePosting(jobId) {
         }
     })
     .catch(() => { btn.classList.remove('loading'); btn.disabled = false; alert('Network error'); });
+}
+
+function showFullForm() {
+    document.getElementById('quickStartCard').style.display = 'none';
+    document.getElementById('fullFormCard').style.display = 'block';
+    // Carry over whatever they typed in quick start
+    const title = document.getElementById('qsTitle').value.trim();
+    const loc = document.getElementById('qsLocation').value.trim();
+    if (title) document.getElementById('fTitle').value = title;
+    if (loc) document.getElementById('fLocation').value = loc;
+}
+
+function warrenPrefill() {
+    const title = document.getElementById('qsTitle').value.trim();
+    if (!title) { document.getElementById('qsTitle').focus(); return; }
+
+    const btn = document.getElementById('prefillBtn');
+    const errEl = document.getElementById('prefillError');
+    btn.classList.add('loading');
+    btn.disabled = true;
+    errEl.style.display = 'none';
+
+    const payload = {
+        title: title,
+        location: document.getElementById('qsLocation').value.trim(),
+        owner_notes: document.getElementById('qsNotes').value.trim()
+    };
+
+    fetch('{{ url_for("hiring.ai_prefill_job") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+        if (!data.ok) {
+            errEl.textContent = data.error || 'WARREN could not generate suggestions. Try filling manually.';
+            errEl.style.display = 'block';
+            return;
+        }
+        const d = data.draft;
+        // Populate the full form
+        document.getElementById('fTitle').value = d.title || title;
+        document.getElementById('fDept').value = d.department || '';
+        document.getElementById('fLocation').value = d.location || payload.location || '';
+        if (d.job_type) document.getElementById('fJobType').value = d.job_type;
+        if (d.remote) document.getElementById('fRemote').value = d.remote;
+        if (d.salary_min) document.getElementById('fSalaryMin').value = d.salary_min;
+        if (d.salary_max) document.getElementById('fSalaryMax').value = d.salary_max;
+        document.getElementById('fBenefits').value = d.benefits || '';
+        document.getElementById('fMustHaves').value = d.must_haves || '';
+        document.getElementById('fDealbreakers').value = d.dealbreakers || '';
+        document.getElementById('fCulture').value = d.culture_notes || '';
+        document.getElementById('fPhysical').value = d.physical_requirements || '';
+
+        // Show the full form with prefill badge
+        document.getElementById('quickStartCard').style.display = 'none';
+        document.getElementById('fullFormCard').style.display = 'block';
+        document.getElementById('prefillBadge').style.display = 'inline-block';
+    })
+    .catch(() => {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+        errEl.textContent = 'Network error. Try again or fill manually.';
+        errEl.style.display = 'block';
+    });
 }
 </script>
 {% endblock %}
