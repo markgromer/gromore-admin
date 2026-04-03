@@ -33,6 +33,44 @@ hiring_bp = Blueprint(
     template_folder="templates",
 )
 
+
+@hiring_bp.context_processor
+def inject_hiring_globals():
+    """Provide the same base-template variables that client_bp injects."""
+    import re
+    brand_id = session.get("client_brand_id")
+    assistant_enabled = False
+    assistant_messages = []
+    assistant_model_chat = "gpt-4o-mini"
+    month = (request.args.get("month") or "").strip()
+    if not re.match(r"^\d{4}-\d{2}$", month):
+        month = datetime.now().strftime("%Y-%m")
+
+    if brand_id:
+        try:
+            db = _get_db()
+            brand = db.get_brand(brand_id) or {}
+            api_key = _get_api_key(brand)
+            assistant_enabled = bool(api_key)
+            rows = db.get_ai_chat_messages(brand_id, month, limit=30)
+            assistant_messages = [
+                {"role": r.get("role"), "content": r.get("content", "")}
+                for r in rows if r.get("content")
+            ]
+        except Exception:
+            pass
+
+    return {
+        "client_user": session.get("client_name"),
+        "client_brand": session.get("client_brand_name"),
+        "now": datetime.now(),
+        "assistant_enabled": assistant_enabled,
+        "assistant_messages": assistant_messages,
+        "assistant_month": month,
+        "assistant_model_chat": assistant_model_chat,
+        "assistant_models": ["gpt-4o-mini", "gpt-4o"],
+    }
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
