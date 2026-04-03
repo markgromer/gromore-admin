@@ -3619,6 +3619,13 @@ class WebDB:
 
     def delete_hiring_job(self, job_id):
         conn = self._conn()
+        # Cascade: messages -> interviews -> candidates -> job
+        conn.execute(
+            "DELETE FROM hiring_messages WHERE interview_id IN "
+            "(SELECT id FROM hiring_interviews WHERE job_id = ?)", (job_id,)
+        )
+        conn.execute("DELETE FROM hiring_interviews WHERE job_id = ?", (job_id,))
+        conn.execute("DELETE FROM hiring_candidates WHERE job_id = ?", (job_id,))
         conn.execute("DELETE FROM hiring_jobs WHERE id = ?", (job_id,))
         conn.commit()
         conn.close()
