@@ -936,6 +936,7 @@ class WebDB:
             ("hired_agents", "TEXT DEFAULT '{}'"),
             ("quo_api_key", "TEXT DEFAULT ''"),
             ("quo_phone_number", "TEXT DEFAULT ''"),
+            ("hiring_design", "TEXT DEFAULT '{}'"),
         ]
         for col_name, col_def in new_brand_cols:
             if col_name not in brand_columns:
@@ -1210,6 +1211,7 @@ class WebDB:
             "titan_snapshot_id", "titan_account_id", "titan_ghl_location_id", "titan_email",
             "wp_site_url", "wp_username", "wp_app_password",
             "hired_agents", "agent_context",
+            "hiring_design",
         }
         if field not in allowed:
             raise ValueError(f"Cannot update field: {field}")

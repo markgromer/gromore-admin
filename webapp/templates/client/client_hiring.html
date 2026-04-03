@@ -46,9 +46,14 @@
 
 <div class="hiring-header">
     <h2 style="margin:0;color:var(--text, #e2e2f0);">Hiring Hub</h2>
-    <a href="{{ url_for('hiring.create_job') }}" class="btn btn-primary btn-sm" style="display:inline-flex;align-items:center;gap:.35rem;">
-        <i class="bi bi-plus-lg"></i> Create Job
-    </a>
+    <div style="display:flex;gap:.5rem;align-items:center;">
+        <a href="{{ url_for('hiring.interview_design') }}" class="btn btn-sm" style="display:inline-flex;align-items:center;gap:.35rem;background:transparent;border:1px solid var(--border-color,#2d2d3d);color:var(--text-muted,#8888aa);padding:.35rem .85rem;border-radius:6px;font-size:.8rem;text-decoration:none;">
+            <i class="bi bi-palette"></i> Design
+        </a>
+        <a href="{{ url_for('hiring.create_job') }}" class="btn btn-primary btn-sm" style="display:inline-flex;align-items:center;gap:.35rem;">
+            <i class="bi bi-plus-lg"></i> Create Job
+        </a>
+    </div>
 </div>
 
 {% if stats %}

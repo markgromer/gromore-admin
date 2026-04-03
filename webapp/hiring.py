@@ -558,6 +558,45 @@ def hiring_dashboard():
     return render_template("client/client_hiring.html", brand=brand, jobs=jobs, stats=stats)
 
 
+@hiring_bp.route("/design", methods=["GET", "POST"])
+def interview_design():
+    """Brand-level interview design settings: colors, logo choice, card style."""
+    brand, user_id = _require_client_login()
+    db = _get_db()
+
+    if request.method == "POST":
+        design = {
+            "primary_color": (request.form.get("primary_color") or "#7c3aed").strip()[:7],
+            "secondary_color": (request.form.get("secondary_color") or "#60a5fa").strip()[:7],
+            "bg_color": (request.form.get("bg_color") or "#0a0a14").strip()[:7],
+            "card_bg": (request.form.get("card_bg") or "#12121e").strip()[:7],
+            "text_color": (request.form.get("text_color") or "#e2e2f0").strip()[:7],
+            "show_logo": request.form.get("show_logo") == "1",
+            "logo_variant": (request.form.get("logo_variant") or "primary").strip()[:32],
+            "company_label": (request.form.get("company_label") or "").strip()[:80],
+            "border_radius": (request.form.get("border_radius") or "20").strip()[:3],
+        }
+        db.update_brand_text_field(brand["id"], "hiring_design", json.dumps(design))
+        flash("Interview design saved.", "success")
+        return redirect(url_for("hiring.interview_design"))
+
+    design = {}
+    try:
+        design = json.loads(brand.get("hiring_design") or "{}")
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    logo_variants = []
+    try:
+        logo_variants = json.loads(brand.get("logo_variants") or "[]")
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    return render_template("client/client_hiring_design.html",
+                           brand=brand, design=design, logo_variants=logo_variants,
+                           jobs=[], stats={})
+
+
 @hiring_bp.route("/jobs/create", methods=["GET", "POST"])
 def create_job():
     brand, user_id = _require_client_login()
@@ -1118,7 +1157,34 @@ def interview_page(token):
 
     brand = db.get_brand(interview["brand_id"])
     company = (brand or {}).get("display_name", "")
-    common = dict(interview=interview, token=token, brand=brand, company=company)
+
+    # Load hiring design settings
+    design = {}
+    try:
+        design = json.loads((brand or {}).get("hiring_design") or "{}")
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    # Resolve logo URL
+    logo_url = ""
+    if design.get("show_logo") and brand:
+        variant_key = design.get("logo_variant", "primary")
+        try:
+            variants = json.loads(brand.get("logo_variants") or "[]")
+        except (json.JSONDecodeError, TypeError):
+            variants = []
+        match = next((v for v in variants if v.get("key") == variant_key), None)
+        if match and match.get("path"):
+            logo_url = f"/uploads/{match['path']}"
+        elif brand.get("logo_path"):
+            logo_url = f"/uploads/{brand['logo_path']}"
+
+    # Let brand override the displayed company name
+    if design.get("company_label"):
+        company = design["company_label"]
+
+    common = dict(interview=interview, token=token, brand=brand, company=company,
+                  design=design, logo_url=logo_url)
 
     # Check expiry
     if interview["status"] == "expired":

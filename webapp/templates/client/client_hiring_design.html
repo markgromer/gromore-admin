@@ -1,0 +1,279 @@
+{% extends "client/client_base.html" %}
+{% block title %}Interview Design{% endblock %}
+{% block content %}
+<style>
+    .design-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; }
+    .design-card { background:var(--card-bg, #1e1e2e); border:1px solid var(--border-color, #2d2d3d); border-radius:10px; padding:1.25rem; margin-bottom:1rem; }
+    .design-card h5 { margin:0 0 .75rem 0; font-size:.95rem; color:var(--text, #e2e2f0); }
+    .design-card label { font-size:.8rem; color:var(--text-muted, #8888aa); margin-bottom:.25rem; display:block; }
+    .design-card input[type="text"], .design-card select { width:100%; padding:.45rem .7rem; background:var(--input-bg, #12121e); border:1px solid var(--border-color, #2d2d3d); border-radius:6px; color:var(--text, #e2e2f0); font-size:.85rem; }
+    .color-row { display:flex; align-items:center; gap:.5rem; margin-bottom:.65rem; }
+    .color-row input[type="color"] { width:36px; height:36px; border:1px solid var(--border-color, #2d2d3d); border-radius:6px; padding:2px; cursor:pointer; background:var(--input-bg, #12121e); }
+    .color-row input[type="text"] { flex:1; max-width:120px; }
+    .color-row .color-label { flex:1; min-width:100px; }
+    .form-switch-row { display:flex; align-items:center; gap:.75rem; margin-bottom:.75rem; }
+    .form-switch-row label { margin-bottom:0; }
+    .toggle-switch { position:relative; width:40px; height:22px; }
+    .toggle-switch input { opacity:0; width:0; height:0; }
+    .toggle-slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:var(--border-color,#2d2d3d); border-radius:22px; transition:.3s; }
+    .toggle-slider:before { position:absolute; content:""; height:16px; width:16px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:.3s; }
+    .toggle-switch input:checked + .toggle-slider { background:var(--accent,#60a5fa); }
+    .toggle-switch input:checked + .toggle-slider:before { transform:translateX(18px); }
+
+    /* ── Live Preview ── */
+    .preview-shell { background:var(--input-bg,#12121e); border:1px solid var(--border-color,#2d2d3d); border-radius:12px; padding:1.5rem; display:flex; justify-content:center; }
+    .preview-card {
+        width:100%; max-width:340px; border-radius:16px; overflow:hidden;
+        display:flex; flex-direction:column; font-family:'Inter',system-ui,sans-serif; font-size:.78rem;
+        box-shadow:0 10px 40px rgba(0,0,0,.3);
+    }
+    .preview-header { padding:.7rem .9rem; display:flex; align-items:center; gap:.6rem; border-bottom:1px solid rgba(255,255,255,.06); }
+    .preview-icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:.75rem; color:#fff; flex-shrink:0; overflow:hidden; }
+    .preview-icon img { width:100%; height:100%; object-fit:cover; border-radius:8px; }
+    .preview-brand-name { font-weight:600; font-size:.8rem; }
+    .preview-brand-role { font-size:.65rem; opacity:.5; }
+    .preview-dots { display:flex; gap:3px; padding:.5rem .9rem; }
+    .preview-dot { height:3px; flex:1; border-radius:2px; opacity:.15; }
+    .preview-dot.filled { opacity:1; }
+    .preview-chat { padding:.7rem .9rem; display:flex; flex-direction:column; gap:.4rem; min-height:80px; }
+    .preview-msg { padding:.4rem .6rem; border-radius:10px; max-width:85%; font-size:.72rem; line-height:1.4; }
+    .preview-msg.warren { align-self:flex-start; border-bottom-left-radius:3px; }
+    .preview-msg.candidate { align-self:flex-end; border-bottom-right-radius:3px; }
+    .preview-input-bar { padding:.5rem .7rem; display:flex; gap:.35rem; align-items:center; border-top:1px solid rgba(255,255,255,.06); }
+    .preview-input { flex:1; padding:.35rem .5rem; border-radius:8px; border:1px solid rgba(255,255,255,.08); font-size:.7rem; }
+    .preview-send { width:28px; height:28px; border-radius:8px; border:none; color:#fff; display:flex; align-items:center; justify-content:center; font-size:.7rem; cursor:default; }
+    .preview-footer { text-align:center; font-size:.5rem; padding:.3rem; opacity:.3; border-top:1px solid rgba(255,255,255,.06); }
+</style>
+
+<div class="design-header">
+    <div>
+        <h2 style="margin:0;color:var(--text, #e2e2f0);font-size:1.2rem;">Interview Design</h2>
+        <p style="margin:0;font-size:.82rem;color:var(--text-muted,#8888aa);">Customize how your screening interview looks to candidates.</p>
+    </div>
+    <a href="{{ url_for('hiring.hiring_dashboard') }}" class="btn btn-secondary btn-sm" style="font-size:.8rem;">
+        <i class="bi bi-arrow-left"></i> Back to Hiring
+    </a>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:start;">
+    <!-- Left: Settings -->
+    <div>
+        <form method="POST" action="{{ url_for('hiring.interview_design') }}" id="designForm">
+            <!-- Colors -->
+            <div class="design-card">
+                <h5><i class="bi bi-palette" style="color:#a78bfa;margin-right:.4rem;"></i> Colors</h5>
+                <div class="color-row">
+                    <input type="color" id="primaryColor" name="primary_color" value="{{ design.primary_color or '#7c3aed' }}" onchange="syncHex(this,'primaryHex');updatePreview()">
+                    <input type="text" id="primaryHex" value="{{ design.primary_color or '#7c3aed' }}" maxlength="7" onchange="syncColor(this,'primaryColor');updatePreview()">
+                    <span class="color-label">Primary (buttons, accents)</span>
+                </div>
+                <div class="color-row">
+                    <input type="color" id="secondaryColor" name="secondary_color" value="{{ design.secondary_color or '#60a5fa' }}" onchange="syncHex(this,'secondaryHex');updatePreview()">
+                    <input type="text" id="secondaryHex" value="{{ design.secondary_color or '#60a5fa' }}" maxlength="7" onchange="syncColor(this,'secondaryColor');updatePreview()">
+                    <span class="color-label">Secondary (gradient end)</span>
+                </div>
+                <div class="color-row">
+                    <input type="color" id="bgColor" name="bg_color" value="{{ design.bg_color or '#0a0a14' }}" onchange="syncHex(this,'bgHex');updatePreview()">
+                    <input type="text" id="bgHex" value="{{ design.bg_color or '#0a0a14' }}" maxlength="7" onchange="syncColor(this,'bgColor');updatePreview()">
+                    <span class="color-label">Background</span>
+                </div>
+                <div class="color-row">
+                    <input type="color" id="cardBg" name="card_bg" value="{{ design.card_bg or '#12121e' }}" onchange="syncHex(this,'cardBgHex');updatePreview()">
+                    <input type="text" id="cardBgHex" value="{{ design.card_bg or '#12121e' }}" maxlength="7" onchange="syncColor(this,'cardBg');updatePreview()">
+                    <span class="color-label">Card background</span>
+                </div>
+                <div class="color-row">
+                    <input type="color" id="textColor" name="text_color" value="{{ design.text_color or '#e2e2f0' }}" onchange="syncHex(this,'textHex');updatePreview()">
+                    <input type="text" id="textHex" value="{{ design.text_color or '#e2e2f0' }}" maxlength="7" onchange="syncColor(this,'textColor');updatePreview()">
+                    <span class="color-label">Text color</span>
+                </div>
+            </div>
+
+            <!-- Logo & Branding -->
+            <div class="design-card">
+                <h5><i class="bi bi-image" style="color:#60a5fa;margin-right:.4rem;"></i> Logo & Branding</h5>
+                <div class="form-switch-row">
+                    <label class="toggle-switch">
+                        <input type="checkbox" name="show_logo" value="1" id="showLogoToggle" {% if design.show_logo %}checked{% endif %} onchange="updatePreview()">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <label>Show logo on interview</label>
+                </div>
+                <div id="logoOptions" style="{% if not design.show_logo %}opacity:.4;pointer-events:none;{% endif %}">
+                    <div style="margin-bottom:.65rem;">
+                        <label>Logo Variant</label>
+                        <select name="logo_variant" id="logoVariant" onchange="updatePreview()">
+                            {% if logo_variants %}
+                                {% for v in logo_variants %}
+                                <option value="{{ v.key }}" {% if design.logo_variant == v.key %}selected{% endif %}>{{ v.label }}</option>
+                                {% endfor %}
+                            {% else %}
+                                <option value="primary">Primary (upload on My Business page)</option>
+                            {% endif %}
+                        </select>
+                    </div>
+                    <p style="font-size:.75rem;color:var(--text-muted);margin:0;">Upload logos on the <a href="{{ url_for('client.client_my_business') }}" style="color:var(--accent,#60a5fa);">My Business</a> page.</p>
+                </div>
+            </div>
+
+            <!-- Display -->
+            <div class="design-card">
+                <h5><i class="bi bi-layout-text-window" style="color:#34d399;margin-right:.4rem;"></i> Display</h5>
+                <div style="margin-bottom:.65rem;">
+                    <label>Company Name Override</label>
+                    <input type="text" name="company_label" value="{{ design.company_label or '' }}" placeholder="Leave blank to use brand name ({{ brand.display_name }})">
+                </div>
+                <div style="margin-bottom:.65rem;">
+                    <label>Card Corner Radius (px)</label>
+                    <select name="border_radius" id="borderRadius" onchange="updatePreview()">
+                        <option value="0" {% if design.border_radius == '0' %}selected{% endif %}>Sharp (0px)</option>
+                        <option value="10" {% if design.border_radius == '10' %}selected{% endif %}>Subtle (10px)</option>
+                        <option value="20" {% if design.border_radius|default('20') == '20' %}selected{% endif %}>Rounded (20px)</option>
+                        <option value="30" {% if design.border_radius == '30' %}selected{% endif %}>Pill (30px)</option>
+                    </select>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-sm" style="width:100%;padding:.55rem;">Save Design</button>
+        </form>
+    </div>
+
+    <!-- Right: Live Preview -->
+    <div>
+        <div class="design-card" style="position:sticky;top:1rem;">
+            <h5 style="margin-bottom:.25rem;"><i class="bi bi-phone" style="color:#fbbf24;margin-right:.4rem;"></i> Live Preview</h5>
+            <p style="font-size:.75rem;color:var(--text-muted);margin-bottom:.75rem;">How candidates see the interview on mobile.</p>
+            <div class="preview-shell" id="previewShell">
+                <div class="preview-card" id="previewCard">
+                    <div class="preview-header" id="previewHeader">
+                        <div class="preview-icon" id="previewIcon">{{ brand.display_name[:1]|upper }}</div>
+                        <div>
+                            <div class="preview-brand-name" id="previewName">{{ brand.display_name }}</div>
+                            <div class="preview-brand-role">Service Plumber</div>
+                        </div>
+                    </div>
+                    <div class="preview-dots" id="previewDots">
+                        <div class="preview-dot filled"></div>
+                        <div class="preview-dot filled"></div>
+                        <div class="preview-dot filled"></div>
+                        <div class="preview-dot"></div>
+                        <div class="preview-dot"></div>
+                        <div class="preview-dot"></div>
+                        <div class="preview-dot"></div>
+                    </div>
+                    <div class="preview-chat" id="previewChat">
+                        <div class="preview-msg warren" id="previewWarren">You show up to a job and the customer says they never booked it. What do you do?</div>
+                        <div class="preview-msg candidate" id="previewCandidate">I'd call my supervisor, confirm the address, and let the customer know I'm double checking.</div>
+                    </div>
+                    <div class="preview-input-bar" id="previewInputBar">
+                        <div class="preview-input" id="previewInput">Type your answer...</div>
+                        <div class="preview-send" id="previewSend"><i class="bi bi-send-fill"></i></div>
+                    </div>
+                    <div class="preview-footer">Powered by GroMore</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const logoVariantsData = {{ logo_variants | tojson }};
+const brandInitial = '{{ brand.display_name[:1]|upper }}';
+
+function syncHex(colorInput, hexId) {
+    document.getElementById(hexId).value = colorInput.value;
+}
+function syncColor(hexInput, colorId) {
+    const v = hexInput.value.trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+        document.getElementById(colorId).value = v;
+    }
+}
+
+function updatePreview() {
+    const primary = document.getElementById('primaryColor').value;
+    const secondary = document.getElementById('secondaryColor').value;
+    const bg = document.getElementById('bgColor').value;
+    const cardBg = document.getElementById('cardBg').value;
+    const text = document.getElementById('textColor').value;
+    const radius = document.getElementById('borderRadius').value + 'px';
+    const showLogo = document.getElementById('showLogoToggle').checked;
+
+    // Toggle logo options panel
+    const opts = document.getElementById('logoOptions');
+    opts.style.opacity = showLogo ? '1' : '.4';
+    opts.style.pointerEvents = showLogo ? 'auto' : 'none';
+
+    // Preview card
+    const card = document.getElementById('previewCard');
+    card.style.background = cardBg;
+    card.style.borderRadius = radius;
+    card.style.border = '1px solid ' + lighten(cardBg, 15);
+    card.style.color = text;
+
+    // Preview shell bg
+    document.getElementById('previewShell').style.background = bg;
+
+    // Header
+    const header = document.getElementById('previewHeader');
+    header.style.borderBottomColor = lighten(cardBg, 10);
+
+    // Icon
+    const icon = document.getElementById('previewIcon');
+    icon.style.background = `linear-gradient(135deg, ${primary}, ${secondary})`;
+    if (showLogo) {
+        const variantKey = document.getElementById('logoVariant').value;
+        const match = logoVariantsData.find(v => v.key === variantKey);
+        if (match && match.path) {
+            icon.innerHTML = `<img src="/uploads/${match.path}" alt="Logo">`;
+        } else {
+            icon.textContent = brandInitial;
+        }
+    } else {
+        icon.textContent = brandInitial;
+    }
+
+    // Name
+    document.getElementById('previewName').style.color = text;
+
+    // Dots
+    document.querySelectorAll('.preview-dot').forEach(dot => {
+        dot.style.background = `linear-gradient(90deg, ${primary}, ${secondary})`;
+    });
+
+    // Messages
+    const warrenMsg = document.getElementById('previewWarren');
+    warrenMsg.style.background = lighten(cardBg, 8);
+    warrenMsg.style.border = '1px solid ' + lighten(cardBg, 14);
+    warrenMsg.style.color = text;
+
+    const candidateMsg = document.getElementById('previewCandidate');
+    candidateMsg.style.background = primary + '30';
+    candidateMsg.style.border = '1px solid ' + primary + '50';
+    candidateMsg.style.color = text;
+
+    // Input bar
+    const inputBar = document.getElementById('previewInputBar');
+    inputBar.style.borderTopColor = lighten(cardBg, 10);
+    const input = document.getElementById('previewInput');
+    input.style.background = bg;
+    input.style.borderColor = lighten(cardBg, 10);
+    input.style.color = text + '60';
+
+    // Send button
+    const send = document.getElementById('previewSend');
+    send.style.background = `linear-gradient(135deg, ${primary}, ${secondary})`;
+}
+
+function lighten(hex, amount) {
+    hex = hex.replace('#', '');
+    const r = Math.min(255, parseInt(hex.substr(0, 2), 16) + amount);
+    const g = Math.min(255, parseInt(hex.substr(2, 2), 16) + amount);
+    const b = Math.min(255, parseInt(hex.substr(4, 2), 16) + amount);
+    return '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('');
+}
+
+// Initialize preview
+document.addEventListener('DOMContentLoaded', updatePreview);
+</script>
+{% endblock %}
