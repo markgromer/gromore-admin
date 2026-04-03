@@ -663,10 +663,10 @@ def sng_sync_revenue(brand, db, max_sample=50, month=None):
     if isinstance(r, dict):
         active_count = r.get("data", 0) or 0
 
+    # Note: SNG provides an active_no_subscription endpoint, but in practice we
+    # have seen it be inconsistent across accounts. For revenue scaling we rely
+    # on `subscription_names` from the active clients list (docs include it).
     no_sub_total = 0
-    r, _ = sng_get_active_no_subscription(brand, page=1)
-    if isinstance(r, dict):
-        no_sub_total = (r.get("paginate") or {}).get("total", len(r.get("data", [])))
 
     inactive_count = 0
     r, _ = sng_get_inactive_clients(brand, page=1)
@@ -678,32 +678,63 @@ def sng_sync_revenue(brand, db, max_sample=50, month=None):
     if isinstance(r, dict):
         jobs_count = r.get("data", 0) or 0
 
-    # Collect client IDs - paginate until we have enough for the sample
-    # Exclude active clients without a subscription so revenue scaling is not inflated.
-    no_sub_ids = set(_sng_collect_active_no_subscription_ids(brand) or [])
+    # Collect sample IDs and compute subscribed/no-sub counts from active clients.
     sample_ids = []
+    subscribed_count = 0
+    derived_no_sub = 0
     page = 1
-    while len(sample_ids) < max_sample:
+    while True:
         result, error = sng_get_active_clients(brand, page)
         if error or not isinstance(result, dict):
             break
-        for c in (result.get("data") or []):
+
+        rows = (result.get("data") or [])
+        for c in rows:
             cid = c.get("client") or c.get("id") or c.get("client_id")
-            if cid and cid not in no_sub_ids:
-                sample_ids.append(cid)
-            if len(sample_ids) >= max_sample:
-                break
+            subs_raw = c.get("subscription_names")
+            subs = (str(subs_raw).strip() if subs_raw is not None else "")
+            is_subscribed = bool(subs) and subs.lower() not in ("none", "null")
+
+            if is_subscribed:
+                subscribed_count += 1
+                if cid and len(sample_ids) < max_sample:
+                    sample_ids.append(cid)
+            else:
+                derived_no_sub += 1
+
         paginate = result.get("paginate") or {}
-        if page >= (paginate.get("total_pages") or 1):
+        total_pages = paginate.get("total_pages") or 1
+        if page >= total_pages:
             break
         page += 1
 
+    no_sub_total = derived_no_sub
     sample_size = len(sample_ids)
-    subscribed_count = max(active_count - no_sub_total, 0)
     log.info(
         "SNG sync: got %d sample subscribed client IDs (active=%d, no_sub=%d, subscribed=%d)",
         sample_size, active_count, no_sub_total, subscribed_count
     )
+
+    # If we couldn't find subscribed clients via subscription_names, fall back
+    # to sampling any active clients so revenue sync doesn't become a no-op.
+    if sample_size == 0:
+        page = 1
+        while len(sample_ids) < max_sample:
+            result, error = sng_get_active_clients(brand, page)
+            if error or not isinstance(result, dict):
+                break
+            for c in (result.get("data") or []):
+                cid = c.get("client") or c.get("id") or c.get("client_id")
+                if cid:
+                    sample_ids.append(cid)
+                if len(sample_ids) >= max_sample:
+                    break
+            paginate = result.get("paginate") or {}
+            if page >= (paginate.get("total_pages") or 1):
+                break
+            page += 1
+        sample_size = len(sample_ids)
+        subscribed_count = max(active_count - no_sub_total, 0) or active_count
 
     sample_revenue = 0.0
     sample_payments = 0

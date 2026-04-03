@@ -79,11 +79,11 @@ def probe(token, org_slug=None):
     if r.ok:
         clients = r.json().get("data", [])
         if clients:
-            client_id = clients[0].get("id") or clients[0].get("client_id")
+            client_id = clients[0].get("client") or clients[0].get("id") or clients[0].get("client_id")
             if client_id:
-                print(f"Probing client_id: {client_id}")
+                print(f"Probing client: {client_id}")
                 r2 = requests.post(f"{BASE}/api/v2/clients/client_details",
-                                   headers=headers, json={"client_id": client_id})
+                                   headers=headers, json={"client": client_id})
                 if r2.ok:
                     cd = r2.json()
                     if isinstance(cd, dict):
