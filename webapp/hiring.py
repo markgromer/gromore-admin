@@ -803,7 +803,6 @@ def reject_candidate(candidate_id):
 
     _send_hiring_email(brand, candidate["email"], candidate["name"], subject, body)
     db.update_hiring_candidate(candidate_id, status="rejected")
-    db.add_hiring_message(0, candidate_id, "outbound", "email", f"[Rejection] Sent rejection email")
     flash("Rejection sent.", "success")
     return redirect(url_for("hiring.candidate_detail", candidate_id=candidate_id))
 
@@ -835,7 +834,6 @@ def send_offer(candidate_id):
         _send_quo_sms(brand, candidate["phone"], sms_text)
 
     db.update_hiring_candidate(candidate_id, status="offer")
-    db.add_hiring_message(0, candidate_id, "outbound", "email", f"[Offer] Sent offer email")
     flash("Offer sent!", "success")
     return redirect(url_for("hiring.candidate_detail", candidate_id=candidate_id))
 
