@@ -381,6 +381,20 @@ def sng_get_staff(brand):
     return _sng_api(brand, "GET", "api/v2/report/staff_select_list")
 
 
+def sng_welcome_v2(brand):
+    """Test endpoint for auth/connectivity."""
+    return _sng_api(brand, "GET", "api/v2/welcome")
+
+
+def sng_check_token(brand):
+    """Return token details (useful for debugging token issues).
+
+    Note: SNG requires BOTH Authorization: Bearer <token> and token=<token> query param.
+    """
+    api_key = (brand.get("crm_api_key") or "").strip()
+    return _sng_api(brand, "GET", "api/v2/check_token", params={"token": api_key})
+
+
 def sng_create_coupon(brand, coupon_id=None, name=None, coupon_type="percent",
                       duration="once", percent_off=None, amount_off=None,
                       redeem_by=None, max_redemptions=None):
@@ -591,7 +605,13 @@ def _sng_sum_payments_for_month(brand, client_ids, month_prefix):
             if pmt_month:
                 diag["all_payment_months"][pmt_month] = diag["all_payment_months"].get(pmt_month, 0) + 1
 
-            if status_norm not in ("succeeded", "success", "paid", "completed"):
+            if status_norm not in (
+                "succeeded",
+                "success",
+                "successful",
+                "paid",
+                "completed",
+            ):
                 continue
             if pmt_month != month_prefix:
                 continue
@@ -604,7 +624,7 @@ def _sng_sum_payments_for_month(brand, client_ids, month_prefix):
     return round(total_revenue, 2), payment_count, diag
 
 
-def sng_sync_revenue(brand, db, max_sample=50):
+def sng_sync_revenue(brand, db, max_sample=50, month=None):
     """Revenue sync: samples up to max_sample clients from the previous complete
     month, then extrapolates to the full client base. Stores results in
     brand_month_finance + settings cache.
@@ -616,10 +636,23 @@ def sng_sync_revenue(brand, db, max_sample=50):
     brand_id = brand.get("id") or brand.get("brand_id")
     now = datetime.now()
 
-    # Use previous complete month (current month may have incomplete billing)
-    first_of_this_month = now.replace(day=1)
-    last_month_end = first_of_this_month - timedelta(days=1)
-    rev_month = last_month_end.strftime("%Y-%m")
+    def _valid_month(s):
+        try:
+            if not s or len(s) != 7 or s[4] != "-":
+                return False
+            int(s[:4])
+            m = int(s[5:7])
+            return 1 <= m <= 12
+        except Exception:
+            return False
+
+    if _valid_month(month):
+        rev_month = month
+    else:
+        # Default: previous complete month (current month may have incomplete billing)
+        first_of_this_month = now.replace(day=1)
+        last_month_end = first_of_this_month - timedelta(days=1)
+        rev_month = last_month_end.strftime("%Y-%m")
 
     log.info("SNG revenue sync for brand %s, month %s (sample=%d)",
              brand_id, rev_month, max_sample)
@@ -676,9 +709,25 @@ def sng_sync_revenue(brand, db, max_sample=50):
     sample_payments = 0
     diag = {}
     if sample_ids:
-        sample_revenue, sample_payments, diag = _sng_sum_payments_for_month(
-            brand, sample_ids, rev_month
-        )
+        sample_revenue, sample_payments, diag = _sng_sum_payments_for_month(brand, sample_ids, rev_month)
+
+        # If previous month is $0 but we can see payments in other months,
+        # fall back to the most recent payment month from the sample.
+        if (
+            sample_revenue == 0
+            and isinstance(diag, dict)
+            and (diag.get("all_payment_months") or {})
+        ):
+            months_seen = sorted((diag.get("all_payment_months") or {}).keys())
+            latest_month = months_seen[-1] if months_seen else None
+            current_month = now.strftime("%Y-%m")
+
+            # Only auto-fallback if the latest month is recent (current or previous)
+            if latest_month and latest_month != rev_month and latest_month in (current_month, rev_month):
+                alt_revenue, alt_payments, alt_diag = _sng_sum_payments_for_month(brand, sample_ids, latest_month)
+                if alt_revenue > 0:
+                    rev_month = latest_month
+                    sample_revenue, sample_payments, diag = alt_revenue, alt_payments, alt_diag
 
     # Extrapolate from sample to full subscribed client base
     if sample_size > 0 and subscribed_count > 0:
@@ -809,7 +858,7 @@ def pull_sweepandgo_revenue(brand, month=None):
     if not client_ids:
         return 0, 0, "No active clients found"
 
-    total_revenue, payment_count = _sng_sum_payments_for_month(brand, client_ids, month)
+    total_revenue, payment_count, _diag = _sng_sum_payments_for_month(brand, client_ids, month)
     return total_revenue, payment_count, None
 
 

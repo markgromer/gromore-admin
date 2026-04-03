@@ -5306,7 +5306,7 @@ def client_crm_data():
     try:
         if do_sync:
             # Full sync: sample clients, get real payments, cache results
-            rev = sng_sync_revenue(brand, db)
+            rev = sng_sync_revenue(brand, db, month=request.args.get("month"))
         else:
             # Normal page load: read from cache (fast, no heavy API calls)
             rev = sng_get_cached_revenue(brand, db)
@@ -5358,11 +5358,22 @@ def client_sng_probe():
 
     from webapp.crm_bridge import (
         sng_get_active_clients, sng_get_dispatch_board, sng_get_client_details,
-        sng_get_free_quotes,
+        sng_get_free_quotes, sng_welcome_v2, sng_check_token,
     )
     from datetime import datetime
 
     probe = {}
+
+    # Basic auth/connectivity probes
+    r, e = sng_welcome_v2(brand)
+    probe["welcome_v2"] = r
+    if e:
+        probe["welcome_v2_error"] = e
+
+    r, e = sng_check_token(brand)
+    probe["check_token"] = r
+    if e:
+        probe["check_token_error"] = e
 
     # Sample 1 active client (full record)
     r, e = sng_get_active_clients(brand, page=1)
@@ -5372,7 +5383,8 @@ def client_sng_probe():
         probe["active_client_sample"] = first_client
 
         # If we have a client ID, probe client_details
-        client_id = first_client.get("id") or first_client.get("client_id")
+        # SNG uses a string id under the `client` field (ex: rcl_XXXX)
+        client_id = first_client.get("client") or first_client.get("id") or first_client.get("client_id")
         if client_id:
             dr, de = sng_get_client_details(brand, client_id)
             probe["client_details_sample_keys"] = sorted(dr.keys()) if isinstance(dr, dict) else str(type(dr))
