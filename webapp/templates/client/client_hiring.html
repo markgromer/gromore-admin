@@ -102,6 +102,170 @@
 <div style="text-align:center;padding:2rem;color:var(--text-muted);">No candidates found.</div>
 {% endif %}
 
+<!-- ─── Edit Job Form ─── -->
+{% elif show_edit is defined and show_edit %}
+<div class="job-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h4 style="margin:0;color:var(--text, #e2e2f0);">Edit: {{ job.title }}</h4>
+        <a href="{{ url_for('hiring.job_detail', job_id=job.id) }}" style="color:var(--text-muted,#8888aa);font-size:.8rem;text-decoration:none;">
+            <i class="bi bi-x-lg"></i> Cancel
+        </a>
+    </div>
+    <form method="POST" action="{{ url_for('hiring.update_job', job_id=job.id) }}" class="create-form" onsubmit="prepareGateJSON()">
+        <div class="form-row">
+            <div>
+                <label>Job Title *</label>
+                <input type="text" name="title" value="{{ job.title }}" required>
+            </div>
+            <div>
+                <label>Department</label>
+                <input type="text" name="department" value="{{ job.department or '' }}">
+            </div>
+        </div>
+        <div class="form-row three">
+            <div>
+                <label>Job Type</label>
+                <select name="job_type">
+                    <option value="full-time" {% if job.job_type == 'full-time' %}selected{% endif %}>Full-time</option>
+                    <option value="part-time" {% if job.job_type == 'part-time' %}selected{% endif %}>Part-time</option>
+                    <option value="contract" {% if job.job_type == 'contract' %}selected{% endif %}>Contract</option>
+                </select>
+            </div>
+            <div>
+                <label>Location</label>
+                <input type="text" name="location" value="{{ job.location or '' }}">
+            </div>
+            <div>
+                <label>Remote</label>
+                <select name="remote">
+                    <option value="no" {% if job.remote == 'no' %}selected{% endif %}>On-site</option>
+                    <option value="yes" {% if job.remote == 'yes' %}selected{% endif %}>Remote</option>
+                    <option value="hybrid" {% if job.remote == 'hybrid' %}selected{% endif %}>Hybrid</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div>
+                <label>Salary Min ($)</label>
+                <input type="text" name="salary_min" value="{{ job.salary_min or '' }}" inputmode="numeric">
+            </div>
+            <div>
+                <label>Salary Max ($)</label>
+                <input type="text" name="salary_max" value="{{ job.salary_max or '' }}" inputmode="numeric">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="full">
+                <label>Description</label>
+                <textarea name="description" rows="6">{{ job.description or '' }}</textarea>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="full">
+                <label>Benefits</label>
+                <textarea name="benefits" rows="2">{{ job.benefits or '' }}</textarea>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="full">
+                <label>Scheduling Link (Calendly, etc.)</label>
+                <input type="url" name="scheduling_link" value="{{ job.scheduling_link or '' }}" placeholder="https://calendly.com/yourcompany/interview">
+            </div>
+        </div>
+
+        <h5 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:.9rem;color:var(--text, #e2e2f0);">Screening Criteria (for WARREN's interview)</h5>
+        <div class="form-row">
+            <div class="full">
+                <label>Must-Haves</label>
+                <textarea name="must_haves" rows="3">{{ screening.must_haves if screening else '' }}</textarea>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="full">
+                <label>Dealbreakers</label>
+                <textarea name="dealbreakers" rows="2">{{ screening.dealbreakers if screening else '' }}</textarea>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="full">
+                <label>Culture / Personality Notes</label>
+                <textarea name="culture_notes" rows="2">{{ screening.culture_notes if screening else '' }}</textarea>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="full">
+                <label>Physical Requirements</label>
+                <textarea name="physical_requirements" rows="2">{{ screening.physical_requirements if screening else '' }}</textarea>
+            </div>
+        </div>
+
+        <!-- Gate Question Picker -->
+        <h5 style="margin-top:1.5rem;margin-bottom:.25rem;font-size:.9rem;color:var(--text, #e2e2f0);">
+            <i class="bi bi-funnel"></i> Gate Questions (Pre-Screening)
+        </h5>
+        <p style="color:var(--text-muted,#8888aa);font-size:.8rem;margin-bottom:1rem;">
+            Quick qualifying questions that filter candidates before the full WARREN interview. Pick from common ones or add your own.
+        </p>
+
+        <div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap;">
+            <button type="button" class="ai-gen-btn" onclick="generateGatesAI({{ job.id }})" id="genGatesBtn" style="font-size:.78rem;padding:.35rem .85rem;">
+                <span class="spinner"></span>
+                <i class="bi bi-stars"></i> Generate with WARREN
+            </button>
+        </div>
+
+        <!-- Preset Library -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem .75rem;margin-bottom:1rem;" id="gatePresetGrid">
+        </div>
+
+        <!-- Custom Question -->
+        <div style="margin-bottom:1rem;">
+            <button type="button" onclick="toggleCustomGateForm()" style="background:transparent;border:1px dashed var(--border-color,#2d2d3d);color:var(--accent,#60a5fa);padding:.4rem .75rem;border-radius:6px;cursor:pointer;font-size:.8rem;width:100%;">
+                <i class="bi bi-plus-lg"></i> Add Custom Question
+            </button>
+            <div id="customGateForm" style="display:none;margin-top:.5rem;background:var(--input-bg,#12121e);border:1px solid var(--border-color,#2d2d3d);border-radius:8px;padding:.75rem;">
+                <div style="margin-bottom:.5rem;">
+                    <label style="font-size:.75rem;color:var(--text-muted);">Question</label>
+                    <input type="text" id="customGateQ" placeholder="e.g. Do you have experience with commercial plumbing?" style="width:100%;padding:.4rem .6rem;background:var(--card-bg,#1e1e2e);border:1px solid var(--border-color,#2d2d3d);border-radius:4px;color:var(--text,#e2e2f0);font-size:.8rem;">
+                </div>
+                <div style="display:flex;gap:.5rem;margin-bottom:.5rem;">
+                    <div style="flex:1;">
+                        <label style="font-size:.75rem;color:var(--text-muted);">Type</label>
+                        <select id="customGateType" style="width:100%;padding:.4rem .6rem;background:var(--card-bg,#1e1e2e);border:1px solid var(--border-color,#2d2d3d);border-radius:4px;color:var(--text,#e2e2f0);font-size:.8rem;">
+                            <option value="yes_no">Yes / No</option>
+                            <option value="pick_one">Pick One (custom options)</option>
+                        </select>
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-size:.75rem;color:var(--text-muted);">Disqualifying Answer</label>
+                        <select id="customGateDealbreaker" style="width:100%;padding:.4rem .6rem;background:var(--card-bg,#1e1e2e);border:1px solid var(--border-color,#2d2d3d);border-radius:4px;color:var(--text,#e2e2f0);font-size:.8rem;">
+                            <option value="No">"No" disqualifies</option>
+                            <option value="Yes">"Yes" disqualifies</option>
+                            <option value="">No disqualifier</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="customOptionsRow" style="display:none;margin-bottom:.5rem;">
+                    <label style="font-size:.75rem;color:var(--text-muted);">Options (comma separated)</label>
+                    <input type="text" id="customGateOptions" placeholder="Option A, Option B, Option C" style="width:100%;padding:.4rem .6rem;background:var(--card-bg,#1e1e2e);border:1px solid var(--border-color,#2d2d3d);border-radius:4px;color:var(--text,#e2e2f0);font-size:.8rem;">
+                </div>
+                <button type="button" onclick="addCustomGate()" class="btn btn-primary btn-sm" style="font-size:.78rem;">Add Question</button>
+            </div>
+        </div>
+
+        <!-- Selected Questions Preview -->
+        <div id="selectedGatesList"></div>
+
+        <!-- Hidden JSON input -->
+        <input type="hidden" name="gate_questions" id="gateQuestionsJSON" value="[]">
+
+        <div style="margin-top:1.25rem;display:flex;gap:.75rem;">
+            <button type="submit" class="btn btn-primary btn-sm">Save Changes</button>
+            <a href="{{ url_for('hiring.job_detail', job_id=job.id) }}" class="btn btn-secondary btn-sm">Cancel</a>
+        </div>
+    </form>
+</div>
+
 <!-- ─── Job Detail View ─── -->
 {% elif job %}
 <div class="job-card" style="margin-bottom:1.5rem;">
@@ -127,6 +291,9 @@
             <span class="spinner"></span>
             <i class="bi bi-stars"></i> Generate with WARREN
         </button>
+        <a href="{{ url_for('hiring.edit_job', job_id=job.id) }}" class="btn btn-sm" style="background:var(--card-bg,#1e1e2e);color:var(--text,#e2e2f0);border:1px solid var(--border-color,#2d2d3d);font-size:.8rem;display:inline-flex;align-items:center;gap:.3rem;">
+            <i class="bi bi-pencil"></i> Edit
+        </a>
         <form method="POST" action="{{ url_for('hiring.update_job', job_id=job.id) }}" style="display:inline;">
             {% if job.status == 'draft' %}
             <input type="hidden" name="status" value="active">
@@ -149,6 +316,9 @@
             <input type="hidden" name="status" value="active">
             <button type="submit" class="btn btn-success btn-sm">Re-activate</button>
         </form>
+        <a href="{{ url_for('hiring.edit_job', job_id=job.id) }}" class="btn btn-sm" style="background:var(--card-bg,#1e1e2e);color:var(--text,#e2e2f0);border:1px solid var(--border-color,#2d2d3d);font-size:.8rem;display:inline-flex;align-items:center;gap:.3rem;">
+            <i class="bi bi-pencil"></i> Edit
+        </a>
         <form method="POST" action="{{ url_for('hiring.delete_job', job_id=job.id) }}" style="display:inline;margin-left:auto;"
               onsubmit="return confirm('Delete this job and all its candidates/interviews? This cannot be undone.');">
             <button type="submit" class="btn btn-sm" style="background:transparent;color:var(--text-muted,#8888aa);border:1px solid var(--border,#2d2d3d);font-size:.78rem;">
@@ -235,7 +405,7 @@
         <h4 style="margin:0;color:var(--text, #e2e2f0);">Position Details</h4>
         <span id="prefillBadge" style="display:none;background:linear-gradient(135deg,#7c3aed,#2563eb);color:#fff;padding:3px 10px;border-radius:12px;font-size:.7rem;">WARREN Draft - Edit Anything</span>
     </div>
-    <form method="POST" action="{{ url_for('hiring.create_job') }}" class="create-form" id="jobForm">
+    <form method="POST" action="{{ url_for('hiring.create_job') }}" class="create-form" id="jobForm" onsubmit="prepareGateJSON()">
         <div class="form-row">
             <div>
                 <label>Job Title *</label>
@@ -317,6 +487,59 @@
             </div>
         </div>
 
+        <!-- Gate Question Picker -->
+        <h5 style="margin-top:1.5rem;margin-bottom:.25rem;font-size:.9rem;color:var(--text, #e2e2f0);">
+            <i class="bi bi-funnel"></i> Gate Questions (Pre-Screening)
+        </h5>
+        <p style="color:var(--text-muted,#8888aa);font-size:.8rem;margin-bottom:1rem;">
+            Quick qualifying questions that filter candidates before the full WARREN interview. Pick from common ones or add your own.
+        </p>
+
+        <!-- Preset Library -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem .75rem;margin-bottom:1rem;" id="gatePresetGrid">
+        </div>
+
+        <!-- Custom Question -->
+        <div style="margin-bottom:1rem;">
+            <button type="button" onclick="toggleCustomGateForm()" style="background:transparent;border:1px dashed var(--border-color,#2d2d3d);color:var(--accent,#60a5fa);padding:.4rem .75rem;border-radius:6px;cursor:pointer;font-size:.8rem;width:100%;">
+                <i class="bi bi-plus-lg"></i> Add Custom Question
+            </button>
+            <div id="customGateForm" style="display:none;margin-top:.5rem;background:var(--input-bg,#12121e);border:1px solid var(--border-color,#2d2d3d);border-radius:8px;padding:.75rem;">
+                <div style="margin-bottom:.5rem;">
+                    <label style="font-size:.75rem;color:var(--text-muted);">Question</label>
+                    <input type="text" id="customGateQ" placeholder="e.g. Do you have experience with commercial plumbing?" style="width:100%;padding:.4rem .6rem;background:var(--card-bg,#1e1e2e);border:1px solid var(--border-color,#2d2d3d);border-radius:4px;color:var(--text,#e2e2f0);font-size:.8rem;">
+                </div>
+                <div style="display:flex;gap:.5rem;margin-bottom:.5rem;">
+                    <div style="flex:1;">
+                        <label style="font-size:.75rem;color:var(--text-muted);">Type</label>
+                        <select id="customGateType" style="width:100%;padding:.4rem .6rem;background:var(--card-bg,#1e1e2e);border:1px solid var(--border-color,#2d2d3d);border-radius:4px;color:var(--text,#e2e2f0);font-size:.8rem;">
+                            <option value="yes_no">Yes / No</option>
+                            <option value="pick_one">Pick One (custom options)</option>
+                        </select>
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-size:.75rem;color:var(--text-muted);">Disqualifying Answer</label>
+                        <select id="customGateDealbreaker" style="width:100%;padding:.4rem .6rem;background:var(--card-bg,#1e1e2e);border:1px solid var(--border-color,#2d2d3d);border-radius:4px;color:var(--text,#e2e2f0);font-size:.8rem;">
+                            <option value="No">"No" disqualifies</option>
+                            <option value="Yes">"Yes" disqualifies</option>
+                            <option value="">No disqualifier</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="customOptionsRow" style="display:none;margin-bottom:.5rem;">
+                    <label style="font-size:.75rem;color:var(--text-muted);">Options (comma separated)</label>
+                    <input type="text" id="customGateOptions" placeholder="Option A, Option B, Option C" style="width:100%;padding:.4rem .6rem;background:var(--card-bg,#1e1e2e);border:1px solid var(--border-color,#2d2d3d);border-radius:4px;color:var(--text,#e2e2f0);font-size:.8rem;">
+                </div>
+                <button type="button" onclick="addCustomGate()" class="btn btn-primary btn-sm" style="font-size:.78rem;">Add Question</button>
+            </div>
+        </div>
+
+        <!-- Selected Questions Preview -->
+        <div id="selectedGatesList"></div>
+
+        <!-- Hidden JSON input -->
+        <input type="hidden" name="gate_questions" id="gateQuestionsJSON" value="[]">
+
         <div style="margin-top:1rem;display:flex;gap:.75rem;">
             <button type="submit" class="btn btn-primary btn-sm">Create Job (Draft)</button>
             <a href="{{ url_for('hiring.hiring_dashboard') }}" class="btn btn-secondary btn-sm">Cancel</a>
@@ -363,6 +586,186 @@
 {% endif %}
 
 <script>
+// ─── Gate Question Picker ───
+const GATE_PRESETS = [
+    { question: "Are you authorized to work in the United States?", type: "yes_no", options: ["Yes", "No"], dealbreaker_answer: "No", signal: "Work authorization" },
+    { question: "Do you have a valid driver's license?", type: "yes_no", options: ["Yes", "No"], dealbreaker_answer: "No", signal: "Driving ability" },
+    { question: "Do you have reliable transportation to get to job sites?", type: "yes_no", options: ["Yes", "No"], dealbreaker_answer: "No", signal: "Transportation reliability" },
+    { question: "Can you pass a background check?", type: "yes_no", options: ["Yes", "No"], dealbreaker_answer: "No", signal: "Background clearance" },
+    { question: "Can you pass a drug screening?", type: "yes_no", options: ["Yes", "No"], dealbreaker_answer: "No", signal: "Drug-free compliance" },
+    { question: "Are you comfortable working outdoors in all weather?", type: "yes_no", options: ["Yes", "No"], dealbreaker_answer: "No", signal: "Weather tolerance" },
+    { question: "Can you lift 50 lbs repeatedly throughout the day?", type: "yes_no", options: ["Yes", "No"], dealbreaker_answer: "No", signal: "Physical capability" },
+    { question: "Are you available to start work at 6-7 AM?", type: "yes_no", options: ["Yes", "No"], dealbreaker_answer: "No", signal: "Early start availability" },
+    { question: "Are you available to work weekends when needed?", type: "yes_no", options: ["Yes", "No"], dealbreaker_answer: "No", signal: "Weekend availability" },
+    { question: "Can you commit to this role for at least 6 months?", type: "yes_no", options: ["Yes", "No"], dealbreaker_answer: "No", signal: "Retention commitment" },
+    { question: "Are you comfortable being on your feet for 8+ hours?", type: "yes_no", options: ["Yes", "No"], dealbreaker_answer: "No", signal: "Standing endurance" },
+    { question: "Do you have your own basic tools?", type: "yes_no", options: ["Yes", "No"], dealbreaker_answer: "No", signal: "Tool ownership" },
+];
+
+let selectedGates = [];
+
+function initGatePicker() {
+    const grid = document.getElementById('gatePresetGrid');
+    if (!grid) return;
+
+    // Load existing gate questions (edit mode)
+    {% if gate_questions is defined and gate_questions %}
+    selectedGates = {{ gate_questions | tojson }};
+    {% endif %}
+
+    // Build preset checkboxes
+    GATE_PRESETS.forEach((preset, idx) => {
+        const isChecked = selectedGates.some(g => g.question === preset.question);
+        const label = document.createElement('label');
+        label.style.cssText = 'display:flex;align-items:flex-start;gap:.4rem;font-size:.8rem;color:var(--text,#e2e2f0);cursor:pointer;padding:.35rem .5rem;border-radius:6px;border:1px solid var(--border-color,#2d2d3d);background:var(--input-bg,#12121e);';
+        label.innerHTML = `<input type="checkbox" data-preset-idx="${idx}" ${isChecked ? 'checked' : ''} onchange="togglePreset(${idx}, this.checked)" style="margin-top:2px;accent-color:var(--accent,#60a5fa);"> <span>${preset.question}</span>`;
+        grid.appendChild(label);
+    });
+
+    renderSelectedGates();
+    updateGateJSON();
+
+    // Wire up custom type toggle
+    const typeSelect = document.getElementById('customGateType');
+    if (typeSelect) {
+        typeSelect.addEventListener('change', function() {
+            document.getElementById('customOptionsRow').style.display = this.value === 'pick_one' ? 'block' : 'none';
+        });
+    }
+}
+
+function togglePreset(idx, checked) {
+    const preset = GATE_PRESETS[idx];
+    if (checked) {
+        if (!selectedGates.some(g => g.question === preset.question)) {
+            selectedGates.push({
+                id: getNextGateId(),
+                question: preset.question,
+                type: preset.type,
+                options: [...preset.options],
+                dealbreaker_answer: preset.dealbreaker_answer,
+                signal: preset.signal
+            });
+        }
+    } else {
+        selectedGates = selectedGates.filter(g => g.question !== preset.question);
+    }
+    renderSelectedGates();
+    updateGateJSON();
+}
+
+function getNextGateId() {
+    const ids = selectedGates.map(g => g.id || 0);
+    return Math.max(0, ...ids) + 1;
+}
+
+function toggleCustomGateForm() {
+    const form = document.getElementById('customGateForm');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+function addCustomGate() {
+    const qEl = document.getElementById('customGateQ');
+    const question = qEl.value.trim();
+    if (!question) { qEl.focus(); return; }
+
+    const type = document.getElementById('customGateType').value;
+    const dealbreaker = document.getElementById('customGateDealbreaker').value;
+    let options = ["Yes", "No"];
+    if (type === 'pick_one') {
+        const raw = document.getElementById('customGateOptions').value.trim();
+        if (!raw) { document.getElementById('customGateOptions').focus(); return; }
+        options = raw.split(',').map(o => o.trim()).filter(Boolean);
+    }
+
+    selectedGates.push({
+        id: getNextGateId(),
+        question: question,
+        type: type,
+        options: options,
+        dealbreaker_answer: dealbreaker || null,
+        signal: "Custom question"
+    });
+
+    // Reset form
+    qEl.value = '';
+    document.getElementById('customGateOptions').value = '';
+    document.getElementById('customGateForm').style.display = 'none';
+
+    renderSelectedGates();
+    updateGateJSON();
+}
+
+function removeGate(idx) {
+    const removed = selectedGates.splice(idx, 1)[0];
+    // Uncheck preset if it was one
+    const presetIdx = GATE_PRESETS.findIndex(p => p.question === removed.question);
+    if (presetIdx >= 0) {
+        const cb = document.querySelector(`[data-preset-idx="${presetIdx}"]`);
+        if (cb) cb.checked = false;
+    }
+    renderSelectedGates();
+    updateGateJSON();
+}
+
+function renderSelectedGates() {
+    const container = document.getElementById('selectedGatesList');
+    if (!container) return;
+    if (selectedGates.length === 0) {
+        container.innerHTML = '<div style="text-align:center;padding:.75rem;color:var(--text-muted,#8888aa);font-size:.8rem;border:1px dashed var(--border-color,#2d2d3d);border-radius:6px;">No gate questions selected. Pick from the presets above or add your own.</div>';
+        return;
+    }
+    let html = '<div style="font-size:.75rem;color:var(--text-muted);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.5px;">Selected Questions (' + selectedGates.length + ')</div>';
+    selectedGates.forEach((g, idx) => {
+        const isPreset = GATE_PRESETS.some(p => p.question === g.question);
+        html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:.45rem .65rem;background:var(--input-bg,#12121e);border:1px solid var(--border-color,#2d2d3d);border-radius:6px;margin-bottom:.35rem;font-size:.8rem;">
+            <div style="flex:1;">
+                <span style="color:var(--text,#e2e2f0);">${g.question}</span>
+                <span style="color:var(--text-muted,#8888aa);font-size:.7rem;margin-left:.5rem;">${g.type === 'yes_no' ? 'Yes/No' : 'Pick One'}</span>
+                ${g.dealbreaker_answer ? '<span style="color:#fca5a5;font-size:.7rem;margin-left:.5rem;">Disqualifies: "' + g.dealbreaker_answer + '"</span>' : ''}
+            </div>
+            <button type="button" onclick="removeGate(${idx})" style="background:none;border:none;color:var(--text-muted,#8888aa);cursor:pointer;padding:2px 6px;font-size:.85rem;" title="Remove">&times;</button>
+        </div>`;
+    });
+    container.innerHTML = html;
+}
+
+function updateGateJSON() {
+    const el = document.getElementById('gateQuestionsJSON');
+    if (el) el.value = JSON.stringify(selectedGates);
+}
+
+function prepareGateJSON() {
+    updateGateJSON();
+}
+
+function generateGatesAI(jobId) {
+    const btn = document.getElementById('genGatesBtn');
+    if (!btn) return;
+    btn.classList.add('loading');
+    btn.disabled = true;
+    fetch(`{{ url_for('hiring.hiring_dashboard') }}jobs/${jobId}/generate-gates`, {method:'POST', headers:{'Content-Type':'application/json'}})
+    .then(r => r.json())
+    .then(data => {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+        if (data.ok && data.gate_questions) {
+            selectedGates = data.gate_questions;
+            // Sync preset checkboxes
+            GATE_PRESETS.forEach((preset, idx) => {
+                const cb = document.querySelector(`[data-preset-idx="${idx}"]`);
+                if (cb) cb.checked = selectedGates.some(g => g.question === preset.question);
+            });
+            renderSelectedGates();
+            updateGateJSON();
+        } else {
+            alert(data.error || 'Generation failed');
+        }
+    })
+    .catch(() => { btn.classList.remove('loading'); btn.disabled = false; alert('Network error'); });
+}
+
+// ─── Job Detail Actions ───
 function generatePosting(jobId) {
     const btn = document.getElementById('genBtn');
     btn.classList.add('loading');
@@ -381,6 +784,7 @@ function generatePosting(jobId) {
     .catch(() => { btn.classList.remove('loading'); btn.disabled = false; alert('Network error'); });
 }
 
+// ─── Create Job Form ───
 function showFullForm() {
     document.getElementById('quickStartCard').style.display = 'none';
     document.getElementById('fullFormCard').style.display = 'block';
@@ -448,5 +852,8 @@ function warrenPrefill() {
         errEl.style.display = 'block';
     });
 }
+
+// Init gate picker when DOM ready
+document.addEventListener('DOMContentLoaded', initGatePicker);
 </script>
 {% endblock %}

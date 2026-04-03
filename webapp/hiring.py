@@ -605,6 +605,11 @@ def create_job():
             generated_post=data.get("generated_post", ""),
             created_by=user_id,
         )
+        # Save gate questions if provided
+        gate_qs = data.get("gate_questions", "")
+        if gate_qs:
+            db.update_hiring_job(job_id, gate_questions=gate_qs)
+
         flash("Job created!", "success")
         return redirect(url_for("hiring.job_detail", job_id=job_id))
 
@@ -643,6 +648,29 @@ def job_detail(job_id):
     return render_template("client/client_hiring.html", brand=brand, job=job, candidates=candidates, jobs=[], stats={})
 
 
+@hiring_bp.route("/jobs/<int:job_id>/edit")
+def edit_job(job_id):
+    brand, user_id = _require_client_login()
+    db = _get_db()
+    job = db.get_hiring_job(job_id)
+    if not job or job["brand_id"] != brand["id"]:
+        abort(404)
+    screening = {}
+    try:
+        screening = json.loads(job.get("screening_criteria") or "{}")
+    except (json.JSONDecodeError, TypeError):
+        pass
+    gate_questions = []
+    try:
+        gate_questions = json.loads(job.get("gate_questions") or "[]")
+    except (json.JSONDecodeError, TypeError):
+        pass
+    candidates = db.get_hiring_candidates(brand["id"], job_id=job_id)
+    return render_template("client/client_hiring.html", brand=brand, job=job,
+                           screening=screening, gate_questions=gate_questions,
+                           candidates=candidates, jobs=[], stats={}, show_edit=True)
+
+
 @hiring_bp.route("/jobs/<int:job_id>/update", methods=["POST"])
 def update_job(job_id):
     brand, user_id = _require_client_login()
@@ -669,6 +697,8 @@ def update_job(job_id):
             "culture_notes": data.get("culture_notes", ""),
             "physical_requirements": data.get("physical_requirements", ""),
         })
+    if "gate_questions" in data:
+        fields["gate_questions"] = data["gate_questions"]
 
     if fields:
         db.update_hiring_job(job_id, **fields)
