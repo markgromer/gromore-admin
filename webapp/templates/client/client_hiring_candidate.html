@@ -22,8 +22,19 @@
     .fill-high { background:#34d399; }
     .fill-mid { background:#fbbf24; }
     .fill-low { background:#f87171; }
+    .signal-reason { font-size:.75rem; color:var(--text-muted, #8888aa); margin:-2px 0 .6rem 0; padding-left:110px; line-height:1.4; }
     .red-flag { background:#7f1d1d; color:#fca5a5; padding:.35rem .6rem; border-radius:6px; font-size:.75rem; margin-bottom:.35rem; display:flex; align-items:center; gap:.3rem; }
     .red-flag i { font-size:.7rem; }
+    .key-moment { background:var(--input-bg, #12121e); border-left:3px solid #7c3aed; border-radius:0 8px 8px 0; padding:.5rem .75rem; margin-bottom:.5rem; font-size:.8rem; line-height:1.5; }
+    .key-moment .km-quote { color:var(--text, #e2e2f0); font-style:italic; margin-bottom:.25rem; }
+    .key-moment .km-meta { font-size:.7rem; color:var(--text-muted, #8888aa); display:flex; gap:.5rem; align-items:center; }
+    .km-positive { border-left-color:#34d399; }
+    .km-negative { border-left-color:#f87171; }
+    .rec-badge { display:inline-block; padding:.25rem .65rem; border-radius:6px; font-size:.75rem; font-weight:600; text-transform:uppercase; }
+    .rec-interview { background:#1a3a2a; color:#34d399; }
+    .rec-waitlist { background:#2d2a1a; color:#fbbf24; }
+    .rec-reject { background:#2d1515; color:#f87171; }
+    .ai-summary-text { font-size:.82rem; line-height:1.6; color:var(--text, #e2e2f0); white-space:pre-wrap; }
     .transcript-msg { padding:.6rem .75rem; border-bottom:1px solid var(--border-color, #2d2d3d); font-size:.82rem; line-height:1.5; }
     .transcript-msg:last-child { border-bottom:none; }
     .transcript-msg .role { font-weight:600; font-size:.7rem; text-transform:uppercase; letter-spacing:.5px; margin-bottom:.2rem; }
@@ -35,11 +46,21 @@
     .score-big.mid { color:#fbbf24; }
     .score-big.low { color:#f87171; }
     .notes-area { width:100%; min-height:80px; background:var(--input-bg, #12121e); border:1px solid var(--border-color, #2d2d3d); border-radius:6px; color:var(--text, #e2e2f0); padding:.5rem .75rem; font-size:.82rem; resize:vertical; }
+    .gate-flag-banner { background:#2d2a1a; border:1px solid #92400e; border-radius:8px; padding:.5rem .75rem; margin-bottom:1rem; font-size:.8rem; color:#fbbf24; display:flex; align-items:center; gap:.4rem; }
+    .suggested-q { background:var(--input-bg, #12121e); border-radius:8px; padding:.45rem .7rem; margin-bottom:.35rem; font-size:.8rem; color:var(--text, #e2e2f0); display:flex; align-items:flex-start; gap:.4rem; }
+    .suggested-q i { color:#60a5fa; margin-top:2px; flex-shrink:0; }
 </style>
 
 <a href="{{ url_for('hiring.job_detail', job_id=candidate.job_id) }}" style="font-size:.8rem;color:var(--text-muted);text-decoration:none;display:inline-flex;align-items:center;gap:.3rem;margin-bottom:1rem;">
     <i class="bi bi-arrow-left"></i> Back to {{ job.title if job else 'Job' }}
 </a>
+
+{% if candidate.notes and '[GATE FLAG]' in candidate.notes %}
+<div class="gate-flag-banner">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+    Gate Question Flag: This candidate gave dealbreaker answers during the initial qualifying questions. Review the details below.
+</div>
+{% endif %}
 
 <div class="cand-header">
     <div>
@@ -73,13 +94,18 @@
 </div>
 
 <div class="cand-grid">
-    <!-- Overall Score -->
+    <!-- Overall Score + Recommendation -->
     <div class="card-box" style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
         <h5>AI Evaluation Score</h5>
         {% set score = candidate.ai_score|default(0)|int %}
         <div class="score-big {% if score >= 80 %}high{% elif score >= 50 %}mid{% else %}low{% endif %}">
             {{ score }}<span style="font-size:.9rem;font-weight:400;">/100</span>
         </div>
+        {% if candidate.ai_recommendation %}
+        <div style="margin-top:.5rem;">
+            <span class="rec-badge rec-{{ candidate.ai_recommendation }}">{{ candidate.ai_recommendation }}</span>
+        </div>
+        {% endif %}
         {% if interview and interview.status == 'completed' %}
         <div style="font-size:.75rem;color:var(--text-muted);margin-top:.35rem;">Based on {{ messages|length if messages else 0 }} exchanges</div>
         {% elif interview and interview.status == 'in_progress' %}
@@ -89,7 +115,7 @@
         {% endif %}
     </div>
 
-    <!-- Signal Breakdown -->
+    <!-- Signal Breakdown with Reasoning -->
     <div class="card-box">
         <h5>Signal Breakdown</h5>
         {% set signal_scores = candidate.score_breakdown|default('{}')|tojson|safe %}
@@ -101,7 +127,32 @@
             </div>
             <span style="width:40px;text-align:right;font-weight:600;color:var(--text, #e2e2f0);" data-signal-val="{{ signal_name }}">0/{{ max_val }}</span>
         </div>
+        <div class="signal-reason" data-signal-reason="{{ signal_name }}"></div>
         {% endfor %}
+    </div>
+
+    <!-- WARREN's Assessment -->
+    <div class="card-box" style="grid-column:1/-1;">
+        <h5>WARREN's Assessment</h5>
+        {% if candidate.ai_summary %}
+        <div class="ai-summary-text">{{ candidate.ai_summary }}</div>
+        {% else %}
+        <div style="color:var(--text-muted);font-size:.82rem;text-align:center;padding:.5rem 0;">No assessment yet. Run the AI interview to generate an evaluation.</div>
+        {% endif %}
+    </div>
+
+    <!-- Key Moments -->
+    <div class="card-box">
+        <h5>Key Moments</h5>
+        <div id="keyMomentsContainer">
+            <div style="color:var(--text-muted);font-size:.8rem;text-align:center;padding:.5rem 0;">
+                {% if candidate.ai_score and candidate.ai_score > 0 %}
+                Loading...
+                {% else %}
+                No interview data yet
+                {% endif %}
+            </div>
+        </div>
     </div>
 
     <!-- Red Flags -->
@@ -119,15 +170,31 @@
         </div>
     </div>
 
+    <!-- Suggested In-Person Questions -->
+    {% if candidate.interview_questions and candidate.interview_questions != '[]' %}
+    <div class="card-box" style="grid-column:1/-1;">
+        <h5>Suggested In-Person Questions</h5>
+        <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:.5rem;">Based on gaps WARREN noticed during screening</div>
+        <div id="suggestedQsContainer"></div>
+    </div>
+    {% endif %}
+
     <!-- Application Info -->
     <div class="card-box">
         <h5>Application Details</h5>
+        {% if candidate.cover_letter %}
+        <div style="font-size:.8rem;margin-bottom:.5rem;color:var(--text, #e2e2f0);"><strong>Cover Letter:</strong></div>
+        <div style="font-size:.8rem;line-height:1.5;white-space:pre-wrap;max-height:200px;overflow-y:auto;color:var(--text, #e2e2f0);">{{ candidate.cover_letter }}</div>
+        {% endif %}
         {% if candidate.resume_text %}
-        <div style="font-size:.8rem;margin-bottom:.5rem;"><strong>Resume / Qualifications:</strong></div>
-        <div style="font-size:.8rem;line-height:1.5;white-space:pre-wrap;max-height:200px;overflow-y:auto;">{{ candidate.resume_text }}</div>
+        <div style="font-size:.8rem;margin-bottom:.5rem;color:var(--text, #e2e2f0);"><strong>Resume / Qualifications:</strong></div>
+        <div style="font-size:.8rem;line-height:1.5;white-space:pre-wrap;max-height:200px;overflow-y:auto;color:var(--text, #e2e2f0);">{{ candidate.resume_text }}</div>
         {% endif %}
         {% if candidate.source %}
-        <div style="font-size:.8rem;margin-top:.5rem;"><strong>Source:</strong> {{ candidate.source }}</div>
+        <div style="font-size:.8rem;margin-top:.5rem;color:var(--text, #e2e2f0);"><strong>Source:</strong> {{ candidate.source }}</div>
+        {% endif %}
+        {% if candidate.response_time_avg_sec %}
+        <div style="font-size:.8rem;margin-top:.5rem;color:var(--text, #e2e2f0);"><strong>Avg Response Time:</strong> {{ candidate.response_time_avg_sec }}s</div>
         {% endif %}
     </div>
 </div>
@@ -165,13 +232,18 @@
 {% endif %}
 
 <script>
-// Parse score_breakdown JSON and populate signal bars + red flags
 (function() {
+    // Parse score_breakdown
     var raw = {{ candidate.score_breakdown|default('{}')|tojson }};
     var data = {};
     try { data = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch(e) {}
 
-    // Signal bars
+    // Parse signal_reasoning
+    var reasonRaw = {{ candidate.signal_reasoning|default('{}')|tojson }};
+    var reasoning = {};
+    try { reasoning = typeof reasonRaw === 'string' ? JSON.parse(reasonRaw) : reasonRaw; } catch(e) {}
+
+    // Signal bars + reasoning
     document.querySelectorAll('[data-signal]').forEach(function(bar) {
         var key = bar.getAttribute('data-signal');
         var max = parseInt(bar.getAttribute('data-max')) || 20;
@@ -183,6 +255,16 @@
         if (valEl) valEl.textContent = val + '/' + max;
     });
 
+    // Signal reasoning
+    document.querySelectorAll('[data-signal-reason]').forEach(function(el) {
+        var key = el.getAttribute('data-signal-reason');
+        if (reasoning[key]) {
+            el.textContent = reasoning[key];
+        } else {
+            el.style.display = 'none';
+        }
+    });
+
     // Red flags
     var flags = data.red_flags || [];
     if (flags.length) {
@@ -192,6 +274,46 @@
             html += '<div class="red-flag"><i class="bi bi-exclamation-triangle-fill"></i> ' + f + '</div>';
         });
         container.innerHTML = html;
+    }
+
+    // Key Moments
+    var momentsRaw = {{ candidate.key_moments|default('[]')|tojson }};
+    var moments = [];
+    try { moments = typeof momentsRaw === 'string' ? JSON.parse(momentsRaw) : momentsRaw; } catch(e) {}
+    var kmContainer = document.getElementById('keyMomentsContainer');
+    if (moments && moments.length) {
+        var kmHtml = '';
+        moments.forEach(function(m) {
+            var cls = m.impact === 'positive' ? 'km-positive' : m.impact === 'negative' ? 'km-negative' : '';
+            kmHtml += '<div class="key-moment ' + cls + '">';
+            if (m.quote) kmHtml += '<div class="km-quote">"' + m.quote + '"</div>';
+            kmHtml += '<div class="km-meta">';
+            if (m.signal) kmHtml += '<span style="text-transform:capitalize;">' + m.signal.replace(/_/g, ' ') + '</span>';
+            if (m.impact) kmHtml += '<span style="color:' + (m.impact === 'positive' ? '#34d399' : '#f87171') + ';">' + m.impact + '</span>';
+            kmHtml += '</div>';
+            if (m.note) kmHtml += '<div style="font-size:.73rem;color:var(--text-muted);margin-top:.2rem;">' + m.note + '</div>';
+            kmHtml += '</div>';
+        });
+        kmContainer.innerHTML = kmHtml;
+    } else if ({{ candidate.ai_score|default(0)|int }} === 0) {
+        kmContainer.innerHTML = '<div style="color:var(--text-muted);font-size:.8rem;text-align:center;padding:.5rem 0;">No interview data yet</div>';
+    } else {
+        kmContainer.innerHTML = '<div style="color:var(--text-muted);font-size:.8rem;text-align:center;padding:.5rem 0;">No key moments recorded</div>';
+    }
+
+    // Suggested interview questions
+    var sqContainer = document.getElementById('suggestedQsContainer');
+    if (sqContainer) {
+        var sqRaw = {{ candidate.interview_questions|default('[]')|tojson }};
+        var questions = [];
+        try { questions = typeof sqRaw === 'string' ? JSON.parse(sqRaw) : sqRaw; } catch(e) {}
+        if (questions.length) {
+            var sqHtml = '';
+            questions.forEach(function(q) {
+                sqHtml += '<div class="suggested-q"><i class="bi bi-chat-left-text"></i> ' + q + '</div>';
+            });
+            sqContainer.innerHTML = sqHtml;
+        }
     }
 })();
 </script>

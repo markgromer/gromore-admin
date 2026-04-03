@@ -3,38 +3,78 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>Interview - {{ company }}</title>
+<title>Screening - {{ company }}</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <style>
     *{box-sizing:border-box;margin:0;padding:0;}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f0f1a;color:#e2e2f0;height:100vh;display:flex;flex-direction:column;}
+
+    /* Header */
     .chat-header{background:#1e1e2e;border-bottom:1px solid #2d2d3d;padding:.75rem 1rem;display:flex;align-items:center;gap:.6rem;flex-shrink:0;}
     .chat-header .brand{font-weight:600;font-size:.95rem;}
     .chat-header .sub{font-size:.7rem;color:#8888aa;}
     .chat-header .indicator{width:8px;height:8px;border-radius:50%;background:#34d399;flex-shrink:0;}
+
+    /* Progress */
+    .progress-wrap{background:#1e1e2e;padding:.5rem 1rem;border-bottom:1px solid #2d2d3d;flex-shrink:0;display:flex;align-items:center;gap:.75rem;}
+    .progress-track{flex:1;height:6px;background:#12121e;border-radius:3px;overflow:hidden;}
+    .progress-fill{height:100%;background:linear-gradient(90deg,#7c3aed,#60a5fa);transition:width .5s ease;width:0%;border-radius:3px;}
+    .progress-label{font-size:.7rem;color:#8888aa;white-space:nowrap;min-width:80px;text-align:right;}
+    .q-type-badge{font-size:.6rem;background:#2d2d44;color:#a78bfa;padding:2px 8px;border-radius:10px;white-space:nowrap;}
+
+    /* Chat */
     .chat-body{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.6rem;}
-    .msg{max-width:85%;padding:.6rem .85rem;border-radius:12px;font-size:.87rem;line-height:1.5;word-wrap:break-word;animation:fadeIn .3s ease;}
-    @keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+    .msg{max-width:85%;padding:.65rem .9rem;border-radius:14px;font-size:.87rem;line-height:1.55;word-wrap:break-word;animation:slideIn .35s ease;}
+    @keyframes slideIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
     .msg-warren{background:#1e293b;align-self:flex-start;border-bottom-left-radius:4px;}
     .msg-candidate{background:#3b2e7e;align-self:flex-end;border-bottom-right-radius:4px;}
     .msg-system{background:transparent;align-self:center;color:#8888aa;font-size:.75rem;text-align:center;max-width:100%;}
+
+    /* Choice cards */
+    .choice-group{display:flex;flex-direction:column;gap:.4rem;align-self:flex-start;max-width:85%;animation:slideIn .35s ease;}
+    .choice-card{background:#1a2235;border:1.5px solid #2d3348;border-radius:10px;padding:.55rem .85rem;font-size:.84rem;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:.5rem;}
+    .choice-card:hover{border-color:#60a5fa;background:#1e293b;transform:translateX(4px);}
+    .choice-card.selected{border-color:#7c3aed;background:#2d1f5e;}
+    .choice-card .choice-letter{width:22px;height:22px;border-radius:50%;background:#2d2d44;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#a78bfa;flex-shrink:0;}
+    .choice-card.selected .choice-letter{background:#7c3aed;color:#fff;}
+
+    /* Typing indicator */
     .typing{align-self:flex-start;background:#1e293b;border-radius:12px;padding:.6rem .85rem;display:none;}
     .typing span{display:inline-block;width:6px;height:6px;background:#60a5fa;border-radius:50%;margin:0 2px;animation:bounce .6s infinite alternate;}
     .typing span:nth-child(2){animation-delay:.2s;}
     .typing span:nth-child(3){animation-delay:.4s;}
     @keyframes bounce{to{transform:translateY(-6px);opacity:.3;}}
+
+    /* Input */
     .chat-input{background:#1e1e2e;border-top:1px solid #2d2d3d;padding:.6rem .75rem;display:flex;gap:.5rem;align-items:flex-end;flex-shrink:0;}
     .chat-input textarea{flex:1;background:#12121e;border:1px solid #2d2d3d;border-radius:8px;color:#e2e2f0;padding:.5rem .7rem;font-size:.87rem;resize:none;max-height:120px;min-height:40px;line-height:1.4;font-family:inherit;}
     .chat-input textarea:focus{outline:none;border-color:#60a5fa;}
-    .send-btn{background:#60a5fa;color:#fff;border:none;width:36px;height:36px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+    .send-btn{background:#60a5fa;color:#fff;border:none;width:36px;height:36px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;}
     .send-btn:disabled{opacity:.4;cursor:default;}
-    .send-btn:hover:not(:disabled){background:#3b82f6;}
+    .send-btn:hover:not(:disabled){background:#3b82f6;transform:scale(1.05);}
+
+    /* End states */
     .end-state{text-align:center;padding:2rem 1rem;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;}
     .end-state i{font-size:2.5rem;margin-bottom:.75rem;}
     .end-state h3{margin-bottom:.5rem;}
     .end-state p{color:#8888aa;font-size:.85rem;max-width:400px;}
-    .progress-bar{height:3px;background:#12121e;width:100%;flex-shrink:0;}
-    .progress-fill{height:100%;background:linear-gradient(90deg,#7c3aed,#60a5fa);transition:width .5s ease;width:0%;}
+
+    /* Gate Questions */
+    .gate-screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1.5rem;overflow-y:auto;}
+    .gate-card{background:#1e1e2e;border:1px solid #2d2d3d;border-radius:14px;padding:1.5rem;max-width:500px;width:100%;animation:slideIn .4s ease;}
+    .gate-card h2{font-size:1.1rem;margin-bottom:.25rem;color:#e2e2f0;}
+    .gate-card p{font-size:.8rem;color:#8888aa;margin-bottom:1.25rem;}
+    .gate-q{margin-bottom:1.25rem;}
+    .gate-q .gate-label{font-size:.87rem;font-weight:600;margin-bottom:.45rem;color:#e2e2f0;display:flex;gap:.4rem;align-items:flex-start;}
+    .gate-q .gate-label .q-num{color:#7c3aed;font-weight:700;flex-shrink:0;}
+    .gate-options{display:flex;flex-wrap:wrap;gap:.4rem;}
+    .gate-opt{background:#12121e;border:1.5px solid #2d2d3d;border-radius:8px;padding:.4rem .85rem;font-size:.82rem;cursor:pointer;transition:all .2s;color:#e2e2f0;}
+    .gate-opt:hover{border-color:#60a5fa;background:#1a2235;}
+    .gate-opt.picked{border-color:#7c3aed;background:#2d1f5e;color:#fff;}
+    .gate-submit{width:100%;background:linear-gradient(135deg,#7c3aed,#60a5fa);color:#fff;border:none;border-radius:10px;padding:.65rem;font-size:.9rem;font-weight:600;cursor:pointer;margin-top:.5rem;transition:all .2s;}
+    .gate-submit:hover{transform:translateY(-1px);box-shadow:0 4px 15px rgba(124,58,237,.3);}
+    .gate-submit:disabled{opacity:.4;cursor:default;transform:none;box-shadow:none;}
+    .gate-flag{background:#2d1515;border:1px solid #7f1d1d;border-radius:10px;padding:.75rem;margin-top:1rem;font-size:.8rem;color:#fca5a5;display:none;text-align:center;}
 </style>
 </head>
 <body>
@@ -42,41 +82,73 @@
 {% if expired %}
 <div class="end-state">
     <i class="bi bi-clock-history" style="color:#fbbf24;"></i>
-    <h3>Interview Expired</h3>
-    <p>This interview link is no longer active. If you believe this is an error, please contact {{ company }} directly.</p>
+    <h3>Screening Expired</h3>
+    <p>This screening link is no longer active. If you believe this is an error, please contact {{ company }} directly.</p>
 </div>
 
 {% elif completed %}
 <div class="end-state">
     <i class="bi bi-check-circle" style="color:#34d399;"></i>
-    <h3>Interview Complete</h3>
+    <h3>Screening Complete</h3>
     <p>Thanks for your time! {{ company }} will review your responses and be in touch.</p>
 </div>
 
 {% else %}
-<!-- Active Interview -->
+<!-- Header (always visible) -->
 <div class="chat-header">
     <div class="indicator"></div>
     <div>
         <div class="brand">{{ company }}</div>
-        <div class="sub">AI-Powered Interview for {{ interview.job_title }}</div>
+        <div class="sub">Quick Screening for {{ interview.job_title }}</div>
     </div>
 </div>
-<div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-<div class="chat-body" id="chatBody">
-    <!-- Existing messages load here -->
-    {% for msg in messages %}
-    <div class="msg msg-{{ 'warren' if msg.direction == 'outbound' else 'candidate' }}">{{ msg.content }}</div>
-    {% endfor %}
+
+<!-- GATE QUESTIONS PHASE -->
+{% if gate_questions and not gate_completed %}
+<div class="gate-screen" id="gateScreen">
+    <div class="gate-card">
+        <h2>Before we start</h2>
+        <p>A few quick qualifying questions. Tap your answer for each one.</p>
+        {% for gq in gate_questions %}
+        <div class="gate-q" data-qid="{{ gq.id }}">
+            <div class="gate-label"><span class="q-num">{{ loop.index }}.</span> {{ gq.question }}</div>
+            <div class="gate-options">
+                {% for opt in gq.options %}
+                <div class="gate-opt" onclick="pickGate(this, '{{ gq.id }}', '{{ opt }}')">{{ opt }}</div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+        <button class="gate-submit" id="gateSubmit" onclick="submitGate()" disabled>Continue to Screening</button>
+        <div class="gate-flag" id="gateFlag">
+            <i class="bi bi-info-circle"></i> Some of your answers may not match this role. You can still continue, but we want to be upfront about the job requirements.
+        </div>
+    </div>
 </div>
-<div class="typing" id="typingIndicator"><span></span><span></span><span></span></div>
-<div class="chat-input" id="chatInput">
-    <textarea id="msgInput" rows="1" placeholder="Type your response..." oninput="autoResize(this)"></textarea>
-    <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled><i class="bi bi-send-fill" style="font-size:.8rem;"></i></button>
+{% endif %}
+
+<!-- INTERVIEW PHASE -->
+<div id="interviewPhase" style="{% if gate_questions and not gate_completed %}display:none;{% endif %}flex:1;display:flex;flex-direction:column;">
+    <div class="progress-wrap">
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        <span class="progress-label" id="progressLabel">Starting...</span>
+        <span class="q-type-badge" id="qTypeBadge" style="display:none;"></span>
+    </div>
+    <div class="chat-body" id="chatBody">
+        {% for msg in messages %}
+        <div class="msg msg-{{ 'warren' if msg.direction == 'outbound' else 'candidate' }}">{{ msg.content }}</div>
+        {% endfor %}
+    </div>
+    <div class="typing" id="typingIndicator"><span></span><span></span><span></span></div>
+    <div class="chat-input" id="chatInput">
+        <textarea id="msgInput" rows="1" placeholder="Type your answer..." oninput="autoResize(this)"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled><i class="bi bi-send-fill" style="font-size:.8rem;"></i></button>
+    </div>
 </div>
 
 <script>
 const TOKEN = '{{ token }}';
+const GATE_URL = '{{ url_for("hiring.interview_gate", token=token) }}';
 const START_URL = '{{ url_for("hiring.interview_start", token=token) }}';
 const RESPOND_URL = '{{ url_for("hiring.interview_respond", token=token) }}';
 const chatBody = document.getElementById('chatBody');
@@ -84,16 +156,71 @@ const msgInput = document.getElementById('msgInput');
 const sendBtn = document.getElementById('sendBtn');
 const typingEl = document.getElementById('typingIndicator');
 const progressFill = document.getElementById('progressFill');
+const progressLabel = document.getElementById('progressLabel');
+const qTypeBadge = document.getElementById('qTypeBadge');
 let questionCount = {{ messages|selectattr('direction', 'equalto', 'outbound')|list|length }};
 let lastQuestionTime = Date.now();
 let isWaiting = false;
+let currentChoices = [];
 
-// Enable send button when there's text
+// -- Gate answers tracking --
+const gateAnswers = {};
+const totalGateQs = {{ gate_questions|length if gate_questions else 0 }};
+
+function pickGate(el, qid, val) {
+    el.parentElement.querySelectorAll('.gate-opt').forEach(o => o.classList.remove('picked'));
+    el.classList.add('picked');
+    gateAnswers[qid] = val;
+    const gateBtn = document.getElementById('gateSubmit');
+    gateBtn.disabled = Object.keys(gateAnswers).length < totalGateQs;
+}
+
+function submitGate() {
+    const btn = document.getElementById('gateSubmit');
+    btn.disabled = true;
+    btn.textContent = 'Checking...';
+
+    fetch(GATE_URL, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({answers: gateAnswers})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.ok) {
+            btn.textContent = 'Continue to Screening';
+            btn.disabled = false;
+            return;
+        }
+        if (!data.gate_passed && data.flags && data.flags.length) {
+            document.getElementById('gateFlag').style.display = 'block';
+            btn.textContent = 'Continue Anyway';
+            btn.disabled = false;
+            btn.onclick = function() { showInterview(); };
+        } else {
+            showInterview();
+        }
+    })
+    .catch(() => {
+        btn.textContent = 'Continue to Screening';
+        btn.disabled = false;
+    });
+}
+
+function showInterview() {
+    const gs = document.getElementById('gateScreen');
+    if (gs) gs.style.display = 'none';
+    const ip = document.getElementById('interviewPhase');
+    ip.style.display = 'flex';
+    {% if not messages %}
+    startInterview();
+    {% endif %}
+}
+
+// -- Input handling --
 msgInput.addEventListener('input', function() {
     sendBtn.disabled = !this.value.trim() || isWaiting;
 });
-
-// Enter to send (shift+enter for newline)
 msgInput.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -105,10 +232,7 @@ function autoResize(el) {
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 120) + 'px';
 }
-
-function scrollToBottom() {
-    chatBody.scrollTop = chatBody.scrollHeight;
-}
+function scrollToBottom() { chatBody.scrollTop = chatBody.scrollHeight; }
 
 function addMessage(role, text) {
     const div = document.createElement('div');
@@ -118,46 +242,79 @@ function addMessage(role, text) {
     scrollToBottom();
 }
 
-function showTyping() {
-    typingEl.style.display = 'block';
-    chatBody.appendChild(typingEl);
+function showChoices(choices) {
+    if (!choices || !choices.length) { currentChoices = []; return; }
+    currentChoices = choices;
+    const group = document.createElement('div');
+    group.className = 'choice-group';
+    const letters = 'ABCDEFGH';
+    choices.forEach((c, i) => {
+        const card = document.createElement('div');
+        card.className = 'choice-card';
+        card.innerHTML = '<span class="choice-letter">' + letters[i] + '</span><span>' + c + '</span>';
+        card.onclick = function() {
+            group.querySelectorAll('.choice-card').forEach(x => x.classList.remove('selected'));
+            card.classList.add('selected');
+            msgInput.value = c;
+            sendBtn.disabled = false;
+            msgInput.focus();
+        };
+        group.appendChild(card);
+    });
+    chatBody.appendChild(group);
     scrollToBottom();
 }
 
-function hideTyping() {
-    typingEl.style.display = 'none';
-}
+function showTyping() { typingEl.style.display = 'block'; chatBody.appendChild(typingEl); scrollToBottom(); }
+function hideTyping() { typingEl.style.display = 'none'; }
 
-function updateProgress() {
+const TYPE_LABELS = {
+    scenario: 'Scenario',
+    pick_one: 'Pick One',
+    rapid_fire: 'Quick Fire',
+    rank_it: 'Rank It',
+    real_talk: 'Real Talk'
+};
+const TYPE_ICONS = {
+    scenario: 'bi-signpost-2',
+    pick_one: 'bi-ui-radios',
+    rapid_fire: 'bi-lightning-charge',
+    rank_it: 'bi-sort-numeric-down',
+    real_talk: 'bi-chat-quote'
+};
+
+function updateProgress(qType) {
     const pct = Math.min((questionCount / 12) * 100, 100);
     progressFill.style.width = pct + '%';
+    progressLabel.textContent = 'Question ' + questionCount + ' of ~10';
+    if (qType && TYPE_LABELS[qType]) {
+        qTypeBadge.style.display = 'inline-flex';
+        qTypeBadge.innerHTML = '<i class="bi ' + (TYPE_ICONS[qType] || '') + '" style="margin-right:3px;"></i>' + TYPE_LABELS[qType];
+    }
 }
 
 function setWaiting(on) {
     isWaiting = on;
     sendBtn.disabled = on || !msgInput.value.trim();
     msgInput.disabled = on;
-    if (!on) {
-        msgInput.focus();
-        lastQuestionTime = Date.now();
-    }
+    if (!on) { msgInput.focus(); lastQuestionTime = Date.now(); }
 }
 
 function sendMessage() {
     const text = msgInput.value.trim();
     if (!text || isWaiting) return;
 
-    const responseTimeS = Math.round((Date.now() - lastQuestionTime) / 1000);
     addMessage('candidate', text);
     msgInput.value = '';
     msgInput.style.height = 'auto';
+    currentChoices = [];
     setWaiting(true);
     showTyping();
 
     fetch(RESPOND_URL, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({message: text, response_time_s: responseTimeS})
+        body: JSON.stringify({message: text})
     })
     .then(r => r.json())
     .then(data => {
@@ -170,12 +327,17 @@ function sendMessage() {
         if (data.message) {
             addMessage('warren', data.message);
             questionCount++;
-            updateProgress();
+            updateProgress(data.question_type);
+            if (data.choices && data.choices.length) {
+                showChoices(data.choices);
+            }
         }
         if (data.completed) {
-            addMessage('system', 'Interview complete. Thank you for your time!');
+            addMessage('system', 'Screening complete. Thank you for your time!');
             document.getElementById('chatInput').style.display = 'none';
             progressFill.style.width = '100%';
+            progressLabel.textContent = 'Complete!';
+            qTypeBadge.style.display = 'none';
         } else {
             setWaiting(false);
         }
@@ -187,9 +349,7 @@ function sendMessage() {
     });
 }
 
-// On load: if no messages yet, start the interview
-{% if not messages %}
-(function() {
+function startInterview() {
     showTyping();
     setWaiting(true);
     fetch(START_URL, {method:'POST',headers:{'Content-Type':'application/json'}})
@@ -199,13 +359,19 @@ function sendMessage() {
         if (data.message) {
             addMessage('warren', data.message);
             questionCount = 1;
-            updateProgress();
+            updateProgress('scenario');
         }
         if (data.error) addMessage('system', data.error);
         setWaiting(false);
     })
     .catch(() => { hideTyping(); addMessage('system', 'Failed to start. Please refresh.'); });
-})();
+}
+
+// -- On load --
+{% if not messages %}
+    {% if not gate_questions or gate_completed %}
+    startInterview();
+    {% endif %}
 {% else %}
 updateProgress();
 scrollToBottom();

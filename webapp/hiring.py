@@ -307,47 +307,101 @@ def generate_job_posting(brand, criteria):
 # WARREN: Interview Brain (the core)
 # ---------------------------------------------------------------------------
 
-INTERVIEW_SYSTEM_PROMPT = """You are WARREN, a behavioral screening AI for hiring.
-You are conducting a text-based interview for the following position.
+GATE_QUESTION_PROMPT = """You are WARREN, generating gate questions for a job screening.
+These are quick, practical, non-negotiable qualifying questions.
+They filter out people who physically cannot do the job BEFORE the real interview starts.
+
+RULES:
+- 4-6 questions max. Each one should actually eliminate someone.
+- Questions come directly from the job's must-haves, dealbreakers, physical requirements, and schedule.
+- Format: simple yes/no or pick-one. No essays. No "tell me about yourself."
+- If the job is outdoors, ask about weather/conditions. If early mornings, ask about schedule. If physical, ask about lifting/standing.
+- Include one "commitment" question that states a real condition (e.g. "This role requires Saturday availability. Are you available?")
+- Each question has a "dealbreaker_answer" - the answer that disqualifies them.
+- Be direct. "Can you lift 50 lbs repeatedly?" not "How do you feel about physical labor?"
+- No em dashes. Keep it short and blunt.
+
+Return ONLY valid JSON:
+{
+    "gate_questions": [
+        {
+            "id": 1,
+            "question": "The question text",
+            "type": "yes_no",
+            "options": ["Yes", "No"],
+            "dealbreaker_answer": "No",
+            "signal": "What this question filters for"
+        },
+        {
+            "id": 2,
+            "question": "Pick your preferred shift:",
+            "type": "pick_one",
+            "options": ["6 AM - 2 PM", "9 AM - 5 PM", "2 PM - 10 PM", "No preference"],
+            "dealbreaker_answer": null,
+            "signal": "Schedule flexibility"
+        }
+    ]
+}"""
+
+
+def generate_gate_questions(job, brand):
+    """Generate practical gate questions from job criteria."""
+    api_key = _get_api_key(brand)
+    if not api_key:
+        return None
+    context = {
+        "job_title": job.get("title", ""),
+        "job_type": job.get("job_type", "full-time"),
+        "location": job.get("location", ""),
+        "remote": job.get("remote", "no"),
+        "description": job.get("description", ""),
+        "screening_criteria": job.get("screening_criteria", "{}"),
+    }
+    model = brand.get("openai_model_chat") or brand.get("openai_model") or "gpt-4o-mini"
+    return _ai_call(api_key, GATE_QUESTION_PROMPT, json.dumps(context), model=model, temperature=0.5)
+
+
+INTERVIEW_SYSTEM_PROMPT = """You are WARREN, an AI screening engine for hiring.
+You run interactive, quiz-style screening interviews. Not boring Q&A. Think fast-paced assessment.
 
 ## YOUR MISSION
-Evaluate this candidate on exactly 5 signals. Each scores 0-20 (total 0-100).
-You are NOT measuring personality. You are measuring:
-1. RELIABILITY - Will they show up, on time, repeatedly, without supervision?
-2. OWNERSHIP - Do they take responsibility when something goes wrong?
-3. WORK ETHIC - Can they perform repetitive work consistently without drop-off?
-4. COMMUNICATION CLARITY - Can they communicate simply and effectively?
-5. RESPONSIVENESS - (Measured by system, not your questions. Factor in the response_time data.)
+Score this candidate on 5 signals (each 0-20, total 0-100):
+1. RELIABILITY - Will they show up, on time, repeatedly, without hand-holding?
+2. OWNERSHIP - When something goes wrong, do they fix it or finger-point?
+3. WORK ETHIC - Can they grind through repetitive, unglamorous work without fading?
+4. COMMUNICATION CLARITY - Can they say what they mean simply and directly?
+5. RESPONSIVENESS - (System-measured via response_time data you receive. Factor it in.)
 
-## YOUR TECHNIQUES (use these, rotate between them)
-- Scenario Projection: Simulate reality instead of asking about traits. "You arrive at a job and..."
-- Constraint Framing: Introduce friction (late, heat, complaints). Stress reveals true decision-making.
-- Binary Pressure: Forced A vs B choices. Eliminates vague answers.
-- Commitment Trap: State real job conditions after they're invested. Filters weak candidates.
-- Behavioral Consistency: Compare early answers to later answers. Inconsistency = risk.
+## QUESTION TYPES (rotate between these, use the type field)
+- **scenario**: "You show up to a job site and the customer says they never booked the appointment. What do you do?" Real situations, not hypotheticals about feelings.
+- **pick_one**: Give them 2-4 concrete options. "Which one is closer to how you'd handle it? A) Call your boss immediately B) Try to resolve it yourself first C) Leave and go to the next job" Force a choice.
+- **rapid_fire**: Quick 1-sentence questions that need quick 1-sentence answers. Stack 2-3 in a row. "Quick round: What time do you naturally wake up? What's the longest you've stayed at one job? What makes you quit a job?"
+- **rank_it**: "Rank these from most important to least: Showing up on time, getting along with coworkers, quality of work, speed." Reveals real priorities.
+- **real_talk**: Blunt, direct questions. "What's the worst job you've ever had and why did you leave?" "Be honest: are you looking for something temporary or long-term?"
 
-## RED FLAG DETECTION (heavily penalize these)
+## RED FLAG DETECTION (penalize hard)
 - Blame-first language ("it wasn't my fault", "the customer was wrong")
-- Avoidance of responsibility
-- Overly polished but empty answers (sounds good, says nothing)
-- Ignoring parts of questions
+- Dodging responsibility or parts of questions
+- Polished but empty answers (sounds good, says nothing concrete)
 - Mentions discomfort before solutions
-- Defensive tone
+- Defensive or combative tone
+- Inconsistency between early and later answers
 
-## HIGH-SIGNAL INDICATORS (reward these)
-- Immediate acknowledgment of responsibility
-- Mentions communication proactively ("I'd let them know")
-- Clear, simple, direct answers
-- Accepts conditions without complaint, focuses on completing the job
-- Short, structured responses
+## HIGH-SIGNAL INDICATORS (reward)
+- Takes responsibility immediately, even hypothetically
+- Mentions proactive communication ("I'd call them", "I'd let them know")
+- Clear, simple, direct answers (not rambling)
+- Accepts tough conditions and focuses on getting the job done
+- Short, structured responses that actually answer the question
+- Specificity (times, examples, real situations from their past)
 
 ## WHAT YOU RECEIVE
-- Job description and requirements
-- Owner's screening criteria (must-haves, dealbreakers, culture notes)
-- The full conversation so far (all messages + response times per message)
+- Job description, requirements, screening criteria
+- Full conversation so far (all messages + response times)
 - Current question number
+- Gate question answers (if available)
 
-## WHAT YOU MUST RETURN (strict JSON)
+## WHAT YOU RETURN (strict JSON)
 {
     "signal_scores": {
         "reliability": 0-20,
@@ -356,27 +410,45 @@ You are NOT measuring personality. You are measuring:
         "communication_clarity": 0-20,
         "responsiveness": 0-20
     },
-    "red_flags": ["list of red flags spotted in this answer, empty if none"],
-    "next_question": "Your next question text (adapt based on what you've learned)",
-    "question_technique": "scenario_projection|constraint_framing|binary_pressure|commitment_trap|consistency_check",
+    "red_flags": ["specific red flags from THIS answer, empty array if clean"],
+    "next_question": "Your next question text",
+    "question_type": "scenario|pick_one|rapid_fire|rank_it|real_talk",
+    "choices": ["Option A", "Option B", "Option C"],
     "question_targets": ["which signals this question probes"],
     "is_final": false,
     "running_score": 0-100,
-    "evaluation_notes": "Brief internal note about what you've observed so far"
+    "evaluation_notes": "Brief note: what you learned from this answer and what gap remains"
 }
 
+IMPORTANT: When question_type is "pick_one" or "rank_it", you MUST include a "choices" array.
+For other types, set "choices" to an empty array [].
+
 ## FLOW RULES
-- Ask 8-12 questions total. You decide when you have enough signal.
-- Start with an easy warm-up (scenario projection), escalate pressure gradually.
-- If you spot a red flag, probe it with a follow-up before moving on.
-- Adapt your questions to what you've learned. Don't repeat signal areas you've already scored confidently.
+- 8-12 questions. You decide when you have enough signal. Don't drag it out.
+- Start with a friendly scenario question (ease in). Escalate pressure from there.
+- After 3-4 questions, throw in a rapid_fire round - changes the pace, catches people off guard.
+- If you spot a red flag, probe it with ONE follow-up. Don't belabor it.
+- Adapt based on their answers. Strong candidate? Push harder. Weak? Confirm the pattern quick and wrap up.
+- Mix question types. Never do the same type twice in a row.
 - For the FINAL question (is_final: true), also include:
-  "final_evaluation": "2-3 sentence summary of this candidate",
+  "final_evaluation": "2-3 sentence honest assessment of this candidate. Be specific about what you saw.",
   "recommendation": "interview|waitlist|reject",
-  "suggested_interview_questions": ["3-5 questions for the in-person interview based on gaps you noticed"]
+  "suggested_interview_questions": ["3-5 specific questions for the in-person, based on gaps or flags"],
+  "signal_reasoning": {
+      "reliability": "1-2 sentence explanation of why this score, citing specific answers",
+      "ownership": "1-2 sentence explanation",
+      "work_ethic": "1-2 sentence explanation",
+      "communication_clarity": "1-2 sentence explanation",
+      "responsiveness": "1-2 sentence explanation"
+  },
+  "key_moments": [
+      {"quote": "their exact words or paraphrase", "signal": "which signal it revealed", "impact": "positive|negative", "note": "why this matters"},
+      ...up to 5 key moments
+  ],
+  "detailed_recommendation": "3-5 sentences. What this candidate brings, what concerns you, and what the hiring manager should dig into during in-person."
 - Do NOT reveal scores or that you're scoring them.
-- Keep questions conversational, not robotic. One question at a time. 2-3 sentences max per question.
-- Do NOT use em dashes in your questions."""
+- Keep questions conversational but direct. One question at a time. 2-3 sentences max.
+- No em dashes. No corporate fluff."""
 
 
 def conduct_interview_step(interview, messages, job, candidate, brand):
@@ -407,6 +479,7 @@ def conduct_interview_step(interview, messages, job, candidate, brand):
         "conversation": conversation,
         "current_question_number": interview.get("current_question", 0),
         "avg_response_time_sec": candidate.get("response_time_avg_sec", 0),
+        "gate_answers": interview.get("gate_answers", "{}"),
     }
 
     model = brand.get("openai_model_chat") or brand.get("openai_model") or "gpt-4o-mini"
@@ -434,16 +507,18 @@ def generate_first_question(job, candidate, brand):
         "candidate_name": candidate.get("name", ""),
     }
 
-    system = """You are WARREN, starting a text-based screening interview.
-Generate a friendly, brief welcome message and your first screening question.
-Keep the welcome to 1-2 sentences. Then ask one scenario-based question.
-Do NOT use em dashes.
+    system = """You are WARREN, starting a quiz-style screening interview.
+Generate a brief, friendly welcome (1-2 sentences) and your first question.
+Make it feel like a quick, interactive assessment, not a boring interview.
+Start with a scenario question to ease them in.
+No em dashes.
 
 Return JSON:
 {
-    "welcome_message": "Hi [name]! Thanks for applying for [role]. I have a few quick questions to get to know you better.",
+    "welcome_message": "Hey [name]! Thanks for applying for [role]. Let's run through a quick screening - a mix of scenarios, quick-fire questions, and a few choices. Just be honest, there are no trick questions.",
     "first_question": "Your first scenario question here",
-    "question_technique": "scenario_projection",
+    "question_type": "scenario",
+    "choices": [],
     "question_targets": ["reliability", "ownership"]
 }"""
 
@@ -651,7 +726,30 @@ def generate_posting(job_id):
     if updates:
         db.update_hiring_job(job_id, **updates)
 
+    # Auto-generate gate questions alongside the posting
+    gate_result = generate_gate_questions(job, brand)
+    if gate_result and gate_result.get("gate_questions"):
+        db.update_hiring_job(job_id, gate_questions=json.dumps(gate_result["gate_questions"]))
+
     return jsonify({"ok": True, "result": result})
+
+
+@hiring_bp.route("/jobs/<int:job_id>/generate-gates", methods=["POST"])
+def generate_gates(job_id):
+    """WARREN generates gate questions from job criteria."""
+    brand, user_id = _require_client_login()
+    db = _get_db()
+    job = db.get_hiring_job(job_id)
+    if not job or job["brand_id"] != brand["id"]:
+        return jsonify({"ok": False, "error": "Job not found"}), 404
+
+    result = generate_gate_questions(job, brand)
+    if not result or not result.get("gate_questions"):
+        return jsonify({"ok": False, "error": "Failed to generate gate questions."}), 500
+
+    gate_qs = result["gate_questions"]
+    db.update_hiring_job(job_id, gate_questions=json.dumps(gate_qs))
+    return jsonify({"ok": True, "gate_questions": gate_qs})
 
 
 # ---------------------------------------------------------------------------
@@ -1018,9 +1116,86 @@ def interview_page(token):
 
     messages = db.get_hiring_messages(interview["id"])
 
+    # Load gate questions from job
+    gate_questions = []
+    if interview.get("job_id"):
+        job = db.get_hiring_job(interview["job_id"])
+        if job:
+            try:
+                gate_questions = json.loads(job.get("gate_questions") or "[]")
+            except (json.JSONDecodeError, TypeError):
+                gate_questions = []
+
+    # Has the candidate already completed the gate?
+    gate_completed = bool(interview.get("gate_answers") and interview["gate_answers"] != "{}")
+
     return render_template("client/client_hiring_interview.html",
                            messages=messages,
-                           expired=False, completed=False, **common)
+                           expired=False, completed=False,
+                           gate_questions=gate_questions,
+                           gate_completed=gate_completed,
+                           **common)
+
+
+@hiring_bp.route("/interview/<token>/gate", methods=["POST"])
+def interview_gate(token):
+    """Submit gate question answers before the real interview starts."""
+    db = _get_db()
+    interview = db.get_hiring_interview_by_token(token)
+    if not interview or interview["status"] != "pending":
+        return jsonify({"ok": False, "error": "Interview not available."}), 400
+
+    data = request.get_json(silent=True) or {}
+    answers = data.get("answers", {})
+
+    if not answers:
+        return jsonify({"ok": False, "error": "No answers provided."}), 400
+
+    # Load gate questions from job to check for dealbreakers
+    job = db.get_hiring_job(interview["job_id"]) if interview.get("job_id") else None
+    gate_questions = []
+    if job:
+        try:
+            gate_questions = json.loads(job.get("gate_questions") or "[]")
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Check for dealbreaker answers
+    dealbreaker_hit = False
+    flags = []
+    for gq in gate_questions:
+        qid = str(gq.get("id", ""))
+        candidate_answer = answers.get(qid, "")
+        db_answer = gq.get("dealbreaker_answer")
+        if db_answer and candidate_answer == db_answer:
+            dealbreaker_hit = True
+            flags.append(gq.get("signal", gq.get("question", "")))
+
+    # Save gate answers on the interview
+    gate_passed = 0 if dealbreaker_hit else 1
+    db.update_hiring_interview(
+        interview["id"],
+        gate_answers=json.dumps(answers),
+        gate_passed=gate_passed,
+    )
+
+    # If dealbreaker hit, flag on candidate but still allow interview to proceed
+    # (the hiring manager sees the flag; we don't auto-reject)
+    if dealbreaker_hit:
+        candidate = db.get_hiring_candidate(interview["candidate_id"])
+        existing_notes = (candidate or {}).get("notes", "") or ""
+        flag_note = f"[GATE FLAG] Dealbreaker answers on: {', '.join(flags)}"
+        if flag_note not in existing_notes:
+            db.update_hiring_candidate(
+                interview["candidate_id"],
+                notes=f"{existing_notes}\n{flag_note}".strip(),
+            )
+
+    return jsonify({
+        "ok": True,
+        "gate_passed": gate_passed == 1,
+        "flags": flags,
+    })
 
 
 @hiring_bp.route("/interview/<token>/start", methods=["POST"])
@@ -1162,6 +1337,9 @@ def interview_respond(token):
         recommendation = result.get("recommendation", "waitlist")
         total_score = result.get("running_score", 0)
         score_breakdown = json.dumps(result.get("signal_scores", {}))
+        signal_reasoning = json.dumps(result.get("signal_reasoning", {}))
+        key_moments = json.dumps(result.get("key_moments", []))
+        detailed_rec = result.get("detailed_recommendation", "")
 
         db.update_hiring_interview(
             interview["id"],
@@ -1173,13 +1351,20 @@ def interview_respond(token):
             ai_evaluation=final_eval,
         )
 
-        # Update candidate with final scores
+        # Build rich summary: detailed_recommendation + final_evaluation
+        full_summary = final_eval
+        if detailed_rec:
+            full_summary = f"{detailed_rec}\n\n{final_eval}" if final_eval else detailed_rec
+
+        # Update candidate with final scores + detailed reasoning
         db.update_hiring_candidate(
             interview["candidate_id"],
             ai_score=total_score,
             score_breakdown=score_breakdown,
-            ai_summary=final_eval,
+            ai_summary=full_summary,
             ai_recommendation=recommendation,
+            signal_reasoning=signal_reasoning,
+            key_moments=key_moments,
             status="interviewed",
             screening_completed_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
         )
@@ -1225,6 +1410,8 @@ def interview_respond(token):
         "message": next_q,
         "completed": False,
         "question_number": current_q,
+        "question_type": result.get("question_type", "scenario"),
+        "choices": result.get("choices", []),
     })
 
 

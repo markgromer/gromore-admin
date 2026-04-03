@@ -994,6 +994,38 @@ class WebDB:
                 self._safe_add_column(conn, "client_users", col_name, col_def)
         conn.commit()
 
+        # ── hiring_jobs migrations ──
+        hj_columns = {r[1] for r in conn.execute("PRAGMA table_info(hiring_jobs)").fetchall()}
+        new_hj_cols = [
+            ("gate_questions", "TEXT DEFAULT '[]'"),
+        ]
+        for col_name, col_def in new_hj_cols:
+            if col_name not in hj_columns:
+                self._safe_add_column(conn, "hiring_jobs", col_name, col_def)
+        conn.commit()
+
+        # ── hiring_interviews migrations ──
+        hi_columns = {r[1] for r in conn.execute("PRAGMA table_info(hiring_interviews)").fetchall()}
+        new_hi_cols = [
+            ("gate_answers", "TEXT DEFAULT '{}'"),
+            ("gate_passed", "INTEGER DEFAULT 1"),
+        ]
+        for col_name, col_def in new_hi_cols:
+            if col_name not in hi_columns:
+                self._safe_add_column(conn, "hiring_interviews", col_name, col_def)
+        conn.commit()
+
+        # ── hiring_candidates migrations ──
+        hc_columns = {r[1] for r in conn.execute("PRAGMA table_info(hiring_candidates)").fetchall()}
+        new_hc_cols = [
+            ("signal_reasoning", "TEXT DEFAULT '{}'"),
+            ("key_moments", "TEXT DEFAULT '[]'"),
+        ]
+        for col_name, col_def in new_hc_cols:
+            if col_name not in hc_columns:
+                self._safe_add_column(conn, "hiring_candidates", col_name, col_def)
+        conn.commit()
+
         # ── Legacy migration: brands.competitors (text) -> competitors table ──
         # Older deployments stored competitor names in a free-form text field.
         # The client portal uses the structured competitors table.
