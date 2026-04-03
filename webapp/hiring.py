@@ -38,7 +38,7 @@ hiring_bp = Blueprint(
 # ---------------------------------------------------------------------------
 
 def _get_db():
-    return current_app.config["DB"]
+    return current_app.db
 
 
 def _require_client_login():
@@ -374,18 +374,19 @@ def hiring_dashboard():
     for job in jobs:
         candidates = db.get_hiring_candidates(brand["id"], job_id=job["id"])
         job["candidate_count"] = len(candidates)
-        job["top_score"] = max((c["ai_score"] for c in candidates), default=0)
-        avg = sum(c["ai_score"] for c in candidates) / len(candidates) if candidates else 0
-        job["avg_score"] = round(avg)
+        scores = [c["ai_score"] or 0 for c in candidates]
+        job["top_score"] = max(scores, default=0)
+        job["avg_score"] = round(sum(scores) / len(scores)) if scores else 0
 
     # Overview stats
     all_candidates = db.get_hiring_candidates(brand["id"])
+    all_scores = [c["ai_score"] or 0 for c in all_candidates]
     stats = {
         "total_jobs": len(jobs),
         "active_jobs": sum(1 for j in jobs if j["status"] == "active"),
         "total_candidates": len(all_candidates),
-        "avg_score": round(sum(c["ai_score"] for c in all_candidates) / len(all_candidates)) if all_candidates else 0,
-        "top_candidates": [c for c in all_candidates if c["ai_score"] >= 80],
+        "avg_score": round(sum(all_scores) / len(all_scores)) if all_scores else 0,
+        "top_candidates": [c for c in all_candidates if (c["ai_score"] or 0) >= 80],
     }
 
     return render_template("client/client_hiring.html", brand=brand, jobs=jobs, stats=stats)
