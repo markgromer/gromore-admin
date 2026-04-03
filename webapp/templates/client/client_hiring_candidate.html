@@ -1,0 +1,178 @@
+{% extends "client/client_base.html" %}
+{% block title %}{{ candidate.name }} - Candidate{% endblock %}
+{% block content %}
+<style>
+    .cand-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem; }
+    .cand-name { font-size:1.3rem; font-weight:700; margin-bottom:.25rem; }
+    .cand-meta { font-size:.8rem; color:var(--text-muted, #8888aa); }
+    .cand-actions { display:flex; gap:.5rem; flex-wrap:wrap; }
+    .cand-actions button, .cand-actions a { font-size:.8rem; padding:.35rem .85rem; border-radius:6px; cursor:pointer; border:none; text-decoration:none; display:inline-flex; align-items:center; gap:.3rem; }
+    .btn-interview { background:#7c3aed; color:#fff; }
+    .btn-schedule { background:#2563eb; color:#fff; }
+    .btn-offer { background:#059669; color:#fff; }
+    .btn-reject { background:#dc2626; color:#fff; }
+    .btn-archive { background:#475569; color:#fff; }
+    .cand-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.5rem; }
+    @media(max-width:768px) { .cand-grid { grid-template-columns:1fr; } }
+    .card-box { background:var(--card-bg, #1e1e2e); border:1px solid var(--border-color, #2d2d3d); border-radius:10px; padding:1rem 1.25rem; }
+    .card-box h5 { font-size:.85rem; text-transform:uppercase; letter-spacing:.5px; color:var(--text-muted, #8888aa); margin:0 0 .75rem 0; }
+    .signal-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:.5rem; font-size:.8rem; }
+    .signal-bar-track { flex:1; height:6px; background:var(--input-bg, #12121e); border-radius:3px; margin:0 .75rem; position:relative; }
+    .signal-bar-fill { height:100%; border-radius:3px; position:absolute; left:0; top:0; }
+    .fill-high { background:#34d399; }
+    .fill-mid { background:#fbbf24; }
+    .fill-low { background:#f87171; }
+    .red-flag { background:#7f1d1d; color:#fca5a5; padding:.35rem .6rem; border-radius:6px; font-size:.75rem; margin-bottom:.35rem; display:flex; align-items:center; gap:.3rem; }
+    .red-flag i { font-size:.7rem; }
+    .transcript-msg { padding:.6rem .75rem; border-bottom:1px solid var(--border-color, #2d2d3d); font-size:.82rem; line-height:1.5; }
+    .transcript-msg:last-child { border-bottom:none; }
+    .transcript-msg .role { font-weight:600; font-size:.7rem; text-transform:uppercase; letter-spacing:.5px; margin-bottom:.2rem; }
+    .role-warren { color:#60a5fa; }
+    .role-candidate { color:#a78bfa; }
+    .msg-meta { font-size:.7rem; color:var(--text-muted, #8888aa); margin-top:.3rem; }
+    .score-big { font-size:2.2rem; font-weight:800; text-align:center; }
+    .score-big.high { color:#34d399; }
+    .score-big.mid { color:#fbbf24; }
+    .score-big.low { color:#f87171; }
+    .notes-area { width:100%; min-height:80px; background:var(--input-bg, #12121e); border:1px solid var(--border-color, #2d2d3d); border-radius:6px; color:var(--text, #e2e2f0); padding:.5rem .75rem; font-size:.82rem; resize:vertical; }
+</style>
+
+<a href="{{ url_for('hiring.job_detail', job_id=candidate.job_id) }}" style="font-size:.8rem;color:var(--text-muted);text-decoration:none;display:inline-flex;align-items:center;gap:.3rem;margin-bottom:1rem;">
+    <i class="bi bi-arrow-left"></i> Back to {{ job.title if job else 'Job' }}
+</a>
+
+<div class="cand-header">
+    <div>
+        <div class="cand-name">{{ candidate.name }}</div>
+        <div class="cand-meta">
+            {{ candidate.email }}{% if candidate.phone %} · {{ candidate.phone }}{% endif %}
+            · Applied {{ candidate.created_at[:10] }}
+            · <span class="badge-status badge-{{ candidate.status }}">{{ candidate.status }}</span>
+        </div>
+    </div>
+    <div class="cand-actions">
+        {% if candidate.status == 'applied' or candidate.status == 'screening' %}
+        <form method="POST" action="{{ url_for('hiring.start_interview', candidate_id=candidate.id) }}">
+            <button type="submit" class="btn-interview"><i class="bi bi-chat-dots"></i> Start AI Interview</button>
+        </form>
+        {% endif %}
+        {% if candidate.status == 'interviewed' %}
+        <form method="POST" action="{{ url_for('hiring.schedule_interview_action', candidate_id=candidate.id) }}">
+            <button type="submit" class="btn-schedule"><i class="bi bi-calendar-check"></i> Schedule Interview</button>
+        </form>
+        <form method="POST" action="{{ url_for('hiring.send_offer', candidate_id=candidate.id) }}">
+            <button type="submit" class="btn-offer"><i class="bi bi-check-circle"></i> Send Offer</button>
+        </form>
+        {% endif %}
+        {% if candidate.status not in ('hired', 'rejected') %}
+        <form method="POST" action="{{ url_for('hiring.reject_candidate', candidate_id=candidate.id) }}" onsubmit="return confirm('Reject this candidate?');">
+            <button type="submit" class="btn-reject"><i class="bi bi-x-circle"></i> Reject</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="cand-grid">
+    <!-- Overall Score -->
+    <div class="card-box" style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
+        <h5>AI Evaluation Score</h5>
+        {% set score = candidate.ai_score|default(0)|int %}
+        <div class="score-big {% if score >= 80 %}high{% elif score >= 50 %}mid{% else %}low{% endif %}">
+            {{ score }}<span style="font-size:.9rem;font-weight:400;">/100</span>
+        </div>
+        {% if interview and interview.status == 'completed' %}
+        <div style="font-size:.75rem;color:var(--text-muted);margin-top:.35rem;">Based on {{ messages|length if messages else 0 }} exchanges</div>
+        {% elif interview and interview.status == 'active' %}
+        <div style="font-size:.75rem;color:#fbbf24;margin-top:.35rem;">Interview in progress</div>
+        {% else %}
+        <div style="font-size:.75rem;color:var(--text-muted);margin-top:.35rem;">No interview completed yet</div>
+        {% endif %}
+    </div>
+
+    <!-- Signal Breakdown -->
+    <div class="card-box">
+        <h5>Signal Breakdown</h5>
+        {% set signals = candidate.ai_evaluation|default({})|tojson|from_json if candidate.ai_evaluation else {} %}
+        {% set signal_scores = signals.get('signal_scores', {}) if signals is mapping else {} %}
+        {% for signal_name, max_val in [('reliability', 20), ('ownership', 20), ('work_ethic', 20), ('communication_clarity', 20), ('responsiveness', 20)] %}
+        {% set val = signal_scores.get(signal_name, 0) if signal_scores else 0 %}
+        {% set pct = (val / max_val * 100)|int if max_val > 0 else 0 %}
+        <div class="signal-row">
+            <span style="width:110px;">{{ signal_name|replace('_', ' ')|title }}</span>
+            <div class="signal-bar-track">
+                <div class="signal-bar-fill {% if pct >= 70 %}fill-high{% elif pct >= 40 %}fill-mid{% else %}fill-low{% endif %}" style="width:{{ pct }}%;"></div>
+            </div>
+            <span style="width:40px;text-align:right;font-weight:600;">{{ val }}/{{ max_val }}</span>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Red Flags -->
+    <div class="card-box">
+        <h5>Red Flags</h5>
+        {% set red_flags = signals.get('red_flags', []) if signals is mapping else [] %}
+        {% if red_flags %}
+            {% for flag in red_flags %}
+            <div class="red-flag"><i class="bi bi-exclamation-triangle-fill"></i> {{ flag }}</div>
+            {% endfor %}
+        {% else %}
+            <div style="color:var(--text-muted);font-size:.8rem;text-align:center;padding:1rem 0;">
+                {% if candidate.ai_score > 0 %}
+                <i class="bi bi-shield-check" style="color:#34d399;font-size:1.2rem;display:block;margin-bottom:.3rem;"></i>
+                No red flags detected
+                {% else %}
+                No interview data yet
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Application Info -->
+    <div class="card-box">
+        <h5>Application Details</h5>
+        {% if candidate.resume_text %}
+        <div style="font-size:.8rem;margin-bottom:.5rem;"><strong>Resume / Qualifications:</strong></div>
+        <div style="font-size:.8rem;line-height:1.5;white-space:pre-wrap;max-height:200px;overflow-y:auto;">{{ candidate.resume_text }}</div>
+        {% endif %}
+        {% if candidate.source %}
+        <div style="font-size:.8rem;margin-top:.5rem;"><strong>Source:</strong> {{ candidate.source }}</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Owner Notes -->
+<div class="card-box" style="margin-bottom:1.5rem;">
+    <h5>Owner Notes</h5>
+    <form method="POST" action="{{ url_for('hiring.update_candidate_notes', candidate_id=candidate.id) }}">
+        <textarea class="notes-area" name="notes" placeholder="Add your notes about this candidate...">{{ candidate.notes or '' }}</textarea>
+        <button type="submit" class="btn btn-primary btn-sm" style="margin-top:.5rem;">Save Notes</button>
+    </form>
+</div>
+
+<!-- Interview Transcript -->
+{% if messages %}
+<div class="card-box">
+    <h5>Interview Transcript</h5>
+    <div style="max-height:500px;overflow-y:auto;">
+        {% for msg in messages %}
+        <div class="transcript-msg">
+            <div class="role {% if msg.role == 'warren' %}role-warren{% else %}role-candidate{% endif %}">
+                {% if msg.role == 'warren' %}WARREN{% else %}{{ candidate.name }}{% endif %}
+            </div>
+            <div>{{ msg.content }}</div>
+            <div class="msg-meta">
+                {{ msg.created_at[:19] }}
+                {% if msg.role == 'candidate' and msg.response_time_s %}
+                · Response time: {{ msg.response_time_s }}s
+                {% endif %}
+                {% if msg.signal_snapshot %}
+                · Signals: {{ msg.signal_snapshot }}
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

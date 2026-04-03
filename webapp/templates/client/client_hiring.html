@@ -1,0 +1,328 @@
+{% extends "client/client_base.html" %}
+{% block title %}Hiring Hub{% endblock %}
+{% block content %}
+<style>
+    .hiring-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; }
+    .hiring-stats { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem; }
+    .stat-card { background:var(--card-bg, #1e1e2e); border:1px solid var(--border-color, #2d2d3d); border-radius:10px; padding:1rem 1.25rem; min-width:140px; }
+    .stat-card .stat-value { font-size:1.5rem; font-weight:700; color:var(--accent, #60a5fa); }
+    .stat-card .stat-label { font-size:.75rem; color:var(--text-muted, #8888aa); text-transform:uppercase; letter-spacing:.5px; }
+    .job-card { background:var(--card-bg, #1e1e2e); border:1px solid var(--border-color, #2d2d3d); border-radius:10px; padding:1.25rem; margin-bottom:1rem; }
+    .job-card:hover { border-color:var(--accent, #60a5fa); }
+    .job-title { font-size:1.1rem; font-weight:600; }
+    .job-meta { font-size:.8rem; color:var(--text-muted, #8888aa); margin-top:.35rem; }
+    .job-stats { display:flex; gap:1.5rem; margin-top:.75rem; font-size:.85rem; }
+    .badge-status { display:inline-block; padding:2px 10px; border-radius:20px; font-size:.7rem; font-weight:600; text-transform:uppercase; }
+    .badge-draft { background:#334155; color:#94a3b8; }
+    .badge-active { background:#064e3b; color:#6ee7b7; }
+    .badge-paused { background:#78350f; color:#fbbf24; }
+    .badge-filled { background:#1e1b4b; color:#a5b4fc; }
+    .badge-closed { background:#1f2937; color:#6b7280; }
+    .score-badge { display:inline-block; padding:2px 8px; border-radius:12px; font-size:.75rem; font-weight:600; }
+    .score-high { background:#064e3b; color:#6ee7b7; }
+    .score-mid { background:#78350f; color:#fbbf24; }
+    .score-low { background:#7f1d1d; color:#fca5a5; }
+    .candidate-row { display:flex; justify-content:space-between; align-items:center; padding:.6rem .75rem; border-bottom:1px solid var(--border-color, #2d2d3d); font-size:.85rem; }
+    .candidate-row:last-child { border-bottom:none; }
+    .candidate-row:hover { background:rgba(96,165,250,.05); }
+    .tab-btns { display:flex; gap:.5rem; margin-bottom:1rem; }
+    .tab-btns button { background:transparent; border:1px solid var(--border-color, #2d2d3d); color:var(--text-muted, #8888aa); padding:.4rem 1rem; border-radius:20px; cursor:pointer; font-size:.8rem; }
+    .tab-btns button.active { background:var(--accent, #60a5fa); color:#fff; border-color:var(--accent, #60a5fa); }
+    .create-form label { font-size:.8rem; color:var(--text-muted, #8888aa); margin-bottom:.25rem; display:block; }
+    .create-form input, .create-form textarea, .create-form select { width:100%; padding:.5rem .75rem; background:var(--input-bg, #12121e); border:1px solid var(--border-color, #2d2d3d); border-radius:6px; color:var(--text, #e2e2f0); font-size:.85rem; }
+    .create-form textarea { min-height:80px; resize:vertical; }
+    .create-form .form-row { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:.75rem; }
+    .create-form .form-row.three { grid-template-columns:1fr 1fr 1fr; }
+    .create-form .full { grid-column:1/-1; }
+    .ai-gen-btn { background:linear-gradient(135deg, #7c3aed, #2563eb); color:#fff; border:none; padding:.5rem 1.25rem; border-radius:6px; cursor:pointer; font-size:.85rem; display:inline-flex; align-items:center; gap:.4rem; }
+    .ai-gen-btn:hover { opacity:.9; }
+    .ai-gen-btn .spinner { display:none; width:14px; height:14px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:spin .6s linear infinite; }
+    .ai-gen-btn.loading .spinner { display:inline-block; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .share-url { background:var(--input-bg, #12121e); border:1px solid var(--border-color, #2d2d3d); border-radius:6px; padding:.5rem .75rem; font-size:.8rem; color:var(--text-muted, #8888aa); display:flex; align-items:center; gap:.5rem; }
+    .share-url code { flex:1; word-break:break-all; color:var(--text, #e2e2f0); }
+    .share-url button { background:var(--accent, #60a5fa); color:#fff; border:none; padding:.25rem .75rem; border-radius:4px; cursor:pointer; font-size:.75rem; white-space:nowrap; }
+</style>
+
+<div class="hiring-header">
+    <h2 style="margin:0;">Hiring Hub</h2>
+    <a href="{{ url_for('hiring.create_job') }}" class="btn btn-primary btn-sm" style="display:inline-flex;align-items:center;gap:.35rem;">
+        <i class="bi bi-plus-lg"></i> Create Job
+    </a>
+</div>
+
+{% if stats %}
+<div class="hiring-stats">
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.active_jobs|default(0) }}</div>
+        <div class="stat-label">Active Jobs</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.total_candidates|default(0) }}</div>
+        <div class="stat-label">Total Applicants</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.avg_score|default(0) }}</div>
+        <div class="stat-label">Avg Score</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.top_candidates|length if stats.top_candidates else 0 }}</div>
+        <div class="stat-label">Top Candidates (80+)</div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ─── Candidates List View ─── -->
+{% if view == 'candidates' %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+    <h4 style="margin:0;font-size:1rem;">All Candidates</h4>
+    <form method="GET" action="{{ url_for('hiring.candidates_list') }}" style="display:flex;gap:.5rem;">
+        <input type="text" name="q" value="{{ request.args.get('q','') }}" placeholder="Search name or email..." style="padding:.35rem .6rem;background:var(--input-bg,#12121e);border:1px solid var(--border-color,#2d2d3d);border-radius:6px;color:var(--text,#e2e2f0);font-size:.8rem;">
+        <button type="submit" class="btn btn-primary btn-sm">Search</button>
+    </form>
+</div>
+{% if candidates %}
+<div style="background:var(--card-bg,#1e1e2e);border:1px solid var(--border-color,#2d2d3d);border-radius:10px;overflow:hidden;">
+    {% for c in candidates %}
+    <a href="{{ url_for('hiring.candidate_detail', candidate_id=c.id) }}" class="candidate-row" style="text-decoration:none;color:inherit;">
+        <div>
+            <strong>{{ c.name }}</strong>
+            <span style="color:var(--text-muted);margin-left:.5rem;font-size:.8rem;">{{ c.email }}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:.75rem;">
+            <span class="badge-status badge-{{ c.status }}">{{ c.status }}</span>
+            {% if c.ai_score > 0 %}
+            <span class="score-badge {% if c.ai_score >= 80 %}score-high{% elif c.ai_score >= 50 %}score-mid{% else %}score-low{% endif %}">{{ c.ai_score }}</span>
+            {% endif %}
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div style="text-align:center;padding:2rem;color:var(--text-muted);">No candidates found.</div>
+{% endif %}
+
+<!-- ─── Job Detail View ─── -->
+{% elif job %}
+<div class="job-card" style="margin-bottom:1.5rem;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+            <div class="job-title">{{ job.title }}</div>
+            <div class="job-meta">
+                {{ job.department }}{% if job.department and job.location %} · {% endif %}{{ job.location }}
+                {% if job.remote != 'no' %} · {{ job.remote|title }}{% endif %}
+                · {{ job.job_type|title }}
+            </div>
+        </div>
+        <span class="badge-status badge-{{ job.status }}">{{ job.status }}</span>
+    </div>
+
+    {% if job.description %}
+    <div style="margin-top:1rem;font-size:.85rem;line-height:1.6;white-space:pre-wrap;">{{ job.description }}</div>
+    {% endif %}
+
+    {% if job.status == 'draft' or job.status == 'active' %}
+    <div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap;">
+        <button class="ai-gen-btn" onclick="generatePosting({{ job.id }})" id="genBtn">
+            <span class="spinner"></span>
+            <i class="bi bi-stars"></i> Generate with WARREN
+        </button>
+        <form method="POST" action="{{ url_for('hiring.update_job', job_id=job.id) }}" style="display:inline;">
+            {% if job.status == 'draft' %}
+            <input type="hidden" name="status" value="active">
+            <button type="submit" class="btn btn-success btn-sm">Publish</button>
+            {% elif job.status == 'active' %}
+            <input type="hidden" name="status" value="paused">
+            <button type="submit" class="btn btn-warning btn-sm">Pause</button>
+            {% endif %}
+        </form>
+    </div>
+    {% endif %}
+
+    {% if job.status == 'active' %}
+    <div style="margin-top:1rem;">
+        <div style="font-size:.8rem;color:var(--text-muted);margin-bottom:.35rem;">Share this job:</div>
+        <div class="share-url">
+            <code id="jobUrl">{{ url_for('hiring.public_job_detail', brand_slug=brand.slug, job_id=job.id, _external=True) }}</code>
+            <button onclick="navigator.clipboard.writeText(document.getElementById('jobUrl').textContent);this.textContent='Copied!';">Copy</button>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Candidates for this job -->
+    {% if candidates %}
+    <div style="margin-top:1.5rem;">
+        <h5 style="font-size:.9rem;margin-bottom:.75rem;">Candidates ({{ candidates|length }})</h5>
+        <div style="background:var(--input-bg, #12121e);border-radius:8px;overflow:hidden;">
+            {% for c in candidates %}
+            <a href="{{ url_for('hiring.candidate_detail', candidate_id=c.id) }}" class="candidate-row" style="text-decoration:none;color:inherit;">
+                <div>
+                    <strong>{{ c.name }}</strong>
+                    <span style="color:var(--text-muted);margin-left:.5rem;">{{ c.email }}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:.75rem;">
+                    <span class="badge-status badge-{{ c.status }}">{{ c.status }}</span>
+                    {% if c.ai_score > 0 %}
+                    <span class="score-badge {% if c.ai_score >= 80 %}score-high{% elif c.ai_score >= 50 %}score-mid{% else %}score-low{% endif %}">
+                        {{ c.ai_score }}
+                    </span>
+                    {% endif %}
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ─── Create Job Form (shown via show_create or when no jobs) ─── -->
+{% elif show_create is defined and show_create %}
+<div class="job-card">
+    <h4 style="margin-top:0;margin-bottom:1rem;">Create New Position</h4>
+    <form method="POST" action="{{ url_for('hiring.create_job') }}" class="create-form">
+        <div class="form-row">
+            <div>
+                <label>Job Title *</label>
+                <input type="text" name="title" required placeholder="e.g. Route Technician">
+            </div>
+            <div>
+                <label>Department</label>
+                <input type="text" name="department" placeholder="e.g. Operations">
+            </div>
+        </div>
+        <div class="form-row three">
+            <div>
+                <label>Job Type</label>
+                <select name="job_type">
+                    <option value="full-time">Full-time</option>
+                    <option value="part-time">Part-time</option>
+                    <option value="contract">Contract</option>
+                </select>
+            </div>
+            <div>
+                <label>Location</label>
+                <input type="text" name="location" placeholder="e.g. Dallas, TX">
+            </div>
+            <div>
+                <label>Remote</label>
+                <select name="remote">
+                    <option value="no">On-site</option>
+                    <option value="yes">Remote</option>
+                    <option value="hybrid">Hybrid</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div>
+                <label>Salary Min ($)</label>
+                <input type="number" name="salary_min" placeholder="0" step="1000">
+            </div>
+            <div>
+                <label>Salary Max ($)</label>
+                <input type="number" name="salary_max" placeholder="0" step="1000">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="full">
+                <label>Benefits</label>
+                <textarea name="benefits" rows="2" placeholder="Health insurance, PTO, company vehicle, etc."></textarea>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="full">
+                <label>Scheduling Link (Calendly, etc.)</label>
+                <input type="url" name="scheduling_link" placeholder="https://calendly.com/yourcompany/interview">
+            </div>
+        </div>
+
+        <h5 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:.9rem;">Screening Criteria (for WARREN)</h5>
+        <div class="form-row">
+            <div class="full">
+                <label>Must-Haves (what the right candidate absolutely needs)</label>
+                <textarea name="must_haves" rows="3" placeholder="Reliable transportation, available weekdays 7am-4pm, comfortable working outdoors in heat..."></textarea>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="full">
+                <label>Dealbreakers (instant disqualifiers)</label>
+                <textarea name="dealbreakers" rows="2" placeholder="No-shows, can't pass background check, not available on Mondays..."></textarea>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="full">
+                <label>Culture / Personality Notes</label>
+                <textarea name="culture_notes" rows="2" placeholder="Works independently, doesn't need hand-holding, respects customers' property..."></textarea>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="full">
+                <label>Physical Requirements</label>
+                <textarea name="physical_requirements" rows="2" placeholder="Able to lift 30 lbs, comfortable walking 3-5 miles per day, works outdoors rain or shine..."></textarea>
+            </div>
+        </div>
+
+        <div style="margin-top:1rem;display:flex;gap:.75rem;">
+            <button type="submit" class="btn btn-primary btn-sm">Create Job (Draft)</button>
+            <a href="{{ url_for('hiring.hiring_dashboard') }}" class="btn btn-secondary btn-sm">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<!-- ─── Default: Jobs List ─── -->
+{% else %}
+    {% if jobs %}
+        {% for j in jobs %}
+        <a href="{{ url_for('hiring.job_detail', job_id=j.id) }}" class="job-card" style="display:block;text-decoration:none;color:inherit;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                <div>
+                    <div class="job-title">{{ j.title }}</div>
+                    <div class="job-meta">
+                        {{ j.department }}{% if j.department and j.location %} · {% endif %}{{ j.location }}
+                        {% if j.remote != 'no' %} · {{ j.remote|title }}{% endif %}
+                        · {{ j.job_type|title }}
+                    </div>
+                </div>
+                <span class="badge-status badge-{{ j.status }}">{{ j.status }}</span>
+            </div>
+            <div class="job-stats">
+                <span><strong>{{ j.candidate_count }}</strong> applicants</span>
+                {% if j.avg_score > 0 %}
+                <span>Avg score: <strong>{{ j.avg_score }}</strong></span>
+                {% endif %}
+                {% if j.top_score > 0 %}
+                <span>Top: <span class="score-badge {% if j.top_score >= 80 %}score-high{% elif j.top_score >= 50 %}score-mid{% else %}score-low{% endif %}">{{ j.top_score }}</span></span>
+                {% endif %}
+            </div>
+        </a>
+        {% endfor %}
+    {% else %}
+        <div style="text-align:center;padding:3rem 1rem;color:var(--text-muted, #8888aa);">
+            <i class="bi bi-briefcase" style="font-size:2.5rem;display:block;margin-bottom:.75rem;"></i>
+            <p style="margin-bottom:1rem;">No job postings yet. Create your first position and let WARREN help you screen candidates.</p>
+            <a href="{{ url_for('hiring.create_job') }}" class="btn btn-primary btn-sm">
+                <i class="bi bi-plus-lg"></i> Create Your First Job
+            </a>
+        </div>
+    {% endif %}
+{% endif %}
+
+<script>
+function generatePosting(jobId) {
+    const btn = document.getElementById('genBtn');
+    btn.classList.add('loading');
+    btn.disabled = true;
+    fetch(`{{ url_for('hiring.hiring_dashboard') }}jobs/${jobId}/generate`, {method:'POST',headers:{'Content-Type':'application/json'}})
+    .then(r => r.json())
+    .then(data => {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+        if (data.ok) {
+            location.reload();
+        } else {
+            alert(data.error || 'Generation failed');
+        }
+    })
+    .catch(() => { btn.classList.remove('loading'); btn.disabled = false; alert('Network error'); });
+}
+</script>
+{% endblock %}

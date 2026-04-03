@@ -719,6 +719,142 @@ class WebDB:
             ON brand_tasks(brand_id, status, assigned_to);
         """)
 
+        # ── Hiring tables ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS hiring_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                department TEXT DEFAULT '',
+                job_type TEXT DEFAULT 'full-time',
+                location TEXT DEFAULT '',
+                remote TEXT DEFAULT 'no',
+                description TEXT DEFAULT '',
+                requirements TEXT DEFAULT '[]',
+                nice_to_haves TEXT DEFAULT '[]',
+                salary_min REAL DEFAULT 0,
+                salary_max REAL DEFAULT 0,
+                benefits TEXT DEFAULT '',
+                screening_criteria TEXT DEFAULT '{}',
+                scheduling_link TEXT DEFAULT '',
+                status TEXT DEFAULT 'draft',
+                generated_post TEXT DEFAULT '',
+                created_by INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_hiring_jobs_brand
+            ON hiring_jobs(brand_id, status);
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS hiring_candidates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                job_id INTEGER,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL COLLATE NOCASE,
+                phone TEXT DEFAULT '',
+                source TEXT DEFAULT 'website',
+                resume_text TEXT DEFAULT '',
+                cover_letter TEXT DEFAULT '',
+                status TEXT DEFAULT 'applied',
+                ai_score INTEGER DEFAULT 0,
+                score_breakdown TEXT DEFAULT '{}',
+                ai_summary TEXT DEFAULT '',
+                ai_recommendation TEXT DEFAULT '',
+                interview_questions TEXT DEFAULT '[]',
+                response_time_avg_sec INTEGER DEFAULT 0,
+                applied_at TEXT DEFAULT (datetime('now')),
+                screening_started_at TEXT DEFAULT '',
+                screening_completed_at TEXT DEFAULT '',
+                interview_scheduled_at TEXT DEFAULT '',
+                hired_at TEXT DEFAULT '',
+                notes TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+                FOREIGN KEY (job_id) REFERENCES hiring_jobs(id) ON DELETE SET NULL
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_hiring_candidates_brand
+            ON hiring_candidates(brand_id, status, ai_score DESC);
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_hiring_candidates_email
+            ON hiring_candidates(email);
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS hiring_interviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                candidate_id INTEGER NOT NULL,
+                brand_id INTEGER NOT NULL,
+                job_id INTEGER,
+                token TEXT UNIQUE NOT NULL,
+                status TEXT DEFAULT 'pending',
+                current_question INTEGER DEFAULT 0,
+                started_at TEXT DEFAULT '',
+                completed_at TEXT DEFAULT '',
+                expired_at TEXT DEFAULT '',
+                total_score INTEGER DEFAULT 0,
+                score_breakdown TEXT DEFAULT '{}',
+                ai_evaluation TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (candidate_id) REFERENCES hiring_candidates(id) ON DELETE CASCADE,
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+                FOREIGN KEY (job_id) REFERENCES hiring_jobs(id) ON DELETE SET NULL
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_hiring_interviews_token
+            ON hiring_interviews(token);
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_hiring_interviews_status
+            ON hiring_interviews(candidate_id, status);
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS hiring_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                interview_id INTEGER NOT NULL,
+                candidate_id INTEGER NOT NULL,
+                direction TEXT NOT NULL,
+                channel TEXT DEFAULT 'web_chat',
+                content TEXT NOT NULL,
+                is_question INTEGER DEFAULT 0,
+                question_number INTEGER DEFAULT NULL,
+                signal_scores TEXT DEFAULT '{}',
+                response_time_sec INTEGER DEFAULT NULL,
+                sent_at TEXT DEFAULT (datetime('now')),
+                read_at TEXT DEFAULT '',
+                FOREIGN KEY (interview_id) REFERENCES hiring_interviews(id) ON DELETE CASCADE,
+                FOREIGN KEY (candidate_id) REFERENCES hiring_candidates(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_hiring_messages_interview
+            ON hiring_messages(interview_id, sent_at);
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS hiring_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                template_type TEXT NOT NULL,
+                name TEXT DEFAULT '',
+                subject TEXT DEFAULT '',
+                body TEXT DEFAULT '',
+                is_default INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+        """)
+
         conn.commit()
 
         # ── Seed default feature flags ──
@@ -740,6 +876,7 @@ class WebDB:
             ("your_team",       "Your Team",         "AI agent team dashboard",           "all",   "business", 145),
             ("staff",           "Staff",             "Manage team members and roles",     "all",   "business", 146),
             ("tasks",           "Tasks",             "Task management and assignment",    "all",   "business", 147),
+            ("hiring",          "Hiring Hub",        "AI-powered hiring and screening",   "beta",  "business", 148),
             ("connections",     "Connections",       "Platform connection settings",      "all",   "settings", 150),
             ("feedback",        "Feedback",          "Submit feedback to the team",       "all",   "settings", 160),
             ("help",            "Help",              "Help documentation and support",    "all",   "settings", 170),
@@ -797,6 +934,8 @@ class WebDB:
             ("ai_quality_tier", "TEXT DEFAULT 'balanced'"),
             ("agent_context", "TEXT DEFAULT '{}'"),
             ("hired_agents", "TEXT DEFAULT '{}'"),
+            ("quo_api_key", "TEXT DEFAULT ''"),
+            ("quo_phone_number", "TEXT DEFAULT ''"),
         ]
         for col_name, col_def in new_brand_cols:
             if col_name not in brand_columns:
@@ -3382,5 +3521,290 @@ class WebDB:
     def delete_brand_task(self, task_id, brand_id):
         conn = self._conn()
         conn.execute("DELETE FROM brand_tasks WHERE id = ? AND brand_id = ?", (task_id, brand_id))
+        conn.commit()
+        conn.close()
+
+    # ── Hiring: Jobs ──
+
+    def create_hiring_job(self, brand_id, title, department="", job_type="full-time",
+                          location="", remote="no", description="", requirements="[]",
+                          nice_to_haves="[]", salary_min=0, salary_max=0, benefits="",
+                          screening_criteria="{}", scheduling_link="", status="draft",
+                          generated_post="", created_by=0):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO hiring_jobs
+               (brand_id, title, department, job_type, location, remote, description,
+                requirements, nice_to_haves, salary_min, salary_max, benefits,
+                screening_criteria, scheduling_link, status, generated_post, created_by)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (brand_id, title, department, job_type, location, remote, description,
+             requirements, nice_to_haves, salary_min, salary_max, benefits,
+             screening_criteria, scheduling_link, status, generated_post, created_by),
+        )
+        job_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.commit()
+        conn.close()
+        return job_id
+
+    def get_hiring_job(self, job_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM hiring_jobs WHERE id = ?", (job_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_hiring_jobs(self, brand_id, status=None):
+        conn = self._conn()
+        if status:
+            rows = conn.execute(
+                "SELECT * FROM hiring_jobs WHERE brand_id = ? AND status = ? ORDER BY created_at DESC",
+                (brand_id, status),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM hiring_jobs WHERE brand_id = ? ORDER BY created_at DESC",
+                (brand_id,),
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def update_hiring_job(self, job_id, **fields):
+        if not fields:
+            return
+        fields["updated_at"] = "datetime('now')"
+        parts, vals = [], []
+        for k, v in fields.items():
+            if v == "datetime('now')":
+                parts.append(f"{k} = datetime('now')")
+            else:
+                parts.append(f"{k} = ?")
+                vals.append(v)
+        vals.append(job_id)
+        conn = self._conn()
+        conn.execute(f"UPDATE hiring_jobs SET {', '.join(parts)} WHERE id = ?", vals)
+        conn.commit()
+        conn.close()
+
+    def delete_hiring_job(self, job_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM hiring_jobs WHERE id = ?", (job_id,))
+        conn.commit()
+        conn.close()
+
+    def count_candidates_for_job(self, job_id):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT COUNT(*) as cnt FROM hiring_candidates WHERE job_id = ?", (job_id,)
+        ).fetchone()
+        conn.close()
+        return row["cnt"] if row else 0
+
+    # ── Hiring: Candidates ──
+
+    def create_hiring_candidate(self, brand_id, job_id, name, email, phone="",
+                                source="website", resume_text="", cover_letter=""):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO hiring_candidates
+               (brand_id, job_id, name, email, phone, source, resume_text, cover_letter)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (brand_id, job_id, name, email, phone, source, resume_text, cover_letter),
+        )
+        cid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.commit()
+        conn.close()
+        return cid
+
+    def get_hiring_candidate(self, candidate_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM hiring_candidates WHERE id = ?", (candidate_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_hiring_candidates(self, brand_id, job_id=None, status=None, sort="ai_score"):
+        conn = self._conn()
+        sql = "SELECT * FROM hiring_candidates WHERE brand_id = ?"
+        params = [brand_id]
+        if job_id:
+            sql += " AND job_id = ?"
+            params.append(job_id)
+        if status:
+            sql += " AND status = ?"
+            params.append(status)
+        order = "ai_score DESC" if sort == "ai_score" else "created_at DESC"
+        sql += f" ORDER BY {order}"
+        rows = conn.execute(sql, params).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def update_hiring_candidate(self, candidate_id, **fields):
+        if not fields:
+            return
+        parts, vals = [], []
+        for k, v in fields.items():
+            parts.append(f"{k} = ?")
+            vals.append(v)
+        vals.append(candidate_id)
+        conn = self._conn()
+        conn.execute(f"UPDATE hiring_candidates SET {', '.join(parts)} WHERE id = ?", vals)
+        conn.commit()
+        conn.close()
+
+    def search_hiring_candidates(self, brand_id, query):
+        conn = self._conn()
+        q = f"%{query}%"
+        rows = conn.execute(
+            """SELECT * FROM hiring_candidates
+               WHERE brand_id = ? AND (name LIKE ? OR email LIKE ? OR notes LIKE ?)
+               ORDER BY ai_score DESC""",
+            (brand_id, q, q, q),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_candidate_by_email_and_job(self, email, job_id):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM hiring_candidates WHERE email = ? AND job_id = ?",
+            (email.lower().strip(), job_id),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    # ── Hiring: Interviews ──
+
+    def create_hiring_interview(self, candidate_id, brand_id, job_id):
+        import uuid
+        token = uuid.uuid4().hex
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO hiring_interviews
+               (candidate_id, brand_id, job_id, token)
+               VALUES (?,?,?,?)""",
+            (candidate_id, brand_id, job_id, token),
+        )
+        iid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.commit()
+        conn.close()
+        return iid, token
+
+    def get_hiring_interview_by_token(self, token):
+        conn = self._conn()
+        row = conn.execute(
+            """SELECT hi.*, hc.name as candidate_name, hc.email as candidate_email,
+                      hc.phone as candidate_phone, hc.cover_letter,
+                      hj.title as job_title, hj.description as job_description,
+                      hj.requirements as job_requirements, hj.screening_criteria,
+                      hj.scheduling_link
+               FROM hiring_interviews hi
+               JOIN hiring_candidates hc ON hi.candidate_id = hc.id
+               LEFT JOIN hiring_jobs hj ON hi.job_id = hj.id
+               WHERE hi.token = ?""",
+            (token,),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_hiring_interview(self, interview_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM hiring_interviews WHERE id = ?", (interview_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_hiring_interviews_for_candidate(self, candidate_id):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM hiring_interviews WHERE candidate_id = ? ORDER BY created_at DESC",
+            (candidate_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def update_hiring_interview(self, interview_id, **fields):
+        if not fields:
+            return
+        parts, vals = [], []
+        for k, v in fields.items():
+            parts.append(f"{k} = ?")
+            vals.append(v)
+        vals.append(interview_id)
+        conn = self._conn()
+        conn.execute(f"UPDATE hiring_interviews SET {', '.join(parts)} WHERE id = ?", vals)
+        conn.commit()
+        conn.close()
+
+    def get_expired_hiring_interviews(self, pending_hours=48, active_hours=72):
+        conn = self._conn()
+        rows = conn.execute(
+            """SELECT * FROM hiring_interviews
+               WHERE (status = 'pending' AND created_at < datetime('now', ?))
+                  OR (status = 'in_progress' AND started_at < datetime('now', ?))""",
+            (f"-{pending_hours} hours", f"-{active_hours} hours"),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    # ── Hiring: Messages ──
+
+    def add_hiring_message(self, interview_id, candidate_id, direction, channel,
+                           content, is_question=0, question_number=None,
+                           signal_scores="{}", response_time_sec=None):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO hiring_messages
+               (interview_id, candidate_id, direction, channel, content,
+                is_question, question_number, signal_scores, response_time_sec)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (interview_id, candidate_id, direction, channel, content,
+             is_question, question_number, signal_scores, response_time_sec),
+        )
+        mid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.commit()
+        conn.close()
+        return mid
+
+    def get_hiring_messages(self, interview_id):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM hiring_messages WHERE interview_id = ? ORDER BY sent_at ASC",
+            (interview_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    # ── Hiring: Templates ──
+
+    def get_hiring_templates(self, brand_id, template_type=None):
+        conn = self._conn()
+        if template_type:
+            rows = conn.execute(
+                "SELECT * FROM hiring_templates WHERE brand_id = ? AND template_type = ? ORDER BY is_default DESC",
+                (brand_id, template_type),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM hiring_templates WHERE brand_id = ? ORDER BY template_type, is_default DESC",
+                (brand_id,),
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def upsert_hiring_template(self, brand_id, template_type, name, subject, body, is_default=0):
+        conn = self._conn()
+        existing = conn.execute(
+            "SELECT id FROM hiring_templates WHERE brand_id = ? AND template_type = ? AND name = ?",
+            (brand_id, template_type, name),
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE hiring_templates SET subject=?, body=?, is_default=? WHERE id=?",
+                (subject, body, is_default, existing["id"]),
+            )
+        else:
+            conn.execute(
+                """INSERT INTO hiring_templates (brand_id, template_type, name, subject, body, is_default)
+                   VALUES (?,?,?,?,?,?)""",
+                (brand_id, template_type, name, subject, body, is_default),
+            )
         conn.commit()
         conn.close()

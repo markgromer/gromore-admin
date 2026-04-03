@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Interview - {{ brand.name }}</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f0f1a;color:#e2e2f0;height:100vh;display:flex;flex-direction:column;}
+    .chat-header{background:#1e1e2e;border-bottom:1px solid #2d2d3d;padding:.75rem 1rem;display:flex;align-items:center;gap:.6rem;flex-shrink:0;}
+    .chat-header .brand{font-weight:600;font-size:.95rem;}
+    .chat-header .sub{font-size:.7rem;color:#8888aa;}
+    .chat-header .indicator{width:8px;height:8px;border-radius:50%;background:#34d399;flex-shrink:0;}
+    .chat-body{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.6rem;}
+    .msg{max-width:85%;padding:.6rem .85rem;border-radius:12px;font-size:.87rem;line-height:1.5;word-wrap:break-word;animation:fadeIn .3s ease;}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+    .msg-warren{background:#1e293b;align-self:flex-start;border-bottom-left-radius:4px;}
+    .msg-candidate{background:#3b2e7e;align-self:flex-end;border-bottom-right-radius:4px;}
+    .msg-system{background:transparent;align-self:center;color:#8888aa;font-size:.75rem;text-align:center;max-width:100%;}
+    .typing{align-self:flex-start;background:#1e293b;border-radius:12px;padding:.6rem .85rem;display:none;}
+    .typing span{display:inline-block;width:6px;height:6px;background:#60a5fa;border-radius:50%;margin:0 2px;animation:bounce .6s infinite alternate;}
+    .typing span:nth-child(2){animation-delay:.2s;}
+    .typing span:nth-child(3){animation-delay:.4s;}
+    @keyframes bounce{to{transform:translateY(-6px);opacity:.3;}}
+    .chat-input{background:#1e1e2e;border-top:1px solid #2d2d3d;padding:.6rem .75rem;display:flex;gap:.5rem;align-items:flex-end;flex-shrink:0;}
+    .chat-input textarea{flex:1;background:#12121e;border:1px solid #2d2d3d;border-radius:8px;color:#e2e2f0;padding:.5rem .7rem;font-size:.87rem;resize:none;max-height:120px;min-height:40px;line-height:1.4;font-family:inherit;}
+    .chat-input textarea:focus{outline:none;border-color:#60a5fa;}
+    .send-btn{background:#60a5fa;color:#fff;border:none;width:36px;height:36px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+    .send-btn:disabled{opacity:.4;cursor:default;}
+    .send-btn:hover:not(:disabled){background:#3b82f6;}
+    .end-state{text-align:center;padding:2rem 1rem;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+    .end-state i{font-size:2.5rem;margin-bottom:.75rem;}
+    .end-state h3{margin-bottom:.5rem;}
+    .end-state p{color:#8888aa;font-size:.85rem;max-width:400px;}
+    .progress-bar{height:3px;background:#12121e;width:100%;flex-shrink:0;}
+    .progress-fill{height:100%;background:linear-gradient(90deg,#7c3aed,#60a5fa);transition:width .5s ease;width:0%;}
+</style>
+</head>
+<body>
+
+{% if status == 'expired' %}
+<div class="end-state">
+    <i class="bi bi-clock-history" style="color:#fbbf24;"></i>
+    <h3>Interview Expired</h3>
+    <p>This interview link is no longer active. If you believe this is an error, please contact {{ brand.name }} directly.</p>
+</div>
+
+{% elif status == 'completed' %}
+<div class="end-state">
+    <i class="bi bi-check-circle" style="color:#34d399;"></i>
+    <h3>Interview Complete</h3>
+    <p>Thanks for your time! {{ brand.name }} will review your responses and be in touch.</p>
+</div>
+
+{% else %}
+<!-- Active Interview -->
+<div class="chat-header">
+    <div class="indicator"></div>
+    <div>
+        <div class="brand">{{ brand.name }}</div>
+        <div class="sub">AI-Powered Interview for {{ job.title }}</div>
+    </div>
+</div>
+<div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+<div class="chat-body" id="chatBody">
+    <!-- Existing messages load here -->
+    {% for msg in messages %}
+    <div class="msg msg-{{ msg.role }}">{{ msg.content }}</div>
+    {% endfor %}
+</div>
+<div class="typing" id="typingIndicator"><span></span><span></span><span></span></div>
+<div class="chat-input" id="chatInput">
+    <textarea id="msgInput" rows="1" placeholder="Type your response..." oninput="autoResize(this)"></textarea>
+    <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled><i class="bi bi-send-fill" style="font-size:.8rem;"></i></button>
+</div>
+
+<script>
+const TOKEN = '{{ token }}';
+const START_URL = '{{ url_for("hiring.interview_start", token=token) }}';
+const RESPOND_URL = '{{ url_for("hiring.interview_respond", token=token) }}';
+const chatBody = document.getElementById('chatBody');
+const msgInput = document.getElementById('msgInput');
+const sendBtn = document.getElementById('sendBtn');
+const typingEl = document.getElementById('typingIndicator');
+const progressFill = document.getElementById('progressFill');
+let questionCount = {{ messages|selectattr('role', 'equalto', 'warren')|list|length }};
+let lastQuestionTime = Date.now();
+let isWaiting = false;
+
+// Enable send button when there's text
+msgInput.addEventListener('input', function() {
+    sendBtn.disabled = !this.value.trim() || isWaiting;
+});
+
+// Enter to send (shift+enter for newline)
+msgInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (!sendBtn.disabled) sendMessage();
+    }
+});
+
+function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function scrollToBottom() {
+    chatBody.scrollTop = chatBody.scrollHeight;
+}
+
+function addMessage(role, text) {
+    const div = document.createElement('div');
+    div.className = 'msg msg-' + role;
+    div.textContent = text;
+    chatBody.appendChild(div);
+    scrollToBottom();
+}
+
+function showTyping() {
+    typingEl.style.display = 'block';
+    chatBody.appendChild(typingEl);
+    scrollToBottom();
+}
+
+function hideTyping() {
+    typingEl.style.display = 'none';
+}
+
+function updateProgress() {
+    const pct = Math.min((questionCount / 12) * 100, 100);
+    progressFill.style.width = pct + '%';
+}
+
+function setWaiting(on) {
+    isWaiting = on;
+    sendBtn.disabled = on || !msgInput.value.trim();
+    msgInput.disabled = on;
+    if (!on) {
+        msgInput.focus();
+        lastQuestionTime = Date.now();
+    }
+}
+
+function sendMessage() {
+    const text = msgInput.value.trim();
+    if (!text || isWaiting) return;
+
+    const responseTimeS = Math.round((Date.now() - lastQuestionTime) / 1000);
+    addMessage('candidate', text);
+    msgInput.value = '';
+    msgInput.style.height = 'auto';
+    setWaiting(true);
+    showTyping();
+
+    fetch(RESPOND_URL, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message: text, response_time_s: responseTimeS})
+    })
+    .then(r => r.json())
+    .then(data => {
+        hideTyping();
+        if (data.error) {
+            addMessage('system', data.error);
+            setWaiting(false);
+            return;
+        }
+        if (data.message) {
+            addMessage('warren', data.message);
+            questionCount++;
+            updateProgress();
+        }
+        if (data.complete) {
+            addMessage('system', 'Interview complete. Thank you for your time!');
+            document.getElementById('chatInput').style.display = 'none';
+            progressFill.style.width = '100%';
+        } else {
+            setWaiting(false);
+        }
+    })
+    .catch(() => {
+        hideTyping();
+        addMessage('system', 'Connection error. Please try again.');
+        setWaiting(false);
+    });
+}
+
+// On load: if no messages yet, start the interview
+{% if not messages %}
+(function() {
+    showTyping();
+    setWaiting(true);
+    fetch(START_URL, {method:'POST',headers:{'Content-Type':'application/json'}})
+    .then(r => r.json())
+    .then(data => {
+        hideTyping();
+        if (data.message) {
+            addMessage('warren', data.message);
+            questionCount = 1;
+            updateProgress();
+        }
+        if (data.error) addMessage('system', data.error);
+        setWaiting(false);
+    })
+    .catch(() => { hideTyping(); addMessage('system', 'Failed to start. Please refresh.'); });
+})();
+{% else %}
+updateProgress();
+scrollToBottom();
+msgInput.focus();
+{% endif %}
+</script>
+{% endif %}
+
+</body>
+</html>

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% if job %}{{ job.title }} - {{ brand.name }}{% else %}Careers - {{ brand.name }}{% endif %}</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f0f1a;color:#e2e2f0;min-height:100vh;}
+    .container{max-width:720px;margin:0 auto;padding:2rem 1.25rem;}
+    .brand-header{text-align:center;margin-bottom:2rem;}
+    .brand-header h1{font-size:1.5rem;font-weight:700;}
+    .brand-header p{color:#8888aa;font-size:.85rem;margin-top:.25rem;}
+    .job-listing{background:#1e1e2e;border:1px solid #2d2d3d;border-radius:10px;padding:1.25rem;margin-bottom:1rem;cursor:pointer;transition:border-color .2s;}
+    .job-listing:hover{border-color:#60a5fa;}
+    .job-listing h3{font-size:1rem;font-weight:600;margin-bottom:.35rem;}
+    .job-listing .meta{font-size:.8rem;color:#8888aa;display:flex;gap:1rem;flex-wrap:wrap;}
+    .job-listing .salary{color:#34d399;font-weight:600;}
+    a{color:inherit;text-decoration:none;}
+    .detail-card{background:#1e1e2e;border:1px solid #2d2d3d;border-radius:10px;padding:1.5rem;margin-bottom:1.5rem;}
+    .detail-card h2{font-size:1.2rem;font-weight:700;margin-bottom:.75rem;}
+    .detail-card .meta-line{font-size:.8rem;color:#8888aa;display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;}
+    .detail-body{font-size:.88rem;line-height:1.7;white-space:pre-wrap;}
+    .salary-tag{background:#064e3b;color:#6ee7b7;padding:.25rem .75rem;border-radius:20px;font-size:.75rem;font-weight:600;display:inline-block;}
+    .apply-card{background:#1e1e2e;border:1px solid #2d2d3d;border-radius:10px;padding:1.5rem;}
+    .apply-card h4{font-size:1rem;margin-bottom:1rem;}
+    .apply-card label{display:block;font-size:.8rem;color:#8888aa;margin-bottom:.25rem;}
+    .apply-card input,.apply-card textarea{width:100%;padding:.5rem .75rem;background:#12121e;border:1px solid #2d2d3d;border-radius:6px;color:#e2e2f0;font-size:.85rem;margin-bottom:.75rem;}
+    .apply-card textarea{min-height:100px;resize:vertical;}
+    .apply-btn{background:#60a5fa;color:#fff;border:none;padding:.6rem 1.5rem;border-radius:6px;cursor:pointer;font-size:.85rem;font-weight:600;}
+    .apply-btn:hover{background:#3b82f6;}
+    .apply-btn:disabled{opacity:.5;cursor:default;}
+    .success-msg{background:#064e3b;color:#6ee7b7;padding:1rem;border-radius:8px;text-align:center;margin-bottom:1rem;}
+    .error-msg{background:#7f1d1d;color:#fca5a5;padding:.75rem;border-radius:8px;text-align:center;margin-bottom:1rem;font-size:.85rem;}
+    .empty-state{text-align:center;padding:3rem 1rem;color:#8888aa;}
+    .empty-state i{font-size:2.5rem;display:block;margin-bottom:.75rem;}
+    .back-link{font-size:.8rem;color:#8888aa;display:inline-flex;align-items:center;gap:.3rem;margin-bottom:1rem;}
+    .back-link:hover{color:#60a5fa;}
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="brand-header">
+        <h1>{{ brand.name }}</h1>
+        <p>{% if job %}We're hiring!{% else %}Open Positions{% endif %}</p>
+    </div>
+
+    {% if job %}
+    <!-- Single Job Detail + Apply -->
+    <a href="{{ url_for('hiring.public_jobs', brand_slug=brand.slug) }}" class="back-link">
+        <i class="bi bi-arrow-left"></i> All Positions
+    </a>
+
+    <div class="detail-card">
+        <h2>{{ job.title }}</h2>
+        <div class="meta-line">
+            {% if job.department %}<span><i class="bi bi-building"></i> {{ job.department }}</span>{% endif %}
+            {% if job.location %}<span><i class="bi bi-geo-alt"></i> {{ job.location }}</span>{% endif %}
+            <span><i class="bi bi-clock"></i> {{ job.job_type|title }}</span>
+            {% if job.remote != 'no' %}<span><i class="bi bi-wifi"></i> {{ job.remote|title }}</span>{% endif %}
+        </div>
+        {% if job.salary_min or job.salary_max %}
+        <div style="margin-bottom:1rem;">
+            <span class="salary-tag">
+                {% if job.salary_min and job.salary_max %}
+                    ${{ "{:,.0f}".format(job.salary_min) }} - ${{ "{:,.0f}".format(job.salary_max) }}
+                {% elif job.salary_min %}
+                    From ${{ "{:,.0f}".format(job.salary_min) }}
+                {% else %}
+                    Up to ${{ "{:,.0f}".format(job.salary_max) }}
+                {% endif %}
+            </span>
+        </div>
+        {% endif %}
+        <div class="detail-body">{{ job.description or 'No description provided yet.' }}</div>
+        {% if job.benefits %}
+        <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid #2d2d3d;">
+            <strong style="font-size:.85rem;">Benefits:</strong>
+            <div style="font-size:.85rem;margin-top:.25rem;line-height:1.6;">{{ job.benefits }}</div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="apply-card" id="applyCard">
+        <h4>Apply for this Position</h4>
+        <div id="applySuccess" class="success-msg" style="display:none;">
+            Application submitted! We'll review it and get back to you.
+        </div>
+        <div id="applyError" class="error-msg" style="display:none;"></div>
+        <form id="applyForm" onsubmit="submitApp(event)">
+            <label>Full Name *</label>
+            <input type="text" id="appName" required placeholder="Your full name">
+            <label>Email *</label>
+            <input type="email" id="appEmail" required placeholder="your@email.com">
+            <label>Phone</label>
+            <input type="tel" id="appPhone" placeholder="(555) 123-4567">
+            <label>Tell us about yourself</label>
+            <textarea id="appResume" placeholder="Relevant experience, skills, availability..."></textarea>
+            <button type="submit" class="apply-btn" id="applyBtn">Submit Application</button>
+        </form>
+    </div>
+
+    {% else %}
+    <!-- Jobs List -->
+    {% if jobs %}
+        {% for j in jobs %}
+        <a href="{{ url_for('hiring.public_job_detail', brand_slug=brand.slug, job_id=j.id) }}" class="job-listing">
+            <h3>{{ j.title }}</h3>
+            <div class="meta">
+                {% if j.department %}<span><i class="bi bi-building"></i> {{ j.department }}</span>{% endif %}
+                {% if j.location %}<span><i class="bi bi-geo-alt"></i> {{ j.location }}</span>{% endif %}
+                <span><i class="bi bi-clock"></i> {{ j.job_type|title }}</span>
+                {% if j.remote != 'no' %}<span><i class="bi bi-wifi"></i> {{ j.remote|title }}</span>{% endif %}
+                {% if j.salary_min or j.salary_max %}
+                <span class="salary">
+                    {% if j.salary_min and j.salary_max %}${{ "{:,.0f}".format(j.salary_min) }} - ${{ "{:,.0f}".format(j.salary_max) }}
+                    {% elif j.salary_min %}From ${{ "{:,.0f}".format(j.salary_min) }}
+                    {% else %}Up to ${{ "{:,.0f}".format(j.salary_max) }}{% endif %}
+                </span>
+                {% endif %}
+            </div>
+        </a>
+        {% endfor %}
+    {% else %}
+        <div class="empty-state">
+            <i class="bi bi-briefcase"></i>
+            <p>No open positions right now. Check back soon.</p>
+        </div>
+    {% endif %}
+    {% endif %}
+</div>
+
+{% if job %}
+<script>
+function submitApp(e) {
+    e.preventDefault();
+    const btn = document.getElementById('applyBtn');
+    const errEl = document.getElementById('applyError');
+    btn.disabled = true;
+    btn.textContent = 'Submitting...';
+    errEl.style.display = 'none';
+
+    const payload = {
+        job_id: {{ job.id }},
+        name: document.getElementById('appName').value.trim(),
+        email: document.getElementById('appEmail').value.trim(),
+        phone: document.getElementById('appPhone').value.trim(),
+        resume_text: document.getElementById('appResume').value.trim()
+    };
+
+    fetch('{{ url_for("hiring.public_apply") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            document.getElementById('applyForm').style.display = 'none';
+            document.getElementById('applySuccess').style.display = 'block';
+        } else {
+            errEl.textContent = data.error || 'Something went wrong. Please try again.';
+            errEl.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Submit Application';
+        }
+    })
+    .catch(() => {
+        errEl.textContent = 'Network error. Please check your connection and try again.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Submit Application';
+    });
+}
+</script>
+{% endif %}
+</body>
+</html>

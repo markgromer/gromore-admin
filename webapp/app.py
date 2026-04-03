@@ -25,6 +25,7 @@ from webapp.client_oauth_google import client_google_bp
 from webapp.client_oauth_meta import client_meta_bp
 from webapp.jobs import jobs_bp
 from webapp.client_portal import client_bp
+from webapp.hiring import hiring_bp
 
 BASE_DIR = Path(__file__).parent.parent
 
@@ -186,6 +187,8 @@ def create_app():
     app.register_blueprint(client_google_bp, url_prefix="/client/oauth/google")
     app.register_blueprint(client_meta_bp, url_prefix="/client/oauth/meta")
     app.register_blueprint(jobs_bp, url_prefix="/jobs")
+    app.register_blueprint(hiring_bp, url_prefix="/client/hiring")
+    csrf.exempt(hiring_bp)  # Public apply + interview endpoints
     app.register_blueprint(client_bp)
 
     # Global 500 handler that includes CORS headers for cross-origin API callers
