@@ -3925,6 +3925,21 @@ def client_search_place():
         return jsonify(ok=False, error="Enter a business name to search."), 400
 
     import requests as _req
+
+    # ── Detect if user pasted a Place ID directly (starts with "ChIJ") ──
+    if query.startswith("ChIJ") and " " not in query:
+        from webapp.heatmap import verify_place_id
+        result = verify_place_id(api_key, query)
+        if result and not result.get("error"):
+            return jsonify(ok=True, results=[{
+                "place_id": query,
+                "name": result.get("name", "Unknown"),
+                "address": result.get("address", ""),
+            }])
+        err = result.get("error", "Unknown error") if result else "Lookup failed"
+        msg = result.get("message", "") if result else ""
+        return jsonify(ok=False, error=f"Place ID lookup failed: {err}. {msg}".strip())
+
     lat = float(brand.get("business_lat") or 0)
     lng = float(brand.get("business_lng") or 0)
     api_errors = []
