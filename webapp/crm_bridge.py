@@ -435,6 +435,92 @@ def _sng_collect_all_client_ids(brand):
 def _sng_sum_payments_for_month(brand, client_ids, month_prefix):
     """Call client_details for each client and sum succeeded payments in given month.
     month_prefix is like '2026-03'. Returns (total_revenue, payment_count, diagnostics)."""
+    from datetime import datetime
+
+    def _extract_payments(result_dict):
+        if not isinstance(result_dict, dict):
+            return []
+        # Common: top-level payments
+        payments = result_dict.get("payments")
+        if isinstance(payments, list):
+            return payments
+        # Common: data.payments
+        data = result_dict.get("data")
+        if isinstance(data, dict):
+            payments = data.get("payments")
+            if isinstance(payments, list):
+                return payments
+            client = data.get("client")
+            if isinstance(client, dict):
+                payments = client.get("payments")
+                if isinstance(payments, list):
+                    return payments
+        # Common: client.payments
+        client = result_dict.get("client")
+        if isinstance(client, dict):
+            payments = client.get("payments")
+            if isinstance(payments, list):
+                return payments
+        return []
+
+    def _month_from_date(value):
+        if not value:
+            return None
+        if isinstance(value, (int, float)):
+            # Epoch seconds or ms
+            ts = int(value)
+            if ts > 10**12:
+                ts = ts / 1000.0
+            try:
+                return datetime.utcfromtimestamp(ts).strftime("%Y-%m")
+            except Exception:
+                return None
+        if not isinstance(value, str):
+            return None
+        s = value.strip()
+        if len(s) >= 7 and s[4] == "-" and s[7:8] in ("", "-"):
+            return s[:7]
+        # ISO-ish
+        try:
+            return datetime.fromisoformat(s.replace("Z", "+00:00")).strftime("%Y-%m")
+        except Exception:
+            pass
+        # Common US formats
+        for fmt in ("%m/%d/%Y", "%m/%d/%y", "%m-%d-%Y", "%m-%d-%y"):
+            try:
+                return datetime.strptime(s[:10], fmt).strftime("%Y-%m")
+            except Exception:
+                continue
+        return None
+
+    def _money(value):
+        if value is None:
+            return 0.0
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            s = value.strip().replace(",", "")
+            if s.startswith("$"):
+                s = s[1:].strip()
+            try:
+                return float(s)
+            except Exception:
+                return 0.0
+        return 0.0
+
+    def _payment_amount(pmt):
+        if not isinstance(pmt, dict):
+            return 0.0
+        base = (
+            pmt.get("amount")
+            or pmt.get("amount_paid")
+            or pmt.get("total")
+            or pmt.get("value")
+            or 0
+        )
+        tip = pmt.get("tip_amount") or pmt.get("tip") or 0
+        return _money(base) + _money(tip)
+
     total_revenue = 0.0
     payment_count = 0
     diag = {
@@ -445,6 +531,7 @@ def _sng_sum_payments_for_month(brand, client_ids, month_prefix):
         "all_payment_months": {},
         "sample_response_keys": None,
         "sample_payment": None,
+        "sample_payment_keys": None,
         "first_error": None,
     }
     for i, cid in enumerate(client_ids):
@@ -464,33 +551,32 @@ def _sng_sum_payments_for_month(brand, client_ids, month_prefix):
         if diag["sample_response_keys"] is None:
             diag["sample_response_keys"] = list(result.keys())
 
-        payments = result.get("payments") or []
+        payments = _extract_payments(result)
         if payments:
             diag["clients_with_payments"] += 1
             # Capture first payment as sample
             if diag["sample_payment"] is None:
                 diag["sample_payment"] = {k: str(v)[:100] for k, v in payments[0].items()}
+            diag["sample_payment_keys"] = list(payments[0].keys()) if isinstance(payments[0], dict) else None
         else:
             diag["clients_without_payments"] += 1
 
         for pmt in payments:
             # Track all statuses and months seen
-            status = pmt.get("status") or "unknown"
+            status = (pmt.get("status") or "unknown")
+            status_norm = str(status).strip().lower()
             diag["all_payment_statuses"][status] = diag["all_payment_statuses"].get(status, 0) + 1
 
-            pmt_date = (pmt.get("date") or "")
-            if len(pmt_date) >= 7:
-                pmt_month = pmt_date[:7]
+            pmt_date = pmt.get("date") or pmt.get("created_at") or pmt.get("createdAt") or ""
+            pmt_month = _month_from_date(pmt_date)
+            if pmt_month:
                 diag["all_payment_months"][pmt_month] = diag["all_payment_months"].get(pmt_month, 0) + 1
 
-            if pmt.get("status") != "succeeded":
+            if status_norm not in ("succeeded", "success", "paid", "completed"):
                 continue
-            if not pmt_date.startswith(month_prefix):
+            if pmt_month != month_prefix:
                 continue
-            try:
-                total_revenue += float(pmt.get("amount") or 0)
-            except (ValueError, TypeError):
-                pass
+            total_revenue += _payment_amount(pmt)
             payment_count += 1
 
     log.info("SNG payment sum: %d clients, %d payments, $%.2f for %s | diag: with_pmts=%d, without=%d, errors=%d",
