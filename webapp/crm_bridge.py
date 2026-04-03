@@ -432,6 +432,25 @@ def _sng_collect_all_client_ids(brand):
     return all_ids
 
 
+def _sng_collect_active_no_subscription_ids(brand):
+    """Paginate through active_no_subscription and return client string IDs."""
+    all_ids = []
+    page = 1
+    while True:
+        result, error = sng_get_active_no_subscription(brand, page=page)
+        if error or not isinstance(result, dict):
+            break
+        for c in (result.get("data") or []):
+            cid = c.get("client") or c.get("id") or c.get("client_id")
+            if cid:
+                all_ids.append(cid)
+        paginate = result.get("paginate") or {}
+        if page >= (paginate.get("total_pages") or 1):
+            break
+        page += 1
+    return all_ids
+
+
 def _sng_sum_payments_for_month(brand, client_ids, month_prefix):
     """Call client_details for each client and sum succeeded payments in given month.
     month_prefix is like '2026-03'. Returns (total_revenue, payment_count, diagnostics)."""
@@ -611,6 +630,11 @@ def sng_sync_revenue(brand, db, max_sample=50):
     if isinstance(r, dict):
         active_count = r.get("data", 0) or 0
 
+    no_sub_total = 0
+    r, _ = sng_get_active_no_subscription(brand, page=1)
+    if isinstance(r, dict):
+        no_sub_total = (r.get("paginate") or {}).get("total", len(r.get("data", [])))
+
     inactive_count = 0
     r, _ = sng_get_inactive_clients(brand, page=1)
     if isinstance(r, dict):
@@ -622,6 +646,8 @@ def sng_sync_revenue(brand, db, max_sample=50):
         jobs_count = r.get("data", 0) or 0
 
     # Collect client IDs - paginate until we have enough for the sample
+    # Exclude active clients without a subscription so revenue scaling is not inflated.
+    no_sub_ids = set(_sng_collect_active_no_subscription_ids(brand) or [])
     sample_ids = []
     page = 1
     while len(sample_ids) < max_sample:
@@ -630,7 +656,7 @@ def sng_sync_revenue(brand, db, max_sample=50):
             break
         for c in (result.get("data") or []):
             cid = c.get("client") or c.get("id") or c.get("client_id")
-            if cid:
+            if cid and cid not in no_sub_ids:
                 sample_ids.append(cid)
             if len(sample_ids) >= max_sample:
                 break
@@ -640,7 +666,11 @@ def sng_sync_revenue(brand, db, max_sample=50):
         page += 1
 
     sample_size = len(sample_ids)
-    log.info("SNG sync: got %d sample client IDs (of %d active)", sample_size, active_count)
+    subscribed_count = max(active_count - no_sub_total, 0)
+    log.info(
+        "SNG sync: got %d sample subscribed client IDs (active=%d, no_sub=%d, subscribed=%d)",
+        sample_size, active_count, no_sub_total, subscribed_count
+    )
 
     sample_revenue = 0.0
     sample_payments = 0
@@ -650,9 +680,9 @@ def sng_sync_revenue(brand, db, max_sample=50):
             brand, sample_ids, rev_month
         )
 
-    # Extrapolate from sample to full active client base
-    if sample_size > 0 and active_count > 0:
-        scale = active_count / sample_size
+    # Extrapolate from sample to full subscribed client base
+    if sample_size > 0 and subscribed_count > 0:
+        scale = subscribed_count / sample_size
         mrr = round(sample_revenue * scale, 2)
         payment_count = int(sample_payments * scale)
     else:
@@ -661,13 +691,15 @@ def sng_sync_revenue(brand, db, max_sample=50):
         scale = 1
 
     # Calculate derived metrics
-    avg_client_monthly = round(mrr / active_count, 2) if active_count > 0 and mrr > 0 else 0
+    avg_client_monthly = round(mrr / subscribed_count, 2) if subscribed_count > 0 and mrr > 0 else 0
     avg_retention_months = 18
     estimated_clv = round(avg_client_monthly * avg_retention_months, 2)
     churn_cost = round(inactive_count * estimated_clv, 2) if mrr > 0 else 0
 
     snapshot = {
         "active_clients": active_count,
+        "no_subscription_clients": no_sub_total,
+        "subscribed_clients": subscribed_count,
         "inactive_clients": inactive_count,
         "total_jobs": jobs_count,
         "mrr": mrr,

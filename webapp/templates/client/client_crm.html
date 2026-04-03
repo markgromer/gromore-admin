@@ -631,8 +631,10 @@ function updateRevenueCards(rev) {
     document.getElementById('revChurnMonthly').textContent = fmtDollar(rev.inactive_clients * (rev.avg_client_monthly_value || 0));
     document.getElementById('revChurnTotal').textContent = fmtDollar(rev.churn_cost_total);
     var syncInfo = 'Last synced: ' + (rev.synced_at || 'just now') + ' (' + (rev.revenue_month || '') + ')';
-    if (rev.sample_size && rev.active_clients && rev.sample_size < rev.active_clients) {
-        syncInfo += ' - ' + rev.sample_size + ' of ' + rev.active_clients + ' clients sampled';
+    var baseClients = rev.subscribed_clients || rev.active_clients;
+    if (rev.sample_size && baseClients && rev.sample_size < baseClients) {
+        var baseLabel = rev.subscribed_clients ? 'subscribed clients' : 'clients';
+        syncInfo += ' - ' + rev.sample_size + ' of ' + baseClients + ' ' + baseLabel + ' sampled';
     }
     document.getElementById('revSyncedAt').textContent = syncInfo;
     document.getElementById('revMonthLabel').textContent = rev.revenue_month || 'previous month';
