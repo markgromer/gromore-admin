@@ -168,7 +168,7 @@
 
 {% if expired %}
     <div class="brand-bar">
-        {% if logo_url %}<img src="{{ logo_url }}" class="brand-logo" alt="{{ company }}" onerror="this.outerHTML='<div class=brand-icon>{{ company[:1]|upper if company else \'W\' }}</div>'">{% else %}<div class="brand-icon">{{ company[:1]|upper if company else 'W' }}</div>{% endif %}
+        {% if logo_url %}<img src="{{ logo_url }}" class="brand-logo" alt="{{ company }}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><div class="brand-icon" style="display:none;">{{ company[:1]|upper if company else 'W' }}</div>{% else %}<div class="brand-icon">{{ company[:1]|upper if company else 'W' }}</div>{% endif %}
         <div class="brand-info">
             <div class="brand-name">{{ company }}</div>
             <div class="brand-role">{{ interview.job_title }}</div>
@@ -182,7 +182,7 @@
 
 {% elif completed %}
     <div class="brand-bar">
-        {% if logo_url %}<img src="{{ logo_url }}" class="brand-logo" alt="{{ company }}" onerror="this.outerHTML='<div class=brand-icon>{{ company[:1]|upper if company else \'W\' }}</div>'">{% else %}<div class="brand-icon">{{ company[:1]|upper if company else 'W' }}</div>{% endif %}
+        {% if logo_url %}<img src="{{ logo_url }}" class="brand-logo" alt="{{ company }}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><div class="brand-icon" style="display:none;">{{ company[:1]|upper if company else 'W' }}</div>{% else %}<div class="brand-icon">{{ company[:1]|upper if company else 'W' }}</div>{% endif %}
         <div class="brand-info">
             <div class="brand-name">{{ company }}</div>
             <div class="brand-role">{{ interview.job_title }}</div>
@@ -197,7 +197,7 @@
 {% else %}
     <!-- ── Brand header ── -->
     <div class="brand-bar">
-        {% if logo_url %}<img src="{{ logo_url }}" class="brand-logo" alt="{{ company }}" onerror="this.outerHTML='<div class=brand-icon>{{ company[:1]|upper if company else \'W\' }}</div>'">{% else %}<div class="brand-icon">{{ company[:1]|upper if company else 'W' }}</div>{% endif %}
+        {% if logo_url %}<img src="{{ logo_url }}" class="brand-logo" alt="{{ company }}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><div class="brand-icon" style="display:none;">{{ company[:1]|upper if company else 'W' }}</div>{% else %}<div class="brand-icon">{{ company[:1]|upper if company else 'W' }}</div>{% endif %}
         <div class="brand-info">
             <div class="brand-name">{{ company }}</div>
             <div class="brand-role">{{ interview.job_title }}</div>
