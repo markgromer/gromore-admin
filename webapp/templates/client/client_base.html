@@ -103,6 +103,26 @@
             line-height: 1.6;
         }
 
+        /* ── Page Title Bar (replaces gradient hero banners) ── */
+        .page-title-bar {
+            margin-bottom: 1.25rem;
+        }
+        .page-title-bar h5 {
+            font-weight: 700;
+            font-size: 1.15rem;
+            color: var(--text-strong);
+            margin-bottom: .2rem;
+        }
+        .page-title-bar h5 i {
+            color: var(--primary);
+            margin-right: .4rem;
+        }
+        .page-title-bar p {
+            color: var(--text-muted);
+            font-size: .88rem;
+            margin: 0;
+        }
+
         /* ── Sidebar Navigation ── */
         .client-sidebar {
             position: fixed;
@@ -219,6 +239,11 @@
             color: var(--primary-strong);
             background: var(--primary-muted);
             font-weight: 600;
+        }
+        .client-sidebar .nav-divider {
+            height: 1px;
+            background: var(--line);
+            margin: .6rem .55rem;
         }
         .client-sidebar .sidebar-footer {
             border-top: 1px solid var(--line);
@@ -1194,8 +1219,7 @@
             <span class="brand-text">{{ client_brand or 'Dashboard' }}</span>
         </div>
         <div class="nav-links">
-            <div class="nav-section-label" data-section="main">Main</div>
-            <div class="nav-section-group" data-section="main">
+            {# ── Primary: always visible ── #}
             {% if feature_on('dashboard') %}
             <a href="{{ url_for('client.client_dashboard') }}" class="{% if request.endpoint == 'client.client_dashboard' %}active{% endif %}">
                 <i class="bi bi-speedometer2"></i> Overview
@@ -1206,14 +1230,9 @@
                 <i class="bi bi-megaphone"></i> Campaigns
             </a>
             {% endif %}
-            {% if feature_on('quick_launch') %}
-            <a href="{{ url_for('client.client_quick_launch') }}" class="{% if request.endpoint == 'client.client_quick_launch' %}active{% endif %}">
-                <i class="bi bi-rocket-takeoff"></i> Quick Launch
-            </a>
-            {% endif %}
-            {% if feature_on('kpis') %}
-            <a href="{{ url_for('client.client_kpis') }}" class="{% if request.endpoint == 'client.client_kpis' %}active{% endif %}">
-                <i class="bi bi-bullseye"></i> KPIs
+            {% if feature_on('crm') %}
+            <a href="{{ url_for('client.client_crm') }}" class="{% if request.endpoint in ('client.client_crm',) %}active{% endif %}">
+                <i class="bi bi-people"></i> CRM
             </a>
             {% endif %}
             {% if feature_on('missions') %}
@@ -1221,8 +1240,13 @@
                 <i class="bi bi-clipboard2-check"></i> Missions
             </a>
             {% endif %}
-            </div>
+            {% if feature_on('hiring') %}
+            <a href="{{ url_for('hiring.hiring_dashboard') }}" class="{% if 'hiring' in request.endpoint|default('') %}active{% endif %}">
+                <i class="bi bi-briefcase-fill"></i> Hiring Hub
+            </a>
+            {% endif %}
 
+            {# ── Create: collapsed ── #}
             <div class="nav-section-label collapsed" data-section="create">Create</div>
             <div class="nav-section-group collapsed" data-section="create">
             {% if feature_on('ad_builder') %}
@@ -1240,6 +1264,16 @@
                 <i class="bi bi-journal-richtext"></i> Blog
             </a>
             {% endif %}
+            {% if feature_on('post_scheduler') %}
+            <a href="{{ url_for('client.client_post_scheduler') }}" class="{% if request.endpoint == 'client.client_post_scheduler' %}active{% endif %}">
+                <i class="bi bi-calendar2-week"></i> Post Scheduler
+            </a>
+            {% endif %}
+            {% if feature_on('quick_launch') %}
+            <a href="{{ url_for('client.client_quick_launch') }}" class="{% if request.endpoint == 'client.client_quick_launch' %}active{% endif %}">
+                <i class="bi bi-rocket-takeoff"></i> Quick Launch
+            </a>
+            {% endif %}
             {% if feature_on('coaching') %}
             <a href="{{ url_for('client.client_coaching') }}" class="{% if request.endpoint == 'client.client_coaching' %}active{% endif %}">
                 <i class="bi bi-mortarboard"></i> Coaching
@@ -1247,13 +1281,9 @@
             {% endif %}
             </div>
 
+            {# ── Business: collapsed ── #}
             <div class="nav-section-label collapsed" data-section="business">Business</div>
             <div class="nav-section-group collapsed" data-section="business">
-            {% if feature_on('crm') %}
-            <a href="{{ url_for('client.client_crm') }}" class="{% if request.endpoint in ('client.client_crm',) %}active{% endif %}">
-                <i class="bi bi-people"></i> CRM
-            </a>
-            {% endif %}
             {% if feature_on('my_business') %}
             <a href="{{ url_for('client.client_my_business') }}" class="{% if request.endpoint == 'client.client_my_business' %}active{% endif %}">
                 <i class="bi bi-building"></i> My Business
@@ -1264,14 +1294,14 @@
                 <i class="bi bi-google"></i> Google Profile
             </a>
             {% endif %}
-            {% if feature_on('post_scheduler') %}
-            <a href="{{ url_for('client.client_post_scheduler') }}" class="{% if request.endpoint == 'client.client_post_scheduler' %}active{% endif %}">
-                <i class="bi bi-calendar2-week"></i> Post Scheduler
-            </a>
-            {% endif %}
             {% if feature_on('competitor_intel') %}
             <a href="{{ url_for('client.client_competitors') }}" class="{% if request.endpoint == 'client.client_competitors' %}active{% endif %}">
                 <i class="bi bi-binoculars"></i> Competitor Intel
+            </a>
+            {% endif %}
+            {% if feature_on('kpis') %}
+            <a href="{{ url_for('client.client_kpis') }}" class="{% if request.endpoint == 'client.client_kpis' %}active{% endif %}">
+                <i class="bi bi-bullseye"></i> KPIs
             </a>
             {% endif %}
             {% if feature_on('your_team') %}
@@ -1289,18 +1319,13 @@
                 <i class="bi bi-list-task"></i> Tasks
             </a>
             {% endif %}
-            {% if feature_on('hiring') %}
-            <a href="{{ url_for('hiring.hiring_dashboard') }}" class="{% if 'hiring' in request.endpoint|default('') %}active{% endif %}">
-                <i class="bi bi-briefcase-fill"></i> Hiring Hub
-            </a>
-            {% endif %}
             <a href="{{ url_for('client.client_titan_launch') }}" target="_blank" rel="noopener">
                 <i class="bi bi-box-arrow-up-right"></i> Titan
             </a>
             </div>
 
-            <div class="nav-section-label collapsed" data-section="settings">Settings</div>
-            <div class="nav-section-group collapsed" data-section="settings">
+            {# ── Utility: always visible at bottom ── #}
+            <div class="nav-divider"></div>
             {% if feature_on('connections') %}
             <a href="{{ url_for('client.client_settings') }}" class="{% if request.endpoint == 'client.client_settings' %}active{% endif %}">
                 <i class="bi bi-plug"></i> Connections
@@ -1316,7 +1341,6 @@
                 <i class="bi bi-question-circle"></i> Help
             </a>
             {% endif %}
-            </div>
         </div>
         <div class="sidebar-footer">
             <span class="user-name"><i class="bi bi-person-circle"></i> {{ client_user or '' }}</span>
@@ -1378,8 +1402,8 @@
         <ul class="bottom-nav-items">
             <li><a href="{{ url_for('client.client_dashboard') }}" class="{% if request.endpoint == 'client.client_dashboard' %}active{% endif %}"><i class="bi bi-speedometer2"></i>Overview</a></li>
             <li><a href="{{ url_for('client.client_campaigns') }}" class="{% if request.endpoint in ('client.client_campaigns', 'client.client_campaign_detail') %}active{% endif %}"><i class="bi bi-megaphone"></i>Campaigns</a></li>
-            <li><a href="{{ url_for('client.client_ad_builder') }}" class="{% if request.endpoint in ('client.client_ad_builder',) %}active{% endif %}"><i class="bi bi-brush"></i>Ad Builder</a></li>
             <li><a href="{{ url_for('client.client_crm') }}" class="{% if request.endpoint == 'client.client_crm' %}active{% endif %}"><i class="bi bi-people"></i>CRM</a></li>
+            <li><a href="{{ url_for('client.client_actions') }}" class="{% if request.endpoint == 'client.client_actions' %}active{% endif %}"><i class="bi bi-clipboard2-check"></i>Missions</a></li>
             <li><a href="{{ url_for('client.client_settings') }}" class="{% if request.endpoint == 'client.client_settings' %}active{% endif %}"><i class="bi bi-gear"></i>Settings</a></li>
         </ul>
     </nav>

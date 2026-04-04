@@ -4,25 +4,7 @@
 
 {% block content %}
 <style>
-    .kpi-hero {
-        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #3730a3 100%);
-        border-radius: 16px;
-        padding: 1.75rem 2rem;
-        margin-bottom: 1.5rem;
-        color: #fff;
-        box-shadow: 0 8px 32px rgba(30, 27, 75, .25);
-    }
-    .kpi-hero h3 {
-        font-size: 1.4rem;
-        font-weight: 800;
-        color: #fff !important;
-        margin-bottom: .25rem;
-    }
-    .kpi-hero p {
-        color: rgba(255,255,255,.7);
-        font-size: .9rem;
-        margin: 0;
-    }
+
     .kpi-deep-card {
         background: #fff;
         border: 1px solid #e2e8f0;
@@ -126,8 +108,8 @@
     </form>
 </div>
 
-<div class="kpi-hero">
-    <h3><i class="bi bi-bullseye me-2"></i>W.A.R.R.E.N.'s KPI Analysis</h3>
+<div class="page-title-bar" style="padding:.75rem 1rem; background:var(--surface); border:1px solid var(--line); border-radius:10px;">
+    <h5 style="margin-bottom:.15rem;"><i class="bi bi-bullseye"></i>W.A.R.R.E.N.'s KPI Analysis</h5>
     <p>
         {% if kpi_data %}
             {% set off_track = kpi_data | selectattr('on_track', 'false') | list %}

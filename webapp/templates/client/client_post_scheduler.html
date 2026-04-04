@@ -3,25 +3,7 @@
 
 {% block content %}
 <style>
-    .sched-header {
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-        border-radius: 16px;
-        padding: 2rem 2.25rem;
-        margin-bottom: 1.5rem;
-        color: #fff;
-        position: relative;
-        overflow: hidden;
-    }
-    .sched-header::after {
-        content: '';
-        position: absolute;
-        top: -40%; right: -10%;
-        width: 300px; height: 300px;
-        background: radial-gradient(circle, rgba(59,130,246,.15) 0%, transparent 70%);
-        border-radius: 50%;
-    }
-    .sched-header h3 { font-weight: 700; margin: 0; position: relative; z-index: 1; color: #fff !important; }
-    .sched-header p { color: #94a3b8; margin: .5rem 0 0; position: relative; z-index: 1; }
+
 
     .post-card {
         background: var(--surface); border-radius: var(--radius);
@@ -75,8 +57,8 @@
     .tab-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 </style>
 
-<div class="sched-header">
-    <h3><i class="bi bi-calendar2-week me-2"></i>Post Scheduler</h3>
+<div class="page-title-bar">
+    <h5><i class="bi bi-calendar2-week"></i>Post Scheduler</h5>
     <p>Schedule Facebook posts with images from your Google Drive. Upload a CSV or compose posts one at a time.</p>
 </div>
 
