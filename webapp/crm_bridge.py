@@ -244,6 +244,7 @@ def _sng_api(brand, method, path, json_body=None, params=None):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
+        "Accept": "application/json",
     }
 
     url = f"{SNG_BASE}/{path.lstrip('/')}"
@@ -761,14 +762,38 @@ def sng_sync_revenue(brand, db, max_sample=50, month=None):
                     sample_revenue, sample_payments, diag = alt_revenue, alt_payments, alt_diag
 
     debug_note = ""
+    auth_debug = {}
     try:
         if sample_ids and (sample_revenue == 0) and isinstance(diag, dict):
             months_seen = sorted((diag.get("all_payment_months") or {}).keys())
             statuses_seen = list((diag.get("all_payment_statuses") or {}).keys())
             first_error = diag.get("first_error")
 
+            # Lightweight auth check hints (only when we otherwise got $0)
+            try:
+                w, we = sng_welcome_v2(brand)
+                auth_debug["welcome_v2_ok"] = bool(w) and not we
+                if we:
+                    auth_debug["welcome_v2_error"] = we
+            except Exception:
+                pass
+            try:
+                ct, cte = sng_check_token(brand)
+                auth_debug["check_token_ok"] = bool(ct) and not cte
+                if cte:
+                    auth_debug["check_token_error"] = cte
+            except Exception:
+                pass
+
+            auth_bits = []
+            if auth_debug.get("welcome_v2_ok") is False:
+                auth_bits.append("welcome_v2 failed")
+            if auth_debug.get("check_token_ok") is False:
+                auth_bits.append("check_token failed")
+            auth_suffix = f" Auth: {', '.join(auth_bits)}." if auth_bits else ""
+
             if first_error:
-                debug_note = f"SNG sync warning: {first_error}"
+                debug_note = f"SNG sync warning: {first_error}.{auth_suffix}" if auth_suffix else f"SNG sync warning: {first_error}"
             elif months_seen:
                 debug_note = (
                     f"SNG sync found payments but none matched month={rev_month} + succeeded status. "
@@ -776,7 +801,7 @@ def sng_sync_revenue(brand, db, max_sample=50, month=None):
                     f"Statuses seen: {', '.join(statuses_seen[:8])}"
                 )
             else:
-                debug_note = "SNG sync returned no payments in the sample client_details responses."
+                debug_note = f"SNG sync returned no payments in the sample client_details responses.{auth_suffix}"
     except Exception:
         debug_note = ""
 
@@ -817,6 +842,7 @@ def sng_sync_revenue(brand, db, max_sample=50, month=None):
         "data_source": "real_payments_sampled" if sample_size < active_count else "real_payments_full",
         "diagnostics": diag,
         "debug_note": debug_note,
+        "auth_debug": auth_debug,
     }
 
     # Store in brand_month_finance for ROAS pipeline
