@@ -178,6 +178,16 @@
             </div>
         </div>
 
+        <div class="form-row">
+            <div class="full" style="display:flex;align-items:center;gap:.6rem;">
+                <input type="checkbox" name="auto_send_interview" id="editAutoSend" value="on" {% if job.auto_send_interview %}checked{% endif %} style="width:auto;accent-color:#7c3aed;">
+                <label for="editAutoSend" style="margin:0;cursor:pointer;">
+                    <span style="font-weight:600;">Auto-send WARREN interview</span>
+                    <span style="display:block;font-size:.75rem;color:var(--text-muted,#8888aa);margin-top:.15rem;">Candidates receive the AI screening link immediately when they apply, instead of waiting for you to send it manually.</span>
+                </label>
+            </div>
+        </div>
+
         <h5 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:.9rem;color:var(--text, #e2e2f0);">Screening Criteria (for WARREN's interview)</h5>
         <div class="form-row">
             <div class="full">
@@ -283,10 +293,14 @@
                 · {{ job.job_type|title }}
             </div>
         </div>
-        <span class="badge-status badge-{{ job.status }}">{{ job.status }}</span>
-    </div>
-
-    {% if job.description %}
+        <div style="display:flex;align-items:center;gap:.5rem;">
+            <span class="badge-status badge-{{ job.status }}">{{ job.status }}</span>
+            {% if job.auto_send_interview %}
+            <span style="background:#1a3a2a;color:#34d399;padding:.15rem .5rem;border-radius:5px;font-size:.7rem;font-weight:600;display:inline-flex;align-items:center;gap:.25rem;">
+                <i class="bi bi-lightning-fill"></i> Auto-Interview
+            </span>
+            {% endif %}
+        </div>
     <div style="margin-top:1rem;font-size:.85rem;line-height:1.6;white-space:pre-wrap;">{{ job.description }}</div>
     {% endif %}
 
@@ -463,6 +477,16 @@
             <div class="full">
                 <label>Scheduling Link (Calendly, etc.)</label>
                 <input type="url" name="scheduling_link" id="fSchedLink" placeholder="https://calendly.com/yourcompany/interview">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="full" style="display:flex;align-items:center;gap:.6rem;">
+                <input type="checkbox" name="auto_send_interview" id="createAutoSend" value="on" style="width:auto;accent-color:#7c3aed;">
+                <label for="createAutoSend" style="margin:0;cursor:pointer;">
+                    <span style="font-weight:600;">Auto-send WARREN interview</span>
+                    <span style="display:block;font-size:.75rem;color:var(--text-muted,#8888aa);margin-top:.15rem;">Candidates receive the AI screening link immediately when they apply, instead of waiting for you to send it manually.</span>
+                </label>
             </div>
         </div>
 

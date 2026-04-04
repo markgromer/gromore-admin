@@ -999,6 +999,7 @@ class WebDB:
         hj_columns = {r[1] for r in conn.execute("PRAGMA table_info(hiring_jobs)").fetchall()}
         new_hj_cols = [
             ("gate_questions", "TEXT DEFAULT '[]'"),
+            ("auto_send_interview", "INTEGER DEFAULT 0"),
         ]
         for col_name, col_def in new_hj_cols:
             if col_name not in hj_columns:

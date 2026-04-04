@@ -652,6 +652,9 @@ def create_job():
         if gate_qs:
             db.update_hiring_job(job_id, gate_questions=gate_qs)
 
+        # Save auto-send interview setting
+        db.update_hiring_job(job_id, auto_send_interview=1 if data.get("auto_send_interview") == "on" else 0)
+
         flash("Job created!", "success")
         return redirect(url_for("hiring.job_detail", job_id=job_id))
 
@@ -741,6 +744,9 @@ def update_job(job_id):
         })
     if "gate_questions" in data:
         fields["gate_questions"] = data["gate_questions"]
+
+    # Checkbox: present = on, absent = off
+    fields["auto_send_interview"] = 1 if data.get("auto_send_interview") == "on" else 0
 
     if fields:
         db.update_hiring_job(job_id, **fields)
@@ -1009,23 +1015,15 @@ def send_offer(candidate_id):
 
 
 # ---------------------------------------------------------------------------
-# Routes: Start AI Interview
+# Helper: send interview link (used by manual start + auto-send)
 # ---------------------------------------------------------------------------
 
-@hiring_bp.route("/candidates/<int:candidate_id>/start-interview", methods=["POST"])
-def start_interview(candidate_id):
-    """Create an interview and send the link to the candidate."""
-    brand, user_id = _require_client_login()
-    db = _get_db()
-    candidate = db.get_hiring_candidate(candidate_id)
-    if not candidate or candidate["brand_id"] != brand["id"]:
-        abort(404)
+def _send_interview_link(db, brand, job, candidate):
+    """Create an interview, email+SMS the link, update candidate status.
 
-    job = db.get_hiring_job(candidate["job_id"]) if candidate.get("job_id") else None
-    if not job:
-        flash("Candidate must be attached to a job first.", "warning")
-        return redirect(url_for("hiring.candidate_detail", candidate_id=candidate_id))
-
+    Returns (interview_id, token) on success, or (None, None) on failure.
+    """
+    candidate_id = candidate["id"]
     interview_id, token = db.create_hiring_interview(candidate_id, brand["id"], job["id"])
     interview_url = url_for("hiring.interview_page", token=token, _external=True)
 
@@ -1049,6 +1047,28 @@ def start_interview(candidate_id):
 
     db.update_hiring_candidate(candidate_id, status="screening",
                                screening_started_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
+    return interview_id, token
+
+
+# ---------------------------------------------------------------------------
+# Routes: Start AI Interview
+# ---------------------------------------------------------------------------
+
+@hiring_bp.route("/candidates/<int:candidate_id>/start-interview", methods=["POST"])
+def start_interview(candidate_id):
+    """Create an interview and send the link to the candidate."""
+    brand, user_id = _require_client_login()
+    db = _get_db()
+    candidate = db.get_hiring_candidate(candidate_id)
+    if not candidate or candidate["brand_id"] != brand["id"]:
+        abort(404)
+
+    job = db.get_hiring_job(candidate["job_id"]) if candidate.get("job_id") else None
+    if not job:
+        flash("Candidate must be attached to a job first.", "warning")
+        return redirect(url_for("hiring.candidate_detail", candidate_id=candidate_id))
+
+    _send_interview_link(db, brand, job, candidate)
 
     flash("Interview link sent!", "success")
     return redirect(url_for("hiring.candidate_detail", candidate_id=candidate_id))
@@ -1098,15 +1118,35 @@ def public_apply():
     # Send confirmation to applicant
     brand = db.get_brand(job["brand_id"])
     company = (brand or {}).get("display_name", "the company")
-    _send_hiring_email(
-        brand or {},
-        email, name,
-        f"Application Received - {job['title']} at {company}",
-        f"""<p>Hi {name},</p>
+
+    # Auto-send interview if enabled on this job
+    if job.get("auto_send_interview"):
+        candidate = db.get_hiring_candidate(candidate_id)
+        try:
+            _send_interview_link(db, brand, job, candidate)
+            log.info("Auto-sent interview to candidate %s for job %s", candidate_id, job_id)
+        except Exception as exc:
+            log.warning("Auto-send interview failed for candidate %s: %s", candidate_id, exc)
+            # Fall back to confirmation email
+            _send_hiring_email(
+                brand or {},
+                email, name,
+                f"Application Received - {job['title']} at {company}",
+                f"""<p>Hi {name},</p>
 <p>We've received your application for the <strong>{job['title']}</strong> position at {company}. Thanks for your interest!</p>
 <p>We'll be in touch with next steps soon.</p>
 <p>Best,<br>{company}</p>""",
-    )
+            )
+    else:
+        _send_hiring_email(
+            brand or {},
+            email, name,
+            f"Application Received - {job['title']} at {company}",
+            f"""<p>Hi {name},</p>
+<p>We've received your application for the <strong>{job['title']}</strong> position at {company}. Thanks for your interest!</p>
+<p>We'll be in touch with next steps soon.</p>
+<p>Best,<br>{company}</p>""",
+        )
 
     return _cors_json({"ok": True, "candidate_id": candidate_id})
 
