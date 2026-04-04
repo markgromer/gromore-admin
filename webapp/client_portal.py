@@ -1991,6 +1991,19 @@ def client_my_business():
             db.update_brand_text_field(brand_id, "call_tracking_number", call_num)
             flash("Performance targets saved.", "success")
 
+        elif section == "identity":
+            display_name = request.form.get("display_name", "")[:200].strip()
+            industry = request.form.get("industry", "")[:200].strip()
+            service_area = request.form.get("service_area", "")[:500].strip()
+            primary_services = request.form.get("primary_services", "")[:500].strip()
+            if display_name:
+                db.update_brand_text_field(brand_id, "display_name", display_name)
+                session["client_brand_name"] = display_name
+            db.update_brand_text_field(brand_id, "industry", industry)
+            db.update_brand_text_field(brand_id, "service_area", service_area)
+            db.update_brand_text_field(brand_id, "primary_services", primary_services)
+            flash("Business identity updated.", "success")
+
         elif section == "branding":
             brand_colors = request.form.get("brand_colors", "")[:200].strip()
             db.update_brand_text_field(brand_id, "brand_colors", brand_colors)
@@ -2171,12 +2184,12 @@ def client_upload_logo():
         flash("Invalid file type. Use PNG, JPG, SVG, or WebP.", "error")
         return redirect(url_for("client.client_my_business"))
 
-    # 5MB limit
+    # 20MB limit (client-side resize handles large images before upload)
     f.seek(0, 2)
     size = f.tell()
     f.seek(0)
-    if size > 5 * 1024 * 1024:
-        flash("File too large. Maximum 5MB.", "error")
+    if size > 20 * 1024 * 1024:
+        flash("File too large. Maximum 20MB.", "error")
         return redirect(url_for("client.client_my_business"))
 
     uploads_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads"))

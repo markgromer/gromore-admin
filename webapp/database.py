@@ -1205,6 +1205,7 @@ class WebDB:
             "openai_api_key", "openai_model",
             "openai_model_chat", "openai_model_images", "openai_model_analysis", "openai_model_ads",
             "ai_quality_tier",
+            "display_name", "industry", "service_area", "primary_services",
             "logo_path", "logo_variants", "brand_colors",
             "google_drive_folder_id", "google_drive_sheet_id",
             "google_maps_api_key", "google_place_id",

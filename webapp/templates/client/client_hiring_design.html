@@ -149,7 +149,7 @@
                         <div class="preview-icon" id="previewIcon">{{ brand.display_name[:1]|upper }}</div>
                         <div>
                             <div class="preview-brand-name" id="previewName">{{ brand.display_name }}</div>
-                            <div class="preview-brand-role">Service Plumber</div>
+                            <div class="preview-brand-role">{{ brand.industry or 'Your Industry' }}</div>
                         </div>
                     </div>
                     <div class="preview-dots" id="previewDots">

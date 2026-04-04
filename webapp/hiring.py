@@ -21,6 +21,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_from_directory,
     session,
     url_for,
 )
@@ -1144,6 +1145,23 @@ def public_job_detail(brand_slug, job_id):
 
 
 # ---------------------------------------------------------------------------
+# Routes: Public logo serving (for interview pages, no login required)
+# ---------------------------------------------------------------------------
+
+@hiring_bp.route("/assets/logo/<path:filename>")
+def public_logo(filename):
+    """Serve logo files publicly so interview pages can display brand logos."""
+    from pathlib import Path
+    uploads_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads"))
+    logo_dir = uploads_dir / "logos"
+    # Prevent directory traversal
+    safe_path = Path(filename)
+    if ".." in safe_path.parts:
+        abort(404)
+    return send_from_directory(str(logo_dir), filename)
+
+
+# ---------------------------------------------------------------------------
 # Routes: Interview Chat Page (public, token-authenticated)
 # ---------------------------------------------------------------------------
 
@@ -1165,7 +1183,7 @@ def interview_page(token):
     except (json.JSONDecodeError, TypeError):
         pass
 
-    # Resolve logo URL
+    # Resolve logo URL (use public route so no login needed)
     logo_url = ""
     if design.get("show_logo") and brand:
         variant_key = design.get("logo_variant", "primary")
@@ -1174,10 +1192,15 @@ def interview_page(token):
         except (json.JSONDecodeError, TypeError):
             variants = []
         match = next((v for v in variants if v.get("key") == variant_key), None)
+        logo_rel = None
         if match and match.get("path"):
-            logo_url = f"/uploads/{match['path']}"
+            logo_rel = match["path"]
         elif brand.get("logo_path"):
-            logo_url = f"/uploads/{brand['logo_path']}"
+            logo_rel = brand["logo_path"]
+        if logo_rel and logo_rel.startswith("logos/"):
+            logo_url = url_for("hiring.public_logo", filename=logo_rel[len("logos/"):])
+        elif logo_rel:
+            logo_url = f"/uploads/{logo_rel}"
 
     # Let brand override the displayed company name
     if design.get("company_label"):

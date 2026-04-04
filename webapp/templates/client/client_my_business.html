@@ -238,6 +238,57 @@
         margin-bottom: .75rem;
         border-radius: 8px;
     }
+
+    /* ── Logo resize overlay ── */
+    .logo-resize-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.55);
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .logo-resize-panel {
+        background: #fff;
+        border-radius: 16px;
+        padding: 1.5rem;
+        max-width: 520px;
+        width: 95%;
+        box-shadow: 0 20px 60px rgba(0,0,0,.25);
+    }
+    .logo-resize-panel h5 { margin: 0 0 .75rem; font-weight: 700; color: #1a1d2e; }
+    .logo-resize-canvas-wrap {
+        position: relative;
+        display: inline-block;
+        border: 2px dashed #d1d5db;
+        border-radius: 10px;
+        overflow: hidden;
+        cursor: nw-resize;
+        margin-bottom: .75rem;
+    }
+    .logo-resize-canvas-wrap canvas { display: block; }
+    .logo-resize-handle {
+        position: absolute;
+        right: -4px;
+        bottom: -4px;
+        width: 16px;
+        height: 16px;
+        background: #6366f1;
+        border: 2px solid #fff;
+        border-radius: 3px;
+        cursor: nwse-resize;
+        z-index: 2;
+    }
+    .logo-resize-dims {
+        font-size: .75rem;
+        color: #6b7280;
+        margin-bottom: .75rem;
+    }
+    .logo-resize-btns { display: flex; gap: .5rem; justify-content: flex-end; }
+    .logo-resize-btns button { padding: .45rem 1.1rem; border-radius: 8px; font-size: .85rem; font-weight: 600; cursor: pointer; border: none; }
+    .logo-resize-btns .btn-cancel { background: #e5e7eb; color: #374151; }
+    .logo-resize-btns .btn-confirm { background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; }
 </style>
 
 <!-- Header -->
@@ -291,11 +342,11 @@
                                 {% else %}
                                 <i class="bi bi-cloud-arrow-up" style="font-size:2rem; color:#9ca3af;"></i>
                                 <div style="font-size:.88rem; color:#6b7280; margin-top:.5rem;">Click to upload your logo</div>
-                                <small class="text-muted">PNG, JPG, SVG, or WebP. Max 5MB.</small>
+                                <small class="text-muted">PNG, JPG, SVG, or WebP.</small>
                                 {% endif %}
                             </div>
                             <input type="file" id="logoInput" name="logo" accept="image/png,image/jpeg,image/svg+xml,image/webp"
-                                   style="display:none;" onchange="this.form.submit()">
+                                   style="display:none;" onchange="openLogoResize(this)">
                         </form>
 
                         {% if logo_variants %}
@@ -363,6 +414,69 @@
 
     <!-- Left column: Brand profile -->
     <div class="col-lg-7">
+        <!-- Business Identity -->
+        <form method="POST" action="{{ url_for('client.client_my_business') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="section" value="identity">
+
+            <div class="biz-section">
+                <div class="biz-section-header">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <h5><i class="bi bi-shop me-2" style="color:#0ea5e9;"></i> Business Identity</h5>
+                    </div>
+                    <div class="section-hint">Core info about your business. Used across ads, hiring, and reports.</div>
+                </div>
+                <div class="biz-section-body">
+                    <div class="biz-field">
+                        <label>
+                            <span class="field-icon"><i class="bi bi-building"></i></span>
+                            Business Name
+                        </label>
+                        <input type="text" name="display_name" maxlength="200"
+                               value="{{ brand.display_name or '' }}"
+                               placeholder="e.g. Ace Plumbing Co.">
+                    </div>
+
+                    <div class="biz-field">
+                        <label>
+                            <span class="field-icon"><i class="bi bi-tools"></i></span>
+                            Industry / Service Type
+                        </label>
+                        <input type="text" name="industry" maxlength="200"
+                               value="{{ brand.industry or '' }}"
+                               placeholder="e.g. Plumbing, HVAC, Roofing, Landscaping">
+                        <div class="field-help">What kind of business are you? Used for job postings, AI context, and ad targeting.</div>
+                    </div>
+
+                    <div class="biz-field">
+                        <label>
+                            <span class="field-icon"><i class="bi bi-wrench"></i></span>
+                            Primary Services
+                        </label>
+                        <input type="text" name="primary_services" maxlength="500"
+                               value="{{ brand.primary_services or '' }}"
+                               placeholder="e.g. Drain cleaning, Water heater install, Leak repair, Repiping">
+                        <div class="field-help">Comma-separated list of your main services.</div>
+                    </div>
+
+                    <div class="biz-field">
+                        <label>
+                            <span class="field-icon"><i class="bi bi-geo-alt"></i></span>
+                            Service Area
+                        </label>
+                        <input type="text" name="service_area" maxlength="500"
+                               value="{{ brand.service_area or '' }}"
+                               placeholder="e.g. Dallas-Fort Worth metro, Within 30mi of downtown Austin">
+                        <div class="field-help">Where do you operate? Used for geo-targeting and job listings.</div>
+                    </div>
+
+                    <button type="submit" class="biz-save-btn" style="background: linear-gradient(135deg, #0ea5e9, #0284c7);">
+                        <i class="bi bi-check2 me-1"></i> Save Identity
+                    </button>
+                </div>
+            </div>
+        </form>
+
         <form method="POST" action="{{ url_for('client.client_my_business') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="section" value="voice">
@@ -713,4 +827,141 @@
         </div>
     </div>
 </div>
+
+<!-- Logo resize overlay (hidden until file selected) -->
+<div class="logo-resize-overlay" id="logoResizeOverlay" style="display:none;">
+    <div class="logo-resize-panel">
+        <h5><i class="bi bi-aspect-ratio me-2"></i> Resize Your Logo</h5>
+        <p style="font-size:.82rem;color:#6b7280;margin-bottom:.75rem;">Drag the corner handle to resize. The image will be saved at the size shown.</p>
+        <div style="text-align:center;">
+            <div class="logo-resize-canvas-wrap" id="canvasWrap">
+                <canvas id="resizeCanvas"></canvas>
+                <div class="logo-resize-handle" id="resizeHandle"></div>
+            </div>
+        </div>
+        <div class="logo-resize-dims" id="resizeDims">400 &times; 400</div>
+        <div class="logo-resize-btns">
+            <button type="button" class="btn-cancel" onclick="cancelResize()">Cancel</button>
+            <button type="button" class="btn-confirm" onclick="confirmResize()"><i class="bi bi-check2 me-1"></i> Upload</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function(){
+    let origImg = null;
+    let origW = 0, origH = 0;
+    let curW = 0, curH = 0;
+    let dragging = false, startX = 0, startW = 0;
+    const MAX_PREVIEW = 400;
+    const MIN_SIZE = 40;
+
+    window.openLogoResize = function(input) {
+        const file = input.files[0];
+        if (!file) return;
+        // SVG: skip resize, submit directly
+        if (file.type === 'image/svg+xml') {
+            input.closest('form').submit();
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                origImg = img;
+                origW = img.width;
+                origH = img.height;
+                // Start at original size, capped to preview max
+                curW = Math.min(origW, MAX_PREVIEW);
+                curH = Math.round(curW * (origH / origW));
+                if (curH > MAX_PREVIEW) {
+                    curH = MAX_PREVIEW;
+                    curW = Math.round(curH * (origW / origH));
+                }
+                drawCanvas();
+                document.getElementById('logoResizeOverlay').style.display = 'flex';
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    };
+
+    function drawCanvas() {
+        const canvas = document.getElementById('resizeCanvas');
+        // Output size = scaled proportionally from display size
+        const scale = origW / curW;
+        const outW = Math.round(curW);
+        const outH = Math.round(curH);
+        canvas.width = outW;
+        canvas.height = outH;
+        canvas.style.width = outW + 'px';
+        canvas.style.height = outH + 'px';
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, outW, outH);
+        ctx.drawImage(origImg, 0, 0, outW, outH);
+        document.getElementById('resizeDims').innerHTML = outW + ' &times; ' + outH + ' px';
+    }
+
+    // Drag handle
+    const handle = document.getElementById('resizeHandle');
+    handle.addEventListener('mousedown', startDrag);
+    handle.addEventListener('touchstart', startDrag, {passive: false});
+
+    function startDrag(e) {
+        e.preventDefault();
+        dragging = true;
+        startX = (e.touches ? e.touches[0].clientX : e.clientX);
+        startW = curW;
+        document.addEventListener('mousemove', doDrag);
+        document.addEventListener('mouseup', endDrag);
+        document.addEventListener('touchmove', doDrag, {passive: false});
+        document.addEventListener('touchend', endDrag);
+    }
+    function doDrag(e) {
+        if (!dragging) return;
+        e.preventDefault();
+        const clientX = (e.touches ? e.touches[0].clientX : e.clientX);
+        const delta = clientX - startX;
+        let newW = Math.max(MIN_SIZE, Math.min(MAX_PREVIEW, startW + delta));
+        curW = newW;
+        curH = Math.round(curW * (origH / origW));
+        if (curH > MAX_PREVIEW) {
+            curH = MAX_PREVIEW;
+            curW = Math.round(curH * (origW / origH));
+        }
+        if (curH < MIN_SIZE) {
+            curH = MIN_SIZE;
+            curW = Math.round(curH * (origW / origH));
+        }
+        drawCanvas();
+    }
+    function endDrag() {
+        dragging = false;
+        document.removeEventListener('mousemove', doDrag);
+        document.removeEventListener('mouseup', endDrag);
+        document.removeEventListener('touchmove', doDrag);
+        document.removeEventListener('touchend', endDrag);
+    }
+
+    window.cancelResize = function() {
+        document.getElementById('logoResizeOverlay').style.display = 'none';
+        document.getElementById('logoInput').value = '';
+    };
+
+    window.confirmResize = function() {
+        const canvas = document.getElementById('resizeCanvas');
+        canvas.toBlob(function(blob) {
+            // Build a new FormData and submit via fetch
+            const form = document.getElementById('logoInput').closest('form');
+            const fd = new FormData(form);
+            fd.delete('logo');
+            fd.append('logo', blob, 'logo.png');
+            fetch(form.action, { method: 'POST', body: fd })
+                .then(function(r) { window.location.reload(); })
+                .catch(function() { window.location.reload(); });
+        }, 'image/png', 0.92);
+        document.getElementById('logoResizeOverlay').style.display = 'none';
+    };
+})();
+</script>
 {% endblock %}
