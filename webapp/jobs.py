@@ -241,3 +241,64 @@ def cron_run_agents():
         "total_findings": total_findings,
         "errors": errors[:10],
     })
+
+
+@jobs_bp.route("/cron/refresh-dashboards", methods=["POST"])
+def cron_refresh_dashboards():
+    """Daily cron: refresh dashboard snapshots for all active brands.
+
+    Pulls live data from Google/Meta APIs, assembles the full dashboard
+    payload, and stores it so client logins are sub-second.
+    Auth via CRON_SECRET (same as cron_run_agents).
+    """
+    if not _verify_cron_secret():
+        return jsonify({"error": "unauthorized"}), 401
+
+    import json as _json
+    db = current_app.db
+    month = datetime.now().strftime("%Y-%m")
+    brand_ids = db.get_stale_dashboard_brands(month, max_age_hours=20)
+
+    from webapp.report_runner import get_analysis_and_suggestions_for_brand
+    from webapp.client_portal import _get_campaigns_cached, _assemble_dashboard_payload
+
+    refreshed = 0
+    skipped = 0
+    errors = []
+    for bid in brand_ids:
+        brand = db.get_brand(bid)
+        if not brand:
+            skipped += 1
+            continue
+        try:
+            analysis, suggestions = get_analysis_and_suggestions_for_brand(
+                db, brand, month, force_refresh=True
+            )
+            if not analysis:
+                skipped += 1
+                continue
+            campaigns_data = {}
+            try:
+                campaigns_data = _get_campaigns_cached(db, brand, month, force_sync=True)
+            except Exception:
+                pass
+            dashboard_data = _assemble_dashboard_payload(
+                db, brand, bid, month, analysis, suggestions, campaigns_data
+            )
+            db.upsert_dashboard_snapshot(
+                bid, month,
+                _json.dumps(dashboard_data, default=str),
+                source="cron",
+            )
+            refreshed += 1
+        except Exception as e:
+            skipped += 1
+            errors.append(f"{brand.get('display_name', '?')}: {str(e)[:80]}")
+
+    logger.info("Cron dashboard refresh: %d refreshed, %d skipped", refreshed, skipped)
+    return jsonify({
+        "ok": True,
+        "refreshed": refreshed,
+        "skipped": skipped,
+        "errors": errors[:10],
+    })

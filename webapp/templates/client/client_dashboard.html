@@ -401,10 +401,14 @@
         <h4 class="mb-1">Welcome back{% if client_name %}, {{ client_name }}{% endif %}</h4>
         <p class="text-muted mb-0">Here's how your marketing is performing</p>
     </div>
-    <div class="month-selector">
-        <form method="GET" class="d-flex align-items-center gap-2">
-            <input type="month" name="month" value="{{ month }}" class="form-control form-control-sm" style="width: 160px;" onchange="this.form.submit()">
-        </form>
+    <div class="d-flex align-items-center gap-2">
+        <span id="syncBadge" style="display:none; font-size:.78rem; color:#94a3b8;"><i class="bi bi-clock-history me-1"></i><span id="syncTime"></span></span>
+        <a id="refreshBtn" href="?month={{ month }}&refresh=1" style="display:none; font-size:.78rem; font-weight:600; color:#4f46e5; text-decoration:none; white-space:nowrap;" title="Pull fresh data from Google and Meta"><i class="bi bi-arrow-clockwise me-1"></i>Refresh</a>
+        <div class="month-selector">
+            <form method="GET" class="d-flex align-items-center gap-2">
+                <input type="month" name="month" value="{{ month }}" class="form-control form-control-sm" style="width: 160px;" onchange="this.form.submit()">
+            </form>
+        </div>
     </div>
 </div>
 
@@ -709,34 +713,63 @@ function fmtInt(v) {
 
     var month = '{{ month }}';
     var qs = 'month=' + encodeURIComponent(month);
+    var isManualRefresh = false;
     try {
         var sp2 = new URLSearchParams(window.location.search || '');
-        if (sp2.get('refresh') === '1') qs += '&refresh=1';
-        if (sp2.get('sync') === '1') qs += '&sync=1';
+        if (sp2.get('refresh') === '1') { qs += '&refresh=1'; isManualRefresh = true; }
+        if (sp2.get('sync') === '1') { qs += '&sync=1'; isManualRefresh = true; }
     } catch (e) {}
 
     fetch('{{ url_for("client.client_dashboard_data") }}?' + qs, { credentials: 'same-origin' })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        // Do not let individual steps "finish" early. Once data is in, complete them together.
+        var isCached = data.dashboard && data.dashboard._cached;
+
+        // Show sync badge and refresh button
+        if (data.dashboard) {
+            var syncBadge = document.getElementById('syncBadge');
+            var syncTimeEl = document.getElementById('syncTime');
+            var refreshBtn = document.getElementById('refreshBtn');
+            if (syncBadge && syncTimeEl && data.dashboard._cached_at) {
+                var ago = timeAgo(data.dashboard._cached_at);
+                syncTimeEl.textContent = 'Synced ' + ago;
+                syncBadge.style.display = 'inline-flex';
+            }
+            if (refreshBtn) refreshBtn.style.display = 'inline-flex';
+        }
+
+        if (isCached && !isManualRefresh) {
+            // Fast path: skip animated loader entirely
+            stopTicker();
+            document.getElementById('dashLoader').style.display = 'none';
+
+            if (data.error && !data.dashboard) {
+                document.getElementById('dashError').style.display = 'block';
+                document.getElementById('dashErrorMsg').textContent =
+                    'No data available for ' + month + ' yet. Data appears after your reports are generated.';
+                return;
+            }
+            renderDashboard(data.dashboard);
+            _triggerWarrenGreeting();
+            return;
+        }
+
+        // Slow path: play the animated loader as usual
         var finishAll = function() {
             stopTicker();
-            // Complete all non-render steps quickly.
             stepIds.forEach(function(id) {
                 if (id === 'step-build') return;
                 markDone(id);
             });
 
-            // Final render hold.
             var renderEl = document.getElementById('step-build');
             if (renderEl) {
                 markActive('step-build');
-                var title = renderEl.querySelector('.step-title');
-                var sub = renderEl.querySelector('.step-sub');
-                if (title) title.textContent = 'Letting the dashboard render';
-                if (sub) sub.textContent = 'Final pass: charts and cards.';
+                var titleEl = renderEl.querySelector('.step-title');
+                var subEl = renderEl.querySelector('.step-sub');
+                if (titleEl) titleEl.textContent = 'Letting the dashboard render';
+                if (subEl) subEl.textContent = 'Final pass: charts and cards.';
 
-                // Start render progress animation for the hold.
                 renderPhase.active = true;
                 renderPhase.startedAt = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                 startTicker();
@@ -758,42 +791,12 @@ function fmtInt(v) {
 
                     if (data.dashboard) {
                         renderDashboard(data.dashboard);
-                        if (!sessionStorage.getItem('warren_greeted')) {
-                            sessionStorage.setItem('warren_greeted', '1');
-                            var csrfMeta = document.querySelector('meta[name="csrf-token"]');
-                            var csrfVal = csrfMeta ? csrfMeta.getAttribute('content') : '';
-                            fetch('{{ url_for("client.client_assistant_proactive") }}', {
-                                method: 'POST',
-                                credentials: 'same-origin',
-                                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfVal },
-                                body: JSON.stringify({ hint: '' }),
-                            })
-                            .then(function(r) { return r.json(); })
-                            .then(function(pData) {
-                                if (pData.greeting) {
-                                    var logEl = document.getElementById('assistantLog');
-                                    if (logEl) {
-                                        var div = document.createElement('div');
-                                        div.className = 'assistant-bubble assistant';
-                                        div.innerHTML = (window.marked ? marked.parse(pData.greeting) : pData.greeting);
-                                        logEl.appendChild(div);
-                                        logEl.scrollTop = logEl.scrollHeight;
-                                        var shell = document.getElementById('globalAssistantShell');
-                                        if (shell && shell.classList.contains('assistant-collapsed')) {
-                                            shell.classList.remove('assistant-collapsed');
-                                            localStorage.setItem('clientAssistantCollapsed', '0');
-                                        }
-                                    }
-                                }
-                            })
-                            .catch(function() {});
-                        }
+                        _triggerWarrenGreeting();
                     }
                 }, 250);
             }, renderHoldMs);
         };
 
-        // Make sure the loader stays on screen briefly so it reads as "real work".
         var now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
         var elapsed = now - startedAt;
         var wait = Math.max(0, minShowMs - elapsed);
@@ -804,6 +807,51 @@ function fmtInt(v) {
         document.getElementById('dashError').style.display = 'block';
         document.getElementById('dashErrorMsg').textContent = 'Something went wrong loading your data. Please refresh.';
     });
+
+    function _triggerWarrenGreeting() {
+        if (!sessionStorage.getItem('warren_greeted')) {
+            sessionStorage.setItem('warren_greeted', '1');
+            var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+            var csrfVal = csrfMeta ? csrfMeta.getAttribute('content') : '';
+            fetch('{{ url_for("client.client_assistant_proactive") }}', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfVal },
+                body: JSON.stringify({ hint: '' }),
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(pData) {
+                if (pData.greeting) {
+                    var logEl = document.getElementById('assistantLog');
+                    if (logEl) {
+                        var div = document.createElement('div');
+                        div.className = 'assistant-bubble assistant';
+                        div.innerHTML = (window.marked ? marked.parse(pData.greeting) : pData.greeting);
+                        logEl.appendChild(div);
+                        logEl.scrollTop = logEl.scrollHeight;
+                        var shell = document.getElementById('globalAssistantShell');
+                        if (shell && shell.classList.contains('assistant-collapsed')) {
+                            shell.classList.remove('assistant-collapsed');
+                            localStorage.setItem('clientAssistantCollapsed', '0');
+                        }
+                    }
+                }
+            })
+            .catch(function() {});
+        }
+    }
+
+    function timeAgo(utcStr) {
+        try {
+            var d = new Date(utcStr + (utcStr.indexOf('Z') < 0 ? 'Z' : ''));
+            var diff = Math.floor((Date.now() - d.getTime()) / 1000);
+            if (diff < 60) return 'just now';
+            if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+            if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+            return Math.floor(diff / 86400) + 'd ago';
+        } catch(e) { return ''; }
+    }
+
     function computeVerdict(camp, targetCpa) {
         var spend = parseFloat(camp.spend) || 0;
         var leads = parseFloat(camp.conversions) || 0;

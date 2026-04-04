@@ -1070,6 +1070,25 @@ class WebDB:
             # Best-effort migration; never block app startup.
             pass
 
+        # ── Dashboard Snapshots (Phase 1 cache layer) ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS dashboard_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                month TEXT NOT NULL,
+                snapshot_json TEXT NOT NULL DEFAULT '{}',
+                source TEXT NOT NULL DEFAULT 'auto',
+                created_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(brand_id, month),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_dashboard_snapshots_brand_month
+            ON dashboard_snapshots(brand_id, month);
+        """)
+        conn.commit()
+
         conn.close()
 
     # ── Users ──
@@ -3852,3 +3871,44 @@ class WebDB:
             )
         conn.commit()
         conn.close()
+
+    # ── Dashboard Snapshots ──
+
+    def upsert_dashboard_snapshot(self, brand_id, month, snapshot_json, source="auto"):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO dashboard_snapshots (brand_id, month, snapshot_json, source, created_at)
+               VALUES (?, ?, ?, ?, datetime('now'))
+               ON CONFLICT(brand_id, month) DO UPDATE SET
+                 snapshot_json = excluded.snapshot_json,
+                 source = excluded.source,
+                 created_at = datetime('now')""",
+            (brand_id, month, snapshot_json, source),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_dashboard_snapshot(self, brand_id, month, max_age_hours=24):
+        conn = self._conn()
+        row = conn.execute(
+            """SELECT * FROM dashboard_snapshots
+               WHERE brand_id = ? AND month = ?
+                 AND created_at > datetime('now', ?)""",
+            (brand_id, month, f"-{max_age_hours} hours"),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_stale_dashboard_brands(self, month, max_age_hours=20):
+        """Return brand IDs whose snapshot is missing or older than max_age_hours."""
+        conn = self._conn()
+        rows = conn.execute(
+            """SELECT b.id FROM brands b
+               LEFT JOIN dashboard_snapshots ds
+                 ON ds.brand_id = b.id AND ds.month = ?
+               WHERE ds.id IS NULL
+                  OR ds.created_at <= datetime('now', ?)""",
+            (month, f"-{max_age_hours} hours"),
+        ).fetchall()
+        conn.close()
+        return [r["id"] for r in rows]

@@ -42,6 +42,7 @@ def _warm_client_snapshots_async(*, brand_id: int, month: str) -> None:
     Populates:
     - analysis + suggestions (monthly_summary)
     - campaigns list snapshot (settings)
+    - full dashboard snapshot (dashboard_snapshots table)
 
     Best-effort: failures should never block the request.
     """
@@ -61,19 +62,36 @@ def _warm_client_snapshots_async(*, brand_id: int, month: str) -> None:
                 if not brand:
                     return
 
+                analysis = None
+                suggestions = None
                 try:
                     from webapp.report_runner import get_analysis_and_suggestions_for_brand
 
-                    get_analysis_and_suggestions_for_brand(
+                    analysis, suggestions = get_analysis_and_suggestions_for_brand(
                         db, brand, month, force_refresh=True
                     )
                 except Exception as exc:
                     log.info("Warm-up analysis failed (brand=%s month=%s): %s", brand_id, month, exc)
 
+                campaigns_data = {}
                 try:
-                    _get_campaigns_cached(db, brand, month, force_sync=True)
+                    campaigns_data = _get_campaigns_cached(db, brand, month, force_sync=True)
                 except Exception as exc:
                     log.info("Warm-up campaigns failed (brand=%s month=%s): %s", brand_id, month, exc)
+
+                # Build and save full dashboard snapshot
+                if analysis:
+                    try:
+                        dashboard_data = _assemble_dashboard_payload(
+                            db, brand, brand_id, month, analysis, suggestions, campaigns_data
+                        )
+                        db.upsert_dashboard_snapshot(
+                            brand_id, month,
+                            json.dumps(dashboard_data, default=str),
+                            source="warmup",
+                        )
+                    except Exception as exc:
+                        log.info("Warm-up snapshot save failed (brand=%s): %s", brand_id, exc)
         except Exception:
             return
 
@@ -82,6 +100,128 @@ def _warm_client_snapshots_async(*, brand_id: int, month: str) -> None:
         t.start()
     except Exception:
         return
+
+
+def _assemble_dashboard_payload(db, brand, brand_id, month, analysis, suggestions, campaigns_data):
+    """Build the full dashboard JSON payload from pre-fetched data.
+
+    Shared by the /dashboard/data endpoint and the warm-up thread so the
+    snapshot contains the exact same structure the frontend expects.
+    """
+    from webapp.client_advisor import build_client_dashboard
+
+    dashboard_data = build_client_dashboard(analysis, suggestions, brand)
+    dashboard_data["campaigns"] = {
+        "google": [
+            {
+                "id": c.get("id", ""),
+                "name": c.get("name", ""),
+                "status": c.get("status", ""),
+                "daily_budget": c.get("daily_budget", 0),
+                "spend": c.get("spend", 0),
+                "clicks": c.get("clicks", 0),
+                "ctr": c.get("ctr", 0),
+                "conversions": c.get("conversions", 0),
+                "cpa": c.get("cpa", 0),
+                "channel_type": c.get("channel_type", ""),
+            }
+            for c in (campaigns_data.get("google") or [])
+        ],
+        "meta": [
+            {
+                "id": c.get("id", ""),
+                "name": c.get("name", ""),
+                "status": c.get("status", ""),
+                "daily_budget": c.get("daily_budget", 0),
+                "spend": c.get("spend", 0),
+                "clicks": c.get("clicks", 0),
+                "ctr": c.get("ctr", 0),
+                "conversions": c.get("conversions", 0),
+                "cpa": c.get("cpa", 0),
+                "objective": c.get("objective", ""),
+            }
+            for c in (campaigns_data.get("meta") or [])
+        ],
+    }
+
+    try:
+        dashboard_data["target_cpa"] = float(brand.get("kpi_target_cpa") or 0)
+    except (ValueError, TypeError):
+        dashboard_data["target_cpa"] = 0.0
+
+    try:
+        drafts_raw = db.get_campaign_drafts(brand_id) or []
+        dashboard_data["drafts"] = [
+            {
+                "id": dr["id"],
+                "platform": dr.get("platform", ""),
+                "campaign_name": dr.get("campaign_name", "Untitled"),
+                "status": dr.get("status", "draft"),
+                "created_by": dr.get("created_by", ""),
+                "updated_at": dr.get("updated_at", dr.get("created_at", "")),
+            }
+            for dr in drafts_raw
+        ]
+    except Exception:
+        dashboard_data["drafts"] = []
+
+    try:
+        if brand.get("crm_type") == "sweepandgo" and brand.get("crm_api_key"):
+            from webapp.crm_bridge import (
+                sng_count_active_clients,
+                sng_count_happy_clients,
+                sng_count_happy_dogs,
+                sng_count_jobs,
+            )
+            dashboard_data["sng"] = {
+                "connected": True,
+                "active_clients": sng_count_active_clients(brand) or 0,
+                "happy_clients": sng_count_happy_clients(brand) or 0,
+                "happy_dogs": sng_count_happy_dogs(brand) or 0,
+                "completed_jobs": sng_count_jobs(brand) or 0,
+            }
+    except Exception:
+        dashboard_data["sng"] = {"connected": False}
+
+    try:
+        latest_findings = db.get_agent_findings(brand_id, month=month, limit=50)
+        briefing_critical = [f for f in latest_findings if f.get("severity") == "critical"]
+        briefing_warning = [f for f in latest_findings if f.get("severity") == "warning"]
+        briefing_positive = [f for f in latest_findings if f.get("severity") == "positive"]
+
+        dashboard_data["warren_briefing"] = {
+            "total_findings": len(latest_findings),
+            "critical_count": len(briefing_critical),
+            "warning_count": len(briefing_warning),
+            "positive_count": len(briefing_positive),
+            "top_critical": [
+                {"title": f.get("title", ""), "detail": f.get("detail", ""), "agent": f.get("agent_key", "")}
+                for f in briefing_critical[:3]
+            ],
+            "top_warnings": [
+                {"title": f.get("title", ""), "detail": f.get("detail", ""), "agent": f.get("agent_key", "")}
+                for f in briefing_warning[:3]
+            ],
+            "top_wins": [
+                {"title": f.get("title", ""), "detail": f.get("detail", ""), "agent": f.get("agent_key", "")}
+                for f in briefing_positive[:3]
+            ],
+        }
+    except Exception:
+        dashboard_data["warren_briefing"] = None
+
+    try:
+        hired_agents = json.loads(brand.get("hired_agents") or "{}")
+        active_count = len([a for a in hired_agents.values() if a.get("trained")])
+        dashboard_data["team_status"] = {
+            "hired": len(hired_agents),
+            "trained": active_count,
+            "total_available": len(AGENT_ROSTER),
+        }
+    except Exception:
+        dashboard_data["team_status"] = None
+
+    return dashboard_data
 
 
 ALLOWED_AI_MODELS = {
@@ -562,7 +702,11 @@ def client_dashboard():
 @client_bp.route("/dashboard/data")
 @client_login_required
 def client_dashboard_data():
-    """JSON endpoint for async dashboard loading."""
+    """JSON endpoint for async dashboard loading.
+
+    Returns a cached snapshot when available (sub-second).
+    Pass ?refresh=1 to force a live pull from ad platforms.
+    """
     db = _get_db()
     brand_id = session["client_brand_id"]
     brand = db.get_brand(brand_id)
@@ -571,137 +715,50 @@ def client_dashboard_data():
 
     month = request.args.get("month") or datetime.now().strftime("%Y-%m")
 
+    force_refresh = (request.args.get("refresh") == "1")
+    force_campaign_sync = (request.args.get("sync") == "1")
+
+    # ── Fast path: serve from snapshot cache ──
+    if not force_refresh and not force_campaign_sync:
+        try:
+            snapshot = db.get_dashboard_snapshot(brand_id, month)
+            if snapshot:
+                cached_data = json.loads(snapshot["snapshot_json"])
+                cached_data["_cached"] = True
+                cached_data["_cached_at"] = snapshot["created_at"]
+                return jsonify({"dashboard": cached_data, "error": ""})
+        except Exception:
+            pass  # Fall through to live pull
+
+    # ── Slow path: live pull ──
     try:
         from webapp.report_runner import get_analysis_and_suggestions_for_brand
-        from webapp.client_advisor import build_client_dashboard
 
-        force_refresh = (request.args.get("refresh") == "1")
         analysis, suggestions = get_analysis_and_suggestions_for_brand(
             db, brand, month, force_refresh=force_refresh
         )
 
         campaigns_data = {}
         try:
-            force_campaign_sync = (request.args.get("sync") == "1")
             campaigns_data = _get_campaigns_cached(db, brand, month, force_sync=force_campaign_sync)
         except Exception as exc:
             current_app.logger.exception("Campaign listing failed: %s", exc)
 
         if analysis:
-            dashboard_data = build_client_dashboard(analysis, suggestions, brand)
-            dashboard_data["campaigns"] = {
-                "google": [
-                    {
-                        "id": c.get("id", ""),
-                        "name": c.get("name", ""),
-                        "status": c.get("status", ""),
-                        "daily_budget": c.get("daily_budget", 0),
-                        "spend": c.get("spend", 0),
-                        "clicks": c.get("clicks", 0),
-                        "ctr": c.get("ctr", 0),
-                        "conversions": c.get("conversions", 0),
-                        "cpa": c.get("cpa", 0),
-                        "channel_type": c.get("channel_type", ""),
-                    }
-                    for c in (campaigns_data.get("google") or [])
-                ],
-                "meta": [
-                    {
-                        "id": c.get("id", ""),
-                        "name": c.get("name", ""),
-                        "status": c.get("status", ""),
-                        "daily_budget": c.get("daily_budget", 0),
-                        "spend": c.get("spend", 0),
-                        "clicks": c.get("clicks", 0),
-                        "ctr": c.get("ctr", 0),
-                        "conversions": c.get("conversions", 0),
-                        "cpa": c.get("cpa", 0),
-                        "objective": c.get("objective", ""),
-                    }
-                    for c in (campaigns_data.get("meta") or [])
-                ],
-            }
-            # KPI target for verdict computation
-            try:
-                dashboard_data["target_cpa"] = float(brand.get("kpi_target_cpa") or 0)
-            except (ValueError, TypeError):
-                dashboard_data["target_cpa"] = 0.0
+            dashboard_data = _assemble_dashboard_payload(
+                db, brand, brand_id, month, analysis, suggestions, campaigns_data
+            )
 
-            # Campaign drafts for the dashboard
+            # Save snapshot for next visit
             try:
-                drafts_raw = db.get_campaign_drafts(brand_id) or []
-                dashboard_data["drafts"] = [
-                    {
-                        "id": dr["id"],
-                        "platform": dr.get("platform", ""),
-                        "campaign_name": dr.get("campaign_name", "Untitled"),
-                        "status": dr.get("status", "draft"),
-                        "created_by": dr.get("created_by", ""),
-                        "updated_at": dr.get("updated_at", dr.get("created_at", "")),
-                    }
-                    for dr in drafts_raw
-                ]
+                source = "manual" if force_refresh else "auto"
+                db.upsert_dashboard_snapshot(
+                    brand_id, month,
+                    json.dumps(dashboard_data, default=str),
+                    source,
+                )
             except Exception:
-                dashboard_data["drafts"] = []
-
-            # SNG business pulse (non-blocking)
-            try:
-                if brand.get("crm_type") == "sweepandgo" and brand.get("crm_api_key"):
-                    from webapp.crm_bridge import (
-                        sng_count_active_clients,
-                        sng_count_happy_clients,
-                        sng_count_happy_dogs,
-                        sng_count_jobs,
-                    )
-                    dashboard_data["sng"] = {
-                        "connected": True,
-                        "active_clients": sng_count_active_clients(brand) or 0,
-                        "happy_clients": sng_count_happy_clients(brand) or 0,
-                        "happy_dogs": sng_count_happy_dogs(brand) or 0,
-                        "completed_jobs": sng_count_jobs(brand) or 0,
-                    }
-            except Exception:
-                dashboard_data["sng"] = {"connected": False}
-
-            # WARREN briefing: latest agent findings + action plans
-            try:
-                latest_findings = db.get_agent_findings(brand_id, month=month, limit=50)
-                briefing_critical = [f for f in latest_findings if f.get("severity") == "critical"]
-                briefing_warning = [f for f in latest_findings if f.get("severity") == "warning"]
-                briefing_positive = [f for f in latest_findings if f.get("severity") == "positive"]
-
-                dashboard_data["warren_briefing"] = {
-                    "total_findings": len(latest_findings),
-                    "critical_count": len(briefing_critical),
-                    "warning_count": len(briefing_warning),
-                    "positive_count": len(briefing_positive),
-                    "top_critical": [
-                        {"title": f.get("title", ""), "detail": f.get("detail", ""), "agent": f.get("agent_key", "")}
-                        for f in briefing_critical[:3]
-                    ],
-                    "top_warnings": [
-                        {"title": f.get("title", ""), "detail": f.get("detail", ""), "agent": f.get("agent_key", "")}
-                        for f in briefing_warning[:3]
-                    ],
-                    "top_wins": [
-                        {"title": f.get("title", ""), "detail": f.get("detail", ""), "agent": f.get("agent_key", "")}
-                        for f in briefing_positive[:3]
-                    ],
-                }
-            except Exception:
-                dashboard_data["warren_briefing"] = None
-
-            # Hired agents count for dashboard team status
-            try:
-                hired_agents = json.loads(brand.get("hired_agents") or "{}")
-                active_count = len([a for a in hired_agents.values() if a.get("trained")])
-                dashboard_data["team_status"] = {
-                    "hired": len(hired_agents),
-                    "trained": active_count,
-                    "total_available": len(AGENT_ROSTER),
-                }
-            except Exception:
-                dashboard_data["team_status"] = None
+                pass
 
             _log_agent("scout", "Analyzed campaign performance", f"Scanned {len(campaigns_data.get('google', []))} Google + {len(campaigns_data.get('meta', []))} Meta campaigns")
             _log_agent("warren", "Built dashboard briefing", f"Month: {month}")
