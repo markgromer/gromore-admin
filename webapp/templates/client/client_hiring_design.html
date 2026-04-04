@@ -225,7 +225,12 @@ function updatePreview() {
         const variantKey = document.getElementById('logoVariant').value;
         const match = logoVariantsData.find(v => v.key === variantKey);
         if (match && match.path) {
-            icon.innerHTML = `<img src="/uploads/${match.path}" alt="Logo">`;
+            // Use the same public route the live interview page uses
+            let logoSrc = '/uploads/' + match.path;
+            if (match.path.startsWith('logos/')) {
+                logoSrc = '{{ url_for("hiring.public_logo", filename="__PH__") }}'.replace('__PH__', match.path.substring(6));
+            }
+            icon.innerHTML = `<img src="${logoSrc}" alt="Logo" style="width:100%;height:100%;object-fit:cover;border-radius:8px;" onerror="this.parentNode.textContent='${brandInitial}'">`;
         } else {
             icon.textContent = brandInitial;
         }

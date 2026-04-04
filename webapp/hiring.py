@@ -1165,6 +1165,48 @@ def public_logo(filename):
 # Routes: Interview Chat Page (public, token-authenticated)
 # ---------------------------------------------------------------------------
 
+@hiring_bp.route("/interview/<token>/debug")
+def interview_debug(token):
+    """Debug endpoint - shows what design data the interview page would use."""
+    db = _get_db()
+    interview = db.get_hiring_interview_by_token(token)
+    if not interview:
+        abort(404)
+    brand = db.get_brand(interview["brand_id"])
+    design = {}
+    try:
+        design = json.loads((brand or {}).get("hiring_design") or "{}")
+    except (json.JSONDecodeError, TypeError):
+        pass
+    variants_raw = (brand or {}).get("logo_variants", "[]")
+    logo_path = (brand or {}).get("logo_path", "")
+    # Resolve logo URL same way as interview_page
+    logo_url = ""
+    if design.get("show_logo") and brand:
+        variant_key = design.get("logo_variant", "primary")
+        try:
+            variants = json.loads(variants_raw or "[]")
+        except (json.JSONDecodeError, TypeError):
+            variants = []
+        match = next((v for v in variants if v.get("key") == variant_key), None)
+        logo_rel = None
+        if match and match.get("path"):
+            logo_rel = match["path"]
+        elif brand.get("logo_path"):
+            logo_rel = brand["logo_path"]
+        if logo_rel and logo_rel.startswith("logos/"):
+            logo_url = url_for("hiring.public_logo", filename=logo_rel[len("logos/"):])
+        elif logo_rel:
+            logo_url = f"/uploads/{logo_rel}"
+    return jsonify({
+        "design": design,
+        "logo_url": logo_url,
+        "logo_path": logo_path,
+        "logo_variants_raw": variants_raw,
+        "company": (brand or {}).get("display_name", ""),
+        "brand_id": (brand or {}).get("id"),
+    })
+
 @hiring_bp.route("/interview/<token>")
 def interview_page(token):
     """Public interview chat page - token is the auth."""
