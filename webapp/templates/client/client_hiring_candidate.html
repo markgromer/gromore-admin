@@ -49,6 +49,31 @@
     .gate-flag-banner { background:#2d2a1a; border:1px solid #92400e; border-radius:8px; padding:.5rem .75rem; margin-bottom:1rem; font-size:.8rem; color:#fbbf24; display:flex; align-items:center; gap:.4rem; }
     .suggested-q { background:var(--input-bg, #12121e); border-radius:8px; padding:.45rem .7rem; margin-bottom:.35rem; font-size:.8rem; color:var(--text, #e2e2f0); display:flex; align-items:flex-start; gap:.4rem; }
     .suggested-q i { color:#60a5fa; margin-top:2px; flex-shrink:0; }
+
+    /* Social Scan Styles */
+    .scan-card { grid-column:1/-1; }
+    .scan-header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.5rem; }
+    .scan-header h5 { margin:0; }
+    .scan-badge { display:inline-block; padding:.2rem .55rem; border-radius:5px; font-size:.7rem; font-weight:600; text-transform:uppercase; letter-spacing:.3px; }
+    .scan-clean { background:#1a3a2a; color:#34d399; }
+    .scan-minor { background:#2d2a1a; color:#fbbf24; }
+    .scan-significant { background:#2d1515; color:#f87171; }
+    .scan-unknown { background:var(--input-bg, #12121e); color:var(--text-muted, #8888aa); }
+    .scan-profile-row { display:flex; align-items:center; gap:.5rem; padding:.35rem 0; font-size:.8rem; border-bottom:1px solid var(--border-color, #2d2d3d); }
+    .scan-profile-row:last-child { border-bottom:none; }
+    .scan-profile-row a { color:#60a5fa; text-decoration:none; }
+    .scan-profile-row a:hover { text-decoration:underline; }
+    .scan-profile-platform { font-weight:600; width:80px; flex-shrink:0; color:var(--text, #e2e2f0); }
+    .scan-confidence { font-size:.7rem; padding:.1rem .35rem; border-radius:4px; background:var(--input-bg, #12121e); color:var(--text-muted, #8888aa); }
+    .scan-flag { background:#7f1d1d; color:#fca5a5; padding:.35rem .6rem; border-radius:6px; font-size:.75rem; margin-bottom:.35rem; display:flex; align-items:center; gap:.3rem; }
+    .scan-positive { background:#1a3a2a; color:#34d399; padding:.35rem .6rem; border-radius:6px; font-size:.75rem; margin-bottom:.35rem; display:flex; align-items:center; gap:.3rem; }
+    .scan-form-urls { width:100%; min-height:40px; background:var(--input-bg, #12121e); border:1px solid var(--border-color, #2d2d3d); border-radius:6px; color:var(--text, #e2e2f0); padding:.4rem .6rem; font-size:.8rem; resize:vertical; }
+    .scan-btn { background:#6366f1; color:#fff; border:none; padding:.4rem 1rem; border-radius:6px; font-size:.8rem; cursor:pointer; display:inline-flex; align-items:center; gap:.35rem; }
+    .scan-btn:hover { background:#4f46e5; }
+    .scan-btn:disabled { opacity:.6; cursor:not-allowed; }
+    .scan-time { font-size:.7rem; color:var(--text-muted, #8888aa); }
+    @keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+    .spin-icon { animation:spin 1s linear infinite; }
 </style>
 
 <a href="{{ url_for('hiring.job_detail', job_id=candidate.job_id) }}" style="font-size:.8rem;color:var(--text-muted);text-decoration:none;display:inline-flex;align-items:center;gap:.3rem;margin-bottom:1rem;">
@@ -178,6 +203,39 @@
         <div id="suggestedQsContainer"></div>
     </div>
     {% endif %}
+
+    <!-- Social Profile Scan -->
+    <div class="card-box scan-card">
+        <div class="scan-header">
+            <h5><i class="bi bi-globe2"></i> Social Profile Scan</h5>
+            {% set scan_data_raw = candidate.social_scan|default('{}') %}
+            {% if scan_data_raw and scan_data_raw != '{}' %}
+                {% set scan_status = '' %}
+                <span class="scan-time" id="scanTimestamp"></span>
+            {% endif %}
+        </div>
+
+        <div id="scanResults">
+            {% if not scan_data_raw or scan_data_raw == '{}' %}
+            <div style="color:var(--text-muted);font-size:.82rem;padding:.5rem 0;">
+                No scan has been run yet. Search the web for this candidate's public social media profiles.
+            </div>
+            {% endif %}
+        </div>
+
+        <div style="margin-top:.75rem; border-top:1px solid var(--border-color, #2d2d3d); padding-top:.75rem;">
+            <form method="POST" action="{{ url_for('hiring.social_scan', candidate_id=candidate.id) }}" onsubmit="this.querySelector('.scan-btn').disabled=true; this.querySelector('.scan-btn').innerHTML='<i class=\'bi bi-arrow-repeat spin-icon\'></i> Scanning...';">
+                <div style="margin-bottom:.5rem;">
+                    <label style="font-size:.75rem; color:var(--text-muted);">Paste known profile URLs (optional, one per line):</label>
+                    <textarea class="scan-form-urls" name="social_urls" rows="2" placeholder="https://facebook.com/johndoe&#10;https://linkedin.com/in/johndoe"></textarea>
+                </div>
+                <button type="submit" class="scan-btn">
+                    <i class="bi bi-search"></i>
+                    {% if scan_data_raw and scan_data_raw != '{}' %}Re-scan Profiles{% else %}Scan Social Profiles{% endif %}
+                </button>
+            </form>
+        </div>
+    </div>
 
     <!-- Application Info -->
     <div class="card-box">
@@ -313,6 +371,79 @@
                 sqHtml += '<div class="suggested-q"><i class="bi bi-chat-left-text"></i> ' + q + '</div>';
             });
             sqContainer.innerHTML = sqHtml;
+        }
+    }
+
+    // ----- Social Scan Results -----
+    var scanRaw = {{ candidate.social_scan|default('{}')|tojson }};
+    var scan = {};
+    try { scan = typeof scanRaw === 'string' ? JSON.parse(scanRaw) : scanRaw; } catch(e) {}
+
+    if (scan && scan.status) {
+        var container = document.getElementById('scanResults');
+        var html = '';
+
+        // Overall assessment badge
+        var assess = scan.overall_assessment || scan.status;
+        var badgeClass = 'scan-unknown';
+        var badgeLabel = assess;
+        if (assess === 'clean') { badgeClass = 'scan-clean'; badgeLabel = 'Clean'; }
+        else if (assess === 'minor_concerns') { badgeClass = 'scan-minor'; badgeLabel = 'Minor Concerns'; }
+        else if (assess === 'significant_concerns') { badgeClass = 'scan-significant'; badgeLabel = 'Significant Concerns'; }
+        else if (assess === 'no_profiles_found') { badgeClass = 'scan-unknown'; badgeLabel = 'No Profiles Found'; }
+        else if (assess === 'error') { badgeClass = 'scan-minor'; badgeLabel = 'Scan Error'; }
+
+        html += '<div style="margin-bottom:.75rem;"><span class="scan-badge ' + badgeClass + '">' + badgeLabel + '</span></div>';
+
+        // Summary
+        if (scan.summary) {
+            html += '<div style="font-size:.82rem;line-height:1.5;color:var(--text,#e2e2f0);margin-bottom:.75rem;">' + scan.summary + '</div>';
+        }
+        if (scan.analysis) {
+            html += '<div style="font-size:.82rem;line-height:1.5;color:var(--text,#e2e2f0);margin-bottom:.75rem;">' + scan.analysis + '</div>';
+        }
+
+        // Profiles found
+        if (scan.profiles && scan.profiles.length) {
+            html += '<div style="margin-bottom:.75rem;">';
+            html += '<div style="font-size:.75rem;color:var(--text-muted);margin-bottom:.4rem;font-weight:600;">PROFILES FOUND</div>';
+            scan.profiles.forEach(function(p) {
+                html += '<div class="scan-profile-row">';
+                html += '<span class="scan-profile-platform">' + (p.platform || 'Unknown') + '</span>';
+                if (p.url) html += '<a href="' + p.url + '" target="_blank" rel="noopener">' + p.url.substring(0, 60) + (p.url.length > 60 ? '...' : '') + '</a>';
+                if (p.confidence) html += ' <span class="scan-confidence">' + p.confidence + '</span>';
+                if (p.likely_match === false) html += ' <span class="scan-confidence" style="color:#f87171;">unlikely match</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        // Red flags
+        if (scan.red_flags && scan.red_flags.length) {
+            html += '<div style="margin-bottom:.75rem;">';
+            html += '<div style="font-size:.75rem;color:var(--text-muted);margin-bottom:.4rem;font-weight:600;">RED FLAGS</div>';
+            scan.red_flags.forEach(function(f) {
+                html += '<div class="scan-flag"><i class="bi bi-exclamation-triangle-fill"></i> ' + f + '</div>';
+            });
+            html += '</div>';
+        }
+
+        // Positive signals
+        if (scan.positive_signals && scan.positive_signals.length) {
+            html += '<div style="margin-bottom:.5rem;">';
+            html += '<div style="font-size:.75rem;color:var(--text-muted);margin-bottom:.4rem;font-weight:600;">POSITIVE SIGNALS</div>';
+            scan.positive_signals.forEach(function(s) {
+                html += '<div class="scan-positive"><i class="bi bi-check-circle-fill"></i> ' + s + '</div>';
+            });
+            html += '</div>';
+        }
+
+        container.innerHTML = html;
+
+        // Timestamp
+        var tsEl = document.getElementById('scanTimestamp');
+        if (tsEl && scan.scanned_at) {
+            tsEl.textContent = 'Last scanned: ' + scan.scanned_at;
         }
     }
 })();

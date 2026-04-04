@@ -1021,6 +1021,7 @@ class WebDB:
         new_hc_cols = [
             ("signal_reasoning", "TEXT DEFAULT '{}'"),
             ("key_moments", "TEXT DEFAULT '[]'"),
+            ("social_scan", "TEXT DEFAULT '{}'"),
         ]
         for col_name, col_def in new_hc_cols:
             if col_name not in hc_columns:

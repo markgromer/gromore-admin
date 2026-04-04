@@ -8,8 +8,10 @@ and one-push scheduling/offer/rejection actions.
 import json
 import logging
 import os
+import re
 import time
 from datetime import datetime, timedelta
+from urllib.parse import quote_plus, urlparse
 
 import requests as _requests
 from flask import (
@@ -1620,6 +1622,243 @@ def quo_phone_numbers():
     from webapp.quo_sms import get_phone_numbers
     numbers, err = get_phone_numbers(api_key)
     return jsonify({"ok": not err, "numbers": numbers, "error": err})
+
+
+# ---------------------------------------------------------------------------
+# Social Profile Scan
+# ---------------------------------------------------------------------------
+
+_SOCIAL_DOMAINS = {
+    "facebook.com": "Facebook",
+    "instagram.com": "Instagram",
+    "twitter.com": "Twitter/X",
+    "x.com": "Twitter/X",
+    "linkedin.com": "LinkedIn",
+    "tiktok.com": "TikTok",
+    "reddit.com": "Reddit",
+    "youtube.com": "YouTube",
+    "threads.net": "Threads",
+    "nextdoor.com": "Nextdoor",
+}
+
+
+def _classify_url(url):
+    """Return (platform_name, url) or None if not a social platform."""
+    try:
+        host = urlparse(url).netloc.lower().replace("www.", "")
+        for domain, name in _SOCIAL_DOMAINS.items():
+            if host.endswith(domain):
+                return name, url
+    except Exception:
+        pass
+    return None
+
+
+def _duckduckgo_search(query, max_results=20):
+    """Search DuckDuckGo HTML lite and return a list of {title, url, snippet} dicts."""
+    results = []
+    try:
+        resp = _requests.get(
+            "https://html.duckduckgo.com/html/",
+            params={"q": query},
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return results
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for r in soup.select(".result")[:max_results]:
+            link_el = r.select_one(".result__a")
+            snippet_el = r.select_one(".result__snippet")
+            if not link_el:
+                continue
+            href = link_el.get("href", "")
+            # DuckDuckGo wraps links in a redirect - extract actual URL
+            if "uddg=" in href:
+                from urllib.parse import parse_qs, urlparse as _up
+                qs = parse_qs(_up(href).query)
+                href = qs.get("uddg", [href])[0]
+            results.append({
+                "title": link_el.get_text(strip=True),
+                "url": href,
+                "snippet": snippet_el.get_text(strip=True) if snippet_el else "",
+            })
+    except Exception as exc:
+        log.warning("DuckDuckGo search failed: %s", exc)
+    return results
+
+
+def _fetch_page_text(url, max_chars=5000):
+    """Fetch a public page and return its visible text, truncated."""
+    try:
+        resp = _requests.get(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+            timeout=8,
+            allow_redirects=True,
+        )
+        if resp.status_code != 200:
+            return None
+        ct = resp.headers.get("Content-Type", "")
+        if "text/html" not in ct:
+            return None
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for tag in soup(["script", "style", "nav", "header", "footer"]):
+            tag.decompose()
+        text = soup.get_text(separator=" ", strip=True)
+        return text[:max_chars] if text else None
+    except Exception:
+        return None
+
+
+@hiring_bp.route("/candidates/<int:candidate_id>/social-scan", methods=["POST"])
+def social_scan(candidate_id):
+    """Run a social media profile scan for a candidate."""
+    brand, user_id = _require_client_login()
+    db = _get_db()
+    candidate = db.get_hiring_candidate(candidate_id)
+    if not candidate or candidate["brand_id"] != brand["id"]:
+        abort(404)
+
+    api_key = _get_openai_key()
+    if not api_key:
+        flash("OpenAI API key required for social scanning.", "danger")
+        return redirect(url_for("hiring.candidate_detail", candidate_id=candidate_id))
+
+    name = candidate["name"]
+    location = brand.get("service_area", "")
+    manual_urls = request.form.get("social_urls", "").strip()
+
+    # ── Phase 1: Discover profiles via web search ──
+    search_query = f'"{name}"'
+    if location:
+        search_query += f" {location}"
+    search_query += " site:facebook.com OR site:instagram.com OR site:linkedin.com OR site:twitter.com OR site:x.com OR site:tiktok.com OR site:reddit.com"
+
+    search_results = _duckduckgo_search(search_query)
+
+    # Classify found URLs
+    found_profiles = {}
+    for r in search_results:
+        match = _classify_url(r["url"])
+        if match:
+            platform, url = match
+            if platform not in found_profiles:
+                found_profiles[platform] = {
+                    "url": url,
+                    "title": r["title"],
+                    "snippet": r["snippet"],
+                }
+
+    # Add manually provided URLs
+    if manual_urls:
+        for line in manual_urls.replace(",", "\n").split("\n"):
+            url = line.strip()
+            if not url:
+                continue
+            match = _classify_url(url)
+            if match:
+                platform, url = match
+                found_profiles[platform] = {
+                    "url": url,
+                    "title": "(manually provided)",
+                    "snippet": "",
+                }
+            else:
+                found_profiles[f"Other ({urlparse(url).netloc})"] = {
+                    "url": url,
+                    "title": "(manually provided)",
+                    "snippet": "",
+                }
+
+    # ── Phase 2: Fetch public page content where possible ──
+    profile_content = {}
+    for platform, info in found_profiles.items():
+        text = _fetch_page_text(info["url"])
+        if text and len(text) > 50:
+            profile_content[platform] = text[:3000]
+
+    # ── Phase 3: AI analysis ──
+    profile_summary = ""
+    for platform, info in found_profiles.items():
+        profile_summary += f"\n--- {platform} ---\nURL: {info['url']}\nSearch result title: {info['title']}\nSearch snippet: {info['snippet']}\n"
+        if platform in profile_content:
+            profile_summary += f"Page content excerpt: {profile_content[platform][:2000]}\n"
+
+    if not found_profiles:
+        scan_result = {
+            "status": "no_profiles_found",
+            "profiles": [],
+            "analysis": "No public social media profiles were found for this candidate.",
+            "red_flags": [],
+            "scanned_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    else:
+        system_prompt = """You are a professional HR screening assistant. You are reviewing publicly available social media profiles found for a job candidate. Your job is to identify potential red flags that might indicate the candidate is not a good fit for a professional workplace.
+
+Red flags to look for:
+- Discriminatory, hateful, or violent language
+- Illegal activity or drug references (beyond legal substances)
+- Extreme unprofessional behavior
+- Dishonesty indicators (claims that contradict their application)
+- Repeated complaints about employers, coworkers, or customers
+- Sharing confidential business information from past jobs
+
+Things that are NOT red flags (do not flag these):
+- Normal personal life, hobbies, relationships
+- Political opinions (unless extreme/hateful)
+- Religious beliefs
+- Humor, memes, or casual language
+- Gaps in posting or minimal social presence
+
+Be fair and objective. Do not discriminate based on protected characteristics. Only flag genuinely concerning content.
+
+Return JSON:
+{
+  "profiles": [{"platform": "...", "url": "...", "likely_match": true/false, "confidence": "high/medium/low"}],
+  "red_flags": ["concise description of each flag"],
+  "positive_signals": ["anything that reflects well on the candidate"],
+  "overall_assessment": "clean / minor_concerns / significant_concerns",
+  "summary": "2-3 sentence overview"
+}"""
+
+        user_msg = f"Candidate name: {name}\nJob applied for: {(db.get_hiring_job(candidate['job_id']) or {}).get('title', 'Unknown')}\nCompany: {brand.get('display_name', brand.get('name', 'Unknown'))}\n\nProfiles found:\n{profile_summary}"
+
+        ai_result = _ai_call(api_key, system_prompt, user_msg, temperature=0.3, timeout=30)
+
+        if ai_result:
+            scan_result = {
+                "status": "completed",
+                "profiles": ai_result.get("profiles", []),
+                "red_flags": ai_result.get("red_flags", []),
+                "positive_signals": ai_result.get("positive_signals", []),
+                "overall_assessment": ai_result.get("overall_assessment", "unknown"),
+                "summary": ai_result.get("summary", ""),
+                "scanned_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        else:
+            scan_result = {
+                "status": "error",
+                "profiles": [{"platform": p, "url": info["url"]} for p, info in found_profiles.items()],
+                "red_flags": [],
+                "analysis": "AI analysis failed. Profiles were found but could not be analyzed.",
+                "scanned_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+
+    db.update_hiring_candidate(candidate_id, social_scan=json.dumps(scan_result))
+
+    n_profiles = len(scan_result.get("profiles", []))
+    n_flags = len(scan_result.get("red_flags", []))
+    if n_flags:
+        flash(f"Scan complete: {n_profiles} profile(s) found, {n_flags} red flag(s) detected.", "warning")
+    elif n_profiles:
+        flash(f"Scan complete: {n_profiles} profile(s) found, no red flags.", "success")
+    else:
+        flash("Scan complete: no public profiles found.", "info")
+
+    return redirect(url_for("hiring.candidate_detail", candidate_id=candidate_id))
 
 
 # ---------------------------------------------------------------------------
