@@ -191,6 +191,13 @@ def create_app():
     csrf.exempt(hiring_bp)  # Public apply + interview endpoints
     app.register_blueprint(client_bp)
 
+    # ── Static asset cache headers ──
+    @app.after_request
+    def _set_cache_headers(response):
+        if request.path.startswith('/static/'):
+            response.headers['Cache-Control'] = 'public, max-age=86400'
+        return response
+
     # Global 500 handler that includes CORS headers for cross-origin API callers
     @app.errorhandler(500)
     def _handle_500(e):
