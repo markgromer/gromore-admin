@@ -1,5 +1,5 @@
 # Stage 1: Build React app
-FROM node:20-slim AS react-build
+FROM node:22-bookworm-slim AS react-build
 WORKDIR /build
 COPY client-app/package.json client-app/package-lock.json ./
 RUN npm ci
