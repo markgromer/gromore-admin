@@ -516,9 +516,6 @@ def _check_feature_gate():
 
 @client_bp.route("/login", methods=["GET", "POST"])
 def client_login():
-    if request.method == "GET":
-        return redirect(url_for("client.react_spa", path="login"))
-
     if request.method == "POST":
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "")
@@ -539,9 +536,9 @@ def client_login():
                 _warm_client_snapshots_async(brand_id=int(user["brand_id"]), month=current_month)
 
             db.update_client_user_login(user["id"])
-            return redirect(url_for("client.react_spa"))
+            return redirect(url_for("client.client_dashboard"))
         flash("Invalid email or password", "error")
-    return redirect(url_for("client.react_spa", path="login"))
+    return render_template("client_login.html")
 
 
 def _consume_login_refresh_month(session_key: str, month: str) -> bool:
@@ -740,7 +737,37 @@ def _log_agent(agent_key, action, detail="", status="completed"):
 @client_bp.route("/dashboard")
 @client_login_required
 def client_dashboard():
-    return redirect(url_for("client.react_spa"))
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        flash("Your account is not linked to an active brand.", "error")
+        return redirect(url_for("client.client_logout"))
+
+    month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+
+    connections = db.get_brand_connections(brand_id) or {}
+    google_connected = (connections.get("google", {}).get("status") == "connected")
+    meta_connected = (connections.get("meta", {}).get("status") == "connected")
+
+    has_google, has_meta = _get_ad_connection_status(db, brand)
+    first_run = not has_google and not has_meta
+
+    return render_template(
+        "client_dashboard.html",
+        brand=brand,
+        month=month,
+        dashboard=None,
+        error="",
+        async_load=True,
+        first_run=first_run,
+        has_google=has_google,
+        has_meta=has_meta,
+        google_connected=google_connected,
+        meta_connected=meta_connected,
+        client_name=session.get("client_name", ""),
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
 
 
 @client_bp.route("/dashboard/data")
