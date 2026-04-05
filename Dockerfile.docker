@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Copy React build output from stage 1
-COPY --from=react-build /build/webapp/static/react/ ./webapp/static/react/
+COPY --from=react-build /webapp/static/react/ ./webapp/static/react/
 
 # Create data directories
 RUN mkdir -p /data/database /data/reports
