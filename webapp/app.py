@@ -228,6 +228,10 @@ def create_app():
     csrf.exempt("client.public_signup")
     csrf.exempt("client.public_assess")
 
+    # Exempt React SPA JSON API endpoints from CSRF
+    csrf.exempt("client.api_login")
+    csrf.exempt("client.api_logout")
+
     # ── Auth decorator ──
     def login_required(f):
         @wraps(f)

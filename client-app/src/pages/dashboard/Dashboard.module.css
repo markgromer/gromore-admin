@@ -1,0 +1,169 @@
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 16px;
+}
+.title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.2;
+}
+.subtitle {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.refreshBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--primary-ghost);
+  border-radius: var(--radius-sm);
+  transition: all var(--duration) var(--ease);
+  white-space: nowrap;
+}
+.refreshBtn:hover {
+  background: var(--primary);
+  color: var(--primary-text);
+}
+.refreshBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 20px;
+}
+
+.kpiGrid {
+  margin-bottom: 20px;
+}
+
+.twoCol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+@media (max-width: 768px) {
+  .twoCol { grid-template-columns: 1fr; }
+}
+
+.findings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.finding {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-xs);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+.finding strong {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.finding p {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+.critical {
+  background: rgba(239, 68, 68, 0.06);
+  color: var(--danger);
+}
+.positive {
+  background: rgba(16, 185, 129, 0.06);
+  color: var(--success);
+}
+
+.campSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.campPlatform {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-inset);
+  border-radius: var(--radius-xs);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text);
+}
+.campCount {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+.empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 24px 0;
+}
+
+.teamBar {
+  height: 6px;
+  background: var(--bg-inset);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.teamFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--success));
+  border-radius: 3px;
+  transition: width var(--duration-slow) var(--ease);
+}
+.teamLabel {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.cacheNote {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 20px;
+}
+.refreshLink {
+  color: var(--primary);
+  font-weight: 600;
+  margin-left: 4px;
+  font-size: 0.75rem;
+}
+.refreshLink:hover {
+  text-decoration: underline;
+}

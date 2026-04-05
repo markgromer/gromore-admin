@@ -36,3 +36,6 @@ webapp/static/sprites/robots.png
 
 # Temp splice files
 temp_*.txt
+
+# React build output (generated from client-app/)
+webapp/static/react/

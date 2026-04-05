@@ -22,7 +22,7 @@ from urllib.parse import urlencode
 from flask import (
     Blueprint, render_template, request, redirect,
     url_for, flash, session, abort, jsonify, current_app,
-    make_response,
+    make_response, send_file,
 )
 
 client_bp = Blueprint(
@@ -643,6 +643,79 @@ def client_logout():
     session.pop("client_name", None)
     session.pop("client_brand_name", None)
     return redirect(url_for("client.client_login"))
+
+
+# ── React SPA API endpoints ──
+
+@client_bp.route("/api/me")
+def api_me():
+    """Return current authenticated user + brand for the React SPA."""
+    uid = session.get("client_user_id")
+    if not uid:
+        return jsonify({"error": "not_authenticated"}), 401
+    return jsonify({
+        "user": {
+            "id": uid,
+            "display_name": session.get("client_name", ""),
+            "role": session.get("client_role", "owner"),
+        },
+        "brand": {
+            "id": session.get("client_brand_id"),
+            "display_name": session.get("client_brand_name", ""),
+        },
+    })
+
+
+@client_bp.route("/api/login", methods=["POST"])
+def api_login():
+    """JSON login for the React SPA."""
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip()
+    password = data.get("password") or ""
+
+    if not email or not password:
+        return jsonify({"ok": False, "error": "Email and password are required."}), 400
+
+    db = _get_db()
+    user = db.authenticate_client(email, password)
+    if not user:
+        return jsonify({"ok": False, "error": "Invalid email or password."}), 401
+
+    session["client_user_id"] = user["id"]
+    session["client_brand_id"] = user["brand_id"]
+    session["client_name"] = user["display_name"]
+    session["client_brand_name"] = user["brand_name"]
+    session["client_role"] = user.get("role", "owner")
+
+    current_month = datetime.now().strftime("%Y-%m")
+    last_warm = session.get("warmup_started_month")
+    if last_warm != current_month:
+        session["warmup_started_month"] = current_month
+        _warm_client_snapshots_async(brand_id=int(user["brand_id"]), month=current_month)
+
+    db.update_client_user_login(user["id"])
+    return jsonify({
+        "ok": True,
+        "user": {
+            "id": user["id"],
+            "display_name": user["display_name"],
+            "role": user.get("role", "owner"),
+        },
+        "brand": {
+            "id": user["brand_id"],
+            "display_name": user["brand_name"],
+        },
+    })
+
+
+@client_bp.route("/api/logout", methods=["POST"])
+def api_logout():
+    """JSON logout for the React SPA."""
+    session.pop("client_user_id", None)
+    session.pop("client_brand_id", None)
+    session.pop("client_name", None)
+    session.pop("client_brand_name", None)
+    return jsonify({"ok": True})
 
 
 # ── Agent Activity Helper ──
@@ -7070,6 +7143,24 @@ def client_task_from_finding():
         due_date=data.get("due_date", ""),
     )
     return jsonify({"success": True, "task_id": task_id})
+
+
+# ── React SPA catch-all ──
+
+@client_bp.route("/app/")
+@client_bp.route("/app/<path:path>")
+def react_spa(path=""):
+    """Serve the React SPA index.html for all /client/app/* routes.
+
+    Flask static serving handles JS/CSS automatically via /static/react/*.
+    This route only needs to return index.html so React Router can take over.
+    """
+    react_index = os.path.join(
+        current_app.static_folder, "react", "index.html"
+    )
+    if os.path.exists(react_index):
+        return send_file(react_index)
+    return "React app not built. Run: cd client-app && npm run build", 404
 
 
 # ── Helper ──
