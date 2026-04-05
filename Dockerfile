@@ -25,4 +25,4 @@ ENV PORT=10000
 
 EXPOSE ${PORT}
 
-CMD ["sh", "-c", "gunicorn webapp.app:app --bind 0.0.0.0:${PORT} --workers 2 --timeout 120"]
+CMD ["sh", "-c", "gunicorn webapp.app:app --bind 0.0.0.0:${PORT} --workers 2 --timeout 300"]
