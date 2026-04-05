@@ -1,10 +1,13 @@
-FROM python:3.12-slim
+# Stage 1: Build React app
+FROM node:20-slim AS react-build
+WORKDIR /build
+COPY client-app/package.json client-app/package-lock.json ./
+RUN npm ci
+COPY client-app/ .
+RUN npm run build
 
-# Install Node.js for React build
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# Stage 2: Python app
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -13,8 +16,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Build the React client app into webapp/static/react/
-RUN cd client-app && npm ci && npm run build
+# Copy React build output from stage 1
+COPY --from=react-build /webapp/static/react/ ./webapp/static/react/
 
 # Create data directories
 RUN mkdir -p /data/database /data/reports
