@@ -785,21 +785,35 @@ def client_kpis():
     kpi_data = None
     channels = {}
     error = None
-    try:
-        from webapp.report_runner import get_analysis_and_suggestions_for_brand
-        from webapp.client_advisor import build_client_dashboard
+    force_refresh = (request.args.get("refresh") == "1")
 
-        force_refresh = (request.args.get("refresh") == "1")
-        analysis, suggestions = get_analysis_and_suggestions_for_brand(
-            db, brand, month, force_refresh=force_refresh
-        )
-        if analysis:
-            dashboard = build_client_dashboard(analysis, suggestions, brand)
-            kpi_data = dashboard.get("kpi_status", [])
-            channels = dashboard.get("channels", {})
-    except Exception as exc:
-        current_app.logger.exception("KPI page data error: %s", exc)
-        error = str(exc)
+    # ── Fast path: serve from dashboard snapshot ──
+    if not force_refresh:
+        try:
+            snapshot = db.get_dashboard_snapshot(brand_id, month)
+            if snapshot:
+                cached = json.loads(snapshot["snapshot_json"])
+                kpi_data = cached.get("kpi_status")
+                channels = cached.get("channels", {})
+        except Exception:
+            pass
+
+    # ── Slow path: live pull (cache miss or forced refresh) ──
+    if kpi_data is None:
+        try:
+            from webapp.report_runner import get_analysis_and_suggestions_for_brand
+            from webapp.client_advisor import build_client_dashboard
+
+            analysis, suggestions = get_analysis_and_suggestions_for_brand(
+                db, brand, month, force_refresh=force_refresh
+            )
+            if analysis:
+                dashboard = build_client_dashboard(analysis, suggestions, brand)
+                kpi_data = dashboard.get("kpi_status", [])
+                channels = dashboard.get("channels", {})
+        except Exception as exc:
+            current_app.logger.exception("KPI page data error: %s", exc)
+            error = str(exc)
 
     return render_template(
         "client/client_kpis.html",
@@ -829,27 +843,39 @@ def client_actions():
     actions = []
     ai_analysis = ""
     error = ""
+    force_refresh = (request.args.get("refresh") == "1")
 
-    try:
-        from webapp.report_runner import get_analysis_and_suggestions_for_brand
-        from webapp.client_advisor import build_client_dashboard
+    # ── Fast path: serve actions from dashboard snapshot ──
+    if not force_refresh and not run_analysis:
+        try:
+            snapshot = db.get_dashboard_snapshot(brand_id, month)
+            if snapshot:
+                cached = json.loads(snapshot["snapshot_json"])
+                actions = cached.get("actions") or []
+        except Exception:
+            pass
 
-        force_refresh = (request.args.get("refresh") == "1")
-        analysis, suggestions = get_analysis_and_suggestions_for_brand(
-            db, brand, month, force_refresh=force_refresh
-        )
-        if analysis:
-            data = build_client_dashboard(
-                analysis,
-                suggestions,
-                brand,
-                ai_model=ai_model,
-                include_deep_analysis=run_analysis,
+    # ── Slow path: live pull (cache miss, forced refresh, or deep analysis) ──
+    if not actions:
+        try:
+            from webapp.report_runner import get_analysis_and_suggestions_for_brand
+            from webapp.client_advisor import build_client_dashboard
+
+            analysis, suggestions = get_analysis_and_suggestions_for_brand(
+                db, brand, month, force_refresh=force_refresh
             )
-            actions = data.get("actions", [])
-            ai_analysis = data.get("ai_analysis", "")
-    except Exception as e:
-        error = str(e)
+            if analysis:
+                data = build_client_dashboard(
+                    analysis,
+                    suggestions,
+                    brand,
+                    ai_model=ai_model,
+                    include_deep_analysis=run_analysis,
+                )
+                actions = data.get("actions", [])
+                ai_analysis = data.get("ai_analysis", "")
+        except Exception as e:
+            error = str(e)
 
     # Generate a stable key for each action so dismissal persists
     for action in actions:
@@ -1304,13 +1330,25 @@ def client_ad_builder():
 
     has_data = False
     error = ""
-    try:
-        from webapp.report_runner import get_analysis_and_suggestions_for_brand
-        force_refresh = (request.args.get("refresh") == "1")
-        analysis, _ = get_analysis_and_suggestions_for_brand(db, brand, month, force_refresh=force_refresh)
-        has_data = bool(analysis)
-    except Exception as e:
-        error = str(e)
+    force_refresh = (request.args.get("refresh") == "1")
+
+    # ── Fast path: snapshot exists means data is available ──
+    if not force_refresh:
+        try:
+            snapshot = db.get_dashboard_snapshot(brand_id, month)
+            if snapshot:
+                has_data = True
+        except Exception:
+            pass
+
+    # ── Slow path: live pull (cache miss or forced refresh) ──
+    if not has_data:
+        try:
+            from webapp.report_runner import get_analysis_and_suggestions_for_brand
+            analysis, _ = get_analysis_and_suggestions_for_brand(db, brand, month, force_refresh=force_refresh)
+            has_data = bool(analysis)
+        except Exception as e:
+            error = str(e)
 
     return render_template(
         "client_ad_builder.html",
@@ -1414,8 +1452,24 @@ def client_campaigns():
     from webapp.campaign_manager import get_campaign_recommendations
 
     force_campaign_sync = (request.args.get("sync") == "1")
-    campaigns = _get_campaigns_cached(db, brand, month, force_sync=force_campaign_sync)
+    campaigns = None
     recommendations = []
+
+    # ── Fast path: serve from dashboard snapshot ──
+    if not force_campaign_sync:
+        try:
+            snapshot = db.get_dashboard_snapshot(brand_id, month)
+            if snapshot:
+                cached = json.loads(snapshot["snapshot_json"])
+                snap_campaigns = cached.get("campaigns")
+                if isinstance(snap_campaigns, dict):
+                    campaigns = snap_campaigns
+        except Exception:
+            pass
+
+    # ── Slow path: live pull (cache miss or forced sync) ──
+    if campaigns is None:
+        campaigns = _get_campaigns_cached(db, brand, month, force_sync=force_campaign_sync)
 
     if any(campaigns.values()):
         try:

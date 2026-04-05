@@ -318,14 +318,33 @@
             void navBar.offsetWidth;
             navBar.classList.add('running');
 
+            // Fade out current content immediately
+            content.classList.add('pjax-out');
+
+            // Show shimmer skeleton after a short delay if fetch is slow
+            var shimmerTimer = setTimeout(function() {
+                content.innerHTML = '<div class="shimmer-skeleton">'
+                    + '<div class="shimmer-block shimmer-header"></div>'
+                    + '<div class="shimmer-block shimmer-card"></div>'
+                    + '<div class="shimmer-block shimmer-row"></div>'
+                    + '<div class="shimmer-block shimmer-row-short"></div>'
+                    + '<div class="shimmer-block shimmer-card"></div>'
+                    + '</div>';
+                content.classList.remove('pjax-out');
+            }, 200);
+
             fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'PJAX' } })
             .then(function(r) {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.text();
             })
             .then(function(html) {
+                clearTimeout(shimmerTimer);
                 var parser = new DOMParser();
                 var doc = parser.parseFromString(html, 'text/html');
+
+                // Prep: ensure content is invisible before swap
+                content.classList.add('pjax-out');
 
                 // Swap content
                 var newContent = doc.getElementById('pjaxContent');
@@ -404,7 +423,12 @@
                 // Scroll to top
                 window.scrollTo(0, 0);
 
-                // Done
+                // Fade in the new content
+                requestAnimationFrame(function() {
+                    content.classList.remove('pjax-out');
+                });
+
+                // Done - complete the progress bar
                 navBar.classList.remove('running');
                 navBar.style.width = '100%';
                 setTimeout(function() { navBar.style.opacity = '0'; setTimeout(function() { navBar.style.width = ''; navBar.style.opacity = ''; }, 200); }, 100);
@@ -413,7 +437,9 @@
                 _bindPjaxLinks();
             })
             .catch(function() {
+                clearTimeout(shimmerTimer);
                 navBar.classList.remove('running');
+                content.classList.remove('pjax-out');
                 window.location.href = url;
             });
         };

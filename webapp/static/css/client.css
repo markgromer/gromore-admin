@@ -1,4 +1,4 @@
-        :root {
+﻿        :root {
             --sidebar-width: 230px;
             --sidebar-collapsed: 60px;
             --topbar-height: 48px;
@@ -785,6 +785,34 @@
         @keyframes navDot {
             0%, 100% { opacity: .3; transform: scaleX(1); }
             50% { opacity: 1; transform: scaleX(2); }
+        }
+
+        /* PJAX crossfade */
+        #pjaxContent {
+            transition: opacity .15s ease;
+        }
+        #pjaxContent.pjax-out {
+            opacity: 0;
+        }
+
+        /* Shimmer skeleton for cold cache */
+        .shimmer-skeleton {
+            padding: 1.5rem;
+        }
+        .shimmer-block {
+            background: linear-gradient(90deg, var(--card-bg) 25%, var(--hover-bg) 50%, var(--card-bg) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.4s ease-in-out infinite;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+        }
+        .shimmer-header { height: 28px; width: 40%; margin-bottom: 1.2rem; }
+        .shimmer-card { height: 120px; width: 100%; }
+        .shimmer-row { height: 18px; width: 70%; margin-bottom: .6rem; }
+        .shimmer-row-short { height: 18px; width: 45%; margin-bottom: .6rem; }
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
         }
 
         /* â”€â”€ Branded page loader â”€â”€ */
