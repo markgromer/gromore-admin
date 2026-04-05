@@ -1,0 +1,14 @@
+node_modules
+client-app/node_modules
+webapp/static/react
+__pycache__
+*.pyc
+.venv
+venv
+.env
+.git
+data/database/*.db
+data/imports
+reports
+*.rtf
+temp_*.txt
