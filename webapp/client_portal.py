@@ -7148,17 +7148,10 @@ def client_task_from_finding():
 @client_bp.route("/app/")
 @client_bp.route("/app/<path:path>")
 def react_spa(path=""):
-    """Serve the React SPA index.html for all /client/app/* routes.
-
-    Flask static serving handles JS/CSS automatically via /static/react/*.
-    This route only needs to return index.html so React Router can take over.
-    """
-    react_index = os.path.join(
-        current_app.static_folder, "react", "index.html"
-    )
-    if os.path.exists(react_index):
-        return send_file(react_index)
-    return "React app not built. Run: cd client-app && npm run build", 404
+    """Keep unfinished React portal routes off the live client experience."""
+    if session.get("client_user_id"):
+        return redirect(url_for("client.client_dashboard"))
+    return redirect(url_for("client.client_login"))
 
 
 # ── Helper ──
