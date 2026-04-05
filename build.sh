@@ -11,4 +11,9 @@ npm run build
 cd ..
 
 echo "=== Build complete ==="
-ls -la webapp/static/react/ 2>/dev/null || echo "WARNING: React build output not found"
+if [ ! -f "webapp/static/react/index.html" ]; then
+	echo "FATAL: React build output missing at webapp/static/react/index.html"
+	exit 1
+fi
+
+ls -la webapp/static/react/

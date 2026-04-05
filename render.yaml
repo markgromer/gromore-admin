@@ -2,11 +2,13 @@ services:
   - type: web
     name: agency-analytics
     runtime: python
-    buildCommand: chmod +x build.sh && ./build.sh
+    buildCommand: bash ./build.sh
     startCommand: gunicorn webapp.app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 300
     envVars:
       - key: SECRET_KEY
         generateValue: true
+      - key: RENDER
+        value: "1"
       - key: DATABASE_PATH
         value: /data/database/webapp.db
       - key: FLASK_DEBUG
