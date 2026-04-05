@@ -25,22 +25,10 @@
   gap: 10px;
   margin-bottom: 24px;
 }
-.logoIcon {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
-  color: white;
-  font-size: 1.25rem;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.logoText {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: var(--text);
+.logoImg {
+  height: 56px;
+  width: auto;
+  object-fit: contain;
 }
 
 .title {

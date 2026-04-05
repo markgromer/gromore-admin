@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import { motion } from 'framer-motion'
 import { LogIn, AlertCircle } from 'lucide-react'
+import logoSrc from '../../assets/WARREN_TRANSPARENT_LOGO.svg'
 import styles from './Login.module.css'
 
 export default function Login() {
@@ -39,8 +40,7 @@ export default function Login() {
         transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
       >
         <div className={styles.logo}>
-          <div className={styles.logoIcon}>G</div>
-          <span className={styles.logoText}>GroMore</span>
+          <img src={logoSrc} alt="GroMore" className={styles.logoImg} />
         </div>
         <h1 className={styles.title}>Sign in to your dashboard</h1>
 

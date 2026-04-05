@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { useThemeStore } from '../../stores/themeStore'
 import { useAuthStore } from '../../stores/authStore'
+import logoSrc from '../../assets/WARREN_TRANSPARENT_LOGO.svg'
 import styles from './Sidebar.module.css'
 
 const navSections = [
@@ -99,9 +100,7 @@ export default function Sidebar({ mobileOpen, onClose }) {
       <nav className={`${styles.sidebar} ${mobileOpen ? styles.open : ''}`}>
         {/* Brand */}
         <div className={styles.brand}>
-          <div className={styles.brandIcon}>
-            <LayoutDashboard size={20} />
-          </div>
+          <img src={logoSrc} alt="GroMore" className={styles.brandLogo} />
           <span className={styles.brandText}>{brand?.display_name || 'Dashboard'}</span>
           <button className={styles.mobileClose} onClick={onClose}>
             <X size={18} />
