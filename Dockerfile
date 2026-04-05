@@ -1,8 +1,8 @@
 # Stage 1: Build React app
-FROM node:22-bookworm-slim AS react-build
+FROM node:22.12.0-bookworm-slim AS react-build
 WORKDIR /build
 COPY client-app/package.json client-app/package-lock.json ./
-RUN npm ci
+RUN node --version && npm --version && npm install --no-fund --no-audit
 COPY client-app/ .
 RUN npm run build
 
