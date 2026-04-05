@@ -1,8 +1,9 @@
 services:
   - type: web
     name: agency-analytics
-    runtime: docker
-    dockerfilePath: ./Dockerfile
+    runtime: python
+    buildCommand: pip install -r requirements.txt && cd client-app && npm ci && npm run build
+    startCommand: gunicorn webapp.app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 300
     envVars:
       - key: SECRET_KEY
         generateValue: true
