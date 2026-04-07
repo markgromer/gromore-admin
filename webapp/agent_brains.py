@@ -1297,6 +1297,15 @@ GBP DATA:
                         parts.append(f"    Strengths: {str(res['strengths'])[:200]}")
                     if res.get("weaknesses"):
                         parts.append(f"    Weaknesses: {str(res['weaknesses'])[:200]}")
+                if intel.get("pricing"):
+                    pricing = intel["pricing"]
+                    summary = pricing.get("summary") or {}
+                    if summary.get("sample_count"):
+                        parts.append(
+                            f"    Pricing: {summary.get('sample_count')} public mentions, "
+                            f"range ${summary.get('price_min', '?')} to ${summary.get('price_max', '?')}, "
+                            f"confidence={summary.get('confidence_band', 'unknown')}"
+                        )
 
     if agent_key == "pulse":
         for ch in ("gsc", "ga"):

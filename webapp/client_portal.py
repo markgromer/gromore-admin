@@ -2317,14 +2317,44 @@ def client_competitors():
 
     competitors = db.get_competitors(brand_id)
     reports = []
+    pricing_market_summary = {}
+    warren_pricing_strategy = ""
+    pricing_strategy_competitor = ""
+    pricing_position = ""
+    pricing_observations = []
     for comp in competitors:
         from webapp.competitor_intel import get_competitor_report
         reports.append(get_competitor_report(db, brand, comp))
+
+    if reports:
+        from webapp.competitor_intel import summarize_market_pricing
+        pricing_market_summary = summarize_market_pricing(reports)
+        ranked_reports = []
+        for report in reports:
+            pricing = (report.get("pricing") or {}).get("summary") or {}
+            ranked_reports.append((
+                pricing.get("billable_sample_count") or 0,
+                (report.get("research") or {}).get("pricing_strategy", ""),
+                report,
+            ))
+        ranked_reports.sort(key=lambda row: row[0], reverse=True)
+        top_report = ranked_reports[0][2] if ranked_reports else None
+        if top_report:
+            research = top_report.get("research") or {}
+            warren_pricing_strategy = (research.get("pricing_strategy") or "").strip()
+            pricing_position = (research.get("pricing_position") or "").strip()
+            pricing_observations = list((research.get("observed_pricing") or [])[:4])
+            pricing_strategy_competitor = ((top_report.get("competitor") or {}).get("name") or "").strip()
 
     return render_template(
         "client_competitors.html",
         competitors=competitors,
         reports=reports,
+        pricing_market_summary=pricing_market_summary,
+        warren_pricing_strategy=warren_pricing_strategy,
+        pricing_strategy_competitor=pricing_strategy_competitor,
+        pricing_position=pricing_position,
+        pricing_observations=pricing_observations,
     )
 
 

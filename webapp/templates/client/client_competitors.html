@@ -3,6 +3,59 @@
 
 {% block head %}
 <style>
+    .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.25rem;
+    }
+    .summary-card {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-soft);
+        padding: 1rem 1.1rem;
+    }
+    .summary-card .kicker {
+        font-size: .72rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        margin-bottom: .45rem;
+    }
+    .summary-card .metric {
+        font-size: 1.65rem;
+        font-weight: 800;
+        color: var(--text-strong);
+        line-height: 1.1;
+    }
+    .summary-card .subtext {
+        font-size: .8rem;
+        color: var(--text-muted);
+        margin-top: .35rem;
+    }
+    .strategy-card {
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-soft);
+        padding: 1rem 1.1rem;
+        margin-bottom: 1.25rem;
+    }
+    .strategy-card h6 {
+        font-size: .8rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: #4338ca;
+        margin-bottom: .5rem;
+    }
+    .strategy-card p {
+        margin: 0;
+        color: var(--text-strong);
+        line-height: 1.55;
+    }
     .comp-card {
         background: #fff;
         border: 1px solid var(--line);
@@ -89,6 +142,20 @@
         color: var(--text-muted);
         margin-top: .5rem;
     }
+    .pricing-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        font-size: .72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        background: #eef2ff;
+        color: #4338ca;
+        border-radius: 999px;
+        padding: .18rem .5rem;
+        margin-bottom: .45rem;
+    }
     .empty-state {
         text-align: center;
         padding: 3rem 1.5rem;
@@ -103,6 +170,39 @@
     <h5><i class="bi bi-binoculars"></i>Competitor Intel</h5>
     <p>Automated reports on your competitors, refreshed weekly. Add competitors from <a href="{{ url_for('client.client_my_business') }}">My Business</a>.</p>
 </div>
+
+{% if pricing_market_summary and pricing_market_summary.billable_source_count %}
+<div class="summary-grid">
+    <div class="summary-card">
+        <div class="kicker">Average Price</div>
+        <div class="metric">${{ '%.0f'|format(pricing_market_summary.average_price) }}</div>
+        <div class="subtext">{{ pricing_market_summary.billable_source_count }} public price mentions across {{ pricing_market_summary.competitors_with_pricing }} competitors</div>
+    </div>
+    <div class="summary-card">
+        <div class="kicker">Cheapest Price</div>
+        <div class="metric">${{ '%.0f'|format(pricing_market_summary.lowest_price) }}</div>
+        <div class="subtext">Lowest public price found in tracked competitor data</div>
+    </div>
+    <div class="summary-card">
+        <div class="kicker">Highest Price</div>
+        <div class="metric">${{ '%.0f'|format(pricing_market_summary.highest_price) }}</div>
+        <div class="subtext">Highest public price found in tracked competitor data</div>
+    </div>
+</div>
+{% endif %}
+
+{% if warren_pricing_strategy %}
+<div class="strategy-card">
+    <h6><i class="bi bi-stars me-1"></i>W.A.R.R.E.N. Pricing Strategy{% if pricing_strategy_competitor %} vs {{ pricing_strategy_competitor }}{% endif %}</h6>
+    <p>{{ warren_pricing_strategy }}</p>
+    {% if pricing_position %}
+    <p class="subtext" style="margin-top:.55rem;">{{ pricing_position }}</p>
+    {% endif %}
+    {% if pricing_observations %}
+    <p class="subtext" style="margin-top:.55rem;">Signals: {{ pricing_observations | join(' | ') }}</p>
+    {% endif %}
+</div>
+{% endif %}
 
 {% if not competitors %}
 <div class="empty-state">
@@ -136,7 +236,7 @@
         </div>
     </div>
     <div class="comp-card-body">
-        {% if not report.get('google_places') and not report.get('meta_ads') and not report.get('website') %}
+        {% if not report.get('google_places') and not report.get('meta_ads') and not report.get('website') and not report.get('pricing') %}
         <p class="text-muted" style="font-size:.88rem;">No intel collected yet. Click <strong>Scan</strong> to fetch data.</p>
         {% else %}
         <div class="intel-grid">
@@ -222,6 +322,59 @@
             </div>
             {% endif %}
 
+            {# Pricing panel #}
+            {% if report.get('pricing') %}
+            {% set pr = report.pricing %}
+            <div class="intel-panel">
+                <h6><i class="bi bi-cash-stack"></i> Public Pricing</h6>
+                {% if pr.summary %}
+                <div class="intel-stat"><span class="label">Mentions found</span><span class="value">{{ pr.summary.sample_count or 0 }}</span></div>
+                {% if pr.summary.price_min %}
+                <div class="intel-stat"><span class="label">Lowest found</span><span class="value">${{ '%.0f'|format(pr.summary.price_min) }}</span></div>
+                {% endif %}
+                {% if pr.summary.price_max %}
+                <div class="intel-stat"><span class="label">Highest found</span><span class="value">${{ '%.0f'|format(pr.summary.price_max) }}</span></div>
+                {% endif %}
+                {% if pr.summary.confidence_band %}
+                <div class="intel-stat"><span class="label">Confidence</span><span class="value">{{ pr.summary.confidence_band|title }}</span></div>
+                {% endif %}
+                {% endif %}
+
+                {% if pr.items %}
+                <div style="margin-top:.65rem;">
+                    {% for item in pr.items[:6] %}
+                    <div class="ad-sample">
+                        <div class="pricing-chip">{{ item.price_type|replace('_', ' ') }}</div>
+                        <div class="ad-title">
+                            {{ item.service or 'General Service' }}
+                            {% if item.amount_min is not none %}
+                                {% if item.amount_max %}
+                                    - ${{ '%.0f'|format(item.amount_min) }} to ${{ '%.0f'|format(item.amount_max) }}
+                                {% else %}
+                                    - ${{ '%.0f'|format(item.amount_min) }}
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                        {% if item.snippet %}<div>{{ item.snippet }}</div>{% endif %}
+                        <div class="ad-platforms">
+                            Confidence {{ '%.0f'|format((item.confidence or 0) * 100) }}%
+                            {% if item.source_url %} | <a href="{{ item.source_url }}" target="_blank" rel="noopener">Source</a>{% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if pr.errors %}
+                <div class="intel-stale">Scan notes: {{ pr.errors[:2] | join(' | ') }}</div>
+                {% endif %}
+
+                {% if report.get('pricing_fetched') %}
+                <div class="intel-stale">Last updated: {{ report.pricing_fetched[:10] }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
+
             {# Research panel (AI-generated from fetched intel) #}
             {% if report.get('research') %}
             {% set rr = report.research %}
@@ -242,6 +395,21 @@
 
                 {% if rr.observed_offers %}
                 <div class="intel-stat"><span class="label">Offers</span><span class="value" style="font-size:.82rem; text-align:right; max-width:65%;">{{ rr.observed_offers[:3] | join(' | ') }}</span></div>
+                {% endif %}
+
+                {% if rr.observed_pricing %}
+                <div class="intel-stat"><span class="label">Pricing</span><span class="value" style="font-size:.82rem; text-align:right; max-width:65%;">{{ rr.observed_pricing[:3] | join(' | ') }}</span></div>
+                {% endif %}
+
+                {% if rr.pricing_position %}
+                <div style="font-size:.82rem; color:#4b5563; margin-top:.45rem;">{{ rr.pricing_position }}</div>
+                {% endif %}
+
+                {% if rr.pricing_strategy %}
+                <div class="ad-sample" style="margin-top:.6rem;">
+                    <div class="ad-title">Pricing Strategy</div>
+                    <div>{{ rr.pricing_strategy }}</div>
+                </div>
                 {% endif %}
 
                 {% if rr.counter_moves %}

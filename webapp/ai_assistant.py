@@ -53,6 +53,25 @@ WARREN_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "scan_competitor_pricing",
+            "description": (
+                "Scan public web sources for competitor pricing using the saved competitor profiles for this brand. "
+                "Use this when the user asks what competitors charge, wants pricing comparisons, or wants to position pricing."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "competitor_name": {
+                        "type": "string",
+                        "description": "Optional competitor name filter. Leave empty to scan all saved competitors.",
+                    }
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "web_search",
             "description": (
                 "Search the web for current information. Use when the user asks about "
@@ -253,6 +272,70 @@ def get_memory_context_for_chat(db, brand_id: int, user_message: str,
         "save them with save_memory so you remember next time."
     )
     return "\n".join(parts)
+
+
+def _execute_competitor_pricing_scan(db, brand_id: int, competitor_name: str = "") -> str:
+    """Refresh pricing intel for one or more saved competitors and summarize the evidence."""
+    if not db or not brand_id:
+        return "Competitor pricing scan is unavailable because the brand context is missing."
+
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return "Competitor pricing scan failed because the brand could not be loaded."
+
+    competitors = db.get_competitors(brand_id) or []
+    if competitor_name:
+        query = competitor_name.strip().lower()
+        competitors = [c for c in competitors if query in (c.get("name", "").lower())]
+    if not competitors:
+        return "No saved competitors matched this pricing scan. Add competitors in My Business first."
+
+    from webapp.competitor_intel import refresh_competitor_intel
+
+    lines = []
+    for competitor in competitors[:5]:
+        result = refresh_competitor_intel(
+            db,
+            brand,
+            competitor,
+            force=True,
+            only_types=["pricing"],
+        )
+        pricing = result.get("pricing") or {}
+        summary = pricing.get("summary") or {}
+        items = pricing.get("items") or []
+
+        lines.append(f"Competitor: {competitor.get('name', 'Unknown')}")
+        if summary.get("sample_count"):
+            lines.append(
+                f"- Public pricing mentions: {summary.get('sample_count')} "
+                f"(confidence: {summary.get('confidence_band', 'unknown')})"
+            )
+            if summary.get("price_min") is not None or summary.get("price_max") is not None:
+                lines.append(
+                    f"- Price range found: ${summary.get('price_min', '?')} to ${summary.get('price_max', '?')}"
+                )
+            for item in items[:5]:
+                amount_min = item.get("amount_min")
+                amount_max = item.get("amount_max")
+                if amount_min is None:
+                    price_text = item.get("price_type", "offer").replace("_", " ")
+                elif amount_max:
+                    price_text = f"${amount_min} to ${amount_max}"
+                else:
+                    price_text = f"${amount_min}"
+                lines.append(
+                    f"- {item.get('service', 'General Service')}: {price_text} | "
+                    f"{item.get('price_type', 'price').replace('_', ' ')} | "
+                    f"{item.get('source_url', '')}"
+                )
+        else:
+            lines.append("- No public pricing evidence found yet.")
+            for err in (pricing.get("errors") or result.get("_errors") or [])[:2]:
+                lines.append(f"- Note: {err}")
+        lines.append("")
+
+    return "\n".join(lines).strip()
 
 
 _URL_RE = re.compile(r"(?P<url>(?:https?://|www\.)[^\s<>'\"()]+)", re.IGNORECASE)
@@ -725,6 +808,11 @@ DEFAULT_CHAT_SYSTEM_PROMPT = (
     "If the user gives you a URL, asks you to inspect a website, or mentions a draft/staging site, "
     "you are expected to browse it. Use your website browsing capability before saying data is missing. "
     "Do not say you cannot access external websites unless a live fetch actually failed.\n\n"
+
+    "PRICING INTEL\n"
+    "When the client asks what competitors charge, how their pricing compares, or whether they should move prices, "
+    "use competitor pricing evidence. Scan saved competitors first, then answer from the public pricing evidence you found. "
+    "Do not guess at competitor pricing.\n\n"
 
     "EXPERTISE AREAS\n"
     "Google Ads, Meta Ads, Search Console, GA4, SEO, conversion optimization, sales funnels, "
@@ -1246,14 +1334,16 @@ def chat_with_warren(
 
         # Tools / capabilities
         "YOUR TOOLS: "
-        "You have three special tools you can use anytime: "
+        "You have four special tools you can use anytime: "
         "1. **browse_website** - Open a specific URL and inspect live page content. Use it immediately when the user "
         "shares a link, asks you to review a website, mentions a draft site, or wants feedback on page structure or copy. "
         "Never claim you cannot access a website before trying this tool. "
-        "2. **web_search** - Search the web for real-time info. Use it when someone asks about competitors, "
+        "2. **scan_competitor_pricing** - Scan public web pages for pricing mentions from the saved competitors on this brand. "
+        "Use it when the user asks what competitors charge, wants price comparisons, or wants to adjust pricing based on the market. "
+        "3. **web_search** - Search the web for real-time info. Use it when someone asks about competitors, "
         "pricing, industry trends, links, products, news, or anything you don't have in your data. "
         "Just call it naturally, no need to ask permission. "
-        "3. **generate_image** - Create images with DALL-E 3. Use it when someone asks you to make, "
+        "4. **generate_image** - Create images with DALL-E 3. Use it when someone asks you to make, "
         "create, design, or generate any kind of image, graphic, visual, ad creative mockup, "
         "social media post image, logo concept, etc. Describe the image in detail in your prompt "
         "and incorporate the brand's colors, style, and identity when relevant. "
@@ -1263,10 +1353,10 @@ def chat_with_warren(
         # Long-term memory
         "YOUR MEMORY: "
         "You have long-term memory that persists across conversations. You can: "
-        "4. **save_memory** - Save important insights, strategies, decisions, and learnings about this brand. "
+        "5. **save_memory** - Save important insights, strategies, decisions, and learnings about this brand. "
         "Use this often. Every time you identify a pattern, make a recommendation, note a strategy change, "
         "or learn what worked or didn't, save it. Categories: strategy, insight, decision, learning. "
-        "5. **recall_memories** - Search your past memories about this brand. Use this when you need "
+        "6. **recall_memories** - Search your past memories about this brand. Use this when you need "
         "context about what's been tried before, what strategies are active, or what outcomes were observed. "
         "MEMORY DISCIPLINE: "
         "You are not a stateless chatbot. You grow with this business. "
@@ -1460,6 +1550,10 @@ def chat_with_warren(
                     max_pages = fn_args.get("max_pages", 5)
                     log.info("Warren tool: browse_website('%s', max_pages=%s)", url, max_pages)
                     tool_result = _execute_browse_website(url, max_pages=max_pages)
+                elif fn_name == "scan_competitor_pricing" and db and brand_id:
+                    competitor_name = fn_args.get("competitor_name", "")
+                    log.info("Warren tool: scan_competitor_pricing('%s')", competitor_name)
+                    tool_result = _execute_competitor_pricing_scan(db, brand_id, competitor_name=competitor_name)
                 elif fn_name == "web_search":
                     query = fn_args.get("query", "")
                     log.info("Warren tool: web_search('%s')", query)
