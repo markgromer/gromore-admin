@@ -5,6 +5,8 @@ import Sidebar from './Sidebar'
 import { Menu } from 'lucide-react'
 import styles from './Shell.module.css'
 
+const MotionDiv = motion.div
+
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
   animate: { opacity: 1, y: 0 },
@@ -30,7 +32,7 @@ export default function Shell() {
         {/* Page content with transitions */}
         <div className={styles.content}>
           <AnimatePresence mode="wait">
-            <motion.div
+            <MotionDiv
               key={location.pathname}
               variants={pageVariants}
               initial="initial"
@@ -40,7 +42,7 @@ export default function Shell() {
               className={styles.page}
             >
               <Outlet />
-            </motion.div>
+            </MotionDiv>
           </AnimatePresence>
         </div>
       </div>

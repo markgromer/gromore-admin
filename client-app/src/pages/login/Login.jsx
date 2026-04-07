@@ -6,6 +6,8 @@ import { LogIn, AlertCircle } from 'lucide-react'
 import logoSrc from '../../assets/WARREN_TRANSPARENT_LOGO.svg'
 import styles from './Login.module.css'
 
+const MotionDiv = motion.div
+
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -33,7 +35,7 @@ export default function Login() {
 
   return (
     <div className={styles.wrapper}>
-      <motion.div
+      <MotionDiv
         className={styles.card}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -90,7 +92,7 @@ export default function Login() {
         <a href="/client/forgot-password" className={styles.forgot}>
           Forgot your password?
         </a>
-      </motion.div>
+      </MotionDiv>
     </div>
   )
 }

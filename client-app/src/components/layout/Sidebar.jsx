@@ -5,14 +5,16 @@ import {
   LayoutDashboard, Megaphone, Users, ClipboardCheck,
   UserPlus, PenTool, Palette, FileText, CalendarClock,
   Zap, GraduationCap, Building2, Globe, Swords, Target,
-  UsersRound, UserCog, ListTodo, ExternalLink,
   Link2, MessageSquareMore, HelpCircle, Sun, Moon,
-  ChevronDown, LogOut, Menu, X
+  ChevronDown, LogOut, X
 } from 'lucide-react'
 import { useThemeStore } from '../../stores/themeStore'
 import { useAuthStore } from '../../stores/authStore'
 import logoSrc from '../../assets/WARREN_TRANSPARENT_LOGO.svg'
 import styles from './Sidebar.module.css'
+
+const MotionDiv = motion.div
+const MotionUl = motion.ul
 
 const navSections = [
   {
@@ -80,14 +82,14 @@ export default function Sidebar({ mobileOpen, onClose }) {
   // Close mobile sidebar on navigation
   useEffect(() => {
     if (mobileOpen) onClose()
-  }, [location.pathname])
+  }, [location.pathname, mobileOpen, onClose])
 
   return (
     <>
       {/* Mobile backdrop */}
       <AnimatePresence>
         {mobileOpen && (
-          <motion.div
+          <MotionDiv
             className={styles.backdrop}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -122,28 +124,31 @@ export default function Sidebar({ mobileOpen, onClose }) {
               )}
               <AnimatePresence initial={false}>
                 {!collapsed[section.id] && (
-                  <motion.ul
+                  <MotionUl
                     className={styles.items}
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
                     transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
                   >
-                    {section.items.map(({ to, icon: Icon, label }) => (
-                      <li key={to}>
-                        <NavLink
-                          to={to}
-                          end={to === '/'}
-                          className={({ isActive }) =>
-                            `${styles.link} ${isActive ? styles.active : ''}`
-                          }
-                        >
-                          <Icon size={18} strokeWidth={1.8} />
-                          <span>{label}</span>
-                        </NavLink>
-                      </li>
-                    ))}
-                  </motion.ul>
+                    {section.items.map((item) => {
+                      const NavIcon = item.icon
+                      return (
+                        <li key={item.to}>
+                          <NavLink
+                            to={item.to}
+                            end={item.to === '/'}
+                            className={({ isActive }) =>
+                              `${styles.link} ${isActive ? styles.active : ''}`
+                            }
+                          >
+                            <NavIcon size={18} strokeWidth={1.8} />
+                            <span>{item.label}</span>
+                          </NavLink>
+                        </li>
+                      )
+                    })}
+                  </MotionUl>
                 )}
               </AnimatePresence>
             </div>

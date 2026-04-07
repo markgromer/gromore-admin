@@ -16,6 +16,10 @@ class WebDB:
         self.db_path = db_path
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
+    @staticmethod
+    def _normalize_email(email):
+        return (email or "").strip().lower()
+
     def _conn(self):
         conn = sqlite3.connect(self.db_path, timeout=10)
         conn.row_factory = sqlite3.Row
@@ -1581,6 +1585,7 @@ class WebDB:
         return dict(row) if row else None
 
     def create_client_user(self, brand_id, email, password, display_name, role="owner", invited_by=None):
+        email = self._normalize_email(email)
         conn = self._conn()
         password_hash = generate_password_hash(password)
         try:
@@ -1589,7 +1594,7 @@ class WebDB:
                 (brand_id, email, password_hash, display_name, role, invited_by),
             )
             conn.commit()
-            row = conn.execute("SELECT id FROM client_users WHERE email = ?", (email,)).fetchone()
+            row = conn.execute("SELECT id FROM client_users WHERE lower(email) = ?", (email,)).fetchone()
             conn.close()
             # Auto-remove from drip campaigns on conversion
             try:
@@ -1602,11 +1607,12 @@ class WebDB:
             return None
 
     def authenticate_client(self, email, password):
+        email = self._normalize_email(email)
         conn = self._conn()
         row = conn.execute(
             "SELECT cu.*, b.display_name AS brand_name, b.slug AS brand_slug "
             "FROM client_users cu JOIN brands b ON cu.brand_id = b.id "
-            "WHERE cu.email = ? AND cu.is_active = 1",
+            "WHERE lower(cu.email) = ? AND cu.is_active = 1",
             (email,),
         ).fetchone()
         conn.close()
@@ -1648,9 +1654,10 @@ class WebDB:
         conn.close()
 
     def get_client_user_by_email(self, email):
+        email = self._normalize_email(email)
         conn = self._conn()
         row = conn.execute(
-            "SELECT * FROM client_users WHERE email = ? AND is_active = 1",
+            "SELECT * FROM client_users WHERE lower(email) = ? AND is_active = 1",
             (email,),
         ).fetchone()
         conn.close()

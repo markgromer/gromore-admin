@@ -1,6 +1,8 @@
 import { motion } from 'framer-motion'
 import styles from './KpiCard.module.css'
 
+const MotionDiv = motion.div
+
 const statusColors = {
   good: 'var(--success)',
   ok: 'var(--warning)',
@@ -12,7 +14,7 @@ export default function KpiCard({ label, value, target, unit = '', status = 'neu
   const color = statusColors[status] || statusColors.neutral
 
   return (
-    <motion.div
+    <MotionDiv
       className={styles.card}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
@@ -34,6 +36,6 @@ export default function KpiCard({ label, value, target, unit = '', status = 'neu
           {trend > 0 ? '+' : ''}{trend}%
         </div>
       )}
-    </motion.div>
+    </MotionDiv>
   )
 }

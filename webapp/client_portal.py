@@ -36,6 +36,16 @@ client_bp = Blueprint(
 log = logging.getLogger(__name__)
 
 
+def _external_app_url() -> str:
+    configured = (current_app.config.get("APP_URL", "") or "").rstrip("/")
+    scheme = request.headers.get("X-Forwarded-Proto", request.scheme)
+    host = (request.headers.get("X-Forwarded-Host") or request.host or "").strip()
+    request_base = f"{scheme}://{host}" if host else request.host_url.rstrip("/")
+    if not configured or "localhost" in configured:
+        return request_base.rstrip("/")
+    return configured
+
+
 def _warm_client_snapshots_async(*, brand_id: int, month: str) -> None:
     """Warm heavy caches in the background after login.
 
@@ -517,7 +527,7 @@ def _check_feature_gate():
 @client_bp.route("/login", methods=["GET", "POST"])
 def client_login():
     if request.method == "POST":
-        email = request.form.get("email", "").strip()
+        email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
         db = _get_db()
         user = db.authenticate_client(email, password)
@@ -602,11 +612,10 @@ def client_forgot_password():
             db.set_password_reset_token(user["id"], token, expires)
             try:
                 from webapp.email_sender import send_password_reset_email
-                app_url = current_app.config.get("APP_URL", request.host_url.rstrip("/"))
-                reset_url = f"{app_url}/client/reset-password/{token}"
+                reset_url = f"{_external_app_url()}{url_for('client.client_reset_password', token=token)}"
                 send_password_reset_email(current_app.config, email, user["display_name"], reset_url)
             except Exception:
-                pass  # Don't reveal email delivery failures
+                current_app.logger.exception("Password reset email delivery failed for %s", email)
         # Always show success to prevent email enumeration
         flash("If that email is on file, you'll receive a reset link shortly.", "success")
         return render_template("client_forgot_password.html", sent=True)
@@ -670,7 +679,7 @@ def api_me():
 def api_login():
     """JSON login for the React SPA."""
     data = request.get_json(silent=True) or {}
-    email = (data.get("email") or "").strip()
+    email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
 
     if not email or not password:

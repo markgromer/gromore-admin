@@ -8,10 +8,12 @@ import json
 import logging
 import math
 import re
+from collections import deque
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import requests
+from bs4 import BeautifulSoup
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +23,33 @@ DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 # ── Warren tool definitions (OpenAI function calling) ──
 
 WARREN_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "browse_website",
+            "description": (
+                "Open a specific URL and inspect one or more pages from that website. "
+                "Use this when the user shares a link, asks you to review a website, "
+                "mentions a draft or staging site, or wants feedback on page structure or copy."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "The exact page or website URL to inspect.",
+                    },
+                    "max_pages": {
+                        "type": "integer",
+                        "description": "How many pages to inspect from the same site.",
+                        "minimum": 1,
+                        "maximum": 8,
+                    },
+                },
+                "required": ["url"],
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -224,6 +253,217 @@ def get_memory_context_for_chat(db, brand_id: int, user_message: str,
         "save them with save_memory so you remember next time."
     )
     return "\n".join(parts)
+
+
+_URL_RE = re.compile(r"(?P<url>(?:https?://|www\.)[^\s<>'\"()]+)", re.IGNORECASE)
+_BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    )
+}
+
+
+def _extract_urls_from_text(text: str) -> List[str]:
+    urls = []
+    for match in _URL_RE.finditer(text or ""):
+        url = (match.group("url") or "").rstrip(".,);!?]}")
+        if url and not url.lower().startswith(("http://", "https://")):
+            url = "https://" + url
+        if url and url not in urls:
+            urls.append(url)
+    return urls
+
+
+def _should_prefetch_website_review(user_message: str) -> bool:
+    lower_msg = (user_message or "").lower()
+    review_terms = (
+        "look at",
+        "review",
+        "audit",
+        "analyze",
+        "analyse",
+        "check",
+        "browse",
+        "visit",
+        "crawl",
+        "site",
+        "website",
+        "landing page",
+        "landing pages",
+        "page",
+        "pages",
+        "draft",
+        "staging",
+    )
+    return any(term in lower_msg for term in review_terms)
+
+
+def _normalize_site_url(url: str) -> str:
+    url = (url or "").strip()
+    if not url:
+        return ""
+    if not re.match(r"^https?://", url, re.IGNORECASE):
+        url = "https://" + url
+    return url
+
+
+def _extract_page_text(soup: BeautifulSoup, max_chars: int = 1200) -> str:
+    container = soup.find("main") or soup.find("article") or soup.body or soup
+    if not container:
+        return ""
+
+    cloned = BeautifulSoup(str(container), "html.parser")
+    for tag in cloned(["script", "style", "noscript", "svg"]):
+        tag.decompose()
+
+    text = " ".join(cloned.stripped_strings)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:max_chars]
+
+
+def _extract_internal_links(page_url: str, soup: BeautifulSoup, limit: int = 12) -> List[str]:
+    parsed_page = urlparse(page_url)
+    base_host = parsed_page.netloc.lower()
+    links: List[str] = []
+
+    for anchor in soup.find_all("a", href=True):
+        href = (anchor.get("href") or "").strip()
+        if not href or href.startswith(("#", "mailto:", "tel:", "javascript:")):
+            continue
+        abs_url = urljoin(page_url, href)
+        parsed = urlparse(abs_url)
+        if parsed.scheme not in {"http", "https"}:
+            continue
+        if parsed.netloc.lower() != base_host:
+            continue
+        clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path or '/'}"
+        if parsed.query:
+            clean_url += f"?{parsed.query}"
+        if clean_url not in links:
+            links.append(clean_url)
+        if len(links) >= limit:
+            break
+    return links
+
+
+def _summarize_browsed_page(page_url: str, html: str) -> Dict[str, Any]:
+    soup = BeautifulSoup(html or "", "html.parser")
+    title = soup.title.get_text(" ", strip=True) if soup.title else ""
+    meta_description = ""
+    meta_tag = soup.find("meta", attrs={"name": re.compile(r"^description$", re.I)})
+    if meta_tag:
+        meta_description = (meta_tag.get("content") or "").strip()
+
+    headings: List[str] = []
+    for tag_name in ("h1", "h2"):
+        for tag in soup.find_all(tag_name):
+            text = tag.get_text(" ", strip=True)
+            if text and text not in headings:
+                headings.append(text)
+            if len(headings) >= 8:
+                break
+        if len(headings) >= 8:
+            break
+
+    return {
+        "url": page_url,
+        "title": title,
+        "meta_description": meta_description,
+        "headings": headings[:8],
+        "text_excerpt": _extract_page_text(soup),
+        "internal_links": _extract_internal_links(page_url, soup),
+    }
+
+
+def _execute_browse_website(url: str, max_pages: int = 5) -> str:
+    """Fetch a live website page and a small set of internal pages for review."""
+    start_url = _normalize_site_url(url)
+    if not start_url:
+        return "No URL was provided to browse."
+
+    try:
+        max_pages = int(max_pages or 5)
+    except (TypeError, ValueError):
+        max_pages = 5
+    max_pages = max(1, min(max_pages, 8))
+    session = requests.Session()
+    session.headers.update(_BROWSER_HEADERS)
+
+    queue = deque([start_url])
+    seen: set[str] = set()
+    pages: List[Dict[str, Any]] = []
+    errors: List[str] = []
+    start_host = urlparse(start_url).netloc.lower()
+
+    while queue and len(pages) < max_pages:
+        current = queue.popleft()
+        if current in seen:
+            continue
+        seen.add(current)
+
+        try:
+            resp = session.get(current, timeout=12, allow_redirects=True)
+        except requests.exceptions.SSLError:
+            try:
+                requests.packages.urllib3.disable_warnings()  # type: ignore[attr-defined]
+                resp = session.get(current, timeout=12, allow_redirects=True, verify=False)
+                errors.append(f"{current} -> SSL verification failed, fetched without certificate verification")
+            except Exception as exc:
+                errors.append(f"{current} -> request failed after SSL fallback: {exc}")
+                continue
+        except Exception as exc:
+            errors.append(f"{current} -> request failed: {exc}")
+            continue
+
+        final_url = resp.url or current
+        parsed_final = urlparse(final_url)
+        if parsed_final.netloc.lower() != start_host:
+            continue
+        if resp.status_code >= 400:
+            errors.append(f"{final_url} -> HTTP {resp.status_code}")
+            continue
+
+        content_type = (resp.headers.get("Content-Type") or "").lower()
+        if "html" not in content_type and "xml" not in content_type and resp.text[:50].lstrip()[:1] != "<":
+            errors.append(f"{final_url} -> unsupported content type: {content_type or 'unknown'}")
+            continue
+
+        page = _summarize_browsed_page(final_url, resp.text)
+        pages.append(page)
+
+        for link in page["internal_links"]:
+            if link not in seen and link not in queue and len(queue) < (max_pages * 4):
+                queue.append(link)
+
+    if not pages:
+        if errors:
+            return "Website browse failed:\n" + "\n".join(errors[:5])
+        return f"Website browse failed for {start_url}."
+
+    lines = [
+        f"Website browse results for {start_url}",
+        f"Pages reviewed: {len(pages)}",
+    ]
+
+    for idx, page in enumerate(pages, start=1):
+        lines.append(f"\nPAGE {idx}: {page['url']}")
+        if page["title"]:
+            lines.append(f"Title: {page['title']}")
+        if page["meta_description"]:
+            lines.append(f"Meta description: {page['meta_description'][:220]}")
+        if page["headings"]:
+            lines.append("Headings: " + " | ".join(page["headings"][:6]))
+        if page["text_excerpt"]:
+            lines.append(f"Visible text excerpt: {page['text_excerpt']}")
+        if page["internal_links"]:
+            lines.append("Internal links: " + ", ".join(page["internal_links"][:8]))
+
+    if errors:
+        lines.append("\nBrowse warnings:")
+        lines.extend(errors[:5])
+
+    return "\n".join(lines)
 
 
 def _execute_web_search(query: str) -> str:
@@ -480,6 +720,11 @@ DEFAULT_CHAT_SYSTEM_PROMPT = (
     "Creative Center (/client/creative): Visual ad builder with templates for every format.\n\n"
     "My Business (/client/my-business): Edit brand voice, offers, audience, KPIs, colors, logos.\n\n"
     "Settings (/client/settings): Connect platforms, enter IDs, manage API keys.\n\n"
+
+    "WEBSITE ACCESS\n"
+    "If the user gives you a URL, asks you to inspect a website, or mentions a draft/staging site, "
+    "you are expected to browse it. Use your website browsing capability before saying data is missing. "
+    "Do not say you cannot access external websites unless a live fetch actually failed.\n\n"
 
     "EXPERTISE AREAS\n"
     "Google Ads, Meta Ads, Search Console, GA4, SEO, conversion optimization, sales funnels, "
@@ -1001,11 +1246,14 @@ def chat_with_warren(
 
         # Tools / capabilities
         "YOUR TOOLS: "
-        "You have two special tools you can use anytime: "
-        "1. **web_search** - Search the web for real-time info. Use it when someone asks about competitors, "
+        "You have three special tools you can use anytime: "
+        "1. **browse_website** - Open a specific URL and inspect live page content. Use it immediately when the user "
+        "shares a link, asks you to review a website, mentions a draft site, or wants feedback on page structure or copy. "
+        "Never claim you cannot access a website before trying this tool. "
+        "2. **web_search** - Search the web for real-time info. Use it when someone asks about competitors, "
         "pricing, industry trends, links, products, news, or anything you don't have in your data. "
         "Just call it naturally, no need to ask permission. "
-        "2. **generate_image** - Create images with DALL-E 3. Use it when someone asks you to make, "
+        "3. **generate_image** - Create images with DALL-E 3. Use it when someone asks you to make, "
         "create, design, or generate any kind of image, graphic, visual, ad creative mockup, "
         "social media post image, logo concept, etc. Describe the image in detail in your prompt "
         "and incorporate the brand's colors, style, and identity when relevant. "
@@ -1015,10 +1263,10 @@ def chat_with_warren(
         # Long-term memory
         "YOUR MEMORY: "
         "You have long-term memory that persists across conversations. You can: "
-        "3. **save_memory** - Save important insights, strategies, decisions, and learnings about this brand. "
+        "4. **save_memory** - Save important insights, strategies, decisions, and learnings about this brand. "
         "Use this often. Every time you identify a pattern, make a recommendation, note a strategy change, "
         "or learn what worked or didn't, save it. Categories: strategy, insight, decision, learning. "
-        "4. **recall_memories** - Search your past memories about this brand. Use this when you need "
+        "5. **recall_memories** - Search your past memories about this brand. Use this when you need "
         "context about what's been tried before, what strategies are active, or what outcomes were observed. "
         "MEMORY DISCIPLINE: "
         "You are not a stateless chatbot. You grow with this business. "
@@ -1114,6 +1362,25 @@ def chat_with_warren(
             "SUGGEST FIXES: For every issue, give a concrete fix they can apply right now in the canvas editor."
         )
 
+    latest_user_message = ""
+    if messages:
+        latest_content = messages[-1].get("content", "")
+        if isinstance(latest_content, str):
+            latest_user_message = latest_content
+
+    candidate_urls = _extract_urls_from_text(latest_user_message)
+    if candidate_urls and _should_prefetch_website_review(latest_user_message):
+        try:
+            prefetched_site = _execute_browse_website(candidate_urls[0], max_pages=6)
+            system += (
+                "\n\nLIVE WEBSITE DATA FROM THE USER'S URL:\n"
+                + prefetched_site
+                + "\n\nUse this live browse result when reviewing the website. "
+                "Do not say you cannot access the site unless this fetch clearly failed."
+            )
+        except Exception as exc:
+            log.warning("Failed to prefetch website review for %s: %s", candidate_urls[0], exc)
+
     ctx_user = {
         "role": "user",
         "content": "Context JSON:\n" + json.dumps(context, ensure_ascii=False),
@@ -1188,7 +1455,12 @@ def chat_with_warren(
                     fn_args = {}
 
                 tool_result = ""
-                if fn_name == "web_search":
+                if fn_name == "browse_website":
+                    url = fn_args.get("url", "")
+                    max_pages = fn_args.get("max_pages", 5)
+                    log.info("Warren tool: browse_website('%s', max_pages=%s)", url, max_pages)
+                    tool_result = _execute_browse_website(url, max_pages=max_pages)
+                elif fn_name == "web_search":
                     query = fn_args.get("query", "")
                     log.info("Warren tool: web_search('%s')", query)
                     tool_result = _execute_web_search(query)

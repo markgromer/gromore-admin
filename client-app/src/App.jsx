@@ -5,6 +5,7 @@ import Shell from './components/layout/Shell'
 import Dashboard from './pages/dashboard/Dashboard'
 import Login from './pages/login/Login'
 import PlaceholderPage from './pages/PlaceholderPage'
+import LegacyRedirectPage from './pages/LegacyRedirectPage'
 import { ShimmerPage } from './components/ui/Shimmer'
 
 function ProtectedRoute({ children }) {
@@ -17,7 +18,9 @@ function ProtectedRoute({ children }) {
 export default function App() {
   const init = useAuthStore(s => s.init)
 
-  useEffect(() => { init() }, [])
+  useEffect(() => {
+    init()
+  }, [init])
 
   return (
     <Routes>
@@ -37,7 +40,16 @@ export default function App() {
         <Route path="actions" element={<PlaceholderPage title="Missions" emoji="📋" />} />
         <Route path="hiring" element={<PlaceholderPage title="Hiring Hub" />} />
         <Route path="ad-builder" element={<PlaceholderPage title="Ad Builder" />} />
-        <Route path="creative" element={<PlaceholderPage title="Creative" />} />
+        <Route
+          path="creative"
+          element={
+            <LegacyRedirectPage
+              title="Creative Center"
+              to="/client/creative"
+              description="Redirecting to the full Creative Center."
+            />
+          }
+        />
         <Route path="blog" element={<PlaceholderPage title="Blog" />} />
         <Route path="post-scheduler" element={<PlaceholderPage title="Post Scheduler" />} />
         <Route path="quick-launch" element={<PlaceholderPage title="Quick Launch" />} />

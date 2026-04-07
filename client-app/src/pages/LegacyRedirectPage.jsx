@@ -1,9 +1,15 @@
+import { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import styles from './Placeholder.module.css'
 
 const MotionDiv = motion.div
 
-export default function PlaceholderPage({ title, icon: Icon, description }) {
+export default function LegacyRedirectPage({ title, to, description }) {
+  useEffect(() => {
+    if (!to) return
+    window.location.replace(to)
+  }, [to])
+
   return (
     <MotionDiv
       className={styles.page}
@@ -12,9 +18,13 @@ export default function PlaceholderPage({ title, icon: Icon, description }) {
       transition={{ duration: 0.3 }}
     >
       <div className={styles.inner}>
-        {Icon && <Icon size={48} strokeWidth={1.2} className={styles.icon} />}
         <h1 className={styles.title}>{title}</h1>
-        <p className={styles.desc}>{description || 'This page is being built. Check back soon.'}</p>
+        <p className={styles.desc}>
+          {description || 'Opening the full editor...'}
+        </p>
+        <p className={styles.desc}>
+          <a href={to}>Continue to {title}</a>
+        </p>
       </div>
     </MotionDiv>
   )

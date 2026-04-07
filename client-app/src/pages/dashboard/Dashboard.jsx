@@ -6,10 +6,12 @@ import { ShimmerPage } from '../../components/ui/Shimmer'
 import KpiCard from '../../components/ui/KpiCard'
 import Card, { CardHeader, CardGrid } from '../../components/ui/Card'
 import {
-  TrendingUp, AlertTriangle, CheckCircle2, Megaphone,
+  AlertTriangle, CheckCircle2, Megaphone,
   RefreshCw, Zap
 } from 'lucide-react'
 import styles from './Dashboard.module.css'
+
+const MotionDiv = motion.div
 
 const stagger = {
   animate: { transition: { staggerChildren: 0.05 } },
@@ -21,7 +23,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchDashboard()
-  }, [month])
+  }, [fetchDashboard, month])
 
   if (loading && !data) return <ShimmerPage />
 
@@ -33,7 +35,7 @@ export default function Dashboard() {
   const metaCount = (campaigns.meta || []).length
 
   return (
-    <motion.div variants={stagger} initial="initial" animate="animate">
+    <MotionDiv variants={stagger} initial="initial" animate="animate">
       {/* Header */}
       <div className={styles.header}>
         <div>
@@ -157,6 +159,6 @@ export default function Dashboard() {
           </button>
         </p>
       )}
-    </motion.div>
+    </MotionDiv>
   )
 }
