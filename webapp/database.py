@@ -1074,6 +1074,7 @@ class WebDB:
             ("sales_bot_sms_opt_out_footer", "TEXT DEFAULT 'Reply STOP to opt out'"),
             ("sales_bot_objection_playbook", "TEXT DEFAULT ''"),
             ("sales_bot_message_templates", "TEXT DEFAULT ''"),
+            ("sales_bot_collect_fields", "TEXT DEFAULT 'name,phone'"),
             ("hiring_design", "TEXT DEFAULT '{}'"),
         ]
         for col_name, col_def in new_brand_cols:
@@ -1771,12 +1772,21 @@ class WebDB:
         conn.close()
         return event_id
 
-    def get_lead_events(self, thread_id, limit=100):
+    def get_lead_events(self, brand_id_or_thread=None, thread_id=None, event_type=None, limit=100):
+        """Get lead events. Supports old call style (thread_id) and new style (brand_id, thread_id, event_type)."""
+        # Handle old-style call: get_lead_events(thread_id)
+        if thread_id is None and brand_id_or_thread is not None:
+            thread_id = brand_id_or_thread
+
         conn = self._conn()
-        rows = conn.execute(
-            "SELECT * FROM lead_events WHERE thread_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
-            (thread_id, int(limit or 100)),
-        ).fetchall()
+        sql = "SELECT * FROM lead_events WHERE thread_id = ?"
+        params = [thread_id]
+        if event_type:
+            sql += " AND event_type = ?"
+            params.append(event_type)
+        sql += " ORDER BY created_at DESC, id DESC LIMIT ?"
+        params.append(int(limit or 100))
+        rows = conn.execute(sql, params).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 

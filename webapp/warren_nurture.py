@@ -217,12 +217,34 @@ def _send_nurture(db, brand, thread, rule):
             log.info("Skipping nurture for opted-out phone %s thread %s", lead_phone, thread_id)
             return False
 
+    # Build a smarter system message for the follow-up
+    hours = rule['hours_since_last']
+    nudge = f"[System: The lead has not responded in {hours} hours. Generate a brief, natural follow-up. Do not repeat your last message. Keep it short and low-pressure."
+
+    # Add objection context
+    objection_events = db.get_lead_events(brand_id, thread_id, event_type="objection_detected")
+    if objection_events:
+        past = [e.get("event_value", "") for e in objection_events[:3] if e.get("event_value")]
+        if past:
+            nudge += f"\n\nThis lead had these concerns: {', '.join(past)}. Address one of them naturally, don't ignore the elephant in the room."
+
+    # Add missing info context
+    missing = []
+    if not thread.get("lead_name"):
+        missing.append("their name")
+    if not thread.get("lead_phone") and channel == "messenger":
+        missing.append("their phone number")
+    if missing:
+        nudge += f"\n\nWe still don't know {' or '.join(missing)}. Try to get it naturally in this follow-up."
+
+    nudge += "]"
+
     # Add a system message to guide Warren's follow-up
     db.add_lead_message(
         thread_id,
         direction="inbound",
         role="system",
-        content=f"[System: The lead has not responded in {rule['hours_since_last']} hours. Generate a brief, natural follow-up. Do not repeat your last message. Keep it short and low-pressure.]",
+        content=nudge,
         channel=channel,
     )
 

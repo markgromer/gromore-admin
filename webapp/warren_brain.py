@@ -94,6 +94,18 @@ QUOTING MODE: {quote_mode}
     if message_templates:
         prompt += f"\n\nMESSAGE TEMPLATES (use as starting points, personalize based on context):\n{message_templates}"
 
+    # Info collection strategy
+    collect_fields = brand.get("sales_bot_collect_fields", "") or "name,phone"
+    if collect_fields:
+        field_labels = {"name": "Name", "phone": "Phone number", "email": "Email", "address": "Service address", "service_needed": "What service they need"}
+        fields_list = [f.strip() for f in collect_fields.split(",") if f.strip()]
+        readable = ", ".join(field_labels.get(f, f) for f in fields_list)
+        prompt += f"\n\nINFORMATION TO COLLECT: {readable}"
+        prompt += "\n- Only ask for ONE piece of missing info per message. Be casual about it."
+        prompt += "\n- If on Messenger and you need their phone, say something like 'Want me to text you the details? What's the best number?'"
+        prompt += "\n- If you don't have their name yet, work it in: 'By the way, who am I chatting with?'"
+        prompt += "\n- Never demand info. If they don't share it, move on."
+
     prompt += """
 
 RESPONSE FORMAT:
@@ -106,8 +118,23 @@ You must respond with valid JSON containing these fields:
     "quote_high": null or number,
     "stage_suggestion": null or "engaged|quoted|qualified|booked",
     "handoff_reason": null or "reason string",
-    "internal_notes": "Brief note about what you observed and why you chose this action"
+    "internal_notes": "Brief note about what you observed and why you chose this action",
+    "info_collected": {"name": null, "phone": null, "email": null, "address": null, "service_needed": null},
+    "objection_detected": null
 }
+
+INFO_COLLECTED RULES:
+- Only set a field if the lead EXPLICITLY provided that info in THIS message.
+- "name" = their first name or full name. null if not given.
+- "phone" = phone number they shared. null if not given.
+- "email" = email they shared. null if not given.
+- "address" = service address or location. null if not given.
+- "service_needed" = what service they want (e.g. "drain cleaning", "AC repair"). null if not clear.
+
+OBJECTION_DETECTED RULES:
+- Set to a short label when the lead pushes back. Examples: "too expensive", "need to think about it", "got another quote", "not ready yet", "bad reviews", "timing"
+- null if no objection in this message.
+- Use the objection playbook to respond, but always log the objection here.
 
 RULES:
 - Keep SMS replies under 300 characters. Be concise.
@@ -168,15 +195,32 @@ def generate_response(db, brand, thread, messages, channel="sms"):
     # Add lead context
     lead_name = thread.get("lead_name", "")
     lead_phone = thread.get("lead_phone", "")
+    lead_email = thread.get("lead_email", "")
     source = thread.get("source", "")
-    if lead_name or lead_phone or source:
-        system_prompt += "\n\nLEAD INFO:"
+    if lead_name or lead_phone or lead_email or source:
+        system_prompt += "\n\nLEAD INFO (what we already know):"
         if lead_name:
             system_prompt += f"\n- Name: {lead_name}"
+        else:
+            system_prompt += "\n- Name: UNKNOWN - try to get it naturally"
         if lead_phone:
             system_prompt += f"\n- Phone: {lead_phone}"
+        elif channel == "messenger":
+            system_prompt += "\n- Phone: UNKNOWN - we're on Messenger, try to get their number so we can text them details"
+        if lead_email:
+            system_prompt += f"\n- Email: {lead_email}"
         if source:
             system_prompt += f"\n- Source: {source}"
+    else:
+        system_prompt += "\n\nLEAD INFO: Nothing known yet. Try to get their name naturally."
+
+    # Add past objection context if any
+    past_objections = thread.get("_objections", [])
+    if past_objections:
+        system_prompt += "\n\nPAST OBJECTIONS FROM THIS LEAD:"
+        for obj in past_objections[-5:]:
+            system_prompt += f"\n- {obj}"
+        system_prompt += "\nAddress these concerns naturally. Don't ignore them."
 
     # Build conversation history
     conversation = _build_conversation_context(messages)
@@ -222,6 +266,14 @@ def generate_response(db, brand, thread, messages, channel="sms"):
             log.error("Warren brain: invalid JSON response: %s", content[:500])
             return None
 
+        # Normalize info_collected - only keep non-null values
+        raw_info = result.get("info_collected") or {}
+        info_collected = {}
+        for k in ("name", "phone", "email", "address", "service_needed"):
+            v = raw_info.get(k)
+            if v and isinstance(v, str) and v.strip():
+                info_collected[k] = v.strip()
+
         # Normalize the response
         return {
             "reply": (result.get("reply") or "").strip(),
@@ -232,6 +284,8 @@ def generate_response(db, brand, thread, messages, channel="sms"):
             "stage_suggestion": result.get("stage_suggestion"),
             "handoff_reason": result.get("handoff_reason"),
             "internal_notes": (result.get("internal_notes") or "").strip(),
+            "info_collected": info_collected,
+            "objection_detected": (result.get("objection_detected") or "").strip() or None,
         }
 
     except Exception as exc:
@@ -264,12 +318,37 @@ def process_and_respond(db, brand_id, thread_id, channel="sms"):
         return None
 
     messages = db.get_lead_messages(thread_id)
+
+    # Load past objections into thread context for the brain
+    objection_events = db.get_lead_events(brand_id, thread_id, event_type="objection_detected")
+    thread["_objections"] = [e.get("event_value", "") for e in (objection_events or []) if e.get("event_value")]
+
     response = generate_response(db, brand, thread, messages, channel=channel)
     if not response:
         return None
 
     action = response.get("action", "reply")
     reply_text = response.get("reply", "")
+
+    # Save any info the AI collected from this message
+    info = response.get("info_collected") or {}
+    if info:
+        update_data = {}
+        if info.get("name") and not thread.get("lead_name"):
+            update_data["lead_name"] = info["name"]
+        if info.get("phone") and not thread.get("lead_phone"):
+            update_data["lead_phone"] = info["phone"]
+        if info.get("email") and not thread.get("lead_email"):
+            update_data["lead_email"] = info["email"]
+        if update_data:
+            db.upsert_lead_thread(brand_id, channel, thread.get("external_thread_id", ""), data=update_data)
+            log.info("Warren collected info for thread %s: %s", thread_id, update_data)
+
+    # Log any objection detected
+    objection = response.get("objection_detected")
+    if objection:
+        db.add_lead_event(brand_id, thread_id, "objection_detected", event_value=objection)
+        log.info("Warren detected objection for thread %s: %s", thread_id, objection)
 
     # Determine if we should auto-send or hold for review
     confidence = response.get("confidence", 0)

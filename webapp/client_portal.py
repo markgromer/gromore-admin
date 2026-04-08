@@ -5786,6 +5786,24 @@ def client_save_lead_assistant_profile():
         (request.form.get("sales_bot_message_templates") or "").strip()[:4000],
     )
 
+    # Info collection fields
+    collect = []
+    if request.form.get("collect_name"):
+        collect.append("name")
+    if request.form.get("collect_phone"):
+        collect.append("phone")
+    if request.form.get("collect_email"):
+        collect.append("email")
+    if request.form.get("collect_address"):
+        collect.append("address")
+    if request.form.get("collect_service"):
+        collect.append("service_needed")
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_collect_fields",
+        ",".join(collect) if collect else "",
+    )
+
     flash("Lead assistant profile saved.", "success")
     return redirect(url_for("client.client_lead_assistant"))
 

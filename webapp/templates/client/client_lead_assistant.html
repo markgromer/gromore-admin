@@ -262,6 +262,35 @@ WIN-BACK (LOST LEAD):
     </div>
 
     <div class="la-card">
+        <h5>Info Collection</h5>
+        <p class="section-copy">Warren will naturally try to collect missing lead info during conversations. Pick what matters to your business.</p>
+        {% set collect_fields = (brand.sales_bot_collect_fields or 'name,phone').split(',') %}
+        <div class="d-flex flex-wrap gap-3 mb-2">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="collect_name" id="collectName" value="1" {{ 'checked' if 'name' in collect_fields }}>
+                <label class="form-check-label" for="collectName"><i class="bi bi-person me-1"></i> Name</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="collect_phone" id="collectPhone" value="1" {{ 'checked' if 'phone' in collect_fields }}>
+                <label class="form-check-label" for="collectPhone"><i class="bi bi-telephone me-1"></i> Phone</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="collect_email" id="collectEmail" value="1" {{ 'checked' if 'email' in collect_fields }}>
+                <label class="form-check-label" for="collectEmail"><i class="bi bi-envelope me-1"></i> Email</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="collect_address" id="collectAddress" value="1" {{ 'checked' if 'address' in collect_fields }}>
+                <label class="form-check-label" for="collectAddress"><i class="bi bi-geo-alt me-1"></i> Address</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="collect_service" id="collectService" value="1" {{ 'checked' if 'service_needed' in collect_fields }}>
+                <label class="form-check-label" for="collectService"><i class="bi bi-tools me-1"></i> Service Needed</label>
+            </div>
+        </div>
+        <p class="la-hint mb-0">Warren asks for one thing at a time, casually, and won't push if they skip it.</p>
+    </div>
+
+    <div class="la-card">
         <p class="section-copy">The goal is not more copy. The goal is a quoting brain that behaves like your best sales rep.</p>
         <div class="la-hint">
             Put real numbers in the service menu. Put real boundaries in guardrails. Put real message examples in example language. If this page stays vague, the assistant will stay vague.
