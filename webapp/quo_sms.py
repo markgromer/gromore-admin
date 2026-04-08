@@ -94,3 +94,50 @@ def test_connection(api_key):
     if err:
         return False, err
     return True, f"Connected. {len(numbers)} phone number(s) found."
+
+
+def send_test_sms(api_key, from_number, to_phone):
+    """Send a diagnostic test SMS and return the full API response for debugging.
+
+    Returns:
+        dict with keys: ok, status_code, response_body, request_body, error
+    """
+    to_phone = (to_phone or "").strip()
+    from_number = (from_number or "").strip()
+
+    if not api_key or not from_number or not to_phone:
+        return {"ok": False, "error": "Missing api_key, from_number, or to_phone"}
+
+    if not to_phone.startswith("+"):
+        to_phone = "+1" + to_phone.lstrip("1").replace("-", "").replace(" ", "").replace("(", "").replace(")", "")
+
+    request_body = {
+        "content": f"Test SMS from Gromore ({from_number}). If you received this, your SMS integration is working.",
+        "from": from_number,
+        "to": [to_phone],
+    }
+
+    try:
+        resp = requests.post(
+            f"{BASE_URL}/messages",
+            headers=_headers(api_key),
+            json=request_body,
+            timeout=15,
+        )
+        try:
+            resp_json = resp.json()
+        except Exception:
+            resp_json = resp.text[:500]
+
+        return {
+            "ok": resp.status_code in (200, 201, 202),
+            "status_code": resp.status_code,
+            "response_body": resp_json,
+            "request_body": {
+                "from": from_number,
+                "to": [to_phone],
+                "content": request_body["content"][:50] + "...",
+            },
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}

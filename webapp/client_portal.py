@@ -4034,13 +4034,43 @@ def client_test_openphone():
     # Get phone numbers
     phone_numbers = []
     try:
-        nums = get_phone_numbers(api_key)
+        nums, _err = get_phone_numbers(api_key)
         if isinstance(nums, list):
             phone_numbers = [n.get("phoneNumber", "") for n in nums if n.get("phoneNumber")]
     except Exception:
         pass
 
     return jsonify({"ok": True, "phone_numbers": phone_numbers})
+
+
+@client_bp.route("/api/warren/send-test-sms", methods=["POST"])
+@client_login_required
+def client_send_test_sms():
+    """Send a real test SMS and return the full API response for diagnostics."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"ok": False, "error": "Brand not found"}), 404
+
+    api_key = (brand.get("quo_api_key") or "").strip()
+    from_number = (brand.get("quo_phone_number") or "").strip()
+    to_phone = (request.get_json(silent=True) or {}).get("to_phone", "").strip()
+
+    if not api_key:
+        return jsonify({"ok": False, "error": "No Quo API key configured"})
+    if not from_number:
+        return jsonify({"ok": False, "error": "No Quo phone number configured. Set your OpenPhone number in E.164 format (+1XXXXXXXXXX)."})
+    if not to_phone:
+        return jsonify({"ok": False, "error": "Enter a phone number to send the test to."})
+
+    # Validate from_number format
+    if not from_number.startswith("+"):
+        return jsonify({"ok": False, "error": f"Your configured 'from' number ({from_number}) is not in E.164 format. It must start with + (e.g. +15551234567)."})
+
+    from webapp.quo_sms import send_test_sms
+    result = send_test_sms(api_key, from_number, to_phone)
+    return jsonify(result)
 
 
 @client_bp.route("/api/warren/test-messenger", methods=["POST"])

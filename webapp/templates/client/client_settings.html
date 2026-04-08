@@ -816,6 +816,17 @@
                     </div>
                     <small class="text-muted">Paste this URL in OpenPhone > Settings > Webhooks > Add Webhook. Select "message.received" event.</small>
                 </div>
+                <div class="mt-2 pt-2" style="border-top:1px solid #bbf7d0; font-size:.82rem;">
+                    <label class="form-label mb-1 fw-medium">Send Test SMS</label>
+                    <div class="input-group input-group-sm">
+                        <input type="tel" class="form-control form-control-sm" id="testSmsPhone"
+                               placeholder="+15551234567 (your personal phone)">
+                        <button class="btn btn-outline-success" type="button" id="sendTestSmsBtn" onclick="sendTestSMS()">
+                            <i class="bi bi-send me-1"></i>Send
+                        </button>
+                    </div>
+                    <div id="testSmsResult" class="mt-2" style="display:none;"></div>
+                </div>
             </div>
             {% endif %}
 
@@ -1494,6 +1505,59 @@ function testOpenPhoneConnection() {
         btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Test Connection';
         badge.className = 'badge bg-danger ms-2';
         badge.textContent = 'Error';
+    });
+}
+
+function sendTestSMS() {
+    var btn = document.getElementById('sendTestSmsBtn');
+    var input = document.getElementById('testSmsPhone');
+    var resultDiv = document.getElementById('testSmsResult');
+    var phone = input.value.trim();
+    var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+    if (!phone) { alert('Enter a phone number to send the test to.'); return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    resultDiv.style.display = 'none';
+
+    fetch('/client/api/warren/send-test-sms', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({to_phone: phone})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send me-1"></i>Send';
+        resultDiv.style.display = '';
+
+        if (data.ok) {
+            resultDiv.innerHTML = '<div class="alert alert-success py-2 mb-0" style="font-size:.82rem;">' +
+                '<i class="bi bi-check-circle me-1"></i>SMS sent successfully (HTTP ' + data.status_code + ')' +
+                '<br><small class="text-muted">Check your phone. If it doesn\'t arrive, your carrier registration may be incomplete.</small>' +
+                '</div>';
+        } else {
+            var detail = data.error || '';
+            if (data.status_code) detail += ' (HTTP ' + data.status_code + ')';
+            if (data.response_body) {
+                var rb = typeof data.response_body === 'string' ? data.response_body : JSON.stringify(data.response_body, null, 2);
+                detail += '<br><pre style="font-size:.75rem; max-height:120px; overflow:auto; margin:.5rem 0 0; background:#fff; padding:.5rem; border-radius:6px;">' + rb + '</pre>';
+            }
+            if (data.request_body) {
+                detail += '<br><small class="text-muted">Sent from: ' + (data.request_body.from || '?') + ' to: ' + (data.request_body.to || '?') + '</small>';
+            }
+            resultDiv.innerHTML = '<div class="alert alert-danger py-2 mb-0" style="font-size:.82rem;">' +
+                '<i class="bi bi-x-circle me-1"></i>SMS failed' +
+                '<br>' + detail +
+                '</div>';
+        }
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send me-1"></i>Send';
+        resultDiv.style.display = '';
+        resultDiv.innerHTML = '<div class="alert alert-danger py-2 mb-0" style="font-size:.82rem;">Network error: ' + err + '</div>';
     });
 }
 
