@@ -354,6 +354,9 @@ class WarrenInboxTests(unittest.TestCase):
             conn.commit()
             conn.close()
 
+            # Enable the warren_inbox feature flag for tests
+            self.db.update_feature_flag("warren_inbox", "all", True)
+
             # Create a test thread
             self.thread_id = self.db.create_lead_thread(self.brand_id, {
                 "lead_name": "Test Lead",

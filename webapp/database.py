@@ -955,6 +955,7 @@ class WebDB:
             ("blog",            "Blog",             "Blog post creation and publishing", "all",   "create",   90),
             ("my_business",     "My Business",      "Business profile and details",      "all",   "business", 100),
             ("crm",             "CRM",              "Customer relationship management",  "beta",  "business", 110),
+            ("warren_inbox",    "Lead Inbox",        "Warren AI lead inbox and pipeline",  "none",  "business", 111),
             ("gbp",             "Google Profile",   "Google Business Profile manager",   "all",   "business", 120),
             ("post_scheduler",  "Post Scheduler",   "Social media post scheduling",      "beta",  "business", 130),
             ("competitor_intel","Competitor Intel",  "Competitor analysis tools",         "beta",  "business", 140),
