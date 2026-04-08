@@ -9,18 +9,13 @@ from urllib.parse import urlencode
 
 from flask import Blueprint, request, redirect, session, flash, url_for, current_app
 
+from webapp.meta_scopes import META_SCOPES
+
 client_meta_bp = Blueprint("client_meta_oauth", __name__)
 
 META_AUTH_URL = "https://www.facebook.com/v21.0/dialog/oauth"
 
-SCOPES = [
-    "ads_read",
-    "ads_management",
-    "read_insights",
-    "business_management",
-    "pages_show_list",
-    "pages_read_engagement",
-]
+SCOPES = META_SCOPES
 
 
 def _client_required():

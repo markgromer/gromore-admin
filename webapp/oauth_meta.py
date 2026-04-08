@@ -12,22 +12,15 @@ from urllib.parse import urlencode
 from flask import Blueprint, request, redirect, session, flash, url_for, current_app, render_template
 import requests
 
+from webapp.meta_scopes import META_SCOPES
+
 meta_bp = Blueprint("meta_oauth", __name__)
 
 META_AUTH_URL = "https://www.facebook.com/v21.0/dialog/oauth"
 META_TOKEN_URL = "https://graph.facebook.com/v21.0/oauth/access_token"
 META_LONG_LIVED_URL = "https://graph.facebook.com/v21.0/oauth/access_token"
 
-SCOPES = [
-    "ads_read",
-    "ads_management",
-    "read_insights",
-    "business_management",
-    "pages_show_list",
-    "pages_read_engagement",
-    "pages_read_user_content",
-    "pages_manage_posts",
-]
+SCOPES = META_SCOPES
 
 
 @meta_bp.route("/connect/<int:brand_id>")
@@ -290,8 +283,8 @@ def _finalize_meta_connection(db, brand_id, access_token, expiry, acct):
         flash(f"Facebook Pages detected: {page_names}. Using first page for organic tracking.", "info")
     else:
         flash(
-            "No Facebook Pages detected. Organic tracking won't work until a page is linked. "
-            "When reconnecting Meta, make sure to check your business page in the 'Pages' permissions screen.",
+            "No Facebook Pages detected. Organic tracking and Warren Meta channels won't work until a page is linked. "
+            "When reconnecting Meta, make sure to approve your business page and accept page management, messaging, and lead access permissions.",
             "warning",
         )
 

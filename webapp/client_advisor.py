@@ -393,7 +393,7 @@ def _explain_facebook_organic(fb_organic):
                 "We can see your page info but could not pull engagement data. "
                 "This usually means Facebook permissions need updating. "
                 "Go to Connections, disconnect Meta, then reconnect and make sure you approve ALL permissions "
-                "(pages_read_engagement, read_insights, pages_show_list). "
+                "(pages_read_engagement, read_insights, pages_show_list, pages_manage_metadata, pages_messaging, leads_retrieval). "
                 "Also confirm your Meta app has Advanced Access for these permissions in the App Dashboard."
             )
         else:
