@@ -38,6 +38,10 @@ def create_app():
         static_folder=str(BASE_DIR / "webapp" / "static"),
     )
 
+    # Trust reverse proxy headers (Render, etc.) for correct HTTPS scheme
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
     # Config from environment (Render-friendly)
     env_secret_key = os.environ.get("SECRET_KEY")
     # Use a temporary key until DB-backed config is loaded.
