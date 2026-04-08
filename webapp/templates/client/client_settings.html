@@ -692,6 +692,175 @@
     </div>
 </div>
 
+<!-- Lead Assistant Settings -->
+<div class="card mb-4" style="border-radius:12px; border:none; box-shadow:0 1px 3px rgba(0,0,0,.05);">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+            <div class="d-flex align-items-center gap-3">
+                <div style="width:48px; height:48px; border-radius:12px; background:linear-gradient(135deg,#0f766e,#14b8a6); display:flex; align-items:center; justify-content:center;">
+                    <i class="bi bi-chat-dots" style="font-size:1.3rem; color:#fff;"></i>
+                </div>
+                <div>
+                    <h5 class="mb-1 fw-semibold">Lead Assistant</h5>
+                    <p class="text-muted mb-0" style="font-size:.88rem;">Configure Warren to quote and nurture leads for this brand inside the CRM inbox.</p>
+                </div>
+            </div>
+            {% if brand.sales_bot_enabled %}
+            <span class="badge bg-success rounded-pill px-3 py-2">
+                <i class="bi bi-check-circle me-1"></i> Enabled
+            </span>
+            {% else %}
+            <span class="badge bg-secondary rounded-pill px-3 py-2">Disabled</span>
+            {% endif %}
+        </div>
+
+        <form method="POST" action="{{ url_for('client.client_save_leads_assistant_settings') }}" class="mt-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" role="switch" id="salesBotEnabled" name="sales_bot_enabled" value="1" {{ 'checked' if brand.sales_bot_enabled }}>
+                <label class="form-check-label fw-medium" for="salesBotEnabled">Turn on the lead assistant for this brand</label>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-lg-6">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">Channels</label>
+                    <div class="row g-2">
+                        <div class="col-sm-6">
+                            <label class="border rounded-3 p-3 w-100 h-100" style="cursor:pointer; background:#f8fafc;">
+                                <input class="form-check-input me-2" type="checkbox" name="sales_bot_channels" value="sms" {{ 'checked' if 'sms' in chatbot_channels }}>
+                                <span class="fw-medium">OpenPhone SMS</span>
+                                <small class="text-muted d-block mt-1">Two-way texting with leads.</small>
+                            </label>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="border rounded-3 p-3 w-100 h-100" style="cursor:pointer; background:#f8fafc;">
+                                <input class="form-check-input me-2" type="checkbox" name="sales_bot_channels" value="lead_forms" {{ 'checked' if 'lead_forms' in chatbot_channels }}>
+                                <span class="fw-medium">Meta Lead Forms</span>
+                                <small class="text-muted d-block mt-1">Create threads from Facebook lead form submissions.</small>
+                            </label>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="border rounded-3 p-3 w-100 h-100" style="cursor:pointer; background:#f8fafc;">
+                                <input class="form-check-input me-2" type="checkbox" name="sales_bot_channels" value="messenger" {{ 'checked' if 'messenger' in chatbot_channels }}>
+                                <span class="fw-medium">Facebook Messenger</span>
+                                <small class="text-muted d-block mt-1">Keep schema ready for page messaging.</small>
+                            </label>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="border rounded-3 p-3 w-100 h-100" style="cursor:pointer; background:#f8fafc;">
+                                <input class="form-check-input me-2" type="checkbox" name="sales_bot_channels" value="calls" {{ 'checked' if 'calls' in chatbot_channels }}>
+                                <span class="fw-medium">Call Logging</span>
+                                <small class="text-muted d-block mt-1">Track inbound calls as lead events.</small>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">Quote Mode</label>
+                    <select class="form-select" name="sales_bot_quote_mode">
+                        <option value="simple" {{ 'selected' if (brand.sales_bot_quote_mode or 'hybrid') == 'simple' else '' }}>Simple AI quote replies</option>
+                        <option value="hybrid" {{ 'selected' if (brand.sales_bot_quote_mode or 'hybrid') == 'hybrid' else '' }}>Hybrid - stored quote plus AI explanation</option>
+                        <option value="structured" {{ 'selected' if (brand.sales_bot_quote_mode or 'hybrid') == 'structured' else '' }}>Structured quote records</option>
+                    </select>
+                    <small class="text-muted d-block mt-2">Hybrid is the best phase 1 fit because it gives you searchable quote records without forcing a full estimating engine.</small>
+
+                    <label class="form-label fw-medium mt-3" style="font-size:.88rem;">Reply Tone</label>
+                    <input type="text" class="form-control" name="sales_bot_reply_tone"
+                           value="{{ brand.sales_bot_reply_tone or '' }}"
+                           placeholder="Helpful, direct, blue-collar, premium, calm">
+
+                    <label class="form-label fw-medium mt-3" style="font-size:.88rem;">Business Hours / Escalation Notes</label>
+                    <textarea class="form-control" name="sales_bot_business_hours" rows="4" maxlength="1000"
+                              placeholder="Mon-Fri 8am-5pm. After-hours emergency calls should still be escalated. If a lead asks for pricing outside our service area, collect info and hand off.">{{ brand.sales_bot_business_hours or '' }}</textarea>
+                </div>
+            </div>
+
+            <div class="row g-3 mt-1">
+                <div class="col-lg-6">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">OpenPhone / Quo API Key</label>
+                    <input type="password" class="form-control" name="quo_api_key"
+                           placeholder="{{ '••••••' ~ brand.quo_api_key[-4:] if brand.quo_api_key else 'Enter your Quo API key' }}"
+                           autocomplete="off">
+                    <small class="text-muted">Leave blank to keep the current key.</small>
+                </div>
+                <div class="col-lg-6">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">OpenPhone / Quo Number</label>
+                    <input type="text" class="form-control" name="quo_phone_number"
+                           value="{{ brand.quo_phone_number or '' }}"
+                           placeholder="+15551234567">
+                </div>
+            </div>
+
+            <div class="row g-3 mt-1">
+                <div class="col-lg-6">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">OpenPhone Webhook Secret</label>
+                    <input type="password" class="form-control" name="sales_bot_quo_webhook_secret"
+                           placeholder="{{ '••••••' ~ brand.sales_bot_quo_webhook_secret[-4:] if brand.sales_bot_quo_webhook_secret else 'Secret used to verify inbound webhooks' }}"
+                           autocomplete="off">
+                </div>
+                <div class="col-lg-6">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">Meta Webhook Verify Token</label>
+                    <input type="password" class="form-control" name="sales_bot_meta_webhook_secret"
+                           placeholder="{{ '••••••' ~ brand.sales_bot_meta_webhook_secret[-4:] if brand.sales_bot_meta_webhook_secret else 'Token used for Meta webhook verification' }}"
+                           autocomplete="off">
+                </div>
+            </div>
+
+            <div class="row g-3 mt-1">
+                <div class="col-md-4">
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" name="sales_bot_transcript_export" id="salesBotTranscriptExport" value="1" {{ 'checked' if brand.sales_bot_transcript_export }}>
+                        <label class="form-check-label" for="salesBotTranscriptExport">Export transcripts to Google Drive</label>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" name="sales_bot_meta_lead_forms" id="salesBotLeadForms" value="1" {{ 'checked' if brand.sales_bot_meta_lead_forms }}>
+                        <label class="form-check-label" for="salesBotLeadForms">Auto-ingest Meta lead forms</label>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" name="sales_bot_messenger_enabled" id="salesBotMessenger" value="1" {{ 'checked' if brand.sales_bot_messenger_enabled }}>
+                        <label class="form-check-label" for="salesBotMessenger">Enable Messenger when scopes are ready</label>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" name="sales_bot_call_logging" id="salesBotCallLogging" value="1" {{ 'checked' if brand.sales_bot_call_logging }}>
+                        <label class="form-check-label" for="salesBotCallLogging">Log calls as lead events</label>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" name="sales_bot_auto_push_crm" id="salesBotAutoPushCrm" value="1" {{ 'checked' if brand.sales_bot_auto_push_crm }}>
+                        <label class="form-check-label" for="salesBotAutoPushCrm">Push qualified leads to connected CRM</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-3 d-flex gap-2 align-items-center flex-wrap">
+                <button class="btn btn-primary" type="submit">Save Lead Assistant Settings</button>
+                {% if brand.quo_api_key %}
+                <span class="badge bg-success rounded-pill px-3 py-2">
+                    <i class="bi bi-check-circle me-1"></i> Quo key configured
+                </span>
+                {% endif %}
+                {% if brand.openai_api_key %}
+                <span class="badge bg-success rounded-pill px-3 py-2">
+                    <i class="bi bi-check-circle me-1"></i> AI key configured
+                </span>
+                {% endif %}
+            </div>
+
+            <div class="mt-3 p-3" style="background:#f8fafc; border-radius:10px;">
+                <small class="text-muted d-block">Phase 1 recommendation: run SMS, Meta lead forms, and call logging first. Use Google Drive for exports, not live message storage.</small>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Team Instructions (per-agent context) -->
 <div class="card mb-4" style="border-radius:12px; border:none; box-shadow:0 1px 3px rgba(0,0,0,.05);">
     <div class="card-body p-4">

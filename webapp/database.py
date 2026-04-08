@@ -94,6 +94,87 @@ class WebDB:
                 FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS lead_threads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                lead_name TEXT DEFAULT '',
+                lead_email TEXT DEFAULT '',
+                lead_phone TEXT DEFAULT '',
+                source TEXT DEFAULT '',
+                channel TEXT NOT NULL DEFAULT 'sms',
+                external_thread_id TEXT DEFAULT NULL,
+                status TEXT NOT NULL DEFAULT 'new',
+                quote_status TEXT NOT NULL DEFAULT 'not_started',
+                assigned_to TEXT DEFAULT '',
+                unread_count INTEGER DEFAULT 0,
+                summary TEXT DEFAULT '',
+                last_message_at TEXT DEFAULT (datetime('now')),
+                last_inbound_at TEXT DEFAULT '',
+                last_outbound_at TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+                UNIQUE(brand_id, channel, external_thread_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_lead_threads_brand_updated
+            ON lead_threads(brand_id, updated_at DESC, id DESC);
+
+            CREATE TABLE IF NOT EXISTS lead_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                thread_id INTEGER NOT NULL,
+                direction TEXT NOT NULL DEFAULT 'inbound',
+                role TEXT NOT NULL DEFAULT 'lead',
+                channel TEXT DEFAULT '',
+                external_message_id TEXT DEFAULT '',
+                content TEXT NOT NULL DEFAULT '',
+                metadata_json TEXT DEFAULT '{}',
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (thread_id) REFERENCES lead_threads(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_lead_messages_thread_created
+            ON lead_messages(thread_id, created_at ASC, id ASC);
+
+            CREATE TABLE IF NOT EXISTS lead_quotes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                thread_id INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'draft',
+                quote_mode TEXT NOT NULL DEFAULT 'hybrid',
+                amount_low REAL DEFAULT 0,
+                amount_high REAL DEFAULT 0,
+                currency TEXT DEFAULT 'USD',
+                line_items_json TEXT DEFAULT '[]',
+                summary TEXT DEFAULT '',
+                follow_up_text TEXT DEFAULT '',
+                sent_at TEXT DEFAULT '',
+                accepted_at TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+                FOREIGN KEY (thread_id) REFERENCES lead_threads(id) ON DELETE CASCADE,
+                UNIQUE(thread_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_lead_quotes_brand_status
+            ON lead_quotes(brand_id, status, updated_at DESC);
+
+            CREATE TABLE IF NOT EXISTS lead_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                thread_id INTEGER NOT NULL,
+                event_type TEXT NOT NULL,
+                event_value TEXT DEFAULT '',
+                metadata_json TEXT DEFAULT '{}',
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+                FOREIGN KEY (thread_id) REFERENCES lead_threads(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_lead_events_thread_created
+            ON lead_events(thread_id, created_at DESC, id DESC);
+
             CREATE TABLE IF NOT EXISTS reports (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand_id INTEGER NOT NULL,
@@ -940,6 +1021,18 @@ class WebDB:
             ("hired_agents", "TEXT DEFAULT '{}'"),
             ("quo_api_key", "TEXT DEFAULT ''"),
             ("quo_phone_number", "TEXT DEFAULT ''"),
+            ("sales_bot_enabled", "INTEGER DEFAULT 0"),
+            ("sales_bot_channels", "TEXT DEFAULT '[]'"),
+            ("sales_bot_quote_mode", "TEXT DEFAULT 'hybrid'"),
+            ("sales_bot_business_hours", "TEXT DEFAULT ''"),
+            ("sales_bot_reply_tone", "TEXT DEFAULT ''"),
+            ("sales_bot_quo_webhook_secret", "TEXT DEFAULT ''"),
+            ("sales_bot_meta_webhook_secret", "TEXT DEFAULT ''"),
+            ("sales_bot_transcript_export", "INTEGER DEFAULT 0"),
+            ("sales_bot_meta_lead_forms", "INTEGER DEFAULT 0"),
+            ("sales_bot_messenger_enabled", "INTEGER DEFAULT 0"),
+            ("sales_bot_call_logging", "INTEGER DEFAULT 1"),
+            ("sales_bot_auto_push_crm", "INTEGER DEFAULT 0"),
             ("hiring_design", "TEXT DEFAULT '{}'"),
         ]
         for col_name, col_def in new_brand_cols:
@@ -1237,6 +1330,10 @@ class WebDB:
             "titan_snapshot_id", "titan_account_id", "titan_ghl_location_id", "titan_email",
             "wp_site_url", "wp_username", "wp_app_password",
             "hired_agents", "agent_context",
+            "quo_api_key", "quo_phone_number",
+            "sales_bot_channels", "sales_bot_quote_mode", "sales_bot_business_hours",
+            "sales_bot_reply_tone", "sales_bot_quo_webhook_secret",
+            "sales_bot_meta_webhook_secret",
             "hiring_design",
         }
         if field not in allowed:
@@ -1247,8 +1344,12 @@ class WebDB:
         conn.close()
 
     def update_brand_number_field(self, brand_id, field, value):
-        allowed = {"kpi_target_cpa", "kpi_target_leads", "kpi_target_roas",
-                   "business_lat", "business_lng", "crm_avg_service_price"}
+        allowed = {
+            "kpi_target_cpa", "kpi_target_leads", "kpi_target_roas",
+            "business_lat", "business_lng", "crm_avg_service_price",
+            "sales_bot_enabled", "sales_bot_transcript_export", "sales_bot_meta_lead_forms",
+            "sales_bot_messenger_enabled", "sales_bot_call_logging", "sales_bot_auto_push_crm",
+        }
         if field not in allowed:
             raise ValueError(f"Cannot update field: {field}")
         try:
@@ -1384,6 +1485,331 @@ class WebDB:
         )
         conn.commit()
         conn.close()
+
+    # ── Leads Inbox ──
+
+    def create_lead_thread(self, brand_id, data):
+        conn = self._conn()
+        cur = conn.execute(
+            """
+            INSERT INTO lead_threads (
+                brand_id, lead_name, lead_email, lead_phone, source, channel,
+                external_thread_id, status, quote_status, assigned_to, summary,
+                last_message_at, last_inbound_at, last_outbound_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, datetime('now'))
+            """,
+            (
+                brand_id,
+                (data.get("lead_name") or "").strip(),
+                (data.get("lead_email") or "").strip().lower(),
+                (data.get("lead_phone") or "").strip(),
+                (data.get("source") or "").strip(),
+                (data.get("channel") or "sms").strip() or "sms",
+                ((data.get("external_thread_id") or "").strip() or None),
+                (data.get("status") or "new").strip() or "new",
+                (data.get("quote_status") or "not_started").strip() or "not_started",
+                (data.get("assigned_to") or "").strip(),
+                (data.get("summary") or "").strip(),
+                (data.get("last_inbound_at") or "").strip(),
+                (data.get("last_outbound_at") or "").strip(),
+            ),
+        )
+        conn.commit()
+        thread_id = cur.lastrowid
+        conn.close()
+        return thread_id
+
+    def get_lead_thread(self, thread_id, brand_id=None):
+        conn = self._conn()
+        if brand_id is None:
+            row = conn.execute("SELECT * FROM lead_threads WHERE id = ?", (thread_id,)).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT * FROM lead_threads WHERE id = ? AND brand_id = ?",
+                (thread_id, brand_id),
+            ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_lead_threads(self, brand_id, status=None, limit=100):
+        conn = self._conn()
+        if status:
+            rows = conn.execute(
+                """
+                SELECT * FROM lead_threads
+                WHERE brand_id = ? AND status = ?
+                ORDER BY last_message_at DESC, updated_at DESC, id DESC
+                LIMIT ?
+                """,
+                (brand_id, status, int(limit or 100)),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT * FROM lead_threads
+                WHERE brand_id = ?
+                ORDER BY last_message_at DESC, updated_at DESC, id DESC
+                LIMIT ?
+                """,
+                (brand_id, int(limit or 100)),
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def upsert_lead_thread(self, brand_id, channel, external_thread_id, data=None):
+        data = data or {}
+        normalized_channel = (channel or "sms").strip() or "sms"
+        normalized_external_id = (external_thread_id or "").strip()
+        if not normalized_external_id:
+            return self.create_lead_thread(
+                brand_id,
+                {
+                    **data,
+                    "channel": normalized_channel,
+                    "external_thread_id": None,
+                },
+            )
+
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT id FROM lead_threads WHERE brand_id = ? AND channel = ? AND external_thread_id = ?",
+            (brand_id, normalized_channel, normalized_external_id),
+        ).fetchone()
+        if row:
+            updates = []
+            values = []
+            for field in ("lead_name", "lead_email", "lead_phone", "source", "status", "quote_status", "assigned_to", "summary"):
+                if field in data and data.get(field) is not None:
+                    updates.append(f"{field} = ?")
+                    value = data.get(field) or ""
+                    if field == "lead_email":
+                        value = value.strip().lower()
+                    elif isinstance(value, str):
+                        value = value.strip()
+                    values.append(value)
+            updates.append("updated_at = datetime('now')")
+            values.extend([brand_id, normalized_channel, normalized_external_id])
+            if updates:
+                conn.execute(
+                    f"UPDATE lead_threads SET {', '.join(updates)} WHERE brand_id = ? AND channel = ? AND external_thread_id = ?",
+                    values,
+                )
+                conn.commit()
+            thread_id = row["id"]
+        else:
+            cur = conn.execute(
+                """
+                INSERT INTO lead_threads (
+                    brand_id, lead_name, lead_email, lead_phone, source, channel,
+                    external_thread_id, status, quote_status, assigned_to, summary,
+                    last_message_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                """,
+                (
+                    brand_id,
+                    (data.get("lead_name") or "").strip(),
+                    (data.get("lead_email") or "").strip().lower(),
+                    (data.get("lead_phone") or "").strip(),
+                    (data.get("source") or "").strip(),
+                    normalized_channel,
+                    normalized_external_id,
+                    (data.get("status") or "new").strip() or "new",
+                    (data.get("quote_status") or "not_started").strip() or "not_started",
+                    (data.get("assigned_to") or "").strip(),
+                    (data.get("summary") or "").strip(),
+                ),
+            )
+            conn.commit()
+            thread_id = cur.lastrowid
+        conn.close()
+        return thread_id
+
+    def update_lead_thread_status(self, thread_id, *, status=None, quote_status=None, assigned_to=None, summary=None):
+        updates = []
+        values = []
+        if status is not None:
+            updates.append("status = ?")
+            values.append((status or "new").strip() or "new")
+        if quote_status is not None:
+            updates.append("quote_status = ?")
+            values.append((quote_status or "not_started").strip() or "not_started")
+        if assigned_to is not None:
+            updates.append("assigned_to = ?")
+            values.append((assigned_to or "").strip())
+        if summary is not None:
+            updates.append("summary = ?")
+            values.append((summary or "").strip())
+        if not updates:
+            return
+        updates.append("updated_at = datetime('now')")
+        values.append(thread_id)
+        conn = self._conn()
+        conn.execute(
+            f"UPDATE lead_threads SET {', '.join(updates)} WHERE id = ?",
+            values,
+        )
+        conn.commit()
+        conn.close()
+
+    def mark_lead_thread_read(self, thread_id):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE lead_threads SET unread_count = 0, updated_at = datetime('now') WHERE id = ?",
+            (thread_id,),
+        )
+        conn.commit()
+        conn.close()
+
+    def add_lead_message(self, thread_id, direction, role, content, channel="", external_message_id="", metadata=None):
+        normalized_direction = (direction or "inbound").strip().lower()
+        if normalized_direction not in {"inbound", "outbound"}:
+            raise ValueError("direction must be 'inbound' or 'outbound'")
+        normalized_role = (role or "lead").strip().lower()
+        if normalized_role not in {"lead", "assistant", "user", "system"}:
+            raise ValueError("role must be one of: lead, assistant, user, system")
+
+        conn = self._conn()
+        cur = conn.execute(
+            """
+            INSERT INTO lead_messages (
+                thread_id, direction, role, channel, external_message_id, content, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                thread_id,
+                normalized_direction,
+                normalized_role,
+                (channel or "").strip(),
+                (external_message_id or "").strip(),
+                content or "",
+                json.dumps(metadata or {}),
+            ),
+        )
+        timestamp_field = "last_inbound_at" if normalized_direction == "inbound" else "last_outbound_at"
+        unread_sql = ", unread_count = unread_count + 1" if normalized_direction == "inbound" else ""
+        conn.execute(
+            f"""
+            UPDATE lead_threads
+            SET last_message_at = datetime('now'),
+                {timestamp_field} = datetime('now'),
+                updated_at = datetime('now')
+                {unread_sql}
+            WHERE id = ?
+            """,
+            (thread_id,),
+        )
+        conn.commit()
+        message_id = cur.lastrowid
+        conn.close()
+        return message_id
+
+    def get_lead_messages(self, thread_id, limit=200):
+        conn = self._conn()
+        rows = conn.execute(
+            """
+            SELECT * FROM lead_messages
+            WHERE thread_id = ?
+            ORDER BY created_at ASC, id ASC
+            LIMIT ?
+            """,
+            (thread_id, int(limit or 200)),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def add_lead_event(self, brand_id, thread_id, event_type, event_value="", metadata=None):
+        conn = self._conn()
+        cur = conn.execute(
+            "INSERT INTO lead_events (brand_id, thread_id, event_type, event_value, metadata_json) VALUES (?, ?, ?, ?, ?)",
+            (brand_id, thread_id, (event_type or "").strip(), event_value or "", json.dumps(metadata or {})),
+        )
+        conn.commit()
+        event_id = cur.lastrowid
+        conn.close()
+        return event_id
+
+    def get_lead_events(self, thread_id, limit=100):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM lead_events WHERE thread_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
+            (thread_id, int(limit or 100)),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_lead_quote_for_thread(self, thread_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM lead_quotes WHERE thread_id = ?", (thread_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def upsert_lead_quote(
+        self,
+        brand_id,
+        thread_id,
+        *,
+        status="draft",
+        quote_mode="hybrid",
+        amount_low=0,
+        amount_high=0,
+        currency="USD",
+        line_items=None,
+        summary="",
+        follow_up_text="",
+        sent_at="",
+        accepted_at="",
+    ):
+        try:
+            low_value = float(amount_low or 0)
+        except (TypeError, ValueError):
+            low_value = 0.0
+        try:
+            high_value = float(amount_high or 0)
+        except (TypeError, ValueError):
+            high_value = 0.0
+        conn = self._conn()
+        conn.execute(
+            """
+            INSERT INTO lead_quotes (
+                brand_id, thread_id, status, quote_mode, amount_low, amount_high, currency,
+                line_items_json, summary, follow_up_text, sent_at, accepted_at, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            ON CONFLICT(thread_id) DO UPDATE SET
+                status = excluded.status,
+                quote_mode = excluded.quote_mode,
+                amount_low = excluded.amount_low,
+                amount_high = excluded.amount_high,
+                currency = excluded.currency,
+                line_items_json = excluded.line_items_json,
+                summary = excluded.summary,
+                follow_up_text = excluded.follow_up_text,
+                sent_at = excluded.sent_at,
+                accepted_at = excluded.accepted_at,
+                updated_at = datetime('now')
+            """,
+            (
+                brand_id,
+                thread_id,
+                (status or "draft").strip() or "draft",
+                (quote_mode or "hybrid").strip() or "hybrid",
+                low_value,
+                high_value,
+                (currency or "USD").strip() or "USD",
+                json.dumps(line_items or []),
+                summary or "",
+                follow_up_text or "",
+                sent_at or "",
+                accepted_at or "",
+            ),
+        )
+        conn.execute(
+            "UPDATE lead_threads SET quote_status = ?, updated_at = datetime('now') WHERE id = ?",
+            ((status or "draft").strip() or "draft", thread_id),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM lead_quotes WHERE thread_id = ?", (thread_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
 
     # ── Reports ──
 

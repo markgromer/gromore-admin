@@ -3657,6 +3657,10 @@ def client_settings():
     # Check for full 'auth/drive' scope (not just drive.file)
     has_full_drive = "auth/drive " in (scopes + " ") or scopes.endswith("auth/drive")
     drive_scoped = has_full_drive or ("spreadsheets" in scopes)
+    try:
+        chatbot_channels = set(json.loads(brand.get("sales_bot_channels") or "[]"))
+    except Exception:
+        chatbot_channels = set()
 
     try:
         return render_template(
@@ -3672,6 +3676,7 @@ def client_settings():
             drive_scoped=drive_scoped,
             google_conn=google_conn,
             meta_conn=meta_conn,
+            chatbot_channels=chatbot_channels,
             brand_name=session.get("client_brand_name", brand.get("display_name", "")),
         )
     except Exception:
@@ -3902,6 +3907,58 @@ def client_save_google_drive():
                 flash(f"Folder ID saved but auto-setup failed: {result.get('error', 'Unknown error')}", "warning")
     else:
         flash("Google Drive sync settings saved.", "success")
+    return redirect(url_for("client.client_settings"))
+
+
+@client_bp.route("/settings/leads-assistant", methods=["POST"])
+@client_login_required
+def client_save_leads_assistant_settings():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    valid_channels = {"sms", "messenger", "lead_forms", "calls"}
+    selected_channels = [c for c in request.form.getlist("sales_bot_channels") if c in valid_channels]
+    quote_mode = (request.form.get("sales_bot_quote_mode") or "hybrid").strip().lower()
+    if quote_mode not in {"simple", "hybrid", "structured"}:
+        quote_mode = "hybrid"
+
+    db.update_brand_number_field(brand_id, "sales_bot_enabled", 1 if request.form.get("sales_bot_enabled") else 0)
+    db.update_brand_text_field(brand_id, "sales_bot_channels", json.dumps(selected_channels))
+    db.update_brand_text_field(brand_id, "sales_bot_quote_mode", quote_mode)
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_business_hours",
+        (request.form.get("sales_bot_business_hours") or "").strip()[:1000],
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_reply_tone",
+        (request.form.get("sales_bot_reply_tone") or "").strip()[:500],
+    )
+    db.update_brand_number_field(brand_id, "sales_bot_transcript_export", 1 if request.form.get("sales_bot_transcript_export") else 0)
+    db.update_brand_number_field(brand_id, "sales_bot_meta_lead_forms", 1 if request.form.get("sales_bot_meta_lead_forms") else 0)
+    db.update_brand_number_field(brand_id, "sales_bot_messenger_enabled", 1 if request.form.get("sales_bot_messenger_enabled") else 0)
+    db.update_brand_number_field(brand_id, "sales_bot_call_logging", 1 if request.form.get("sales_bot_call_logging") else 0)
+    db.update_brand_number_field(brand_id, "sales_bot_auto_push_crm", 1 if request.form.get("sales_bot_auto_push_crm") else 0)
+
+    quo_api_key = (request.form.get("quo_api_key") or "").strip()
+    if quo_api_key:
+        db.update_brand_text_field(brand_id, "quo_api_key", quo_api_key[:500])
+    db.update_brand_text_field(
+        brand_id,
+        "quo_phone_number",
+        (request.form.get("quo_phone_number") or "").strip()[:100],
+    )
+
+    quo_secret = (request.form.get("sales_bot_quo_webhook_secret") or "").strip()
+    if quo_secret:
+        db.update_brand_text_field(brand_id, "sales_bot_quo_webhook_secret", quo_secret[:255])
+
+    meta_secret = (request.form.get("sales_bot_meta_webhook_secret") or "").strip()
+    if meta_secret:
+        db.update_brand_text_field(brand_id, "sales_bot_meta_webhook_secret", meta_secret[:255])
+
+    flash("Lead assistant settings saved.", "success")
     return redirect(url_for("client.client_settings"))
 
 
