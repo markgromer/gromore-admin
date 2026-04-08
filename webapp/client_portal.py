@@ -3965,6 +3965,40 @@ def client_save_leads_assistant_settings():
     if meta_secret:
         db.update_brand_text_field(brand_id, "sales_bot_meta_webhook_secret", meta_secret[:255])
 
+    # ── Nurture cadence ──
+    db.update_brand_number_field(brand_id, "sales_bot_nurture_enabled", 1 if request.form.get("sales_bot_nurture_enabled") else 0)
+
+    for tier in ("hot", "warm", "cold"):
+        hours_key = f"sales_bot_nurture_{tier}_hours"
+        max_key = f"sales_bot_nurture_{tier}_max"
+        try:
+            hours_val = max(0.5, min(720, float(request.form.get(hours_key) or 0)))
+        except (ValueError, TypeError):
+            hours_val = {"hot": 2, "warm": 24, "cold": 48}[tier]
+        try:
+            max_val = max(1, min(10, int(request.form.get(max_key) or 0)))
+        except (ValueError, TypeError):
+            max_val = {"hot": 3, "warm": 2, "cold": 2}[tier]
+        db.update_brand_number_field(brand_id, hours_key, hours_val)
+        db.update_brand_number_field(brand_id, max_key, max_val)
+
+    try:
+        ghost_hours = max(24, min(720, float(request.form.get("sales_bot_nurture_ghost_hours") or 72)))
+    except (ValueError, TypeError):
+        ghost_hours = 72
+    db.update_brand_number_field(brand_id, "sales_bot_nurture_ghost_hours", ghost_hours)
+
+    # ── DND ──
+    db.update_brand_number_field(brand_id, "sales_bot_dnd_enabled", 1 if request.form.get("sales_bot_dnd_enabled") else 0)
+    db.update_brand_text_field(brand_id, "sales_bot_dnd_start", (request.form.get("sales_bot_dnd_start") or "21:00").strip()[:5])
+    db.update_brand_text_field(brand_id, "sales_bot_dnd_end", (request.form.get("sales_bot_dnd_end") or "08:00").strip()[:5])
+    db.update_brand_number_field(brand_id, "sales_bot_dnd_weekends", 1 if request.form.get("sales_bot_dnd_weekends") else 0)
+    valid_tz = {"America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"}
+    tz = (request.form.get("sales_bot_dnd_timezone") or "America/New_York").strip()
+    if tz not in valid_tz:
+        tz = "America/New_York"
+    db.update_brand_text_field(brand_id, "sales_bot_dnd_timezone", tz)
+
     flash("Lead assistant settings saved.", "success")
     return redirect(url_for("client.client_settings"))
 

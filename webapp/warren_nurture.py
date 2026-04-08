@@ -7,19 +7,97 @@ Runs as a background job (called from the job scheduler) to:
 3. Send gentle nudges to quoted-but-not-booked leads
 
 Uses Warren's brain to generate contextual follow-ups rather than templates.
+Cadence (hot/warm/cold) and DND settings are per-brand, configured in settings.
 """
 import logging
 from datetime import datetime, timedelta
 
 log = logging.getLogger(__name__)
 
-# Nurture timing rules (hours since last outbound with no reply)
-NURTURE_RULES = [
-    {"stage": "engaged", "hours_since_last": 4, "max_attempts": 3, "event": "nurture_followup"},
-    {"stage": "quoted", "hours_since_last": 24, "max_attempts": 2, "event": "nurture_quote_followup"},
-    {"stage": "qualified", "hours_since_last": 48, "max_attempts": 2, "event": "nurture_qualified_followup"},
-    {"stage": "new", "hours_since_last": 2, "max_attempts": 2, "event": "nurture_first_touch"},
-]
+# Fallback defaults if brand settings are missing
+_DEFAULTS = {
+    "hot_hours": 2, "hot_max": 3,
+    "warm_hours": 24, "warm_max": 2,
+    "cold_hours": 48, "cold_max": 2,
+    "ghost_hours": 72,
+}
+
+# Map pipeline stages to temperature tiers
+_STAGE_TIER = {
+    "new": "hot",
+    "engaged": "hot",
+    "quoted": "warm",
+    "qualified": "cold",
+}
+
+# Event name per tier for tracking attempts
+_TIER_EVENT = {
+    "hot": "nurture_followup",
+    "warm": "nurture_quote_followup",
+    "cold": "nurture_qualified_followup",
+}
+
+
+def _brand_nurture_rules(brand):
+    """Build nurture rules from per-brand settings (with fallbacks)."""
+    rules = []
+    for stage, tier in _STAGE_TIER.items():
+        hours = brand.get(f"sales_bot_nurture_{tier}_hours") or _DEFAULTS[f"{tier}_hours"]
+        max_att = brand.get(f"sales_bot_nurture_{tier}_max") or _DEFAULTS[f"{tier}_max"]
+        rules.append({
+            "stage": stage,
+            "hours_since_last": float(hours),
+            "max_attempts": int(max_att),
+            "event": _TIER_EVENT[tier],
+        })
+    return rules
+
+
+def _is_dnd(brand):
+    """Check if the brand is currently in a Do Not Disturb window.
+
+    Returns True if Warren should hold messages right now.
+    """
+    if not brand.get("sales_bot_dnd_enabled"):
+        return False
+
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        from backports.zoneinfo import ZoneInfo
+
+    tz_name = brand.get("sales_bot_dnd_timezone") or "America/New_York"
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:
+        tz = ZoneInfo("America/New_York")
+
+    now = datetime.now(tz)
+
+    # Weekend check
+    if brand.get("sales_bot_dnd_weekends") and now.weekday() >= 5:
+        return True
+
+    # Time window check
+    dnd_start_str = brand.get("sales_bot_dnd_start") or "21:00"
+    dnd_end_str = brand.get("sales_bot_dnd_end") or "08:00"
+    try:
+        start_h, start_m = map(int, dnd_start_str.split(":"))
+        end_h, end_m = map(int, dnd_end_str.split(":"))
+    except (ValueError, AttributeError):
+        start_h, start_m = 21, 0
+        end_h, end_m = 8, 0
+
+    start_minutes = start_h * 60 + start_m
+    end_minutes = end_h * 60 + end_m
+    now_minutes = now.hour * 60 + now.minute
+
+    if start_minutes > end_minutes:
+        # Overnight window (e.g. 21:00 - 08:00)
+        return now_minutes >= start_minutes or now_minutes < end_minutes
+    else:
+        # Same-day window (e.g. 12:00 - 14:00)
+        return start_minutes <= now_minutes < end_minutes
 
 
 def process_nurture_queue(db):
@@ -55,7 +133,18 @@ def _process_brand_nurture(db, brand):
     sent = 0
     skipped = 0
 
-    for rule in NURTURE_RULES:
+    # Check nurture enabled
+    if not brand.get("sales_bot_nurture_enabled", 1):
+        return sent, skipped
+
+    # Check DND
+    if _is_dnd(brand):
+        log.info("Brand %s is in DND window, skipping nurture", brand_id)
+        return sent, skipped
+
+    rules = _brand_nurture_rules(brand)
+
+    for rule in rules:
         threads = _find_stale_threads(db, brand_id, rule)
         for thread in threads:
             thread_id = thread["id"]
@@ -156,13 +245,20 @@ def _send_nurture(db, brand, thread, rule):
     return False
 
 
-def check_for_ghosted_leads(db, brand_id, ghost_hours=72):
+def check_for_ghosted_leads(db, brand_id, ghost_hours=None):
     """Mark leads as 'lost' if they haven't responded in ghost_hours.
 
     Only marks leads that Warren has already followed up on at least twice.
+    If ghost_hours is None, reads from brand settings.
     Returns count of leads marked as ghosted.
     """
     from webapp.warren_pipeline import advance_stage
+
+    if ghost_hours is None:
+        conn = db._conn()
+        row = conn.execute("SELECT sales_bot_nurture_ghost_hours FROM brands WHERE id = ?", (brand_id,)).fetchone()
+        conn.close()
+        ghost_hours = float(row["sales_bot_nurture_ghost_hours"]) if row and row["sales_bot_nurture_ghost_hours"] else 72
 
     cutoff = (datetime.utcnow() - timedelta(hours=ghost_hours)).isoformat()
 

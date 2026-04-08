@@ -449,5 +449,115 @@ class WarrenBrainTests(unittest.TestCase):
         self.assertEqual(len(context), 10)
 
 
+class WarrenNurtureCadenceTests(unittest.TestCase):
+    """Test per-brand nurture cadence and DND logic."""
+
+    def test_brand_nurture_rules_uses_settings(self):
+        from webapp.warren_nurture import _brand_nurture_rules
+
+        brand = {
+            "sales_bot_nurture_hot_hours": 1,
+            "sales_bot_nurture_hot_max": 5,
+            "sales_bot_nurture_warm_hours": 12,
+            "sales_bot_nurture_warm_max": 4,
+            "sales_bot_nurture_cold_hours": 96,
+            "sales_bot_nurture_cold_max": 1,
+        }
+        rules = _brand_nurture_rules(brand)
+        self.assertEqual(len(rules), 4)
+
+        by_stage = {r["stage"]: r for r in rules}
+        self.assertEqual(by_stage["new"]["hours_since_last"], 1.0)
+        self.assertEqual(by_stage["new"]["max_attempts"], 5)
+        self.assertEqual(by_stage["engaged"]["hours_since_last"], 1.0)
+        self.assertEqual(by_stage["quoted"]["hours_since_last"], 12.0)
+        self.assertEqual(by_stage["quoted"]["max_attempts"], 4)
+        self.assertEqual(by_stage["qualified"]["hours_since_last"], 96.0)
+
+    def test_brand_nurture_rules_uses_defaults(self):
+        from webapp.warren_nurture import _brand_nurture_rules
+
+        rules = _brand_nurture_rules({})
+        by_stage = {r["stage"]: r for r in rules}
+        self.assertEqual(by_stage["new"]["hours_since_last"], 2.0)
+        self.assertEqual(by_stage["new"]["max_attempts"], 3)
+        self.assertEqual(by_stage["quoted"]["hours_since_last"], 24.0)
+
+    def test_dnd_disabled_returns_false(self):
+        from webapp.warren_nurture import _is_dnd
+        self.assertFalse(_is_dnd({"sales_bot_dnd_enabled": 0}))
+        self.assertFalse(_is_dnd({}))
+
+    def test_dnd_overnight_window(self):
+        from webapp.warren_nurture import _is_dnd
+        from unittest.mock import patch
+        from datetime import datetime
+
+        brand = {
+            "sales_bot_dnd_enabled": 1,
+            "sales_bot_dnd_start": "21:00",
+            "sales_bot_dnd_end": "08:00",
+            "sales_bot_dnd_timezone": "America/New_York",
+            "sales_bot_dnd_weekends": 0,
+        }
+
+        try:
+            from zoneinfo import ZoneInfo
+        except ImportError:
+            from backports.zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("America/New_York")
+
+        # 23:00 ET - should be in DND
+        with patch("webapp.warren_nurture.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 4, 7, 23, 0, tzinfo=tz)
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            self.assertTrue(_is_dnd(brand))
+
+        # 06:00 ET - should be in DND
+        with patch("webapp.warren_nurture.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 4, 7, 6, 0, tzinfo=tz)
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            self.assertTrue(_is_dnd(brand))
+
+        # 10:00 ET - should NOT be in DND
+        with patch("webapp.warren_nurture.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 4, 7, 10, 0, tzinfo=tz)
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            self.assertFalse(_is_dnd(brand))
+
+    def test_dnd_weekends(self):
+        from webapp.warren_nurture import _is_dnd
+        from unittest.mock import patch
+        from datetime import datetime
+
+        brand = {
+            "sales_bot_dnd_enabled": 1,
+            "sales_bot_dnd_start": "21:00",
+            "sales_bot_dnd_end": "08:00",
+            "sales_bot_dnd_timezone": "America/New_York",
+            "sales_bot_dnd_weekends": 1,
+        }
+
+        try:
+            from zoneinfo import ZoneInfo
+        except ImportError:
+            from backports.zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("America/New_York")
+
+        # Saturday 10:00 ET - outside time window but weekend DND is on
+        with patch("webapp.warren_nurture.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 4, 11, 10, 0, tzinfo=tz)  # Saturday
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            self.assertTrue(_is_dnd(brand))
+
+        # Monday 10:00 ET - should NOT be in DND
+        with patch("webapp.warren_nurture.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 4, 6, 10, 0, tzinfo=tz)  # Monday
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            self.assertFalse(_is_dnd(brand))
+
+
 if __name__ == "__main__":
     unittest.main()

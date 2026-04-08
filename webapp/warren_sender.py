@@ -11,8 +11,10 @@ import requests
 log = logging.getLogger(__name__)
 
 
-def send_reply(db, brand, thread_id, message_text, channel="sms", recipient_id=None, page_id=None):
+def send_reply(db, brand, thread_id, message_text, channel="sms", recipient_id=None, page_id=None, skip_dnd=False):
     """Send an outbound reply through the appropriate channel.
+
+    If DND is active and skip_dnd is False, the message is logged but NOT sent.
 
     Args:
         db: WebDB instance
@@ -22,10 +24,23 @@ def send_reply(db, brand, thread_id, message_text, channel="sms", recipient_id=N
         channel: 'sms' or 'messenger'
         recipient_id: Messenger PSID (required for messenger)
         page_id: Facebook Page ID (required for messenger)
+        skip_dnd: if True, bypass DND check (used for manual sends)
 
     Returns:
         (success, detail_string)
     """
+    # DND check (automated sends only)
+    if not skip_dnd:
+        from webapp.warren_nurture import _is_dnd
+        if _is_dnd(brand):
+            db.add_lead_message(
+                thread_id, "outbound", "assistant", message_text,
+                channel=channel,
+                metadata_json=json.dumps({"dnd_held": True, "held_at": __import__("datetime").datetime.utcnow().isoformat()}),
+            )
+            log.info("DND active for brand %s - message held for thread %s", brand.get("id"), thread_id)
+            return False, "dnd_held"
+
     if channel == "sms":
         return _send_sms(db, brand, thread_id, message_text)
     elif channel == "messenger":
@@ -198,9 +213,9 @@ def send_manual_reply(db, brand_id, thread_id, message_text, channel=None):
         metadata={"manual": True},
     )
 
-    # Send it
+    # Send it (manual sends bypass DND)
     success, detail = send_reply(db, brand, thread_id, message_text,
                                   channel=channel, recipient_id=recipient_id,
-                                  page_id=page_id)
+                                  page_id=page_id, skip_dnd=True)
 
     return success, detail
