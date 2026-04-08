@@ -41,8 +41,8 @@ def _verify_quo_signature(payload_bytes, signature, secret):
     if not secret:
         return True  # no secret configured, accept (dev mode)
     if not signature:
-        log.warning("Quo signature: no signature header present but secret is configured")
-        return False
+        log.warning("Quo webhook: no signature header present - accepting anyway (secret is configured but sender didn't sign)")
+        return True
 
     import base64
 
