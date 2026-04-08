@@ -33,17 +33,70 @@ def _get_db():
 # ─────────────────────────────────────────────
 
 def _verify_quo_signature(payload_bytes, signature, secret):
-    """Verify Quo webhook signature using HMAC-SHA256."""
+    """Verify Quo webhook signature using HMAC-SHA256.
+
+    OpenPhone signs with the webhook 'key' (base64-encoded secret).
+    The signature header is a base64-encoded HMAC-SHA256 digest.
+    """
     if not secret:
         return True  # no secret configured, accept (dev mode)
     if not signature:
+        log.warning("Quo signature: no signature header present but secret is configured")
         return False
-    expected = hmac.new(
-        secret.encode("utf-8"),
-        payload_bytes,
-        hashlib.sha256,
-    ).hexdigest()
-    return hmac.compare_digest(expected, signature)
+
+    import base64
+
+    try:
+        # The secret from OpenPhone is base64-encoded
+        try:
+            secret_bytes = base64.b64decode(secret)
+        except Exception:
+            secret_bytes = secret.encode("utf-8")
+
+        computed = hmac.new(
+            secret_bytes,
+            payload_bytes,
+            hashlib.sha256,
+        ).digest()
+
+        # Try base64 comparison first (OpenPhone's format)
+        computed_b64 = base64.b64encode(computed).decode("utf-8")
+        if hmac.compare_digest(computed_b64, signature):
+            return True
+
+        # Fall back to hex comparison
+        computed_hex = hmac.new(
+            secret_bytes,
+            payload_bytes,
+            hashlib.sha256,
+        ).hexdigest()
+        if hmac.compare_digest(computed_hex, signature):
+            return True
+
+        # Also try with the secret as plain UTF-8 + base64 output
+        computed2 = hmac.new(
+            secret.encode("utf-8"),
+            payload_bytes,
+            hashlib.sha256,
+        ).digest()
+        computed2_b64 = base64.b64encode(computed2).decode("utf-8")
+        if hmac.compare_digest(computed2_b64, signature):
+            return True
+
+        computed2_hex = hmac.new(
+            secret.encode("utf-8"),
+            payload_bytes,
+            hashlib.sha256,
+        ).hexdigest()
+        if hmac.compare_digest(computed2_hex, signature):
+            return True
+
+        log.warning("Quo signature mismatch. Header=%s, expected_b64=%s, expected_hex=%s",
+                     signature[:20] + "...", computed_b64[:20] + "...", computed_hex[:20] + "...")
+        return False
+    except Exception as exc:
+        log.exception("Quo signature verification error: %s", exc)
+        return False
 
 
 @webhooks_bp.route("/quo/sms/<brand_slug>", methods=["POST"])
@@ -79,9 +132,18 @@ def quo_sms_webhook(brand_slug):
     # Verify signature
     secret = (brand.get("sales_bot_quo_webhook_secret") or "").strip()
     raw_body = request.get_data()
-    signature = request.headers.get("X-Openphone-Signature", "")
+
+    # Try multiple possible signature header names
+    signature = (
+        request.headers.get("X-Openphone-Signature", "") or
+        request.headers.get("X-Quo-Signature", "") or
+        request.headers.get("X-Webhook-Signature", "") or
+        request.headers.get("X-Signature", "")
+    )
     if secret and not _verify_quo_signature(raw_body, signature, secret):
-        log.warning("Quo webhook: invalid signature for brand %s", brand_id)
+        log.warning("Quo webhook: signature verification failed for brand %s (sig_present=%s, headers=%s)",
+                     brand_id, bool(signature),
+                     {k: v for k, v in request.headers if k.lower().startswith("x-")})
         abort(401)
 
     payload = request.get_json(silent=True) or {}
