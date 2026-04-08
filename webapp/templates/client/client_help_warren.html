@@ -1,0 +1,327 @@
+{% extends "client_base.html" %}
+{% block title %}Warren Help{% endblock %}
+
+{% block head %}
+<style>
+    .help-header {
+        background: linear-gradient(135deg, #0f172a 0%, #155e75 55%, #0f766e 100%);
+        border-radius: 16px;
+        padding: 2.4rem 2rem;
+        color: #fff;
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+    .help-header::before {
+        content: '';
+        position: absolute;
+        top: -30%;
+        right: -5%;
+        width: 260px;
+        height: 260px;
+        background: radial-gradient(circle, rgba(255,255,255,.16), transparent 70%);
+        pointer-events: none;
+    }
+    .help-header h3 { font-weight: 800; margin-bottom: .45rem; color: #fff !important; }
+    .help-header p { color: rgba(255,255,255,.82); margin: 0; max-width: 860px; }
+    .help-nav { position: sticky; top: 80px; }
+    .help-nav a {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: .7rem 1rem;
+        border-radius: 12px;
+        color: #475569;
+        text-decoration: none;
+        font-size: .9rem;
+        font-weight: 600;
+        transition: all .15s;
+        margin-bottom: 4px;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+    }
+    .help-nav a:hover { background: #f8fafc; color: #0f172a; border-color: #cbd5e1; }
+    .help-nav a.active { background: #0f766e; color: #fff; border-color: #0f766e; }
+    .help-nav a .nav-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 9px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #ecfeff;
+        color: #0f766e;
+        flex-shrink: 0;
+    }
+    .help-nav a.active .nav-icon { background: rgba(255,255,255,.18); color: #fff; }
+    .help-topic {
+        background: #fff;
+        border-radius: 16px;
+        padding: 2rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+        border: 1px solid #e2e8f0;
+    }
+    .help-topic h4 {
+        font-weight: 800;
+        margin-bottom: .3rem;
+        color: #0f172a;
+        display: flex;
+        align-items: center;
+        gap: .55rem;
+    }
+    .help-topic .topic-desc {
+        color: #64748b;
+        font-size: .93rem;
+        margin-bottom: 1.2rem;
+    }
+    .help-topic h5 {
+        font-weight: 700;
+        color: #0f766e;
+        font-size: 1rem;
+        margin-top: 1.4rem;
+        margin-bottom: .7rem;
+    }
+    .help-topic p, .help-topic li {
+        font-size: .92rem;
+        color: #334155;
+        line-height: 1.72;
+    }
+    .help-topic ul, .help-topic ol { padding-left: 1.25rem; }
+    .help-card-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+        margin: 1rem 0 1.25rem;
+    }
+    .help-mini-card {
+        border: 1px solid #dbeafe;
+        background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+        border-radius: 14px;
+        padding: 1rem;
+    }
+    .help-mini-card .label {
+        font-size: .74rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: #2563eb;
+        margin-bottom: .35rem;
+    }
+    .help-callout {
+        border-radius: 12px;
+        padding: .9rem 1rem;
+        margin: .9rem 0;
+        font-size: .9rem;
+    }
+    .help-callout.tip { background: #ecfdf5; color: #166534; }
+    .help-callout.warn { background: #fff7ed; color: #9a3412; }
+    .help-callout.info { background: #eff6ff; color: #1d4ed8; }
+    @media (max-width: 768px) {
+        .help-sidebar { display: none; }
+        .help-card-grid { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="help-header">
+    <h3><i class="bi bi-robot"></i> Warren Lead Guide</h3>
+    <p>Everything about Warren in one place: what data it uses, how to connect SMS, Messenger, and lead forms, how to train it, how the inbox and pipeline work, and how to use owner chat to understand lead quality and conversion patterns.</p>
+    <div class="d-flex flex-wrap gap-2 mt-3">
+        <a href="{{ url_for('client.client_help', guide='connections') }}" class="btn btn-sm btn-outline-light">Core Setup Guides</a>
+        <a href="{{ url_for('client.client_help', guide='warren') }}" class="btn btn-sm btn-light">Warren Lead Guide</a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-3 help-sidebar">
+        <div class="help-nav">
+            <a href="#warren-overview" class="{{ 'active' if active_topic == 'warren-overview' }}">
+                <span class="nav-icon"><i class="bi bi-stars"></i></span>
+                Warren Overview
+            </a>
+            <a href="#warren-channels" class="{{ 'active' if active_topic == 'warren-channels' }}">
+                <span class="nav-icon"><i class="bi bi-broadcast"></i></span>
+                Channels And Webhooks
+            </a>
+            <a href="#warren-training" class="{{ 'active' if active_topic == 'warren-training' }}">
+                <span class="nav-icon"><i class="bi bi-journal-richtext"></i></span>
+                Training And Knowledge
+            </a>
+            <a href="#warren-inbox" class="{{ 'active' if active_topic == 'warren-inbox' }}">
+                <span class="nav-icon"><i class="bi bi-inbox"></i></span>
+                Inbox And Pipeline
+            </a>
+            <a href="#warren-owner-chat" class="{{ 'active' if active_topic == 'warren-owner-chat' }}">
+                <span class="nav-icon"><i class="bi bi-chat-dots"></i></span>
+                Owner Chat And Analytics
+            </a>
+        </div>
+    </div>
+
+    <div class="col-md-9">
+        <div class="help-topic" id="warren-overview">
+            <h4><i class="bi bi-stars text-primary"></i> Warren Overview</h4>
+            <p class="topic-desc">Warren is now two things at once: a lead-facing assistant that talks to prospects, and an owner-facing assistant in the main client window that can explain what is happening in the pipeline.</p>
+
+            <div class="help-card-grid">
+                <div class="help-mini-card">
+                    <div class="label">Lead Side</div>
+                    <p class="mb-0">Warren replies to SMS, Messenger, and lead forms, collects missing info, logs objections, analyzes photos when a lead sends them, and nudges ghosted leads based on conversation context.</p>
+                </div>
+                <div class="help-mini-card">
+                    <div class="label">Owner Side</div>
+                    <p class="mb-0">The Warren chat in the main portal can answer questions about stage counts, recent lead conversations, response speed, objections, channels, and where leads are stalling.</p>
+                </div>
+            </div>
+
+            <h5>Where Warren gets its knowledge</h5>
+            <ul>
+                <li>The Lead Assistant Workspace is the main source of truth for pricing logic, guardrails, objection handling, tone, handoff rules, and message examples.</li>
+                <li>Your brand profile gives Warren business context like service area, website, goals, offers, and voice.</li>
+                <li>Google Business Profile can add more context when your Place ID is linked, but Warren does not magically learn everything from GBP by default.</li>
+                <li>Google Drive is the best place to organize supporting knowledge, assets, transcripts, and future training materials for this brand.</li>
+            </ul>
+
+            <div class="help-callout warn"><strong>Important:</strong> do not assume Warren automatically knows your pricing, policies, or service boundaries from your website or GBP alone. If something matters, put it in the Lead Assistant Workspace.</div>
+        </div>
+
+        <div class="help-topic" id="warren-channels">
+            <h4><i class="bi bi-broadcast text-primary"></i> Channels And Webhooks</h4>
+            <p class="topic-desc">Warren can work across SMS, Meta lead forms, and Messenger. Each one has a separate connection path, and each one should be verified before you trust it live.</p>
+
+            <h5>OpenPhone / Quo SMS</h5>
+            <ol>
+                <li>Go to <a href="{{ url_for('client.client_settings') }}">Settings</a> and turn on OpenPhone SMS in the Lead Assistant section.</li>
+                <li>Paste your Quo API key and sending number.</li>
+                <li>Copy the inbound SMS webhook URL and add it in OpenPhone / Quo with the `message.received` event.</li>
+                <li>Use the connection test and the Send Test SMS tool before going live.</li>
+            </ol>
+
+            <h5>Meta Lead Forms</h5>
+            <ol>
+                <li>Connect your Meta account in Settings.</li>
+                <li>Subscribe the page to the leadgen webhook URL shown in Settings.</li>
+                <li>Enable Meta lead form ingest so new lead forms create Warren threads automatically.</li>
+                <li>Lead form conversations are tracked from submission to reply, follow-up, and pipeline stage movement.</li>
+            </ol>
+
+            <h5>Messenger</h5>
+            <ol>
+                <li>Connect the correct Facebook Page and verify Messenger scopes are ready.</li>
+                <li>Copy the Messenger webhook URL into your Meta app dashboard.</li>
+                <li>Turn on Messenger in Warren settings after the connection test passes.</li>
+                <li>Messenger is especially useful when you want Warren to collect a phone number and move the conversation to SMS.</li>
+            </ol>
+
+            <div class="help-callout info"><strong>Best rollout path:</strong> SMS first, then lead forms, then Messenger. That gives you the cleanest debugging path and the fastest proof that Warren is helping, not just making noise.</div>
+        </div>
+
+        <div class="help-topic" id="warren-training">
+            <h4><i class="bi bi-journal-richtext text-primary"></i> Training And Knowledge</h4>
+            <p class="topic-desc">The quality of Warren depends on the quality of the information you give it. Vague inputs create vague replies.</p>
+
+            <h5>What to edit regularly</h5>
+            <ul>
+                <li><strong>Service Menu:</strong> what you sell, how you package it, and rough pricing boundaries.</li>
+                <li><strong>Pricing Notes:</strong> margin rules, when to hold firm, when to request photos, and what changes price.</li>
+                <li><strong>Guardrails:</strong> promises Warren must never make.</li>
+                <li><strong>Example Language:</strong> the most important tone control in the whole system.</li>
+                <li><strong>Objection Playbook:</strong> the exact way you want Warren to respond to pushback on price, trust, timing, or spouse approval.</li>
+            </ul>
+
+            <h5>Using Google Drive as a knowledge base</h5>
+            <p>Google Drive is already a strong fit for brand knowledge because it gives you one stable place for assets and documents. Even before deeper document ingestion is added, you should use Drive to centralize:</p>
+            <ul>
+                <li>pricing sheets</li>
+                <li>SOPs and FAQs</li>
+                <li>warranty terms</li>
+                <li>before/after photos Warren can reference when owners review conversations</li>
+                <li>sales scripts, offer documents, and call handling notes</li>
+            </ul>
+
+            <div class="help-callout tip"><strong>Practical rule:</strong> if a new salesperson would need the document to answer leads correctly, it belongs in your Warren knowledge stack too.</div>
+
+            <h5>Where GBP fits</h5>
+            <p>Linking your Google Place ID helps the platform understand the business more accurately, but it is not a substitute for explicit training. Google Business Profile helps with identity and visibility data. The Lead Assistant Workspace is where you define how Warren actually sells.</p>
+        </div>
+
+        <div class="help-topic" id="warren-inbox">
+            <h4><i class="bi bi-inbox text-primary"></i> Inbox And Pipeline</h4>
+            <p class="topic-desc">The inbox is where Warren’s conversations become usable business intelligence. Every thread is a lead record, not just a chat log.</p>
+
+            <h5>What the pipeline tracks</h5>
+            <ul>
+                <li>new</li>
+                <li>engaged</li>
+                <li>quoted</li>
+                <li>qualified</li>
+                <li>booked</li>
+                <li>won</li>
+                <li>lost</li>
+            </ul>
+
+            <h5>What Warren is already learning from conversations</h5>
+            <ul>
+                <li>how quickly the lead replies or ghosts</li>
+                <li>which objections come up most often</li>
+                <li>whether price ranges move the deal forward or stall it</li>
+                <li>which channels produce cleaner, faster-closing conversations</li>
+                <li>what missing info keeps blocking the close, like phone, name, address, or service details</li>
+            </ul>
+
+            <div class="help-callout info"><strong>Manual control still matters:</strong> owners can manually change stage, hand off a thread, or send a manual message from the inbox. Warren should make the owner faster, not remove the owner from the loop.</div>
+        </div>
+
+        <div class="help-topic" id="warren-owner-chat">
+            <h4><i class="bi bi-chat-dots text-primary"></i> Owner Chat And Analytics</h4>
+            <p class="topic-desc">The Warren chat in the main window is no longer just for ad strategy. It can now speak to lead quality and pipeline movement too.</p>
+
+            <h5>Questions you should be able to ask</h5>
+            <ul>
+                <li>Which stage are most of my leads getting stuck in?</li>
+                <li>Are Facebook lead form leads actually turning into real conversations?</li>
+                <li>What objections are we hearing most this month?</li>
+                <li>Which conversations look high intent but still went lost?</li>
+                <li>Are we responding fast enough?</li>
+                <li>Is Warren helping qualify leads or just chatting?</li>
+            </ul>
+
+            <h5>What this data is valuable for</h5>
+            <ul>
+                <li>finding where ad performance looks good but sales conversations break down</li>
+                <li>comparing lead volume to real conversation quality</li>
+                <li>understanding whether a channel produces fast closes or low-intent noise</li>
+                <li>connecting objections back to pricing strategy, offers, and ad promises</li>
+                <li>building a clearer picture of why leads are won or lost instead of just counting form fills</li>
+            </ul>
+
+            <div class="help-callout warn"><strong>Attribution note:</strong> not every lead thread will have perfect ad-level attribution yet. Even when ad IDs are incomplete, the conversation path, objection pattern, and stage outcome are still valuable signals.</div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var sections = document.querySelectorAll('.help-topic');
+    var navLinks = document.querySelectorAll('.help-nav a');
+    if (!sections.length || !navLinks.length) return;
+
+    function setActive(id) {
+        navLinks.forEach(function(link) {
+            link.classList.toggle('active', link.getAttribute('href') === '#' + id);
+        });
+    }
+
+    window.addEventListener('scroll', function() {
+        var current = '';
+        sections.forEach(function(section) {
+            var top = section.offsetTop - 120;
+            if (window.scrollY >= top) current = section.getAttribute('id');
+        });
+        if (current) setActive(current);
+    });
+});
+</script>
+{% endblock %}

@@ -1278,10 +1278,18 @@ def chat_with_warren(
         "Meta Organic (reach, engagement, post-level performance, audience growth). "
         "GA4 (sessions, conversion paths, attribution signals, landing page performance, session quality). "
         "Search Console (queries, impressions, CTR, position, demand trends). "
-        "Optional: CRM (closed deals, revenue, LTV), Call tracking (call volume, quality, conversion outcomes). "
+        "Optional: CRM (closed deals, revenue, LTV), Call tracking (call volume, quality, conversion outcomes), "
+        "lead pipeline and conversation history (stage movement, objections, recent message quality, channel mix). "
         "When context includes data from these sources, reference the actual numbers. "
         "When a source isn't connected, just say so naturally: "
         "'I don't have your [source] connected yet. You can hook it up in Settings.'",
+
+        "LEAD INTELLIGENCE: "
+        "When context includes lead_intelligence, you can answer questions about what is happening in the pipeline, "
+        "which channels are producing leads, where conversations stall, what objections show up most, and how quickly the team or Warren responds. "
+        "Use recent conversation snippets to explain quality, friction, and momentum. "
+        "Treat conversation data as a performance signal, not just support noise. "
+        "If attribution between an ad and a specific lead is incomplete, say that clearly, but still analyze the conversation path and stage outcomes.",
 
         # Brand profile
         "BRAND PROFILE: "

@@ -287,6 +287,95 @@ def _assistant_month():
     return datetime.now().strftime("%Y-%m")
 
 
+def _compact_message_text(text, limit=160):
+    cleaned = re.sub(r"\s+", " ", (text or "").strip())
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 3].rstrip() + "..."
+
+
+def _build_warren_lead_intelligence(db, brand):
+    """Build a compact lead and pipeline snapshot for owner-facing Warren chat."""
+    brand_id = brand["id"]
+    from webapp.warren_pipeline import get_pipeline_metrics
+
+    metrics = get_pipeline_metrics(db, brand_id)
+    threads = db.get_lead_threads(brand_id, limit=40)
+    connections = db.get_brand_connections(brand_id)
+
+    source_counts = {}
+    objection_counts = {}
+    recent_threads = []
+
+    for thread in threads[:8]:
+        thread_id = thread["id"]
+        source = (thread.get("source") or thread.get("channel") or "unknown").strip() or "unknown"
+        source_counts[source] = source_counts.get(source, 0) + 1
+
+        messages = db.get_lead_messages(thread_id, limit=8)
+        lead_message = ""
+        assistant_message = ""
+        for msg in reversed(messages):
+            content = (msg.get("content") or "").strip()
+            if not content or msg.get("role") == "system":
+                continue
+            if not lead_message and (msg.get("direction") == "inbound" or msg.get("role") in {"lead", "user"}):
+                lead_message = _compact_message_text(content)
+            elif not assistant_message and msg.get("role") == "assistant":
+                assistant_message = _compact_message_text(content)
+            if lead_message and assistant_message:
+                break
+
+        objections = db.get_lead_events(brand_id, thread_id, event_type="objection_detected", limit=3)
+        objection_labels = [e.get("event_value", "") for e in objections if e.get("event_value")]
+        for label in objection_labels:
+            objection_counts[label] = objection_counts.get(label, 0) + 1
+
+        recent_threads.append({
+            "thread_id": thread_id,
+            "lead_name": thread.get("lead_name") or "Unknown lead",
+            "channel": thread.get("channel") or "unknown",
+            "stage": thread.get("status") or "new",
+            "source": source,
+            "quote_status": thread.get("quote_status") or "not_started",
+            "last_message_at": thread.get("last_message_at") or "",
+            "summary": _compact_message_text(thread.get("summary") or "", limit=140),
+            "latest_lead_message": lead_message,
+            "latest_assistant_message": assistant_message,
+            "objections": objection_labels,
+        })
+
+    recent_threads.sort(key=lambda item: item.get("last_message_at") or "", reverse=True)
+
+    return {
+        "pipeline_metrics": metrics,
+        "recent_threads": recent_threads,
+        "source_breakdown": source_counts,
+        "objection_breakdown": objection_counts,
+        "knowledge_sources": {
+            "lead_assistant_profile_configured": bool(
+                brand.get("sales_bot_service_menu") or brand.get("sales_bot_pricing_notes") or brand.get("sales_bot_example_language")
+            ),
+            "google_business_profile_linked": bool(brand.get("google_place_id")),
+            "google_drive_connected": bool(connections.get("google", {}).get("status") == "connected" and brand.get("google_drive_folder_id")),
+            "google_drive_folder_id": brand.get("google_drive_folder_id") or "",
+            "google_drive_sheet_id": brand.get("google_drive_sheet_id") or "",
+            "channels_enabled": json.loads(brand.get("sales_bot_channels") or "[]") if isinstance(brand.get("sales_bot_channels"), str) else (brand.get("sales_bot_channels") or []),
+        },
+        "connection_status": {
+            "google": connections.get("google", {}).get("status") or "not_connected",
+            "meta": connections.get("meta", {}).get("status") or "not_connected",
+            "quo_sms": "connected" if (brand.get("quo_api_key") and brand.get("quo_phone_number")) else "not_connected",
+            "google_business_profile": "linked" if brand.get("google_place_id") else "not_linked",
+        },
+        "attribution_notes": [
+            "Lead form conversations are tracked through pipeline stages and thread source metadata.",
+            "Ad-level attribution is partial unless the upstream channel provides campaign or ad identifiers.",
+            "Conversation quality, objections, speed to reply, and close stage movement are available now.",
+        ],
+    }
+
+
 def _get_ad_connection_status(db, brand):
     """Return (has_google, has_meta) for a brand's ad platform connections."""
     brand_id = brand["id"] if isinstance(brand, dict) else brand
@@ -1375,6 +1464,7 @@ def _client_assistant_chat_handler(payload):
             "analysis": summarize_analysis_for_ai(analysis) if isinstance(analysis, dict) else None,
             "suggestions": suggestions,
             "analysis_error": analysis_error,
+            "lead_intelligence": _build_warren_lead_intelligence(db, brand),
         }
 
         from webapp.ai_assistant import DEFAULT_CHAT_SYSTEM_PROMPT
@@ -3942,6 +4032,11 @@ def client_save_leads_assistant_settings():
         "sales_bot_reply_tone",
         (request.form.get("sales_bot_reply_tone") or "").strip()[:500],
     )
+    try:
+        reply_delay_seconds = max(0, min(300, float(request.form.get("sales_bot_reply_delay_seconds") or 0)))
+    except (ValueError, TypeError):
+        reply_delay_seconds = 0
+    db.update_brand_number_field(brand_id, "sales_bot_reply_delay_seconds", reply_delay_seconds)
     db.update_brand_number_field(brand_id, "sales_bot_transcript_export", 1 if request.form.get("sales_bot_transcript_export") else 0)
     db.update_brand_number_field(brand_id, "sales_bot_meta_lead_forms", 1 if request.form.get("sales_bot_meta_lead_forms") else 0)
     db.update_brand_number_field(brand_id, "sales_bot_messenger_enabled", 1 if request.form.get("sales_bot_messenger_enabled") else 0)
@@ -6429,9 +6524,18 @@ def client_delete_scheduled_post(post_id):
 @client_login_required
 def client_help():
     topic = request.args.get("topic", "")
+    guide = (request.args.get("guide", "connections") or "connections").strip().lower()
+    if guide == "warren":
+        return render_template(
+            "client_help_warren.html",
+            active_topic=topic,
+            help_guide=guide,
+            brand_name=session.get("client_brand_name", ""),
+        )
     return render_template(
         "client_help.html",
         active_topic=topic,
+        help_guide=guide,
         brand_name=session.get("client_brand_name", ""),
     )
 
