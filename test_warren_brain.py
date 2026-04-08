@@ -448,6 +448,22 @@ class WarrenBrainTests(unittest.TestCase):
         context = _build_conversation_context(messages, max_messages=10)
         self.assertEqual(len(context), 10)
 
+    def test_conversation_context_includes_image_parts(self):
+        from webapp.warren_brain import _build_conversation_context
+
+        messages = [{
+            "role": "lead",
+            "content": "Can you tell how bad this looks?",
+            "metadata_json": json.dumps({"image_urls": ["https://example.com/test-photo.jpg"]}),
+        }]
+        context = _build_conversation_context(messages)
+        self.assertEqual(len(context), 1)
+        self.assertEqual(context[0]["role"], "user")
+        self.assertIsInstance(context[0]["content"], list)
+        self.assertEqual(context[0]["content"][0]["type"], "text")
+        self.assertEqual(context[0]["content"][1]["type"], "image_url")
+        self.assertEqual(context[0]["content"][1]["image_url"]["url"], "https://example.com/test-photo.jpg")
+
 
 class WarrenNurtureCadenceTests(unittest.TestCase):
     """Test per-brand nurture cadence and DND logic."""

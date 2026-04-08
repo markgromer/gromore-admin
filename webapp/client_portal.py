@@ -4014,7 +4014,11 @@ def client_save_leads_assistant_settings():
     brand_id = session["client_brand_id"]
 
     valid_channels = {"sms", "messenger", "lead_forms", "calls"}
+    valid_payment_channels = {"email", "sms"}
     selected_channels = [c for c in request.form.getlist("sales_bot_channels") if c in valid_channels]
+    selected_payment_channels = [c for c in request.form.getlist("sales_bot_payment_reminder_channels") if c in valid_payment_channels]
+    if not selected_payment_channels:
+        selected_payment_channels = ["email"]
     quote_mode = (request.form.get("sales_bot_quote_mode") or "hybrid").strip().lower()
     if quote_mode not in {"simple", "hybrid", "structured"}:
         quote_mode = "hybrid"
@@ -4037,6 +4041,27 @@ def client_save_leads_assistant_settings():
     except (ValueError, TypeError):
         reply_delay_seconds = 0
     db.update_brand_number_field(brand_id, "sales_bot_reply_delay_seconds", reply_delay_seconds)
+    db.update_brand_number_field(brand_id, "sales_bot_payment_reminders_enabled", 1 if request.form.get("sales_bot_payment_reminders_enabled") else 0)
+    try:
+        payment_days_before = max(0, min(21, int(float(request.form.get("sales_bot_payment_reminder_days_before") or 3))))
+    except (ValueError, TypeError):
+        payment_days_before = 3
+    db.update_brand_number_field(brand_id, "sales_bot_payment_reminder_days_before", payment_days_before)
+    try:
+        payment_billing_day = max(1, min(31, int(float(request.form.get("sales_bot_payment_reminder_billing_day") or 1))))
+    except (ValueError, TypeError):
+        payment_billing_day = 1
+    db.update_brand_number_field(brand_id, "sales_bot_payment_reminder_billing_day", payment_billing_day)
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_payment_reminder_channels",
+        json.dumps(selected_payment_channels),
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_payment_reminder_template",
+        (request.form.get("sales_bot_payment_reminder_template") or "").strip()[:2000],
+    )
     db.update_brand_number_field(brand_id, "sales_bot_transcript_export", 1 if request.form.get("sales_bot_transcript_export") else 0)
     db.update_brand_number_field(brand_id, "sales_bot_meta_lead_forms", 1 if request.form.get("sales_bot_meta_lead_forms") else 0)
     db.update_brand_number_field(brand_id, "sales_bot_messenger_enabled", 1 if request.form.get("sales_bot_messenger_enabled") else 0)

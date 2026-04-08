@@ -4,6 +4,9 @@ Supports GoHighLevel, HubSpot, Sweep and Go, Jobber, and generic webhooks.
 """
 
 import logging
+from collections import Counter
+from datetime import date, datetime, timedelta
+
 import requests
 
 log = logging.getLogger(__name__)
@@ -55,6 +58,300 @@ def _parse_ts_ms(value):
             return 0
 
     return 0
+
+
+def _sng_extract_payments(result_dict):
+    if not isinstance(result_dict, dict):
+        return []
+    payments = result_dict.get("payments")
+    if isinstance(payments, list):
+        return payments
+    data = result_dict.get("data")
+    if isinstance(data, dict):
+        payments = data.get("payments")
+        if isinstance(payments, list):
+            return payments
+        client = data.get("client")
+        if isinstance(client, dict):
+            payments = client.get("payments")
+            if isinstance(payments, list):
+                return payments
+    client = result_dict.get("client")
+    if isinstance(client, dict):
+        payments = client.get("payments")
+        if isinstance(payments, list):
+            return payments
+    return []
+
+
+def _sng_extract_client_record(result_dict):
+    if not isinstance(result_dict, dict):
+        return {}
+    data = result_dict.get("data")
+    if isinstance(data, dict):
+        client = data.get("client")
+        if isinstance(client, dict):
+            return client
+    client = result_dict.get("client")
+    if isinstance(client, dict):
+        return client
+    if isinstance(data, dict):
+        return data
+    return result_dict
+
+
+def _sng_parse_date(value):
+    if not value:
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, (int, float)):
+        ts = int(value)
+        if ts > 10**12:
+            ts = ts / 1000.0
+        try:
+            return datetime.utcfromtimestamp(ts).date()
+        except Exception:
+            return None
+    if not isinstance(value, str):
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).date()
+    except Exception:
+        pass
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%m-%d-%Y", "%m-%d-%y"):
+        try:
+            return datetime.strptime(raw[:10], fmt).date()
+        except Exception:
+            continue
+    return None
+
+
+def _sng_money(value):
+    if value is None:
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        cleaned = value.strip().replace(",", "")
+        if cleaned.startswith("$"):
+            cleaned = cleaned[1:].strip()
+        try:
+            return float(cleaned)
+        except Exception:
+            return 0.0
+    return 0.0
+
+
+def _sng_payment_amount(pmt):
+    if not isinstance(pmt, dict):
+        return 0.0
+    base = (
+        pmt.get("amount")
+        or pmt.get("amount_paid")
+        or pmt.get("total")
+        or pmt.get("value")
+        or 0
+    )
+    tip = pmt.get("tip_amount") or pmt.get("tip") or 0
+    return _sng_money(base) + _sng_money(tip)
+
+
+def _sng_successful_payments(result_dict):
+    rows = []
+    for payment in _sng_extract_payments(result_dict):
+        if not isinstance(payment, dict):
+            continue
+        status = str(payment.get("status") or "").strip().lower()
+        if status not in {"succeeded", "success", "successful", "paid", "completed"}:
+            continue
+        payment_date = _sng_parse_date(payment.get("date") or payment.get("created_at") or payment.get("createdAt"))
+        if not payment_date:
+            continue
+        rows.append({
+            "date": payment_date,
+            "amount": _sng_payment_amount(payment),
+            "raw": payment,
+        })
+    rows.sort(key=lambda item: item["date"])
+    return rows
+
+
+def _sng_add_months(base_date, months):
+    month_index = base_date.month - 1 + months
+    year = base_date.year + month_index // 12
+    month = month_index % 12 + 1
+    if month == 12:
+        next_month = date(year + 1, 1, 1)
+    else:
+        next_month = date(year, month + 1, 1)
+    last_day = (next_month - timedelta(days=1)).day
+    return date(year, month, min(base_date.day, last_day))
+
+
+def _infer_next_payment_date(successful_payments, today=None):
+    today = today or datetime.utcnow().date()
+    payment_dates = []
+    for payment in successful_payments:
+        payment_date = payment.get("date") if isinstance(payment, dict) else None
+        if payment_date and (not payment_dates or payment_date != payment_dates[-1]):
+            payment_dates.append(payment_date)
+    if len(payment_dates) < 2:
+        return None
+
+    intervals = []
+    for index in range(1, len(payment_dates)):
+        delta_days = (payment_dates[index] - payment_dates[index - 1]).days
+        if delta_days > 0:
+            intervals.append(delta_days)
+    if not intervals:
+        return None
+
+    cadence_labels = []
+    for interval in intervals:
+        if 26 <= interval <= 35:
+            cadence_labels.append(("months", 1))
+        elif 55 <= interval <= 66:
+            cadence_labels.append(("months", 2))
+        elif 80 <= interval <= 100:
+            cadence_labels.append(("months", 3))
+        elif 6 <= interval <= 8:
+            cadence_labels.append(("days", 7))
+        elif 13 <= interval <= 15:
+            cadence_labels.append(("days", 14))
+        elif 20 <= interval <= 24:
+            cadence_labels.append(("days", 21))
+        elif 27 <= interval <= 31:
+            cadence_labels.append(("days", 30))
+
+    last_date = payment_dates[-1]
+    if cadence_labels:
+        cadence_kind, cadence_value = Counter(cadence_labels).most_common(1)[0][0]
+        due_date = _sng_add_months(last_date, cadence_value) if cadence_kind == "months" else last_date + timedelta(days=cadence_value)
+    else:
+        sorted_intervals = sorted(intervals)
+        median_interval = sorted_intervals[len(sorted_intervals) // 2]
+        if median_interval < 6 or median_interval > 100:
+            return None
+        due_date = last_date + timedelta(days=median_interval)
+
+    if due_date <= today - timedelta(days=7):
+        return None
+    if due_date >= today + timedelta(days=120):
+        return None
+    return due_date
+
+
+def _billing_date_for_month(year, month, billing_day):
+    billing_day = max(1, min(31, int(billing_day or 1)))
+    if month == 12:
+        next_month = date(year + 1, 1, 1)
+    else:
+        next_month = date(year, month + 1, 1)
+    last_day = (next_month - timedelta(days=1)).day
+    return date(year, month, min(billing_day, last_day))
+
+
+def _next_uniform_billing_date(billing_day, today=None):
+    today = today or datetime.utcnow().date()
+    try:
+        billing_day = max(1, min(31, int(billing_day or 1)))
+    except (TypeError, ValueError):
+        return None
+
+    current_month_due = _billing_date_for_month(today.year, today.month, billing_day)
+    if current_month_due < today:
+        next_month_year = today.year + (1 if today.month == 12 else 0)
+        next_month = 1 if today.month == 12 else today.month + 1
+        return _billing_date_for_month(next_month_year, next_month, billing_day)
+    return current_month_due
+
+
+def _sng_extract_contact_info(client_record, fallback_client_id=""):
+    client_record = client_record if isinstance(client_record, dict) else {}
+
+    def _first_non_empty(keys):
+        for key in keys:
+            value = client_record.get(key)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                return text
+        return ""
+
+    first_name = _first_non_empty(["first_name", "firstName"])
+    last_name = _first_non_empty(["last_name", "lastName"])
+    full_name = _first_non_empty(["name", "full_name", "fullName", "client_name", "customer_name"])
+    if not full_name:
+        full_name = " ".join(part for part in (first_name, last_name) if part).strip()
+
+    return {
+        "external_client_id": _first_non_empty(["client", "id", "client_id", "customer_id"]) or fallback_client_id,
+        "client_name": full_name,
+        "client_email": _first_non_empty(["email", "email_address", "emailAddress"]),
+        "client_phone": _first_non_empty(["phone", "phone_number", "phoneNumber", "mobile", "mobile_phone", "mobilePhone", "cell_phone", "cellPhone"]),
+    }
+
+
+def sng_get_payment_reminder_candidates(brand, billing_day, days_before=3, today=None, max_clients=None):
+    today = today or datetime.utcnow().date()
+    due_date = _next_uniform_billing_date(billing_day, today=today)
+    if not due_date:
+        return [], "A valid billing day is required"
+
+    try:
+        days_before = int(max(0, min(21, float(days_before or 0))))
+    except (TypeError, ValueError):
+        days_before = 3
+
+    target_due_date = today + timedelta(days=days_before)
+    if due_date != target_due_date:
+        return [], None
+
+    candidates = []
+    page = 1
+    while True:
+        result, error = sng_get_active_clients(brand, page=page)
+        if error or not isinstance(result, dict):
+            return candidates, error
+
+        for client_row in (result.get("data") or []):
+            client_id = ""
+            if isinstance(client_row, dict):
+                client_id = str(client_row.get("client") or client_row.get("id") or client_row.get("client_id") or "").strip()
+            if not client_id:
+                continue
+
+            contact = _sng_extract_contact_info(client_row, fallback_client_id=client_id)
+            if not contact["client_email"] and not contact["client_phone"]:
+                detail_result, detail_error = sng_get_client_details(brand, client_id)
+                if not detail_error and isinstance(detail_result, dict):
+                    contact = _sng_extract_contact_info(_sng_extract_client_record(detail_result), fallback_client_id=client_id)
+            if not contact["client_email"] and not contact["client_phone"]:
+                continue
+
+            candidates.append({
+                **contact,
+                "due_date": due_date.isoformat(),
+                "due_date_obj": due_date,
+                "days_before": days_before,
+                "billing_day": int(billing_day),
+            })
+            if max_clients and len(candidates) >= max(0, int(max_clients)):
+                return candidates, None
+
+        paginate = result.get("paginate") or {}
+        if page >= (paginate.get("total_pages") or 1):
+            break
+        page += 1
+
+    return candidates, None
 
 
 def push_lead(brand, lead_data):
@@ -469,34 +766,6 @@ def _sng_collect_active_no_subscription_ids(brand):
 def _sng_sum_payments_for_month(brand, client_ids, month_prefix):
     """Call client_details for each client and sum succeeded payments in given month.
     month_prefix is like '2026-03'. Returns (total_revenue, payment_count, diagnostics)."""
-    from datetime import datetime
-
-    def _extract_payments(result_dict):
-        if not isinstance(result_dict, dict):
-            return []
-        # Common: top-level payments
-        payments = result_dict.get("payments")
-        if isinstance(payments, list):
-            return payments
-        # Common: data.payments
-        data = result_dict.get("data")
-        if isinstance(data, dict):
-            payments = data.get("payments")
-            if isinstance(payments, list):
-                return payments
-            client = data.get("client")
-            if isinstance(client, dict):
-                payments = client.get("payments")
-                if isinstance(payments, list):
-                    return payments
-        # Common: client.payments
-        client = result_dict.get("client")
-        if isinstance(client, dict):
-            payments = client.get("payments")
-            if isinstance(payments, list):
-                return payments
-        return []
-
     def _month_from_date(value):
         if not value:
             return None
@@ -526,34 +795,6 @@ def _sng_sum_payments_for_month(brand, client_ids, month_prefix):
             except Exception:
                 continue
         return None
-
-    def _money(value):
-        if value is None:
-            return 0.0
-        if isinstance(value, (int, float)):
-            return float(value)
-        if isinstance(value, str):
-            s = value.strip().replace(",", "")
-            if s.startswith("$"):
-                s = s[1:].strip()
-            try:
-                return float(s)
-            except Exception:
-                return 0.0
-        return 0.0
-
-    def _payment_amount(pmt):
-        if not isinstance(pmt, dict):
-            return 0.0
-        base = (
-            pmt.get("amount")
-            or pmt.get("amount_paid")
-            or pmt.get("total")
-            or pmt.get("value")
-            or 0
-        )
-        tip = pmt.get("tip_amount") or pmt.get("tip") or 0
-        return _money(base) + _money(tip)
 
     total_revenue = 0.0
     payment_count = 0
@@ -585,7 +826,7 @@ def _sng_sum_payments_for_month(brand, client_ids, month_prefix):
         if diag["sample_response_keys"] is None:
             diag["sample_response_keys"] = list(result.keys())
 
-        payments = _extract_payments(result)
+        payments = _sng_extract_payments(result)
         if payments:
             diag["clients_with_payments"] += 1
             # Capture first payment as sample
@@ -616,7 +857,7 @@ def _sng_sum_payments_for_month(brand, client_ids, month_prefix):
                 continue
             if pmt_month != month_prefix:
                 continue
-            total_revenue += _payment_amount(pmt)
+            total_revenue += _sng_payment_amount(pmt)
             payment_count += 1
 
     log.info("SNG payment sum: %d clients, %d payments, $%.2f for %s | diag: with_pmts=%d, without=%d, errors=%d",

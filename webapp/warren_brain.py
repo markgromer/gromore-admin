@@ -139,6 +139,7 @@ OBJECTION_DETECTED RULES:
 RULES:
 - Keep SMS replies under 300 characters. Be concise.
 - For Messenger, you can be slightly longer but still keep it tight.
+- If the lead sends photos, analyze what you can actually see and use it to improve your reply. Be helpful, but do not overclaim or pretend you can inspect hidden details.
 - If the lead asks about pricing, quote per the quoting mode.
 - If a handoff rule matches, set action to "handoff" immediately.
 - If the lead seems cold or hasn't replied, set action to "nurture".
@@ -157,8 +158,36 @@ def _build_conversation_context(messages, max_messages=20):
     for msg in recent:
         role = "assistant" if msg.get("role") == "assistant" else "user"
         content = msg.get("content", "")
-        if content:
-            context.append({"role": role, "content": content})
+        metadata = msg.get("metadata") or {}
+        if not metadata:
+            raw_metadata = msg.get("metadata_json", "")
+            if raw_metadata:
+                try:
+                    metadata = json.loads(raw_metadata)
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    metadata = {}
+        image_urls = metadata.get("image_urls") or []
+        if content or image_urls:
+            if role == "user" and image_urls:
+                parts = []
+                if content:
+                    parts.append({"type": "text", "text": content})
+                else:
+                    parts.append({"type": "text", "text": "Lead sent image(s)."})
+                for image_url in image_urls[:3]:
+                    if image_url:
+                        parts.append(
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": image_url,
+                                    "detail": "high",
+                                },
+                            }
+                        )
+                context.append({"role": role, "content": parts})
+            else:
+                context.append({"role": role, "content": content})
     return context
 
 

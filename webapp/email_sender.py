@@ -402,3 +402,30 @@ def send_client_login_email(app_config, email, name, temp_password, login_url, b
         msg.attach(MIMEText(text, "plain"))
         msg.attach(MIMEText(html, "html"))
         server.sendmail(from_email, email, msg.as_string())
+
+
+def send_simple_email(app_config, email, subject, text, html=None):
+    """Send a simple transactional email with text and optional HTML."""
+    smtp_host = app_config.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = app_config.get("SMTP_PORT", 587)
+    smtp_user = app_config.get("SMTP_USER", "")
+    smtp_password = app_config.get("SMTP_PASSWORD", "")
+    from_name = app_config.get("SMTP_FROM_NAME", "GroMore")
+    from_email = app_config.get("SMTP_FROM_EMAIL", smtp_user)
+
+    if not smtp_user or not smtp_password:
+        raise ValueError("SMTP not configured.")
+
+    html = html or f"<pre style=\"font-family:Arial,sans-serif;white-space:pre-wrap;\">{text}</pre>"
+
+    with smtplib.SMTP(smtp_host, smtp_port) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{from_name} <{from_email}>"
+        msg["To"] = email
+        msg.attach(MIMEText(text, "plain"))
+        msg.attach(MIMEText(html, "html"))
+        server.sendmail(from_email, email, msg.as_string())

@@ -6,6 +6,7 @@ and logging the delivery status.
 """
 import json
 import logging
+import time
 import requests
 
 log = logging.getLogger(__name__)
@@ -56,6 +57,15 @@ def send_reply(db, brand, thread_id, message_text, channel="sms", recipient_id=N
                 return False, "opted_out"
             else:
                 log.warning("Manual send to opted-out phone %s - allowed but flagged", to_phone)
+
+    if not skip_dnd:
+        try:
+            delay_seconds = max(0.0, min(300.0, float(brand.get("sales_bot_reply_delay_seconds") or 0)))
+        except (TypeError, ValueError):
+            delay_seconds = 0.0
+        if delay_seconds > 0:
+            log.info("Warren auto-reply delay: brand=%s thread=%s delay=%.1fs", brand.get("id"), thread_id, delay_seconds)
+            time.sleep(delay_seconds)
 
     if channel == "sms":
         return _send_sms(db, brand, thread_id, message_text)
@@ -260,6 +270,22 @@ def _send_raw_sms(brand, to_phone, text):
         log.warning("Cannot send compliance SMS - Quo not configured for brand %s", brand.get("id"))
         return False, "not_configured"
     return send_sms(api_key, from_number, to_phone, text)
+
+
+def send_transactional_sms(db, brand, to_phone, text, append_opt_out_footer=True):
+    """Send a direct SMS outside the lead-thread system for transactional notices."""
+    to_phone = (to_phone or "").strip()
+    if not to_phone:
+        return False, "missing_phone"
+    if db.is_opted_out(brand.get("id"), to_phone):
+        return False, "opted_out"
+
+    full_text = text or ""
+    if append_opt_out_footer:
+        footer = (brand.get("sales_bot_sms_opt_out_footer") or "").strip()
+        if footer:
+            full_text = f"{full_text}\n\n{footer}"
+    return _send_raw_sms(brand, to_phone, full_text)
 
 
 def send_opt_out_confirmation(db, brand, phone):

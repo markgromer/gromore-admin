@@ -340,3 +340,22 @@ def cron_warren_nurture():
         "skipped": skipped,
         "ghosted": ghosted,
     })
+
+
+@jobs_bp.route("/cron/warren-payment-reminders", methods=["POST"])
+def cron_warren_payment_reminders():
+    """Daily cron: send Warren payment reminders for upcoming SNG bill dates."""
+    if not _verify_cron_secret():
+        return jsonify({"error": "unauthorized"}), 401
+
+    from webapp.warren_billing import process_payment_reminders
+
+    stats = process_payment_reminders(current_app.db, current_app.config)
+    logger.info(
+        "Warren payment reminders: %d sent, %d failed, %d skipped across %d brands",
+        stats.get("sent", 0),
+        stats.get("failed", 0),
+        stats.get("skipped", 0),
+        stats.get("brands", 0),
+    )
+    return jsonify({"ok": True, **stats})

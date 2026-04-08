@@ -28,6 +28,44 @@ def _get_db():
     return current_app.db
 
 
+def _looks_like_image_url(url):
+    lowered = (url or "").lower()
+    return any(token in lowered for token in (".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", "/photo", "/image"))
+
+
+def _extract_image_urls(payload):
+    """Extract image attachment URLs from a webhook payload fragment."""
+    found = []
+
+    def _walk(value):
+        if isinstance(value, dict):
+            url = (value.get("url") or "").strip()
+            mime_type = (
+                value.get("mimeType") or value.get("mime_type") or
+                value.get("contentType") or value.get("content_type") or ""
+            ).strip().lower()
+            attachment_type = (value.get("type") or "").strip().lower()
+            if url and (attachment_type == "image" or mime_type.startswith("image/") or _looks_like_image_url(url)):
+                found.append(url)
+            for child_key in ("attachments", "attachment", "media", "files", "payload", "data", "object"):
+                child = value.get(child_key)
+                if child:
+                    _walk(child)
+        elif isinstance(value, list):
+            for item in value:
+                _walk(item)
+
+    _walk(payload)
+
+    urls = []
+    seen = set()
+    for url in found:
+        if url not in seen:
+            seen.add(url)
+            urls.append(url)
+    return urls
+
+
 # ─────────────────────────────────────────────
 # Quo / OpenPhone SMS Webhook
 # ─────────────────────────────────────────────
@@ -158,8 +196,9 @@ def quo_sms_webhook(brand_slug):
     from_phone = (msg_data.get("from") or "").strip()
     conversation_id = (msg_data.get("conversationId") or "").strip()
     message_id = (msg_data.get("id") or "").strip()
+    image_urls = _extract_image_urls(msg_data)
 
-    if not msg_body or not from_phone:
+    if (not msg_body and not image_urls) or not from_phone:
         return jsonify({"ok": True, "skipped": "empty_message"}), 200
 
     # ── A2P opt-out / opt-in keyword detection ──
@@ -210,9 +249,9 @@ def quo_sms_webhook(brand_slug):
             data={"lead_phone": from_phone, "source": "openphone"},
         )
         db.add_lead_message(
-            thread_id, direction="inbound", role="lead", content=msg_body,
+            thread_id, direction="inbound", role="lead", content=(msg_body or "[Lead sent image]"),
             channel="sms", external_message_id=message_id,
-            metadata={"from": from_phone, "conversation_id": conversation_id, "opted_out": True},
+            metadata={"from": from_phone, "conversation_id": conversation_id, "opted_out": True, "image_urls": image_urls},
         )
         return jsonify({"ok": True, "thread_id": thread_id, "auto_reply": False, "reason": "opted_out"}), 200
 
@@ -231,10 +270,10 @@ def quo_sms_webhook(brand_slug):
         thread_id,
         direction="inbound",
         role="lead",
-        content=msg_body,
+        content=(msg_body or "[Lead sent image]"),
         channel="sms",
         external_message_id=message_id,
-        metadata={"from": from_phone, "conversation_id": conversation_id},
+        metadata={"from": from_phone, "conversation_id": conversation_id, "image_urls": image_urls},
     )
 
     # Check if assistant is enabled
@@ -539,12 +578,13 @@ def meta_messenger_webhook():
             message = event.get("message") or {}
             msg_text = (message.get("text") or "").strip()
             msg_id = message.get("mid", "")
+            image_urls = _extract_image_urls(message)
 
             # Skip echoes (messages sent by the page itself)
             if message.get("is_echo"):
                 continue
 
-            if not msg_text or not sender_id:
+            if (not msg_text and not image_urls) or not sender_id:
                 continue
 
             # Skip if sender is the page itself
@@ -574,10 +614,10 @@ def meta_messenger_webhook():
                 thread_id,
                 direction="inbound",
                 role="lead",
-                content=msg_text,
+                content=(msg_text or "[Lead sent image]"),
                 channel="messenger",
                 external_message_id=msg_id,
-                metadata={"sender_psid": sender_id, "page_id": page_id},
+                metadata={"sender_psid": sender_id, "page_id": page_id, "image_urls": image_urls},
             )
 
             # Process with Warren

@@ -770,6 +770,12 @@
                            value="{{ brand.sales_bot_reply_tone or '' }}"
                            placeholder="Helpful, direct, blue-collar, premium, calm">
 
+                          <label class="form-label fw-medium mt-3" style="font-size:.88rem;">Auto-reply delay (seconds)</label>
+                          <input type="number" class="form-control" name="sales_bot_reply_delay_seconds"
+                              value="{{ brand.sales_bot_reply_delay_seconds|default(0) }}"
+                              min="0" max="300" step="1">
+                          <small class="text-muted d-block mt-2">Set this above 0 if you want Warren to pause before automated replies send.</small>
+
                     <label class="form-label fw-medium mt-3" style="font-size:.88rem;">Business Hours / Escalation Notes</label>
                     <textarea class="form-control" name="sales_bot_business_hours" rows="4" maxlength="1000"
                               placeholder="Mon-Fri 8am-5pm. After-hours emergency calls should still be escalated. If a lead asks for pricing outside our service area, collect info and hand off.">{{ brand.sales_bot_business_hours or '' }}</textarea>
@@ -915,6 +921,50 @@
                         <input class="form-check-input" type="checkbox" name="sales_bot_auto_push_crm" id="salesBotAutoPushCrm" value="1" {{ 'checked' if brand.sales_bot_auto_push_crm }}>
                         <label class="form-check-label" for="salesBotAutoPushCrm">Push qualified leads to connected CRM</label>
                     </div>
+                </div>
+            </div>
+
+            {% set payment_reminder_channels = (brand.sales_bot_payment_reminder_channels or 'email').replace('[', '').replace(']', '').replace('"', '').replace(', ', ',').split(',') %}
+            <div class="mt-4 p-3" style="background:#eff6ff; border-radius:10px; border:1px solid #bfdbfe;">
+                <h6 class="fw-semibold mb-1"><i class="bi bi-calendar-check me-2"></i>Billing Reminders</h6>
+                <p class="text-muted mb-3" style="font-size:.85rem;">MVP mode: pick one billing day for all active SNG clients, then Warren reminds them a set number of days ahead of that date.</p>
+
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" role="switch" id="paymentRemindersEnabled" name="sales_bot_payment_reminders_enabled" value="1" {{ 'checked' if brand.sales_bot_payment_reminders_enabled }}>
+                    <label class="form-check-label fw-medium" for="paymentRemindersEnabled">Enable automated billing reminders</label>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label mb-1" style="font-size:.82rem;">Main billing day</label>
+                        <input type="number" class="form-control form-control-sm" name="sales_bot_payment_reminder_billing_day" value="{{ brand.sales_bot_payment_reminder_billing_day|default(1) }}" min="1" max="31" step="1">
+                        <small class="text-muted">Use the calendar day you bill everyone on, like 1 for the first of the month.</small>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label mb-1" style="font-size:.82rem;">Send this many days before</label>
+                        <input type="number" class="form-control form-control-sm" name="sales_bot_payment_reminder_days_before" value="{{ brand.sales_bot_payment_reminder_days_before|default(3) }}" min="0" max="21" step="1">
+                        <small class="text-muted">Set 0 if you want the reminder to go out on billing day.</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label mb-1" style="font-size:.82rem;">Reminder channels</label>
+                        <div class="d-flex gap-3 flex-wrap pt-1">
+                            <label class="form-check-label d-flex align-items-center gap-2">
+                                <input class="form-check-input" type="checkbox" name="sales_bot_payment_reminder_channels" value="email" {{ 'checked' if 'email' in payment_reminder_channels }}>
+                                <span>Email</span>
+                            </label>
+                            <label class="form-check-label d-flex align-items-center gap-2">
+                                <input class="form-check-input" type="checkbox" name="sales_bot_payment_reminder_channels" value="sms" {{ 'checked' if 'sms' in payment_reminder_channels }}>
+                                <span>SMS</span>
+                            </label>
+                        </div>
+                        <small class="text-muted d-block mt-2">SMS uses your connected phone setup and still respects opt-outs.</small>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <label class="form-label mb-1 fw-medium" style="font-size:.82rem;">Custom reminder template</label>
+                    <textarea class="form-control form-control-sm" name="sales_bot_payment_reminder_template" rows="4" placeholder="Hi {client_name}, this is a reminder from {brand_name} that your billing date is {due_date}. Reply if you need anything before then.">{{ brand.sales_bot_payment_reminder_template or '' }}</textarea>
+                    <small class="text-muted">Available placeholders: {client_name}, {brand_name}, {due_date}, {days_before}</small>
                 </div>
             </div>
 

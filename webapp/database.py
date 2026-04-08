@@ -218,6 +218,25 @@ class WebDB:
                 FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS client_billing_reminders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                external_client_id TEXT NOT NULL,
+                due_date TEXT NOT NULL,
+                channel TEXT NOT NULL,
+                reminder_type TEXT NOT NULL DEFAULT 'payment_due',
+                recipient TEXT DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'sent',
+                detail TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(brand_id, external_client_id, due_date, channel, reminder_type),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_client_billing_reminders_brand_due
+            ON client_billing_reminders(brand_id, due_date, channel, reminder_type);
+
             CREATE TABLE IF NOT EXISTS ai_briefs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand_id INTEGER NOT NULL,
@@ -1045,6 +1064,7 @@ class WebDB:
             ("sales_bot_quote_mode", "TEXT DEFAULT 'hybrid'"),
             ("sales_bot_business_hours", "TEXT DEFAULT ''"),
             ("sales_bot_reply_tone", "TEXT DEFAULT ''"),
+                ("sales_bot_reply_delay_seconds", "REAL DEFAULT 0"),
             ("sales_bot_service_menu", "TEXT DEFAULT ''"),
             ("sales_bot_pricing_notes", "TEXT DEFAULT ''"),
             ("sales_bot_guardrails", "TEXT DEFAULT ''"),
@@ -1075,6 +1095,11 @@ class WebDB:
             ("sales_bot_objection_playbook", "TEXT DEFAULT ''"),
             ("sales_bot_message_templates", "TEXT DEFAULT ''"),
             ("sales_bot_collect_fields", "TEXT DEFAULT 'name,phone'"),
+            ("sales_bot_payment_reminders_enabled", "INTEGER DEFAULT 0"),
+            ("sales_bot_payment_reminder_days_before", "INTEGER DEFAULT 3"),
+            ("sales_bot_payment_reminder_billing_day", "INTEGER DEFAULT 1"),
+            ("sales_bot_payment_reminder_channels", "TEXT DEFAULT 'email'"),
+            ("sales_bot_payment_reminder_template", "TEXT DEFAULT ''"),
             ("hiring_design", "TEXT DEFAULT '{}'"),
         ]
         for col_name, col_def in new_brand_cols:
@@ -1378,6 +1403,10 @@ class WebDB:
             "sales_bot_guardrails", "sales_bot_example_language",
             "sales_bot_disallowed_language", "sales_bot_handoff_rules",
             "sales_bot_quo_webhook_secret", "sales_bot_meta_webhook_secret",
+            "sales_bot_objection_playbook", "sales_bot_message_templates", "sales_bot_collect_fields",
+            "sales_bot_payment_reminder_channels", "sales_bot_payment_reminder_template",
+            "sales_bot_dnd_start", "sales_bot_dnd_end", "sales_bot_dnd_timezone",
+            "sales_bot_sms_opt_out_footer",
             "hiring_design",
         }
         if field not in allowed:
@@ -1393,6 +1422,13 @@ class WebDB:
             "business_lat", "business_lng", "crm_avg_service_price",
             "sales_bot_enabled", "sales_bot_transcript_export", "sales_bot_meta_lead_forms",
             "sales_bot_messenger_enabled", "sales_bot_call_logging", "sales_bot_auto_push_crm",
+            "sales_bot_reply_delay_seconds",
+            "sales_bot_payment_reminders_enabled", "sales_bot_payment_reminder_days_before",
+            "sales_bot_payment_reminder_billing_day",
+            "sales_bot_nurture_enabled", "sales_bot_nurture_hot_hours", "sales_bot_nurture_hot_max",
+            "sales_bot_nurture_warm_hours", "sales_bot_nurture_warm_max",
+            "sales_bot_nurture_cold_hours", "sales_bot_nurture_cold_max",
+            "sales_bot_nurture_ghost_hours", "sales_bot_dnd_enabled", "sales_bot_dnd_weekends",
         }
         if field not in allowed:
             raise ValueError(f"Cannot update field: {field}")
@@ -1923,6 +1959,64 @@ class WebDB:
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
+    # ── Client Billing Reminders ──
+
+    def get_client_billing_reminder(self, brand_id, external_client_id, due_date, channel, reminder_type="payment_due"):
+        conn = self._conn()
+        row = conn.execute(
+            """
+            SELECT * FROM client_billing_reminders
+            WHERE brand_id = ? AND external_client_id = ? AND due_date = ?
+              AND channel = ? AND reminder_type = ?
+            """,
+            (brand_id, external_client_id, due_date, channel, reminder_type),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def has_sent_client_billing_reminder(self, brand_id, external_client_id, due_date, channel, reminder_type="payment_due"):
+        reminder = self.get_client_billing_reminder(brand_id, external_client_id, due_date, channel, reminder_type)
+        return bool(reminder and reminder.get("status") == "sent")
+
+    def record_client_billing_reminder(
+        self,
+        brand_id,
+        external_client_id,
+        due_date,
+        channel,
+        recipient="",
+        status="sent",
+        detail="",
+        reminder_type="payment_due",
+    ):
+        conn = self._conn()
+        conn.execute(
+            """
+            INSERT INTO client_billing_reminders (
+                brand_id, external_client_id, due_date, channel,
+                reminder_type, recipient, status, detail, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(brand_id, external_client_id, due_date, channel, reminder_type)
+            DO UPDATE SET
+                recipient = excluded.recipient,
+                status = excluded.status,
+                detail = excluded.detail,
+                updated_at = datetime('now')
+            """,
+            (
+                brand_id,
+                external_client_id,
+                due_date,
+                channel,
+                reminder_type,
+                recipient or "",
+                status or "sent",
+                detail or "",
+            ),
+        )
+        conn.commit()
+        conn.close()
 
     # ── Reports ──
 

@@ -190,6 +190,12 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
                 "sales_bot_quote_mode": "hybrid",
                 "sales_bot_business_hours": "Mon-Fri 8am-5pm. After-hours emergencies should be escalated.",
                 "sales_bot_reply_tone": "Direct and helpful",
+                "sales_bot_reply_delay_seconds": "17",
+                "sales_bot_payment_reminders_enabled": "1",
+                "sales_bot_payment_reminder_days_before": "5",
+                "sales_bot_payment_reminder_billing_day": "1",
+                "sales_bot_payment_reminder_channels": ["email", "sms"],
+                "sales_bot_payment_reminder_template": "Hi {client_name}, your billing date is {due_date}.",
                 "sales_bot_transcript_export": "1",
                 "sales_bot_meta_lead_forms": "1",
                 "sales_bot_call_logging": "1",
@@ -212,6 +218,12 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertEqual(brand["sales_bot_quote_mode"], "hybrid")
         self.assertEqual(brand["sales_bot_business_hours"], "Mon-Fri 8am-5pm. After-hours emergencies should be escalated.")
         self.assertEqual(brand["sales_bot_reply_tone"], "Direct and helpful")
+        self.assertEqual(brand["sales_bot_reply_delay_seconds"], 17.0)
+        self.assertEqual(brand["sales_bot_payment_reminders_enabled"], 1.0)
+        self.assertEqual(brand["sales_bot_payment_reminder_days_before"], 5.0)
+        self.assertEqual(brand["sales_bot_payment_reminder_billing_day"], 1.0)
+        self.assertEqual(brand["sales_bot_payment_reminder_channels"], '["email", "sms"]')
+        self.assertEqual(brand["sales_bot_payment_reminder_template"], "Hi {client_name}, your billing date is {due_date}.")
         self.assertEqual(brand["sales_bot_transcript_export"], 1.0)
         self.assertEqual(brand["sales_bot_meta_lead_forms"], 1.0)
         self.assertEqual(brand["sales_bot_call_logging"], 1.0)
