@@ -57,6 +57,9 @@
             <a href="{{ url_for('client.client_lead_assistant') }}" class="{% if request.endpoint in ('client.client_lead_assistant',) %}active{% endif %}">
                 <i class="bi bi-chat-dots"></i> Lead Assistant
             </a>
+            <a href="{{ url_for('client.client_inbox') }}" class="{% if request.endpoint in ('client.client_inbox',) %}active{% endif %}">
+                <i class="bi bi-inbox"></i> Inbox
+            </a>
             {% endif %}
             {% if feature_on('missions') %}
             <a href="{{ url_for('client.client_actions') }}" class="{% if request.endpoint == 'client.client_actions' %}active{% endif %}">
@@ -227,6 +230,7 @@
             <li><a href="{{ url_for('client.client_campaigns') }}" class="{% if request.endpoint in ('client.client_campaigns', 'client.client_campaign_detail') %}active{% endif %}"><i class="bi bi-megaphone"></i>Campaigns</a></li>
             <li><a href="{{ url_for('client.client_crm') }}" class="{% if request.endpoint == 'client.client_crm' %}active{% endif %}"><i class="bi bi-people"></i>CRM</a></li>
             <li><a href="{{ url_for('client.client_lead_assistant') }}" class="{% if request.endpoint == 'client.client_lead_assistant' %}active{% endif %}"><i class="bi bi-chat-dots"></i>Lead AI</a></li>
+            <li><a href="{{ url_for('client.client_inbox') }}" class="{% if request.endpoint == 'client.client_inbox' %}active{% endif %}"><i class="bi bi-inbox"></i>Inbox</a></li>
             <li><a href="{{ url_for('client.client_actions') }}" class="{% if request.endpoint == 'client.client_actions' %}active{% endif %}"><i class="bi bi-clipboard2-check"></i>Missions</a></li>
             <li><a href="{{ url_for('client.client_settings') }}" class="{% if request.endpoint == 'client.client_settings' %}active{% endif %}"><i class="bi bi-gear"></i>Settings</a></li>
         </ul>

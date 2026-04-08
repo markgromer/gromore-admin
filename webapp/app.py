@@ -26,6 +26,7 @@ from webapp.client_oauth_meta import client_meta_bp
 from webapp.jobs import jobs_bp
 from webapp.client_portal import client_bp
 from webapp.hiring import hiring_bp
+from webapp.warren_webhooks import webhooks_bp
 
 BASE_DIR = Path(__file__).parent.parent
 
@@ -189,6 +190,8 @@ def create_app():
     app.register_blueprint(jobs_bp, url_prefix="/jobs")
     app.register_blueprint(hiring_bp, url_prefix="/client/hiring")
     csrf.exempt(hiring_bp)  # Public apply + interview endpoints
+    app.register_blueprint(webhooks_bp, url_prefix="/webhooks")
+    csrf.exempt(webhooks_bp)  # Public webhook endpoints (verified by signature)
     app.register_blueprint(client_bp)
 
     # ── Static asset cache headers ──

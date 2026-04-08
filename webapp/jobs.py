@@ -302,3 +302,41 @@ def cron_refresh_dashboards():
         "skipped": skipped,
         "errors": errors[:10],
     })
+
+
+@jobs_bp.route("/cron/warren-nurture", methods=["POST"])
+def cron_warren_nurture():
+    """Periodic cron: run Warren nurture follow-ups for stale leads.
+
+    Should run every 1-2 hours. Checks all enabled brands for leads
+    that need follow-up and generates contextual messages.
+    Auth via CRON_SECRET.
+    """
+    if not _verify_cron_secret():
+        return jsonify({"error": "unauthorized"}), 401
+
+    from webapp.warren_nurture import process_nurture_queue, check_for_ghosted_leads
+
+    db = current_app.db
+    sent, skipped = process_nurture_queue(db)
+
+    # Also check for ghosted leads (72 hours no reply)
+    ghosted = 0
+    try:
+        conn = db._conn()
+        rows = conn.execute(
+            "SELECT id FROM brands WHERE sales_bot_enabled = 1"
+        ).fetchall()
+        conn.close()
+        for row in rows:
+            ghosted += check_for_ghosted_leads(db, row["id"])
+    except Exception as e:
+        logger.warning("Ghosted lead check failed: %s", e)
+
+    logger.info("Warren nurture: %d sent, %d skipped, %d ghosted", sent, skipped, ghosted)
+    return jsonify({
+        "ok": True,
+        "sent": sent,
+        "skipped": skipped,
+        "ghosted": ghosted,
+    })

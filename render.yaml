@@ -36,3 +36,22 @@ services:
           name: agency-analytics
           property: host
           prefix: https://
+
+  - type: cron
+    name: warren-nurture
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    schedule: "0 */2 * * *"
+    startCommand: python -c "import requests,os;requests.post(os.environ['RENDER_EXTERNAL_URL']+'/jobs/cron/warren-nurture',headers={'Authorization':'Bearer '+os.environ['SECRET_KEY']},timeout=300)"
+    envVars:
+      - key: SECRET_KEY
+        fromService:
+          type: web
+          name: agency-analytics
+          envVarKey: SECRET_KEY
+      - key: RENDER_EXTERNAL_URL
+        fromService:
+          type: web
+          name: agency-analytics
+          property: host
+          prefix: https://

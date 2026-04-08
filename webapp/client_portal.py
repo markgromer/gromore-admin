@@ -483,6 +483,11 @@ _ENDPOINT_FEATURE_MAP = {
     "client_crm_data":             "crm",
     "client_lead_assistant":       "crm",
     "client_save_lead_assistant_profile": "crm",
+    "client_inbox":                "crm",
+    "client_inbox_thread":         "crm",
+    "client_inbox_reply":          "crm",
+    "client_inbox_stage":          "crm",
+    "client_inbox_warren_draft":   "crm",
     "client_gbp":                  "gbp",
     "client_gbp_audit":            "gbp",
     "client_post_scheduler":       "post_scheduler",
@@ -5605,6 +5610,133 @@ def client_save_lead_assistant_profile():
 
     flash("Lead assistant profile saved.", "success")
     return redirect(url_for("client.client_lead_assistant"))
+
+
+# ── Warren Inbox ──
+
+@client_bp.route("/inbox")
+@client_login_required
+def client_inbox():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    threads = db.get_lead_threads(brand_id, limit=200)
+
+    from webapp.warren_pipeline import get_pipeline_metrics
+    metrics = get_pipeline_metrics(db, brand_id)
+
+    return render_template(
+        "client_inbox.html",
+        brand=brand,
+        threads=threads,
+        metrics=metrics,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/inbox/thread/<int:thread_id>")
+@client_login_required
+def client_inbox_thread(thread_id):
+    """JSON: get thread detail + messages."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread:
+        return jsonify(error="Thread not found"), 404
+
+    # Mark as read
+    db.mark_lead_thread_read(thread_id)
+
+    messages = db.get_lead_messages(thread_id)
+    return jsonify(thread=thread, messages=messages)
+
+
+@client_bp.route("/inbox/thread/<int:thread_id>/reply", methods=["POST"])
+@client_login_required
+def client_inbox_reply(thread_id):
+    """Send a manual reply from the inbox."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread:
+        return jsonify(error="Thread not found"), 404
+
+    data = request.get_json(silent=True) or {}
+    message_text = (data.get("message") or "").strip()
+    if not message_text:
+        return jsonify(error="Message cannot be empty"), 400
+    if len(message_text) > 2000:
+        return jsonify(error="Message too long"), 400
+
+    from webapp.warren_sender import send_manual_reply
+    success, detail = send_manual_reply(db, brand_id, thread_id, message_text)
+
+    return jsonify(ok=success, detail=detail)
+
+
+@client_bp.route("/inbox/thread/<int:thread_id>/stage", methods=["POST"])
+@client_login_required
+def client_inbox_stage(thread_id):
+    """Manually change a lead's pipeline stage."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread:
+        return jsonify(error="Thread not found"), 404
+
+    data = request.get_json(silent=True) or {}
+    new_stage = (data.get("stage") or "").strip().lower()
+
+    from webapp.warren_pipeline import manual_stage_change, PIPELINE_STAGES
+    if new_stage not in PIPELINE_STAGES:
+        return jsonify(error=f"Invalid stage: {new_stage}"), 400
+
+    success, event_id = manual_stage_change(
+        db, thread_id, brand_id, new_stage,
+        changed_by=session.get("client_name", "client"),
+    )
+
+    if data.get("handoff"):
+        db.update_lead_thread_status(thread_id, assigned_to="human")
+        db.add_lead_event(brand_id, thread_id, "handoff_triggered", event_value="Manual handoff from inbox")
+
+    return jsonify(ok=success)
+
+
+@client_bp.route("/inbox/thread/<int:thread_id>/warren-draft", methods=["POST"])
+@client_login_required
+def client_inbox_warren_draft(thread_id):
+    """Generate a Warren draft reply without sending it."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(error="Brand not found"), 404
+
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread:
+        return jsonify(error="Thread not found"), 404
+
+    messages = db.get_lead_messages(thread_id)
+
+    from webapp.warren_brain import generate_response
+    result = generate_response(db, brand, thread, messages, channel=thread.get("channel", "sms"))
+
+    if not result or not result.get("reply"):
+        return jsonify(error="Warren could not generate a reply"), 500
+
+    return jsonify(
+        reply=result["reply"],
+        action=result.get("action", "reply"),
+        confidence=result.get("confidence", 0),
+        internal_notes=result.get("internal_notes", ""),
+    )
 
 
 @client_bp.route("/crm/data")
