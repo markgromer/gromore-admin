@@ -14,6 +14,28 @@ from datetime import datetime, timedelta
 
 log = logging.getLogger(__name__)
 
+_SPOUSE_CHECK_PATTERNS = (
+    "check with my wife",
+    "check with wife",
+    "talk to my wife",
+    "ask my wife",
+    "run it by my wife",
+    "check with my husband",
+    "check with husband",
+    "talk to my husband",
+    "ask my husband",
+    "run it by my husband",
+    "check with my spouse",
+    "talk to my spouse",
+    "ask my spouse",
+    "check with my partner",
+    "talk to my partner",
+    "ask my partner",
+    "run it by them",
+    "talk it over",
+    "sleep on it",
+)
+
 # Fallback defaults if brand settings are missing
 _DEFAULTS = {
     "hot_hours": 2, "hot_max": 3,
@@ -36,6 +58,104 @@ _TIER_EVENT = {
     "warm": "nurture_quote_followup",
     "cold": "nurture_qualified_followup",
 }
+
+
+def _hours_since_timestamp(value):
+    """Return hours elapsed since a stored ISO/datetime string."""
+    if not value:
+        return None
+    try:
+        then = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, (datetime.utcnow() - then).total_seconds() / 3600.0)
+
+
+def _recent_lead_text(messages, limit=3):
+    """Return a compact string of the most recent lead-authored messages."""
+    lead_parts = []
+    for msg in reversed(messages):
+        if msg.get("role") == "system":
+            continue
+        if msg.get("direction") == "inbound" or msg.get("role") in {"lead", "user"}:
+            content = (msg.get("content") or "").strip()
+            if content:
+                lead_parts.append(content.lower())
+            if len(lead_parts) >= limit:
+                break
+    lead_parts.reverse()
+    return "\n".join(lead_parts)
+
+
+def _detect_contextual_nudge_plan(thread, messages):
+    """Return a context-specific nurture plan, if one matches the conversation."""
+    if not messages:
+        return None
+
+    recent_lead_text = _recent_lead_text(messages)
+    non_system_messages = [m for m in messages if m.get("role") != "system" and (m.get("content") or "").strip()]
+
+    if recent_lead_text and any(pattern in recent_lead_text for pattern in _SPOUSE_CHECK_PATTERNS):
+        return {
+            "event": "nurture_spouse_followup",
+            "wait_hours": 4.0,
+            "max_attempts": 1,
+            "prompt": (
+                "The lead said they need to check with their spouse or partner. "
+                "Send a low-pressure follow-up that acknowledges that directly. "
+                "Offer one useful detail that helps them decide, like a quick price recap, what is included, "
+                "availability, warranty, or the easiest next step. Keep it supportive, not pushy."
+            ),
+        }
+
+    if thread.get("status") in {"new", "engaged"} and len(non_system_messages) >= 4:
+        return {
+            "event": "nurture_soft_close",
+            "wait_hours": 0.25,
+            "max_attempts": 1,
+            "prompt": (
+                "The lead went quiet in the middle of an active conversation. "
+                "Send a simple, human nudge that gives them an easy out. "
+                "Use the spirit of: 'Want me to leave this open or close it out for now?' "
+                "Keep it brief, casual, and non-pushy."
+            ),
+        }
+
+    return None
+
+
+def _build_nurture_system_message(db, brand_id, thread, rule, messages=None):
+    """Build the system instruction that guides a nurture follow-up."""
+    channel = thread.get("channel", "sms")
+    thread_id = thread["id"]
+    hours = rule["hours_since_last"]
+    context_prompt = rule.get(
+        "prompt",
+        f"The lead has not responded in {hours} hours. Generate a brief, natural follow-up. Do not repeat your last message. Keep it short and low-pressure.",
+    )
+    nudge = f"[System: {context_prompt}"
+
+    objection_events = db.get_lead_events(brand_id, thread_id, event_type="objection_detected")
+    if objection_events:
+        past = [e.get("event_value", "") for e in objection_events[:3] if e.get("event_value")]
+        if past:
+            nudge += f"\n\nThis lead had these concerns: {', '.join(past)}. Address one of them naturally, don't ignore the elephant in the room."
+
+    missing = []
+    if not thread.get("lead_name"):
+        missing.append("their name")
+    if not thread.get("lead_phone") and channel == "messenger":
+        missing.append("their phone number")
+    if missing:
+        nudge += f"\n\nWe still don't know {' or '.join(missing)}. Try to get it naturally in this follow-up."
+
+    if messages:
+        recent_lead_text = _recent_lead_text(messages, limit=2)
+        if recent_lead_text:
+            nudge += f"\n\nRecent lead context: {recent_lead_text}"
+
+    nudge += "]"
+    return nudge
 
 
 def _brand_nurture_rules(brand):
@@ -132,6 +252,7 @@ def _process_brand_nurture(db, brand):
     brand_id = brand["id"]
     sent = 0
     skipped = 0
+    suppressed_thread_ids = set()
 
     # Check nurture enabled
     if not brand.get("sales_bot_nurture_enabled", 1):
@@ -142,12 +263,44 @@ def _process_brand_nurture(db, brand):
         log.info("Brand %s is in DND window, skipping nurture", brand_id)
         return sent, skipped
 
+    for thread in _find_contextual_candidates(db, brand_id):
+        thread_id = thread["id"]
+        messages = db.get_lead_messages(thread_id)
+        plan = _detect_contextual_nudge_plan(thread, messages)
+        if not plan:
+            continue
+
+        attempts = _count_nurture_attempts(db, thread_id, plan["event"])
+        if attempts < plan["max_attempts"]:
+            suppressed_thread_ids.add(thread_id)
+
+        last_outbound_hours = _hours_since_timestamp(thread.get("last_outbound_at"))
+        if last_outbound_hours is None or last_outbound_hours < plan["wait_hours"]:
+            continue
+        if attempts >= plan["max_attempts"]:
+            continue
+
+        custom_rule = {
+            "event": plan["event"],
+            "hours_since_last": plan["wait_hours"],
+            "prompt": plan["prompt"],
+        }
+        success = _send_nurture(db, brand, thread, custom_rule, messages=messages)
+        if success:
+            sent += 1
+        else:
+            skipped += 1
+
     rules = _brand_nurture_rules(brand)
 
     for rule in rules:
         threads = _find_stale_threads(db, brand_id, rule)
         for thread in threads:
             thread_id = thread["id"]
+
+            if thread_id in suppressed_thread_ids:
+                skipped += 1
+                continue
 
             # Check nurture attempt count
             attempts = _count_nurture_attempts(db, thread_id, rule["event"])
@@ -187,6 +340,28 @@ def _find_stale_threads(db, brand_id, rule):
     return [dict(r) for r in rows]
 
 
+def _find_contextual_candidates(db, brand_id):
+        """Find open threads that may qualify for fast, context-aware nudges."""
+        cutoff = (datetime.utcnow() - timedelta(minutes=15)).isoformat()
+
+        conn = db._conn()
+        rows = conn.execute(
+                """
+                SELECT * FROM lead_threads
+                WHERE brand_id = ?
+                    AND status IN ('new', 'engaged', 'quoted', 'qualified')
+                    AND last_outbound_at != ''
+                    AND last_outbound_at < ?
+                    AND (last_inbound_at = '' OR last_inbound_at < last_outbound_at)
+                ORDER BY last_outbound_at ASC
+                LIMIT 100
+                """,
+                (brand_id, cutoff),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+
 def _count_nurture_attempts(db, thread_id, event_type):
     """Count how many nurture events of this type exist for this thread."""
     conn = db._conn()
@@ -198,7 +373,7 @@ def _count_nurture_attempts(db, thread_id, event_type):
     return row["cnt"] if row else 0
 
 
-def _send_nurture(db, brand, thread, rule):
+def _send_nurture(db, brand, thread, rule, messages=None):
     """Generate a nurture follow-up and send it.
 
     Returns True if sent successfully.
@@ -217,27 +392,10 @@ def _send_nurture(db, brand, thread, rule):
             log.info("Skipping nurture for opted-out phone %s thread %s", lead_phone, thread_id)
             return False
 
-    # Build a smarter system message for the follow-up
-    hours = rule['hours_since_last']
-    nudge = f"[System: The lead has not responded in {hours} hours. Generate a brief, natural follow-up. Do not repeat your last message. Keep it short and low-pressure."
+    if messages is None:
+        messages = db.get_lead_messages(thread_id)
 
-    # Add objection context
-    objection_events = db.get_lead_events(brand_id, thread_id, event_type="objection_detected")
-    if objection_events:
-        past = [e.get("event_value", "") for e in objection_events[:3] if e.get("event_value")]
-        if past:
-            nudge += f"\n\nThis lead had these concerns: {', '.join(past)}. Address one of them naturally, don't ignore the elephant in the room."
-
-    # Add missing info context
-    missing = []
-    if not thread.get("lead_name"):
-        missing.append("their name")
-    if not thread.get("lead_phone") and channel == "messenger":
-        missing.append("their phone number")
-    if missing:
-        nudge += f"\n\nWe still don't know {' or '.join(missing)}. Try to get it naturally in this follow-up."
-
-    nudge += "]"
+    nudge = _build_nurture_system_message(db, brand_id, thread, rule, messages=messages)
 
     # Add a system message to guide Warren's follow-up
     db.add_lead_message(

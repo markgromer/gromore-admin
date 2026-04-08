@@ -483,6 +483,39 @@ class WarrenNurtureCadenceTests(unittest.TestCase):
         self.assertEqual(by_stage["new"]["max_attempts"], 3)
         self.assertEqual(by_stage["quoted"]["hours_since_last"], 24.0)
 
+    def test_detect_contextual_nudge_plan_for_spouse_check(self):
+        from webapp.warren_nurture import _detect_contextual_nudge_plan
+
+        thread = {"status": "quoted"}
+        messages = [
+            {"role": "lead", "direction": "inbound", "content": "Looks good."},
+            {"role": "assistant", "direction": "outbound", "content": "Want me to lock it in?"},
+            {"role": "lead", "direction": "inbound", "content": "I need to check with my wife tonight first."},
+        ]
+
+        plan = _detect_contextual_nudge_plan(thread, messages)
+        self.assertIsNotNone(plan)
+        self.assertEqual(plan["event"], "nurture_spouse_followup")
+        self.assertEqual(plan["wait_hours"], 4.0)
+        self.assertIn("spouse", plan["prompt"].lower())
+
+    def test_detect_contextual_nudge_plan_for_mid_conversation_ghost(self):
+        from webapp.warren_nurture import _detect_contextual_nudge_plan
+
+        thread = {"status": "engaged"}
+        messages = [
+            {"role": "lead", "direction": "inbound", "content": "Hey, do you service my area?"},
+            {"role": "assistant", "direction": "outbound", "content": "Yes, we do. What do you need help with?"},
+            {"role": "lead", "direction": "inbound", "content": "Dog poop cleanup for two dogs."},
+            {"role": "assistant", "direction": "outbound", "content": "We can help with that. Weekly is our most popular option."},
+        ]
+
+        plan = _detect_contextual_nudge_plan(thread, messages)
+        self.assertIsNotNone(plan)
+        self.assertEqual(plan["event"], "nurture_soft_close")
+        self.assertEqual(plan["wait_hours"], 0.25)
+        self.assertIn("close it out", plan["prompt"].lower())
+
     def test_dnd_disabled_returns_false(self):
         from webapp.warren_nurture import _is_dnd
         self.assertFalse(_is_dnd({"sales_bot_dnd_enabled": 0}))
