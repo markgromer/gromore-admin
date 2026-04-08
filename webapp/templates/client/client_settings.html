@@ -792,6 +792,33 @@
                 </div>
             </div>
 
+            <!-- OpenPhone Connection Status -->
+            {% if brand.quo_api_key %}
+            <div class="mt-2 p-3" style="background:#f0fdf4; border-radius:10px; border:1px solid #bbf7d0;">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                    <div>
+                        <span class="fw-semibold" style="font-size:.88rem;"><i class="bi bi-plug me-1 text-success"></i>OpenPhone Connection</span>
+                        <span class="badge bg-success ms-2" id="quoStatusBadge">Checking...</span>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-success" id="testQuoBtn" onclick="testOpenPhoneConnection()">
+                        <i class="bi bi-arrow-repeat me-1"></i>Test Connection
+                    </button>
+                </div>
+                <div id="quoPhoneNumbers" class="mb-2" style="font-size:.82rem;"></div>
+                <div style="font-size:.82rem;">
+                    <label class="form-label mb-1 fw-medium">Inbound SMS Webhook URL</label>
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control form-control-sm bg-light" readonly
+                               value="{{ request.url_root }}webhooks/quo/sms/{{ brand.slug }}" id="quoWebhookUrl">
+                        <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('quoWebhookUrl')">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                    </div>
+                    <small class="text-muted">Paste this URL in OpenPhone > Settings > Webhooks > Add Webhook. Select "message.received" event.</small>
+                </div>
+            </div>
+            {% endif %}
+
             <div class="row g-3 mt-1">
                 <div class="col-lg-6">
                     <label class="form-label fw-medium" style="font-size:.88rem;">OpenPhone Webhook Secret</label>
@@ -806,6 +833,46 @@
                            autocomplete="off">
                 </div>
             </div>
+
+            <!-- Messenger Connection Status -->
+            {% if brand.facebook_page_id %}
+            <div class="mt-2 p-3" style="background:#eff6ff; border-radius:10px; border:1px solid #bfdbfe;">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                    <div>
+                        <span class="fw-semibold" style="font-size:.88rem;"><i class="bi bi-messenger me-1 text-primary"></i>Messenger Connection</span>
+                        <span class="badge bg-primary ms-2" id="messengerStatusBadge">Checking...</span>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="testMessengerBtn" onclick="testMessengerConnection()">
+                        <i class="bi bi-arrow-repeat me-1"></i>Test Connection
+                    </button>
+                </div>
+                <div id="messengerPageInfo" class="mb-2" style="font-size:.82rem;"></div>
+                <div class="row g-2">
+                    <div class="col-md-6" style="font-size:.82rem;">
+                        <label class="form-label mb-1 fw-medium">Messenger Webhook URL</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control form-control-sm bg-light" readonly
+                                   value="{{ request.url_root }}webhooks/meta/messenger" id="messengerWebhookUrl">
+                            <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('messengerWebhookUrl')">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                        <small class="text-muted">Use in Meta App Dashboard > Webhooks.</small>
+                    </div>
+                    <div class="col-md-6" style="font-size:.82rem;">
+                        <label class="form-label mb-1 fw-medium">Lead Forms Webhook URL</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control form-control-sm bg-light" readonly
+                                   value="{{ request.url_root }}webhooks/meta/leadgen" id="leadgenWebhookUrl">
+                            <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('leadgenWebhookUrl')">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                        <small class="text-muted">Subscribe to "leadgen" events for your Page.</small>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
 
             <div class="row g-3 mt-1">
                 <div class="col-md-4">
@@ -929,6 +996,35 @@
                             <label class="form-check-label" for="dndWeekends" style="font-size:.85rem;">Silent all day on weekends</label>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- A2P / SMS Compliance -->
+            <div class="mt-3 p-3" style="background:#fef2f2; border-radius:10px; border:1px solid #fecaca;">
+                <h6 class="fw-semibold mb-1"><i class="bi bi-shield-check me-2"></i>SMS Compliance (A2P / TCPA)</h6>
+                <p class="text-muted mb-3" style="font-size:.85rem;">
+                    Warren automatically handles STOP, START, and HELP keywords per TCPA requirements.
+                    Leads who text STOP are immediately unsubscribed and will not receive automated messages.
+                </p>
+
+                <div class="mb-3">
+                    <label class="form-label mb-1 fw-medium" style="font-size:.85rem;">Opt-out footer (appended to every outbound SMS)</label>
+                    <input type="text" class="form-control form-control-sm" name="sales_bot_sms_opt_out_footer"
+                           value="{{ brand.sales_bot_sms_opt_out_footer|default('Reply STOP to opt out') }}"
+                           placeholder="Reply STOP to opt out">
+                    <small class="text-muted">Leave blank to send messages without a footer (not recommended).</small>
+                </div>
+
+                <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <span class="badge bg-light text-dark border px-3 py-2" style="font-size:.82rem;">
+                        <i class="bi bi-check-circle text-success me-1"></i> STOP/UNSUBSCRIBE auto-handled
+                    </span>
+                    <span class="badge bg-light text-dark border px-3 py-2" style="font-size:.82rem;">
+                        <i class="bi bi-check-circle text-success me-1"></i> START re-subscribe supported
+                    </span>
+                    <span class="badge bg-light text-dark border px-3 py-2" style="font-size:.82rem;">
+                        <i class="bi bi-check-circle text-success me-1"></i> HELP auto-reply enabled
+                    </span>
                 </div>
             </div>
 
@@ -1347,5 +1443,101 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// ── Lead Assistant connection helpers ──
+function copyWebhookUrl(inputId) {
+    var input = document.getElementById(inputId);
+    if (!input) return;
+    navigator.clipboard.writeText(input.value).then(function() {
+        var btn = input.nextElementSibling;
+        var orig = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check"></i>';
+        setTimeout(function() { btn.innerHTML = orig; }, 1500);
+    });
+}
+
+function testOpenPhoneConnection() {
+    var btn = document.getElementById('testQuoBtn');
+    var badge = document.getElementById('quoStatusBadge');
+    var phoneDiv = document.getElementById('quoPhoneNumbers');
+    var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
+    badge.className = 'badge bg-secondary ms-2';
+    badge.textContent = 'Testing...';
+
+    fetch('/client/api/warren/test-openphone', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Test Connection';
+        if (data.ok) {
+            badge.className = 'badge bg-success ms-2';
+            badge.textContent = 'Connected';
+            if (data.phone_numbers && data.phone_numbers.length > 0) {
+                phoneDiv.innerHTML = '<span class="text-muted">Phone numbers: </span>' +
+                    data.phone_numbers.map(function(p) {
+                        return '<span class="badge bg-light text-dark border me-1">' + p + '</span>';
+                    }).join('');
+            }
+        } else {
+            badge.className = 'badge bg-danger ms-2';
+            badge.textContent = 'Failed';
+            phoneDiv.innerHTML = '<small class="text-danger">' + (data.error || 'Connection failed') + '</small>';
+        }
+    })
+    .catch(function() {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Test Connection';
+        badge.className = 'badge bg-danger ms-2';
+        badge.textContent = 'Error';
+    });
+}
+
+function testMessengerConnection() {
+    var btn = document.getElementById('testMessengerBtn');
+    var badge = document.getElementById('messengerStatusBadge');
+    var infoDiv = document.getElementById('messengerPageInfo');
+    var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
+    badge.className = 'badge bg-secondary ms-2';
+    badge.textContent = 'Testing...';
+
+    fetch('/client/api/warren/test-messenger', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Test Connection';
+        if (data.ok) {
+            badge.className = 'badge bg-success ms-2';
+            badge.textContent = 'Connected';
+            var info = '<span class="text-muted">Page: </span><strong>' + (data.page_name || 'Unknown') + '</strong>';
+            if (data.subscribed_fields && data.subscribed_fields.length > 0) {
+                info += ' <span class="text-muted ms-2">Subscriptions: </span>' +
+                    data.subscribed_fields.map(function(f) {
+                        return '<span class="badge bg-light text-dark border me-1">' + f + '</span>';
+                    }).join('');
+            }
+            infoDiv.innerHTML = info;
+        } else {
+            badge.className = 'badge bg-danger ms-2';
+            badge.textContent = 'Failed';
+            infoDiv.innerHTML = '<small class="text-danger">' + (data.error || 'Connection failed') + '</small>';
+        }
+    })
+    .catch(function() {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Test Connection';
+        badge.className = 'badge bg-danger ms-2';
+        badge.textContent = 'Error';
+    });
+}
 </script>
 {% endblock %}

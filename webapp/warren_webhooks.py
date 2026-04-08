@@ -100,6 +100,60 @@ def quo_sms_webhook(brand_slug):
     if not msg_body or not from_phone:
         return jsonify({"ok": True, "skipped": "empty_message"}), 200
 
+    # ── A2P opt-out / opt-in keyword detection ──
+    OPT_OUT_KEYWORDS = {"stop", "unsubscribe", "cancel", "end", "quit"}
+    OPT_IN_KEYWORDS = {"start", "unstop", "subscribe"}
+    HELP_KEYWORDS = {"help", "info"}
+    body_lower = msg_body.lower().strip()
+
+    if body_lower in OPT_OUT_KEYWORDS:
+        db.record_opt_out(brand_id, from_phone, keyword=msg_body.upper())
+        log.info("A2P opt-out recorded: brand=%s phone=%s keyword=%s", brand_id, from_phone, msg_body)
+        # Send required confirmation
+        from webapp.warren_sender import send_opt_out_confirmation
+        app = current_app._get_current_object()
+        def _send_optout():
+            with app.app_context():
+                send_opt_out_confirmation(db, brand, from_phone)
+        threading.Thread(target=_send_optout, daemon=True).start()
+        return jsonify({"ok": True, "action": "opted_out"}), 200
+
+    if body_lower in OPT_IN_KEYWORDS:
+        db.record_opt_in(brand_id, from_phone, source=msg_body.upper())
+        log.info("A2P opt-in recorded: brand=%s phone=%s keyword=%s", brand_id, from_phone, msg_body)
+        # Send opt-in confirmation
+        from webapp.warren_sender import send_opt_in_confirmation
+        app = current_app._get_current_object()
+        def _send_optin():
+            with app.app_context():
+                send_opt_in_confirmation(db, brand, from_phone)
+        threading.Thread(target=_send_optin, daemon=True).start()
+        return jsonify({"ok": True, "action": "opted_in"}), 200
+
+    if body_lower in HELP_KEYWORDS:
+        from webapp.warren_sender import send_help_reply
+        app = current_app._get_current_object()
+        def _send_help():
+            with app.app_context():
+                send_help_reply(db, brand, from_phone)
+        threading.Thread(target=_send_help, daemon=True).start()
+        return jsonify({"ok": True, "action": "help_sent"}), 200
+
+    # ── Check if this phone has opted out ──
+    if db.is_opted_out(brand_id, from_phone):
+        log.info("Inbound from opted-out phone %s, logging only (no auto-reply)", from_phone)
+        external_id = conversation_id or from_phone
+        thread_id = db.upsert_lead_thread(
+            brand_id, "sms", external_id,
+            data={"lead_phone": from_phone, "source": "openphone"},
+        )
+        db.add_lead_message(
+            thread_id, direction="inbound", role="lead", content=msg_body,
+            channel="sms", external_message_id=message_id,
+            metadata={"from": from_phone, "conversation_id": conversation_id, "opted_out": True},
+        )
+        return jsonify({"ok": True, "thread_id": thread_id, "auto_reply": False, "reason": "opted_out"}), 200
+
     # Upsert thread (keyed by channel + conversation ID)
     external_id = conversation_id or from_phone
     thread_id = db.upsert_lead_thread(

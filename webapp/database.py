@@ -175,6 +175,24 @@ class WebDB:
             CREATE INDEX IF NOT EXISTS idx_lead_events_thread_created
             ON lead_events(thread_id, created_at DESC, id DESC);
 
+            CREATE TABLE IF NOT EXISTS sms_consent (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                phone TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'opted_in',
+                opted_in_at TEXT DEFAULT (datetime('now')),
+                opted_out_at TEXT DEFAULT '',
+                opted_out_keyword TEXT DEFAULT '',
+                opted_in_source TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+                UNIQUE(brand_id, phone)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_sms_consent_brand_phone
+            ON sms_consent(brand_id, phone, status);
+
             CREATE TABLE IF NOT EXISTS reports (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand_id INTEGER NOT NULL,
@@ -1053,6 +1071,9 @@ class WebDB:
             ("sales_bot_dnd_end", "TEXT DEFAULT '08:00'"),
             ("sales_bot_dnd_timezone", "TEXT DEFAULT 'America/New_York'"),
             ("sales_bot_dnd_weekends", "INTEGER DEFAULT 0"),
+            ("sales_bot_sms_opt_out_footer", "TEXT DEFAULT 'Reply STOP to opt out'"),
+            ("sales_bot_objection_playbook", "TEXT DEFAULT ''"),
+            ("sales_bot_message_templates", "TEXT DEFAULT ''"),
             ("hiring_design", "TEXT DEFAULT '{}'"),
         ]
         for col_name, col_def in new_brand_cols:
@@ -1832,6 +1853,66 @@ class WebDB:
         row = conn.execute("SELECT * FROM lead_quotes WHERE thread_id = ?", (thread_id,)).fetchone()
         conn.close()
         return dict(row) if row else None
+
+    # ── SMS Consent / A2P Opt-Out ──
+
+    def get_sms_consent(self, brand_id, phone):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM sms_consent WHERE brand_id = ? AND phone = ?",
+            (brand_id, phone),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def is_opted_out(self, brand_id, phone):
+        record = self.get_sms_consent(brand_id, phone)
+        if not record:
+            return False
+        return record.get("status") == "opted_out"
+
+    def record_opt_out(self, brand_id, phone, keyword="STOP"):
+        conn = self._conn()
+        conn.execute(
+            """
+            INSERT INTO sms_consent (brand_id, phone, status, opted_out_at, opted_out_keyword, updated_at)
+            VALUES (?, ?, 'opted_out', datetime('now'), ?, datetime('now'))
+            ON CONFLICT(brand_id, phone) DO UPDATE SET
+                status = 'opted_out',
+                opted_out_at = datetime('now'),
+                opted_out_keyword = excluded.opted_out_keyword,
+                updated_at = datetime('now')
+            """,
+            (brand_id, phone, keyword.upper()),
+        )
+        conn.commit()
+        conn.close()
+
+    def record_opt_in(self, brand_id, phone, source="START"):
+        conn = self._conn()
+        conn.execute(
+            """
+            INSERT INTO sms_consent (brand_id, phone, status, opted_in_at, opted_in_source, updated_at)
+            VALUES (?, ?, 'opted_in', datetime('now'), ?, datetime('now'))
+            ON CONFLICT(brand_id, phone) DO UPDATE SET
+                status = 'opted_in',
+                opted_in_at = datetime('now'),
+                opted_in_source = excluded.opted_in_source,
+                updated_at = datetime('now')
+            """,
+            (brand_id, phone, source),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_opted_out_phones(self, brand_id):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT phone, opted_out_at FROM sms_consent WHERE brand_id = ? AND status = 'opted_out' ORDER BY opted_out_at DESC",
+            (brand_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
 
     # ── Reports ──
 

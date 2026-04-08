@@ -38,6 +38,8 @@ def _build_system_prompt(brand):
     example_language = brand.get("sales_bot_example_language", "") or ""
     disallowed = brand.get("sales_bot_disallowed_language", "") or ""
     handoff_rules = brand.get("sales_bot_handoff_rules", "") or ""
+    objection_playbook = brand.get("sales_bot_objection_playbook", "") or ""
+    message_templates = brand.get("sales_bot_message_templates", "") or ""
     quote_mode = brand.get("sales_bot_quote_mode", "hybrid") or "hybrid"
     avg_price = brand.get("crm_avg_service_price", 0) or 0
     business_hours = brand.get("sales_bot_business_hours", "") or ""
@@ -85,6 +87,12 @@ QUOTING MODE: {quote_mode}
 
     if disallowed:
         prompt += f"\n\nNEVER SAY (language to avoid):\n{disallowed}"
+
+    if objection_playbook:
+        prompt += f"\n\nOBJECTION HANDLING (use these responses when a lead pushes back):\n{objection_playbook}"
+
+    if message_templates:
+        prompt += f"\n\nMESSAGE TEMPLATES (use as starting points, personalize based on context):\n{message_templates}"
 
     prompt += """
 

@@ -559,5 +559,206 @@ class WarrenNurtureCadenceTests(unittest.TestCase):
             self.assertFalse(_is_dnd(brand))
 
 
+class WarrenA2PConsentTests(unittest.TestCase):
+    """Test A2P opt-out/opt-in consent tracking."""
+
+    def setUp(self):
+        self.app = create_app()
+        self.app.config["TESTING"] = True
+        self.db = self.app.db
+
+        with self.app.app_context():
+            conn = self.db._conn()
+            brand_row = conn.execute(
+                "SELECT id FROM brands WHERE slug = 'warren_a2p_test'"
+            ).fetchone()
+            if brand_row:
+                self.brand_id = brand_row["id"]
+            else:
+                cur = conn.execute(
+                    "INSERT INTO brands (slug, display_name, industry, sales_bot_enabled) VALUES (?, ?, ?, ?)",
+                    ("warren_a2p_test", "A2P Test Co", "plumbing", 1),
+                )
+                self.brand_id = cur.lastrowid
+            conn.commit()
+
+            # Clean up old consent records
+            conn.execute("DELETE FROM sms_consent WHERE brand_id = ?", (self.brand_id,))
+            conn.commit()
+            conn.close()
+
+    def test_no_consent_record_not_opted_out(self):
+        with self.app.app_context():
+            self.assertFalse(self.db.is_opted_out(self.brand_id, "+15551234567"))
+
+    def test_opt_out_then_check(self):
+        with self.app.app_context():
+            self.db.record_opt_out(self.brand_id, "+15551234567", keyword="STOP")
+            self.assertTrue(self.db.is_opted_out(self.brand_id, "+15551234567"))
+
+    def test_opt_out_then_opt_in(self):
+        with self.app.app_context():
+            self.db.record_opt_out(self.brand_id, "+15559999999", keyword="STOP")
+            self.assertTrue(self.db.is_opted_out(self.brand_id, "+15559999999"))
+
+            self.db.record_opt_in(self.brand_id, "+15559999999", source="START")
+            self.assertFalse(self.db.is_opted_out(self.brand_id, "+15559999999"))
+
+    def test_opt_out_per_brand(self):
+        with self.app.app_context():
+            self.db.record_opt_out(self.brand_id, "+15550001111", keyword="STOP")
+            self.assertTrue(self.db.is_opted_out(self.brand_id, "+15550001111"))
+            # Different brand should not be opted out
+            self.assertFalse(self.db.is_opted_out(self.brand_id + 9999, "+15550001111"))
+
+    def test_get_opted_out_phones(self):
+        with self.app.app_context():
+            self.db.record_opt_out(self.brand_id, "+15551111111", keyword="STOP")
+            self.db.record_opt_out(self.brand_id, "+15552222222", keyword="UNSUBSCRIBE")
+            phones = self.db.get_opted_out_phones(self.brand_id)
+            opted_numbers = [p["phone"] for p in phones]
+            self.assertIn("+15551111111", opted_numbers)
+            self.assertIn("+15552222222", opted_numbers)
+
+    def test_consent_record_details(self):
+        with self.app.app_context():
+            self.db.record_opt_out(self.brand_id, "+15553333333", keyword="CANCEL")
+            record = self.db.get_sms_consent(self.brand_id, "+15553333333")
+            self.assertIsNotNone(record)
+            self.assertEqual(record["status"], "opted_out")
+            self.assertEqual(record["opted_out_keyword"], "CANCEL")
+
+
+class WarrenWebhookSTOPTests(unittest.TestCase):
+    """Test that STOP/START keywords are handled at the webhook level."""
+
+    def setUp(self):
+        self.app = create_app()
+        self.app.config["TESTING"] = True
+        self.test_client = self.app.test_client()
+        self.db = self.app.db
+
+        with self.app.app_context():
+            conn = self.db._conn()
+            brand_row = conn.execute(
+                "SELECT id FROM brands WHERE slug = 'warren_stop_test'"
+            ).fetchone()
+            if brand_row:
+                self.brand_id = brand_row["id"]
+            else:
+                cur = conn.execute(
+                    "INSERT INTO brands (slug, display_name, industry, sales_bot_enabled) VALUES (?, ?, ?, ?)",
+                    ("warren_stop_test", "STOP Test Co", "plumbing", 1),
+                )
+                self.brand_id = cur.lastrowid
+            conn.commit()
+
+            # Clean up
+            conn.execute("DELETE FROM sms_consent WHERE brand_id = ?", (self.brand_id,))
+            conn.commit()
+            conn.close()
+
+    @patch("webapp.quo_sms.send_sms")
+    def test_stop_keyword_opts_out(self, mock_send):
+        mock_send.return_value = (True, {})
+        with self.app.app_context():
+            payload = {
+                "type": "message.received",
+                "data": {
+                    "object": {
+                        "id": "msg_stop1",
+                        "from": "+15557778888",
+                        "body": "STOP",
+                        "direction": "incoming",
+                    }
+                },
+            }
+            resp = self.test_client.post(
+                "/webhooks/quo/sms/warren_stop_test",
+                data=json.dumps(payload),
+                content_type="application/json",
+            )
+            self.assertEqual(resp.status_code, 200)
+            data = resp.get_json()
+            self.assertEqual(data.get("action"), "opted_out")
+
+            # Verify consent record
+            self.assertTrue(self.db.is_opted_out(self.brand_id, "+15557778888"))
+
+    @patch("webapp.quo_sms.send_sms")
+    def test_start_keyword_opts_in(self, mock_send):
+        mock_send.return_value = (True, {})
+        with self.app.app_context():
+            # First opt out
+            self.db.record_opt_out(self.brand_id, "+15556667777", keyword="STOP")
+            self.assertTrue(self.db.is_opted_out(self.brand_id, "+15556667777"))
+
+            # Then send START
+            payload = {
+                "type": "message.received",
+                "data": {
+                    "object": {
+                        "id": "msg_start1",
+                        "from": "+15556667777",
+                        "body": "start",
+                        "direction": "incoming",
+                    }
+                },
+            }
+            resp = self.test_client.post(
+                "/webhooks/quo/sms/warren_stop_test",
+                data=json.dumps(payload),
+                content_type="application/json",
+            )
+            self.assertEqual(resp.status_code, 200)
+            data = resp.get_json()
+            self.assertEqual(data.get("action"), "opted_in")
+
+            # Verify re-subscribed
+            self.assertFalse(self.db.is_opted_out(self.brand_id, "+15556667777"))
+
+
+class WarrenBrainPromptTests(unittest.TestCase):
+    """Test that objection playbook and templates are wired into the system prompt."""
+
+    def test_objection_playbook_in_prompt(self):
+        from webapp.warren_brain import _build_system_prompt
+
+        brand = {
+            "display_name": "Test Co",
+            "industry": "plumbing",
+            "sales_bot_reply_tone": "friendly",
+            "sales_bot_objection_playbook": "TOO EXPENSIVE: We offer financing options.",
+        }
+        prompt = _build_system_prompt(brand)
+        self.assertIn("OBJECTION HANDLING", prompt)
+        self.assertIn("TOO EXPENSIVE", prompt)
+
+    def test_message_templates_in_prompt(self):
+        from webapp.warren_brain import _build_system_prompt
+
+        brand = {
+            "display_name": "Test Co",
+            "industry": "plumbing",
+            "sales_bot_reply_tone": "friendly",
+            "sales_bot_message_templates": "FIRST CONTACT: Hey, thanks for reaching out!",
+        }
+        prompt = _build_system_prompt(brand)
+        self.assertIn("MESSAGE TEMPLATES", prompt)
+        self.assertIn("FIRST CONTACT", prompt)
+
+    def test_no_objection_no_section(self):
+        from webapp.warren_brain import _build_system_prompt
+
+        brand = {
+            "display_name": "Test Co",
+            "industry": "plumbing",
+            "sales_bot_reply_tone": "friendly",
+        }
+        prompt = _build_system_prompt(brand)
+        self.assertNotIn("OBJECTION HANDLING", prompt)
+        self.assertNotIn("MESSAGE TEMPLATES", prompt)
+
+
 if __name__ == "__main__":
     unittest.main()

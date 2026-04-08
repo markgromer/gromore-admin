@@ -3999,8 +3999,112 @@ def client_save_leads_assistant_settings():
         tz = "America/New_York"
     db.update_brand_text_field(brand_id, "sales_bot_dnd_timezone", tz)
 
+    # ── A2P / SMS Compliance ──
+    db.update_brand_text_field(
+        brand_id, "sales_bot_sms_opt_out_footer",
+        (request.form.get("sales_bot_sms_opt_out_footer") or "").strip()[:200],
+    )
+
     flash("Lead assistant settings saved.", "success")
     return redirect(url_for("client.client_settings"))
+
+
+# ── Warren Connection Test Endpoints ──
+
+@client_bp.route("/api/warren/test-openphone", methods=["POST"])
+@client_login_required
+def client_test_openphone():
+    """Test OpenPhone/Quo API connection and list phone numbers."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"ok": False, "error": "Brand not found"}), 404
+
+    api_key = (brand.get("quo_api_key") or "").strip()
+    if not api_key:
+        return jsonify({"ok": False, "error": "No API key configured"})
+
+    from webapp.quo_sms import test_connection, get_phone_numbers
+
+    ok, detail = test_connection(api_key)
+    if not ok:
+        return jsonify({"ok": False, "error": str(detail)})
+
+    # Get phone numbers
+    phone_numbers = []
+    try:
+        nums = get_phone_numbers(api_key)
+        if isinstance(nums, list):
+            phone_numbers = [n.get("phoneNumber", "") for n in nums if n.get("phoneNumber")]
+    except Exception:
+        pass
+
+    return jsonify({"ok": True, "phone_numbers": phone_numbers})
+
+
+@client_bp.route("/api/warren/test-messenger", methods=["POST"])
+@client_login_required
+def client_test_messenger():
+    """Test Meta Messenger connection for the brand's Facebook Page."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"ok": False, "error": "Brand not found"}), 404
+
+    page_id = (brand.get("facebook_page_id") or "").strip()
+    if not page_id:
+        return jsonify({"ok": False, "error": "No Facebook Page ID configured"})
+
+    # Get page access token
+    conn_data = db.get_brand_connections(brand_id).get("meta")
+    if not conn_data or conn_data.get("status") != "connected":
+        return jsonify({"ok": False, "error": "Meta not connected. Connect Meta in the Connections section first."})
+
+    from webapp.api_bridge import _get_meta_token, _get_page_access_token
+    import requests as _req
+
+    user_token = _get_meta_token(db, brand_id, conn_data)
+    if not user_token:
+        return jsonify({"ok": False, "error": "Could not get a valid Meta access token. Try reconnecting Meta."})
+
+    page_token = _get_page_access_token(page_id, user_token)
+    if not page_token:
+        return jsonify({"ok": False, "error": "Could not get Page access token. Make sure you granted page permissions."})
+
+    # Test: get page info
+    try:
+        resp = _req.get(
+            f"https://graph.facebook.com/v21.0/{page_id}",
+            params={"access_token": page_token, "fields": "name,id"},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return jsonify({"ok": False, "error": f"Page API returned {resp.status_code}"})
+        page_info = resp.json()
+
+        # Check subscribed fields
+        sub_resp = _req.get(
+            f"https://graph.facebook.com/v21.0/{page_id}/subscribed_apps",
+            params={"access_token": page_token},
+            timeout=10,
+        )
+        subscribed_fields = []
+        if sub_resp.status_code == 200:
+            sub_data = sub_resp.json().get("data", [])
+            for app in sub_data:
+                subscribed_fields.extend(app.get("subscribed_fields", []))
+
+        return jsonify({
+            "ok": True,
+            "page_name": page_info.get("name", ""),
+            "page_id": page_info.get("id", ""),
+            "subscribed_fields": subscribed_fields,
+        })
+
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)[:200]})
 
 
 @client_bp.route("/api/drive/diagnose")
@@ -5640,6 +5744,16 @@ def client_save_lead_assistant_profile():
         brand_id,
         "sales_bot_handoff_rules",
         (request.form.get("sales_bot_handoff_rules") or "").strip()[:3000],
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_objection_playbook",
+        (request.form.get("sales_bot_objection_playbook") or "").strip()[:4000],
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_message_templates",
+        (request.form.get("sales_bot_message_templates") or "").strip()[:4000],
     )
 
     flash("Lead assistant profile saved.", "success")

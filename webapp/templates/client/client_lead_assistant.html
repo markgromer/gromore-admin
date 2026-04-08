@@ -213,8 +213,55 @@ Example:
         </div>
     </div>
 
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="la-card h-100">
+                <h5>Objection Playbook</h5>
+                <p class="section-copy">When a lead pushes back on price, timing, or trust, what should Warren say? Write the actual responses you want per objection.</p>
+                <textarea class="form-control la-textarea" name="sales_bot_objection_playbook" rows="12" placeholder="Example:
+TOO EXPENSIVE:
+- I get it, nobody wants to overpay. Our pricing reflects licensed techs and a 1-year warranty. Most customers tell us the peace of mind is worth it.
+
+NEED TO THINK ABOUT IT:
+- Totally fair. I'll follow up tomorrow. If anything changes or you have more questions, just text back.
+
+ALREADY GOT ANOTHER QUOTE:
+- No problem. If you want, share the other quote and I can walk you through what's included vs what's not. Sometimes the details make the difference.
+
+NOT READY YET:
+- No rush at all. I'll check back in a week. Just text back when you're ready and we'll pick right up.
+
+BAD REVIEWS / TRUST:
+- Fair question. We've done over 500 jobs in the area. Happy to share recent reviews or connect you with a past customer in your neighborhood.">{{ brand.sales_bot_objection_playbook or '' }}</textarea>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="la-card h-100">
+                <h5>Message Templates</h5>
+                <p class="section-copy">Pre-written message templates for common scenarios. Warren will use these as a starting point and personalize based on context.</p>
+                <textarea class="form-control la-textarea" name="sales_bot_message_templates" rows="12" placeholder="Example:
+FIRST CONTACT:
+- Hey [name], thanks for reaching out! I'm [brand] - what can I help you with today?
+
+QUOTE FOLLOW-UP:
+- Hi [name], just checking in on that estimate we sent over. Any questions I can answer?
+
+NO RESPONSE (1ST):
+- Hey [name], wanted to make sure my last message didn't get buried. Still interested in getting that taken care of?
+
+NO RESPONSE (2ND):
+- Hi [name], last check-in from me. If the timing isn't right, no worries at all. Just text back whenever you're ready.
+
+AFTER BOOKING:
+- Great, you're all set for [date]. We'll text you a reminder the day before. Let me know if anything changes.
+
+WIN-BACK (LOST LEAD):
+- Hey [name], we chatted a while back about [service]. Just wanted to see if that's still on your list or if I can help with anything else.">{{ brand.sales_bot_message_templates or '' }}</textarea>
+            </div>
+        </div>
+    </div>
+
     <div class="la-card">
-        <h5>How To Use This Page</h5>
         <p class="section-copy">The goal is not more copy. The goal is a quoting brain that behaves like your best sales rep.</p>
         <div class="la-hint">
             Put real numbers in the service menu. Put real boundaries in guardrails. Put real message examples in example language. If this page stays vague, the assistant will stay vague.

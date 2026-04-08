@@ -210,6 +210,13 @@ def _send_nurture(db, brand, thread, rule):
     brand_id = brand["id"]
     channel = thread.get("channel", "sms")
 
+    # A2P: skip opted-out leads
+    if channel == "sms":
+        lead_phone = (thread.get("lead_phone") or "").strip()
+        if lead_phone and db.is_opted_out(brand_id, lead_phone):
+            log.info("Skipping nurture for opted-out phone %s thread %s", lead_phone, thread_id)
+            return False
+
     # Add a system message to guide Warren's follow-up
     db.add_lead_message(
         thread_id,

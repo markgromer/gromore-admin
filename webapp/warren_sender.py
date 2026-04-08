@@ -41,6 +41,22 @@ def send_reply(db, brand, thread_id, message_text, channel="sms", recipient_id=N
             log.info("DND active for brand %s - message held for thread %s", brand.get("id"), thread_id)
             return False, "dnd_held"
 
+    # A2P opt-out check for SMS (blocks automated sends, warns on manual)
+    if channel == "sms":
+        thread = db.get_lead_thread(thread_id)
+        to_phone = (thread.get("lead_phone") or "") if thread else ""
+        if to_phone and db.is_opted_out(brand.get("id"), to_phone):
+            if not skip_dnd:
+                log.info("Blocked SMS to opted-out phone %s for brand %s", to_phone, brand.get("id"))
+                db.add_lead_message(
+                    thread_id, "outbound", "assistant", message_text,
+                    channel=channel,
+                    metadata_json=json.dumps({"blocked_opted_out": True}),
+                )
+                return False, "opted_out"
+            else:
+                log.warning("Manual send to opted-out phone %s - allowed but flagged", to_phone)
+
     if channel == "sms":
         return _send_sms(db, brand, thread_id, message_text)
     elif channel == "messenger":
@@ -83,7 +99,14 @@ def _send_sms(db, brand, thread_id, message_text):
     if not to_phone:
         return False, "No phone number found for lead"
 
-    success, detail = send_sms(api_key, from_number, to_phone, message_text)
+    # Append opt-out footer for A2P compliance
+    footer = (brand.get("sales_bot_sms_opt_out_footer") or "").strip()
+    if footer:
+        full_text = f"{message_text}\n\n{footer}"
+    else:
+        full_text = message_text
+
+    success, detail = send_sms(api_key, from_number, to_phone, full_text)
 
     # Log delivery event
     db.add_lead_event(
@@ -219,3 +242,61 @@ def send_manual_reply(db, brand_id, thread_id, message_text, channel=None):
                                   page_id=page_id, skip_dnd=True)
 
     return success, detail
+
+
+# ─────────────────────────────────────────────
+# A2P Compliance Replies (STOP / START / HELP)
+# ─────────────────────────────────────────────
+
+def _send_raw_sms(brand, to_phone, text):
+    """Send an SMS directly without thread context or opt-out checks.
+    Used only for STOP/START/HELP compliance responses.
+    """
+    from webapp.quo_sms import send_sms
+
+    api_key = (brand.get("quo_api_key") or "").strip()
+    from_number = (brand.get("quo_phone_number") or "").strip()
+    if not api_key or not from_number:
+        log.warning("Cannot send compliance SMS - Quo not configured for brand %s", brand.get("id"))
+        return False, "not_configured"
+    return send_sms(api_key, from_number, to_phone, text)
+
+
+def send_opt_out_confirmation(db, brand, phone):
+    """TCPA-required: confirm the user has been unsubscribed."""
+    brand_name = brand.get("name", "")
+    msg = f"You have been unsubscribed from {brand_name} messages. Reply START to re-subscribe."
+    ok, detail = _send_raw_sms(brand, phone, msg)
+    if ok:
+        log.info("Opt-out confirmation sent to %s for brand %s", phone, brand.get("id"))
+    else:
+        log.warning("Failed to send opt-out confirmation to %s: %s", phone, detail)
+    return ok
+
+
+def send_opt_in_confirmation(db, brand, phone):
+    """Confirm the user has re-subscribed."""
+    brand_name = brand.get("name", "")
+    msg = f"You have been re-subscribed to {brand_name} messages. Reply STOP to opt out."
+    ok, detail = _send_raw_sms(brand, phone, msg)
+    if ok:
+        log.info("Opt-in confirmation sent to %s for brand %s", phone, brand.get("id"))
+    else:
+        log.warning("Failed to send opt-in confirmation to %s: %s", phone, detail)
+    return ok
+
+
+def send_help_reply(db, brand, phone):
+    """TCPA-required: respond to HELP with contact info."""
+    brand_name = brand.get("name", "")
+    contact_phone = (brand.get("phone") or brand.get("business_phone") or "").strip()
+    if contact_phone:
+        msg = f"{brand_name}: For help, call {contact_phone}. Msg frequency varies. Reply STOP to opt out."
+    else:
+        msg = f"{brand_name}: Msg frequency varies. Msg & data rates may apply. Reply STOP to opt out."
+    ok, detail = _send_raw_sms(brand, phone, msg)
+    if ok:
+        log.info("HELP reply sent to %s for brand %s", phone, brand.get("id"))
+    else:
+        log.warning("Failed to send HELP reply to %s: %s", phone, detail)
+    return ok
