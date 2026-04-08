@@ -842,6 +842,9 @@
 
             <div class="mt-3 d-flex gap-2 align-items-center flex-wrap">
                 <button class="btn btn-primary" type="submit">Save Lead Assistant Settings</button>
+                <a href="{{ url_for('client.client_lead_assistant') }}" class="btn btn-outline-dark">
+                    <i class="bi bi-box-arrow-up-right me-1"></i> Open Full Workspace
+                </a>
                 {% if brand.quo_api_key %}
                 <span class="badge bg-success rounded-pill px-3 py-2">
                     <i class="bi bi-check-circle me-1"></i> Quo key configured

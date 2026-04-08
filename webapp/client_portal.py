@@ -481,6 +481,8 @@ _ENDPOINT_FEATURE_MAP = {
     "client_delete_logo_variant":  "my_business",
     "client_crm":                  "crm",
     "client_crm_data":             "crm",
+    "client_lead_assistant":       "crm",
+    "client_save_lead_assistant_profile": "crm",
     "client_gbp":                  "gbp",
     "client_gbp_audit":            "gbp",
     "client_post_scheduler":       "post_scheduler",
@@ -5535,6 +5537,74 @@ def client_crm():
         crm_type=crm_type,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
+
+
+@client_bp.route("/lead-assistant")
+@client_login_required
+def client_lead_assistant():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    try:
+        chatbot_channels = set(json.loads(brand.get("sales_bot_channels") or "[]"))
+    except Exception:
+        chatbot_channels = set()
+
+    return render_template(
+        "client_lead_assistant.html",
+        brand=brand,
+        chatbot_channels=chatbot_channels,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/lead-assistant", methods=["POST"])
+@client_login_required
+def client_save_lead_assistant_profile():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    db.update_brand_number_field(
+        brand_id,
+        "crm_avg_service_price",
+        request.form.get("crm_avg_service_price") or 0,
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_service_menu",
+        (request.form.get("sales_bot_service_menu") or "").strip()[:4000],
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_pricing_notes",
+        (request.form.get("sales_bot_pricing_notes") or "").strip()[:4000],
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_guardrails",
+        (request.form.get("sales_bot_guardrails") or "").strip()[:4000],
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_example_language",
+        (request.form.get("sales_bot_example_language") or "").strip()[:4000],
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_disallowed_language",
+        (request.form.get("sales_bot_disallowed_language") or "").strip()[:3000],
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_handoff_rules",
+        (request.form.get("sales_bot_handoff_rules") or "").strip()[:3000],
+    )
+
+    flash("Lead assistant profile saved.", "success")
+    return redirect(url_for("client.client_lead_assistant"))
 
 
 @client_bp.route("/crm/data")

@@ -155,6 +155,13 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
                 "Password123",
                 "Owner User",
             )
+            conn = self.app.db._conn()
+            conn.execute(
+                "INSERT INTO beta_testers (name, email, status, brand_id, client_user_id) VALUES (?, ?, 'approved', ?, ?)",
+                ("Owner User", f"beta-{uuid.uuid4().hex[:8]}@example.com", self.brand_id, self.user_id),
+            )
+            conn.commit()
+            conn.close()
 
         with self.client.session_transaction() as session:
             session["client_user_id"] = self.user_id
@@ -214,6 +221,39 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertEqual(brand["sales_bot_quo_webhook_secret"], "quo-secret")
         self.assertEqual(brand["sales_bot_meta_webhook_secret"], "meta-secret")
         self.assertEqual(brand["sales_bot_channels"], '["sms", "lead_forms", "calls"]')
+
+    def test_client_can_open_and_save_lead_assistant_workspace(self):
+        response = self.client.get("/client/lead-assistant")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Lead Assistant Workspace", response.data)
+
+        save_response = self.client.post(
+            "/client/lead-assistant",
+            data={
+                "crm_avg_service_price": "245",
+                "sales_bot_service_menu": "Weekly lawn service: $95-$145\nFirst cleanup: starts at $175",
+                "sales_bot_pricing_notes": "Protect margin and use a photo request before tightening quotes.",
+                "sales_bot_guardrails": "Never promise same-day service without confirmation.",
+                "sales_bot_example_language": "Most jobs like this land between $125 and $175.",
+                "sales_bot_disallowed_language": "Do not say guaranteed lowest price.",
+                "sales_bot_handoff_rules": "Escalate angry leads and commercial jobs.",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(save_response.status_code, 302)
+        self.assertTrue(save_response.headers["Location"].endswith("/client/lead-assistant"))
+
+        with self.app.app_context():
+            brand = self.app.db.get_brand(self.brand_id)
+
+        self.assertEqual(brand["crm_avg_service_price"], 245.0)
+        self.assertEqual(brand["sales_bot_service_menu"], "Weekly lawn service: $95-$145\nFirst cleanup: starts at $175")
+        self.assertEqual(brand["sales_bot_pricing_notes"], "Protect margin and use a photo request before tightening quotes.")
+        self.assertEqual(brand["sales_bot_guardrails"], "Never promise same-day service without confirmation.")
+        self.assertEqual(brand["sales_bot_example_language"], "Most jobs like this land between $125 and $175.")
+        self.assertEqual(brand["sales_bot_disallowed_language"], "Do not say guaranteed lowest price.")
+        self.assertEqual(brand["sales_bot_handoff_rules"], "Escalate angry leads and commercial jobs.")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,236 @@
+{% extends "client_base.html" %}
+{% block title %}Lead Assistant{% endblock %}
+
+{% block content %}
+<style>
+    .lead-assistant-hero {
+        background: linear-gradient(135deg, #0f172a 0%, #155e75 52%, #14b8a6 100%);
+        border-radius: 18px;
+        padding: 2rem;
+        margin-bottom: 1.5rem;
+        color: #fff;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, .18);
+    }
+    .lead-assistant-hero h3 {
+        font-weight: 800;
+        margin-bottom: .35rem;
+        color: #fff !important;
+    }
+    .lead-assistant-hero p {
+        margin: 0;
+        opacity: .82;
+        max-width: 760px;
+        font-size: .92rem;
+    }
+    .la-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .45rem .75rem;
+        border-radius: 999px;
+        font-size: .75rem;
+        font-weight: 700;
+        background: rgba(255,255,255,.12);
+        color: #fff;
+        border: 1px solid rgba(255,255,255,.12);
+    }
+    .la-card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 1.4rem;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, .05);
+        margin-bottom: 1.25rem;
+    }
+    .la-card h5 {
+        font-weight: 800;
+        font-size: .98rem;
+        margin-bottom: .35rem;
+    }
+    .la-card p.section-copy {
+        color: #64748b;
+        font-size: .84rem;
+        margin-bottom: 1rem;
+    }
+    .la-kpi {
+        border-radius: 14px;
+        border: 1px solid #dbeafe;
+        background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+        padding: 1rem 1.1rem;
+        height: 100%;
+    }
+    .la-kpi .value {
+        font-size: 1.4rem;
+        font-weight: 800;
+        color: #0f172a;
+        line-height: 1.1;
+    }
+    .la-kpi .label {
+        font-size: .75rem;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: #64748b;
+        font-weight: 700;
+        margin-top: .3rem;
+    }
+    .la-hint {
+        background: #f8fafc;
+        border: 1px dashed #cbd5e1;
+        border-radius: 12px;
+        padding: .9rem 1rem;
+        font-size: .82rem;
+        color: #475569;
+    }
+    .la-textarea {
+        min-height: 180px;
+    }
+</style>
+
+<div class="lead-assistant-hero">
+    <div class="d-flex flex-wrap justify-content-between gap-3 align-items-start">
+        <div>
+            <h3><i class="bi bi-chat-dots me-2"></i>Lead Assistant Workspace</h3>
+            <p>This is the operating profile Warren should use when quoting and nurturing leads. Set the pricing posture, hard boundaries, escalation rules, and the exact kind of language that should sound like your brand.</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2 justify-content-end">
+            <span class="la-chip"><i class="bi bi-cash-stack"></i> {{ (brand.sales_bot_quote_mode or 'hybrid')|replace('_', ' ')|title }}</span>
+            {% if 'sms' in chatbot_channels %}<span class="la-chip"><i class="bi bi-phone"></i> SMS</span>{% endif %}
+            {% if 'lead_forms' in chatbot_channels %}<span class="la-chip"><i class="bi bi-facebook"></i> Lead Forms</span>{% endif %}
+            {% if 'messenger' in chatbot_channels %}<span class="la-chip"><i class="bi bi-messenger"></i> Messenger</span>{% endif %}
+            {% if 'calls' in chatbot_channels %}<span class="la-chip"><i class="bi bi-telephone"></i> Calls</span>{% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="la-kpi">
+            <div class="value">${{ '%.0f'|format(brand.crm_avg_service_price or 0) }}</div>
+            <div class="label">Average Service Price</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="la-kpi">
+            <div class="value">{{ 'On' if brand.sales_bot_enabled else 'Off' }}</div>
+            <div class="label">Assistant Status</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="la-kpi">
+            <div class="value">{{ chatbot_channels|length }}</div>
+            <div class="label">Configured Channels</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="la-kpi">
+            <div class="value">{{ 'Yes' if brand.sales_bot_auto_push_crm else 'No' }}</div>
+            <div class="label">Push To CRM</div>
+        </div>
+    </div>
+</div>
+
+<form method="POST" action="{{ url_for('client.client_save_lead_assistant_profile') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="la-card">
+        <div class="d-flex justify-content-between gap-3 flex-wrap align-items-start">
+            <div>
+                <h5>Pricing Profile</h5>
+                <p class="section-copy">Give Warren enough pricing structure to qualify and quote without freelancing. This is where you define ranges, what affects price, and how aggressive or conservative it should be.</p>
+            </div>
+            <a href="{{ url_for('client.client_settings') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-sliders me-1"></i> Back to Connections
+            </a>
+        </div>
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label fw-semibold">Average Service Price</label>
+                <input type="number" step="0.01" min="0" class="form-control" name="crm_avg_service_price" value="{{ brand.crm_avg_service_price or 0 }}">
+                <small class="text-muted">Used as a baseline anchor when the lead asks for a fast ballpark.</small>
+            </div>
+            <div class="col-md-8">
+                <label class="form-label fw-semibold">Service Menu And Quote Anchors</label>
+                <textarea class="form-control la-textarea" name="sales_bot_service_menu" rows="8" placeholder="List common services, starting prices, common upsells, and what moves the price up or down.
+
+Example:
+- Weekly lawn service: $95-$145 for standard suburban lots
+- First cleanup visit: starts at $175
+- Heavy overgrowth, pet waste, hauling, and same-day scheduling increase price">{{ brand.sales_bot_service_menu or '' }}</textarea>
+            </div>
+            <div class="col-12">
+                <label class="form-label fw-semibold">Pricing Strategy Notes</label>
+                <textarea class="form-control" name="sales_bot_pricing_notes" rows="6" placeholder="Explain how the assistant should think about pricing. Example: We do not race to the bottom. Quote confidently, protect margin, and only offer discounts when the lead is high intent or bundling recurring service.">{{ brand.sales_bot_pricing_notes or '' }}</textarea>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="la-card h-100">
+                <h5>Guardrails</h5>
+                <p class="section-copy">Set hard rules so Warren does not overpromise, invent offers, or quote the wrong kind of job.</p>
+                <textarea class="form-control la-textarea" name="sales_bot_guardrails" rows="10" placeholder="Example:
+- Never guarantee a final price without photos for overgrown jobs
+- Never promise same-day service unless the calendar confirms it
+- Never quote outside our service area
+- If a lead asks for commercial work, collect details and hand off to a human">{{ brand.sales_bot_guardrails or '' }}</textarea>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="la-card h-100">
+                <h5>Human Handoff Rules</h5>
+                <p class="section-copy">Define when the assistant should stop acting like a closer and escalate to a human immediately.</p>
+                <textarea class="form-control la-textarea" name="sales_bot_handoff_rules" rows="10" placeholder="Example:
+- Angry lead or complaint
+- Commercial opportunity over $2,000
+- Anything involving refunds, cancellations, or legal risk
+- The lead asks for a manager, owner, or custom contract">{{ brand.sales_bot_handoff_rules or '' }}</textarea>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="la-card h-100">
+                <h5>Example Language</h5>
+                <p class="section-copy">Write the kind of lines you actually want Warren to sound like. This matters more than abstract tone labels.</p>
+                <textarea class="form-control la-textarea" name="sales_bot_example_language" rows="10" placeholder="Example:
+- We can usually give you a clean ballpark right away, then lock in the final quote once we see the property.
+- Based on what you described, most jobs like this land between $125 and $175.
+- If you want, send a couple of photos and I can tighten that range.">{{ brand.sales_bot_example_language or '' }}</textarea>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="la-card h-100">
+                <h5>Language To Avoid</h5>
+                <p class="section-copy">Call out words, sales tactics, or promises that would make the assistant sound off-brand or reckless.</p>
+                <textarea class="form-control la-textarea" name="sales_bot_disallowed_language" rows="10" placeholder="Example:
+- Do not say 'guaranteed lowest price'
+- Do not use corporate jargon
+- Do not sound robotic or overeager
+- Do not use pressure phrases like 'act now' unless a real deadline exists">{{ brand.sales_bot_disallowed_language or '' }}</textarea>
+            </div>
+        </div>
+    </div>
+
+    <div class="la-card">
+        <h5>How To Use This Page</h5>
+        <p class="section-copy">The goal is not more copy. The goal is a quoting brain that behaves like your best sales rep.</p>
+        <div class="la-hint">
+            Put real numbers in the service menu. Put real boundaries in guardrails. Put real message examples in example language. If this page stays vague, the assistant will stay vague.
+        </div>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-4">
+        <button class="btn btn-primary btn-lg" type="submit">
+            <i class="bi bi-save me-1"></i> Save Lead Assistant Profile
+        </button>
+        <a href="{{ url_for('client.client_settings') }}" class="btn btn-outline-secondary">
+            Connections
+        </a>
+        <a href="{{ url_for('client.client_crm') }}" class="btn btn-outline-secondary">
+            CRM
+        </a>
+    </div>
+</form>
+{% endblock %}
