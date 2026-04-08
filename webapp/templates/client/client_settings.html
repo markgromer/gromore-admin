@@ -844,10 +844,9 @@
                            autocomplete="off">
                 </div>
                 <div class="col-lg-6">
-                    <label class="form-label fw-medium" style="font-size:.88rem;">Meta Webhook Verify Token</label>
-                    <input type="password" class="form-control" name="sales_bot_meta_webhook_secret"
-                           placeholder="{{ '••••••' ~ brand.sales_bot_meta_webhook_secret[-4:] if brand.sales_bot_meta_webhook_secret else 'Token used for Meta webhook verification' }}"
-                           autocomplete="off">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">Meta Webhook Setup</label>
+                    <div class="form-control bg-light d-flex align-items-center" style="min-height:38px;">Platform-managed by GroMore admin</div>
+                    <small class="text-muted d-block mt-2">You do not need to create or store a Meta verify token per brand. Copy the callback URLs below, connect the right Facebook Page, and let the platform-level Meta app handle webhook verification.</small>
                 </div>
             </div>
 

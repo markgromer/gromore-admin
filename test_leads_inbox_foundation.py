@@ -203,7 +203,6 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
                 "quo_api_key": "quo_test_key_123",
                 "quo_phone_number": "+15555550123",
                 "sales_bot_quo_webhook_secret": "quo-secret",
-                "sales_bot_meta_webhook_secret": "meta-secret",
             },
             follow_redirects=False,
         )
@@ -231,7 +230,6 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertEqual(brand["quo_api_key"], "quo_test_key_123")
         self.assertEqual(brand["quo_phone_number"], "+15555550123")
         self.assertEqual(brand["sales_bot_quo_webhook_secret"], "quo-secret")
-        self.assertEqual(brand["sales_bot_meta_webhook_secret"], "meta-secret")
         self.assertEqual(brand["sales_bot_channels"], '["sms", "lead_forms", "calls"]')
 
     def test_client_can_open_and_save_lead_assistant_workspace(self):

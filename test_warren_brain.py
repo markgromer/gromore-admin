@@ -298,6 +298,37 @@ class WarrenWebhookTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data.decode(), "challenge_12345")
 
+    def test_meta_leadgen_verify_uses_global_verify_token(self):
+        """Leadgen verification uses the platform-level verify token."""
+        with self.app.app_context():
+            self.db.save_setting("meta_webhook_verify_token", "leadgen_verify_789")
+
+        resp = self.client.get(
+            "/webhooks/meta/leadgen",
+            query_string={
+                "hub.mode": "subscribe",
+                "hub.verify_token": "leadgen_verify_789",
+                "hub.challenge": "challenge_leadgen",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data.decode(), "challenge_leadgen")
+
+    def test_meta_messenger_verify_rejects_brand_only_token(self):
+        """Messenger verification should not depend on a brand-level token."""
+        with self.app.app_context():
+            self.db.update_brand_text_field(self.brand_id, "sales_bot_meta_webhook_secret", "brand_verify_456")
+
+        resp = self.client.get(
+            "/webhooks/meta/messenger",
+            query_string={
+                "hub.mode": "subscribe",
+                "hub.verify_token": "brand_verify_456",
+                "hub.challenge": "challenge_brand_token",
+            },
+        )
+        self.assertEqual(resp.status_code, 403)
+
 
 class WarrenInboxTests(unittest.TestCase):
     """Test inbox UI routes."""

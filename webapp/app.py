@@ -1665,9 +1665,12 @@ def create_app():
                 secret = request.form.get("meta_app_secret", "").strip()
                 if secret:
                     db.save_setting("meta_app_secret", secret)
+                verify_token = request.form.get("meta_webhook_verify_token", "").strip()
+                if verify_token:
+                    db.save_setting("meta_webhook_verify_token", verify_token)
                 app.config["META_APP_ID"] = db.get_setting("meta_app_id", "")
                 app.config["META_APP_SECRET"] = db.get_setting("meta_app_secret", app.config["META_APP_SECRET"])
-                flash("Meta OAuth credentials saved", "success")
+                flash("Meta OAuth and webhook settings saved", "success")
             elif section == "smtp":
                 db.save_setting("smtp_host", request.form.get("smtp_host", "").strip())
                 db.save_setting("smtp_port", request.form.get("smtp_port", "587").strip())
@@ -1775,6 +1778,7 @@ def create_app():
             branding=branding,
             openai_model=openai_model,
             openai_model_competitor=openai_model_competitor,
+            meta_webhook_verify_token=db.get_setting("meta_webhook_verify_token", ""),
         )
 
     # ── Settings Test Endpoints ──

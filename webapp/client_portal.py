@@ -4081,10 +4081,6 @@ def client_save_leads_assistant_settings():
     if quo_secret:
         db.update_brand_text_field(brand_id, "sales_bot_quo_webhook_secret", quo_secret[:255])
 
-    meta_secret = (request.form.get("sales_bot_meta_webhook_secret") or "").strip()
-    if meta_secret:
-        db.update_brand_text_field(brand_id, "sales_bot_meta_webhook_secret", meta_secret[:255])
-
     # ── Nurture cadence ──
     db.update_brand_number_field(brand_id, "sales_bot_nurture_enabled", 1 if request.form.get("sales_bot_nurture_enabled") else 0)
 

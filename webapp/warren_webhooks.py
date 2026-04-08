@@ -28,6 +28,29 @@ def _get_db():
     return current_app.db
 
 
+def _meta_verify_token_is_valid(db, token):
+    token = (token or "").strip()
+    if not token:
+        return False
+
+    global_token = (db.get_setting("meta_webhook_verify_token", "") or "").strip()
+    return bool(global_token and hmac.compare_digest(token, global_token))
+
+
+def _handle_meta_webhook_verification():
+    db = _get_db()
+    mode = request.args.get("hub.mode", "")
+    token = request.args.get("hub.verify_token", "")
+    challenge = request.args.get("hub.challenge", "")
+
+    if mode == "subscribe" and _meta_verify_token_is_valid(db, token):
+        log.info("Meta webhook verified")
+        return challenge, 200
+
+    log.warning("Meta webhook verification failed")
+    abort(403)
+
+
 def _looks_like_image_url(url):
     lowered = (url or "").lower()
     return any(token in lowered for token in (".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", "/photo", "/image"))
@@ -396,6 +419,12 @@ def meta_leadgen_webhook():
     return jsonify({"ok": True}), 200
 
 
+@webhooks_bp.route("/meta/leadgen", methods=["GET"])
+def meta_leadgen_verify():
+    """Meta leadgen webhook verification (GET challenge)."""
+    return _handle_meta_webhook_verification()
+
+
 def _find_brand_by_page_id(db, page_id):
     """Find a brand by its facebook_page_id."""
     if not page_id:
@@ -515,19 +544,7 @@ def _fetch_and_process_lead(db, brand_id, leadgen_id, form_id, brand):
 @webhooks_bp.route("/meta/messenger", methods=["GET"])
 def meta_messenger_verify():
     """Meta webhook verification (GET challenge)."""
-    db = _get_db()
-    verify_token = (db.get_setting("meta_webhook_verify_token", "") or "").strip()
-
-    mode = request.args.get("hub.mode", "")
-    token = request.args.get("hub.verify_token", "")
-    challenge = request.args.get("hub.challenge", "")
-
-    if mode == "subscribe" and token == verify_token and verify_token:
-        log.info("Meta Messenger webhook verified")
-        return challenge, 200
-
-    log.warning("Meta Messenger webhook verification failed")
-    abort(403)
+    return _handle_meta_webhook_verification()
 
 
 @webhooks_bp.route("/meta/messenger", methods=["POST"])

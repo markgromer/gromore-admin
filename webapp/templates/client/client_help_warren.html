@@ -204,22 +204,46 @@
                 <li>Connect your Meta account in Settings. If Meta OAuth is already connected, that part is already handled.</li>
                 <li>Meta OAuth gives the app a valid Meta user token and can often auto-detect or resolve the connected Facebook Page ID for you.</li>
                 <li>Meta OAuth does not fully replace webhook setup. You still need to subscribe the Page to the leadgen webhook URL shown in Settings.</li>
-                <li>Save the Meta webhook verify token in Settings so Meta can verify the webhook endpoint.</li>
+                <li>The Meta verify token is now platform-managed at the admin level. Brands do not need to create their own webhook token anymore.</li>
+                <li>Copy the Lead Forms webhook URL from Settings and paste it into Meta when setting up the leadgen webhook callback.</li>
+                <li>When Meta asks for the Verify Token, use the one configured in the admin Meta settings for the platform.</li>
                 <li>Enable Meta lead form ingest so new lead forms create Warren threads automatically.</li>
                 <li>Lead form conversations are tracked from submission to reply, follow-up, and pipeline stage movement.</li>
+            </ol>
+
+            <h6>Easy lead form webhook setup</h6>
+            <ol>
+                <li>Open GroMore Settings and copy the Lead Forms webhook URL.</li>
+                <li>Ask the platform admin for the Meta webhook verify token if you do not already have it.</li>
+                <li>Open Meta for Developers, go to your app, then Webhooks.</li>
+                <li>Add the callback URL from GroMore, paste the same verify token, and complete verification.</li>
+                <li>Subscribe the Page object to the <code>leadgen</code> field.</li>
+                <li>Back in GroMore, turn on Auto-ingest Meta lead forms.</li>
             </ol>
 
             <h5>Messenger</h5>
             <ol>
                 <li>Connect the correct Facebook Page through Meta OAuth first. That gives the app the Meta connection it uses to request a Page access token.</li>
                 <li>Meta OAuth helps with authentication, but it does not automatically finish the Messenger webhook setup for you.</li>
-                <li>Copy the Messenger webhook URL into your Meta app dashboard, use the same verify token from Settings, and make sure the app is subscribed to the Page.</li>
+                <li>Copy the Messenger webhook URL into your Meta app dashboard, use the same platform-level verify token, and make sure the app is subscribed to the Page.</li>
                 <li>Run the Messenger connection test in Settings. That test checks whether the app can fetch Page info and see subscribed fields.</li>
                 <li>Turn on Messenger in Warren settings after the connection test passes.</li>
                 <li>Messenger is especially useful when you want Warren to collect a phone number and move the conversation to SMS.</li>
             </ol>
 
-            <div class="help-callout warn"><strong>Important:</strong> Meta OAuth handles the login and token side. It does not, by itself, guarantee that leadgen or Messenger webhooks are subscribed correctly. If Warren is not receiving Facebook leads or Messenger messages, check the webhook URL, verify token, Page subscription, and the Warren toggles in Settings.</div>
+            <h6>Easy Messenger webhook setup</h6>
+            <ol>
+                <li>Open GroMore Settings and copy the Messenger webhook URL.</li>
+                <li>Use the same platform-level verify token used for lead forms.</li>
+                <li>In Meta for Developers, add the Messenger callback URL and paste the same verify token.</li>
+                <li>Subscribe the Page object to the messaging-related fields you need, then connect or re-connect the Page if Meta asks.</li>
+                <li>Run the Test Connection button in GroMore.</li>
+                <li>Turn on Enable Messenger in Warren Settings only after the test passes.</li>
+            </ol>
+
+            <div class="help-callout warn"><strong>Important:</strong> Meta OAuth handles the login and token side. It does not, by itself, guarantee that leadgen or Messenger webhooks are subscribed correctly. If Warren is not receiving Facebook leads or Messenger messages, check the callback URL, the platform-level verify token, Page subscription, and the Warren toggles in Settings.</div>
+
+            <div class="help-callout tip"><strong>Fast rule:</strong> one Meta app, one verify token, one shared callback setup. Each brand only needs its own Meta connection, the correct Facebook Page, and the Warren toggles enabled.</div>
 
             <div class="help-callout info"><strong>Best rollout path:</strong> SMS first, then lead forms, then Messenger. That gives you the cleanest debugging path and the fastest proof that Warren is helping, not just making noise.</div>
         </div>
