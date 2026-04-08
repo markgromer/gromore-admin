@@ -492,12 +492,12 @@
             <div class="cc-card-body">
                 <div class="asset-grid">
                     {% if brand.get('logo_path') %}
-                    <div class="brand-asset-thumb" onclick="addBrandImage('{{ url_for('client.client_serve_upload', filename=brand['logo_path']) }}', 'Primary Logo')" title="Primary Logo">
+                    <div class="brand-asset-thumb" onclick='addBrandImage({{ url_for("client.client_serve_upload", filename=brand["logo_path"])|tojson }}, {{ "Primary Logo"|tojson }})' title="Primary Logo">
                         <img src="{{ url_for('client.client_serve_upload', filename=brand['logo_path']) }}" alt="Primary Logo">
                     </div>
                     {% endif %}
                     {% for lv in logo_variants %}
-                    <div class="brand-asset-thumb" onclick="addBrandImage('{{ url_for('client.client_serve_upload', filename=lv['path']) }}', '{{ lv['label'] }}')" title="{{ lv['label'] }}">
+                    <div class="brand-asset-thumb" onclick='addBrandImage({{ url_for("client.client_serve_upload", filename=lv["path"])|tojson }}, {{ lv["label"]|tojson }})' title="{{ lv['label'] }}">
                         <img src="{{ url_for('client.client_serve_upload', filename=lv['path']) }}" alt="{{ lv['label'] }}">
                     </div>
                     {% endfor %}
@@ -776,9 +776,57 @@
 
 {% block scripts %}
 <script>
-(function(){
+(async function(){
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     const logoUrl = {{ (url_for('client.client_serve_upload', filename=brand['logo_path']) if brand.get('logo_path') else '')|tojson }};
+    const fabricScriptUrl = 'https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js';
+    const creativeFontHref = 'https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@100;300;400;500;600;700;800;900&family=Barlow:wght@300;400;500;600;700;800;900&family=Bebas+Neue&family=Bitter:wght@300;400;500;600;700;800;900&family=Cabin:wght@400;500;600;700&family=Comfortaa:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&family=Exo+2:wght@300;400;500;600;700;800;900&family=Fjalla+One&family=Fredoka:wght@300;400;500;600;700&family=Fugaz+One&family=Inter:wght@300;400;500;600;700;800;900&family=Josefin+Sans:wght@300;400;500;600;700&family=Kanit:wght@300;400;500;600;700;800;900&family=Lato:wght@300;400;700;900&family=Lexend:wght@300;400;500;600;700;800;900&family=Lobster&family=Merriweather:wght@300;400;700;900&family=Montserrat:wght@300;400;500;600;700;800;900&family=Nunito:wght@300;400;500;600;700;800;900&family=Open+Sans:wght@300;400;500;600;700;800&family=Oswald:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&family=Pacifico&family=Permanent+Marker&family=Playfair+Display:wght@400;500;600;700;800;900&family=Poppins:wght@300;400;500;600;700;800;900&family=Quicksand:wght@300;400;500;600;700&family=Raleway:wght@300;400;500;600;700;800;900&family=Righteous&family=Roboto:wght@300;400;500;700;900&family=Roboto+Condensed:wght@300;400;500;600;700;800;900&family=Rubik:wght@300;400;500;600;700;800;900&family=Russo+One&family=Shadows+Into+Light&family=Signika:wght@300;400;500;600;700&family=Sora:wght@300;400;500;600;700;800&family=Source+Serif+4:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Titan+One&family=Ubuntu:wght@300;400;500;700&family=Work+Sans:wght@300;400;500;600;700;800;900&display=swap';
+
+    function ensureScript(url, test) {
+        if (test()) return Promise.resolve();
+        return new Promise((resolve, reject) => {
+            let script = Array.from(document.scripts).find((el) => (el.src || '').includes('fabric.min.js'));
+            const onLoad = () => test() ? resolve() : reject(new Error('Fabric failed to initialize'));
+            const onError = () => reject(new Error('Failed to load required script'));
+
+            if (script) {
+                script.addEventListener('load', onLoad, { once: true });
+                script.addEventListener('error', onError, { once: true });
+                return;
+            }
+
+            script = document.createElement('script');
+            script.src = url;
+            script.async = true;
+            script.dataset.creativeCenterAsset = 'fabric';
+            script.addEventListener('load', onLoad, { once: true });
+            script.addEventListener('error', onError, { once: true });
+            document.head.appendChild(script);
+        });
+    }
+
+    function ensureStylesheet(url) {
+        if (Array.from(document.styleSheets || []).some((sheet) => (sheet.href || '') === url)) return;
+        if (document.querySelector(`link[href="${url}"]`)) return;
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = url;
+        link.dataset.creativeCenterAsset = 'fonts';
+        document.head.appendChild(link);
+    }
+
+    try {
+        ensureStylesheet(creativeFontHref);
+        window.__creativeCenterAssetsPromise = window.__creativeCenterAssetsPromise || ensureScript(fabricScriptUrl, () => typeof window.fabric !== 'undefined');
+        await window.__creativeCenterAssetsPromise;
+    } catch (error) {
+        console.error('Creative Center failed to load required assets.', error);
+        const workspace = document.getElementById('canvasWorkspace');
+        if (workspace) {
+            workspace.innerHTML = '<div style="color:#fff;text-align:center;max-width:320px"><strong>Creative Center failed to load.</strong><div style="margin-top:.4rem;color:#cbd5e1;font-size:.9rem">Refresh the page and try again.</div></div>';
+        }
+        return;
+    }
 
     // Canvas dimensions (display scaled down, export at full res)
     const FORMAT_SIZES = {

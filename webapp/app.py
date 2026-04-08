@@ -328,6 +328,18 @@ def create_app():
     def health_check():
         return jsonify({"ok": True, "service": "gromore-admin"}), 200
 
+    @app.route("/privacy")
+    def privacy_policy():
+        return render_template("privacy_policy.html")
+
+    @app.route("/terms")
+    def terms_of_service():
+        return render_template("terms_of_service.html")
+
+    @app.route("/meta/data-deletion")
+    def meta_data_deletion():
+        return render_template("meta_data_deletion.html")
+
     # ── Dashboard ──
     @app.route("/")
     @login_required

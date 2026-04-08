@@ -7,9 +7,36 @@ and logging the delivery status.
 import json
 import logging
 import time
+from datetime import datetime, timedelta
 import requests
 
 log = logging.getLogger(__name__)
+
+
+def _parse_iso_timestamp(value):
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            return datetime.strptime(raw, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return None
+
+
+def _messenger_response_window_open(thread, now=None):
+    """Return True when the lead's last inbound Messenger message is within 24 hours."""
+    now = now or datetime.utcnow()
+    last_inbound = _parse_iso_timestamp(thread.get("last_inbound_at", "")) if thread else None
+    if not last_inbound:
+        return False
+
+    if last_inbound.tzinfo is not None:
+        now = datetime.now(last_inbound.tzinfo)
+
+    return now - last_inbound <= timedelta(hours=24)
 
 
 def send_reply(db, brand, thread_id, message_text, channel="sms", recipient_id=None, page_id=None, skip_dnd=False):
@@ -30,6 +57,21 @@ def send_reply(db, brand, thread_id, message_text, channel="sms", recipient_id=N
     Returns:
         (success, detail_string)
     """
+    thread = db.get_lead_thread(thread_id)
+    if not thread:
+        return False, "Thread not found"
+
+    # Messenger policy guard: only send RESPONSE messages inside the 24-hour response window.
+    if channel == "messenger" and not _messenger_response_window_open(thread):
+        db.add_lead_event(
+            brand["id"], thread_id,
+            "messenger_blocked_policy",
+            event_value=message_text[:200],
+            metadata={"reason": "outside_24h_response_window"},
+        )
+        log.info("Blocked Messenger send outside 24h response window: brand=%s thread=%s", brand.get("id"), thread_id)
+        return False, "outside_24h_response_window"
+
     # DND check (automated sends only)
     if not skip_dnd:
         from webapp.warren_nurture import _is_dnd
@@ -37,14 +79,13 @@ def send_reply(db, brand, thread_id, message_text, channel="sms", recipient_id=N
             db.add_lead_message(
                 thread_id, "outbound", "assistant", message_text,
                 channel=channel,
-                metadata_json=json.dumps({"dnd_held": True, "held_at": __import__("datetime").datetime.utcnow().isoformat()}),
+                metadata={"dnd_held": True, "held_at": datetime.utcnow().isoformat()},
             )
             log.info("DND active for brand %s - message held for thread %s", brand.get("id"), thread_id)
             return False, "dnd_held"
 
     # A2P opt-out check for SMS (blocks automated sends, warns on manual)
     if channel == "sms":
-        thread = db.get_lead_thread(thread_id)
         to_phone = (thread.get("lead_phone") or "") if thread else ""
         if to_phone and db.is_opted_out(brand.get("id"), to_phone):
             if not skip_dnd:
@@ -52,7 +93,7 @@ def send_reply(db, brand, thread_id, message_text, channel="sms", recipient_id=N
                 db.add_lead_message(
                     thread_id, "outbound", "assistant", message_text,
                     channel=channel,
-                    metadata_json=json.dumps({"blocked_opted_out": True}),
+                    metadata={"blocked_opted_out": True},
                 )
                 return False, "opted_out"
             else:
