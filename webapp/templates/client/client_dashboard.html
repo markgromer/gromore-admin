@@ -27,7 +27,7 @@
     }
     .warren-call-body strong { color: #fff; }
 
-    /* -- Performance Snapshot -- */
+    /* -- Health Meter -- */
     .perf-snapshot {
         background: #fff;
         border: 1px solid #e2e8f0;
@@ -36,73 +36,100 @@
         margin-bottom: 1.5rem;
         box-shadow: 0 4px 16px rgba(15,23,42,.05);
     }
-    .perf-snapshot-header {
+    .health-summary-header {
         display: flex;
-        align-items: center;
         justify-content: space-between;
-        margin-bottom: 1.25rem;
+        gap: 1rem;
+        margin-bottom: 1rem;
     }
-    .perf-snapshot-header h5 {
+    .health-summary-status {
+        display: inline-flex;
+        align-items: center;
+        padding: .35rem .7rem;
+        border-radius: 999px;
+        font-size: .72rem;
         font-weight: 800;
-        font-size: .9rem;
         text-transform: uppercase;
-        letter-spacing: .06em;
-        background: linear-gradient(135deg, #1e1b4b, #4f46e5);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        margin: 0;
+        letter-spacing: .05em;
+        margin-bottom: .65rem;
     }
-    .kpi-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1.25rem;
+    .health-summary-status.positive { background: #dcfce7; color: #15803d; }
+    .health-summary-status.good { background: #dbeafe; color: #1d4ed8; }
+    .health-summary-status.caution { background: #fef3c7; color: #92400e; }
+    .health-summary-status.warning { background: #fee2e2; color: #991b1b; }
+    .health-summary-status.neutral { background: #e2e8f0; color: #475569; }
+    .health-summary-title {
+        font-size: 1.1rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: .45rem;
     }
-    .kpi-card {
-        padding: 1.25rem;
-        border-radius: 12px;
-        border: 1px solid #e2e8f0;
-        background: #f8fafc;
-    }
-    .kpi-label {
-        font-size: .75rem;
-        text-transform: uppercase;
-        letter-spacing: .06em;
+    .health-summary-text {
         color: #64748b;
-        font-weight: 600;
-        margin-bottom: .5rem;
+        font-size: .92rem;
+        line-height: 1.5;
+        max-width: 64ch;
     }
-    .kpi-value {
+    .health-summary-grade {
+        min-width: 92px;
+        text-align: right;
+    }
+    .health-summary-grade-value {
         font-size: 2rem;
         font-weight: 800;
         color: #0f172a;
-        line-height: 1.1;
-        margin-bottom: .25rem;
+        line-height: 1;
     }
-    .kpi-target-line {
-        font-size: .82rem;
+    .health-summary-grade-label {
+        margin-top: .35rem;
         color: #94a3b8;
-        margin-bottom: .65rem;
+        font-size: .74rem;
     }
-    .kpi-verdict {
-        display: inline-flex;
-        align-items: center;
-        gap: .35rem;
-        padding: .3rem .65rem;
-        border-radius: 20px;
-        font-size: .75rem;
-        font-weight: 700;
-        white-space: nowrap;
+    .health-meter-track {
+        height: 14px;
+        border-radius: 999px;
+        background: #e2e8f0;
+        overflow: hidden;
+        margin-bottom: 1rem;
     }
-    .kpi-verdict.beating { background: #dcfce7; color: #15803d; }
-    .kpi-verdict.close { background: #fef3c7; color: #92400e; }
-    .kpi-verdict.off { background: #fee2e2; color: #991b1b; }
-    .kpi-verdict i { font-size: .7rem; }
-    .kpi-verdict-detail {
+    .health-meter-fill {
+        height: 100%;
+        border-radius: 999px;
+    }
+    .health-meter-fill.positive { background: #10b981; }
+    .health-meter-fill.good { background: #3b82f6; }
+    .health-meter-fill.caution { background: #f59e0b; }
+    .health-meter-fill.warning { background: #ef4444; }
+    .health-meter-fill.neutral { background: #94a3b8; }
+    .health-number-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .6rem;
+        margin-bottom: 1rem;
+    }
+    .health-number-pill {
+        padding: .45rem .7rem;
+        border-radius: 999px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        color: #475569;
         font-size: .8rem;
-        color: #64748b;
-        margin-top: .5rem;
-        line-height: 1.4;
+        font-weight: 600;
+    }
+    .health-actions-label {
+        font-size: .72rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: #94a3b8;
+        margin-bottom: .45rem;
+    }
+    .health-actions-list {
+        margin: 0;
+        padding-left: 1.1rem;
+        color: #475569;
+        font-size: .86rem;
+        line-height: 1.5;
     }
 
     /* -- Team Alerts -- */
@@ -887,26 +914,47 @@ function fmtInt(v) {
     }
 
     function buildWarrenCall(d) {
-        var kpis = d.kpi_status || [];
-        var parts = [];
-        kpis.forEach(function(kpi) {
-            if (!kpi.on_track && kpi.explanation) {
-                parts.push(kpi.explanation);
+            if (d.health_summary && d.health_summary.summary) {
+                return d.health_summary.summary;
             }
-        });
-        if (parts.length === 0) {
-            return 'You are on track this month. All KPIs are meeting their targets.';
+            return 'We need a little more data before the dashboard can make a clear call.';
         }
-        var summary = parts[0];
-        if (d.concerns && d.concerns.length) {
-            for (var i = 0; i < d.concerns.length; i++) {
-                if (d.concerns[i].indexOf('$') >= 0 && summary.indexOf('$') < 0) {
-                    summary += ' ' + d.concerns[i];
-                    break;
-                }
+
+        function buildHealthSummaryHtml(d) {
+            var hs = d.health_summary;
+            if (!hs) return '';
+            var tone = hs.tone || 'neutral';
+            var html = '';
+            html += '<div class="perf-snapshot">';
+            html += '<div class="health-summary-header">';
+            html += '<div>';
+            html += '<div class="health-summary-status ' + esc(tone) + '">' + esc(hs.label || 'Health') + '</div>';
+            html += '<div class="health-summary-title">Health Meter</div>';
+            html += '<div class="health-summary-text">' + esc(hs.summary || '') + '</div>';
+            html += '</div>';
+            html += '<div class="health-summary-grade">';
+            html += '<div class="health-summary-grade-value">' + esc(hs.grade || 'N/A') + '</div>';
+            html += '<div class="health-summary-grade-label">' + esc(hs.grade_label || 'Health score') + '</div>';
+            html += '</div>';
+            html += '</div>';
+            html += '<div class="health-meter-track"><div class="health-meter-fill ' + esc(tone) + '" style="width:' + Math.max(0, Math.min(100, hs.meter_pct || 0)) + '%"></div></div>';
+            if (hs.numbers && hs.numbers.length) {
+                html += '<div class="health-number-row">';
+                hs.numbers.forEach(function(item) {
+                    html += '<span class="health-number-pill">' + esc(item) + '</span>';
+                });
+                html += '</div>';
             }
-        }
-        return summary;
+            if (hs.actions && hs.actions.length) {
+                html += '<div class="health-actions-label">What to do</div>';
+                html += '<ul class="health-actions-list">';
+                hs.actions.forEach(function(item) {
+                    html += '<li>' + esc(item) + '</li>';
+                });
+                html += '</ul>';
+            }
+            html += '</div>';
+            return html;
     }
     function renderDashboard(d) {
         var container = document.getElementById('dashContent');
@@ -943,52 +991,7 @@ function fmtInt(v) {
 
         html += '</div>';
 
-        // Performance Snapshot
-        if (d.kpi_status && d.kpi_status.length) {
-            html += '<div class="perf-snapshot">';
-            html += '<div class="perf-snapshot-header"><h5>Performance Snapshot</h5></div>';
-            html += '<div class="kpi-grid">';
-            d.kpi_status.forEach(function(kpi) {
-                var verdictClass, verdictLabel, verdictIcon;
-                if (kpi.on_track) {
-                    verdictClass = 'beating';
-                    verdictLabel = 'Beating Target';
-                    verdictIcon = 'bi-arrow-up';
-                } else {
-                    var numActual = parseFloat(String(kpi.actual).replace(/[^0-9.\-]/g, ''));
-                    var numTarget = parseFloat(String(kpi.target).replace(/[^0-9.\-]/g, ''));
-                    var label = (kpi.label || '').toLowerCase();
-                    var pctOff = 0;
-                    if (numTarget > 0 && !isNaN(numActual)) {
-                        if (label.indexOf('cpa') >= 0 || label.indexOf('cost') >= 0 || label.indexOf('cpl') >= 0) {
-                            pctOff = ((numActual - numTarget) / numTarget) * 100;
-                        } else {
-                            pctOff = ((numTarget - numActual) / numTarget) * 100;
-                        }
-                    }
-                    if (pctOff <= 15) {
-                        verdictClass = 'close';
-                        verdictLabel = 'Just Off Target';
-                        verdictIcon = 'bi-arrow-up';
-                    } else {
-                        verdictClass = 'off';
-                        verdictLabel = 'Adjustments Needed';
-                        verdictIcon = 'bi-arrow-down';
-                    }
-                }
-
-                html += '<div class="kpi-card">';
-                html += '<div class="kpi-label">' + esc(kpi.label) + '</div>';
-                html += '<div class="kpi-value">' + esc(kpi.actual) + '</div>';
-                html += '<div class="kpi-target-line">Target: ' + esc(kpi.target) + '</div>';
-                html += '<div class="kpi-verdict ' + verdictClass + '"><i class="bi ' + verdictIcon + '"></i> ' + verdictLabel + '</div>';
-                if (kpi.explanation) {
-                    html += '<div class="kpi-verdict-detail">' + esc(kpi.explanation) + '</div>';
-                }
-                html += '</div>';
-            });
-            html += '</div></div>';
-        }
+        html += buildHealthSummaryHtml(d);
 
         // Top Moves (promoted - right after KPIs for action focus)
         if (d.actions && d.actions.length) {
@@ -1247,39 +1250,52 @@ function toggleMovesRows(platform, btn) {
 <div class="warren-call">
     <h3>W.A.R.R.E.N.'s Call <span>- {{ month }}</span></h3>
     <div class="warren-call-body">
-        {% if dashboard.kpi_status %}
-            {% for kpi in dashboard.kpi_status if not kpi.on_track %}
-                {% if loop.first %}{{ kpi.explanation }}{% endif %}
-            {% else %}
-                You are on track this month. All KPIs are meeting their targets.
-            {% endfor %}
+        {% if dashboard.health_summary %}
+            {{ dashboard.health_summary.summary }}
         {% else %}
             Not enough data to generate a call yet.
         {% endif %}
     </div>
 </div>
 
-{% if dashboard.kpi_status %}
+{% if dashboard.health_summary %}
 <div class="perf-snapshot">
-    <div class="perf-snapshot-header"><h5>Performance Snapshot</h5></div>
-    <div class="kpi-grid">
-        {% for kpi in dashboard.kpi_status %}
-        <div class="kpi-card">
-            <div class="kpi-label">{{ kpi.label }}</div>
-            <div class="kpi-value">{{ kpi.actual }}</div>
-            <div class="kpi-target-line">Target: {{ kpi.target }}</div>
-            {% if kpi.on_track %}
-            <div class="kpi-verdict beating"><i class="bi bi-arrow-up"></i> Beating Target</div>
-            {% else %}
-            <div class="kpi-verdict off"><i class="bi bi-arrow-down"></i> Adjustments Needed</div>
-            {% endif %}
-            {% if kpi.explanation %}
-            <div class="kpi-verdict-detail">{{ kpi.explanation }}</div>
-            {% endif %}
+    <div class="health-summary-header">
+        <div>
+            <div class="health-summary-status {{ dashboard.health_summary.tone }}">{{ dashboard.health_summary.label }}</div>
+            <div class="health-summary-title">Health Meter</div>
+            <div class="health-summary-text">{{ dashboard.health_summary.summary }}</div>
         </div>
+        <div class="health-summary-grade">
+            <div class="health-summary-grade-value">{{ dashboard.health_summary.grade }}</div>
+            <div class="health-summary-grade-label">{{ dashboard.health_summary.grade_label }}</div>
+        </div>
+    </div>
+    <div class="health-meter-track">
+        <div class="health-meter-fill {{ dashboard.health_summary.tone }}" data-health-meter-width="{{ dashboard.health_summary.meter_pct }}"></div>
+    </div>
+    {% if dashboard.health_summary.numbers %}
+    <div class="health-number-row">
+        {% for item in dashboard.health_summary.numbers %}
+        <span class="health-number-pill">{{ item }}</span>
         {% endfor %}
     </div>
+    {% endif %}
+    {% if dashboard.health_summary.actions %}
+    <div class="health-actions-label">What to do</div>
+    <ul class="health-actions-list">
+        {% for item in dashboard.health_summary.actions %}
+        <li>{{ item }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
 </div>
+<script>
+document.querySelectorAll('[data-health-meter-width]').forEach(function(el) {
+    var width = parseFloat(el.getAttribute('data-health-meter-width') || '0');
+    el.style.width = Math.max(0, Math.min(100, width)) + '%';
+});
+</script>
 {% endif %}
 
 {% if dashboard.actions %}

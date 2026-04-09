@@ -31,7 +31,12 @@
 
     .note-editor { border-radius: 10px !important; border-color: #dbe3ef !important; }
     .note-toolbar { border-radius: 10px 10px 0 0 !important; background: #f8f9fa !important; }
-    .note-editing-area { min-height: 350px; }
+    .note-editing-area { min-height: 520px; }
+    .note-editor .note-editable {
+        min-height: 520px;
+        font-size: .96rem;
+        line-height: 1.65;
+    }
 
     .ai-btn {
         background: linear-gradient(135deg, #6366f1, #818cf8);
@@ -73,6 +78,7 @@
 <form id="blogForm" method="POST" action="{{ url_for('client.client_blog_save') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="post_id" value="{{ post.id if post else '' }}">
+    <input type="hidden" name="action" id="blogAction" value="draft">
 
     <div class="row g-3">
         <div class="col-lg-8">
@@ -100,7 +106,7 @@
             <!-- Excerpt -->
             <div class="editor-card">
                 <h6><i class="bi bi-text-left me-1"></i> Excerpt</h6>
-                <textarea class="form-control" name="excerpt" rows="2" placeholder="A short summary shown in search results and post previews..."
+                <textarea class="form-control" name="excerpt" rows="4" placeholder="A short summary shown in search results and post previews..."
                           style="font-size:.88rem;">{{ post.excerpt if post else '' }}</textarea>
             </div>
         </div>
@@ -112,10 +118,10 @@
                 <div class="mb-3">
                     <label class="form-label fw-medium" style="font-size:.84rem;">Status</label>
                     <div class="d-flex flex-wrap gap-2">
-                        <button type="submit" name="action" value="draft" class="btn btn-outline-secondary btn-sm">
+                        <button type="button" class="btn btn-outline-secondary btn-sm js-blog-action" data-action="draft">
                             <i class="bi bi-file-earmark me-1"></i> Save Draft
                         </button>
-                        <button type="submit" name="action" value="publish" class="btn btn-primary btn-sm">
+                        <button type="button" class="btn btn-primary btn-sm js-blog-action" data-action="publish">
                             <i class="bi bi-send me-1"></i> Publish Now
                         </button>
                     </div>
@@ -128,8 +134,8 @@
                     </label>
                     <div id="scheduleFields" style="display:{{ 'block' if post and post.status == 'scheduled' else 'none' }}; margin-top:.75rem;">
                         <input type="datetime-local" class="form-control form-control-sm" name="scheduled_at"
-                               value="{{ post.scheduled_at[:16] if post and post.scheduled_at else '' }}">
-                        <button type="submit" name="action" value="schedule" class="btn btn-outline-primary btn-sm mt-2 w-100">
+                               value="{{ post.scheduled_at.replace(' ', 'T')[:16] if post and post.scheduled_at else '' }}">
+                        <button type="button" class="btn btn-outline-primary btn-sm mt-2 w-100 js-blog-action" data-action="schedule">
                             <i class="bi bi-clock me-1"></i> Save & Schedule
                         </button>
                     </div>
@@ -157,7 +163,7 @@
                 </div>
                 <div class="mb-2">
                     <label class="form-label" style="font-size:.82rem;">Meta Description</label>
-                    <textarea class="form-control form-control-sm" name="seo_description" id="seoDesc" rows="2"
+                    <textarea class="form-control form-control-sm" name="seo_description" id="seoDesc" rows="4"
                               placeholder="Brief description for search engines" maxlength="160">{{ post.seo_description if post else '' }}</textarea>
                     <small class="text-muted"><span id="seoDescCount">{{ (post.seo_description or '')|length if post else 0 }}</span>/160</small>
                 </div>
@@ -229,7 +235,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize Summernote
     $('#postContent').summernote({
-        height: 400,
+        height: 560,
         placeholder: 'Start writing your blog post...',
         toolbar: [
             ['style', ['style']],
@@ -246,6 +252,34 @@ document.addEventListener('DOMContentLoaded', function() {
     // Schedule toggle
     document.getElementById('scheduleCheck').addEventListener('change', function() {
         document.getElementById('scheduleFields').style.display = this.checked ? 'block' : 'none';
+    });
+
+    var blogForm = document.getElementById('blogForm');
+    var blogActionInput = document.getElementById('blogAction');
+    var scheduledAtInput = document.querySelector('input[name="scheduled_at"]');
+    if (scheduledAtInput) {
+        var now = new Date();
+        now.setMinutes(now.getMinutes() + 1);
+        scheduledAtInput.min = now.toISOString().slice(0, 16);
+    }
+
+    document.querySelectorAll('.js-blog-action').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var action = this.getAttribute('data-action') || 'draft';
+            blogActionInput.value = action;
+
+            if (action === 'schedule') {
+                document.getElementById('scheduleCheck').checked = true;
+                document.getElementById('scheduleFields').style.display = 'block';
+                if (!scheduledAtInput || !scheduledAtInput.value) {
+                    alert('Pick a date and time to schedule.');
+                    if (scheduledAtInput) scheduledAtInput.focus();
+                    return;
+                }
+            }
+
+            blogForm.requestSubmit();
+        });
     });
 
     // SEO character counts

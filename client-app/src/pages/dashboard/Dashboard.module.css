@@ -61,8 +61,142 @@
   margin-bottom: 20px;
 }
 
-.kpiGrid {
+.healthCard {
   margin-bottom: 20px;
+}
+
+.healthHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.healthTone {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.tonepositive {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--success);
+}
+
+.tonegood {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--primary);
+}
+
+.tonecaution {
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
+}
+
+.tonewarning {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger);
+}
+
+.toneneutral {
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--text-secondary);
+}
+
+.healthTitle {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.healthText {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  max-width: 60ch;
+  line-height: 1.5;
+}
+
+.healthGradeWrap {
+  text-align: right;
+  min-width: 110px;
+}
+
+.healthGrade {
+  font-size: 2rem;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.healthGradeLabel {
+  margin-top: 6px;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.healthMeterTrack {
+  height: 14px;
+  background: var(--bg-inset);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.healthMeterFill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width var(--duration-slow) var(--ease);
+}
+
+.healthMeterFill.tonepositive,
+.healthMeterFill.tonegood,
+.healthMeterFill.tonecaution,
+.healthMeterFill.tonewarning,
+.healthMeterFill.toneneutral {
+  background: currentColor;
+}
+
+.healthNumbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.healthNumberPill {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.healthActions {
+  margin-top: 18px;
+}
+
+.healthActionsLabel {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.healthActionsList {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+  line-height: 1.5;
 }
 
 .twoCol {
@@ -73,6 +207,13 @@
 }
 @media (max-width: 768px) {
   .twoCol { grid-template-columns: 1fr; }
+  .healthHeader {
+    flex-direction: column;
+  }
+  .healthGradeWrap {
+    text-align: left;
+    min-width: 0;
+  }
 }
 
 .findings {

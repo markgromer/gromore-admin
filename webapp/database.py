@@ -3387,12 +3387,15 @@ class WebDB:
         conn.commit()
         conn.close()
 
-    def get_due_blog_posts(self):
+    def get_due_blog_posts(self, brand_id=None):
         """Return blog posts that are scheduled and past due."""
         conn = self._conn()
-        rows = conn.execute(
-            "SELECT * FROM blog_posts WHERE status = 'scheduled' AND scheduled_at <= datetime('now')"
-        ).fetchall()
+        sql = "SELECT * FROM blog_posts WHERE status = 'scheduled' AND datetime(scheduled_at) <= datetime('now')"
+        params = []
+        if brand_id is not None:
+            sql += " AND brand_id = ?"
+            params.append(brand_id)
+        rows = conn.execute(sql, params).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 

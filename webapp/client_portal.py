@@ -46,6 +46,30 @@ def _external_app_url() -> str:
     return configured
 
 
+def _normalize_scheduled_datetime(raw_value):
+    raw = (raw_value or "").strip()
+    if not raw:
+        return None
+
+    for fmt in (
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d %H:%M:%S",
+    ):
+        try:
+            parsed = datetime.strptime(raw, fmt)
+            return parsed.strftime("%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            continue
+
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    return parsed.strftime("%Y-%m-%d %H:%M:%S")
+
+
 def _warm_client_snapshots_async(*, brand_id: int, month: str) -> None:
     """Warm heavy caches in the background after login.
 
@@ -5096,10 +5120,8 @@ def client_blog():
 
     # Check for due scheduled posts and publish them
     if wp_ok:
-        due = db.get_due_blog_posts()
+        due = db.get_due_blog_posts(brand_id)
         for bp in due:
-            if bp["brand_id"] != brand_id:
-                continue
             result = _publish_to_wp(
                 brand, bp["title"], bp["content"],
                 excerpt=bp.get("excerpt", ""),
@@ -5180,8 +5202,9 @@ def client_blog_save():
     seo_title = request.form.get("seo_title", "").strip()
     seo_description = request.form.get("seo_description", "").strip()
     featured_image_url = request.form.get("featured_image_url", "").strip()
-    scheduled_at = request.form.get("scheduled_at", "").strip() or None
-    action = request.form.get("action", "draft")
+    raw_scheduled_at = request.form.get("scheduled_at", "").strip()
+    scheduled_at = _normalize_scheduled_datetime(raw_scheduled_at)
+    action = (request.form.get("action", "draft") or "draft").strip().lower()
     auto_facebook = request.form.get("auto_facebook") == "1"
 
     fields = dict(
@@ -5229,27 +5252,32 @@ def client_blog_save():
             flash("Pick a date and time to schedule.", "error")
             fields["status"] = "draft"
         else:
-            fields["status"] = "scheduled"
-            fields["scheduled_at"] = scheduled_at
-            flash("Post scheduled.", "success")
+            scheduled_dt = datetime.strptime(scheduled_at, "%Y-%m-%d %H:%M:%S")
+            if scheduled_dt <= datetime.now() + timedelta(minutes=1):
+                flash("Scheduled publish time must be at least 1 minute in the future.", "error")
+                fields["status"] = "draft"
+            else:
+                fields["status"] = "scheduled"
+                fields["scheduled_at"] = scheduled_at
+                flash("Post scheduled.", "success")
 
-            # Auto-create Facebook promo post (scheduled 15 min after blog)
-            if auto_facebook:
-                site_url = (brand.get("wp_site_url") or "").rstrip("/")
-                slug = re.sub(r'[^a-z0-9]+', '-', title.lower())[:80].strip('-')
-                estimated_url = f"{site_url}/{slug}/" if site_url else ""
-                if estimated_url:
-                    fb_result = _create_fb_promo_for_blog(
-                        db, brand, brand_id, title, estimated_url,
-                        excerpt=excerpt, featured_image_url=featured_image_url,
-                        scheduled_at=scheduled_at,
-                    )
-                    if fb_result.get("ok"):
-                        flash("Facebook promo post scheduled 15 min after blog publish.", "success")
-                    else:
-                        fb_err = fb_result.get("error", "")
-                        if fb_err:
-                            flash(f"Facebook post skipped: {fb_err[:80]}", "warning")
+                # Auto-create Facebook promo post (scheduled 15 min after blog)
+                if auto_facebook:
+                    site_url = (brand.get("wp_site_url") or "").rstrip("/")
+                    slug = re.sub(r'[^a-z0-9]+', '-', title.lower())[:80].strip('-')
+                    estimated_url = f"{site_url}/{slug}/" if site_url else ""
+                    if estimated_url:
+                        fb_result = _create_fb_promo_for_blog(
+                            db, brand, brand_id, title, estimated_url,
+                            excerpt=excerpt, featured_image_url=featured_image_url,
+                            scheduled_at=scheduled_at,
+                        )
+                        if fb_result.get("ok"):
+                            flash("Facebook promo post scheduled 15 min after blog publish.", "success")
+                        else:
+                            fb_err = fb_result.get("error", "")
+                            if fb_err:
+                                flash(f"Facebook post skipped: {fb_err[:80]}", "warning")
     else:
         fields["status"] = "draft"
         flash("Draft saved.", "success")

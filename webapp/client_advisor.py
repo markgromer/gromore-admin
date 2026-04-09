@@ -104,6 +104,7 @@ def build_client_dashboard(analysis, suggestions, brand, ai_model=None, include_
             "score": overall_score,
             "label": _grade_label(overall_grade),
         },
+        "health_summary": _build_health_summary(analysis, actions, overall_grade, overall_score),
         "channels": channels,
         "actions": actions,
         "kpi_status": kpi_status,
@@ -1185,20 +1186,33 @@ def _explain_kpis(analysis):
             ),
         })
 
-    if targets.get("leads") and actual.get("paid_leads"):
+    if targets.get("leads") and actual.get("paid_leads") is not None:
         leads_eval = evaluation.get("leads", {})
         on_track = leads_eval.get("on_track", False)
+        expected_to_date = leads_eval.get("expected_to_date")
+        is_current_month = leads_eval.get("is_current_month", False)
+        pace_label = leads_eval.get("pace_label") or ("On pace" if on_track else "Behind pace")
+        elapsed_days = leads_eval.get("elapsed_days")
         cards.append({
             "label": "Total Leads",
             "target": f"{int(targets['leads'])}",
             "actual": f"{int(actual['paid_leads'])}",
             "on_track": on_track,
+            "status_label": pace_label,
             "explanation": (
-                f"Target is {int(targets['leads'])} leads and you got {int(actual['paid_leads'])}. "
-                + ("You're hitting your lead target."
-                   if on_track
-                   else "You're below your lead target. Consider increasing budget on "
-                        "your best-performing campaigns or launching new ad variations.")
+                (
+                    f"You have {int(actual['paid_leads'])} leads against a monthly target of {int(targets['leads'])}. "
+                    f"By day {int(elapsed_days or 0)}, the paced target is {expected_to_date:.1f}, so you're {pace_label.lower()}."
+                    if is_current_month and expected_to_date is not None
+                    else f"Target is {int(targets['leads'])} leads and you got {int(actual['paid_leads'])}. "
+                )
+                + (
+                    " Keep spend stable and focus on lead quality before making major changes."
+                    if on_track and is_current_month
+                    else " You're hitting your lead target."
+                    if on_track
+                    else " Consider increasing budget on your best-performing campaigns or launching new ad variations."
+                )
             ),
         })
 
@@ -1220,6 +1234,115 @@ def _explain_kpis(analysis):
         })
 
     return cards
+
+
+def _build_health_summary(analysis, actions, overall_grade, overall_score):
+    kpi = analysis.get("kpi_status", {}) if isinstance(analysis, dict) else {}
+    evaluation = kpi.get("evaluation", {}) if isinstance(kpi, dict) else {}
+    actual = kpi.get("actual", {}) if isinstance(kpi, dict) else {}
+    targets = kpi.get("targets", {}) if isinstance(kpi, dict) else {}
+
+    leads_eval = evaluation.get("leads") if isinstance(evaluation.get("leads"), dict) else None
+    cpa_eval = evaluation.get("cpa") if isinstance(evaluation.get("cpa"), dict) else None
+    roas_eval = evaluation.get("roas") if isinstance(evaluation.get("roas"), dict) else None
+
+    tone = "neutral"
+    label = "Needs more data"
+    summary = "Connect more data sources or wait for more activity before the dashboard can call the month clearly."
+    numbers = []
+
+    if leads_eval:
+        paid_leads = int(actual.get("paid_leads") or 0)
+        target_leads = int(targets.get("leads") or 0)
+        expected_to_date = leads_eval.get("expected_to_date")
+        pace_status = leads_eval.get("pace_status") or "full_month"
+
+        numbers.append(f"{paid_leads} leads so far")
+        if target_leads:
+            numbers.append(f"{target_leads} target this month")
+        if expected_to_date is not None and leads_eval.get("is_current_month"):
+            numbers.append(f"{expected_to_date:.1f} paced target by today")
+
+        if pace_status == "ahead":
+            tone = "positive"
+            label = "Ahead of pace"
+            summary = (
+                f"The numbers say lead volume is running ahead of plan. You have {paid_leads} leads so far, "
+                f"which is above the paced target of {expected_to_date:.1f} for this point in the month."
+            )
+        elif pace_status == "on_track":
+            tone = "good"
+            label = "On pace"
+            summary = (
+                f"The numbers say lead volume is on track. You have {paid_leads} leads so far against a paced target of {expected_to_date:.1f}."
+            )
+        elif pace_status == "watch":
+            tone = "caution"
+            label = "Watch closely"
+            summary = (
+                f"The numbers say lead flow is a little behind pace. You have {paid_leads} leads so far against a paced target of {expected_to_date:.1f}."
+            )
+        elif pace_status == "at_risk":
+            tone = "warning"
+            label = "Needs attention"
+            summary = (
+                f"The numbers say lead flow is behind pace. You have {paid_leads} leads so far against a paced target of {expected_to_date:.1f}."
+            )
+        elif leads_eval.get("on_track"):
+            tone = "good"
+            label = "On target"
+            summary = f"The numbers say you are hitting your lead target with {paid_leads} leads against a goal of {target_leads}."
+        else:
+            tone = "warning"
+            label = "Off target"
+            summary = f"The numbers say you are below your lead target with {paid_leads} leads against a goal of {target_leads}."
+    elif cpa_eval and cpa_eval.get("on_track") is not None:
+        tone = "good" if cpa_eval.get("on_track") else "warning"
+        label = "Efficient" if cpa_eval.get("on_track") else "Needs attention"
+        summary = (
+            f"The numbers say cost efficiency is {'healthy' if cpa_eval.get('on_track') else 'slipping'}. "
+            f"Your blended cost per lead is ${cpa_eval.get('actual'):.2f} against a target of ${cpa_eval.get('target'):.2f}."
+        )
+
+    action_titles = []
+    for action in actions or []:
+        title = (action.get("mission_name") or action.get("title") or "").strip()
+        if title:
+            action_titles.append(title)
+        if len(action_titles) == 2:
+            break
+
+    if not action_titles:
+        if tone in {"positive", "good"}:
+            action_titles = ["Keep budget stable", "Watch lead quality before making changes"]
+        elif tone == "caution":
+            action_titles = ["Review your top-performing campaigns", "Refresh one underperforming ad or offer"]
+        elif tone == "warning":
+            action_titles = ["Shift spend to your best campaign", "Launch one new ad variation this week"]
+        else:
+            action_titles = ["Connect your data sources", "Wait for more month-to-date data"]
+
+    meter_pct_map = {
+        "positive": 88,
+        "good": 74,
+        "caution": 52,
+        "warning": 28,
+        "neutral": 40,
+    }
+
+    return {
+        "tone": tone,
+        "label": label,
+        "summary": summary,
+        "numbers": numbers,
+        "actions": action_titles,
+        "meter_pct": meter_pct_map.get(tone, 40),
+        "grade": overall_grade,
+        "score": overall_score,
+        "grade_label": _grade_label(overall_grade),
+        "cpa_on_track": cpa_eval.get("on_track") if cpa_eval else None,
+        "roas_on_track": roas_eval.get("on_track") if roas_eval else None,
+    }
 
 
 # ── Helpers ──

@@ -3,8 +3,7 @@ import { motion } from 'framer-motion'
 import { useDashboardStore } from '../../stores/dashboardStore'
 import { useAuthStore } from '../../stores/authStore'
 import { ShimmerPage } from '../../components/ui/Shimmer'
-import KpiCard from '../../components/ui/KpiCard'
-import Card, { CardHeader, CardGrid } from '../../components/ui/Card'
+import Card, { CardHeader } from '../../components/ui/Card'
 import {
   AlertTriangle, CheckCircle2, Megaphone,
   RefreshCw, Zap
@@ -27,9 +26,9 @@ export default function Dashboard() {
 
   if (loading && !data) return <ShimmerPage />
 
-  const kpis = data?.kpi_status || []
   const campaigns = data?.campaigns || {}
   const briefing = data?.warren_briefing
+  const healthSummary = data?.health_summary
   const team = data?.team_status
   const googleCount = (campaigns.google || []).length
   const metaCount = (campaigns.meta || []).length
@@ -61,21 +60,48 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* KPI Cards */}
-      {kpis.length > 0 && (
-        <CardGrid cols={4} className={styles.kpiGrid}>
-          {kpis.slice(0, 8).map((kpi, i) => (
-            <KpiCard
-              key={kpi.label || i}
-              label={kpi.label}
-              value={kpi.value}
-              target={kpi.target}
-              unit={kpi.unit}
-              status={kpi.status}
-              delay={i * 0.05}
+      {healthSummary && (
+        <Card className={styles.healthCard}>
+          <div className={styles.healthHeader}>
+            <div>
+              <div className={`${styles.healthTone} ${styles[`tone${healthSummary.tone?.replace('_', '') || 'neutral'}`]}`}>
+                {healthSummary.label}
+              </div>
+              <h2 className={styles.healthTitle}>Health Meter</h2>
+              <p className={styles.healthText}>{healthSummary.summary}</p>
+            </div>
+            <div className={styles.healthGradeWrap}>
+              <div className={styles.healthGrade}>{healthSummary.grade || 'N/A'}</div>
+              <div className={styles.healthGradeLabel}>{healthSummary.grade_label || 'Health score'}</div>
+            </div>
+          </div>
+
+          <div className={styles.healthMeterTrack}>
+            <div
+              className={`${styles.healthMeterFill} ${styles[`tone${healthSummary.tone?.replace('_', '') || 'neutral'}`]}`}
+              style={{ width: `${healthSummary.meter_pct || 0}%` }}
             />
-          ))}
-        </CardGrid>
+          </div>
+
+          {healthSummary.numbers?.length > 0 && (
+            <div className={styles.healthNumbers}>
+              {healthSummary.numbers.map((item) => (
+                <span key={item} className={styles.healthNumberPill}>{item}</span>
+              ))}
+            </div>
+          )}
+
+          {healthSummary.actions?.length > 0 && (
+            <div className={styles.healthActions}>
+              <div className={styles.healthActionsLabel}>What to do</div>
+              <ul className={styles.healthActionsList}>
+                {healthSummary.actions.map((action) => (
+                  <li key={action}>{action}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Card>
       )}
 
       {/* Briefing + Campaigns Row */}

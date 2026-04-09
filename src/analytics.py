@@ -4,7 +4,9 @@ Analytics / Interpretation Engine
 Takes parsed data from all three sources, compares against industry benchmarks
 and prior months, and produces a structured analysis with scored metrics.
 """
+import calendar
 import json
+from datetime import date, datetime
 from pathlib import Path
 from . import database as db
 
@@ -54,6 +56,67 @@ def _to_float(value, default=0.0):
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _build_lead_pacing(month, target_leads, actual_leads, today=None):
+    today = today or date.today()
+    actual_leads = round(_to_float(actual_leads, 0.0), 2)
+    target_leads = round(_to_float(target_leads, 0.0), 2)
+    if target_leads <= 0:
+        return None
+
+    pacing = {
+        "is_current_month": False,
+        "expected_to_date": target_leads,
+        "elapsed_days": None,
+        "days_in_month": None,
+        "pace_ratio": None,
+        "status": "full_month",
+        "label": "Full-month target",
+        "on_track": actual_leads >= target_leads,
+    }
+
+    try:
+        month_dt = datetime.strptime(month, "%Y-%m")
+    except (TypeError, ValueError):
+        return pacing
+
+    days_in_month = calendar.monthrange(month_dt.year, month_dt.month)[1]
+    pacing["days_in_month"] = days_in_month
+
+    if today.year == month_dt.year and today.month == month_dt.month:
+        elapsed_days = max(1, min(today.day, days_in_month))
+        expected_to_date = round(target_leads * (elapsed_days / days_in_month), 2)
+        pace_ratio = round(actual_leads / expected_to_date, 2) if expected_to_date > 0 else None
+
+        if actual_leads >= expected_to_date * 1.15:
+            status = "ahead"
+            label = "Ahead of pace"
+            on_track = True
+        elif actual_leads >= expected_to_date * 0.9:
+            status = "on_track"
+            label = "On pace"
+            on_track = True
+        elif actual_leads >= expected_to_date * 0.75:
+            status = "watch"
+            label = "Slightly behind pace"
+            on_track = False
+        else:
+            status = "at_risk"
+            label = "Behind pace"
+            on_track = False
+
+        pacing.update({
+            "is_current_month": True,
+            "expected_to_date": expected_to_date,
+            "elapsed_days": elapsed_days,
+            "pace_ratio": pace_ratio,
+            "status": status,
+            "label": label,
+            "on_track": on_track,
+        })
+
+    return pacing
 
 
 def _parse_competitors(raw_competitors):
@@ -765,15 +828,34 @@ def build_full_analysis(client_id, month, current_data, client_config):
             )
 
     if target_leads > 0:
-        lead_gap_pct = round(((paid_leads - target_leads) / target_leads) * 100, 1)
-        leads_on_track = paid_leads >= target_leads
+        lead_pacing = _build_lead_pacing(month, target_leads, paid_leads)
+        comparison_target = lead_pacing.get("expected_to_date") if lead_pacing else target_leads
+        lead_gap_pct = round(((paid_leads - comparison_target) / comparison_target) * 100, 1) if comparison_target else None
+        leads_on_track = bool(lead_pacing.get("on_track")) if lead_pacing else paid_leads >= target_leads
         kpi_status["evaluation"]["leads"] = {
             "target": target_leads,
             "actual": paid_leads,
             "gap_pct": lead_gap_pct,
             "on_track": leads_on_track,
+            "expected_to_date": lead_pacing.get("expected_to_date") if lead_pacing else None,
+            "elapsed_days": lead_pacing.get("elapsed_days") if lead_pacing else None,
+            "days_in_month": lead_pacing.get("days_in_month") if lead_pacing else None,
+            "pace_ratio": lead_pacing.get("pace_ratio") if lead_pacing else None,
+            "pace_status": lead_pacing.get("status") if lead_pacing else "full_month",
+            "pace_label": lead_pacing.get("label") if lead_pacing else "Full-month target",
+            "is_current_month": bool(lead_pacing.get("is_current_month")) if lead_pacing else False,
         }
-        if leads_on_track:
+        if lead_pacing and lead_pacing.get("is_current_month"):
+            expected_to_date = lead_pacing.get("expected_to_date") or 0
+            if leads_on_track:
+                all_highlights.append(
+                    f"Paid leads are {paid_leads} against a paced target of {expected_to_date} by day {lead_pacing.get('elapsed_days')} ({lead_pacing.get('pace_label').lower()})"
+                )
+            else:
+                all_concerns.append(
+                    f"Paid leads are {paid_leads} against a paced target of {expected_to_date} by day {lead_pacing.get('elapsed_days')} ({lead_pacing.get('pace_label').lower()})"
+                )
+        elif leads_on_track:
             all_highlights.append(
                 f"Paid leads are {paid_leads} vs target {target_leads} (+{lead_gap_pct}%)"
             )
