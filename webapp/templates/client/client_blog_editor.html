@@ -228,25 +228,103 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/summernote@0.8.20/dist/summernote-bs5.min.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+function initBlogEditorPage() {
+    var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    var jqueryUrl = 'https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js';
+    var summernoteCssUrl = 'https://cdn.jsdelivr.net/npm/summernote@0.8.20/dist/summernote-bs5.min.css';
+    var summernoteJsUrl = 'https://cdn.jsdelivr.net/npm/summernote@0.8.20/dist/summernote-bs5.min.js';
+    var contentField = document.getElementById('postContent');
 
-    // Initialize Summernote
-    $('#postContent').summernote({
-        height: 560,
-        placeholder: 'Start writing your blog post...',
-        toolbar: [
-            ['style', ['style']],
-            ['font', ['bold', 'italic', 'underline', 'clear']],
-            ['fontsize', ['fontsize']],
-            ['para', ['ul', 'ol', 'paragraph']],
-            ['insert', ['link', 'picture', 'hr']],
-            ['view', ['codeview', 'fullscreen']],
-        ],
-        styleTags: ['p', 'h2', 'h3', 'h4', 'blockquote'],
-        callbacks: {}
+    function ensureStylesheet(url) {
+        if (!url) return;
+        if (document.querySelector('link[href="' + url + '"]')) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = url;
+        link.setAttribute('data-blog-editor-asset', '1');
+        document.head.appendChild(link);
+    }
+
+    function ensureScript(url, test) {
+        return new Promise(function(resolve, reject) {
+            try {
+                if (typeof test === 'function' && test()) {
+                    resolve();
+                    return;
+                }
+            } catch (err) {}
+
+            var existing = document.querySelector('script[src="' + url + '"]');
+            if (existing) {
+                existing.addEventListener('load', function() { resolve(); }, { once: true });
+                existing.addEventListener('error', function() { reject(new Error('Failed to load ' + url)); }, { once: true });
+                return;
+            }
+
+            var script = document.createElement('script');
+            script.src = url;
+            script.async = false;
+            script.setAttribute('data-blog-editor-asset', '1');
+            script.onload = function() { resolve(); };
+            script.onerror = function() { reject(new Error('Failed to load ' + url)); };
+            document.head.appendChild(script);
+        });
+    }
+
+    function getEditorHtml() {
+        if (window.jQuery && window.jQuery.fn && window.jQuery.fn.summernote && contentField.dataset.editorReady === '1') {
+            return window.jQuery('#postContent').summernote('code');
+        }
+        return contentField.value || '';
+    }
+
+    function setEditorHtml(html) {
+        if (window.jQuery && window.jQuery.fn && window.jQuery.fn.summernote && contentField.dataset.editorReady === '1') {
+            window.jQuery('#postContent').summernote('code', html || '');
+            return;
+        }
+        contentField.value = html || '';
+    }
+
+    function initSummernote() {
+        if (!contentField || contentField.dataset.editorReady === '1') {
+            return;
+        }
+        if (!(window.jQuery && window.jQuery.fn && window.jQuery.fn.summernote)) {
+            return;
+        }
+
+        window.jQuery('#postContent').summernote({
+            height: 560,
+            placeholder: 'Start writing your blog post...',
+            toolbar: [
+                ['style', ['style']],
+                ['font', ['bold', 'italic', 'underline', 'clear']],
+                ['fontsize', ['fontsize']],
+                ['para', ['ul', 'ol', 'paragraph']],
+                ['insert', ['link', 'picture', 'hr']],
+                ['view', ['codeview', 'fullscreen']],
+            ],
+            styleTags: ['p', 'h2', 'h3', 'h4', 'blockquote'],
+            callbacks: {}
+        });
+        contentField.dataset.editorReady = '1';
+    }
+
+    ensureStylesheet(summernoteCssUrl);
+    window.__blogEditorAssetsPromise = window.__blogEditorAssetsPromise || ensureScript(
+        jqueryUrl,
+        function() { return !!window.jQuery; }
+    ).then(function() {
+        return ensureScript(
+            summernoteJsUrl,
+            function() { return !!(window.jQuery && window.jQuery.fn && window.jQuery.fn.summernote); }
+        );
+    }).then(function() {
+        initSummernote();
+    }).catch(function() {
+        contentField.dataset.editorReady = '0';
     });
 
     // Schedule toggle
@@ -327,7 +405,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.getElementById('postTitle').value = data.title;
                 }
                 if (data.content) {
-                    $('#postContent').summernote('code', data.content);
+                    setEditorHtml(data.content);
                 }
                 if (data.excerpt) {
                     document.querySelector('textarea[name="excerpt"]').value = data.excerpt;
@@ -382,5 +460,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initBlogEditorPage, { once: true });
+} else {
+    initBlogEditorPage();
+}
 </script>
 {% endblock %}

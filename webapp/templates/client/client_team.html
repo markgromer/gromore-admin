@@ -5,9 +5,9 @@
 <style>
 /* ── TEAM HEADER WRAP ── */
 .team-wrap {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    background: linear-gradient(135deg, #0f172a 0%, #16213e 55%, #1d4ed8 100%);
     border-radius: 20px;
-    padding: 24px 28px 0;
+    padding: 24px 28px;
     margin-bottom: 32px;
     box-shadow: 0 4px 24px rgba(0,0,0,.35);
     position: relative;
@@ -29,6 +29,32 @@
 .team-stats { display: flex; gap: 24px; text-align: center; }
 .team-stat .ts-val { font-size: 1.5rem; font-weight: 700; color: #fff; line-height: 1; }
 .team-stat .ts-lbl { font-size: 0.62rem; text-transform: uppercase; color: rgba(255,255,255,.4); letter-spacing: 1px; margin-top: 2px; }
+.team-guide {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin: 18px 0 0;
+    position: relative;
+    z-index: 2;
+}
+.team-guide-card {
+    background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 14px;
+    padding: 14px 16px;
+}
+.team-guide-card strong {
+    display: block;
+    color: #fff;
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+}
+.team-guide-card p {
+    margin: 0;
+    color: rgba(255,255,255,.72);
+    font-size: 0.8rem;
+    line-height: 1.45;
+}
 
 /* ── HERO ACTIONS ── */
 .team-hero-actions {
@@ -45,24 +71,21 @@
 .run-team-btn:hover { opacity: 0.9; transform: translateY(-1px); }
 .run-team-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 .run-team-btn .spinner-border { width: 16px; height: 16px; border-width: 2px; }
-.warren-brief-toggle {
-    display: none; align-items: center; gap: 6px;
-    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15);
-    color: rgba(255,255,255,.7); padding: 8px 16px; border-radius: 10px;
-    font-size: 0.82rem; font-weight: 500; cursor: pointer; transition: all .2s;
+.team-hero-note {
+    color: rgba(255,255,255,.78);
+    font-size: 0.82rem;
+    max-width: 760px;
+    margin: 0;
 }
-.warren-brief-toggle:hover { background: rgba(255,255,255,.14); color: #fff; }
-.warren-brief-toggle img { width: 22px; height: 22px; border-radius: 6px; }
 
 /* ── WARREN BRIEF ── */
 .warren-brief-panel {
-    display: none; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+    display: block; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
     border-radius: 12px; padding: 14px 16px; margin-bottom: 14px;
     position: relative; z-index: 2;
 }
-.warren-brief-panel.open { display: block; }
 .warren-textarea {
-    width: 100%; min-height: 70px; background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.12);
+    width: 100%; min-height: 96px; background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.12);
     border-radius: 8px; padding: 10px 12px; font-size: 0.84rem; color: #fff;
     resize: vertical; font-family: inherit;
 }
@@ -70,25 +93,9 @@
 .warren-textarea::placeholder { color: rgba(255,255,255,.3); }
 .warren-brief-hint { font-size: 0.72rem; color: rgba(255,255,255,.35); margin-top: 6px; }
 .warren-note {
-    margin-top: 12px;
     font-size: 0.82rem;
     color: rgba(255,255,255,.78);
     max-width: 720px;
-}
-
-/* ── OFFICE FLOOR ── */
-.office-floor {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 1147 / 765;
-    min-height: 320px;
-    background:
-        radial-gradient(circle at 20% 18%, rgba(255,255,255,.22) 0, rgba(255,255,255,0) 24%),
-        radial-gradient(circle at 78% 26%, rgba(255,255,255,.16) 0, rgba(255,255,255,0) 20%),
-        linear-gradient(180deg, #dfe5ee 0%, #d1d9e6 100%);
-    border-radius: 12px 12px 0 0;
-    overflow: hidden;
-    image-rendering: auto;
 }
 
 /* ── AGENT SPRITE ── */
@@ -646,17 +653,14 @@
 
 /* ── RESPONSIVE ── */
 @media (max-width: 768px) {
-    .team-wrap { padding: 18px 16px 0; }
-    .office-sprite { width: 50px; height: 50px; }
+    .team-wrap { padding: 18px 16px; }
     .agent-grid { grid-template-columns: 1fr; }
     .team-stats { gap: 14px; }
     .team-header { flex-direction: column; gap: 10px; }
     .findings-header { flex-direction: column; gap: 10px; align-items: flex-start; }
     .command-grid { grid-template-columns: 1fr; }
     .command-desk-head { flex-direction: column; }
-}
-@media (max-width: 480px) {
-    .office-sprite { width: 40px; height: 40px; }
+    .team-guide { grid-template-columns: 1fr; }
 }
 
 /* ── VOTE BUTTONS ── */
@@ -753,12 +757,11 @@
 }
 </style>
 
-<!-- ── OFFICE SCENE ── -->
 <div class="team-wrap">
     <div class="team-header">
         <div>
-            <h2><i class="bi bi-building me-2"></i>{{ brand_name }} HQ</h2>
-            <p>Brief Warren, then let him direct the team.</p>
+            <h2><i class="bi bi-diagram-3 me-2"></i>{{ brand_name }} Command Center</h2>
+            <p>Run the team from one place, then read Warren's condensed plan first.</p>
         </div>
         <div class="team-stats">
             <div class="team-stat"><div class="ts-val" id="stat-hired">0</div><div class="ts-lbl">Hired</div></div>
@@ -770,22 +773,30 @@
         <button class="run-team-btn" id="run-team-btn" onclick="runTeam()">
             <i class="bi bi-play-circle"></i> Send To Warren
         </button>
-        <button class="warren-brief-toggle" id="warren-brief-toggle" onclick="toggleWarrenBrief()">
-            <img src="/static/sprites/agents/warren.png" alt="Warren"> Brief Warren
-        </button>
         <span id="run-status" style="margin-left:8px;font-size:0.82rem;color:rgba(255,255,255,.8);"></span>
     </div>
     <div class="warren-brief-panel" id="warren-brief-panel">
         <textarea class="warren-textarea" id="warren-instructions" placeholder="Give Warren specific focus areas for this run, e.g. 'Focus on reducing CPA. Check if competitors changed their ads. Look for new keyword gaps.'"></textarea>
         <div class="warren-brief-hint">Optional - Warren will share this with the team before they get to work.</div>
     </div>
-    <div class="warren-note">Use Warren as your command layer. He should hand you the fewest high-impact moves, while the rest of the team stays in the background unless you want the detail.</div>
+    <p class="team-hero-note">You do not need to manage individual agents here. Warren is the front door, Weave bundles dependencies, and the raw feed stays below if you want to inspect the evidence.</p>
     <div class="run-progress-bar" id="run-progress-bar">
         <div class="progress-agents" id="progress-agents"></div>
         <div class="progress-stage" id="progress-stage"></div>
     </div>
-    <div class="office-floor" id="office-floor">
-        <div class="sequence-banner" id="sequence-banner"></div>
+    <div class="team-guide">
+        <div class="team-guide-card">
+            <strong>1. Brief Warren</strong>
+            <p>Tell him what matters right now, like lowering CPA, checking seasonal shifts, or finding lead leaks.</p>
+        </div>
+        <div class="team-guide-card">
+            <strong>2. Run The Team</strong>
+            <p>Warren routes the work in the background. You only need one button, not a room full of characters.</p>
+        </div>
+        <div class="team-guide-card">
+            <strong>3. Read The Plan</strong>
+            <p>Start with the command desk and priority tasks. Only open the raw feed when you want supporting detail.</p>
+        </div>
     </div>
 </div>
 
@@ -940,27 +951,6 @@ const SEV_ICONS = {
     positive:'bi-check-circle-fill', info:'bi-info-circle-fill'
 };
 
-// Desk positions (% of office floor) for each agent
-const DESK_POSITIONS = {
-    warren:  {x:74, y:12}, scout: {x:18, y:52}, penny: {x:30, y:52},
-    ace:     {x:42, y:52}, radar: {x:7,  y:68}, hawk:  {x:20, y:68},
-    pulse:   {x:32, y:68}, spark: {x:46, y:20}, bridge:{x:60, y:44},
-    chief:   {x:78, y:64}
-};
-
-// Where agents gather around the conference table
-const GATHER_SPOTS = {
-    warren: {x:46, y:36},
-    scout:  {x:38, y:40}, penny: {x:54, y:40},
-    ace:    {x:36, y:46}, radar: {x:56, y:46},
-    hawk:   {x:38, y:52}, pulse: {x:54, y:52},
-    spark:  {x:42, y:56}, bridge:{x:50, y:56},
-    chief:  {x:46, y:60}
-};
-
-// Walk bounds
-const BOUNDS = { minX: 5, maxX: 92, minY: 10, maxY: 82 };
-
 const TRAIN_GUIDANCE = {
     scout: {
         intro: "Scout analyzes your paid ad performance. Help them understand your ad strategy so they can spot what's working and what's wasting money.",
@@ -1040,7 +1030,7 @@ const TRAIN_GUIDANCE = {
             "What's your average close rate from lead to paying customer?",
             "What's your average job value or service ticket?",
         ],
-        placeholder: "e.g. Most leads call us directly. We use ServiceTitan as our CRM. Close rate is about 60% for standard calls, 80% for emergencies. Average ticket is $350 for repairs, $8,000 for repipes.",
+        placeholder: "e.g. Most leads call us directly. We use GoHighLevel as our CRM. Close rate is about 60% for standard calls, 80% for emergencies. Average ticket is $350 for repairs, $8,000 for repipes.",
     },
     chief: {
         intro: "Weave pulls threads from every agent, groups related issues, and turns them into a Minimal Actionable Process. Tell them how you want tradeoffs and cross-KPI impacts handled.",
@@ -1064,362 +1054,20 @@ const TRAIN_GUIDANCE = {
     },
 };
 
-// ══════════════════════════════════════
-//  ANIMATION STATE
-// ══════════════════════════════════════
-let animatedAgents = [];
-let isInSequence = false;
-let chatCooldown = {};
 let allFindings = [];
 let currentFilter = 'all';
 let currentHireAgent = null;
 
 // ══════════════════════════════════════
-//  OFFICE INIT
+//  PAGE HELPERS
 // ══════════════════════════════════════
-function initOffice() {
-    const floor = document.getElementById('office-floor');
-    if (!floor) return;
-
-    // Create agent sprites
-    AGENTS.forEach(agent => {
-        const isHired = !!hiredAgents[agent.key];
-        const desk = DESK_POSITIONS[agent.key] || {x:50, y:50};
-
-        const el = document.createElement('div');
-        el.className = 'office-sprite';
-        el.dataset.agent = agent.key;
-        el.onclick = function() { openHireModal(agent.key); };
-
-        const img = document.createElement('img');
-        img.src = '/static/sprites/agents/' + agent.key + '.png';
-        img.alt = agent.name;
-        el.appendChild(img);
-
-        // Name label
-        const label = document.createElement('div');
-        label.className = 'sprite-label';
-        label.textContent = agent.name;
-        el.appendChild(label);
-
-        // Chat dots (hidden by default)
-        const dots = document.createElement('div');
-        dots.className = 'chat-dots';
-        dots.innerHTML = '<span>.</span><span>.</span><span>.</span>';
-        el.appendChild(dots);
-
-        // Speech bubble (hidden by default)
-        const speech = document.createElement('div');
-        speech.className = 'speech-bubble';
-        el.appendChild(speech);
-
-        if (!isHired) {
-            el.classList.add('sprite-unhired');
-            el.style.left = desk.x + '%';
-            el.style.top = desk.y + '%';
-
-            const badge = document.createElement('div');
-            badge.className = 'sprite-hire-badge';
-            badge.textContent = 'HIRE';
-            el.appendChild(badge);
-        } else {
-            // Start hired agents at their desks so the office reads clearly.
-            el.style.left = desk.x + '%';
-            el.style.top = desk.y + '%';
-
-            // Status dot
-            const sdot = document.createElement('div');
-            sdot.className = 'sprite-status-dot ssd-idle';
-            el.appendChild(sdot);
-        }
-
-        floor.appendChild(el);
-
-        const agentObj = {
-            key: agent.key,
-            name: agent.name,
-            el: el,
-            x: parseFloat(el.style.left),
-            y: parseFloat(el.style.top),
-            hired: isHired,
-            state: 'idle',
-            deskX: desk.x,
-            deskY: desk.y,
-            moveTimeout: null,
-        };
-        animatedAgents.push(agentObj);
-
-        // Set z-index based on y position
-        el.style.zIndex = Math.floor(agentObj.y) + 10;
-    });
-
-    // Start idle behavior for hired agents
-    animatedAgents.filter(a => a.hired).forEach(a => {
-        const delay = 500 + Math.random() * 2000;
-        setTimeout(() => scheduleNextMove(a), delay);
-    });
-
-    // Update Warren brief toggle visibility
-    updateWarrenToggle();
-
-    // Update hired stat
-    document.getElementById('stat-hired').textContent =
-        Object.keys(hiredAgents).length + '/' + AGENTS.length;
-}
-
 function updateWarrenToggle() {
-    const toggle = document.getElementById('warren-brief-toggle');
-    toggle.style.display = hiredAgents.warren ? 'inline-flex' : 'none';
+    return;
 }
 
 function toggleWarrenBrief() {
-    document.getElementById('warren-brief-panel').classList.toggle('open');
-}
-
-// ══════════════════════════════════════
-//  WALKING + IDLE
-// ══════════════════════════════════════
-function walkTo(agent, x, y, onArrive) {
-    const dx = x - agent.x;
-    const dy = y - agent.y;
-    const dist = Math.hypot(dx, dy);
-    const duration = Math.max(1.2, dist * 0.04);
-
-    const el = agent.el;
-    el.style.transition = 'left ' + duration + 's ease-in-out, top ' + duration + 's ease-in-out';
-    el.style.left = x + '%';
-    el.style.top = y + '%';
-
-    // Face direction
-    const img = el.querySelector('img');
-    if (dx > 2) img.style.transform = 'scaleX(1)';
-    else if (dx < -2) img.style.transform = 'scaleX(-1)';
-
-    // Walk bob
-    el.classList.add('sprite-walking');
-    el.classList.remove('sprite-working');
-
-    agent.x = x;
-    agent.y = y;
-    agent.state = 'walking';
-
-    // Z-index follows y position (depth sorting)
-    el.style.zIndex = Math.floor(y) + 10;
-
-    // Clear any existing movement timeout
-    clearTimeout(agent.moveTimeout);
-
-    agent.moveTimeout = setTimeout(function() {
-        el.classList.remove('sprite-walking');
-        agent.state = 'idle';
-        if (onArrive) onArrive();
-    }, duration * 1000);
-}
-
-function scheduleNextMove(agent) {
-    if (isInSequence || !agent.hired) return;
-
-    const delay = 12000 + Math.random() * 12000;
-    agent.moveTimeout = setTimeout(function() {
-        if (isInSequence || agent.state === 'working') return;
-
-        // Keep idle motion occasional so the map does not feel chaotic.
-        if (Math.random() < 0.12 && tryChat(agent)) return;
-
-        // Take a small wander near the desk rather than roaming the whole office.
-        const x = Math.min(BOUNDS.maxX, Math.max(BOUNDS.minX, agent.deskX + (Math.random() * 10 - 5)));
-        const y = Math.min(BOUNDS.maxY, Math.max(BOUNDS.minY, agent.deskY + (Math.random() * 8 - 4)));
-
-        walkTo(agent, x, y, function() {
-            scheduleNextMove(agent);
-        });
-    }, delay);
-}
-
-function tryChat(agent) {
-    if (chatCooldown[agent.key]) return false;
-
-    const candidates = animatedAgents.filter(function(a) {
-        return a.key !== agent.key && a.hired && a.state === 'idle'
-            && !chatCooldown[a.key] && Math.hypot(a.x - agent.x, a.y - agent.y) < 22;
-    });
-    if (candidates.length === 0) return false;
-
-    const partner = candidates[Math.floor(Math.random() * candidates.length)];
-    const midX = (agent.x + partner.x) / 2;
-    const midY = (agent.y + partner.y) / 2;
-
-    // Walk toward each other
-    walkTo(agent, midX - 3, midY);
-    walkTo(partner, midX + 3, midY);
-
-    // After arriving, face each other and show chat dots
-    const arriveTime = Math.max(1200, Math.hypot(midX - agent.x, midY - agent.y) * 40);
-    setTimeout(function() {
-        if (isInSequence) return;
-
-        // Face each other
-        const aImg = agent.el.querySelector('img');
-        const pImg = partner.el.querySelector('img');
-        aImg.style.transform = partner.x > agent.x ? 'scaleX(1)' : 'scaleX(-1)';
-        pImg.style.transform = agent.x > partner.x ? 'scaleX(1)' : 'scaleX(-1)';
-
-        showChatDots(agent, 3500);
-        showChatDots(partner, 3500);
-    }, arriveTime + 300);
-
-    // Set cooldown
-    chatCooldown[agent.key] = true;
-    chatCooldown[partner.key] = true;
-    setTimeout(function() { delete chatCooldown[agent.key]; }, 10000);
-    setTimeout(function() { delete chatCooldown[partner.key]; }, 10000);
-
-    // Schedule next moves after chat
-    setTimeout(function() {
-        scheduleNextMove(agent);
-        scheduleNextMove(partner);
-    }, arriveTime + 4500);
-
-    return true;
-}
-
-function showChatDots(agent, duration) {
-    const dots = agent.el.querySelector('.chat-dots');
-    if (!dots) return;
-    dots.style.display = 'block';
-    setTimeout(function() { dots.style.display = 'none'; }, duration);
-}
-
-function showSpeech(agent, text, duration, isBriefing) {
-    const bubble = agent.el.querySelector('.speech-bubble');
-    if (!bubble) return;
-    bubble.textContent = text;
-    bubble.className = 'speech-bubble' + (isBriefing ? ' briefing' : '') + ' visible';
-    setTimeout(function() {
-        bubble.classList.remove('visible');
-    }, duration);
-}
-
-function showBanner(text, duration) {
-    const banner = document.getElementById('sequence-banner');
-    banner.textContent = text;
-    banner.classList.add('visible');
-    if (duration) {
-        setTimeout(function() { banner.classList.remove('visible'); }, duration);
-    }
-}
-
-function hideBanner() {
-    document.getElementById('sequence-banner').classList.remove('visible');
-}
-
-function stopAllIdle() {
-    animatedAgents.forEach(function(a) {
-        clearTimeout(a.moveTimeout);
-        a.el.classList.remove('sprite-walking');
-        a.el.querySelector('.chat-dots').style.display = 'none';
-    });
-}
-
-function setWorking(agent) {
-    agent.state = 'working';
-    agent.el.classList.remove('sprite-walking');
-    agent.el.classList.add('sprite-working');
-
-    // Add work indicator if not present
-    if (!agent.el.querySelector('.work-indicator')) {
-        const ind = document.createElement('div');
-        ind.className = 'work-indicator';
-        ind.innerHTML = '<i class="bi bi-gear-fill"></i>';
-        agent.el.appendChild(ind);
-    }
-
-    // Update status dot
-    const sdot = agent.el.querySelector('.sprite-status-dot');
-    if (sdot) { sdot.className = 'sprite-status-dot ssd-working'; }
-}
-
-function clearWorking(agent) {
-    agent.state = 'idle';
-    agent.el.classList.remove('sprite-working');
-    const ind = agent.el.querySelector('.work-indicator');
-    if (ind) ind.remove();
-    const sdot = agent.el.querySelector('.sprite-status-dot');
-    if (sdot) { sdot.className = 'sprite-status-dot ssd-idle'; }
-}
-
-function resumeIdle() {
-    isInSequence = false;
-    animatedAgents.filter(function(a) { return a.hired && a.state !== 'working'; }).forEach(function(a) {
-        clearWorking(a);
-        const delay = 500 + Math.random() * 2000;
-        setTimeout(function() { scheduleNextMove(a); }, delay);
-    });
-}
-
-// ══════════════════════════════════════
-//  GATHERING SEQUENCE
-// ══════════════════════════════════════
-function startGatheringSequence(instructions) {
-    isInSequence = true;
-    stopAllIdle();
-
-    const hired = animatedAgents.filter(function(a) { return a.hired; });
-    const warren = animatedAgents.find(function(a) { return a.key === 'warren' && a.hired; });
-    const others = hired.filter(function(a) { return a.key !== 'warren'; });
-
-    if (!warren) {
-        // No Warren hired - just send everyone to desks
-        showBanner('Sending team to their stations...', 3000);
-        hired.forEach(function(a) {
-            walkTo(a, a.deskX, a.deskY, function() { setWorking(a); });
-        });
-        setTimeout(function() { fireRunApi(); }, 3000);
-        return;
-    }
-
-    // Step 1: Warren walks to table head
-    var ws = GATHER_SPOTS.warren;
-    walkTo(warren, ws.x, ws.y);
-
-    // Step 2: Warren calls everyone over
-    setTimeout(function() {
-        showSpeech(warren, 'Team, huddle up!', 2500);
-    }, 1200);
-
-    // Step 3: Everyone walks to their gather spot
-    setTimeout(function() {
-        others.forEach(function(a) {
-            var spot = GATHER_SPOTS[a.key] || {x: 46 + Math.random()*8 - 4, y: 50 + Math.random()*8 - 4};
-            walkTo(a, spot.x, spot.y);
-        });
-    }, 2000);
-
-    // Step 4: All gathered - Warren briefs
-    setTimeout(function() {
-        var msg = instructions
-            ? (instructions.length > 90 ? instructions.substring(0, 90) + '...' : instructions)
-            : "Alright, let's find opportunities and fix what's broken.";
-        showSpeech(warren, msg, 4000, true);
-    }, 5500);
-
-    // Step 5: Warren says go
-    setTimeout(function() {
-        showSpeech(warren, "Let's get to work!", 2000);
-    }, 10000);
-
-    // Step 6: Everyone disperses to desks
-    setTimeout(function() {
-        showBanner('Team is at their desks...', 2500);
-        hired.forEach(function(a) {
-            walkTo(a, a.deskX, a.deskY, function() { setWorking(a); });
-        });
-    }, 12000);
-
-    // Step 7: Fire API call
-    setTimeout(function() {
-        fireRunApi();
-    }, 14000);
+    var panel = document.getElementById('warren-brief-panel');
+    if (panel) panel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
 }
 
 // ══════════════════════════════════════
@@ -1505,25 +1153,6 @@ function confirmHire() {
     .then(function(data) {
         if (data.success) {
             hiredAgents = data.hired_agents;
-            // Update the sprite in the office
-            var agent = animatedAgents.find(function(a) { return a.key === currentHireAgent; });
-            if (agent) {
-                agent.hired = true;
-                agent.el.classList.remove('sprite-unhired');
-                var badge = agent.el.querySelector('.sprite-hire-badge');
-                if (badge) badge.remove();
-
-                // Add status dot
-                if (!agent.el.querySelector('.sprite-status-dot')) {
-                    var sdot = document.createElement('div');
-                    sdot.className = 'sprite-status-dot ssd-idle';
-                    agent.el.appendChild(sdot);
-                }
-
-                // Start wandering from current position
-                var delay = 500 + Math.random() * 1000;
-                setTimeout(function() { scheduleNextMove(agent); }, delay);
-            }
             updateWarrenToggle();
             document.getElementById('stat-hired').textContent =
                 Object.keys(hiredAgents).length + '/' + AGENTS.length;
@@ -1895,7 +1524,7 @@ function runTeam() {
     var status = document.getElementById('run-status');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Running...';
-    status.textContent = 'Assembling the team...';
+    status.textContent = 'Sending the brief to Warren...';
 
     // Initialize real-time progress bar
     initProgressBar();
@@ -1905,11 +1534,7 @@ function runTeam() {
     var instrField = document.getElementById('warren-instructions');
     if (instrField) instructions = instrField.value.trim();
 
-    // Close the brief panel
-    document.getElementById('warren-brief-panel').classList.remove('open');
-
-    // Start the cinematic gathering sequence
-    startGatheringSequence(instructions);
+    fireRunApi();
 }
 
 function fireRunApi() {
@@ -1936,7 +1561,6 @@ function fireRunApi() {
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-play-circle"></i> Send To Warren';
             status.textContent = data.error || 'Something went wrong.';
-            resumeIdle();
         }
     })
     .catch(function() {
@@ -1944,7 +1568,6 @@ function fireRunApi() {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-play-circle"></i> Send To Warren';
         status.textContent = 'Failed to start. Try again.';
-        resumeIdle();
     });
 }
 
@@ -1997,15 +1620,10 @@ function pollRunStatus() {
                         statusMsg += ' ' + qa.focus_message;
                     }
                     status.textContent = statusMsg;
-                    hideBanner();
                     loadFindings();
                     loadTeamData();
-
-                    // Celebration then back to idle
-                    setTimeout(function() { resumeIdle(); }, 3000);
                 } else {
                     status.textContent = data.error || 'Run completed with errors.';
-                    resumeIdle();
                 }
                 setTimeout(function() { status.textContent = ''; }, 12000);
             })
@@ -2017,7 +1635,6 @@ function pollRunStatus() {
             btn.innerHTML = '<i class="bi bi-play-circle"></i> Send To Warren';
             status.textContent = 'Taking longer than expected. Check back in a minute.';
             hideProgressBar();
-            resumeIdle();
             setTimeout(function() { status.textContent = ''; }, 8000);
         }
     }, 2000);
@@ -2070,34 +1687,6 @@ function loadTeamData() {
                 if (data.latest && data.latest[a.key]) {
                     a.latest = data.latest[a.key];
                     latestMap[a.key] = data.latest[a.key];
-                }
-            });
-
-            // Update animated agents based on API data
-            agents.forEach(function(a) {
-                var animated = animatedAgents.find(function(aa) { return aa.key === a.key; });
-                if (!animated) return;
-
-                var wasHired = animated.hired;
-                animated.hired = !!hiredAgents[a.key];
-
-                // Newly hired agent
-                if (!wasHired && animated.hired) {
-                    animated.el.classList.remove('sprite-unhired');
-                    var badge = animated.el.querySelector('.sprite-hire-badge');
-                    if (badge) badge.remove();
-                    if (!animated.el.querySelector('.sprite-status-dot')) {
-                        var sdot = document.createElement('div');
-                        sdot.className = 'sprite-status-dot ssd-idle';
-                        animated.el.appendChild(sdot);
-                    }
-                    scheduleNextMove(animated);
-                }
-
-                // Agent is working (from API or run status)
-                if (a.latest && a.latest.status === 'in_progress' && animated.state !== 'working' && !isInSequence) {
-                    clearTimeout(animated.moveTimeout);
-                    walkTo(animated, animated.deskX, animated.deskY, function() { setWorking(animated); });
                 }
             });
 
@@ -2330,7 +1919,6 @@ function hideProgressBar() {
 // ══════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════
-initOffice();
 loadTeamData();
 loadFindings();
 setInterval(loadTeamData, 30000);

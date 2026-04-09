@@ -11,13 +11,9 @@ import re
 import time
 import threading
 import logging
-import base64
-import hashlib
-import hmac
 import uuid
 from functools import wraps
 from datetime import datetime, timedelta
-from urllib.parse import urlencode
 
 from flask import (
     Blueprint, render_template, request, redirect,
@@ -34,6 +30,38 @@ client_bp = Blueprint(
 
 
 log = logging.getLogger(__name__)
+
+
+def client_login_required(view_func):
+    @wraps(view_func)
+    def _wrapped(*args, **kwargs):
+        if session.get("client_user_id") and session.get("client_brand_id"):
+            return view_func(*args, **kwargs)
+
+        wants_json = (
+            request.path.startswith("/client/api/")
+            or request.headers.get("X-Requested-With") in {"XMLHttpRequest", "PJAX"}
+            or request.is_json
+        )
+        if wants_json:
+            return jsonify({"error": "Authentication required"}), 401
+        return redirect(url_for("client.client_login"))
+
+    return _wrapped
+
+
+def _get_ad_connection_status(db, brand):
+    brand_id = int((brand or {}).get("id") or 0)
+    connections = db.get_brand_connections(brand_id) if brand_id else {}
+    google_conn = connections.get("google", {}) if isinstance(connections, dict) else {}
+    meta_conn = connections.get("meta", {}) if isinstance(connections, dict) else {}
+
+    has_google = bool(
+        google_conn.get("status") == "connected"
+        and ((brand or {}).get("google_ads_customer_id") or "").strip()
+    )
+    has_meta = bool(meta_conn.get("status") == "connected")
+    return has_google, has_meta
 
 
 def _external_app_url() -> str:
@@ -325,222 +353,35 @@ def _build_warren_lead_intelligence(db, brand):
 
     metrics = get_pipeline_metrics(db, brand_id)
     threads = db.get_lead_threads(brand_id, limit=40)
-    connections = db.get_brand_connections(brand_id)
-
-    source_counts = {}
-    objection_counts = {}
+    stage_counts = metrics.get("stage_counts") or {}
     recent_threads = []
+    unread_threads = 0
 
-    for thread in threads[:8]:
-        thread_id = thread["id"]
-        source = (thread.get("source") or thread.get("channel") or "unknown").strip() or "unknown"
-        source_counts[source] = source_counts.get(source, 0) + 1
-
-        messages = db.get_lead_messages(thread_id, limit=8)
-        lead_message = ""
-        assistant_message = ""
-        for msg in reversed(messages):
-            content = (msg.get("content") or "").strip()
-            if not content or msg.get("role") == "system":
-                continue
-            if not lead_message and (msg.get("direction") == "inbound" or msg.get("role") in {"lead", "user"}):
-                lead_message = _compact_message_text(content)
-            elif not assistant_message and msg.get("role") == "assistant":
-                assistant_message = _compact_message_text(content)
-            if lead_message and assistant_message:
-                break
-
-        objections = db.get_lead_events(brand_id, thread_id, event_type="objection_detected", limit=3)
-        objection_labels = [e.get("event_value", "") for e in objections if e.get("event_value")]
-        for label in objection_labels:
-            objection_counts[label] = objection_counts.get(label, 0) + 1
-
-        recent_threads.append({
-            "thread_id": thread_id,
-            "lead_name": thread.get("lead_name") or "Unknown lead",
-            "channel": thread.get("channel") or "unknown",
-            "stage": thread.get("status") or "new",
-            "source": source,
-            "quote_status": thread.get("quote_status") or "not_started",
-            "last_message_at": thread.get("last_message_at") or "",
-            "summary": _compact_message_text(thread.get("summary") or "", limit=140),
-            "latest_lead_message": lead_message,
-            "latest_assistant_message": assistant_message,
-            "objections": objection_labels,
-        })
-
-    recent_threads.sort(key=lambda item: item.get("last_message_at") or "", reverse=True)
+    for thread in threads:
+        if len(recent_threads) < 5:
+            recent_threads.append(
+                {
+                    "id": thread.get("id"),
+                    "name": thread.get("lead_name") or thread.get("contact_name") or "Lead",
+                    "stage": thread.get("status") or "new",
+                    "channel": thread.get("channel") or "unknown",
+                    "updated_at": thread.get("updated_at") or thread.get("last_message_at") or "",
+                }
+            )
+        unread_threads += int(thread.get("unread_count") or 0)
 
     return {
-        "pipeline_metrics": metrics,
+        "total_leads": metrics.get("total_leads", 0),
+        "active_leads": metrics.get("active_leads", 0),
+        "conversion_rate": metrics.get("conversion_rate", 0),
+        "avg_response_time_minutes": metrics.get("avg_response_time_minutes", 0),
+        "channels": metrics.get("channels") or {},
+        "stage_counts": stage_counts,
+        "unread_threads": unread_threads,
+        "won_leads": stage_counts.get("won", 0),
+        "lost_leads": stage_counts.get("lost", 0),
         "recent_threads": recent_threads,
-        "source_breakdown": source_counts,
-        "objection_breakdown": objection_counts,
-        "knowledge_sources": {
-            "lead_assistant_profile_configured": bool(
-                brand.get("sales_bot_service_menu") or brand.get("sales_bot_pricing_notes") or brand.get("sales_bot_example_language")
-            ),
-            "google_business_profile_linked": bool(brand.get("google_place_id")),
-            "google_drive_connected": bool(connections.get("google", {}).get("status") == "connected" and brand.get("google_drive_folder_id")),
-            "google_drive_folder_id": brand.get("google_drive_folder_id") or "",
-            "google_drive_sheet_id": brand.get("google_drive_sheet_id") or "",
-            "channels_enabled": json.loads(brand.get("sales_bot_channels") or "[]") if isinstance(brand.get("sales_bot_channels"), str) else (brand.get("sales_bot_channels") or []),
-        },
-        "connection_status": {
-            "google": connections.get("google", {}).get("status") or "not_connected",
-            "meta": connections.get("meta", {}).get("status") or "not_connected",
-            "quo_sms": "connected" if (brand.get("quo_api_key") and brand.get("quo_phone_number")) else "not_connected",
-            "google_business_profile": "linked" if brand.get("google_place_id") else "not_linked",
-        },
-        "attribution_notes": [
-            "Lead form conversations are tracked through pipeline stages and thread source metadata.",
-            "Ad-level attribution is partial unless the upstream channel provides campaign or ad identifiers.",
-            "Conversation quality, objections, speed to reply, and close stage movement are available now.",
-        ],
     }
-
-
-def _get_ad_connection_status(db, brand):
-    """Return (has_google, has_meta) for a brand's ad platform connections."""
-    brand_id = brand["id"] if isinstance(brand, dict) else brand
-    connections = db.get_brand_connections(brand_id)
-    has_google = bool(connections.get("google", {}).get("status") == "connected"
-                     and (brand if isinstance(brand, dict) else {}).get("google_ads_customer_id"))
-    has_meta = bool(connections.get("meta", {}).get("status") == "connected"
-                    and (brand if isinstance(brand, dict) else {}).get("meta_ad_account_id"))
-    return has_google, has_meta
-
-
-def client_login_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if "client_user_id" not in session:
-            return redirect(url_for("client.client_login"))
-        return f(*args, **kwargs)
-    return decorated
-
-
-def _require_role(*allowed_roles):
-    """Check that current user has one of the allowed roles."""
-    role = session.get("client_role", "owner")
-    return role in allowed_roles
-
-
-def _to_base64url(value):
-    if isinstance(value, str):
-        value = value.encode("utf-8")
-    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
-
-
-def _normalize_titan_next_path(next_path, fallback="/"):
-    value = (next_path or "").strip()
-    if not value.startswith("/"):
-        return fallback
-    if value.startswith("//"):
-        return fallback
-    return value
-
-
-def _get_titan_launch_config(config):
-    base_url = (config.get("TITAN_BASE_URL") or "").strip()
-    if base_url and not base_url.lower().startswith(("http://", "https://")):
-        # Make admin entry forgiving (common to paste host without scheme)
-        if base_url.lower().startswith(("localhost", "127.0.0.1")):
-            base_url = "http://" + base_url
-        else:
-            base_url = "https://" + base_url
-    base_url = base_url.rstrip("/")
-
-    issuer = (config.get("TITAN_UPSTREAM_ISSUER") or "").strip()
-    external_app = (config.get("TITAN_EXTERNAL_APP") or issuer).strip() or issuer
-    secret = (config.get("TITAN_UPSTREAM_SSO_SECRET") or "").strip()
-
-    missing = []
-    if not base_url:
-        missing.append("TITAN_BASE_URL")
-    if not issuer:
-        missing.append("TITAN_UPSTREAM_ISSUER")
-    if not secret:
-        missing.append("TITAN_UPSTREAM_SSO_SECRET")
-
-    if missing:
-        raise RuntimeError("Missing Titan launch config: " + ", ".join(missing))
-
-    return {
-        "base_url": base_url,
-        "issuer": issuer,
-        "external_app": external_app,
-        "secret": secret,
-    }
-
-
-def _titan_launch_role(client_role):
-    role = (client_role or "").strip().lower()
-    if role == "owner":
-        return "owner"
-    if role == "manager":
-        return "admin"
-    return "member"
-
-
-def build_titan_launch_payload(config, user, brand, lifetime_seconds=300):
-    titan = _get_titan_launch_config(config)
-    now = int(time.time())
-    ttl = max(1, min(int(lifetime_seconds or 300), 300))
-
-    display_name = (
-        (user.get("display_name") or "").strip()
-        or (user.get("full_name") or "").strip()
-        or (user.get("name") or "").strip()
-    )
-
-    return {
-        "issuer": titan["issuer"],
-        "external_app": titan["external_app"],
-        "external_user_id": str(user.get("id") or "").strip(),
-        "external_brand_id": str(brand.get("id") or "").strip(),
-        "email": ((brand.get("titan_email") or "").strip().lower()
-                 or (user.get("email") or "").strip().lower()),
-        "display_name": display_name,
-        "role": _titan_launch_role(user.get("role")),
-        "titan_snapshot_id": ((brand.get("titan_snapshot_id") or "").strip() or None),
-        "titan_account_id": ((brand.get("titan_account_id") or "").strip() or None),
-        "ghl_location_id": ((brand.get("titan_ghl_location_id") or "").strip() or None),
-        "iat": now,
-        "exp": now + ttl,
-        "nonce": str(uuid.uuid4()),
-    }
-
-
-def build_titan_sso_token(config, user, brand, lifetime_seconds=300):
-    titan = _get_titan_launch_config(config)
-    payload = build_titan_launch_payload(config, user, brand, lifetime_seconds=lifetime_seconds)
-    encoded_payload = _to_base64url(json.dumps(payload, separators=(",", ":")))
-    signature = _to_base64url(
-        hmac.new(
-            titan["secret"].encode("utf-8"),
-            encoded_payload.encode("utf-8"),
-            hashlib.sha256,
-        ).digest()
-    )
-    return f"{encoded_payload}.{signature}", payload
-
-
-def build_titan_launch_url(config, user, brand, next_path="/", lifetime_seconds=300):
-    titan = _get_titan_launch_config(config)
-    token, payload = build_titan_sso_token(
-        config,
-        user,
-        brand,
-        lifetime_seconds=lifetime_seconds,
-    )
-
-    query = {
-        "token": token,
-        "next": _normalize_titan_next_path(next_path, "/"),
-    }
-
-    return f"{titan['base_url']}/sso/upstream?{urlencode(query)}", payload
 
 
 # ── Feature gate (before_request on blueprint) ──
@@ -3789,11 +3630,6 @@ def client_settings():
             brand=brand,
             google_connected=(google_conn.get("status") == "connected"),
             meta_connected=(meta_conn.get("status") == "connected"),
-            titan_configured=bool(
-                (current_app.config.get("TITAN_BASE_URL") or "").strip()
-                and (current_app.config.get("TITAN_UPSTREAM_ISSUER") or "").strip()
-                and (current_app.config.get("TITAN_UPSTREAM_SSO_SECRET") or "").strip()
-            ),
             drive_scoped=drive_scoped,
             google_conn=google_conn,
             meta_conn=meta_conn,
@@ -3830,111 +3666,6 @@ def client_save_facebook_page_id():
     db.update_brand_api_field(brand_id, "facebook_page_id", raw)
     flash("Facebook Page reference saved.", "success")
     return redirect(url_for("client.client_settings"))
-
-
-@client_bp.route("/settings/titan", methods=["POST"])
-@client_login_required
-def client_save_titan_settings():
-    db = _get_db()
-    brand_id = session["client_brand_id"]
-
-    db.update_brand_text_field(brand_id, "titan_snapshot_id", (request.form.get("titan_snapshot_id") or "").strip())
-    db.update_brand_text_field(brand_id, "titan_account_id", (request.form.get("titan_account_id") or "").strip())
-    db.update_brand_text_field(brand_id, "titan_ghl_location_id", (request.form.get("titan_ghl_location_id") or "").strip())
-    db.update_brand_text_field(brand_id, "titan_email", (request.form.get("titan_email") or "").strip().lower())
-
-    flash("Titan settings saved.", "success")
-    return redirect(url_for("client.client_settings"))
-
-
-@client_bp.route("/titan/launch")
-@client_login_required
-def client_titan_launch():
-    db = _get_db()
-    brand_id = session["client_brand_id"]
-    brand = db.get_brand(brand_id)
-    if not brand:
-        abort(404)
-
-    try:
-        titan_cfg = _get_titan_launch_config(current_app.config)
-    except RuntimeError as exc:
-        current_app.logger.error("Titan launch config error: %s", exc)
-        flash(str(exc), "error")
-        return redirect(url_for("client.client_settings"))
-
-    user = db.get_client_user(session.get("client_user_id"))
-    if not user:
-        flash("Your client account could not be loaded.", "error")
-        return redirect(url_for("client.client_logout"))
-
-    email = (brand.get("titan_email") or "").strip().lower() or (user.get("email") or "").strip().lower()
-    display_name = (
-        (user.get("display_name") or "").strip()
-        or (user.get("full_name") or "").strip()
-        or (user.get("name") or "").strip()
-    )
-    if not display_name and email:
-        local_part = email.split("@", 1)[0].strip()
-        derived = local_part.replace(".", " ").replace("_", " ").strip().title()
-        if derived:
-            display_name = derived
-            user = dict(user)
-            user["display_name"] = display_name
-    if not email or not display_name:
-        flash("Titan launch requires a client user with both email and display name.", "error")
-        return redirect(url_for("client.client_settings"))
-
-    next_path = request.args.get("next") or "/"
-    titan_url, payload = build_titan_launch_url(
-        current_app.config,
-        user,
-        brand,
-        next_path=next_path,
-        lifetime_seconds=300,
-    )
-
-    # Extract token and next from the built URL for POST submission
-    titan_cfg = _get_titan_launch_config(current_app.config)
-    token_str, _ = build_titan_sso_token(current_app.config, user, brand, lifetime_seconds=300)
-    sso_endpoint = f"{titan_cfg['base_url']}/sso/upstream"
-    safe_next = _normalize_titan_next_path(next_path, "/")
-
-    # Log every launch so we can verify the redirect target
-    current_app.logger.info(
-        "Titan launch: user=%s brand=%s target=%s issuer=%s method=POST",
-        email, brand_id,
-        sso_endpoint,
-        payload.get("issuer"),
-    )
-
-    # ?preview=1 shows the URL instead of redirecting (owner/admin only)
-    if request.args.get("preview") == "1" and session.get("client_role") in ("owner", "manager"):
-        from markupsafe import escape
-        return (
-            f"<html><body style='font-family:monospace;padding:2rem;'>"
-            f"<h3>Titan Launch Preview</h3>"
-            f"<p><strong>POST target:</strong></p>"
-            f"<pre style='word-break:break-all;background:#f5f5f5;padding:1rem;'>{escape(sso_endpoint)}</pre>"
-            f"<p><strong>Token (first 80 chars):</strong></p>"
-            f"<pre style='background:#f5f5f5;padding:1rem;'>{escape(token_str[:80])}...</pre>"
-            f"<p><strong>Payload claims:</strong></p>"
-            f"<pre style='background:#f5f5f5;padding:1rem;'>{escape(json.dumps({k: v for k, v in payload.items() if k != 'nonce'}, indent=2))}</pre>"
-            f"<p><a href='{escape(titan_url)}'>GET fallback link</a></p>"
-            f"</body></html>"
-        )
-
-    # Auto-submitting POST form - standard SSO handoff pattern
-    from markupsafe import escape
-    return (
-        f"<html><body onload=\"document.getElementById('sso').submit()\">"
-        f"<form id=\"sso\" method=\"POST\" action=\"{escape(sso_endpoint)}\">"
-        f"<input type=\"hidden\" name=\"token\" value=\"{escape(token_str)}\">"
-        f"<input type=\"hidden\" name=\"next\" value=\"{escape(safe_next)}\">"
-        f"</form>"
-        f"<noscript><p>Redirecting to Titan... <a href=\"{escape(titan_url)}\">Click here</a> if not redirected.</p></noscript>"
-        f"</body></html>"
-    )
 
 
 @client_bp.route("/settings/openai", methods=["POST"])
@@ -4150,131 +3881,6 @@ def client_save_leads_assistant_settings():
 
 
 # ── Warren Connection Test Endpoints ──
-
-@client_bp.route("/api/warren/test-openphone", methods=["POST"])
-@client_login_required
-def client_test_openphone():
-    """Test OpenPhone/Quo API connection and list phone numbers."""
-    db = _get_db()
-    brand_id = session["client_brand_id"]
-    brand = db.get_brand(brand_id)
-    if not brand:
-        return jsonify({"ok": False, "error": "Brand not found"}), 404
-
-    api_key = (brand.get("quo_api_key") or "").strip()
-    if not api_key:
-        return jsonify({"ok": False, "error": "No API key configured"})
-
-    from webapp.quo_sms import test_connection, get_phone_numbers
-
-    ok, detail = test_connection(api_key)
-    if not ok:
-        return jsonify({"ok": False, "error": str(detail)})
-
-    # Get phone numbers
-    phone_numbers = []
-    try:
-        nums, _err = get_phone_numbers(api_key)
-        if isinstance(nums, list):
-            phone_numbers = [n.get("phoneNumber", "") for n in nums if n.get("phoneNumber")]
-    except Exception:
-        pass
-
-    return jsonify({"ok": True, "phone_numbers": phone_numbers})
-
-
-@client_bp.route("/api/warren/send-test-sms", methods=["POST"])
-@client_login_required
-def client_send_test_sms():
-    """Send a real test SMS and return the full API response for diagnostics."""
-    db = _get_db()
-    brand_id = session["client_brand_id"]
-    brand = db.get_brand(brand_id)
-    if not brand:
-        return jsonify({"ok": False, "error": "Brand not found"}), 404
-
-    api_key = (brand.get("quo_api_key") or "").strip()
-    from_number = (brand.get("quo_phone_number") or "").strip()
-    to_phone = (request.get_json(silent=True) or {}).get("to_phone", "").strip()
-
-    if not api_key:
-        return jsonify({"ok": False, "error": "No Quo API key configured"})
-    if not from_number:
-        return jsonify({"ok": False, "error": "No Quo phone number configured. Set your OpenPhone number in E.164 format (+1XXXXXXXXXX)."})
-    if not to_phone:
-        return jsonify({"ok": False, "error": "Enter a phone number to send the test to."})
-
-    # Validate from_number format
-    if not from_number.startswith("+"):
-        return jsonify({"ok": False, "error": f"Your configured 'from' number ({from_number}) is not in E.164 format. It must start with + (e.g. +15551234567)."})
-
-    from webapp.quo_sms import send_test_sms
-    result = send_test_sms(api_key, from_number, to_phone)
-    return jsonify(result)
-
-
-@client_bp.route("/api/warren/test-messenger", methods=["POST"])
-@client_login_required
-def client_test_messenger():
-    """Test Meta Messenger connection for the brand's Facebook Page."""
-    db = _get_db()
-    brand_id = session["client_brand_id"]
-    brand = db.get_brand(brand_id)
-    if not brand:
-        return jsonify({"ok": False, "error": "Brand not found"}), 404
-
-    page_id = (brand.get("facebook_page_id") or "").strip()
-    if not page_id:
-        return jsonify({"ok": False, "error": "No Facebook Page ID configured"})
-
-    # Get page access token
-    conn_data = db.get_brand_connections(brand_id).get("meta")
-    if not conn_data or conn_data.get("status") != "connected":
-        return jsonify({"ok": False, "error": "Meta not connected. Connect Meta in the Connections section first."})
-
-    from webapp.api_bridge import _get_meta_token, _get_page_access_token
-    import requests as _req
-
-    user_token = _get_meta_token(db, brand_id, conn_data)
-    if not user_token:
-        return jsonify({"ok": False, "error": "Could not get a valid Meta access token. Try reconnecting Meta."})
-
-    page_token = _get_page_access_token(page_id, user_token)
-    if not page_token:
-        return jsonify({"ok": False, "error": "Could not get Page access token. Make sure you granted page permissions."})
-
-    # Test: get page info
-    try:
-        resp = _req.get(
-            f"https://graph.facebook.com/v21.0/{page_id}",
-            params={"access_token": page_token, "fields": "name,id"},
-            timeout=10,
-        )
-        if resp.status_code != 200:
-            return jsonify({"ok": False, "error": f"Page API returned {resp.status_code}"})
-        page_info = resp.json()
-
-        # Check subscribed fields
-        sub_resp = _req.get(
-            f"https://graph.facebook.com/v21.0/{page_id}/subscribed_apps",
-            params={"access_token": page_token},
-            timeout=10,
-        )
-        subscribed_fields = []
-        if sub_resp.status_code == 200:
-            sub_data = sub_resp.json().get("data", [])
-            for app in sub_data:
-                subscribed_fields.extend(app.get("subscribed_fields", []))
-
-        return jsonify({
-            "ok": True,
-            "page_name": page_info.get("name", ""),
-            "page_id": page_info.get("id", ""),
-            "subscribed_fields": subscribed_fields,
-        })
-
-    except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)[:200]})
 
 
 @client_bp.route("/api/drive/diagnose")

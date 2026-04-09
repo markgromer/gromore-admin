@@ -7,6 +7,7 @@ This is intentionally on-demand and best-effort: failures should not break core 
 import json
 import logging
 import math
+import os
 import re
 from collections import deque
 from typing import Any, Dict, List, Optional
@@ -18,6 +19,71 @@ from bs4 import BeautifulSoup
 log = logging.getLogger(__name__)
 
 DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+
+
+def _load_benchmark_reference() -> Dict[str, Any]:
+    path = os.path.join(os.path.dirname(__file__), "..", "config", "benchmarks.json")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return json.load(handle)
+    except Exception:
+        return {}
+
+
+def _format_benchmark_value(metric: str, value: Any) -> str:
+    if value in (None, ""):
+        return "n/a"
+    if metric in {"cpc", "cpa", "cpm"}:
+        return f"${float(value):.2f}"
+    if metric == "frequency_cap":
+        return f"{float(value):.1f}"
+    if metric in {"avg_session_duration_good"}:
+        return f"{int(value)}s"
+    if metric in {"target_position", "good_position"}:
+        return f"{float(value):.1f}"
+    return f"{float(value):.1f}%"
+
+
+def _build_niche_benchmark_prompt(brand: Dict[str, Any]) -> str:
+    industry = (brand.get("industry") or "").strip().lower().replace(" ", "_")
+    if not industry:
+        return ""
+
+    reference = _load_benchmark_reference()
+    niche_parts = []
+    for channel in ("google_ads", "meta_ads", "website", "seo"):
+        channel_data = (reference.get(channel) or {}).get(industry)
+        if not channel_data:
+            continue
+        metrics = ", ".join(
+            f"{metric} { _format_benchmark_value(metric, value) }"
+            for metric, value in channel_data.items()
+        )
+        niche_parts.append(f"- {channel}: {metrics}")
+
+    if not niche_parts:
+        return ""
+
+    special_notes = []
+    notes = ((reference.get("_meta") or {}).get("notes") or "").strip()
+    if industry == "pet_waste_removal":
+        special_notes.append(
+            "Pet waste removal is a colder demand-creation niche. Do not grade it against higher-intent home service funnels like plumbing or HVAC. "
+            "A website conversion rate around 1.5% can still be healthy here, especially when traffic is colder, awareness-heavy, or requires repeated exposure before inquiry."
+        )
+    elif notes:
+        special_notes.append(
+            "Use the niche benchmarks below as the primary comparison set before falling back to any broader industry intuition."
+        )
+
+    lines = [
+        "NICHE BENCHMARK CALIBRATION:",
+        "Judge funnel quality against this brand's actual niche before using broader local-service heuristics.",
+        *niche_parts,
+    ]
+    if special_notes:
+        lines.extend(special_notes)
+    return "\n".join(lines)
 
 
 # ── Warren tool definitions (OpenAI function calling) ──
@@ -1401,6 +1467,10 @@ def chat_with_warren(
         voice_parts.append(f"KPI targets: {', '.join(kpi_parts)}")
     if voice_parts:
         system += "\n\nLIVE BRAND CONTEXT: " + " | ".join(voice_parts)
+
+    niche_benchmark_prompt = _build_niche_benchmark_prompt(brand)
+    if niche_benchmark_prompt:
+        system += "\n\n" + niche_benchmark_prompt
 
     if context.get("client_mode"):
         system += (

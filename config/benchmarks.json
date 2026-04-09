@@ -7,7 +7,7 @@
             "WordStream Facebook Ad Benchmarks by Industry (256 US accounts, 2016-2017, adjusted for 2024-2025 CPM inflation)",
             "Backlinko / Advanced Web Ranking organic CTR by position studies (2024)"
         ],
-        "notes": "Google Ads figures use 2025 Home & Home Improvement category (CTR 6.37%, CPC $7.85, CVR 7.33%, CPL $90.92) as baseline, sub-niche spreads derived from 2021 home services breakdowns. Meta figures adjusted ~35% upward from 2017 CPMs for 2024-2025 market conditions. SEO CTR derived from organic position studies. Website metrics from GA4 home services aggregates. Pet waste removal calibrated from operator feedback: unknown industry requiring 10-15 ad exposures before consideration, demand-creation model not demand-capture."
+        "notes": "Google Ads figures use 2025 Home & Home Improvement category (CTR 6.37%, CPC $7.85, CVR 7.33%, CPL $90.92) as baseline, sub-niche spreads derived from 2021 home services breakdowns. Meta figures adjusted ~35% upward from 2017 CPMs for 2024-2025 market conditions. SEO CTR derived from organic position studies. Website metrics from GA4 home services aggregates. Pet waste removal calibrated from operator feedback: unknown industry requiring 10-15 ad exposures before consideration, demand-creation model not demand-capture, and a site conversion rate around 1.5% can still be healthy for colder traffic."
     },
     "google_ads": {
         "plumbing":            { "ctr": 5.8, "cpc": 8.50, "conversion_rate": 8.0, "cpa": 55.00 },
@@ -67,7 +67,7 @@
         "garage_door":         { "bounce_rate_good": 38, "bounce_rate_bad": 55, "pages_per_session_good": 2.0, "avg_session_duration_good": 90, "conversion_rate_good": 7.0 },
         "foundation_repair":   { "bounce_rate_good": 55, "bounce_rate_bad": 72, "pages_per_session_good": 3.5, "avg_session_duration_good": 180, "conversion_rate_good": 2.5 },
         "water_damage":        { "bounce_rate_good": 35, "bounce_rate_bad": 52, "pages_per_session_good": 1.8, "avg_session_duration_good": 75, "conversion_rate_good": 8.0 },
-        "pet_waste_removal":   { "bounce_rate_good": 55, "bounce_rate_bad": 72, "pages_per_session_good": 3.0, "avg_session_duration_good": 150, "conversion_rate_good": 3.0 },
+        "pet_waste_removal":   { "bounce_rate_good": 55, "bounce_rate_bad": 72, "pages_per_session_good": 3.0, "avg_session_duration_good": 150, "conversion_rate_good": 1.5 },
         "_default":            { "bounce_rate_good": 45, "bounce_rate_bad": 65, "pages_per_session_good": 2.5, "avg_session_duration_good": 120, "conversion_rate_good": 5.0 }
     }
 }
