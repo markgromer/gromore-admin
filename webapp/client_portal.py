@@ -64,6 +64,86 @@ def _get_ad_connection_status(db, brand):
     return has_google, has_meta
 
 
+def _coerce_action_key(value, fallback):
+    text = re.sub(r"[^a-z0-9]+", "_", (value or "").strip().lower()).strip("_")
+    return (text or fallback)[:80]
+
+
+def _normalize_client_actions(actions):
+    normalized = []
+    if not isinstance(actions, list):
+        return normalized
+
+    for index, raw_action in enumerate(actions, start=1):
+        if isinstance(raw_action, dict):
+            action = dict(raw_action)
+        elif isinstance(raw_action, str):
+            action = {"title": raw_action}
+        else:
+            continue
+
+        title = str(action.get("title") or action.get("mission_name") or "").strip() or f"Mission {index}"
+        mission_name = str(action.get("mission_name") or title).strip() or title
+
+        xp_value = action.get("xp", 100)
+        try:
+            xp = int(xp_value)
+        except (TypeError, ValueError):
+            xp = 100
+
+        difficulty_value = action.get("difficulty", 0)
+        try:
+            difficulty = int(difficulty_value)
+        except (TypeError, ValueError):
+            difficulty = 0
+        difficulty = max(0, min(difficulty, 3))
+
+        steps_value = action.get("steps") or []
+        if isinstance(steps_value, str):
+            steps = [steps_value] if steps_value.strip() else []
+        elif isinstance(steps_value, (list, tuple)):
+            steps = []
+            for step in steps_value:
+                if step is None:
+                    continue
+                step_text = str(step).strip()
+                if step_text:
+                    steps.append(step_text)
+        else:
+            steps = []
+
+        normalized.append(
+            {
+                **action,
+                "title": title,
+                "mission_name": mission_name,
+                "priority": str(action.get("priority") or "Worth Doing Soon"),
+                "priority_class": str(action.get("priority_class") or "warning"),
+                "category": str(action.get("category") or "Marketing"),
+                "what": str(action.get("what") or ""),
+                "steps": steps,
+                "impact": str(action.get("impact") or ""),
+                "time": str(action.get("time") or ""),
+                "data_point": str(action.get("data_point") or ""),
+                "why": str(action.get("why") or ""),
+                "reward": str(action.get("reward") or ""),
+                "icon": str(action.get("icon") or "bi-star-fill"),
+                "icon_color": str(action.get("icon_color") or "#6b7280"),
+                "skill": str(action.get("skill") or "Marketing"),
+                "platform_url": str(action.get("platform_url") or ""),
+                "platform_label": str(action.get("platform_label") or ""),
+                "xp": xp,
+                "difficulty": difficulty,
+                "key": _coerce_action_key(
+                    str(action.get("key") or mission_name or title),
+                    f"mission_{index}",
+                ),
+            }
+        )
+
+    return normalized
+
+
 def _external_app_url() -> str:
     configured = (current_app.config.get("APP_URL", "") or "").rstrip("/")
     scheme = request.headers.get("X-Forwarded-Proto", request.scheme)
@@ -916,13 +996,12 @@ def client_actions():
                 actions = data.get("actions", [])
                 ai_analysis = data.get("ai_analysis", "")
         except Exception as e:
+            current_app.logger.exception("Mission Control load failed for brand %s month %s", brand_id, month)
             error = str(e)
 
-    # Generate a stable key for each action so dismissal persists
-    for action in actions:
-        action["key"] = action.get("title", "").strip().lower().replace(" ", "_")[:80]
+    actions = _normalize_client_actions(actions)
 
-    dismissed = db.get_dismissed_actions(brand_id, month)
+    dismissed = db.get_dismissed_actions(brand_id, month) or []
 
     # ── Monthly cap: 20 total (completed + visible) ──
     # Already-completed items count toward the cap. The remaining visible

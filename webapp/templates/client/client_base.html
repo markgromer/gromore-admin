@@ -322,6 +322,10 @@
             var content = document.getElementById('pjaxContent');
             if (!content) { window.location.href = url; return; }
 
+            if (window.showPageLoader) {
+                window.showPageLoader(messagesForHref(url));
+            }
+
             var navBar = document.getElementById('navProgress');
             navBar.classList.remove('running');
             void navBar.offsetWidth;
@@ -444,11 +448,18 @@
 
                 // Re-bind nav links for PJAX
                 _bindPjaxLinks();
+
+                if (window.hidePageLoader) {
+                    window.hidePageLoader();
+                }
             })
             .catch(function() {
                 clearTimeout(shimmerTimer);
                 navBar.classList.remove('running');
                 content.classList.remove('pjax-out');
+                if (window.hidePageLoader) {
+                    window.hidePageLoader();
+                }
                 window.location.href = url;
             });
         };
@@ -753,6 +764,13 @@
 
         function messagesForHref(href) {
             var p = normalizeHref(href);
+            if (p.indexOf('/actions') !== -1) {
+                return [
+                    'Loading Mission Control...',
+                    'Checking saved missions...',
+                    'Building your action plan...'
+                ];
+            }
             if (p.indexOf('/campaigns') !== -1) {
                 return [
                     'Loading campaigns...',
