@@ -94,6 +94,23 @@ def build_gbp_context(db, brand_id):
     if not place:
         return {"error": "API_FAILED", "place": None, "completeness": None, "reviews": []}
 
+    raw_editorial_summary = place.get("editorialSummary")
+    if isinstance(raw_editorial_summary, dict):
+        description = (raw_editorial_summary.get("text") or "").strip()
+    elif isinstance(raw_editorial_summary, str):
+        description = raw_editorial_summary.strip()
+    else:
+        description = ""
+
+    if description:
+        description_status = "present"
+    elif "editorialSummary" in place:
+        description_status = "missing"
+    else:
+        # Places API often omits the owner-written GBP description entirely,
+        # so absence here is not reliable proof that the profile has no description.
+        description_status = "unverified"
+
     # Determine verification-like status from businessStatus
     biz_status = place.get("businessStatus", "")
     # OPERATIONAL = live on Google, CLOSED_TEMPORARILY, CLOSED_PERMANENTLY
@@ -121,9 +138,8 @@ def build_gbp_context(db, brand_id):
         "rating": place.get("rating", 0),
         "review_count": place.get("userRatingCount", 0),
         "hours": place.get("regularOpeningHours", {}),
-        "description": place.get("editorialSummary", {}).get("text", "")
-                       if isinstance(place.get("editorialSummary"), dict)
-                       else "",
+        "description": description,
+        "description_status": description_status,
         "completeness": score_profile_completeness(place),
         "reviews": _extract_reviews(place),
         "photo_count": len(place.get("photos") or []),
@@ -376,6 +392,9 @@ def _score_field(field, gbp_ctx):
 
     if field == "description":
         desc = gbp_ctx.get("description", "")
+        desc_status = (gbp_ctx.get("description_status") or "present").lower()
+        if desc_status == "unverified":
+            return 100, "pass", "Google did not expose description status through the Places API, so this check is skipped.", micro
         if not desc:
             micro = [
                 {"step": "Open 'Edit profile' at business.google.com.", "done": False},
