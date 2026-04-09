@@ -1,4 +1,5 @@
 import os
+import re
 import unittest
 import uuid
 from pathlib import Path
@@ -68,6 +69,8 @@ class BlogEditorAssetTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("window.__blogEditorAssetsPromise", html)
         self.assertIn("initBlogEditorPage()", html)
+        self.assertRegex(html, re.compile(r"\n}\s*\n\s*if \(document\.readyState === 'loading'\)", re.MULTILINE))
+        self.assertNotIn("\n});\n\nif (document.readyState === 'loading')", html)
 
 
 if __name__ == "__main__":
