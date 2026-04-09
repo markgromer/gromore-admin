@@ -313,6 +313,126 @@
         padding: .75rem 1rem;
         margin-bottom: 1rem;
     }
+    .mission-profile-strip {
+        background: linear-gradient(135deg, #ffffff, #eef2ff);
+        border: 1px solid #dbe4ff;
+        border-radius: 16px;
+        padding: 1rem 1.1rem;
+        margin-bottom: 1rem;
+    }
+    .mission-track-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .45rem;
+        border-radius: 999px;
+        padding: .35rem .8rem;
+        background: #e0e7ff;
+        color: #3730a3;
+        font-size: .78rem;
+        font-weight: 700;
+        margin-bottom: .55rem;
+    }
+    .mission-profile-strip h5 {
+        margin: 0 0 .25rem;
+        font-size: 1rem;
+        font-weight: 800;
+        color: #0f172a;
+    }
+    .mission-profile-strip p {
+        margin: 0;
+        color: #475569;
+        font-size: .88rem;
+        line-height: 1.5;
+    }
+    .mission-track-switch {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .45rem;
+        margin-top: .9rem;
+    }
+    .track-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: .35rem;
+        padding: .45rem .75rem;
+        border-radius: 999px;
+        border: 1px solid #cbd5e1;
+        background: #fff;
+        color: #334155;
+        font-size: .78rem;
+        font-weight: 700;
+        text-decoration: none;
+    }
+    .track-btn.active {
+        background: #1d4ed8;
+        border-color: #1d4ed8;
+        color: #fff;
+    }
+    .advanced-controls {
+        margin-bottom: 1rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        background: #fff;
+    }
+    .advanced-controls summary {
+        list-style: none;
+        cursor: pointer;
+        padding: .85rem 1rem;
+        font-size: .84rem;
+        font-weight: 700;
+        color: #334155;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .advanced-controls summary::-webkit-details-marker { display: none; }
+    .advanced-controls[open] summary {
+        border-bottom: 1px solid #e5e7eb;
+    }
+    .featured-mission-card {
+        border: 1px solid #c7d2fe;
+        background: linear-gradient(135deg, #eef2ff, #ffffff);
+        box-shadow: 0 10px 30px rgba(99,102,241,.08);
+    }
+    .featured-label {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        border-radius: 999px;
+        background: #1d4ed8;
+        color: #fff;
+        font-size: .72rem;
+        font-weight: 800;
+        letter-spacing: .04em;
+        padding: .35rem .7rem;
+        text-transform: uppercase;
+        margin-bottom: .75rem;
+    }
+    .mission-preview-list {
+        margin: 0;
+        padding-left: 1.1rem;
+        color: #334155;
+        font-size: .86rem;
+    }
+    .mission-preview-list li { margin-bottom: .35rem; }
+    .mission-preview-note {
+        font-size: .78rem;
+        color: #64748b;
+        margin-top: .6rem;
+    }
+    .queue-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: .75rem;
+    }
+    .queue-heading h5 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 800;
+        color: #0f172a;
+    }
 </style>
 
 <!-- ═══════ HEADER: Level + XP Bar ═══════ -->
@@ -354,40 +474,62 @@
     </div>
 </div>
 
-<!-- Model selector + Deep Analysis (collapsed) -->
-<div class="settings-bar">
-    <div class="d-flex flex-wrap align-items-center gap-2">
-        <form method="GET" class="d-flex align-items-center gap-2">
-            <input type="hidden" name="month" value="{{ month }}">
-            <label class="form-label mb-0" style="font-size:.8rem; font-weight:600; color:#64748b;">AI Model</label>
-            <select name="ai_model" class="form-select form-select-sm" style="width:150px; font-size:.8rem;">
-                <option value="gpt-4o-mini" {{ 'selected' if ai_model == 'gpt-4o-mini' or not ai_model }}>GPT-4o Mini</option>
-                <option value="gpt-4o" {{ 'selected' if ai_model == 'gpt-4o' }}>GPT-4o</option>
-                <option value="gpt-4-turbo" {{ 'selected' if ai_model == 'gpt-4-turbo' }}>GPT-4 Turbo</option>
-                <option value="gpt-4.1-mini" {{ 'selected' if ai_model == 'gpt-4.1-mini' }}>GPT-4.1 Mini</option>
-                <option value="gpt-4.1" {{ 'selected' if ai_model == 'gpt-4.1' }}>GPT-4.1</option>
-                <option value="o3-mini" {{ 'selected' if ai_model == 'o3-mini' }}>o3-mini</option>
-                <option value="o4-mini" {{ 'selected' if ai_model == 'o4-mini' }}>o4-mini</option>
-            </select>
-            <button class="btn btn-outline-secondary btn-sm" type="submit" style="font-size:.78rem;">Apply</button>
-        </form>
-        <form method="GET">
-            <input type="hidden" name="month" value="{{ month }}">
-            <input type="hidden" name="ai_model" value="{{ ai_model or '' }}">
-            <input type="hidden" name="run_analysis" value="1">
-            <button class="btn btn-primary btn-sm" type="submit" style="font-size:.78rem;">
-                <i class="bi bi-stars me-1"></i> Regenerate Missions
-            </button>
-        </form>
+<div class="mission-profile-strip">
+    <div class="mission-track-pill"><i class="bi bi-person-badge"></i> {{ mission_profile.label }}</div>
+    <h5>{{ mission_profile.tagline }}</h5>
+    <p>{{ mission_profile.summary }}</p>
+    <div class="mission-track-switch">
+        {% for value, label in [('auto', 'Auto'), ('beginner', 'Starter'), ('intermediate', 'Builder'), ('advanced', 'Operator')] %}
+        <a class="track-btn {% if requested_skill_level == value or (value == 'auto' and requested_skill_level not in ['beginner','intermediate','advanced']) %}active{% endif %}"
+           href="{{ url_for('client.client_actions', month=month, ai_model=ai_model or '', skill_level=value) }}">
+            {% if value == 'auto' %}<i class="bi bi-magic"></i>{% elif value == 'beginner' %}<i class="bi bi-flag"></i>{% elif value == 'intermediate' %}<i class="bi bi-hammer"></i>{% else %}<i class="bi bi-lightning-charge"></i>{% endif %}
+            {{ label }}
+        </a>
+        {% endfor %}
     </div>
-
-    {% if ai_analysis %}
-    <div class="mt-2 p-2" style="background:#fff; border-radius:8px; border:1px solid #e5e7eb;">
-        <div class="fw-semibold mb-1" style="font-size:.82rem;"><i class="bi bi-cpu me-1"></i> AI Analysis</div>
-        <div style="white-space: pre-wrap; font-size:.85rem; color:#334155;">{{ ai_analysis }}</div>
-    </div>
-    {% endif %}
 </div>
+
+<details class="advanced-controls">
+    <summary>
+        <span><i class="bi bi-sliders me-2"></i>Advanced controls</span>
+        <i class="bi bi-chevron-down"></i>
+    </summary>
+    <div class="settings-bar" style="margin:0; border:none; border-radius:0 0 12px 12px;">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <form method="GET" class="d-flex align-items-center gap-2">
+                <input type="hidden" name="month" value="{{ month }}">
+                <input type="hidden" name="skill_level" value="{{ requested_skill_level }}">
+                <label class="form-label mb-0" style="font-size:.8rem; font-weight:600; color:#64748b;">AI Model</label>
+                <select name="ai_model" class="form-select form-select-sm" style="width:150px; font-size:.8rem;">
+                    <option value="gpt-4o-mini" {{ 'selected' if ai_model == 'gpt-4o-mini' or not ai_model }}>GPT-4o Mini</option>
+                    <option value="gpt-4o" {{ 'selected' if ai_model == 'gpt-4o' }}>GPT-4o</option>
+                    <option value="gpt-4-turbo" {{ 'selected' if ai_model == 'gpt-4-turbo' }}>GPT-4 Turbo</option>
+                    <option value="gpt-4.1-mini" {{ 'selected' if ai_model == 'gpt-4.1-mini' }}>GPT-4.1 Mini</option>
+                    <option value="gpt-4.1" {{ 'selected' if ai_model == 'gpt-4.1' }}>GPT-4.1</option>
+                    <option value="o3-mini" {{ 'selected' if ai_model == 'o3-mini' }}>o3-mini</option>
+                    <option value="o4-mini" {{ 'selected' if ai_model == 'o4-mini' }}>o4-mini</option>
+                </select>
+                <button class="btn btn-outline-secondary btn-sm" type="submit" style="font-size:.78rem;">Apply</button>
+            </form>
+            <form method="GET">
+                <input type="hidden" name="month" value="{{ month }}">
+                <input type="hidden" name="ai_model" value="{{ ai_model or '' }}">
+                <input type="hidden" name="skill_level" value="{{ requested_skill_level }}">
+                <input type="hidden" name="run_analysis" value="1">
+                <button class="btn btn-primary btn-sm" type="submit" style="font-size:.78rem;">
+                    <i class="bi bi-stars me-1"></i> Regenerate Missions
+                </button>
+            </form>
+        </div>
+
+        {% if ai_analysis %}
+        <div class="mt-2 p-2" style="background:#fff; border-radius:8px; border:1px solid #e5e7eb;">
+            <div class="fw-semibold mb-1" style="font-size:.82rem;"><i class="bi bi-cpu me-1"></i> AI Analysis</div>
+            <div style="white-space: pre-wrap; font-size:.85rem; color:#334155;">{{ ai_analysis }}</div>
+        </div>
+        {% endif %}
+    </div>
+</details>
 
 {% if error %}
 <div class="alert alert-warning">
@@ -431,7 +573,96 @@
         <p class="text-muted small mt-1 mb-0">Tap a mission to see the steps. Each one earns XP and makes your marketing stronger.</p>
     </div>
     <div class="card-body">
-        {% for action in active_actions %}
+        {% if featured_action %}
+        <div class="mission-card featured-mission-card mb-4" data-action-key="{{ featured_action.key }}">
+            <div style="padding:1.1rem 1.15rem 1.15rem;">
+                <div class="featured-label"><i class="bi bi-stars"></i> Start Here</div>
+                <div class="d-flex align-items-start gap-3 mb-3">
+                    <div class="mission-icon" style="background: {{ featured_action.icon_color }}; width:48px; height:48px; font-size:1.2rem;">
+                        <i class="bi {{ featured_action.icon }}"></i>
+                    </div>
+                    <div class="mission-info">
+                        <div class="mission-name" style="font-size:1.05rem;">{{ featured_action.mission_name or featured_action.title }}</div>
+                        <div class="mission-sub">
+                            <span>{{ featured_action.category }}</span>
+                            {% if featured_action.time %}<span class="sep">&middot;</span><span><i class="bi bi-clock"></i> {{ featured_action.time }}</span>{% endif %}
+                            <span class="sep">&middot;</span><span>{{ featured_action.xp }} XP</span>
+                        </div>
+                    </div>
+                </div>
+
+                {% if featured_action.why %}
+                <div class="why-box">
+                    <i class="bi bi-currency-dollar"></i>
+                    <div><strong>Why this matters:</strong> {{ featured_action.why }}</div>
+                </div>
+                {% endif %}
+
+                {% if featured_action.platform_url %}
+                <a href="{{ featured_action.platform_url }}" target="_blank" rel="noopener" class="platform-link mb-2">
+                    <i class="bi bi-box-arrow-up-right"></i> {{ featured_action.platform_label }}
+                </a>
+                {% endif %}
+
+                {% if featured_action.preview_steps %}
+                <div class="mb-1" style="font-size:.78rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:.5px;">
+                    First steps
+                </div>
+                <ol class="mission-preview-list">
+                    {% for step in featured_action.preview_steps %}
+                    <li>{{ step }}</li>
+                    {% endfor %}
+                </ol>
+                {% if featured_action.step_count > featured_action.preview_steps|length %}
+                <div class="mission-preview-note">{{ featured_action.step_count - featured_action.preview_steps|length }} more step{{ 's' if featured_action.step_count - featured_action.preview_steps|length != 1 }} open when you expand the mission below.</div>
+                {% endif %}
+                {% endif %}
+
+                <button class="mission-header active mt-3" onclick="toggleMission(this)" style="padding:0;">
+                    <span class="mission-sub" style="margin-top:0;"><i class="bi bi-list-check"></i> Open full mission</span>
+                    <i class="bi bi-chevron-down mission-chevron"></i>
+                </button>
+                <div class="mission-body" style="padding:.5rem 0 0;">
+                    {% if featured_action.steps %}
+                    {% for step in featured_action.steps %}
+                    <div class="micro-step">
+                        <div class="step-bullet" onclick="toggleStep(this)" data-step-index="{{ loop.index0 }}" role="checkbox" tabindex="0">
+                            <i class="bi bi-check" style="font-size:.75rem; visibility:hidden;"></i>
+                        </div>
+                        <span>{{ step }}</span>
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+
+                    {% if featured_action.reward %}
+                    <div class="reward-box">
+                        <i class="bi bi-gift-fill"></i>
+                        <div><strong>When you're done:</strong> {{ featured_action.reward }}</div>
+                    </div>
+                    {% elif featured_action.impact %}
+                    <div class="reward-box">
+                        <i class="bi bi-graph-up-arrow"></i>
+                        <div>{{ featured_action.impact }}</div>
+                    </div>
+                    {% endif %}
+
+                    <button class="complete-btn done-btn" type="button"
+                            data-action-key="{{ featured_action.key }}" data-month="{{ month }}" data-xp="{{ featured_action.xp }}">
+                        <i class="bi bi-check-circle-fill"></i> Complete Mission &middot; +{{ featured_action.xp }} XP
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if queued_actions %}
+        <div class="queue-heading">
+            <h5>{{ mission_profile.queue_title }}</h5>
+            <span class="text-muted small">{{ queued_actions|length }} queued</span>
+        </div>
+        {% endif %}
+
+        {% for action in queued_actions %}
         <div class="mission-card" id="mission-{{ loop.index }}" data-action-key="{{ action.key }}">
             <button class="mission-header" onclick="toggleMission(this)">
                 <div class="mission-icon" style="background: {{ action.icon_color }};">

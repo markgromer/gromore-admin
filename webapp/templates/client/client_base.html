@@ -323,7 +323,11 @@
             if (!content) { window.location.href = url; return; }
 
             if (window.showPageLoader) {
-                window.showPageLoader(messagesForHref(url));
+                var loaderMessages = null;
+                if (typeof window._pageLoaderMessagesForHref === 'function') {
+                    loaderMessages = window._pageLoaderMessagesForHref(url);
+                }
+                window.showPageLoader(loaderMessages);
             }
 
             var navBar = document.getElementById('navProgress');

@@ -960,11 +960,21 @@ def client_actions():
     month = request.args.get("month") or datetime.now().strftime("%Y-%m")
     ai_model = _pick_ai_model(brand, "analysis", request.args.get("ai_model", ""))
     run_analysis = request.args.get("run_analysis") == "1"
+    requested_skill_level = (request.args.get("skill_level") or "auto").strip().lower()
 
     actions = []
     ai_analysis = ""
     error = ""
-    force_refresh = (request.args.get("refresh") == "1")
+    dismissed = db.get_dismissed_actions(brand_id, month) or []
+    completed_count = len(dismissed)
+
+    from webapp.client_advisor import MONTH_LEVELS, infer_mission_profile
+
+    mission_profile = infer_mission_profile(
+        completed_count=completed_count,
+        requested_level=requested_skill_level,
+    )
+    force_refresh = (request.args.get("refresh") == "1") or mission_profile.get("source") == "manual"
 
     # ── Fast path: serve actions from dashboard snapshot ──
     if not force_refresh and not run_analysis:
@@ -992,6 +1002,7 @@ def client_actions():
                     brand,
                     ai_model=ai_model,
                     include_deep_analysis=run_analysis,
+                    mission_profile=mission_profile,
                 )
                 actions = data.get("actions", [])
                 ai_analysis = data.get("ai_analysis", "")
@@ -1000,30 +1011,33 @@ def client_actions():
             error = str(e)
 
     actions = _normalize_client_actions(actions)
-
-    dismissed = db.get_dismissed_actions(brand_id, month) or []
+    for action in actions:
+        steps = action.get("steps") or []
+        action["step_count"] = len(steps)
+        action["preview_steps"] = steps[: mission_profile.get("preview_steps", 3)]
 
     # ── Monthly cap: 20 total (completed + visible) ──
     # Already-completed items count toward the cap. The remaining visible
     # slots are filled from the generated pool so the user always sees
     # fresh work when they finish items.
     monthly_cap = 20
-    completed_count = len(dismissed)
     visible_slots = max(0, monthly_cap - completed_count)
 
-    # Show only enough active items to fit the cap, but always show at least
-    # 4 so the page doesn't look empty when they have lots of completed items.
-    visible_slots = max(visible_slots, min(4, len(actions)))
+    profile_visible_cap = mission_profile.get("max_active", 4)
+    if actions:
+        visible_slots = max(1, min(profile_visible_cap, visible_slots or profile_visible_cap))
+    else:
+        visible_slots = 0
 
     # Split into active and completed
     active_actions = [a for a in actions if a["key"] not in dismissed][:visible_slots]
     done_actions = [a for a in actions if a["key"] in dismissed]
+    featured_action = active_actions[0] if active_actions else None
+    queued_actions = active_actions[1:] if len(active_actions) > 1 else []
 
     # ── XP & Level ──
     total_xp = sum(a.get("xp", 100) for a in done_actions)
     max_month_xp = monthly_cap * 150  # theoretical max if all high priority
-
-    from webapp.client_advisor import MONTH_LEVELS
     level_num = 1
     level_name = "Rookie"
     level_desc = "Just getting started"
@@ -1053,6 +1067,10 @@ def client_actions():
         dismissed=dismissed,
         monthly_cap=monthly_cap,
         completed_count=completed_count,
+        featured_action=featured_action,
+        queued_actions=queued_actions,
+        mission_profile=mission_profile,
+        requested_skill_level=requested_skill_level,
         total_xp=total_xp,
         max_month_xp=max_month_xp,
         level_num=level_num,

@@ -48,6 +48,61 @@ MONTH_LEVELS = [
 ]
 
 
+_MISSION_SKILL_PROFILES = {
+    "beginner": {
+        "skill_level": "beginner",
+        "label": "Starter Track",
+        "summary": "Fewer missions, simpler language, and obvious first steps so new owners can build confidence fast.",
+        "tagline": "Start small. Stack wins. Keep momentum.",
+        "max_active": 3,
+        "preview_steps": 3,
+        "max_steps_hint": 4,
+        "queue_title": "More Missions",
+    },
+    "intermediate": {
+        "skill_level": "intermediate",
+        "label": "Builder Track",
+        "summary": "A compact queue with enough detail to move quickly without burying the user in operator noise.",
+        "tagline": "Balanced pace, clearer priorities, stronger execution.",
+        "max_active": 4,
+        "preview_steps": 3,
+        "max_steps_hint": 5,
+        "queue_title": "Mission Queue",
+    },
+    "advanced": {
+        "skill_level": "advanced",
+        "label": "Operator Track",
+        "summary": "A denser stack for owners who already know the tools and want tighter, faster operator-level missions.",
+        "tagline": "Less hand-holding, more leverage.",
+        "max_active": 6,
+        "preview_steps": 4,
+        "max_steps_hint": 5,
+        "queue_title": "Extended Queue",
+    },
+}
+
+
+def infer_mission_profile(completed_count=0, requested_level="auto"):
+    requested = (requested_level or "auto").strip().lower()
+    if requested in _MISSION_SKILL_PROFILES:
+        profile = dict(_MISSION_SKILL_PROFILES[requested])
+        profile["source"] = "manual"
+        profile["requested_level"] = requested
+        return profile
+
+    if completed_count >= 8:
+        resolved = "advanced"
+    elif completed_count >= 3:
+        resolved = "intermediate"
+    else:
+        resolved = "beginner"
+
+    profile = dict(_MISSION_SKILL_PROFILES[resolved])
+    profile["source"] = "auto"
+    profile["requested_level"] = requested
+    return profile
+
+
 def _parse_difficulty(time_str):
     """Return 1-3 star difficulty from a time estimate string."""
     if not time_str:
@@ -60,7 +115,7 @@ def _parse_difficulty(time_str):
     return 1
 
 
-def build_client_dashboard(analysis, suggestions, brand, ai_model=None, include_deep_analysis=False):
+def build_client_dashboard(analysis, suggestions, brand, ai_model=None, include_deep_analysis=False, mission_profile=None):
     """
     Build the full client dashboard payload from raw analysis + suggestions.
 
@@ -92,7 +147,7 @@ def build_client_dashboard(analysis, suggestions, brand, ai_model=None, include_
     if gsc:
         channels["seo"] = _explain_seo(gsc)
 
-    actions = _build_action_cards(analysis, suggestions, brand, ai_model=ai_model)
+    actions = _build_action_cards(analysis, suggestions, brand, ai_model=ai_model, mission_profile=mission_profile)
     kpi_status = _explain_kpis(analysis)
 
     overall_score = analysis.get("overall_score")
@@ -568,7 +623,7 @@ def _explain_seo(gsc):
 
 # ── Action Cards with AI-Generated Deliverables ──
 
-def _build_action_cards(analysis, suggestions, brand, ai_model=None):
+def _build_action_cards(analysis, suggestions, brand, ai_model=None, mission_profile=None):
     """Convert top suggestions into action cards with AI-generated deliverables.
 
     Generate up to 10 action items per load (high priority first, then medium,
@@ -639,7 +694,7 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None):
         actions.append(card)
 
     # Generate AI deliverables using actual account data
-    ai_actions = _generate_ai_actions(selected, analysis, brand, ai_model=ai_model)
+    ai_actions = _generate_ai_actions(selected, analysis, brand, ai_model=ai_model, mission_profile=mission_profile)
     if ai_actions:
         for i, card in enumerate(actions):
             if i < len(ai_actions):
@@ -802,7 +857,7 @@ def _fallback_steps(suggestion):
     return steps[:5]
 
 
-def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
+def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_profile=None):
     """Call AI to generate specific deliverables for each action card.
 
     Instead of 'go to Google Ads and click...', this produces the actual work:
@@ -923,22 +978,43 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
             "target_audience": client_info.get("target_audience"),
             "active_offers": client_info.get("active_offers"),
         },
+        "mission_profile": mission_profile or infer_mission_profile(),
         "highlights": analysis_summary.get("highlights", []),
         "concerns": analysis_summary.get("concerns", []),
         "action_items": action_items,
     }
+
+    skill_level = ((mission_profile or {}).get("skill_level") or "beginner").strip().lower()
+    if skill_level == "advanced":
+        audience_block = (
+            "AUDIENCE: An owner or operator who already knows the major tools. "
+            "Keep the missions tighter and less tutorial-heavy, but still name the exact menu, button, or field when a mistake would be costly. "
+            "Prefer concise operator language over hand-holding."
+        )
+        step_rule = "Write 3-5 steps per mission."
+    elif skill_level == "intermediate":
+        audience_block = (
+            "AUDIENCE: A business owner who has used these tools before, but is not a full-time operator. "
+            "Be clear and specific without sounding overwhelming. Name the exact menus and buttons for important actions."
+        )
+        step_rule = "Write 4-5 steps per mission."
+    else:
+        audience_block = (
+            "AUDIENCE: A business owner who has NEVER been inside Google Ads before. "
+            "Write every step so a literal fifth grader could follow it. "
+            "Name every button, every menu, every tab. "
+            "If you say 'click', say exactly what words are on the button. "
+            "If you say 'change', say the exact old value and exact new value. "
+            "NEVER assume they know where anything is."
+        )
+        step_rule = "Write 4-6 steps per mission."
 
     system = (
         "You are the senior paid-media and SEO strategist inside GroMore. "
         "You have completed a deep-dive analysis of this account. "
         "Now produce MISSIONS the business owner can execute right now.\n\n"
 
-        "AUDIENCE: A business owner who has NEVER been inside Google Ads before. "
-        "Write every step so a literal fifth grader could follow it. "
-        "Name every button, every menu, every tab. "
-        "If you say 'click', say exactly what words are on the button. "
-        "If you say 'change', say the exact old value and exact new value. "
-        "NEVER assume they know where anything is.\n\n"
+        + audience_block + "\n\n"
 
         "OUTPUT FORMAT (JSON only):\n"
         "{\"actions\": [\n"
@@ -960,7 +1036,7 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None):
         "- BAD: \"Optimize Campaign Performance\", \"Improve Your SEO\", \"Tune Underperforming Campaigns\"\n\n"
 
         "MICRO-STEP RULES - THIS IS THE MOST IMPORTANT PART:\n"
-        "Write 4-6 steps per mission. Each step = ONE specific action.\n\n"
+        + step_rule + " Each step = ONE specific action.\n\n"
 
         "Each step MUST include ALL of these:\n"
         "1. The exact URL to go to (ads.google.com, business.facebook.com/adsmanager, etc.)\n"
