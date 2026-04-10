@@ -1313,6 +1313,19 @@ def client_actions():
             current_app.logger.exception("Mission Control load failed for brand %s month %s", brand_id, month)
             error = str(e)
 
+    # Last resort: if we still have no actions (regen failed, no data sources),
+    # fall back to whatever the snapshot already had
+    if not actions and error:
+        try:
+            snapshot = db.get_dashboard_snapshot(brand_id, month, max_age_hours=8760)
+            if snapshot:
+                cached = json.loads(snapshot["snapshot_json"])
+                actions = cached.get("actions") or []
+                if actions:
+                    error = ""  # clear error since we have fallback actions
+        except Exception:
+            pass
+
     actions = _normalize_client_actions(actions)
     for action in actions:
         steps = action.get("steps") or []

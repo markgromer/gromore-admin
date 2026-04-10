@@ -6,8 +6,13 @@ import json
 import os
 from pathlib import Path
 
-
-DB_PATH = Path(__file__).parent.parent / "data" / "database" / "agency.db"
+# On Render (persistent disk at /data), store agency.db alongside webapp.db.
+# Locally, use the project-relative data directory.
+_on_render = os.environ.get("RENDER") or os.path.isdir("/data")
+if _on_render:
+    DB_PATH = Path("/data/database/agency.db")
+else:
+    DB_PATH = Path(__file__).parent.parent / "data" / "database" / "agency.db"
 
 
 def get_connection():

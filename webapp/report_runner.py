@@ -269,6 +269,22 @@ def get_analysis_and_suggestions_for_brand(db, brand, month, *, force_refresh: b
                 return analysis, suggestions
         except Exception:
             pass
+
+        # monthly_data also missing - re-run suggestions on cached monthly_summary
+        try:
+            init_db()
+            cached = get_monthly_summary(slug, month)
+            if cached and isinstance(cached.get("summary"), dict):
+                analysis = cached["summary"]
+                suggestions = generate_suggestions(analysis)
+                try:
+                    store_monthly_summary(slug, month, analysis, suggestions)
+                except Exception:
+                    pass
+                return analysis, suggestions
+        except Exception:
+            pass
+
         raise
     try:
         store_monthly_summary(slug, month, analysis, suggestions)
