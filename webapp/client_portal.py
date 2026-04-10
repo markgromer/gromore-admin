@@ -982,6 +982,18 @@ def _log_agent(agent_key, action, detail="", status="completed"):
         pass
 
 
+def _resolve_dashboard_month(db, brand_id, requested_month):
+    explicit_request = bool((requested_month or "").strip())
+    month = (requested_month or "").strip() or datetime.now().strftime("%Y-%m")
+    fallback_month = db.get_latest_dashboard_month(brand_id)
+
+    if explicit_request:
+        return month, month, False
+    if fallback_month and fallback_month != month:
+        return fallback_month, month, True
+    return month, month, False
+
+
 # ── Dashboard ──
 
 @client_bp.route("/")
@@ -995,19 +1007,23 @@ def client_dashboard():
         flash("Your account is not linked to an active brand.", "error")
         return redirect(url_for("client.client_logout"))
 
-    month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+    requested_month = request.args.get("month", "")
+    month, requested_month, used_fallback = _resolve_dashboard_month(db, brand_id, requested_month)
 
     connections = db.get_brand_connections(brand_id) or {}
     google_connected = (connections.get("google", {}).get("status") == "connected")
     meta_connected = (connections.get("meta", {}).get("status") == "connected")
 
     has_google, has_meta = _get_ad_connection_status(db, brand)
-    first_run = not has_google and not has_meta
+    latest_dashboard_month = db.get_latest_dashboard_month(brand_id)
+    first_run = not has_google and not has_meta and not latest_dashboard_month
 
     return render_template(
         "client_dashboard.html",
         brand=brand,
         month=month,
+        requested_month=requested_month,
+        used_month_fallback=used_fallback,
         dashboard=None,
         error="",
         async_load=True,
@@ -1035,7 +1051,8 @@ def client_dashboard_data():
     if not brand:
         return jsonify({"error": "Brand not found"}), 404
 
-    month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+    requested_month = request.args.get("month", "")
+    month, requested_month, used_fallback = _resolve_dashboard_month(db, brand_id, requested_month)
 
     force_refresh = (request.args.get("refresh") == "1")
     force_campaign_sync = (request.args.get("sync") == "1")
@@ -1048,7 +1065,13 @@ def client_dashboard_data():
                 cached_data = json.loads(snapshot["snapshot_json"])
                 cached_data["_cached"] = True
                 cached_data["_cached_at"] = snapshot["created_at"]
-                return jsonify({"dashboard": cached_data, "error": ""})
+                return jsonify({
+                    "dashboard": cached_data,
+                    "error": "",
+                    "month": month,
+                    "requested_month": requested_month,
+                    "used_month_fallback": used_fallback,
+                })
         except Exception:
             pass  # Fall through to live pull
 
@@ -1084,11 +1107,29 @@ def client_dashboard_data():
 
             _log_agent("scout", "Analyzed campaign performance", f"Scanned {len(campaigns_data.get('google', []))} Google + {len(campaigns_data.get('meta', []))} Meta campaigns")
             _log_agent("warren", "Built dashboard briefing", f"Month: {month}")
-            return jsonify({"dashboard": dashboard_data, "error": ""})
+            return jsonify({
+                "dashboard": dashboard_data,
+                "error": "",
+                "month": month,
+                "requested_month": requested_month,
+                "used_month_fallback": used_fallback,
+            })
         else:
-            return jsonify({"dashboard": None, "error": "No data available for this month."})
+            return jsonify({
+                "dashboard": None,
+                "error": "No data available for this month.",
+                "month": month,
+                "requested_month": requested_month,
+                "used_month_fallback": used_fallback,
+            })
     except Exception as e:
-        return jsonify({"dashboard": None, "error": str(e)})
+        return jsonify({
+            "dashboard": None,
+            "error": str(e),
+            "month": month,
+            "requested_month": requested_month,
+            "used_month_fallback": used_fallback,
+        })
 
 
 # ── KPI Deep Dive ──

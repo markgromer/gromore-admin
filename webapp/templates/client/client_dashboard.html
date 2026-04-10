@@ -471,6 +471,17 @@
 </div>
 {% endif %}
 
+{% if error or used_month_fallback %}
+<div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle"></i>
+    {% if used_month_fallback %}
+    No data is available for {{ requested_month }} yet, so Overview is showing {{ month }} instead.
+    {% else %}
+    No data available for {{ month }} yet. Data appears after your reports are generated.
+    {% endif %}
+</div>
+{% endif %}
+
 <div id="dashLoader" class="dash-loader">
     <div class="loader-orb"></div>
     <div class="loader-title">Preparing your dashboard</div>
@@ -739,6 +750,7 @@ function fmtInt(v) {
     startTicker();
 
     var month = '{{ month }}';
+    var requestedMonth = '{{ requested_month or month }}';
     var qs = 'month=' + encodeURIComponent(month);
     var isManualRefresh = false;
     try {
@@ -750,13 +762,28 @@ function fmtInt(v) {
     fetch('{{ url_for("client.client_dashboard_data") }}?' + qs, { credentials: 'same-origin' })
     .then(function(r) { return r.json(); })
     .then(function(data) {
+        var resolvedMonth = data.month || month;
+        var requested = data.requested_month || requestedMonth || resolvedMonth;
+        var usedMonthFallback = !!data.used_month_fallback;
+        month = resolvedMonth;
+        requestedMonth = requested;
+
+        var monthInput = document.querySelector('input[type="month"]');
+        if (monthInput && monthInput.value !== resolvedMonth) {
+            monthInput.value = resolvedMonth;
+        }
+        var refreshBtnHref = '?month=' + encodeURIComponent(resolvedMonth) + '&refresh=1';
+        var refreshBtn = document.getElementById('refreshBtn');
+        if (refreshBtn) {
+            refreshBtn.setAttribute('href', refreshBtnHref);
+        }
+
         var isCached = data.dashboard && data.dashboard._cached;
 
         // Show sync badge and refresh button
         if (data.dashboard) {
             var syncBadge = document.getElementById('syncBadge');
             var syncTimeEl = document.getElementById('syncTime');
-            var refreshBtn = document.getElementById('refreshBtn');
             if (syncBadge && syncTimeEl && data.dashboard._cached_at) {
                 var ago = timeAgo(data.dashboard._cached_at);
                 syncTimeEl.textContent = 'Synced ' + ago;
@@ -773,7 +800,9 @@ function fmtInt(v) {
             if (data.error && !data.dashboard) {
                 document.getElementById('dashError').style.display = 'block';
                 document.getElementById('dashErrorMsg').textContent =
-                    'No data available for ' + month + ' yet. Data appears after your reports are generated.';
+                    usedMonthFallback
+                        ? 'No data is available for ' + requested + ' yet, so you are seeing ' + resolvedMonth + ' instead.'
+                        : 'No data available for ' + resolvedMonth + ' yet. Data appears after your reports are generated.';
                 return;
             }
             renderDashboard(data.dashboard);
@@ -812,7 +841,9 @@ function fmtInt(v) {
                     if (data.error && !data.dashboard) {
                         document.getElementById('dashError').style.display = 'block';
                         document.getElementById('dashErrorMsg').textContent =
-                            'No data available for ' + month + ' yet. Data appears after your reports are generated.';
+                            usedMonthFallback
+                                ? 'No data is available for ' + requested + ' yet, so you are seeing ' + resolvedMonth + ' instead.'
+                                : 'No data available for ' + resolvedMonth + ' yet. Data appears after your reports are generated.';
                         return;
                     }
 
@@ -1237,13 +1268,6 @@ function toggleMovesRows(platform, btn) {
 }
 </script>
 {% else %}
-
-{% if error %}
-<div class="alert alert-warning">
-    <i class="bi bi-exclamation-triangle"></i>
-    No data available for {{ month }} yet. Data appears after your reports are generated.
-</div>
-{% endif %}
 
 {% if dashboard %}
 

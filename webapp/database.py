@@ -4660,6 +4660,25 @@ class WebDB:
         conn.close()
         return dict(row) if row else None
 
+    def get_available_dashboard_months(self, brand_id, limit=24):
+        conn = self._conn()
+        rows = conn.execute(
+            """SELECT month FROM (
+                   SELECT month FROM reports WHERE brand_id = ?
+                   UNION
+                   SELECT month FROM dashboard_snapshots WHERE brand_id = ?
+               ) months
+               ORDER BY month DESC
+               LIMIT ?""",
+            (brand_id, brand_id, limit),
+        ).fetchall()
+        conn.close()
+        return [r["month"] for r in rows if r["month"]]
+
+    def get_latest_dashboard_month(self, brand_id):
+        months = self.get_available_dashboard_months(brand_id, limit=1)
+        return months[0] if months else None
+
     def get_stale_dashboard_brands(self, month, max_age_hours=20):
         """Return brand IDs whose snapshot is missing or older than max_age_hours."""
         conn = self._conn()
