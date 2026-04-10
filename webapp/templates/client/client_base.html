@@ -212,7 +212,16 @@
                     {% endfor %}
                 </select>
             </div>
+            <div id="assistantAttachPreview" style="display:none; margin-bottom:6px;">
+                <div style="position:relative; display:inline-block;">
+                    <img id="assistantAttachThumb" src="" alt="attached" style="max-height:64px; max-width:120px; border-radius:6px; border:1px solid var(--line);">
+                    <button type="button" id="assistantAttachRemove" style="position:absolute; top:-6px; right:-6px; background:#dc3545; color:#fff; border:none; border-radius:50%; width:18px; height:18px; font-size:11px; line-height:18px; padding:0; cursor:pointer;">&times;</button>
+                </div>
+                <div id="assistantAttachName" style="font-size:.7rem; color:var(--text-muted); margin-top:2px; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></div>
+            </div>
             <div class="input-group input-group-sm">
+                <button class="btn btn-outline-secondary" id="assistantAttachBtn" type="button" title="Attach image or file" {% if not assistant_enabled %}disabled{% endif %}><i class="bi bi-paperclip"></i></button>
+                <input type="file" id="assistantFileInput" accept="image/*,.pdf,.csv,.txt,.json,.xlsx,.xls,.doc,.docx" style="display:none;">
                 <textarea class="form-control" id="assistantInput" placeholder="Message W.A.R.R.E.N..." rows="1" style="resize:none; max-height:100px; overflow-y:auto;" {% if not assistant_enabled %}disabled{% endif %}></textarea>
                 <button class="btn btn-primary" id="assistantSend" type="button" {% if not assistant_enabled %}disabled{% endif %}><i class="bi bi-send-fill"></i></button>
             </div>
@@ -525,6 +534,13 @@
         var monthEl = document.getElementById('assistantMonth');
         var modelEl = document.getElementById('assistantModel');
         var csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        var attachBtn = document.getElementById('assistantAttachBtn');
+        var fileInput = document.getElementById('assistantFileInput');
+        var attachPreview = document.getElementById('assistantAttachPreview');
+        var attachThumb = document.getElementById('assistantAttachThumb');
+        var attachRemove = document.getElementById('assistantAttachRemove');
+        var attachNameEl = document.getElementById('assistantAttachName');
+        var pendingFile = null;  // {name, type, dataUri}
 
         // Configure marked for safe rendering
         if (window.marked) {
@@ -618,8 +634,19 @@
         async function sendMessage() {
             if (!input || !send) return;
             var msg = (input.value || '').trim();
-            if (!msg) return;
-            addBubble('user', msg);
+            if (!msg && !pendingFile) return;
+
+            // Show user bubble with attachment thumbnail if present
+            if (pendingFile && pendingFile.type.startsWith('image/')) {
+                addBubble('user', (msg ? msg + '\n' : '') + '![attached](' + pendingFile.dataUri + ')');
+            } else if (pendingFile) {
+                addBubble('user', (msg || '') + (msg ? '\n' : '') + '\ud83d\udcce ' + pendingFile.name);
+            } else {
+                addBubble('user', msg);
+            }
+
+            var filePayload = pendingFile ? { name: pendingFile.name, type: pendingFile.type, data: pendingFile.dataUri } : null;
+            clearAttachment();
             input.value = '';
             autoResize();
             send.disabled = true;
@@ -648,6 +675,7 @@
                             } catch(e) {}
                             return null;
                         })(),
+                        attached_file: filePayload,
                     }),
                 });
                 hideTyping();
@@ -695,6 +723,57 @@
         }
 
         if (clearBtn) clearBtn.addEventListener('click', clearChat);
+
+        // ── File attachment handling ──
+        function clearAttachment() {
+            pendingFile = null;
+            if (fileInput) fileInput.value = '';
+            if (attachPreview) attachPreview.style.display = 'none';
+        }
+
+        function handleFileSelect(file) {
+            if (!file) return;
+            var maxSize = 20 * 1024 * 1024; // 20MB
+            if (file.size > maxSize) {
+                addBubble('assistant', 'File too large. Max size is 20MB.');
+                return;
+            }
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                pendingFile = { name: file.name, type: file.type || 'application/octet-stream', dataUri: e.target.result };
+                if (file.type && file.type.startsWith('image/')) {
+                    attachThumb.src = e.target.result;
+                    attachThumb.style.display = 'inline-block';
+                } else {
+                    attachThumb.src = '';
+                    attachThumb.style.display = 'none';
+                }
+                if (attachNameEl) attachNameEl.textContent = file.name;
+                if (attachPreview) attachPreview.style.display = 'block';
+                if (input) input.focus();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        if (attachBtn && fileInput) {
+            attachBtn.addEventListener('click', function() { fileInput.click(); });
+            fileInput.addEventListener('change', function() {
+                if (fileInput.files && fileInput.files[0]) handleFileSelect(fileInput.files[0]);
+            });
+        }
+        if (attachRemove) {
+            attachRemove.addEventListener('click', clearAttachment);
+        }
+
+        // Drag & drop onto the assistant body
+        if (log) {
+            log.addEventListener('dragover', function(e) { e.preventDefault(); e.stopPropagation(); log.style.outline = '2px dashed var(--primary)'; });
+            log.addEventListener('dragleave', function(e) { e.preventDefault(); log.style.outline = ''; });
+            log.addEventListener('drop', function(e) {
+                e.preventDefault(); e.stopPropagation(); log.style.outline = '';
+                if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) handleFileSelect(e.dataTransfer.files[0]);
+            });
+        }
 
         var mobileToggle = document.getElementById('assistantMobileToggle');
         if (mobileToggle && shell) {

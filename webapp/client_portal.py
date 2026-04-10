@@ -985,10 +985,17 @@ def _log_agent(agent_key, action, detail="", status="completed"):
 def _resolve_dashboard_month(db, brand_id, requested_month):
     explicit_request = bool((requested_month or "").strip())
     month = (requested_month or "").strip() or datetime.now().strftime("%Y-%m")
-    fallback_month = db.get_latest_dashboard_month(brand_id)
+    try:
+        fallback_month = db.get_latest_dashboard_month(brand_id)
+    except Exception:
+        fallback_month = None
 
     if explicit_request:
-        if fallback_month and month not in db.get_available_dashboard_months(brand_id, limit=24) and month >= fallback_month:
+        try:
+            available = db.get_available_dashboard_months(brand_id, limit=24)
+        except Exception:
+            available = []
+        if fallback_month and month not in available and month >= fallback_month:
             return fallback_month, month, True
         return month, month, False
     if fallback_month and fallback_month != month:
@@ -1017,7 +1024,10 @@ def client_dashboard():
     meta_connected = (connections.get("meta", {}).get("status") == "connected")
 
     has_google, has_meta = _get_ad_connection_status(db, brand)
-    latest_dashboard_month = db.get_latest_dashboard_month(brand_id)
+    try:
+        latest_dashboard_month = db.get_latest_dashboard_month(brand_id)
+    except Exception:
+        latest_dashboard_month = None
     first_run = not has_google and not has_meta and not latest_dashboard_month
 
     return render_template(
@@ -1618,14 +1628,47 @@ def _client_assistant_chat_handler(payload):
     # Canvas screenshot from Creative Center (base64 data URI)
     canvas_image = (payload.get("canvas_image") or "").strip() or None
 
-    if not user_message:
+    # User-attached file (image or document)
+    attached_file = payload.get("attached_file") or None
+    attached_image = None
+    attached_text = None
+    if isinstance(attached_file, dict):
+        file_data = (attached_file.get("data") or "").strip()
+        file_type = (attached_file.get("type") or "").strip()
+        file_name = (attached_file.get("name") or "file").strip()
+        if file_data:
+            if file_type.startswith("image/"):
+                attached_image = file_data
+            else:
+                # Extract text content from base64 data URI for non-image files
+                try:
+                    import base64
+                    raw = file_data
+                    if "," in raw:
+                        raw = raw.split(",", 1)[1]
+                    decoded = base64.b64decode(raw)
+                    attached_text = f"[Attached file: {file_name}]\n" + decoded.decode("utf-8", errors="replace")[:50000]
+                except Exception:
+                    attached_text = f"[Attached file: {file_name} - could not read contents]"
+
+    # Use attached image OR canvas image (attached takes priority)
+    vision_image = attached_image or canvas_image
+
+    if not user_message and not attached_file:
         return jsonify({"error": "Message cannot be empty"}), 400
+
+    # Build the stored message (include file reference if attached)
+    stored_message = user_message
+    if attached_text:
+        stored_message = (user_message + "\n\n" + attached_text) if user_message else attached_text
+    elif attached_image:
+        stored_message = (user_message + "\n\n[Image attached]") if user_message else "[Image attached]"
 
     api_key = _get_openai_api_key(brand)
     if not api_key:
         return jsonify({"error": "No OpenAI API key configured. Add one in Connections."}), 400
 
-    db.add_ai_chat_message(brand_id, month, "user", user_message)
+    db.add_ai_chat_message(brand_id, month, "user", stored_message)
 
     try:
         from webapp.report_runner import get_analysis_and_suggestions_for_brand
@@ -1671,6 +1714,8 @@ def _client_assistant_chat_handler(payload):
             "suggestions": suggestions,
             "analysis_error": analysis_error,
             "lead_intelligence": _build_warren_lead_intelligence(db, brand),
+            "attached_text": attached_text,
+            "_user_image_upload": bool(attached_image),
         }
 
         from webapp.ai_assistant import DEFAULT_CHAT_SYSTEM_PROMPT
@@ -1686,7 +1731,7 @@ def _client_assistant_chat_handler(payload):
             timeout=90,
             db=db,
             brand_id=brand_id,
-            canvas_image=canvas_image,
+            canvas_image=vision_image,
         )
         assistant_reply = (assistant_reply or "").strip()
         if assistant_reply:

@@ -1505,8 +1505,33 @@ def chat_with_warren(
     if memory_context:
         system += "\n\n" + memory_context
 
+    # ── Attached file content (non-image files like CSV, PDF text, etc.) ──
+    attached_text = context.get("attached_text")
+    if attached_text:
+        system += (
+            "\n\nATTACHED FILE CONTENT:\n"
+            "The user has uploaded a file. Its text content is included below. "
+            "Analyze it in the context of their message and their marketing data. "
+            "If it's a spreadsheet or CSV, parse the rows and provide insights. "
+            "If it's a document, summarize key points and relate them to their campaigns.\n\n"
+            + attached_text
+        )
+
+    # ── User-uploaded image (not from canvas) ──
+    is_user_image_upload = canvas_image and context.get("_user_image_upload")
+    if is_user_image_upload:
+        system += (
+            "\n\nUSER-UPLOADED IMAGE:\n"
+            "The user has attached an image to their message. You can SEE the image. "
+            "Analyze it based on what they're asking. If they didn't ask anything specific, "
+            "describe what you see and provide relevant marketing feedback, design critique, "
+            "competitive analysis, or whatever is most useful given the context. "
+            "If it's an ad, landing page screenshot, or competitor material, analyze it like an expert. "
+            "Reference specific visual elements you see."
+        )
+
     # ── Creative vision analysis (when canvas screenshot is attached) ──
-    if canvas_image:
+    if canvas_image and not is_user_image_upload:
         system += (
             "\n\nCREATIVE VISION ANALYSIS (canvas screenshot attached):\n"
             "The user has shared a screenshot of their ad creative from the Creative Center canvas. "

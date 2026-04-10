@@ -4673,7 +4673,31 @@ class WebDB:
             (brand_id, brand_id, limit),
         ).fetchall()
         conn.close()
-        return [r["month"] for r in rows if r["month"]]
+        months = {r["month"] for r in rows if r["month"]}
+
+        # Also check the analytics DB (monthly_summary / monthly_data)
+        # which may have data even when no report or snapshot row exists.
+        try:
+            brand = self.get_brand(brand_id)
+            slug = brand.get("slug") if brand else None
+            if slug:
+                from src.database import get_connection as get_analytics_conn
+                aconn = get_analytics_conn()
+                for tbl in ("monthly_summary", "monthly_data"):
+                    try:
+                        arows = aconn.execute(
+                            f"SELECT DISTINCT month FROM {tbl} WHERE client_id = ?",
+                            (slug,),
+                        ).fetchall()
+                        months.update(r["month"] for r in arows if r["month"])
+                    except Exception:
+                        pass
+                aconn.close()
+        except Exception:
+            pass
+
+        sorted_months = sorted(months, reverse=True)[:limit]
+        return sorted_months
 
     def get_latest_dashboard_month(self, brand_id):
         months = self.get_available_dashboard_months(brand_id, limit=1)
