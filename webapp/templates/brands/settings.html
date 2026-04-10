@@ -262,6 +262,79 @@ RotoRooter">{{ brand.competitors or '' }}</textarea>
         </div>
     </div>
 </div>
+
+<div class="row g-4 mt-1">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-toggles2"></i> Client Feature Access</strong></div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="section" value="features">
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-lg-6">
+                            <label class="form-label fw-medium">Primary Developer Email</label>
+                            <input type="email" name="upgrade_dev_email" class="form-control"
+                                   value="{{ brand.upgrade_dev_email or '' }}"
+                                   placeholder="dev@example.com">
+                            <small class="text-muted">Used by the client upgrade screen when they want to email their developer directly.</small>
+                        </div>
+                        <div class="col-lg-6">
+                            <label class="form-label fw-medium">Other Contact Emails</label>
+                            <textarea name="upgrade_contact_emails" class="form-control" rows="2"
+                                      placeholder="designer@example.com&#10;marketing@example.com">{{ brand.upgrade_contact_emails or '' }}</textarea>
+                            <small class="text-muted">One per line, or separate multiple emails with commas or semicolons.</small>
+                        </div>
+                    </div>
+
+                    {% set cat_labels = {"main": "Main", "create": "Create", "business": "Business", "settings": "Settings", "general": "General"} %}
+                    {% for cat, flags in feature_categories.items() %}
+                    <div class="card mb-3 border">
+                        <div class="card-header py-2 bg-light">
+                            <strong>{{ cat_labels.get(cat, cat|title) }}</strong>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-sm mb-0 align-middle">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Feature</th>
+                                            <th style="width:220px;">Brand Access</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for flag in flags %}
+                                        {% set current_state = brand_feature_access.get(flag.feature_key, 'on') %}
+                                        <tr>
+                                            <td>
+                                                <strong>{{ flag.label }}</strong>
+                                                {% if flag.description %}<br><small class="text-muted">{{ flag.description }}</small>{% endif %}
+                                                <br><small class="text-muted">Global rule: {{ (flag.access_level or 'all')|replace('_', ' ')|title }}</small>
+                                            </td>
+                                            <td>
+                                                <select name="feature_state_{{ flag.feature_key }}" class="form-select form-select-sm">
+                                                    <option value="on" {% if current_state == 'on' %}selected{% endif %}>On</option>
+                                                    <option value="off" {% if current_state == 'off' %}selected{% endif %}>Off</option>
+                                                    <option value="upgrade" {% if current_state == 'upgrade' %}selected{% endif %}>Upgrade</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg"></i> Save Feature Access
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}

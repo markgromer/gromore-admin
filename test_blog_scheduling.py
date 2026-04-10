@@ -2,6 +2,7 @@ import os
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 _TEST_ROOT = Path(__file__).resolve().parent / ".tmp-test-artifacts"
 _TEST_ROOT.mkdir(exist_ok=True)
@@ -11,6 +12,7 @@ os.environ.setdefault("SECRET_KEY", "test-secret")
 os.environ.setdefault("APP_URL", "http://localhost:5000")
 
 from webapp.app import create_app
+from webapp.client_portal import _publish_to_wp
 
 
 class BlogSchedulingTests(unittest.TestCase):
@@ -58,17 +60,18 @@ class BlogSchedulingTests(unittest.TestCase):
                 path.unlink()
 
     def test_schedule_save_keeps_post_unpublished(self):
-        response = self.client.post(
-            "/client/blog/save",
-            data={
-                "title": "Scheduled Post",
-                "content": "<p>Scheduled content</p>",
-                "excerpt": "Short summary",
-                "action": "schedule",
-                "scheduled_at": "2099-05-01T10:30",
-            },
-            follow_redirects=False,
-        )
+        with patch("webapp.client_portal._publish_to_wp", side_effect=AssertionError("schedule should not publish immediately")):
+            response = self.client.post(
+                "/client/blog/save",
+                data={
+                    "title": "Scheduled Post",
+                    "content": "<p>Scheduled content</p>",
+                    "excerpt": "Short summary",
+                    "action": "schedule",
+                    "scheduled_at": "2099-05-01T10:30",
+                },
+                follow_redirects=False,
+            )
 
         self.assertEqual(response.status_code, 302)
 
@@ -103,6 +106,27 @@ class BlogSchedulingTests(unittest.TestCase):
         self.assertEqual(len(due_posts), 1)
         self.assertEqual(due_posts[0]["brand_id"], self.brand_id)
         self.assertEqual(due_posts[0]["title"], "Brand One Due")
+
+    @patch("requests.post")
+    def test_publish_error_surfaces_security_challenge_clearly(self, mock_post):
+        mock_post.return_value = Mock(
+            status_code=202,
+            text='<html><head><meta http-equiv="refresh" content="0;/.well-known/sgcaptcha/?r=2"></head></html>',
+        )
+
+        result = _publish_to_wp(
+            {
+                "wp_site_url": "https://example.com",
+                "wp_username": "editor",
+                "wp_app_password": "app-password",
+            },
+            "Scheduled Post",
+            "<p>Scheduled content</p>",
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertIn("security challenge", result["error"].lower())
+        self.assertIn("siteground", result["error"].lower())
 
 
 if __name__ == "__main__":

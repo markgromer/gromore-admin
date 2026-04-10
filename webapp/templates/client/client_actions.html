@@ -433,6 +433,46 @@
         font-weight: 800;
         color: #0f172a;
     }
+    .targets-box,
+    .delegate-box {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        background: #f8fafc;
+        padding: .85rem .95rem;
+        margin-bottom: .8rem;
+    }
+    .targets-box strong,
+    .delegate-box strong {
+        display: block;
+        margin-bottom: .45rem;
+        font-size: .8rem;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: #475569;
+    }
+    .targets-list {
+        margin: 0;
+        padding-left: 1rem;
+        color: #334155;
+        font-size: .85rem;
+    }
+    .targets-list li { margin-bottom: .3rem; }
+    .delegate-copy-btn {
+        border: 1px solid #cbd5e1;
+        background: #fff;
+        color: #334155;
+        border-radius: 999px;
+        font-size: .77rem;
+        font-weight: 700;
+        padding: .35rem .7rem;
+    }
+    .delegate-message {
+        margin: .6rem 0 0;
+        white-space: pre-wrap;
+        font-size: .84rem;
+        color: #334155;
+        line-height: 1.55;
+    }
 </style>
 
 <!-- ═══════ HEADER: Level + XP Bar ═══════ -->
@@ -618,6 +658,29 @@
                 {% endif %}
                 {% endif %}
 
+                {% if featured_action.exact_targets %}
+                <div class="targets-box mt-3">
+                    <strong>What needs work</strong>
+                    <ul class="targets-list">
+                        {% for target in featured_action.exact_targets %}
+                        <li>{{ target }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                {% if featured_action.delegate_message %}
+                <div class="delegate-box">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <strong>Send This To Your {{ featured_action.delegate_to|default('Developer', true)|title }}</strong>
+                        <button type="button" class="delegate-copy-btn" data-copy-target="featuredDelegateMessage">
+                            <i class="bi bi-clipboard me-1"></i> Copy message
+                        </button>
+                    </div>
+                    <div class="delegate-message" id="featuredDelegateMessage">{{ featured_action.delegate_message }}</div>
+                </div>
+                {% endif %}
+
                 <button class="mission-header active mt-3" onclick="toggleMission(this)" style="padding:0;">
                     <span class="mission-sub" style="margin-top:0;"><i class="bi bi-list-check"></i> Open full mission</span>
                     <i class="bi bi-chevron-down mission-chevron"></i>
@@ -702,6 +765,29 @@
                     </a>
                     {% endif %}
                 </div>
+
+                {% if action.exact_targets %}
+                <div class="targets-box">
+                    <strong>What needs work</strong>
+                    <ul class="targets-list">
+                        {% for target in action.exact_targets %}
+                        <li>{{ target }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                {% if action.delegate_message %}
+                <div class="delegate-box">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <strong>Send This To Your {{ action.delegate_to|default('Developer', true)|title }}</strong>
+                        <button type="button" class="delegate-copy-btn" data-copy-target="delegateMessage{{ loop.index0 }}">
+                            <i class="bi bi-clipboard me-1"></i> Copy message
+                        </button>
+                    </div>
+                    <div class="delegate-message" id="delegateMessage{{ loop.index0 }}">{{ action.delegate_message }}</div>
+                </div>
+                {% endif %}
 
                 <!-- Micro-steps -->
                 {% if action.steps %}
@@ -815,6 +901,19 @@ function showXpPopup(xp) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.delegate-copy-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var targetId = btn.getAttribute('data-copy-target');
+            var target = targetId ? document.getElementById(targetId) : null;
+            if (!target) return;
+            navigator.clipboard.writeText(target.textContent || '').then(function() {
+                var oldHtml = btn.innerHTML;
+                btn.innerHTML = '<i class="bi bi-check2 me-1"></i> Copied';
+                setTimeout(function() { btn.innerHTML = oldHtml; }, 1400);
+            });
+        });
+    });
+
     // Restore persisted micro-step checkmarks
     document.querySelectorAll('.mission-card').forEach(function(card) {
         var actionKey = card.dataset.actionKey;

@@ -6,6 +6,7 @@ contacts, connections (OAuth tokens), reports, and settings.
 """
 import sqlite3
 import json
+import re
 from pathlib import Path
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -19,6 +20,25 @@ class WebDB:
     @staticmethod
     def _normalize_email(email):
         return (email or "").strip().lower()
+
+    @classmethod
+    def _parse_email_list(cls, raw_value):
+        emails = []
+        seen = set()
+        for part in re.split(r"[;,\n]+", raw_value or ""):
+            email = cls._normalize_email(part)
+            if not email or "@" not in email or email in seen:
+                continue
+            seen.add(email)
+            emails.append(email)
+        return emails
+
+    @staticmethod
+    def _normalize_feature_state(state):
+        value = (state or "on").strip().lower()
+        if value not in {"on", "off", "upgrade"}:
+            return "on"
+        return value
 
     def _conn(self):
         conn = sqlite3.connect(self.db_path, timeout=10)
@@ -1019,6 +1039,9 @@ class WebDB:
             ("target_audience", "TEXT DEFAULT ''"),
             ("competitors", "TEXT DEFAULT ''"),
             ("reporting_notes", "TEXT DEFAULT ''"),
+            ("feature_access_json", "TEXT DEFAULT '{}'"),
+            ("upgrade_dev_email", "TEXT DEFAULT ''"),
+            ("upgrade_contact_emails", "TEXT DEFAULT ''"),
             ("kpi_target_cpa", "REAL DEFAULT 0"),
             ("kpi_target_leads", "INTEGER DEFAULT 0"),
             ("kpi_target_roas", "REAL DEFAULT 0"),
@@ -1263,6 +1286,19 @@ class WebDB:
         conn.close()
         return [dict(r) for r in rows]
 
+    def get_users_with_email(self):
+        recipients = []
+        for user in self.get_users():
+            email = self._normalize_email(user.get("username"))
+            if "@" not in email:
+                continue
+            recipients.append({
+                **user,
+                "email": email,
+                "recipient_name": user.get("display_name") or email,
+            })
+        return recipients
+
     def get_user(self, user_id):
         conn = self._conn()
         row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -1385,6 +1421,7 @@ class WebDB:
         allowed = {
             "website",
             "brand_voice", "active_offers", "target_audience", "competitors",
+            "feature_access_json", "upgrade_dev_email", "upgrade_contact_emails",
             "reporting_notes", "call_tracking_number",
             "crm_type", "crm_api_key", "crm_webhook_url", "crm_pipeline_id", "crm_server_url",
             "openai_api_key", "openai_model",
@@ -1415,6 +1452,56 @@ class WebDB:
         conn.execute(f"UPDATE brands SET {field}=?, updated_at=datetime('now') WHERE id=?", (value or "", brand_id))
         conn.commit()
         conn.close()
+
+    def get_brand_feature_access(self, brand_id):
+        brand = self.get_brand(brand_id) or {}
+        try:
+            raw = json.loads(brand.get("feature_access_json") or "{}")
+        except Exception:
+            raw = {}
+        if not isinstance(raw, dict):
+            return {}
+        return {
+            str(key).strip(): self._normalize_feature_state(value)
+            for key, value in raw.items()
+            if str(key).strip()
+        }
+
+    def update_brand_feature_access(self, brand_id, feature_access):
+        normalized = {}
+        for key, value in (feature_access or {}).items():
+            feature_key = str(key or "").strip()
+            if not feature_key:
+                continue
+            normalized[feature_key] = self._normalize_feature_state(value)
+        conn = self._conn()
+        conn.execute(
+            "UPDATE brands SET feature_access_json=?, updated_at=datetime('now') WHERE id=?",
+            (json.dumps(normalized, separators=(",", ":")), brand_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_brand_upgrade_contacts(self, brand_id):
+        brand = self.get_brand(brand_id) or {}
+        recipients = []
+        seen = set()
+
+        def _append(email, name, role):
+            normalized = self._normalize_email(email)
+            if "@" not in normalized or normalized in seen:
+                return
+            seen.add(normalized)
+            recipients.append({
+                "email": normalized,
+                "name": name or normalized,
+                "role": role,
+            })
+
+        _append(brand.get("upgrade_dev_email"), "Developer Contact", "developer")
+        for email in self._parse_email_list(brand.get("upgrade_contact_emails")):
+            _append(email, email, "contact")
+        return recipients
 
     def update_brand_number_field(self, brand_id, field, value):
         allowed = {
@@ -2208,6 +2295,20 @@ class WebDB:
             "SELECT * FROM client_users WHERE brand_id = ? ORDER BY display_name",
             (brand_id,),
         ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_client_users(self, active_only=True):
+        conn = self._conn()
+        sql = (
+            "SELECT cu.*, b.display_name AS brand_name "
+            "FROM client_users cu "
+            "LEFT JOIN brands b ON cu.brand_id = b.id"
+        )
+        if active_only:
+            sql += " WHERE cu.is_active = 1"
+        sql += " ORDER BY cu.display_name, cu.email"
+        rows = conn.execute(sql).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
@@ -3264,6 +3365,23 @@ class WebDB:
             rows = conn.execute("SELECT * FROM beta_testers ORDER BY created_at DESC").fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
+    def get_beta_testers_for_broadcast(self):
+        recipients = []
+        seen = set()
+        for tester in self.get_beta_testers():
+            if tester.get("status") not in {"pending", "approved"}:
+                continue
+            email = self._normalize_email(tester.get("email"))
+            if "@" not in email or email in seen:
+                continue
+            seen.add(email)
+            recipients.append({
+                **tester,
+                "email": email,
+                "recipient_name": tester.get("name") or email,
+            })
+        return recipients
 
     def get_beta_tester(self, tester_id):
         conn = self._conn()

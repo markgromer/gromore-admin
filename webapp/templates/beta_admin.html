@@ -11,6 +11,44 @@
     Manage beta signups, approve testers, and review feedback from active users.
 </p>
 
+<div class="card mb-4" style="border:none;border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.06);">
+    <div class="card-header bg-white"><strong><i class="bi bi-envelope-paper"></i> Send Broadcast Email</strong></div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('beta_broadcast_email') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row g-3">
+                <div class="col-lg-3">
+                    <label class="form-label">Audience</label>
+                    <select class="form-select" name="audience" id="broadcastAudience" onchange="toggleSingleEmailField()">
+                        <option value="beta_users">Beta Users</option>
+                        <option value="all_users">All Users</option>
+                        <option value="admins">Admins</option>
+                        <option value="single_user">Single User</option>
+                    </select>
+                </div>
+                <div class="col-lg-3" id="singleEmailWrap" style="display:none;">
+                    <label class="form-label">Single Email</label>
+                    <input type="email" class="form-control" name="single_email" placeholder="person@example.com">
+                </div>
+                <div class="col-lg-6">
+                    <label class="form-label">Subject</label>
+                    <input type="text" class="form-control" name="subject" placeholder="Zoom invite: beta user call" required>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Message</label>
+                    <textarea class="form-control" name="message" rows="5" placeholder="Include the Zoom link, date, time, and what you want them to prepare." required></textarea>
+                    <small class="text-muted">This sends the email immediately using the SMTP settings already configured for the app.</small>
+                </div>
+                <div class="col-12">
+                    <button class="btn btn-primary" type="submit">
+                        <i class="bi bi-send"></i> Send Broadcast
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Stats Cards -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-lg">
@@ -468,4 +506,14 @@
         {% endif %}
     </div>
 </div>
+
+<script>
+function toggleSingleEmailField() {
+    var audience = document.getElementById('broadcastAudience');
+    var singleWrap = document.getElementById('singleEmailWrap');
+    if (!audience || !singleWrap) return;
+    singleWrap.style.display = audience.value === 'single_user' ? 'block' : 'none';
+}
+document.addEventListener('DOMContentLoaded', toggleSingleEmailField);
+</script>
 {% endblock %}

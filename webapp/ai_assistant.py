@@ -1036,6 +1036,9 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
             "keyword_recommendations": (gsc.get("keyword_recommendations") or [])[:20],
             "top_pages": (gsc.get("top_pages") or [])[:15],
         },
+        "website_detail": {
+            "top_landing_pages": (analysis.get("top_landing_pages") or _pick(ga, "by_page") or [])[:15],
+        },
         "google_ads_detail": {
             "campaigns": (google_ads.get("campaign_analysis") or [])[:20],
             "month_over_month": google_ads.get("month_over_month") or {},

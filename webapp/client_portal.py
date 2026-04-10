@@ -112,6 +112,14 @@ def _normalize_client_actions(actions):
         else:
             steps = []
 
+        targets_value = action.get("exact_targets") or []
+        if isinstance(targets_value, str):
+            exact_targets = [targets_value.strip()] if targets_value.strip() else []
+        elif isinstance(targets_value, (list, tuple)):
+            exact_targets = [str(target).strip() for target in targets_value if str(target or "").strip()]
+        else:
+            exact_targets = []
+
         normalized.append(
             {
                 **action,
@@ -132,6 +140,10 @@ def _normalize_client_actions(actions):
                 "skill": str(action.get("skill") or "Marketing"),
                 "platform_url": str(action.get("platform_url") or ""),
                 "platform_label": str(action.get("platform_label") or ""),
+                "execution_mode": str(action.get("execution_mode") or "direct"),
+                "delegate_to": str(action.get("delegate_to") or ""),
+                "delegate_message": str(action.get("delegate_message") or ""),
+                "exact_targets": exact_targets,
                 "xp": xp,
                 "difficulty": difficulty,
                 "key": _coerce_action_key(
@@ -466,6 +478,79 @@ def _build_warren_lead_intelligence(db, brand):
 
 # ── Feature gate (before_request on blueprint) ──
 
+
+def _resolve_feature_state(db, feature_key, brand_id):
+    flag = db.get_feature_flag(feature_key)
+    if not flag or not flag.get("enabled"):
+        return "off"
+
+    level = flag.get("access_level") or "all"
+    if level == "admin":
+        return "off"
+    if level == "beta" and not (brand_id and db.is_beta_brand(brand_id)):
+        return "off"
+
+    if brand_id:
+        overrides = db.get_brand_feature_access(brand_id)
+        return overrides.get(feature_key, "on")
+    return "on"
+
+
+def _feature_gate_error_response(feature_key):
+    upgrade_url = url_for("client.client_feature_upgrade", feature_key=feature_key)
+    wants_json = (
+        request.path.startswith("/client/api/")
+        or request.headers.get("X-Requested-With") in {"XMLHttpRequest", "PJAX"}
+        or request.is_json
+    )
+    if wants_json or request.method != "GET":
+        return jsonify({
+            "ok": False,
+            "error": "This feature requires an upgrade.",
+            "feature_key": feature_key,
+            "upgrade_url": upgrade_url,
+        }), 403
+    return redirect(upgrade_url)
+
+
+def _build_feature_contact_message(brand, feature_flag):
+    brand_name = (brand or {}).get("display_name") or "our brand"
+    feature_name = (feature_flag or {}).get("label") or "this feature"
+    description = ((feature_flag or {}).get("description") or "").strip()
+    lines = [
+        "Hi,",
+        "",
+        f"Please help us enable {feature_name} for {brand_name} in GroMore.",
+    ]
+    if description:
+        lines.extend([
+            "",
+            f"What we want to turn on: {description}",
+        ])
+    lines.extend([
+        "",
+        "Please review the setup, any implementation work needed, and what it will take to get this live.",
+        "",
+        "Thanks,",
+        session.get("client_name") or brand_name,
+    ])
+    return "\n".join(lines)
+
+
+def _build_feature_upgrade_request(brand, feature_flag, note=""):
+    brand_name = (brand or {}).get("display_name") or "Unknown Brand"
+    feature_name = (feature_flag or {}).get("label") or "Feature Upgrade"
+    description = ((feature_flag or {}).get("description") or "").strip()
+    detail_lines = [
+        f"Brand: {brand_name}",
+        f"Feature: {feature_name}",
+    ]
+    if description:
+        detail_lines.append(f"Feature detail: {description}")
+    if note.strip():
+        detail_lines.extend(["", "Client note:", note.strip()])
+    return "\n".join(detail_lines)
+
 # Map route function names → feature flag keys.
 # Routes not listed here are ungated (login, logout, assistant, etc.).
 _ENDPOINT_FEATURE_MAP = {
@@ -501,6 +586,7 @@ _ENDPOINT_FEATURE_MAP = {
     "client_creative_templates_save":  "creative",
     "client_creative_template_load":   "creative",
     "client_creative_template_update": "creative",
+    "client_ai_copy_variants":     "creative",
     "client_blog":                 "blog",
     "client_blog_editor":          "blog",
     "client_blog_save":            "blog",
@@ -525,6 +611,9 @@ _ENDPOINT_FEATURE_MAP = {
     "client_gbp":                  "gbp",
     "client_gbp_audit":            "gbp",
     "client_post_scheduler":       "post_scheduler",
+    "schedule_post":               "post_scheduler",
+    "schedule_post_bulk":          "post_scheduler",
+    "delete_scheduled_post":       "post_scheduler",
     "client_competitors":          "competitor_intel",
     "client_competitor_refresh":   "competitor_intel",
     "client_add_competitor":       "competitor_intel",
@@ -534,6 +623,26 @@ _ENDPOINT_FEATURE_MAP = {
     "client_feedback":             "feedback",
     "client_feedback_submit":      "feedback",
     "client_help":                 "help",
+    "client_team":                 "your_team",
+    "client_team_data":            "your_team",
+    "client_team_hire":            "your_team",
+    "client_team_train":           "your_team",
+    "client_team_findings":        "your_team",
+    "client_dismiss_finding":      "your_team",
+    "client_vote_finding":         "your_team",
+    "client_finding_status":       "your_team",
+    "client_run_team":             "your_team",
+    "client_team_run_status":      "your_team",
+    "client_staff":                "staff",
+    "client_staff_invite":         "staff",
+    "client_staff_update_role":    "staff",
+    "client_staff_toggle_active":  "staff",
+    "client_tasks":                "tasks",
+    "client_task_create":          "tasks",
+    "client_task_detail":          "tasks",
+    "client_task_update":          "tasks",
+    "client_task_delete":          "tasks",
+    "client_task_from_finding":    "tasks",
 }
 
 
@@ -548,22 +657,114 @@ def _check_feature_gate():
         return  # ungated route
 
     db = _get_db()
-    flag = db.get_feature_flag(feature_key)
-    if not flag or not flag["enabled"]:
+    brand_id = session.get("client_brand_id")
+    state = _resolve_feature_state(db, feature_key, brand_id)
+    if state == "off":
         abort(404)
-
-    level = flag["access_level"]
     # Admin session sees everything
     if "user_id" in session:
         return
-    if level == "all":
+    if state == "on":
         return
-    if level == "beta":
-        brand_id = session.get("client_brand_id")
-        if brand_id and db.is_beta_brand(brand_id):
-            return
-    # Not authorized for this feature
-    abort(404)
+    return _feature_gate_error_response(feature_key)
+
+
+@client_bp.route("/upgrade/<feature_key>")
+@client_login_required
+def client_feature_upgrade(feature_key):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    feature_flag = db.get_feature_flag(feature_key)
+    if not feature_flag:
+        abort(404)
+
+    state = _resolve_feature_state(db, feature_key, brand_id)
+    if state == "off":
+        abort(404)
+    if state == "on":
+        return redirect(url_for("client.client_dashboard"))
+
+    return render_template(
+        "client/client_feature_upgrade.html",
+        brand=brand,
+        feature_flag=feature_flag,
+        contact_recipients=db.get_brand_upgrade_contacts(brand_id),
+        default_contact_message=_build_feature_contact_message(brand, feature_flag),
+        default_upgrade_request=_build_feature_upgrade_request(brand, feature_flag),
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/upgrade/<feature_key>/email-contacts", methods=["POST"])
+@client_login_required
+def client_feature_upgrade_email_contacts(feature_key):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    feature_flag = db.get_feature_flag(feature_key)
+    if not feature_flag or _resolve_feature_state(db, feature_key, brand_id) != "upgrade":
+        abort(404)
+
+    recipients = db.get_brand_upgrade_contacts(brand_id)
+    if not recipients:
+        flash("Add a developer email or contact emails in Brand Settings first.", "warning")
+        return redirect(url_for("client.client_feature_upgrade", feature_key=feature_key))
+
+    subject = request.form.get("subject", "").strip() or f"{brand.get('display_name', 'Brand')} - {feature_flag.get('label', 'Feature')}"
+    message = request.form.get("message", "").strip() or _build_feature_contact_message(brand, feature_flag)
+    try:
+        from webapp.email_sender import send_bulk_email
+
+        send_bulk_email(current_app.config, recipients, subject, message)
+        flash(f"Sent to {len(recipients)} contact(s).", "success")
+    except Exception as exc:
+        flash(f"Email failed: {exc}", "warning")
+
+    return redirect(url_for("client.client_feature_upgrade", feature_key=feature_key))
+
+
+@client_bp.route("/upgrade/<feature_key>/request", methods=["POST"])
+@client_login_required
+def client_feature_upgrade_request(feature_key):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    feature_flag = db.get_feature_flag(feature_key)
+    if not feature_flag or _resolve_feature_state(db, feature_key, brand_id) != "upgrade":
+        abort(404)
+
+    subject = request.form.get("subject", "").strip() or f"Upgrade request: {feature_flag.get('label', 'Feature')}"
+    message = request.form.get("message", "").strip() or _build_feature_upgrade_request(brand, feature_flag)
+
+    db.create_upgrade_consideration({
+        "title": f"{feature_flag.get('label', 'Feature')} for {brand.get('display_name', 'Brand')}",
+        "description": _build_feature_upgrade_request(brand, feature_flag, message),
+        "category": "feature",
+        "request_count": 1,
+    })
+
+    admin_recipients = current_app.db.get_users_with_email()
+    if admin_recipients:
+        try:
+            from webapp.email_sender import send_bulk_email
+
+            send_bulk_email(current_app.config, admin_recipients, subject, message)
+        except Exception as exc:
+            flash(f"Upgrade request was logged, but admin email failed: {exc}", "warning")
+            return redirect(url_for("client.client_feature_upgrade", feature_key=feature_key))
+
+    flash("Upgrade request sent.", "success")
+    return redirect(url_for("client.client_feature_upgrade", feature_key=feature_key))
 
 @client_bp.route("/login", methods=["GET", "POST"])
 def client_login():
@@ -4784,6 +4985,21 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
     if meta:
         post_data["meta"] = meta
 
+    def _describe_wp_error(status_code, response_text):
+        body = (response_text or "")[:500]
+        body_lower = body.lower()
+        if "sgcaptcha" in body_lower or "/.well-known/sgcaptcha" in body_lower or (status_code == 202 and "captcha" in body_lower):
+            return (
+                "Publish failed: the WordPress site returned a security challenge instead of the REST API. "
+                "This is usually SiteGround Security or another bot-protection layer blocking Application Password requests. "
+                "Whitelist /wp-json/wp/v2/posts and disable captcha or bot challenges for REST API requests."
+            )
+        if status_code == 401:
+            return "Publish failed: WordPress returned 401. The application password may be expired or the user lacks permission to create posts. Re-enter your app password in Settings, or check that the WordPress user has an Editor/Administrator role."
+        if status_code == 403:
+            return "Publish failed: WordPress returned 403 Forbidden. A security plugin may be blocking REST API access."
+        return f"WordPress API error {status_code}: {body[:200]}"
+
     try:
         resp = req_lib.post(
             api_url,
@@ -4799,12 +5015,7 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
                 "wp_post_url": wp_post.get("link", ""),
             }
         else:
-            err_msg = f"WordPress API error {resp.status_code}: {resp.text[:200]}"
-            if resp.status_code == 401:
-                err_msg = "Publish failed: WordPress returned 401. The application password may be expired or the user lacks permission to create posts. Re-enter your app password in Settings, or check that the WordPress user has an Editor/Administrator role."
-            elif resp.status_code == 403:
-                err_msg = "Publish failed: WordPress returned 403 Forbidden. A security plugin may be blocking REST API access."
-            return {"ok": False, "error": err_msg}
+            return {"ok": False, "error": _describe_wp_error(resp.status_code, resp.text)}
     except Exception as e:
         return {"ok": False, "error": str(e)[:200]}
 

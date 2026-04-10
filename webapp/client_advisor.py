@@ -103,6 +103,176 @@ def infer_mission_profile(completed_count=0, requested_level="auto"):
     return profile
 
 
+def _trim_copy(value, limit=160):
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 3)].rstrip() + "..."
+
+
+def _normalize_text_list(value):
+    if isinstance(value, str):
+        text = value.strip()
+        return [text] if text else []
+    if not isinstance(value, (list, tuple)):
+        return []
+    items = []
+    for raw in value:
+        text = str(raw or "").strip()
+        if text:
+            items.append(text)
+    return items
+
+
+def _build_action_items(suggestions, analysis_summary):
+    paid_categories = {"paid_advertising", "budget", "creative"}
+    seo_categories = {"seo"}
+    web_categories = {"website"}
+    organic_categories = {"organic_social"}
+
+    google_ads_detail = analysis_summary.get("google_ads_detail", {})
+    meta_detail = analysis_summary.get("meta_detail", {})
+    seo_detail = analysis_summary.get("seo_detail", {})
+    website_detail = analysis_summary.get("website_detail", {})
+    fb_organic_detail = analysis_summary.get("facebook_organic_detail", {})
+    kpis = analysis_summary.get("kpis", {})
+
+    action_items = []
+    for suggestion in suggestions:
+        category = suggestion.get("category", "")
+        item = {
+            "title": suggestion["title"],
+            "detail": suggestion["detail"],
+            "category": category,
+            "data_point": suggestion.get("data_point", ""),
+            "relevant_data": {},
+        }
+
+        if category in paid_categories or "google" in suggestion["title"].lower() or "cpc" in suggestion["title"].lower():
+            item["relevant_data"]["google_ads_campaigns"] = (google_ads_detail.get("campaigns") or [])[:10]
+            item["relevant_data"]["google_ads_search_terms"] = (google_ads_detail.get("search_terms") or [])[:30]
+            item["relevant_data"]["google_ads_kpis"] = kpis.get("google_ads", {})
+
+        if category in paid_categories or "meta" in suggestion["title"].lower() or "facebook" in suggestion["title"].lower():
+            item["relevant_data"]["meta_campaigns"] = (meta_detail.get("campaigns") or [])[:10]
+            item["relevant_data"]["meta_top_ads"] = (meta_detail.get("top_ads") or [])[:10]
+            item["relevant_data"]["meta_kpis"] = kpis.get("meta", {})
+
+        if category in seo_categories or "seo" in category or "keyword" in suggestion["title"].lower():
+            item["relevant_data"]["seo_top_queries"] = (seo_detail.get("top_queries") or [])[:15]
+            item["relevant_data"]["seo_keyword_opportunities"] = (seo_detail.get("keyword_opportunities") or [])[:15]
+            item["relevant_data"]["seo_top_pages"] = (seo_detail.get("top_pages") or [])[:10]
+            item["relevant_data"]["seo_kpis"] = kpis.get("gsc", {})
+
+        if category in web_categories:
+            item["relevant_data"]["website_kpis"] = kpis.get("ga", {})
+            item["relevant_data"]["website_landing_pages"] = (website_detail.get("top_landing_pages") or [])[:10]
+            item["relevant_data"]["seo_top_pages"] = (seo_detail.get("top_pages") or [])[:10]
+            item["relevant_data"]["seo_keyword_opportunities"] = (seo_detail.get("keyword_opportunities") or [])[:10]
+
+        if category in organic_categories or "organic" in suggestion["title"].lower():
+            item["relevant_data"]["fb_organic_top_posts"] = (fb_organic_detail.get("top_posts") or [])[:10]
+            item["relevant_data"]["fb_organic_kpis"] = kpis.get("facebook_organic", {})
+
+        competitors = analysis_summary.get("competitor_watch") or {}
+        if competitors:
+            item["relevant_data"]["competitors"] = competitors
+
+        item["relevant_data"] = {key: value for key, value in item["relevant_data"].items() if value}
+        action_items.append(item)
+
+    return action_items
+
+
+def _format_exact_targets(category, relevant_data):
+    targets = []
+
+    if category == "website":
+        for page in (relevant_data.get("website_landing_pages") or [])[:3]:
+            path = page.get("page") or page.get("path") or page.get("url") or "this landing page"
+            sessions = page.get("sessions")
+            conversions = page.get("conversions")
+            bounce = page.get("bounce_rate")
+            parts = [str(path)]
+            if sessions is not None:
+                parts.append(f"{int(float(sessions))} sessions")
+            if conversions is not None:
+                parts.append(f"{int(float(conversions))} conversions")
+            if bounce is not None:
+                parts.append(f"{round(float(bounce), 1)}% bounce")
+            targets.append(" - ".join(parts))
+
+    if category in {"seo", "website"}:
+        for row in (relevant_data.get("seo_keyword_opportunities") or [])[:3]:
+            query = row.get("query") or row.get("keyword")
+            if not query:
+                continue
+            page = row.get("page") or row.get("url") or "no clear page yet"
+            impressions = row.get("impressions")
+            position = row.get("position")
+            parts = [f'"{query}"']
+            if page:
+                parts.append(str(page))
+            if impressions is not None:
+                parts.append(f"{int(float(impressions))} impressions")
+            if position is not None:
+                parts.append(f"position {round(float(position), 1)}")
+            targets.append(" - ".join(parts))
+
+    deduped = []
+    for target in targets:
+        cleaned = _trim_copy(target, 180)
+        if cleaned and cleaned not in deduped:
+            deduped.append(cleaned)
+    return deduped[:4]
+
+
+def _build_delegate_plan(title, category, relevant_data):
+    title_lower = str(title or "").lower()
+    exact_targets = _format_exact_targets(category, relevant_data)
+    needs_delegate = category in {"website", "seo", "strategy", "creative"} or any(
+        word in title_lower for word in ("page", "website", "landing", "seo", "headline", "design", "copy", "competitor")
+    )
+    if not needs_delegate:
+        return {
+            "execution_mode": "direct",
+            "delegate_to": "",
+            "delegate_message": "",
+            "exact_targets": exact_targets,
+        }
+
+    if category == "creative" or any(word in title_lower for word in ("design", "image", "creative", "headline")):
+        delegate_to = "designer"
+        intro = "Please update these creative assets based on GroMore's latest findings:"
+        close = "Goal: improve click-through rate without changing the offer."
+    else:
+        delegate_to = "developer"
+        intro = "Please handle these website and SEO updates from GroMore:"
+        close = "Goal: remove conversion leaks and improve organic visibility on the pages already getting traffic."
+
+    bullets = exact_targets or [_trim_copy(title or "Mission update", 140)]
+    lines = [intro]
+    for bullet in bullets:
+        lines.append(f"- {bullet}")
+
+    if category == "website":
+        lines.append("- Add a clear call-to-action above the fold, tighten the headline to match the service intent, and reduce friction in the contact form.")
+    elif category == "seo":
+        lines.append("- Rewrite the title tag and on-page copy to match the target query, then strengthen internal links and the primary CTA.")
+    elif category == "creative":
+        lines.append("- Keep the offer the same, but refresh the visual and headline so the winner is obvious in one glance.")
+    else:
+        lines.append("- Reply with the ETA and any blockers before making the update.")
+
+    lines.append(close)
+    return {
+        "execution_mode": "delegate",
+        "delegate_to": delegate_to,
+        "delegate_message": "\n".join(lines),
+        "exact_targets": exact_targets,
+    }
+
+
 def _parse_difficulty(time_str):
     """Return 1-3 star difficulty from a time estimate string."""
     if not time_str:
@@ -646,6 +816,11 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None, mission_pro
     if not selected:
         return []
 
+    from webapp.ai_assistant import _summarize_analysis_for_ai
+
+    analysis_summary = _summarize_analysis_for_ai(analysis)
+    action_items = _build_action_items(selected, analysis_summary)
+
     # Build basic card structure first
     actions = []
     for s in selected:
@@ -690,11 +865,22 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None, mission_pro
             "platform_label": platform_label,
             "xp": xp,
             "difficulty": 0,
+            "execution_mode": "direct",
+            "delegate_to": "",
+            "delegate_message": "",
+            "exact_targets": [],
         }
         actions.append(card)
 
     # Generate AI deliverables using actual account data
-    ai_actions = _generate_ai_actions(selected, analysis, brand, ai_model=ai_model, mission_profile=mission_profile)
+    ai_actions = _generate_ai_actions(
+        selected,
+        analysis,
+        brand,
+        ai_model=ai_model,
+        mission_profile=mission_profile,
+        action_items=action_items,
+    )
     if ai_actions:
         for i, card in enumerate(actions):
             if i < len(ai_actions):
@@ -705,24 +891,45 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None, mission_pro
                 card["mission_name"] = ai.get("mission_name", "")
                 card["why"] = ai.get("why", "")
                 card["reward"] = ai.get("reward", "")
+                card["execution_mode"] = str(ai.get("execution_mode") or card["execution_mode"] or "direct")
+                card["delegate_to"] = str(ai.get("delegate_to") or card["delegate_to"] or "")
+                card["delegate_message"] = str(ai.get("delegate_message") or card["delegate_message"] or "")
+                card["exact_targets"] = _normalize_text_list(ai.get("exact_targets") or card["exact_targets"])
 
     # Fallback: if AI didn't return steps, generate basic ones from the suggestion data
     for i, card in enumerate(actions):
+        action_item = action_items[i] if i < len(action_items) else {"relevant_data": {}}
+        delegate_plan = _build_delegate_plan(
+            card["title"],
+            selected[i].get("category", "") if i < len(selected) else "",
+            action_item.get("relevant_data") or {},
+        )
+        if not card.get("exact_targets"):
+            card["exact_targets"] = delegate_plan["exact_targets"]
+        if not card.get("delegate_message"):
+            card["delegate_message"] = delegate_plan["delegate_message"]
+        if not card.get("delegate_to"):
+            card["delegate_to"] = delegate_plan["delegate_to"]
+        if not card.get("execution_mode") or card.get("execution_mode") == "direct":
+            card["execution_mode"] = delegate_plan["execution_mode"]
         if not card["steps"] and i < len(selected):
             s = selected[i]
-            card["steps"] = _fallback_steps(s)
+            card["steps"] = _fallback_steps(s, action_item=action_item, delegate_plan=delegate_plan)
             if not card["time"]:
                 card["time"] = "15-30 minutes"
         # Fallback mission name
         if not card["mission_name"]:
             card["mission_name"] = card["title"]
+        if card.get("execution_mode") == "delegate" and selected[i].get("category") in {"website", "seo", "strategy", "creative"}:
+            card["platform_url"] = ""
+            card["platform_label"] = ""
         # Calculate difficulty from time
         card["difficulty"] = _parse_difficulty(card["time"])
 
     return actions
 
 
-def _fallback_steps(suggestion):
+def _fallback_steps(suggestion, action_item=None, delegate_plan=None):
     """Build detailed, click-by-click steps a fifth grader could follow.
 
     These are used when the AI prompt fails or no API key is set. Each step
@@ -733,8 +940,17 @@ def _fallback_steps(suggestion):
     data_point = suggestion.get("data_point", "")
     detail = suggestion.get("detail", "")
     title_lower = title.lower()
+    relevant_data = (action_item or {}).get("relevant_data") or {}
+    delegate_plan = delegate_plan or {"execution_mode": "direct", "delegate_message": "", "exact_targets": []}
 
     dp = data_point  # short alias
+
+    if delegate_plan.get("execution_mode") == "delegate":
+        steps = ["Copy the developer brief below and send it today."]
+        for target in delegate_plan.get("exact_targets") or []:
+            steps.append(f"Have them update this exact target: {target}.")
+        steps.append("Once the update is live, mark the mission complete so GroMore can re-check performance on the next refresh.")
+        return steps[:5]
 
     # --- Google Ads: CPC / Cost related ---
     if any(w in title_lower for w in ("cost per click", "cpc", "lower cost")):
@@ -778,6 +994,14 @@ def _fallback_steps(suggestion):
 
     # --- Website / Analytics ---
     if category == "website" or any(w in title_lower for w in ("website", "landing page", "conversion", "bounce", "analytics")):
+        exact_targets = _format_exact_targets("website", relevant_data)
+        if exact_targets:
+            steps = []
+            for target in exact_targets[:3]:
+                steps.append(f"Update this exact page next: {target}.")
+            steps.append("On each page, put the phone CTA or quote form above the fold and make the headline match the service intent.")
+            steps.append("When the edits are live, compare lead volume and bounce rate after 7 days.")
+            return steps[:5]
         return [
             f"Go to analytics.google.com. Click \"Reports\" on the left, then \"Pages and screens.\"{f' Current metric: {dp}.' if dp else ''} Sort by \"Views\" to see your most visited pages.",
             "Look at the \"Bounce rate\" column. Find any page with a bounce rate over 70%. That means most people leave without doing anything. Those pages need fixing first.",
@@ -857,7 +1081,7 @@ def _fallback_steps(suggestion):
     return steps[:5]
 
 
-def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_profile=None):
+def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_profile=None, action_items=None):
     """Call AI to generate specific deliverables for each action card.
 
     Instead of 'go to Google Ads and click...', this produces the actual work:
@@ -888,81 +1112,17 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_pr
     from webapp.ai_assistant import _summarize_analysis_for_ai
     analysis_summary = _summarize_analysis_for_ai(analysis)
 
-    # ── Build per-action-item context with relevant data attached ──
-    # Instead of sending raw data in a separate blob, attach the relevant
-    # slice of detailed data directly to each action item so the AI can't
-    # ignore it.
+    if action_items is None:
+        action_items = _build_action_items(suggestions, analysis_summary)
 
-    _cat_paid = {"paid_advertising", "budget", "creative"}
-    _cat_seo = {"seo"}
-    _cat_web = {"website"}
-    _cat_organic = {"organic_social"}
-
-    google_ads_detail = analysis_summary.get("google_ads_detail", {})
-    meta_detail = analysis_summary.get("meta_detail", {})
-    seo_detail = analysis_summary.get("seo_detail", {})
-    fb_organic_detail = analysis_summary.get("facebook_organic_detail", {})
-    kpis = analysis_summary.get("kpis", {})
-
-    action_items = []
-    for s in suggestions:
-        cat = s.get("category", "")
-        item = {
-            "title": s["title"],
-            "detail": s["detail"],
-            "category": cat,
-            "data_point": s.get("data_point", ""),
-            "relevant_data": {},
-        }
-
-        # Attach channel-specific data the AI must reference
-        if cat in _cat_paid or "google" in s["title"].lower() or "cpc" in s["title"].lower():
-            campaigns = google_ads_detail.get("campaigns") or []
-            item["relevant_data"]["google_ads_campaigns"] = campaigns[:10]
-            item["relevant_data"]["google_ads_search_terms"] = (
-                google_ads_detail.get("search_terms") or []
-            )[:30]
-            item["relevant_data"]["google_ads_kpis"] = kpis.get("google_ads", {})
-
-        if cat in _cat_paid or "meta" in s["title"].lower() or "facebook" in s["title"].lower():
-            item["relevant_data"]["meta_campaigns"] = (
-                meta_detail.get("campaigns") or []
-            )[:10]
-            item["relevant_data"]["meta_top_ads"] = (
-                meta_detail.get("top_ads") or []
-            )[:10]
-            item["relevant_data"]["meta_kpis"] = kpis.get("meta", {})
-
-        if cat in _cat_seo or "seo" in cat or "keyword" in s["title"].lower():
-            item["relevant_data"]["seo_top_queries"] = (
-                seo_detail.get("top_queries") or []
-            )[:15]
-            item["relevant_data"]["seo_keyword_opportunities"] = (
-                seo_detail.get("keyword_opportunities") or []
-            )[:15]
-            item["relevant_data"]["seo_top_pages"] = (
-                seo_detail.get("top_pages") or []
-            )[:10]
-            item["relevant_data"]["seo_kpis"] = kpis.get("gsc", {})
-
-        if cat in _cat_web:
-            item["relevant_data"]["website_kpis"] = kpis.get("ga", {})
-
-        if cat in _cat_organic or "organic" in s["title"].lower():
-            item["relevant_data"]["fb_organic_top_posts"] = (
-                fb_organic_detail.get("top_posts") or []
-            )[:10]
-            item["relevant_data"]["fb_organic_kpis"] = kpis.get("facebook_organic", {})
-
-        # Competitor data is relevant across all categories
-        comp = analysis_summary.get("competitor_watch") or {}
-        if comp:
-            item["relevant_data"]["competitors"] = comp
-
-        # Strip empty relevant_data keys
-        item["relevant_data"] = {k: v for k, v in item["relevant_data"].items() if v}
-
-        action_items.append(item)
+    for item in action_items:
+        category = item.get("category", "")
+        exact_targets = _format_exact_targets(category, item.get("relevant_data") or {})
+        if exact_targets:
+            item["detail"] = _trim_copy(
+                f"{item.get('detail', '')} Exact targets from the connected data: {'; '.join(exact_targets)}",
+                900,
+            )
 
     client_info = analysis_summary.get("client", {})
 
@@ -1016,11 +1176,21 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_pr
 
         + audience_block + "\n\n"
 
+        "CRITICAL EXECUTION RULES:\n"
+        "- The user should NEVER have to hunt through analytics, Search Console, or ad dashboards for targets that are already in the connected data.\n"
+        "- Name the exact page, query, campaign, ad, keyword, or search term from the provided data whenever one exists.\n"
+        "- If the work belongs with a developer, designer, or assistant, do NOT send the owner into the tool to figure it out. Write a delegation-ready mission and include a ready-to-send handoff note.\n"
+        "- Avoid verbs like 'look for', 'review', 'find', 'evaluate', or 'assess' unless the exact thing to inspect is named in the same sentence.\n\n"
+
         "OUTPUT FORMAT (JSON only):\n"
         "{\"actions\": [\n"
         "  {\n"
         "    \"mission_name\": \"3-6 word punchy verb phrase\",\n"
         "    \"micro_steps\": [\"step 1\", \"step 2\", ...],\n"
+        "    \"exact_targets\": [\"exact page/query/campaign names from the data\"],\n"
+        "    \"execution_mode\": \"direct\" or \"delegate\",\n"
+        "    \"delegate_to\": \"developer\" or \"designer\" or \"assistant\" or \"\",\n"
+        "    \"delegate_message\": \"ready-to-send note if the owner should hand this off\",\n"
         "    \"why\": \"one sentence: how this is costing them money or losing them leads\",\n"
         "    \"reward\": \"one sentence: what improves when they finish\",\n"
         "    \"impact\": \"one sentence with specific projected numbers\",\n"
@@ -1049,6 +1219,7 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_pr
         "- 'Go to ads.google.com. Click \"Campaigns\" on the left. Find \"SDL Search Campaign\" (it spent $340 and got 0 leads). Click the green dot under \"Status\" and change it to \"Paused.\"'\n"
         "- 'Go to business.facebook.com/adsmanager. Click on your active campaign. Click \"Ad sets\" at the top. Click \"Edit\" on the ad set. Scroll down to \"Budget.\" Change the daily budget from $15 to $25 because this ad set has the lowest cost per lead at $12.'\n"
         "- 'Go to search.google.com/search-console. Click \"Performance\" on the left. Click the \"Queries\" tab. Find \"plumber near me\" - you are at position 14 with 800 impressions. Go to your website and add a new page titled \"Plumber Near Me in [Your City]\" with at least 500 words about that service.'\n\n"
+        "- 'Copy the developer note below and send it to your website developer. Update /emergency-plumbing - 92 sessions, 0 conversions, 81% bounce. Put the phone CTA above the fold, tighten the H1 to match emergency service intent, and shorten the quote form to name, phone, and service.'\n\n"
 
         "STEP EXAMPLES THAT ARE WRONG (NEVER WRITE THESE):\n"
         "- 'Go to ads.google.com and log in to your Google Ads account.' (FILLER. They know how to log in.)\n"
@@ -1145,6 +1316,10 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_pr
                     "impact": str(item.get("impact", "")),
                     "time": str(item.get("time", "")),
                     "mission_name": str(item.get("mission_name", "")),
+                    "exact_targets": _normalize_text_list(item.get("exact_targets")),
+                    "execution_mode": str(item.get("execution_mode", "direct") or "direct"),
+                    "delegate_to": str(item.get("delegate_to", "")),
+                    "delegate_message": str(item.get("delegate_message", "")),
                     "why": str(item.get("why", "")),
                     "reward": str(item.get("reward", "")),
                 })
@@ -1154,9 +1329,13 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_pr
                     "steps": [str(s) for s in item if s],
                     "impact": "",
                     "time": "",
+                    "exact_targets": [],
+                    "execution_mode": "direct",
+                    "delegate_to": "",
+                    "delegate_message": "",
                 })
             else:
-                result.append({"steps": [], "impact": "", "time": ""})
+                result.append({"steps": [], "impact": "", "time": "", "exact_targets": [], "execution_mode": "direct", "delegate_to": "", "delegate_message": ""})
 
         return result
 

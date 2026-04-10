@@ -265,6 +265,56 @@ def create_app():
             app.config["APP_URL"] = detected
             db.save_setting("app_url", detected)
 
+    def _brand_feature_state(brand_id, feature_key):
+        flag = db.get_feature_flag(feature_key)
+        if not flag or not flag.get("enabled"):
+            return "off"
+
+        level = flag.get("access_level") or "all"
+        if level == "admin":
+            return "off"
+        if level == "beta" and not (brand_id and db.is_beta_brand(brand_id)):
+            return "off"
+
+        if brand_id:
+            overrides = db.get_brand_feature_access(brand_id)
+            return overrides.get(feature_key, "on")
+        return "on"
+
+    def _collect_broadcast_recipients(audience, single_email=""):
+        recipients = []
+        seen = set()
+
+        def _append(email, name, source):
+            normalized = db._normalize_email(email)
+            if "@" not in normalized or normalized in seen:
+                return
+            seen.add(normalized)
+            recipients.append({
+                "email": normalized,
+                "name": (name or normalized).strip(),
+                "source": source,
+            })
+
+        audience_key = (audience or "").strip().lower()
+        if audience_key == "admins":
+            for user in db.get_users_with_email():
+                _append(user.get("email"), user.get("recipient_name") or user.get("display_name"), "admin")
+        elif audience_key == "beta_users":
+            for tester in db.get_beta_testers_for_broadcast():
+                _append(tester.get("email"), tester.get("recipient_name") or tester.get("name"), "beta")
+        elif audience_key == "all_users":
+            for user in db.get_users_with_email():
+                _append(user.get("email"), user.get("recipient_name") or user.get("display_name"), "admin")
+            for tester in db.get_beta_testers_for_broadcast():
+                _append(tester.get("email"), tester.get("recipient_name") or tester.get("name"), "beta")
+            for client_user in db.get_client_users(active_only=True):
+                _append(client_user.get("email"), client_user.get("display_name"), "client")
+        elif audience_key == "single_user":
+            _append(single_email, single_email, "single")
+
+        return recipients
+
     # ── Context processor ──
     @app.context_processor
     def inject_globals():
@@ -280,17 +330,11 @@ def create_app():
             flag = _flags.get(key)
             if not flag or not flag["enabled"]:
                 return False
-            level = flag["access_level"]  # 'all', 'beta', 'admin'
             # Admin session sees everything
             if "user_id" in session:
                 return True
-            if level == "all":
-                return True
-            if level == "beta":
-                brand_id = session.get("client_brand_id")
-                return bool(brand_id and db.is_beta_brand(brand_id))
-            # level == 'admin' and no admin session
-            return False
+            brand_id = session.get("client_brand_id")
+            return _brand_feature_state(brand_id, key) in {"on", "upgrade"}
 
         return {
             "current_user": user,
@@ -985,6 +1029,7 @@ def create_app():
         brand = db.get_brand(brand_id)
         if not brand:
             abort(404)
+        feature_flags = db.get_feature_flags()
         if request.method == "POST":
             section = request.form.get("section", "")
             if section == "voice":
@@ -1026,10 +1071,30 @@ def create_app():
                 db.update_brand_text_field(brand_id, "crm_pipeline_id", request.form.get("crm_pipeline_id", ""))
                 db.update_brand_text_field(brand_id, "crm_server_url", request.form.get("crm_server_url", ""))
                 flash("CRM settings saved", "success")
+            elif section == "features":
+                brand_feature_access = {}
+                for flag in feature_flags:
+                    feature_key = flag.get("feature_key")
+                    state = request.form.get(f"feature_state_{feature_key}", "on")
+                    brand_feature_access[feature_key] = state
+                db.update_brand_feature_access(brand_id, brand_feature_access)
+                db.update_brand_text_field(brand_id, "upgrade_dev_email", request.form.get("upgrade_dev_email", ""))
+                db.update_brand_text_field(brand_id, "upgrade_contact_emails", request.form.get("upgrade_contact_emails", ""))
+                flash("Feature access and upgrade contacts saved", "success")
             return redirect(url_for("brand_settings", brand_id=brand_id))
         # Reload brand to get latest data
         brand = db.get_brand(brand_id)
-        return render_template("brands/settings.html", brand=brand, app_url=(app.config.get("APP_URL", "") or "").rstrip("/"))
+        categories = {}
+        for flag in feature_flags:
+            category = flag.get("category") or "general"
+            categories.setdefault(category, []).append(flag)
+        return render_template(
+            "brands/settings.html",
+            brand=brand,
+            app_url=(app.config.get("APP_URL", "") or "").rstrip("/"),
+            feature_categories=categories,
+            brand_feature_access=db.get_brand_feature_access(brand_id),
+        )
 
     @app.route("/webhooks/crm/revenue/<int:brand_id>", methods=["POST"])
     @app.route("/webhooks/crm/revenue/slug/<slug>", methods=["POST"])
@@ -2015,6 +2080,33 @@ def create_app():
             considerations=considerations,
             upgrade_stats=upgrade_stats,
         )
+
+    @app.route("/beta/broadcast", methods=["POST"])
+    @login_required
+    def beta_broadcast_email():
+        audience = request.form.get("audience", "")
+        single_email = request.form.get("single_email", "")
+        subject = request.form.get("subject", "").strip()
+        message = request.form.get("message", "").strip()
+
+        if not subject or not message:
+            flash("Subject and message are required.", "error")
+            return redirect(url_for("beta_dashboard"))
+
+        recipients = _collect_broadcast_recipients(audience, single_email=single_email)
+        if not recipients:
+            flash("No recipients matched that audience.", "warning")
+            return redirect(url_for("beta_dashboard"))
+
+        try:
+            from webapp.email_sender import send_bulk_email
+
+            sent_count = send_bulk_email(app.config, recipients, subject, message)
+            flash(f"Broadcast sent to {sent_count} recipient(s).", "success")
+        except Exception as exc:
+            flash(f"Broadcast failed: {exc}", "warning")
+
+        return redirect(url_for("beta_dashboard"))
 
     @app.route("/beta/approve/<int:tester_id>", methods=["POST"])
     @login_required

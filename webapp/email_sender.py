@@ -1,6 +1,7 @@
 """
 Email sender - sends report HTML to contacts via SMTP.
 """
+import html
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -429,3 +430,44 @@ def send_simple_email(app_config, email, subject, text, html=None):
         msg.attach(MIMEText(text, "plain"))
         msg.attach(MIMEText(html, "html"))
         server.sendmail(from_email, email, msg.as_string())
+
+
+def send_bulk_email(app_config, recipients, subject, text, html_body=None):
+    """Send one message to many recipients using the configured SMTP account."""
+    smtp_host = app_config.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = app_config.get("SMTP_PORT", 587)
+    smtp_user = app_config.get("SMTP_USER", "")
+    smtp_password = app_config.get("SMTP_PASSWORD", "")
+    from_name = app_config.get("SMTP_FROM_NAME", "GroMore")
+    from_email = app_config.get("SMTP_FROM_EMAIL", smtp_user)
+
+    if not smtp_user or not smtp_password:
+        raise ValueError("SMTP not configured.")
+
+    rendered_html = html_body or (
+        "<div style=\"font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.6;\">"
+        f"{html.escape(text).replace(chr(10), '<br>')}"
+        "</div>"
+    )
+
+    sent_count = 0
+    with smtplib.SMTP(smtp_host, smtp_port) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+
+        for recipient in recipients or []:
+            email_address = (recipient.get("email") if isinstance(recipient, dict) else recipient) or ""
+            email_address = email_address.strip()
+            if not email_address:
+                continue
+
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = f"{from_name} <{from_email}>"
+            msg["To"] = email_address
+            msg.attach(MIMEText(text, "plain"))
+            msg.attach(MIMEText(rendered_html, "html"))
+            server.sendmail(from_email, email_address, msg.as_string())
+            sent_count += 1
+
+    return sent_count

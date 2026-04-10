@@ -1,0 +1,78 @@
+{% extends "client/client_base.html" %}
+{% block title %}Upgrade {{ feature_flag.label }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-xl-10">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4 p-lg-5">
+                    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+                        <div>
+                            <span class="badge text-bg-warning mb-2">Upgrade Available</span>
+                            <h1 class="h3 mb-2">{{ feature_flag.label }}</h1>
+                            <p class="text-muted mb-0">{{ feature_flag.description or 'This feature is available as an upgrade for your brand.' }}</p>
+                        </div>
+                        <a href="{{ url_for('client.client_dashboard') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Back to Dashboard
+                        </a>
+                    </div>
+
+                    <div class="row g-4">
+                        <div class="col-lg-6">
+                            <div class="border rounded-4 p-4 h-100 bg-light-subtle">
+                                <h2 class="h5 mb-3"><i class="bi bi-person-workspace"></i> Email Your Dev or Team</h2>
+                                <p class="text-muted small mb-3">Use the saved developer and contact emails for this brand. This is the fastest way to move implementation work forward.</p>
+                                {% if contact_recipients %}
+                                <div class="mb-3">
+                                    <div class="small text-muted mb-1">Recipients</div>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        {% for recipient in contact_recipients %}
+                                        <span class="badge rounded-pill text-bg-light border">{{ recipient.email }}</span>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                {% else %}
+                                <div class="alert alert-warning py-2 small">No developer/contact emails are saved for this brand yet. Add them in Brand Settings.</div>
+                                {% endif %}
+                                <form method="POST" action="{{ url_for('client.client_feature_upgrade_email_contacts', feature_key=feature_flag.feature_key) }}">
+                                    <div class="mb-3">
+                                        <label class="form-label">Subject</label>
+                                        <input type="text" name="subject" class="form-control" value="{{ brand.display_name }} - {{ feature_flag.label }}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Message</label>
+                                        <textarea name="message" class="form-control" rows="9">{{ default_contact_message }}</textarea>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary" {% if not contact_recipients %}disabled{% endif %}>
+                                        <i class="bi bi-envelope"></i> Send to Contacts
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="border rounded-4 p-4 h-100">
+                                <h2 class="h5 mb-3"><i class="bi bi-rocket-takeoff"></i> Request the Upgrade</h2>
+                                <p class="text-muted small mb-3">This logs the request on the admin side and emails the admin team if admin email addresses are available.</p>
+                                <form method="POST" action="{{ url_for('client.client_feature_upgrade_request', feature_key=feature_flag.feature_key) }}">
+                                    <div class="mb-3">
+                                        <label class="form-label">Subject</label>
+                                        <input type="text" name="subject" class="form-control" value="Upgrade request: {{ feature_flag.label }}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">What do you need?</label>
+                                        <textarea name="message" class="form-control" rows="9">{{ default_upgrade_request }}</textarea>
+                                    </div>
+                                    <button type="submit" class="btn btn-dark">
+                                        <i class="bi bi-send-check"></i> Request Upgrade
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
