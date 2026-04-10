@@ -1243,7 +1243,8 @@ def client_actions():
     if not brand:
         abort(404)
 
-    month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+    requested_month = request.args.get("month") or ""
+    month, requested_month, used_month_fallback = _resolve_dashboard_month(db, brand_id, requested_month)
     ai_model = _pick_ai_model(brand, "analysis", request.args.get("ai_model", ""))
     run_analysis = request.args.get("run_analysis") == "1"
     requested_skill_level = (request.args.get("skill_level") or "auto").strip().lower()
