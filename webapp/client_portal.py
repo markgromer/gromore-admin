@@ -1257,10 +1257,10 @@ def client_actions():
         completed_count=completed_count,
         requested_level=requested_skill_level,
     )
-    force_refresh = (request.args.get("refresh") == "1") or mission_profile.get("source") == "manual"
+    force_refresh = (request.args.get("refresh") == "1") or run_analysis or mission_profile.get("source") == "manual"
 
     # ── Fast path: serve actions from dashboard snapshot ──
-    if not force_refresh and not run_analysis:
+    if not force_refresh:
         try:
             snapshot = db.get_dashboard_snapshot(brand_id, month)
             if snapshot:
@@ -1289,6 +1289,22 @@ def client_actions():
                 )
                 actions = data.get("actions", [])
                 ai_analysis = data.get("ai_analysis", "")
+
+                # Save fresh snapshot so "last updated" timestamp reflects this regen
+                if force_refresh and actions:
+                    try:
+                        snap_existing = db.get_dashboard_snapshot(brand_id, month, max_age_hours=8760)
+                        snap_data = json.loads(snap_existing["snapshot_json"]) if snap_existing else {}
+                        snap_data["actions"] = actions
+                        if ai_analysis:
+                            snap_data["ai_analysis"] = ai_analysis
+                        db.upsert_dashboard_snapshot(
+                            brand_id, month,
+                            json.dumps(snap_data, default=str),
+                            source="mission_regen",
+                        )
+                    except Exception:
+                        pass
         except Exception as e:
             current_app.logger.exception("Mission Control load failed for brand %s month %s", brand_id, month)
             error = str(e)

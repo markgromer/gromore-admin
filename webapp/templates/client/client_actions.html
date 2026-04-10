@@ -483,6 +483,16 @@
             <span class="tagline">Complete missions. Earn XP. Level up your marketing.</span>
         </div>
         <div class="d-flex align-items-center gap-2">
+            <form method="GET" style="margin:0;">
+                <input type="hidden" name="month" value="{{ month }}">
+                <input type="hidden" name="ai_model" value="{{ ai_model or '' }}">
+                <input type="hidden" name="skill_level" value="{{ requested_skill_level }}">
+                <input type="hidden" name="refresh" value="1">
+                <button class="btn btn-sm" type="submit"
+                        style="background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.25); color:#fff; font-size:.78rem; font-weight:700;">
+                    <i class="bi bi-arrow-clockwise me-1"></i> Regenerate Missions
+                </button>
+            </form>
             <div class="level-badge">
                 <span class="lvl-num">{{ level_num }}</span>
                 {{ level_name }}
@@ -556,8 +566,9 @@
                 <input type="hidden" name="ai_model" value="{{ ai_model or '' }}">
                 <input type="hidden" name="skill_level" value="{{ requested_skill_level }}">
                 <input type="hidden" name="run_analysis" value="1">
+                <input type="hidden" name="refresh" value="1">
                 <button class="btn btn-primary btn-sm" type="submit" style="font-size:.78rem;">
-                    <i class="bi bi-stars me-1"></i> Regenerate Missions
+                    <i class="bi bi-stars me-1"></i> Deep Analysis + Regenerate
                 </button>
             </form>
         </div>
