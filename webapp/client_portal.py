@@ -1117,6 +1117,9 @@ def client_dashboard_data():
             except Exception:
                 pass
 
+            # Include _cached_at so the UI shows "Synced just now" after refresh
+            dashboard_data["_cached_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
             _log_agent("scout", "Analyzed campaign performance", f"Scanned {len(campaigns_data.get('google', []))} Google + {len(campaigns_data.get('meta', []))} Meta campaigns")
             _log_agent("warren", "Built dashboard briefing", f"Month: {month}")
             return jsonify({

@@ -483,7 +483,7 @@
             <span class="tagline">Complete missions. Earn XP. Level up your marketing.</span>
         </div>
         <div class="d-flex align-items-center gap-2">
-            <form method="GET" style="margin:0;">
+            <form method="GET" style="margin:0;" onsubmit="var b=this.querySelector('button');b.disabled=true;b.innerHTML='<i class=\'bi bi-hourglass-split me-1\'></i> Regenerating...';">
                 <input type="hidden" name="month" value="{{ month }}">
                 <input type="hidden" name="ai_model" value="{{ ai_model or '' }}">
                 <input type="hidden" name="skill_level" value="{{ requested_skill_level }}">

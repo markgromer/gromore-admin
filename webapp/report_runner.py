@@ -190,16 +190,8 @@ def get_analysis_and_suggestions_for_brand(db, brand, month, *, force_refresh: b
         raise ValueError("Brand missing slug")
 
     if not force_refresh:
-        # 1) Prefer cached summary (analysis + suggestions)
-        try:
-            init_db()
-            cached = get_monthly_summary(slug, month)
-            if cached and isinstance(cached.get("summary"), dict):
-                return cached["summary"], (cached.get("suggestions") or [])
-        except Exception:
-            pass
-
-        # 2) If we have stored monthly_data, rebuild analysis locally (no API calls)
+        # 1) Prefer monthly_data rebuild: re-runs generate_suggestions() with latest
+        #    code so new suggestion logic takes effect without a manual refresh.
         try:
             init_db()
             rows = get_monthly_data(slug, month)
@@ -232,8 +224,52 @@ def get_analysis_and_suggestions_for_brand(db, brand, month, *, force_refresh: b
         except Exception:
             pass
 
+        # 2) Fallback: cached summary (analysis + suggestions already computed)
+        try:
+            init_db()
+            cached = get_monthly_summary(slug, month)
+            if cached and isinstance(cached.get("summary"), dict):
+                return cached["summary"], (cached.get("suggestions") or [])
+        except Exception:
+            pass
+
     # 3) Refresh path: pull live data (API + CSV) and store cache
-    analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
+    try:
+        analysis, suggestions = build_analysis_and_suggestions_for_brand(db, brand, month)
+    except Exception:
+        # Live pull failed - rebuild from cached monthly_data with fresh suggestion logic
+        try:
+            init_db()
+            rows = get_monthly_data(slug, month)
+            if rows:
+                data = {}
+                for r in rows:
+                    source = r.get("source")
+                    if not source:
+                        continue
+                    try:
+                        data[source] = json.loads(r.get("data_json") or "{}")
+                    except Exception:
+                        data[source] = {}
+
+                client_config = _brand_to_client_config(brand)
+                try:
+                    competitor_rows = db.get_competitors(brand["id"])
+                    if competitor_rows:
+                        client_config["competitor_profiles"] = [dict(r) for r in competitor_rows]
+                except Exception:
+                    pass
+
+                analysis = build_full_analysis(slug, month, data, client_config)
+                suggestions = generate_suggestions(analysis)
+                try:
+                    store_monthly_summary(slug, month, analysis, suggestions)
+                except Exception:
+                    pass
+                return analysis, suggestions
+        except Exception:
+            pass
+        raise
     try:
         store_monthly_summary(slug, month, analysis, suggestions)
     except Exception:
