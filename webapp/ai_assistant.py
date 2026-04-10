@@ -240,6 +240,33 @@ WARREN_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "browse_drive",
+            "description": (
+                "Browse the brand's Google Drive folder to list files and subfolders. "
+                "Use this when the user asks about files in their Drive, wants to find an image, "
+                "creative, report, or any uploaded asset. You can browse the root folder or a specific subfolder."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "subfolder": {
+                        "type": "string",
+                        "description": (
+                            "Subfolder name to browse (e.g. 'Creatives', 'Ads', 'Images', 'Reports'). "
+                            "Leave empty to browse the root folder and see all subfolders."
+                        ),
+                    },
+                    "folder_id": {
+                        "type": "string",
+                        "description": "Specific Google Drive folder ID to browse. Use this to navigate into a subfolder returned by a previous browse_drive call.",
+                    },
+                },
+            },
+        },
+    },
 ]
 
 
@@ -1435,6 +1462,10 @@ def chat_with_warren(
         "or learn what worked or didn't, save it. Categories: strategy, insight, decision, learning. "
         "6. **recall_memories** - Search your past memories about this brand. Use this when you need "
         "context about what's been tried before, what strategies are active, or what outcomes were observed. "
+        "7. **browse_drive** - Browse the brand's Google Drive folder to see uploaded files, creatives, "
+        "reports, and images. Use this when the user asks about files in their Drive, wants to find something, "
+        "or references an uploaded asset. You can list the root folder or drill into subfolders like "
+        "Creatives, Ads, Images, or Reports. "
         "MEMORY DISCIPLINE: "
         "You are not a stateless chatbot. You grow with this business. "
         "Before making significant recommendations, recall what you've previously advised. "
@@ -1679,6 +1710,50 @@ def chat_with_warren(
                         tool_result = f"Memory saved: [{cat}] {title}"
                     except Exception as exc:
                         tool_result = f"Failed to save memory: {exc}"
+                elif fn_name == "browse_drive" and db and brand_id:
+                    subfolder = fn_args.get("subfolder", "").strip() or None
+                    folder_id = fn_args.get("folder_id", "").strip() or None
+                    log.info("Warren tool: browse_drive(subfolder=%s, folder_id=%s)", subfolder, folder_id)
+                    try:
+                        from webapp.google_drive import browse_folder, list_files
+                        if folder_id:
+                            result = browse_folder(db, brand_id, folder_id=folder_id)
+                        elif subfolder:
+                            result = browse_folder(db, brand_id)
+                            # Find the matching subfolder and browse into it
+                            matched = None
+                            for f in result.get("folders", []):
+                                if f.get("name", "").lower() == subfolder.lower():
+                                    matched = f["id"]
+                                    break
+                            if matched:
+                                result = browse_folder(db, brand_id, folder_id=matched)
+                            else:
+                                result = {"error": f"Subfolder '{subfolder}' not found. Available: {[f['name'] for f in result.get('folders', [])]}"}
+                        else:
+                            result = browse_folder(db, brand_id)
+                        # Format for readability
+                        parts = []
+                        if result.get("error"):
+                            parts.append(result["error"])
+                        else:
+                            folders = result.get("folders", [])
+                            files = result.get("files", [])
+                            if folders:
+                                parts.append("Folders:")
+                                for f in folders:
+                                    parts.append(f"  \U0001f4c1 {f['name']} (id: {f['id']})")
+                            if files:
+                                parts.append(f"Files ({len(files)}):")
+                                for f in files:
+                                    size_kb = int(f.get('size', 0)) // 1024 if f.get('size') else '?'
+                                    link = f.get('webViewLink', '')
+                                    parts.append(f"  \U0001f4c4 {f['name']} ({f.get('mimeType', 'unknown')}, {size_kb}KB) {link}")
+                            if not folders and not files:
+                                parts.append("This folder is empty.")
+                        tool_result = "\n".join(parts)
+                    except Exception as exc:
+                        tool_result = f"Drive access error: {exc}"
                 elif fn_name == "recall_memories" and db and brand_id:
                     q = fn_args.get("query", "")
                     cat = fn_args.get("category", "all")
