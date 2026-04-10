@@ -67,12 +67,30 @@ class ClientDashboardMonthFallbackTests(unittest.TestCase):
         self.assertIn('value="2026-03"', html)
         self.assertIn("Overview is showing 2026-03 instead", html)
 
+    def test_dashboard_page_falls_back_when_newer_empty_month_is_requested(self):
+        response = self.client.get("/client/dashboard?month=2026-04")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('value="2026-03"', html)
+        self.assertIn("No data is available for 2026-04 yet, so Overview is showing 2026-03 instead.", html)
+
     def test_dashboard_data_returns_fallback_month_metadata(self):
         response = self.client.get("/client/dashboard/data")
         payload = response.get_json()
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(payload["month"], "2026-03")
+        self.assertTrue(payload["used_month_fallback"])
+        self.assertEqual(payload["dashboard"]["health_summary"]["summary"], "March data ready.")
+
+    def test_dashboard_data_falls_back_when_newer_empty_month_is_requested(self):
+        response = self.client.get("/client/dashboard/data?month=2026-04")
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["month"], "2026-03")
+        self.assertEqual(payload["requested_month"], "2026-04")
         self.assertTrue(payload["used_month_fallback"])
         self.assertEqual(payload["dashboard"]["health_summary"]["summary"], "March data ready.")
 

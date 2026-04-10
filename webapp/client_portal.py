@@ -988,6 +988,8 @@ def _resolve_dashboard_month(db, brand_id, requested_month):
     fallback_month = db.get_latest_dashboard_month(brand_id)
 
     if explicit_request:
+        if fallback_month and month not in db.get_available_dashboard_months(brand_id, limit=24) and month >= fallback_month:
+            return fallback_month, month, True
         return month, month, False
     if fallback_month and fallback_month != month:
         return fallback_month, month, True
