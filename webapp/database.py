@@ -4649,7 +4649,7 @@ class WebDB:
         conn.commit()
         conn.close()
 
-    def get_dashboard_snapshot(self, brand_id, month, max_age_hours=24):
+    def get_dashboard_snapshot(self, brand_id, month, max_age_hours=168):
         conn = self._conn()
         row = conn.execute(
             """SELECT * FROM dashboard_snapshots

@@ -1127,6 +1127,19 @@ def client_dashboard_data():
                 "used_month_fallback": used_fallback,
             })
         else:
+            # Live pull returned nothing - try stale snapshot before giving up
+            stale = db.get_dashboard_snapshot(brand_id, month, max_age_hours=8760)
+            if stale:
+                stale_data = json.loads(stale["snapshot_json"])
+                stale_data["_cached"] = True
+                stale_data["_cached_at"] = stale["created_at"]
+                return jsonify({
+                    "dashboard": stale_data,
+                    "error": "",
+                    "month": month,
+                    "requested_month": requested_month,
+                    "used_month_fallback": used_fallback,
+                })
             return jsonify({
                 "dashboard": None,
                 "error": "No data available for this month.",
@@ -1135,6 +1148,22 @@ def client_dashboard_data():
                 "used_month_fallback": used_fallback,
             })
     except Exception as e:
+        # Error during live pull - try stale snapshot before showing error
+        try:
+            stale = db.get_dashboard_snapshot(brand_id, month, max_age_hours=8760)
+            if stale:
+                stale_data = json.loads(stale["snapshot_json"])
+                stale_data["_cached"] = True
+                stale_data["_cached_at"] = stale["created_at"]
+                return jsonify({
+                    "dashboard": stale_data,
+                    "error": "",
+                    "month": month,
+                    "requested_month": requested_month,
+                    "used_month_fallback": used_fallback,
+                })
+        except Exception:
+            pass
         return jsonify({
             "dashboard": None,
             "error": str(e),
