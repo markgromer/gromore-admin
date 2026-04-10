@@ -108,6 +108,49 @@ def create_app():
     except Exception as _diag_err:
         print(f"[startup] competitor diagnostic failed: {_diag_err}")
 
+    # ── One-time: seed analytics DB from dashboard snapshots ──
+    # When agency.db is empty (first deploy after persistence fix), extract
+    # raw analysis data from existing snapshots into monthly_data so the
+    # report pipeline can generate data-specific suggestions.
+    try:
+        from src.database import init_db as _init_analytics, get_monthly_data as _get_md, store_monthly_data as _store_md
+        import json as _mig_json
+        _init_analytics()
+        _diag_conn2 = db._conn()
+        _all_snaps = _diag_conn2.execute(
+            "SELECT brand_id, month, snapshot_json FROM dashboard_snapshots"
+        ).fetchall()
+        _seeded = 0
+        for _snap_row in _all_snaps:
+            _bid = _snap_row[0]
+            _smonth = _snap_row[1]
+            _brand_row = db.get_brand(_bid)
+            if not _brand_row:
+                continue
+            _slug = _brand_row.get("slug")
+            if not _slug:
+                continue
+            existing = _get_md(_slug, _smonth)
+            if existing:
+                continue  # already seeded
+            try:
+                _sdata = _mig_json.loads(_snap_row[2])
+                _analysis = _sdata.get("_analysis")
+                if not _analysis or not isinstance(_analysis, dict):
+                    continue
+                for _src_key in ("google_analytics", "meta_business", "search_console", "google_ads", "facebook_organic"):
+                    _src_val = _analysis.get(_src_key)
+                    if _src_val and isinstance(_src_val, dict):
+                        _store_md(_slug, _smonth, _src_key, _src_val)
+                        _seeded += 1
+            except Exception:
+                pass
+        _diag_conn2.close()
+        if _seeded:
+            print(f"[startup] Seeded {_seeded} monthly_data rows from dashboard snapshots")
+    except Exception as _seed_err:
+        print(f"[startup] analytics seed skipped: {_seed_err}")
+
     # Stabilize SECRET_KEY across restarts in local/dev (unless provided via env)
     if not env_secret_key:
         persisted = db.get_setting("secret_key", "")

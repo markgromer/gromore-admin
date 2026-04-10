@@ -265,6 +265,11 @@ def _assemble_dashboard_payload(db, brand, brand_id, month, analysis, suggestion
     from webapp.client_advisor import build_client_dashboard
 
     dashboard_data = build_client_dashboard(analysis, suggestions, brand)
+
+    # Store raw analysis in snapshot so missions can regenerate from it later
+    dashboard_data["_analysis"] = analysis
+    dashboard_data["_suggestions"] = suggestions
+
     dashboard_data["campaigns"] = {
         "google": [
             {
@@ -1118,7 +1123,7 @@ def client_dashboard_data():
                 pass
 
             # Include _cached_at so the UI shows "Synced just now" after refresh
-            dashboard_data["_cached_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            dashboard_data["_cached_at"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
             _log_agent("scout", "Analyzed campaign performance", f"Scanned {len(campaigns_data.get('google', []))} Google + {len(campaigns_data.get('meta', []))} Meta campaigns")
             _log_agent("warren", "Built dashboard briefing", f"Month: {month}")
@@ -1151,10 +1156,54 @@ def client_dashboard_data():
                 "used_month_fallback": used_fallback,
             })
     except Exception as e:
-        # Error during live pull - try stale snapshot before showing error
+        current_app.logger.exception("Dashboard live pull failed for brand %s month %s", brand_id, month)
+        # Error during live pull - rebuild from snapshot analysis with fresh suggestions
         try:
             stale = db.get_dashboard_snapshot(brand_id, month, max_age_hours=8760)
-            if stale:
+            if stale and force_refresh:
+                stale_data = json.loads(stale["snapshot_json"])
+                # Try to regenerate from the snapshot's stored analysis data
+                analysis_from_snap = stale_data.get("_analysis")
+                if analysis_from_snap and isinstance(analysis_from_snap, dict):
+                    try:
+                        from src.suggestions import generate_suggestions
+                        from webapp.client_advisor import build_client_dashboard
+                        if any(analysis_from_snap.get(k) for k in ("google_analytics", "meta_business", "search_console", "google_ads")):
+                            suggestions = generate_suggestions(analysis_from_snap)
+                            campaigns_data = {}
+                            try:
+                                campaigns_data = _get_campaigns_cached(db, brand, month, force_sync=False)
+                            except Exception:
+                                pass
+                            dashboard_data = _assemble_dashboard_payload(
+                                db, brand, brand_id, month, analysis_from_snap, suggestions, campaigns_data
+                            )
+                            db.upsert_dashboard_snapshot(
+                                brand_id, month,
+                                json.dumps(dashboard_data, default=str),
+                                source="regen_from_snapshot",
+                            )
+                            dashboard_data["_cached_at"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                            return jsonify({
+                                "dashboard": dashboard_data,
+                                "error": "",
+                                "month": month,
+                                "requested_month": requested_month,
+                                "used_month_fallback": used_fallback,
+                            })
+                    except Exception:
+                        current_app.logger.exception("Snapshot regen also failed")
+                # Plain stale fallback
+                stale_data["_cached"] = True
+                stale_data["_cached_at"] = stale["created_at"]
+                return jsonify({
+                    "dashboard": stale_data,
+                    "error": "",
+                    "month": month,
+                    "requested_month": requested_month,
+                    "used_month_fallback": used_fallback,
+                })
+            elif stale:
                 stale_data = json.loads(stale["snapshot_json"])
                 stale_data["_cached"] = True
                 stale_data["_cached_at"] = stale["created_at"]
@@ -1313,18 +1362,39 @@ def client_actions():
             current_app.logger.exception("Mission Control load failed for brand %s month %s", brand_id, month)
             error = str(e)
 
-    # Last resort: if we still have no actions (regen failed, no data sources),
-    # fall back to whatever the snapshot already had
+    # Last resort: if no actions yet (regen failed, no data sources),
+    # rebuild actions from the snapshot's own analysis data using fresh code
     if not actions and error:
         try:
             snapshot = db.get_dashboard_snapshot(brand_id, month, max_age_hours=8760)
             if snapshot:
-                cached = json.loads(snapshot["snapshot_json"])
-                actions = cached.get("actions") or []
-                if actions:
-                    error = ""  # clear error since we have fallback actions
+                snap_data = json.loads(snapshot["snapshot_json"])
+                # Try to extract analysis from the snapshot and regenerate
+                analysis_from_snap = snap_data.get("_analysis")
+                if analysis_from_snap and isinstance(analysis_from_snap, dict) and any(analysis_from_snap.get(k) for k in ("google_analytics", "meta_business", "search_console", "google_ads")):
+                    from src.suggestions import generate_suggestions
+                    from webapp.client_advisor import build_client_dashboard
+                    suggestions = generate_suggestions(analysis_from_snap)
+                    fresh = build_client_dashboard(
+                        analysis_from_snap, suggestions, brand,
+                        ai_model=ai_model, mission_profile=mission_profile,
+                    )
+                    actions = fresh.get("actions", [])
+                    if actions:
+                        snap_data["actions"] = actions
+                        db.upsert_dashboard_snapshot(
+                            brand_id, month,
+                            json.dumps(snap_data, default=str),
+                            source="mission_regen_from_snap",
+                        )
+                        error = ""
+                if not actions:
+                    # Plain fallback: serve old actions as-is
+                    actions = snap_data.get("actions") or []
+                    if actions:
+                        error = ""
         except Exception:
-            pass
+            current_app.logger.exception("Mission snapshot regen also failed for brand %s", brand_id)
 
     actions = _normalize_client_actions(actions)
     for action in actions:
