@@ -1106,7 +1106,7 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_pr
         (ai_model or "").strip()
         or (brand.get("openai_model_analysis") or "").strip()
         or (brand.get("openai_model") or "").strip()
-        or "gpt-4o-mini"
+        or "gpt-4o"
     )
 
     from webapp.ai_assistant import _summarize_analysis_for_ai
@@ -1362,7 +1362,7 @@ def _generate_ai_analysis_brief(analysis, suggestions, brand, ai_model=None):
         (ai_model or "").strip()
         or (brand.get("openai_model_analysis") or "").strip()
         or (brand.get("openai_model") or "").strip()
-        or "gpt-4o-mini"
+        or "gpt-4o"
     )
 
     from webapp.ai_assistant import _summarize_analysis_for_ai
