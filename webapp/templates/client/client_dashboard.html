@@ -795,10 +795,11 @@ function fmtInt(v) {
         // Show warning if refresh failed and we fell back to stale data
         if (data.refresh_error && isManualRefresh) {
             var toast = document.createElement('div');
-            toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;background:#fef2f2;border:1px solid #fca5a5;color:#991b1b;padding:12px 24px;border-radius:10px;font-size:.88rem;box-shadow:0 4px 12px rgba(0,0,0,.15);max-width:500px;text-align:center;';
-            toast.innerHTML = '<strong>Refresh failed</strong> - showing cached data. Check your API connections in Settings.';
+            toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;background:#fef2f2;border:1px solid #fca5a5;color:#991b1b;padding:12px 24px;border-radius:10px;font-size:.88rem;box-shadow:0 4px 12px rgba(0,0,0,.15);max-width:600px;text-align:center;';
+            var errDetail = data.refresh_error.length > 200 ? data.refresh_error.substring(0, 200) + '...' : data.refresh_error;
+            toast.innerHTML = '<strong>Refresh failed</strong><br><span style="font-size:.82rem;color:#b91c1c;">' + errDetail + '</span>';
             document.body.appendChild(toast);
-            setTimeout(function(){ toast.style.opacity='0'; toast.style.transition='opacity .5s'; setTimeout(function(){ toast.remove(); }, 600); }, 8000);
+            setTimeout(function(){ toast.style.opacity='0'; toast.style.transition='opacity .5s'; setTimeout(function(){ toast.remove(); }, 600); }, 12000);
         }
 
         if (isCached && !isManualRefresh) {

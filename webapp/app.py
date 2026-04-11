@@ -2587,6 +2587,77 @@ def create_app():
             "connections": connections,
         })
 
+    @app.route("/api/brand/<int:brand_id>/diagnose")
+    @login_required
+    def api_brand_diagnose(brand_id):
+        """Debug endpoint: show exactly why a refresh would fail."""
+        brand = db.get_brand(brand_id)
+        if not brand:
+            return jsonify({"error": "Brand not found"}), 404
+
+        connections = db.get_brand_connections(brand_id) or {}
+        google_conn = connections.get("google", {})
+        meta_conn = connections.get("meta", {})
+
+        diag = {
+            "brand": brand.get("display_name"),
+            "slug": brand.get("slug"),
+            "has_slug": bool(brand.get("slug")),
+            "google": {
+                "connected": google_conn.get("status") == "connected",
+                "has_access_token": bool(google_conn.get("access_token")),
+                "has_refresh_token": bool(google_conn.get("refresh_token")),
+                "token_expiry": google_conn.get("token_expiry", ""),
+                "ga4_property_id": brand.get("ga4_property_id", ""),
+                "gsc_site_url": brand.get("gsc_site_url", ""),
+                "google_ads_customer_id": brand.get("google_ads_customer_id", ""),
+            },
+            "meta": {
+                "connected": meta_conn.get("status") == "connected",
+                "has_access_token": bool(meta_conn.get("access_token")),
+                "token_expiry": meta_conn.get("token_expiry", ""),
+                "meta_ad_account_id": brand.get("meta_ad_account_id", ""),
+                "facebook_page_id": brand.get("facebook_page_id", ""),
+            },
+            "snapshot": None,
+            "live_pull_test": None,
+        }
+
+        # Check latest snapshot
+        month = datetime.now().strftime("%Y-%m")
+        try:
+            snap = db.get_dashboard_snapshot(brand_id, month)
+            if snap:
+                diag["snapshot"] = {
+                    "month": month,
+                    "created_at": snap.get("created_at"),
+                    "source": snap.get("source", ""),
+                }
+            else:
+                diag["snapshot"] = {"month": month, "exists": False}
+        except Exception as e:
+            diag["snapshot"] = {"error": str(e)}
+
+        # Try a live pull and capture the exact error
+        try:
+            from webapp.report_runner import get_analysis_and_suggestions_for_brand
+            analysis, suggestions = get_analysis_and_suggestions_for_brand(
+                db, brand, month, force_refresh=True
+            )
+            sources = [k for k in ("google_analytics", "meta_business", "search_console", "google_ads", "facebook_organic") if analysis.get(k)]
+            diag["live_pull_test"] = {
+                "success": True,
+                "sources_returned": sources,
+                "suggestion_count": len(suggestions),
+            }
+        except Exception as e:
+            diag["live_pull_test"] = {
+                "success": False,
+                "error": str(e),
+            }
+
+        return jsonify(diag)
+
     def _extract_brand_form(form):
         return {
             "display_name": form.get("display_name", "").strip(),
