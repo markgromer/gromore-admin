@@ -111,6 +111,12 @@
             </a>
 
             <div class="section-label">System</div>
+            <a class="nav-link {% if 'agency_crm' in request.endpoint|default('') %}active{% endif %}" href="{{ url_for('agency_crm') }}">
+                <i class="bi bi-funnel"></i> CRM / Pipeline
+            </a>
+            <a class="nav-link {% if request.endpoint == 'agency_billing' %}active{% endif %}" href="{{ url_for('agency_billing') }}">
+                <i class="bi bi-credit-card"></i> Billing
+            </a>
             <a class="nav-link {% if request.endpoint == 'ad_intelligence' %}active{% endif %}" href="{{ url_for('ad_intelligence') }}">
                 <i class="bi bi-lightbulb"></i> Ad Intelligence
             </a>

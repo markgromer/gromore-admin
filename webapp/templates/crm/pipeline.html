@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% block title %}CRM Pipeline{% endblock %}
+{% block content %}
+<style>
+    .pipeline-bar { display: flex; gap: 4px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .pipeline-bar .stage-btn {
+        padding: .45rem 1rem;
+        border-radius: 6px;
+        font-size: .82rem;
+        font-weight: 600;
+        background: #e9ecef;
+        color: #495057;
+        text-decoration: none;
+        transition: all .15s;
+        position: relative;
+    }
+    .pipeline-bar .stage-btn:hover { background: #dee2e6; }
+    .pipeline-bar .stage-btn.active { background: #4361ee; color: #fff; }
+    .pipeline-bar .stage-btn .badge {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        font-size: .65rem;
+        min-width: 18px;
+    }
+    .prospect-card {
+        background: #fff;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 1rem 1.25rem;
+        margin-bottom: .75rem;
+        transition: box-shadow .15s;
+    }
+    .prospect-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    .prospect-card .name { font-weight: 600; font-size: .95rem; color: #1a1d2e; }
+    .prospect-card .meta { font-size: .78rem; color: #6c757d; }
+    .prospect-card .score-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: .72rem;
+        font-weight: 600;
+    }
+    .revenue-cards { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .rev-card {
+        background: #fff;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 1rem 1.5rem;
+        min-width: 140px;
+        flex: 1;
+    }
+    .rev-card .label { font-size: .72rem; text-transform: uppercase; color: #6c757d; font-weight: 600; }
+    .rev-card .value { font-size: 1.5rem; font-weight: 700; color: #1a1d2e; }
+    .stage-won { border-left: 3px solid #2ecc71; }
+    .stage-lost { border-left: 3px solid #e74c3c; opacity: .7; }
+    .stage-new { border-left: 3px solid #3498db; }
+    .stage-contacted { border-left: 3px solid #9b59b6; }
+    .stage-qualified { border-left: 3px solid #f39c12; }
+    .stage-proposal { border-left: 3px solid #e67e22; }
+    .stage-negotiation { border-left: 3px solid #1abc9c; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-funnel me-2"></i>Agency CRM</h4>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#newProspectModal">
+        <i class="bi bi-plus-lg me-1"></i> New Prospect
+    </button>
+</div>
+
+<!-- Revenue summary -->
+<div class="revenue-cards">
+    <div class="rev-card">
+        <div class="label">Monthly Revenue</div>
+        <div class="value text-success">${{ "%.0f"|format(revenue.total_mrr) }}</div>
+    </div>
+    <div class="rev-card">
+        <div class="label">Active</div>
+        <div class="value">{{ revenue.active_count }}</div>
+    </div>
+    <div class="rev-card">
+        <div class="label">Trialing</div>
+        <div class="value text-warning">{{ revenue.trialing_count }}</div>
+    </div>
+    <div class="rev-card">
+        <div class="label">Churned</div>
+        <div class="value text-danger">{{ revenue.churned_count }}</div>
+    </div>
+    <div class="rev-card">
+        <div class="label">Pipeline</div>
+        <div class="value">{{ prospects|length }}</div>
+    </div>
+</div>
+
+<!-- Pipeline stage filter -->
+<div class="pipeline-bar">
+    <a href="{{ url_for('agency_crm') }}" class="stage-btn {% if not current_stage %}active{% endif %}">
+        All
+        <span class="badge bg-secondary rounded-pill">{{ counts.values()|sum }}</span>
+    </a>
+    {% for stage in stages %}
+    <a href="{{ url_for('agency_crm', stage=stage) }}"
+       class="stage-btn {% if current_stage == stage %}active{% endif %}">
+        {{ stage|title }}
+        {% if counts.get(stage, 0) %}
+        <span class="badge bg-primary rounded-pill">{{ counts.get(stage, 0) }}</span>
+        {% endif %}
+    </a>
+    {% endfor %}
+</div>
+
+<!-- Prospect list -->
+{% if prospects %}
+{% for p in prospects %}
+<a href="{{ url_for('agency_crm_detail', prospect_id=p.id) }}" class="text-decoration-none">
+<div class="prospect-card stage-{{ p.stage }}">
+    <div class="d-flex justify-content-between align-items-start">
+        <div>
+            <div class="name">{{ p.business_name or p.name }}</div>
+            <div class="meta">
+                {{ p.name }}
+                {% if p.email %} &middot; {{ p.email }}{% endif %}
+                {% if p.phone %} &middot; {{ p.phone }}{% endif %}
+            </div>
+            <div class="meta mt-1">
+                {% if p.industry %}<span class="me-2"><i class="bi bi-tag"></i> {{ p.industry }}</span>{% endif %}
+                {% if p.service_area %}<span class="me-2"><i class="bi bi-geo-alt"></i> {{ p.service_area }}</span>{% endif %}
+                {% if p.monthly_budget %}<span class="me-2"><i class="bi bi-cash"></i> {{ p.monthly_budget }}</span>{% endif %}
+                {% if p.source %}<span class="me-2"><i class="bi bi-link-45deg"></i> {{ p.source }}</span>{% endif %}
+            </div>
+        </div>
+        <div class="text-end">
+            <span class="badge bg-{{ 'success' if p.stage == 'won' else 'danger' if p.stage == 'lost' else 'primary' }}">{{ p.stage|upper }}</span>
+            {% if p.score %}
+            <div class="mt-1">
+                <span class="score-badge {% if p.score >= 70 %}bg-success text-white{% elif p.score >= 40 %}bg-warning text-dark{% else %}bg-secondary text-white{% endif %}">
+                    Score: {{ p.score }}
+                </span>
+            </div>
+            {% endif %}
+            {% if p.next_follow_up %}
+            <div class="meta mt-1"><i class="bi bi-calendar-event"></i> {{ p.next_follow_up }}</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+</a>
+{% endfor %}
+{% else %}
+<div class="text-center text-muted py-5">
+    <i class="bi bi-funnel" style="font-size: 2rem;"></i>
+    <p class="mt-2">No prospects{% if current_stage %} in "{{ current_stage }}"{% endif %} yet.</p>
+</div>
+{% endif %}
+
+<!-- New Prospect Modal -->
+<div class="modal fade" id="newProspectModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" action="{{ url_for('agency_crm_new_prospect') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">New Prospect</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Contact Name *</label>
+              <input type="text" name="name" class="form-control" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Business Name</label>
+              <input type="text" name="business_name" class="form-control">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Email</label>
+              <input type="email" name="email" class="form-control">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Phone</label>
+              <input type="text" name="phone" class="form-control">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Website</label>
+              <input type="url" name="website" class="form-control" placeholder="https://...">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Industry</label>
+              <input type="text" name="industry" class="form-control" placeholder="Plumbing, HVAC, etc.">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Service Area</label>
+              <input type="text" name="service_area" class="form-control" placeholder="Dallas, TX">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Monthly Budget</label>
+              <input type="text" name="monthly_budget" class="form-control" placeholder="$500-$1000">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Source</label>
+              <select name="source" class="form-select">
+                <option value="manual">Manual Entry</option>
+                <option value="referral">Referral</option>
+                <option value="website">Website</option>
+                <option value="cold_outreach">Cold Outreach</option>
+                <option value="social">Social Media</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Notes</label>
+              <textarea name="notes" class="form-control" rows="3"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Prospect</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

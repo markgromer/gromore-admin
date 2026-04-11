@@ -193,6 +193,10 @@ def create_app():
     from webapp.ai_assistant import DEFAULT_CHAT_SYSTEM_PROMPT
     app.config["AI_CHAT_SYSTEM_PROMPT"] = _cfg("ai_chat_system_prompt", "AI_CHAT_SYSTEM_PROMPT", "") or DEFAULT_CHAT_SYSTEM_PROMPT
 
+    # Stripe billing
+    app.config["STRIPE_SECRET_KEY"] = _cfg("stripe_secret_key", "STRIPE_SECRET_KEY")
+    app.config["STRIPE_WEBHOOK_SECRET"] = _cfg("stripe_webhook_secret", "STRIPE_WEBHOOK_SECRET")
+
     # Ensure admin user exists and password stays in sync with env var
     admin_pw = os.environ.get("ADMIN_PASSWORD", "").strip()
     if not db.get_users():
@@ -503,7 +507,8 @@ def create_app():
     @login_required
     def brands_list():
         brands = db.get_all_brands()
-        return render_template("brands/list.html", brands=brands)
+        pulse = db.get_brand_usage_pulse()
+        return render_template("brands/list.html", brands=brands, pulse=pulse)
 
     @app.route("/brands/new", methods=["GET", "POST"])
     @login_required
@@ -1841,6 +1846,16 @@ def create_app():
                     import logging
                     logging.getLogger(__name__).error("OpenAI settings save failed: %s", e)
                     flash(f"Failed to save OpenAI settings: {e}", "error")
+            elif section == "stripe":
+                key = request.form.get("stripe_secret_key", "").strip()
+                wh = request.form.get("stripe_webhook_secret", "").strip()
+                if key:
+                    db.save_setting("stripe_secret_key", key)
+                    app.config["STRIPE_SECRET_KEY"] = key
+                if wh:
+                    db.save_setting("stripe_webhook_secret", wh)
+                    app.config["STRIPE_WEBHOOK_SECRET"] = wh
+                flash("Stripe settings saved", "success")
             elif section == "branding":
                 db.save_setting("agency_name", request.form.get("agency_name", "").strip())
                 db.save_setting("agency_logo_url", request.form.get("agency_logo_url", "").strip())
@@ -1964,6 +1979,244 @@ def create_app():
             db.update_feature_flag(key, level, enabled)
         flash("Feature flags updated.", "success")
         return redirect(url_for("feature_flags_page"))
+
+    # ── Agency CRM ──
+
+    @app.route("/crm")
+    @login_required
+    def agency_crm():
+        # Auto-import new assessment/signup leads
+        db.import_assessment_leads_to_crm()
+        db.import_signup_leads_to_crm()
+
+        stage_filter = request.args.get("stage", "")
+        prospects = db.get_agency_prospects(stage=stage_filter or None)
+        counts = db.get_agency_pipeline_counts()
+        revenue = db.get_stripe_revenue_summary()
+
+        stages = ["new", "contacted", "qualified", "proposal", "negotiation", "won", "lost"]
+        return render_template("crm/pipeline.html",
+                               prospects=prospects, counts=counts,
+                               stages=stages, current_stage=stage_filter,
+                               revenue=revenue)
+
+    @app.route("/crm/prospect/new", methods=["POST"])
+    @login_required
+    def agency_crm_new_prospect():
+        pid = db.create_agency_prospect(
+            name=request.form.get("name", "").strip(),
+            email=request.form.get("email", "").strip(),
+            phone=request.form.get("phone", "").strip(),
+            business_name=request.form.get("business_name", "").strip(),
+            website=request.form.get("website", "").strip(),
+            industry=request.form.get("industry", "").strip(),
+            service_area=request.form.get("service_area", "").strip(),
+            source=request.form.get("source", "manual").strip(),
+            monthly_budget=request.form.get("monthly_budget", "").strip(),
+            notes=request.form.get("notes", "").strip(),
+        )
+        flash(f"Prospect created.", "success")
+        return redirect(url_for("agency_crm_detail", prospect_id=pid))
+
+    @app.route("/crm/prospect/<int:prospect_id>")
+    @login_required
+    def agency_crm_detail(prospect_id):
+        prospect = db.get_agency_prospect(prospect_id)
+        if not prospect:
+            abort(404)
+        notes = db.get_agency_prospect_notes(prospect_id)
+        messages = db.get_agency_prospect_messages(prospect_id)
+
+        # Get Stripe plans for billing section
+        from webapp.stripe_billing import get_plans
+        plans = get_plans(db)
+
+        # If converted to brand, get brand info
+        brand = None
+        if prospect.get("converted_brand_id"):
+            brand = db.get_brand(prospect["converted_brand_id"])
+
+        return render_template("crm/prospect_detail.html",
+                               prospect=prospect, notes=notes,
+                               messages=messages, plans=plans, brand=brand)
+
+    @app.route("/crm/prospect/<int:prospect_id>/update", methods=["POST"])
+    @login_required
+    def agency_crm_update_prospect(prospect_id):
+        fields = {}
+        for key in ["name", "email", "phone", "business_name", "website",
+                     "industry", "service_area", "stage", "score",
+                     "monthly_budget", "notes", "assigned_to", "next_follow_up"]:
+            val = request.form.get(key)
+            if val is not None:
+                fields[key] = val.strip()
+        if "score" in fields:
+            try:
+                fields["score"] = int(fields["score"])
+            except ValueError:
+                fields["score"] = 0
+        db.update_agency_prospect(prospect_id, **fields)
+        flash("Prospect updated.", "success")
+        return redirect(url_for("agency_crm_detail", prospect_id=prospect_id))
+
+    @app.route("/crm/prospect/<int:prospect_id>/note", methods=["POST"])
+    @login_required
+    def agency_crm_add_note(prospect_id):
+        content = request.form.get("content", "").strip()
+        if content:
+            db.add_agency_prospect_note(prospect_id, content, note_type="note", created_by="admin")
+        return redirect(url_for("agency_crm_detail", prospect_id=prospect_id))
+
+    @app.route("/crm/prospect/<int:prospect_id>/stage", methods=["POST"])
+    @login_required
+    def agency_crm_update_stage(prospect_id):
+        stage = request.form.get("stage", "").strip()
+        if stage:
+            db.update_agency_prospect(prospect_id, stage=stage)
+            db.add_agency_prospect_note(prospect_id, f"Stage changed to {stage}",
+                                         note_type="system", created_by="admin")
+        return redirect(request.referrer or url_for("agency_crm"))
+
+    @app.route("/crm/prospect/<int:prospect_id>/delete", methods=["POST"])
+    @login_required
+    def agency_crm_delete_prospect(prospect_id):
+        db.delete_agency_prospect(prospect_id)
+        flash("Prospect deleted.", "success")
+        return redirect(url_for("agency_crm"))
+
+    @app.route("/crm/prospect/<int:prospect_id>/convert", methods=["POST"])
+    @login_required
+    def agency_crm_convert(prospect_id):
+        """Convert a prospect into a brand and optionally create a Stripe subscription."""
+        prospect = db.get_agency_prospect(prospect_id)
+        if not prospect:
+            abort(404)
+
+        # Create the brand
+        brand_id = db.create_brand(
+            slug=(prospect.get("business_name") or prospect["name"]).lower().replace(" ", "_")[:30],
+            display_name=prospect.get("business_name") or prospect["name"],
+            industry=prospect.get("industry", ""),
+            service_area=prospect.get("service_area", ""),
+            website=prospect.get("website", ""),
+        )
+
+        db.update_agency_prospect(prospect_id, stage="won", converted_brand_id=brand_id)
+        db.add_agency_prospect_note(prospect_id, f"Converted to brand #{brand_id}",
+                                     note_type="system", created_by="admin")
+
+        # Stripe: create customer + subscription if price selected
+        price_id = request.form.get("price_id", "").strip()
+        trial_days = request.form.get("trial_days", "").strip()
+        if price_id:
+            brand = db.get_brand(brand_id)
+            from webapp.stripe_billing import create_subscription
+            result = create_subscription(
+                db, brand, price_id,
+                trial_days=int(trial_days) if trial_days else None,
+            )
+            if result:
+                from datetime import datetime
+                db.update_brand_stripe(brand_id, onboarded_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
+                flash(f"Brand created and Stripe subscription started.", "success")
+            else:
+                flash(f"Brand created but Stripe subscription failed. Set it up manually.", "warning")
+        else:
+            flash(f"Prospect converted to brand.", "success")
+
+        return redirect(url_for("brand_detail", brand_id=brand_id))
+
+    # ── Stripe Billing Routes ──
+
+    @app.route("/crm/billing")
+    @login_required
+    def agency_billing():
+        revenue = db.get_stripe_revenue_summary()
+        brands = db.get_all_brands()
+        billing_brands = [b for b in brands if b.get("stripe_customer_id")]
+        from webapp.stripe_billing import get_plans
+        plans = get_plans(db)
+        return render_template("crm/billing.html",
+                               revenue=revenue, brands=billing_brands, plans=plans)
+
+    @app.route("/crm/brand/<int:brand_id>/stripe/create-customer", methods=["POST"])
+    @login_required
+    def stripe_create_customer(brand_id):
+        brand = db.get_brand(brand_id)
+        if not brand:
+            abort(404)
+        from webapp.stripe_billing import create_customer
+        cid = create_customer(db, brand)
+        if cid:
+            flash(f"Stripe customer created: {cid}", "success")
+        else:
+            flash("Failed to create Stripe customer. Check your API key in Settings.", "error")
+        return redirect(request.referrer or url_for("brand_detail", brand_id=brand_id))
+
+    @app.route("/crm/brand/<int:brand_id>/stripe/subscribe", methods=["POST"])
+    @login_required
+    def stripe_subscribe(brand_id):
+        brand = db.get_brand(brand_id)
+        if not brand:
+            abort(404)
+        price_id = request.form.get("price_id", "").strip()
+        trial_days = request.form.get("trial_days", "").strip()
+        if not price_id:
+            flash("Select a plan.", "error")
+            return redirect(request.referrer or url_for("brand_detail", brand_id=brand_id))
+
+        from webapp.stripe_billing import create_subscription
+        result = create_subscription(db, brand, price_id,
+                                      trial_days=int(trial_days) if trial_days else None)
+        if result:
+            flash(f"Subscription created: {result['status']}", "success")
+        else:
+            flash("Subscription creation failed.", "error")
+        return redirect(request.referrer or url_for("brand_detail", brand_id=brand_id))
+
+    @app.route("/crm/brand/<int:brand_id>/stripe/change-plan", methods=["POST"])
+    @login_required
+    def stripe_change_plan(brand_id):
+        brand = db.get_brand(brand_id)
+        if not brand:
+            abort(404)
+        new_price_id = request.form.get("price_id", "").strip()
+        if not new_price_id:
+            flash("Select a plan.", "error")
+            return redirect(request.referrer)
+        from webapp.stripe_billing import update_subscription
+        result = update_subscription(db, brand, new_price_id)
+        if result:
+            flash(f"Plan updated. New MRR: ${result['mrr']:.0f}", "success")
+        else:
+            flash("Plan change failed.", "error")
+        return redirect(request.referrer or url_for("brand_detail", brand_id=brand_id))
+
+    @app.route("/crm/brand/<int:brand_id>/stripe/cancel", methods=["POST"])
+    @login_required
+    def stripe_cancel(brand_id):
+        brand = db.get_brand(brand_id)
+        if not brand:
+            abort(404)
+        immediate = request.form.get("immediate") == "1"
+        from webapp.stripe_billing import cancel_subscription
+        result = cancel_subscription(db, brand, at_period_end=not immediate)
+        if result:
+            flash(f"Subscription {'canceled' if immediate else 'set to cancel at period end'}.", "success")
+        else:
+            flash("Cancel failed.", "error")
+        return redirect(request.referrer or url_for("brand_detail", brand_id=brand_id))
+
+    @app.route("/webhooks/stripe", methods=["POST"])
+    def stripe_webhook():
+        """Handle incoming Stripe webhook events. No login required."""
+        from webapp.stripe_billing import handle_webhook
+        payload = request.get_data(as_text=True)
+        sig = request.headers.get("Stripe-Signature", "")
+        success, msg = handle_webhook(db, payload, sig)
+        if success:
+            return msg, 200
+        return msg, 400
 
     # ── Drip Campaigns Admin ──
 

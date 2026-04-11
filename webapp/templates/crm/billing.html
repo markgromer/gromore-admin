@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Billing{% endblock %}
+{% block content %}
+<style>
+    .billing-card { background: #fff; border: 1px solid #e9ecef; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
+    .billing-card h6 { font-size: .82rem; text-transform: uppercase; color: #6c757d; font-weight: 700; margin-bottom: .75rem; }
+    .rev-metric { text-align: center; padding: 1rem; }
+    .rev-metric .value { font-size: 2rem; font-weight: 700; }
+    .rev-metric .label { font-size: .78rem; color: #6c757d; text-transform: uppercase; }
+    .brand-billing-row {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: .6rem 0; border-bottom: 1px solid #f1f3f5; font-size: .88rem;
+    }
+    .brand-billing-row:last-child { border-bottom: none; }
+</style>
+
+<h4 class="mb-3"><i class="bi bi-credit-card me-2"></i>Billing Overview</h4>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="billing-card">
+            <div class="rev-metric">
+                <div class="value text-success">${{ "%.0f"|format(revenue.total_mrr) }}</div>
+                <div class="label">Monthly Revenue</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="billing-card">
+            <div class="rev-metric">
+                <div class="value">${{ "%.0f"|format(revenue.total_mrr * 12) }}</div>
+                <div class="label">Annual Run Rate</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="billing-card">
+            <div class="rev-metric">
+                <div class="value">{{ revenue.active_count }}</div>
+                <div class="label">Active</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="billing-card">
+            <div class="rev-metric">
+                <div class="value text-warning">{{ revenue.trialing_count }}</div>
+                <div class="label">Trialing</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="billing-card">
+            <div class="rev-metric">
+                <div class="value text-danger">{{ revenue.churned_count }}</div>
+                <div class="label">Churned</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="billing-card">
+            <h6>Client Subscriptions</h6>
+            {% if brands %}
+            {% for b in brands %}
+            <div class="brand-billing-row">
+                <div>
+                    <a href="{{ url_for('brand_detail', brand_id=b.id) }}" class="text-decoration-none fw-bold">{{ b.display_name }}</a>
+                    <div style="font-size:.75rem; color:#adb5bd;">{{ b.stripe_customer_id[:20] }}...</div>
+                </div>
+                <div class="text-center">
+                    <span class="badge bg-{{ 'success' if b.stripe_status == 'active' else 'warning' if b.stripe_status == 'trialing' else 'danger' if b.stripe_status in ('past_due', 'canceled') else 'secondary' }}">
+                        {{ b.stripe_status or 'none' }}
+                    </span>
+                </div>
+                <div class="text-center" style="font-size:.85rem;">
+                    {{ b.stripe_plan[:25] if b.stripe_plan else '-' }}
+                </div>
+                <div class="fw-bold">
+                    ${{ "%.0f"|format(b.stripe_mrr or 0) }}/mo
+                </div>
+                <div>
+                    <form method="POST" action="{{ url_for('stripe_cancel', brand_id=b.id) }}" class="d-inline" onsubmit="return confirm('Cancel subscription for {{ b.display_name }}?')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:.75rem;">Cancel</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="text-center text-muted py-4" style="font-size:.88rem;">
+                No Stripe customers yet. Convert prospects to clients and attach a plan.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="billing-card">
+            <h6>Available Plans</h6>
+            {% if plans %}
+            {% for plan in plans %}
+            <div class="d-flex justify-content-between align-items-center py-2 border-bottom" style="font-size:.88rem;">
+                <div>
+                    <div class="fw-bold">{{ plan.name }}</div>
+                    <div style="font-size:.75rem; color:#adb5bd;">{{ plan.price_id }}</div>
+                </div>
+                <div class="fw-bold">${{ "%.0f"|format(plan.amount) }}/{{ plan.interval }}</div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="text-muted" style="font-size:.85rem;">
+                No plans found. Create products and prices in your
+                <a href="https://dashboard.stripe.com/products" target="_blank">Stripe Dashboard</a>.
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="billing-card">
+            <h6>Setup</h6>
+            <p style="font-size:.85rem;">
+                1. Add your Stripe Secret Key in <a href="{{ url_for('settings') }}">Settings</a><br>
+                2. Create products/prices in Stripe Dashboard<br>
+                3. Set webhook URL to <code>{{ request.url_root }}webhooks/stripe</code><br>
+                4. Add webhook secret to Settings
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

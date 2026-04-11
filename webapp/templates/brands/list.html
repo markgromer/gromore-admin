@@ -12,16 +12,34 @@
 {% if brands %}
 <div class="row g-3">
     {% for brand in brands %}
+    {% set p = pulse.get(brand.id, {}) if pulse is defined else {} %}
+    {% set last_login = p.get('last_client_login', '') %}
+    {% set leads_30 = p.get('leads_30d', 0) %}
+    {% set blogs_30 = p.get('blogs_30d', 0) %}
+    {% set msgs_30 = p.get('messages_30d', 0) %}
+    {% set total_leads = p.get('lead_threads_total', 0) %}
+    {% set total_blogs = p.get('blog_posts_total', 0) %}
+    {% set total_reports = p.get('reports_total', 0) %}
+    {% set warren_on = brand.sales_bot_enabled %}
     <div class="col-md-6 col-lg-4">
         <div class="card h-100">
-            <div class="card-body">
-                <h5 class="card-title mb-1">{{ brand.display_name }}</h5>
-                <p class="text-muted mb-2" style="font-size: .85rem;">
+            <div class="card-body pb-2">
+                <div class="d-flex justify-content-between align-items-start mb-1">
+                    <h5 class="card-title mb-0">{{ brand.display_name }}</h5>
+                    {% if leads_30 > 5 or blogs_30 > 2 or msgs_30 > 20 %}
+                    <span class="badge bg-success" title="Active last 30 days" style="font-size:.65rem;">ACTIVE</span>
+                    {% elif leads_30 > 0 or blogs_30 > 0 or last_login %}
+                    <span class="badge bg-warning text-dark" title="Low activity" style="font-size:.65rem;">LOW</span>
+                    {% else %}
+                    <span class="badge bg-secondary" title="No recent activity" style="font-size:.65rem;">IDLE</span>
+                    {% endif %}
+                </div>
+                <p class="text-muted mb-2" style="font-size: .82rem;">
                     {{ brand.industry|replace('_',' ')|title }}
                     {% if brand.service_area %} &middot; {{ brand.service_area }}{% endif %}
                 </p>
 
-                <div class="mb-3">
+                <div class="mb-2">
                     {% if brand.ga4_property_id %}
                     <span class="badge badge-connected me-1">GA4</span>
                     {% else %}
@@ -35,14 +53,49 @@
                     {% endif %}
 
                     {% if brand.gsc_site_url %}
-                    <span class="badge badge-connected">GSC</span>
+                    <span class="badge badge-connected me-1">GSC</span>
                     {% else %}
-                    <span class="badge badge-disconnected">GSC</span>
+                    <span class="badge badge-disconnected me-1">GSC</span>
+                    {% endif %}
+
+                    {% if warren_on %}
+                    <span class="badge badge-connected">Warren</span>
+                    {% endif %}
+                </div>
+
+                <!-- Usage pulse -->
+                <div style="font-size:.78rem; color:#6c757d; line-height:1.7;">
+                    <div class="d-flex justify-content-between">
+                        <span><i class="bi bi-chat-dots me-1"></i> Leads (30d)</span>
+                        <strong style="color: {{ '#198754' if leads_30 > 0 else '#adb5bd' }}">{{ leads_30 }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span><i class="bi bi-envelope me-1"></i> Messages (30d)</span>
+                        <strong style="color: {{ '#198754' if msgs_30 > 0 else '#adb5bd' }}">{{ msgs_30 }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span><i class="bi bi-pencil-square me-1"></i> Blogs (30d)</span>
+                        <strong style="color: {{ '#198754' if blogs_30 > 0 else '#adb5bd' }}">{{ blogs_30 }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span><i class="bi bi-file-earmark-text me-1"></i> Reports</span>
+                        <strong>{{ total_reports }}</strong>
+                    </div>
+                    {% if last_login %}
+                    <div class="d-flex justify-content-between mt-1 pt-1" style="border-top:1px solid #eee;">
+                        <span><i class="bi bi-box-arrow-in-right me-1"></i> Last login</span>
+                        <span>{{ last_login[:10] }}</span>
+                    </div>
+                    {% else %}
+                    <div class="d-flex justify-content-between mt-1 pt-1" style="border-top:1px solid #eee;">
+                        <span><i class="bi bi-box-arrow-in-right me-1"></i> Last login</span>
+                        <span class="text-muted">Never</span>
+                    </div>
                     {% endif %}
                 </div>
 
                 {% if brand.monthly_budget %}
-                <p class="mb-2" style="font-size: .85rem;">
+                <p class="mb-0 mt-2" style="font-size: .82rem;">
                     <strong>${{ "%.0f"|format(brand.monthly_budget) }}</strong>/mo budget
                 </p>
                 {% endif %}

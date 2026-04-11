@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% block title %}{{ prospect.business_name or prospect.name }} - CRM{% endblock %}
+{% block content %}
+<style>
+    .detail-card { background: #fff; border: 1px solid #e9ecef; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
+    .detail-card h6 { font-size: .82rem; text-transform: uppercase; color: #6c757d; font-weight: 700; margin-bottom: .75rem; }
+    .field-row { display: flex; justify-content: space-between; padding: .35rem 0; border-bottom: 1px solid #f1f3f5; font-size: .88rem; }
+    .field-row:last-child { border-bottom: none; }
+    .field-label { color: #6c757d; }
+    .field-value { font-weight: 500; color: #1a1d2e; }
+    .note-item { padding: .6rem 0; border-bottom: 1px solid #f1f3f5; font-size: .88rem; }
+    .note-item .note-meta { font-size: .75rem; color: #adb5bd; }
+    .note-system { color: #6c757d; font-style: italic; }
+    .stage-select { display: flex; gap: 4px; flex-wrap: wrap; }
+    .stage-select button {
+        padding: .3rem .75rem;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        font-size: .78rem;
+        font-weight: 600;
+        background: #fff;
+        cursor: pointer;
+        transition: all .15s;
+    }
+    .stage-select button:hover { background: #e9ecef; }
+    .stage-select button.active { background: #4361ee; color: #fff; border-color: #4361ee; }
+    .msg-item { padding: .6rem 0; border-bottom: 1px solid #f1f3f5; }
+    .msg-out { border-left: 3px solid #4361ee; padding-left: .75rem; }
+    .msg-in { border-left: 3px solid #2ecc71; padding-left: .75rem; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="{{ url_for('agency_crm') }}" class="text-muted text-decoration-none" style="font-size:.85rem;">
+            <i class="bi bi-arrow-left me-1"></i> Back to Pipeline
+        </a>
+        <h4 class="mb-0 mt-1">{{ prospect.business_name or prospect.name }}</h4>
+    </div>
+    <div class="d-flex gap-2">
+        {% if not prospect.converted_brand_id %}
+        <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#convertModal">
+            <i class="bi bi-arrow-up-circle me-1"></i> Convert to Client
+        </button>
+        {% else %}
+        <a href="{{ url_for('brand_detail', brand_id=prospect.converted_brand_id) }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-building me-1"></i> View Brand
+        </a>
+        {% endif %}
+        <form method="POST" action="{{ url_for('agency_crm_delete_prospect', prospect_id=prospect.id) }}" onsubmit="return confirm('Delete this prospect?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+        </form>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Left: Info + Edit -->
+    <div class="col-lg-5">
+        <div class="detail-card">
+            <h6>Pipeline Stage</h6>
+            <div class="stage-select">
+                {% for s in ['new','contacted','qualified','proposal','negotiation','won','lost'] %}
+                <form method="POST" action="{{ url_for('agency_crm_update_stage', prospect_id=prospect.id) }}" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="stage" value="{{ s }}">
+                    <button type="submit" class="{% if prospect.stage == s %}active{% endif %}">{{ s|title }}</button>
+                </form>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="detail-card">
+            <h6>Contact Info</h6>
+            <form method="POST" action="{{ url_for('agency_crm_update_prospect', prospect_id=prospect.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label" style="font-size:.78rem;">Name</label>
+                        <input type="text" name="name" class="form-control form-control-sm" value="{{ prospect.name }}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label" style="font-size:.78rem;">Business</label>
+                        <input type="text" name="business_name" class="form-control form-control-sm" value="{{ prospect.business_name }}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label" style="font-size:.78rem;">Email</label>
+                        <input type="email" name="email" class="form-control form-control-sm" value="{{ prospect.email }}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label" style="font-size:.78rem;">Phone</label>
+                        <input type="text" name="phone" class="form-control form-control-sm" value="{{ prospect.phone }}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label" style="font-size:.78rem;">Website</label>
+                        <input type="url" name="website" class="form-control form-control-sm" value="{{ prospect.website }}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label" style="font-size:.78rem;">Industry</label>
+                        <input type="text" name="industry" class="form-control form-control-sm" value="{{ prospect.industry }}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label" style="font-size:.78rem;">Service Area</label>
+                        <input type="text" name="service_area" class="form-control form-control-sm" value="{{ prospect.service_area }}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label" style="font-size:.78rem;">Budget</label>
+                        <input type="text" name="monthly_budget" class="form-control form-control-sm" value="{{ prospect.monthly_budget }}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label" style="font-size:.78rem;">Score (0-100)</label>
+                        <input type="number" name="score" class="form-control form-control-sm" value="{{ prospect.score }}" min="0" max="100">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label" style="font-size:.78rem;">Next Follow-up</label>
+                        <input type="date" name="next_follow_up" class="form-control form-control-sm" value="{{ prospect.next_follow_up }}">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" style="font-size:.78rem;">Notes</label>
+                        <textarea name="notes" class="form-control form-control-sm" rows="3">{{ prospect.notes }}</textarea>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm w-100">
+                    <i class="bi bi-save me-1"></i> Save Changes
+                </button>
+            </form>
+        </div>
+
+        <div class="detail-card">
+            <h6>Source &amp; Dates</h6>
+            <div class="field-row">
+                <span class="field-label">Source</span>
+                <span class="field-value">{{ prospect.source or 'Unknown' }}</span>
+            </div>
+            <div class="field-row">
+                <span class="field-label">Created</span>
+                <span class="field-value">{{ prospect.created_at[:10] if prospect.created_at else '-' }}</span>
+            </div>
+            <div class="field-row">
+                <span class="field-label">Last Contact</span>
+                <span class="field-value">{{ prospect.last_contact_at[:10] if prospect.last_contact_at else 'Never' }}</span>
+            </div>
+            {% if prospect.converted_brand_id %}
+            <div class="field-row">
+                <span class="field-label">Converted</span>
+                <span class="field-value text-success">Brand #{{ prospect.converted_brand_id }}</span>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if brand and brand.stripe_customer_id %}
+        <div class="detail-card">
+            <h6><i class="bi bi-credit-card me-1"></i> Billing</h6>
+            <div class="field-row">
+                <span class="field-label">Stripe Status</span>
+                <span class="field-value">
+                    <span class="badge bg-{{ 'success' if brand.stripe_status == 'active' else 'warning' if brand.stripe_status == 'trialing' else 'danger' }}">
+                        {{ brand.stripe_status or 'none' }}
+                    </span>
+                </span>
+            </div>
+            <div class="field-row">
+                <span class="field-label">Plan</span>
+                <span class="field-value">{{ brand.stripe_plan or '-' }}</span>
+            </div>
+            <div class="field-row">
+                <span class="field-label">MRR</span>
+                <span class="field-value">${{ "%.0f"|format(brand.stripe_mrr or 0) }}</span>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Right: Notes + Messages -->
+    <div class="col-lg-7">
+        <div class="detail-card">
+            <h6>Activity Notes</h6>
+            <form method="POST" action="{{ url_for('agency_crm_add_note', prospect_id=prospect.id) }}" class="mb-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="input-group">
+                    <input type="text" name="content" class="form-control form-control-sm" placeholder="Add a note..." required>
+                    <button class="btn btn-outline-primary btn-sm" type="submit">
+                        <i class="bi bi-plus-lg"></i>
+                    </button>
+                </div>
+            </form>
+            {% for n in notes %}
+            <div class="note-item {% if n.note_type == 'system' %}note-system{% endif %}">
+                <div>{{ n.content }}</div>
+                <div class="note-meta">
+                    {{ n.created_by }} &middot; {{ n.created_at[:16] if n.created_at else '' }}
+                    {% if n.note_type != 'note' %}
+                    <span class="badge bg-light text-muted ms-1" style="font-size:.65rem;">{{ n.note_type }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="text-muted text-center py-3" style="font-size:.85rem;">No notes yet.</div>
+            {% endfor %}
+        </div>
+
+        <div class="detail-card">
+            <h6>Messages</h6>
+            {% for m in messages %}
+            <div class="msg-item {{ 'msg-out' if m.direction == 'outbound' else 'msg-in' }}">
+                <div style="font-size:.88rem;">{{ m.content }}</div>
+                <div style="font-size:.72rem; color:#adb5bd;">
+                    {{ m.direction|title }} via {{ m.channel }} &middot; {{ m.created_at[:16] if m.created_at else '' }}
+                    {% if m.status != 'sent' %}
+                    <span class="badge bg-warning text-dark ms-1" style="font-size:.6rem;">{{ m.status }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="text-muted text-center py-3" style="font-size:.85rem;">No messages yet.</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Convert to Client Modal -->
+{% if not prospect.converted_brand_id %}
+<div class="modal fade" id="convertModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" action="{{ url_for('agency_crm_convert', prospect_id=prospect.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Convert to Client</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p>This will create a new brand for <strong>{{ prospect.business_name or prospect.name }}</strong> and mark this prospect as "Won".</p>
+
+          {% if plans %}
+          <label class="form-label fw-bold">Stripe Plan (optional)</label>
+          <select name="price_id" class="form-select mb-2">
+            <option value="">No subscription yet</option>
+            {% for plan in plans %}
+            <option value="{{ plan.price_id }}">{{ plan.name }} - ${{ "%.0f"|format(plan.amount) }}/{{ plan.interval }}</option>
+            {% endfor %}
+          </select>
+          <div class="mb-2">
+            <label class="form-label" style="font-size:.85rem;">Trial Days</label>
+            <input type="number" name="trial_days" class="form-control form-control-sm" placeholder="0" min="0" style="width:100px;">
+          </div>
+          {% else %}
+          <div class="alert alert-info py-2" style="font-size:.85rem;">
+            <i class="bi bi-info-circle me-1"></i> No Stripe plans found. Configure your Stripe API key in Settings and create products/prices in your Stripe dashboard.
+          </div>
+          {% endif %}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success">Convert &amp; Create Brand</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

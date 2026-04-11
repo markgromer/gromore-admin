@@ -8,7 +8,7 @@ import sqlite3
 import json
 import re
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 
 
@@ -768,6 +768,114 @@ class WebDB:
             );
         """)
 
+        # ── Agency CRM (GroMore's own pipeline) ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS agency_prospects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT DEFAULT '',
+                phone TEXT DEFAULT '',
+                business_name TEXT DEFAULT '',
+                website TEXT DEFAULT '',
+                industry TEXT DEFAULT '',
+                service_area TEXT DEFAULT '',
+                source TEXT DEFAULT '',
+                stage TEXT DEFAULT 'new',
+                score INTEGER DEFAULT 0,
+                monthly_budget TEXT DEFAULT '',
+                notes TEXT DEFAULT '',
+                assigned_to TEXT DEFAULT '',
+                converted_brand_id INTEGER DEFAULT NULL,
+                assessment_lead_id INTEGER DEFAULT NULL,
+                signup_lead_id INTEGER DEFAULT NULL,
+                last_contact_at TEXT DEFAULT '',
+                next_follow_up TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (converted_brand_id) REFERENCES brands(id) ON DELETE SET NULL
+            );
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_agency_prospects_stage ON agency_prospects(stage);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_agency_prospects_email ON agency_prospects(email);")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS agency_prospect_notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                prospect_id INTEGER NOT NULL,
+                note_type TEXT DEFAULT 'note',
+                content TEXT NOT NULL,
+                created_by TEXT DEFAULT 'system',
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (prospect_id) REFERENCES agency_prospects(id) ON DELETE CASCADE
+            );
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS agency_prospect_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                prospect_id INTEGER NOT NULL,
+                direction TEXT NOT NULL DEFAULT 'outbound',
+                channel TEXT DEFAULT 'email',
+                subject TEXT DEFAULT '',
+                content TEXT NOT NULL,
+                status TEXT DEFAULT 'sent',
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (prospect_id) REFERENCES agency_prospects(id) ON DELETE CASCADE
+            );
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS agency_nurture_sequences (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                trigger_stage TEXT DEFAULT '',
+                is_active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS agency_nurture_steps (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sequence_id INTEGER NOT NULL,
+                step_order INTEGER DEFAULT 0,
+                delay_days INTEGER DEFAULT 1,
+                channel TEXT DEFAULT 'email',
+                subject TEXT DEFAULT '',
+                body_template TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (sequence_id) REFERENCES agency_nurture_sequences(id) ON DELETE CASCADE
+            );
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS agency_nurture_enrollments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                prospect_id INTEGER NOT NULL,
+                sequence_id INTEGER NOT NULL,
+                current_step INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'active',
+                enrolled_at TEXT DEFAULT (datetime('now')),
+                completed_at TEXT DEFAULT '',
+                FOREIGN KEY (prospect_id) REFERENCES agency_prospects(id) ON DELETE CASCADE,
+                FOREIGN KEY (sequence_id) REFERENCES agency_nurture_sequences(id) ON DELETE CASCADE
+            );
+        """)
+
+        # ── Stripe event log ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS stripe_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id TEXT UNIQUE,
+                event_type TEXT NOT NULL,
+                brand_id INTEGER DEFAULT NULL,
+                prospect_id INTEGER DEFAULT NULL,
+                data_json TEXT DEFAULT '{}',
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+
         # ── AI Agent activity table ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS agent_activity (
@@ -1138,6 +1246,17 @@ class WebDB:
             ("sales_bot_payment_reminder_channels", "TEXT DEFAULT 'email'"),
             ("sales_bot_payment_reminder_template", "TEXT DEFAULT ''"),
             ("hiring_design", "TEXT DEFAULT '{}'"),
+            # Stripe billing
+            ("stripe_customer_id", "TEXT DEFAULT ''"),
+            ("stripe_subscription_id", "TEXT DEFAULT ''"),
+            ("stripe_plan", "TEXT DEFAULT ''"),
+            ("stripe_status", "TEXT DEFAULT ''"),
+            ("stripe_mrr", "REAL DEFAULT 0"),
+            ("stripe_trial_end", "TEXT DEFAULT ''"),
+            ("stripe_next_invoice", "TEXT DEFAULT ''"),
+            ("stripe_payment_method_last4", "TEXT DEFAULT ''"),
+            ("onboarded_at", "TEXT DEFAULT ''"),
+            ("churned_at", "TEXT DEFAULT ''"),
         ]
         for col_name, col_def in new_brand_cols:
             if col_name not in brand_columns:
@@ -2164,6 +2283,82 @@ class WebDB:
         row = conn.execute("SELECT COUNT(*) as cnt FROM reports WHERE month = ?", (month,)).fetchone()
         conn.close()
         return row["cnt"] if row else 0
+
+    def get_brand_usage_pulse(self):
+        """Return usage metrics for every brand in one shot.
+
+        Returns dict keyed by brand_id with counts + timestamps:
+          lead_threads_total, leads_30d, messages_30d, blog_posts_total,
+          blogs_30d, reports_total, last_client_login, last_lead_at,
+          last_blog_at, warren_enabled
+        """
+        conn = self._conn()
+        cutoff_30d = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+
+        pulse = {}
+
+        # Lead threads total + 30d
+        for row in conn.execute("""
+            SELECT brand_id,
+                   COUNT(*) as total,
+                   SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as recent,
+                   MAX(last_message_at) as last_at
+            FROM lead_threads GROUP BY brand_id
+        """, (cutoff_30d,)).fetchall():
+            bid = row["brand_id"]
+            pulse.setdefault(bid, {})
+            pulse[bid]["lead_threads_total"] = row["total"]
+            pulse[bid]["leads_30d"] = row["recent"]
+            pulse[bid]["last_lead_at"] = row["last_at"] or ""
+
+        # Messages 30d (across all threads per brand)
+        for row in conn.execute("""
+            SELECT lt.brand_id, COUNT(*) as cnt
+            FROM lead_messages lm
+            JOIN lead_threads lt ON lt.id = lm.thread_id
+            WHERE lm.created_at >= ?
+            GROUP BY lt.brand_id
+        """, (cutoff_30d,)).fetchall():
+            bid = row["brand_id"]
+            pulse.setdefault(bid, {})
+            pulse[bid]["messages_30d"] = row["cnt"]
+
+        # Blog posts total + 30d
+        for row in conn.execute("""
+            SELECT brand_id,
+                   COUNT(*) as total,
+                   SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as recent,
+                   MAX(created_at) as last_at
+            FROM blog_posts GROUP BY brand_id
+        """, (cutoff_30d,)).fetchall():
+            bid = row["brand_id"]
+            pulse.setdefault(bid, {})
+            pulse[bid]["blog_posts_total"] = row["total"]
+            pulse[bid]["blogs_30d"] = row["recent"]
+            pulse[bid]["last_blog_at"] = row["last_at"] or ""
+
+        # Reports total
+        for row in conn.execute("""
+            SELECT brand_id, COUNT(*) as total
+            FROM reports GROUP BY brand_id
+        """).fetchall():
+            bid = row["brand_id"]
+            pulse.setdefault(bid, {})
+            pulse[bid]["reports_total"] = row["total"]
+
+        # Last client login
+        for row in conn.execute("""
+            SELECT brand_id, MAX(last_login_at) as last_login
+            FROM client_users
+            WHERE is_active = 1
+            GROUP BY brand_id
+        """).fetchall():
+            bid = row["brand_id"]
+            pulse.setdefault(bid, {})
+            pulse[bid]["last_client_login"] = row["last_login"] or ""
+
+        conn.close()
+        return pulse
 
     def create_report(self, brand_id, month, internal_path, client_path):
         conn = self._conn()
@@ -4742,3 +4937,221 @@ class WebDB:
         ).fetchall()
         conn.close()
         return [r["id"] for r in rows]
+
+    # ── Agency CRM CRUD ──
+
+    def get_agency_prospects(self, stage=None, limit=200):
+        conn = self._conn()
+        if stage:
+            rows = conn.execute(
+                "SELECT * FROM agency_prospects WHERE stage = ? ORDER BY updated_at DESC LIMIT ?",
+                (stage, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM agency_prospects ORDER BY updated_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_agency_prospect(self, prospect_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM agency_prospects WHERE id = ?", (prospect_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def create_agency_prospect(self, **fields):
+        conn = self._conn()
+        allowed = {
+            "name", "email", "phone", "business_name", "website", "industry",
+            "service_area", "source", "stage", "score", "monthly_budget",
+            "notes", "assigned_to", "assessment_lead_id", "signup_lead_id",
+            "next_follow_up",
+        }
+        data = {k: v for k, v in fields.items() if k in allowed and v}
+        cols = ", ".join(data.keys())
+        placeholders = ", ".join("?" for _ in data)
+        cur = conn.execute(
+            f"INSERT INTO agency_prospects ({cols}) VALUES ({placeholders})",
+            list(data.values()),
+        )
+        conn.commit()
+        pid = cur.lastrowid
+        conn.close()
+        return pid
+
+    def update_agency_prospect(self, prospect_id, **fields):
+        conn = self._conn()
+        allowed = {
+            "name", "email", "phone", "business_name", "website", "industry",
+            "service_area", "source", "stage", "score", "monthly_budget",
+            "notes", "assigned_to", "converted_brand_id", "last_contact_at",
+            "next_follow_up",
+        }
+        sets, params = [], []
+        for k, v in fields.items():
+            if k in allowed:
+                sets.append(f"{k} = ?")
+                params.append(v)
+        if not sets:
+            conn.close()
+            return
+        sets.append("updated_at = datetime('now')")
+        params.append(prospect_id)
+        conn.execute(f"UPDATE agency_prospects SET {', '.join(sets)} WHERE id = ?", params)
+        conn.commit()
+        conn.close()
+
+    def delete_agency_prospect(self, prospect_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM agency_prospects WHERE id = ?", (prospect_id,))
+        conn.commit()
+        conn.close()
+
+    def add_agency_prospect_note(self, prospect_id, content, note_type="note", created_by="admin"):
+        conn = self._conn()
+        conn.execute(
+            "INSERT INTO agency_prospect_notes (prospect_id, note_type, content, created_by) VALUES (?, ?, ?, ?)",
+            (prospect_id, note_type, content, created_by),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_agency_prospect_notes(self, prospect_id):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM agency_prospect_notes WHERE prospect_id = ? ORDER BY created_at DESC",
+            (prospect_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def add_agency_prospect_message(self, prospect_id, content, direction="outbound",
+                                     channel="email", subject="", status="sent"):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO agency_prospect_messages
+               (prospect_id, direction, channel, subject, content, status)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (prospect_id, direction, channel, subject, content, status),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_agency_prospect_messages(self, prospect_id):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM agency_prospect_messages WHERE prospect_id = ? ORDER BY created_at DESC",
+            (prospect_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_agency_pipeline_counts(self):
+        """Return {stage: count} for the pipeline board."""
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT stage, COUNT(*) as cnt FROM agency_prospects GROUP BY stage"
+        ).fetchall()
+        conn.close()
+        return {r["stage"]: r["cnt"] for r in rows}
+
+    def import_assessment_leads_to_crm(self):
+        """Import unconverted assessment_leads that aren't already in agency_prospects."""
+        conn = self._conn()
+        rows = conn.execute("""
+            SELECT al.* FROM assessment_leads al
+            LEFT JOIN agency_prospects ap ON ap.assessment_lead_id = al.id
+            WHERE ap.id IS NULL AND al.converted_to_brand_id IS NULL
+        """).fetchall()
+        imported = 0
+        for r in rows:
+            conn.execute(
+                """INSERT INTO agency_prospects
+                   (name, email, phone, business_name, website, industry, service_area,
+                    source, stage, score, assessment_lead_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 'assessment', 'new', ?, ?)""",
+                (r["name"], r["email"], r["phone"] if "phone" in r.keys() else "",
+                 r["business_name"], r["website"], r["industry"], r["service_area"],
+                 r["overall_score"] or 0, r["id"]),
+            )
+            imported += 1
+        if imported:
+            conn.commit()
+        conn.close()
+        return imported
+
+    def import_signup_leads_to_crm(self):
+        """Import unconverted signup_leads that aren't already in agency_prospects."""
+        conn = self._conn()
+        rows = conn.execute("""
+            SELECT sl.* FROM signup_leads sl
+            LEFT JOIN agency_prospects ap ON ap.signup_lead_id = sl.id
+            WHERE ap.id IS NULL AND sl.converted_to_brand_id IS NULL
+        """).fetchall()
+        imported = 0
+        for r in rows:
+            conn.execute(
+                """INSERT INTO agency_prospects
+                   (name, email, phone, business_name, website, industry, service_area,
+                    source, stage, monthly_budget)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 'signup', 'new', ?)""",
+                (r["name"], r["email"], r["phone"], r["business_name"],
+                 r["website"], r["industry"], r["service_area"], r["monthly_budget"]),
+            )
+            imported += 1
+        if imported:
+            conn.commit()
+        conn.close()
+        return imported
+
+    # ── Stripe Billing Helpers ──
+
+    def log_stripe_event(self, event_id, event_type, brand_id=None, prospect_id=None, data=None):
+        conn = self._conn()
+        import json as _json
+        conn.execute(
+            """INSERT OR IGNORE INTO stripe_events
+               (event_id, event_type, brand_id, prospect_id, data_json)
+               VALUES (?, ?, ?, ?, ?)""",
+            (event_id, event_type, brand_id, prospect_id, _json.dumps(data or {})),
+        )
+        conn.commit()
+        conn.close()
+
+    def update_brand_stripe(self, brand_id, **fields):
+        """Update Stripe-related fields on a brand."""
+        conn = self._conn()
+        allowed = {
+            "stripe_customer_id", "stripe_subscription_id", "stripe_plan",
+            "stripe_status", "stripe_mrr", "stripe_trial_end",
+            "stripe_next_invoice", "stripe_payment_method_last4",
+            "onboarded_at", "churned_at",
+        }
+        sets, params = [], []
+        for k, v in fields.items():
+            if k in allowed:
+                sets.append(f"{k} = ?")
+                params.append(v)
+        if not sets:
+            conn.close()
+            return
+        params.append(brand_id)
+        conn.execute(f"UPDATE brands SET {', '.join(sets)} WHERE id = ?", params)
+        conn.commit()
+        conn.close()
+
+    def get_stripe_revenue_summary(self):
+        """Return total MRR, active count, trialing count, churned count."""
+        conn = self._conn()
+        row = conn.execute("""
+            SELECT
+                COALESCE(SUM(CASE WHEN stripe_status = 'active' THEN stripe_mrr ELSE 0 END), 0) as total_mrr,
+                COALESCE(SUM(CASE WHEN stripe_status = 'active' THEN 1 ELSE 0 END), 0) as active_count,
+                COALESCE(SUM(CASE WHEN stripe_status = 'trialing' THEN 1 ELSE 0 END), 0) as trialing_count,
+                COALESCE(SUM(CASE WHEN stripe_status = 'canceled' THEN 1 ELSE 0 END), 0) as churned_count
+            FROM brands WHERE stripe_customer_id != ''
+        """).fetchone()
+        conn.close()
+        return dict(row) if row else {"total_mrr": 0, "active_count": 0, "trialing_count": 0, "churned_count": 0}
