@@ -6254,6 +6254,20 @@ def client_inbox_stage(thread_id):
     return jsonify(ok=success)
 
 
+@client_bp.route("/inbox/thread/<int:thread_id>/private", methods=["POST"])
+@client_login_required
+def client_inbox_toggle_private(thread_id):
+    """Toggle a thread's private flag - Warren won't auto-reply to private threads."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    new_val = db.toggle_lead_thread_private(thread_id, brand_id)
+    if new_val is None:
+        return jsonify(error="Thread not found"), 404
+
+    return jsonify(ok=True, is_private=bool(new_val))
+
+
 @client_bp.route("/inbox/thread/<int:thread_id>/delete", methods=["POST"])
 @client_login_required
 def client_inbox_delete(thread_id):

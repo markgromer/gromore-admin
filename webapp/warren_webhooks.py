@@ -303,6 +303,12 @@ def quo_sms_webhook(brand_slug):
     if not brand.get("sales_bot_enabled"):
         return jsonify({"ok": True, "thread_id": thread_id, "auto_reply": False}), 200
 
+    # Skip auto-reply for private threads (personal conversations)
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if thread and thread.get("is_private"):
+        log.info("Skipping Warren for private thread %s", thread_id)
+        return jsonify({"ok": True, "thread_id": thread_id, "auto_reply": False, "reason": "private"}), 200
+
     # Process in background thread to return 200 quickly
     app = current_app._get_current_object()
 
@@ -639,6 +645,12 @@ def meta_messenger_webhook():
 
             # Process with Warren
             if brand.get("sales_bot_enabled"):
+                # Skip auto-reply for private threads
+                m_thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+                if m_thread and m_thread.get("is_private"):
+                    log.info("Skipping Warren for private Messenger thread %s", thread_id)
+                    continue
+
                 app = current_app._get_current_object()
 
                 def _process(bid=brand_id, tid=thread_id, br=brand, pid=page_id, sid=sender_id):

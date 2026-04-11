@@ -154,7 +154,7 @@
                     {% else %}<i class="bi bi-file-text"></i>{% endif %}
                 </div>
                 <div class="thread-info">
-                    <div class="thread-name">{{ t.lead_name or t.lead_phone or t.lead_email or 'Unknown Lead' }}</div>
+                    <div class="thread-name">{{ t.lead_name or t.lead_phone or t.lead_email or 'Unknown Lead' }}{% if t.is_private %}<i class="bi bi-lock-fill private-lock" style="color: var(--text-muted, #94a3b8); font-size: .75rem; margin-left: .25rem;"></i>{% endif %}</div>
                     <div class="thread-preview">{{ t.summary[:60] if t.summary else (t.channel|title + ' lead') }}</div>
                 </div>
                 <div class="thread-meta">
@@ -206,6 +206,9 @@
                     </button>
                     <button class="btn btn-outline-warning btn-sm" id="handoffBtn" title="Hand off to human">
                         <i class="bi bi-person-up me-1"></i> Handoff
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" id="privateBtn" title="Mark as private - Warren won't auto-reply">
+                        <i class="bi bi-lock me-1"></i> <span id="privateBtnLabel">Private</span>
                     </button>
                     <button class="btn btn-outline-danger btn-sm ms-auto" id="deleteLeadBtn" title="Delete this lead">
                         <i class="bi bi-trash me-1"></i> Delete
@@ -287,6 +290,17 @@
                 area.appendChild(div);
             });
             area.scrollTop = area.scrollHeight;
+
+            // Update private button state
+            const pvtBtn = document.getElementById('privateBtn');
+            const pvtLabel = document.getElementById('privateBtnLabel');
+            if (data.thread.is_private) {
+                pvtBtn.classList.replace('btn-outline-secondary', 'btn-secondary');
+                pvtLabel.textContent = 'Unprivate';
+            } else {
+                pvtBtn.classList.replace('btn-secondary', 'btn-outline-secondary');
+                pvtLabel.textContent = 'Private';
+            }
 
         } catch (err) {
             console.error('loadThread error:', err);
@@ -392,6 +406,44 @@
                 body: JSON.stringify({stage: 'qualified', handoff: true})
             });
             loadThread(activeThreadId);
+        } catch (err) {
+            console.error(err);
+        }
+    });
+
+    // ── Private toggle ──
+    document.getElementById('privateBtn').addEventListener('click', async function() {
+        if (!activeThreadId) return;
+        try {
+            const resp = await fetch(`/client/inbox/thread/${activeThreadId}/private`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
+            });
+            const data = await resp.json();
+            if (data.ok) {
+                const pvtBtn = document.getElementById('privateBtn');
+                const pvtLabel = document.getElementById('privateBtnLabel');
+                if (data.is_private) {
+                    pvtBtn.classList.replace('btn-outline-secondary', 'btn-secondary');
+                    pvtLabel.textContent = 'Unprivate';
+                } else {
+                    pvtBtn.classList.replace('btn-secondary', 'btn-outline-secondary');
+                    pvtLabel.textContent = 'Private';
+                }
+                // Update thread list item with lock indicator
+                const item = document.querySelector(`.thread-item[data-thread-id="${activeThreadId}"]`);
+                if (item) {
+                    let lockIcon = item.querySelector('.private-lock');
+                    if (data.is_private && !lockIcon) {
+                        lockIcon = document.createElement('i');
+                        lockIcon.className = 'bi bi-lock-fill private-lock';
+                        lockIcon.style.cssText = 'color: var(--text-muted, #94a3b8); font-size: .75rem; margin-left: .25rem;';
+                        item.querySelector('.thread-name').appendChild(lockIcon);
+                    } else if (!data.is_private && lockIcon) {
+                        lockIcon.remove();
+                    }
+                }
+            }
         } catch (err) {
             console.error(err);
         }

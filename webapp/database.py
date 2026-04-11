@@ -1315,6 +1315,16 @@ class WebDB:
                 self._safe_add_column(conn, "client_users", col_name, col_def)
         conn.commit()
 
+        # ── lead_threads migrations ──
+        lt_columns = {r[1] for r in conn.execute("PRAGMA table_info(lead_threads)").fetchall()}
+        new_lt_cols = [
+            ("is_private", "INTEGER DEFAULT 0"),
+        ]
+        for col_name, col_def in new_lt_cols:
+            if col_name not in lt_columns:
+                self._safe_add_column(conn, "lead_threads", col_name, col_def)
+        conn.commit()
+
         # ── hiring_jobs migrations ──
         hj_columns = {r[1] for r in conn.execute("PRAGMA table_info(hiring_jobs)").fetchall()}
         new_hj_cols = [
@@ -1961,6 +1971,25 @@ class WebDB:
         )
         conn.commit()
         conn.close()
+
+    def toggle_lead_thread_private(self, thread_id, brand_id):
+        """Toggle the is_private flag on a lead thread. Returns the new value."""
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT is_private FROM lead_threads WHERE id = ? AND brand_id = ?",
+            (thread_id, brand_id),
+        ).fetchone()
+        if not row:
+            conn.close()
+            return None
+        new_val = 0 if row["is_private"] else 1
+        conn.execute(
+            "UPDATE lead_threads SET is_private = ?, updated_at = datetime('now') WHERE id = ? AND brand_id = ?",
+            (new_val, thread_id, brand_id),
+        )
+        conn.commit()
+        conn.close()
+        return new_val
 
     def delete_lead_thread(self, thread_id, brand_id):
         """Delete a lead thread and all related data (messages, events, quotes cascade)."""
