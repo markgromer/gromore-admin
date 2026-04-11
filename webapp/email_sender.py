@@ -89,6 +89,15 @@ def send_beta_welcome_email(app_config, tester, onboarding_url):
         <h2 style="color:#4f46e5;">Welcome to GroMore, {name}!</h2>
         <p>You've been approved for the GroMore beta program. Before we can activate your account, we need a few things from you.</p>
 
+        <div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:10px;padding:20px;margin:20px 0;">
+            <h3 style="margin-top:0;color:#b45309;">A note about beta setup</h3>
+            <p>While we're in beta, we have to add you as a test user. The setup is a slightly longer process that involves us manually adding you on our end, and you creating a free developer account on yours.</p>
+            <p>We walk through this on our <strong>group onboarding calls</strong>. If you're unable to join one of those, you can book a <strong>15-minute Zoom call</strong> with me directly and we'll get you set up:</p>
+            <div style="text-align:center;margin:16px 0;">
+                <a href="https://calendly.com/nopoop520" style="display:inline-block;padding:12px 28px;background:#f59e0b;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Book a Setup Call</a>
+            </div>
+        </div>
+
         <div style="text-align:center;margin:28px 0;">
             <a href="{onboarding_url}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#4f46e5,#4338ca);color:#fff;border-radius:10px;text-decoration:none;font-weight:600;font-size:1rem;">Complete Your Setup</a>
         </div>
@@ -135,6 +144,12 @@ def send_beta_welcome_email(app_config, tester, onboarding_url):
         f"Welcome to GroMore, {name}!\n\n"
         f"You've been approved for the beta program. Complete your setup here:\n"
         f"{onboarding_url}\n\n"
+        f"ABOUT BETA SETUP\n"
+        f"While we're in beta, we have to add you as a test user. The setup is a slightly longer process "
+        f"that involves us manually adding you on our end, and you creating a free developer account on yours.\n\n"
+        f"We walk through this on our group onboarding calls. If you're unable to join one of those, "
+        f"book a 15-minute Zoom call with me and we'll get you set up:\n"
+        f"https://calendly.com/nopoop520\n\n"
         f"What we need:\n"
         f"1. Your Meta/Facebook login email (so we can add you as a tester on our app)\n"
         f"2. Your Google account email (so we can add you as a test user)\n"

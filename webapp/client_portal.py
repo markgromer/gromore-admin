@@ -1157,7 +1157,8 @@ def client_dashboard_data():
                 "used_month_fallback": used_fallback,
             })
     except Exception as e:
-        current_app.logger.exception("Dashboard live pull failed for brand %s month %s", brand_id, month)
+        refresh_error = str(e)
+        current_app.logger.exception("Dashboard live pull failed for brand %s month %s: %s", brand_id, month, refresh_error)
         # Error during live pull - rebuild from snapshot analysis with fresh suggestions
         try:
             stale = db.get_dashboard_snapshot(brand_id, month, max_age_hours=8760)
@@ -1188,6 +1189,7 @@ def client_dashboard_data():
                             return jsonify({
                                 "dashboard": dashboard_data,
                                 "error": "",
+                                "refresh_error": refresh_error,
                                 "month": month,
                                 "requested_month": requested_month,
                                 "used_month_fallback": used_fallback,
@@ -1200,6 +1202,7 @@ def client_dashboard_data():
                 return jsonify({
                     "dashboard": stale_data,
                     "error": "",
+                    "refresh_error": refresh_error,
                     "month": month,
                     "requested_month": requested_month,
                     "used_month_fallback": used_fallback,
@@ -1211,6 +1214,7 @@ def client_dashboard_data():
                 return jsonify({
                     "dashboard": stale_data,
                     "error": "",
+                    "refresh_error": refresh_error,
                     "month": month,
                     "requested_month": requested_month,
                     "used_month_fallback": used_fallback,
@@ -1219,7 +1223,7 @@ def client_dashboard_data():
             pass
         return jsonify({
             "dashboard": None,
-            "error": str(e),
+            "error": refresh_error,
             "month": month,
             "requested_month": requested_month,
             "used_month_fallback": used_fallback,
