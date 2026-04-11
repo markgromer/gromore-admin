@@ -258,7 +258,7 @@ def create_app():
             return resp
         try:
             flash(f"Something went wrong: {str(e)[:200]}", "error")
-            if "client_user_id" in session:
+            if "client_user_id" in session and not session.get("client_admin_impersonating"):
                 return redirect(url_for("client.client_dashboard"))
             return redirect(request.referrer or url_for("dashboard"))
         except Exception:
@@ -2411,21 +2411,38 @@ def create_app():
         if not tester:
             abort(404)
 
+        if tester["status"] == "approved":
+            flash(f"{tester['name']} is already approved.", "warning")
+            return redirect(url_for("beta_dashboard"))
+
         import secrets as _secrets
         import re as _re
         temp_password = _secrets.token_urlsafe(10)
 
         # Create brand for the tester
         slug = _re.sub(r'[^a-z0-9]+', '_', (tester["business_name"] or tester["name"]).lower()).strip('_')
-        brand_id = db.create_brand({
-            "slug": slug,
-            "display_name": tester["business_name"] or tester["name"],
-            "industry": tester.get("industry") or "general",
-            "website": tester.get("website") or "",
-        })
 
-        # Create client user (inactive until manually activated)
+        # Ensure unique slug
+        existing = db.get_brand_by_slug(slug)
+        if existing:
+            slug = slug + "_" + str(tester_id)
+
+        try:
+            brand_id = db.create_brand({
+                "slug": slug,
+                "display_name": tester["business_name"] or tester["name"],
+                "industry": tester.get("industry") or "general",
+                "website": tester.get("website") or "",
+            })
+        except Exception as e:
+            flash(f"Failed to create brand: {e}", "error")
+            return redirect(url_for("beta_dashboard"))
+
+        # Create client user
         client_user_id = db.create_client_user(brand_id, tester["email"], temp_password, tester["name"])
+        if not client_user_id:
+            flash(f"Failed to create client user - email '{tester['email']}' may already exist.", "error")
+            return redirect(url_for("beta_dashboard"))
 
         # Update tester status - store temp password for activation later
         db.update_beta_tester_status(
