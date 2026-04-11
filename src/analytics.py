@@ -847,13 +847,14 @@ def build_full_analysis(client_id, month, current_data, client_config):
         }
         if lead_pacing and lead_pacing.get("is_current_month"):
             expected_to_date = lead_pacing.get("expected_to_date") or 0
+            pace_label = (lead_pacing.get("label") or "On pace").lower()
             if leads_on_track:
                 all_highlights.append(
-                    f"Paid leads are {paid_leads} against a paced target of {expected_to_date} by day {lead_pacing.get('elapsed_days')} ({lead_pacing.get('pace_label').lower()})"
+                    f"Paid leads are {paid_leads} against a paced target of {expected_to_date} by day {lead_pacing.get('elapsed_days')} ({pace_label})"
                 )
             else:
                 all_concerns.append(
-                    f"Paid leads are {paid_leads} against a paced target of {expected_to_date} by day {lead_pacing.get('elapsed_days')} ({lead_pacing.get('pace_label').lower()})"
+                    f"Paid leads are {paid_leads} against a paced target of {expected_to_date} by day {lead_pacing.get('elapsed_days')} ({pace_label})"
                 )
         elif leads_on_track:
             all_highlights.append(
