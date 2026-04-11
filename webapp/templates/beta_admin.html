@@ -49,6 +49,20 @@
     </div>
 </div>
 
+<!-- Broadcast History -->
+<div class="card mb-4" style="border:none;border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.06);">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-clock-history"></i> Broadcast History</strong>
+        <button class="btn btn-sm btn-outline-primary" onclick="loadBroadcasts()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+    </div>
+    <div class="card-body p-0" id="broadcastHistoryBody">
+        <div class="text-center py-4 text-muted">
+            <i class="bi bi-envelope-open" style="font-size:2rem;"></i>
+            <p class="mt-2 mb-0">Click Refresh to load broadcast history.</p>
+        </div>
+    </div>
+</div>
+
 <!-- Stats Cards -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-lg">
@@ -514,6 +528,86 @@ function toggleSingleEmailField() {
     if (!audience || !singleWrap) return;
     singleWrap.style.display = audience.value === 'single_user' ? 'block' : 'none';
 }
-document.addEventListener('DOMContentLoaded', toggleSingleEmailField);
+
+async function loadBroadcasts() {
+    const body = document.getElementById('broadcastHistoryBody');
+    body.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
+    try {
+        const resp = await fetch('/beta/broadcasts');
+        const data = await resp.json();
+        if (!data.broadcasts || data.broadcasts.length === 0) {
+            body.innerHTML = '<div class="text-center py-4 text-muted"><i class="bi bi-envelope-open" style="font-size:2rem;"></i><p class="mt-2 mb-0">No broadcasts sent yet.</p></div>';
+            return;
+        }
+        let html = '<div class="table-responsive"><table class="table table-sm mb-0">';
+        html += '<thead><tr><th>Date</th><th>Subject</th><th>Audience</th><th>Sent</th><th>Opened</th><th>Rate</th><th></th></tr></thead><tbody>';
+        data.broadcasts.forEach(b => {
+            const date = (b.created_at || '').replace('T', ' ').slice(0, 16);
+            const rate = b.recipient_count > 0 ? Math.round((b.open_count / b.recipient_count) * 100) : 0;
+            const rateColor = rate >= 50 ? '#10b981' : rate >= 25 ? '#f59e0b' : '#94a3b8';
+            html += `<tr>
+                <td class="text-nowrap" style="font-size:.85rem;">${date}</td>
+                <td style="font-size:.85rem;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(b.subject)}</td>
+                <td><span class="badge bg-light text-dark">${escHtml(b.audience || '-')}</span></td>
+                <td>${b.recipient_count}</td>
+                <td>${b.open_count}</td>
+                <td><strong style="color:${rateColor};">${rate}%</strong></td>
+                <td><button class="btn btn-sm btn-outline-secondary py-0 px-1" onclick="showRecipients(${b.id}, this)" title="View recipients"><i class="bi bi-people"></i></button></td>
+            </tr>
+            <tr id="recip-row-${b.id}" style="display:none;"><td colspan="7" class="p-0" id="recip-${b.id}"></td></tr>`;
+        });
+        html += '</tbody></table></div>';
+        body.innerHTML = html;
+    } catch (err) {
+        body.innerHTML = '<div class="text-center py-3 text-danger">Failed to load broadcasts.</div>';
+    }
+}
+
+async function showRecipients(broadcastId, btn) {
+    const row = document.getElementById('recip-row-' + broadcastId);
+    if (row.style.display !== 'none') { row.style.display = 'none'; return; }
+    const cell = document.getElementById('recip-' + broadcastId);
+    cell.innerHTML = '<div class="p-2"><div class="spinner-border spinner-border-sm"></div></div>';
+    row.style.display = '';
+    try {
+        const resp = await fetch(`/beta/broadcasts/${broadcastId}/recipients`);
+        const data = await resp.json();
+        if (!data.recipients || data.recipients.length === 0) {
+            cell.innerHTML = '<div class="p-2 text-muted">No recipients.</div>';
+            return;
+        }
+        let html = '<div class="p-2"><table class="table table-sm table-borderless mb-0" style="font-size:.82rem;">';
+        html += '<thead><tr><th>Email</th><th>Name</th><th>Status</th><th>Opened At</th><th>Opens</th></tr></thead><tbody>';
+        data.recipients.forEach(r => {
+            const opened = r.opened_at && r.opened_at !== '';
+            const statusBadge = opened
+                ? '<span class="badge bg-success">Opened</span>'
+                : '<span class="badge bg-secondary">Not opened</span>';
+            const openedAt = opened ? r.opened_at.replace('T', ' ').slice(0, 16) : '-';
+            html += `<tr>
+                <td>${escHtml(r.email)}</td>
+                <td>${escHtml(r.name || '-')}</td>
+                <td>${statusBadge}</td>
+                <td>${openedAt}</td>
+                <td>${r.open_count || 0}</td>
+            </tr>`;
+        });
+        html += '</tbody></table></div>';
+        cell.innerHTML = html;
+    } catch (err) {
+        cell.innerHTML = '<div class="p-2 text-danger">Failed to load recipients.</div>';
+    }
+}
+
+function escHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str || '';
+    return d.innerHTML;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    toggleSingleEmailField();
+    loadBroadcasts();
+});
 </script>
 {% endblock %}

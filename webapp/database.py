@@ -876,6 +876,37 @@ class WebDB:
             );
         """)
 
+        # ── Email broadcast tracking ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS email_broadcasts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject TEXT NOT NULL,
+                body_text TEXT DEFAULT '',
+                audience TEXT DEFAULT '',
+                sent_by TEXT DEFAULT '',
+                recipient_count INTEGER DEFAULT 0,
+                open_count INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS email_broadcast_recipients (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                broadcast_id INTEGER NOT NULL,
+                email TEXT NOT NULL,
+                name TEXT DEFAULT '',
+                token TEXT UNIQUE NOT NULL,
+                sent_at TEXT DEFAULT (datetime('now')),
+                opened_at TEXT DEFAULT '',
+                open_count INTEGER DEFAULT 0,
+                FOREIGN KEY (broadcast_id) REFERENCES email_broadcasts(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_email_broadcast_recipients_token
+            ON email_broadcast_recipients(token);
+        """)
+
         # ── AI Agent activity table ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS agent_activity (
@@ -5184,3 +5215,64 @@ class WebDB:
         """).fetchone()
         conn.close()
         return dict(row) if row else {"total_mrr": 0, "active_count": 0, "trialing_count": 0, "churned_count": 0}
+
+    # ── Email Broadcast Tracking ──
+
+    def create_email_broadcast(self, subject, body_text, audience, sent_by, recipients):
+        """Log a broadcast and its recipients. Returns broadcast_id and list of tokens."""
+        import secrets
+        conn = self._conn()
+        cur = conn.execute(
+            "INSERT INTO email_broadcasts (subject, body_text, audience, sent_by, recipient_count) VALUES (?, ?, ?, ?, ?)",
+            (subject, body_text, audience, sent_by, len(recipients)),
+        )
+        broadcast_id = cur.lastrowid
+        tokens = []
+        for r in recipients:
+            email = r.get("email") if isinstance(r, dict) else r
+            name = r.get("name", "") if isinstance(r, dict) else ""
+            token = secrets.token_urlsafe(16)
+            conn.execute(
+                "INSERT INTO email_broadcast_recipients (broadcast_id, email, name, token) VALUES (?, ?, ?, ?)",
+                (broadcast_id, email, name, token),
+            )
+            tokens.append({"email": email, "token": token})
+        conn.commit()
+        conn.close()
+        return broadcast_id, tokens
+
+    def record_email_open(self, token):
+        """Record an email open by tracking pixel token."""
+        conn = self._conn()
+        row = conn.execute("SELECT id, broadcast_id, opened_at FROM email_broadcast_recipients WHERE token = ?", (token,)).fetchone()
+        if not row:
+            conn.close()
+            return
+        conn.execute(
+            "UPDATE email_broadcast_recipients SET open_count = open_count + 1, opened_at = COALESCE(NULLIF(opened_at, ''), datetime('now')) WHERE id = ?",
+            (row["id"],),
+        )
+        conn.execute(
+            "UPDATE email_broadcasts SET open_count = (SELECT COUNT(*) FROM email_broadcast_recipients WHERE broadcast_id = ? AND opened_at != '') WHERE id = ?",
+            (row["broadcast_id"], row["broadcast_id"]),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_email_broadcasts(self, limit=50):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM email_broadcasts ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_email_broadcast_recipients(self, broadcast_id):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM email_broadcast_recipients WHERE broadcast_id = ? ORDER BY opened_at DESC, email ASC",
+            (broadcast_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]

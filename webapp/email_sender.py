@@ -447,8 +447,13 @@ def send_simple_email(app_config, email, subject, text, html=None):
         server.sendmail(from_email, email, msg.as_string())
 
 
-def send_bulk_email(app_config, recipients, subject, text, html_body=None):
-    """Send one message to many recipients using the configured SMTP account."""
+def send_bulk_email(app_config, recipients, subject, text, html_body=None,
+                    tracking_base_url=None, token_map=None):
+    """Send one message to many recipients using the configured SMTP account.
+    
+    If tracking_base_url and token_map are provided, a 1x1 tracking pixel
+    is appended to each email's HTML body for open tracking.
+    """
     smtp_host = app_config.get("SMTP_HOST", "smtp.gmail.com")
     smtp_port = app_config.get("SMTP_PORT", 587)
     smtp_user = app_config.get("SMTP_USER", "")
@@ -459,7 +464,7 @@ def send_bulk_email(app_config, recipients, subject, text, html_body=None):
     if not smtp_user or not smtp_password:
         raise ValueError("SMTP not configured.")
 
-    rendered_html = html_body or (
+    base_html = html_body or (
         "<div style=\"font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.6;\">"
         f"{html.escape(text).replace(chr(10), '<br>')}"
         "</div>"
@@ -476,12 +481,18 @@ def send_bulk_email(app_config, recipients, subject, text, html_body=None):
             if not email_address:
                 continue
 
+            # Inject tracking pixel if available
+            recipient_html = base_html
+            if tracking_base_url and token_map and email_address in token_map:
+                pixel_url = f"{tracking_base_url}/t/{token_map[email_address]}.gif"
+                recipient_html = base_html + f'<img src="{pixel_url}" width="1" height="1" alt="" style="display:none;">'
+
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
             msg["From"] = f"{from_name} <{from_email}>"
             msg["To"] = email_address
             msg.attach(MIMEText(text, "plain"))
-            msg.attach(MIMEText(rendered_html, "html"))
+            msg.attach(MIMEText(recipient_html, "html"))
             server.sendmail(from_email, email_address, msg.as_string())
             sent_count += 1
 

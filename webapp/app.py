@@ -2397,12 +2397,42 @@ def create_app():
         try:
             from webapp.email_sender import send_bulk_email
 
-            sent_count = send_bulk_email(app.config, recipients, subject, message)
+            # Log broadcast and get per-recipient tracking tokens
+            broadcast_id, tokens = db.create_email_broadcast(
+                subject, message, audience, session.get("user_name", "admin"), recipients
+            )
+            token_map = {t["email"]: t["token"] for t in tokens}
+            base_url = app.config.get("APP_URL", request.host_url.rstrip("/"))
+
+            sent_count = send_bulk_email(app.config, recipients, subject, message,
+                                         tracking_base_url=base_url, token_map=token_map)
             flash(f"Broadcast sent to {sent_count} recipient(s).", "success")
         except Exception as exc:
             flash(f"Broadcast failed: {exc}", "warning")
 
         return redirect(url_for("beta_dashboard"))
+
+    @app.route("/t/<token>.gif")
+    def email_tracking_pixel(token):
+        """1x1 transparent GIF that records email opens."""
+        db.record_email_open(token)
+        # 1x1 transparent GIF
+        import base64
+        gif = base64.b64decode("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
+        return app.response_class(gif, mimetype="image/gif",
+                                  headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"})
+
+    @app.route("/beta/broadcasts")
+    @login_required
+    def beta_broadcast_history():
+        broadcasts = db.get_email_broadcasts(limit=50)
+        return jsonify(broadcasts=broadcasts)
+
+    @app.route("/beta/broadcasts/<int:broadcast_id>/recipients")
+    @login_required
+    def beta_broadcast_recipients(broadcast_id):
+        recipients = db.get_email_broadcast_recipients(broadcast_id)
+        return jsonify(recipients=recipients)
 
     @app.route("/beta/approve/<int:tester_id>", methods=["POST"])
     @login_required
