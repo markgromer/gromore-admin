@@ -5187,7 +5187,13 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
 
     api_url = f"{wp_url}/wp-json/wp/v2/posts"
     token = base64.b64encode(f"{wp_user}:{wp_pass}".encode()).decode()
-    headers = {"Authorization": f"Basic {token}", "X-GM-Auth": f"Basic {token}"}
+    headers = {
+        "Authorization": f"Basic {token}",
+        "X-GM-Auth": f"Basic {token}",
+        "User-Agent": "GroMore/1.0 (WordPress Blog Publisher; +https://gromore.com)",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
 
     post_data = {
         "title": seo_title or title,
@@ -5211,9 +5217,18 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
         body_lower = body.lower()
         if "sgcaptcha" in body_lower or "/.well-known/sgcaptcha" in body_lower or (status_code == 202 and "captcha" in body_lower):
             return (
-                "Publish failed: the WordPress site returned a security challenge instead of the REST API. "
-                "This is usually SiteGround Security or another bot-protection layer blocking Application Password requests. "
-                "Whitelist /wp-json/wp/v2/posts and disable captcha or bot challenges for REST API requests."
+                "Publish failed: SiteGround's server-level bot protection returned a CAPTCHA challenge (HTTP 202) "
+                "instead of allowing the REST API request through. This is not a WordPress plugin - it's a "
+                "SiteGround hosting setting. Fix: Go to SiteGround Site Tools > Security > Bot Protection and "
+                "either lower the protection level or whitelist the GroMore server. Alternatively, go to "
+                "Security > Blocked IPs and make sure the server IP is not blocked."
+            )
+        if status_code == 202:
+            return (
+                "Publish failed: the site returned HTTP 202 instead of creating the post. This usually means "
+                "a server-level security layer (WAF, bot protection, or firewall) intercepted the request before "
+                "WordPress could process it. On SiteGround: go to Site Tools > Security > Bot Protection and "
+                "lower the protection level, or whitelist the GroMore server IP."
             )
         if status_code == 401:
             return "Publish failed: WordPress returned 401. The application password may be expired or the user lacks permission to create posts. Re-enter your app password in Settings, or check that the WordPress user has an Editor/Administrator role."
@@ -5222,12 +5237,17 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
         return f"WordPress API error {status_code}: {body[:200]}"
 
     try:
+        import logging
+        _wp_log = logging.getLogger(__name__)
         resp = req_lib.post(
             api_url,
             json=post_data,
             headers=headers,
             timeout=30,
         )
+        if resp.status_code not in (200, 201):
+            _wp_log.warning("[WP-PUBLISH] status=%d headers=%s body=%s",
+                            resp.status_code, dict(resp.headers), resp.text[:500])
         if resp.status_code in (200, 201):
             wp_post = resp.json()
             return {
@@ -5696,8 +5716,13 @@ def client_blog_test_connection():
     log = logging.getLogger(__name__)
     log.info("[WP-TEST] URL=%s user=%r pass_len=%d pass_preview=%r",
              wp_url, wp_user, len(wp_pass), wp_pass[:4] + "..." if len(wp_pass) > 4 else wp_pass)
+    ua_headers = {
+        "User-Agent": "GroMore/1.0 (WordPress Blog Publisher; +https://gromore.com)",
+        "Accept": "application/json",
+    }
+
     try:
-        probe = req_lib.get(f"{wp_url}/wp-json/", timeout=15)
+        probe = req_lib.get(f"{wp_url}/wp-json/", headers=ua_headers, timeout=15)
         if probe.status_code == 404:
             return jsonify(ok=False, error=f"REST API not found at {wp_url}/wp-json/. Verify the site URL is correct and that the REST API is not disabled by a security plugin (e.g. Wordfence, iThemes).")
         if probe.status_code >= 500:
@@ -5721,7 +5746,12 @@ def client_blog_test_connection():
     # Step 3: Authenticate - send both standard header AND custom header.
     # SiteGround nginx strips Authorization; mu-plugin reads X-GM-Auth instead.
     token = base64.b64encode(f"{wp_user}:{wp_pass}".encode()).decode()
-    headers = {"Authorization": f"Basic {token}", "X-GM-Auth": f"Basic {token}"}
+    headers = {
+        "Authorization": f"Basic {token}",
+        "X-GM-Auth": f"Basic {token}",
+        "User-Agent": "GroMore/1.0 (WordPress Blog Publisher; +https://gromore.com)",
+        "Accept": "application/json",
+    }
 
     try:
         resp = req_lib.get(
