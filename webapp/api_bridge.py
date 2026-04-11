@@ -602,6 +602,44 @@ def _pull_gsc(site_url, access_token, start_date, end_date):
             "position": r.get("position", 0),
         })
 
+    # ── Opportunity queries: position 4-20 with decent impressions ──
+    opportunity_queries = []
+    for r in rows:
+        pos = r.get("position", 0)
+        impr = r.get("impressions", 0)
+        if 4 <= pos <= 20 and impr >= 10:
+            opportunity_queries.append({
+                "query": r["keys"][0] if r.get("keys") else "",
+                "clicks": r.get("clicks", 0),
+                "impressions": impr,
+                "ctr": r.get("ctr", 0) * 100,
+                "position": pos,
+            })
+    opportunity_queries.sort(key=lambda q: q["impressions"], reverse=True)
+
+    # ── Top pages: second API call with page dimension ──
+    top_pages = []
+    try:
+        page_body = {
+            "startDate": start_date,
+            "endDate": end_date,
+            "dimensions": ["page"],
+            "rowLimit": 50,
+        }
+        page_resp = requests.post(url, json=page_body, headers=headers, timeout=30)
+        page_resp.raise_for_status()
+        page_rows = page_resp.json().get("rows", [])
+        for r in page_rows[:20]:
+            top_pages.append({
+                "page": r["keys"][0] if r.get("keys") else "",
+                "clicks": r.get("clicks", 0),
+                "impressions": r.get("impressions", 0),
+                "ctr": r.get("ctr", 0) * 100,
+                "position": r.get("position", 0),
+            })
+    except Exception:
+        pass  # page-level data is supplemental; don't fail the whole pull
+
     return {
         "totals": {
             "clicks": total_clicks,
@@ -610,8 +648,8 @@ def _pull_gsc(site_url, access_token, start_date, end_date):
             "avg_position": avg_position,
         },
         "top_queries": top_queries,
-        "top_pages": [],
-        "opportunity_queries": [],
+        "top_pages": top_pages,
+        "opportunity_queries": opportunity_queries,
         "row_count": len(rows),
     }
 

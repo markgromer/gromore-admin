@@ -207,6 +207,9 @@
                     <button class="btn btn-outline-warning btn-sm" id="handoffBtn" title="Hand off to human">
                         <i class="bi bi-person-up me-1"></i> Handoff
                     </button>
+                    <button class="btn btn-outline-danger btn-sm ms-auto" id="deleteLeadBtn" title="Delete this lead">
+                        <i class="bi bi-trash me-1"></i> Delete
+                    </button>
                 </div>
             </div>
         </div>
@@ -391,6 +394,33 @@
             loadThread(activeThreadId);
         } catch (err) {
             console.error(err);
+        }
+    });
+
+    // ── Delete lead ──
+    document.getElementById('deleteLeadBtn').addEventListener('click', async function() {
+        if (!activeThreadId) return;
+        if (!confirm('Delete this lead and all its messages? This cannot be undone.')) return;
+        this.disabled = true;
+        try {
+            const resp = await fetch(`/client/inbox/thread/${activeThreadId}/delete`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
+            });
+            const data = await resp.json();
+            if (data.ok) {
+                const item = document.querySelector(`.thread-item[data-thread-id="${activeThreadId}"]`);
+                if (item) item.remove();
+                activeThreadId = null;
+                document.getElementById('detailContent').style.display = 'none';
+                document.getElementById('emptyState').style.display = '';
+            } else {
+                alert(data.error || 'Failed to delete');
+            }
+        } catch (err) {
+            alert('Delete failed: ' + err.message);
+        } finally {
+            this.disabled = false;
         }
     });
 

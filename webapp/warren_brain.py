@@ -94,6 +94,44 @@ QUOTING MODE: {quote_mode}
     if message_templates:
         prompt += f"\n\nMESSAGE TEMPLATES (use as starting points, personalize based on context):\n{message_templates}"
 
+    # Closing procedure
+    closing_procedure = brand.get("sales_bot_closing_procedure", "") or ""
+    closing_action = brand.get("sales_bot_closing_action", "") or "none"
+    onboarding_link = brand.get("sales_bot_onboarding_link", "") or ""
+    if closing_procedure:
+        prompt += f"\n\nCLOSING PROCEDURE (follow these steps when the lead is ready to book):\n{closing_procedure}"
+    if closing_action == "send_onboarding" and onboarding_link:
+        prompt += f"\n\nAfter confirming the booking, send them this onboarding link: {onboarding_link}"
+    elif closing_action == "both" and onboarding_link:
+        prompt += f"\n\nAfter confirming the booking, send them this onboarding link: {onboarding_link}"
+        prompt += "\n(The system will also push the lead to the connected CRM automatically.)"
+    elif closing_action == "push_crm":
+        prompt += "\n\nAfter confirming the booking, the system will push the lead to the connected CRM automatically. Just confirm with the lead that they're booked."
+
+    # Booking success message
+    booking_success = brand.get("sales_bot_booking_success_message", "") or ""
+    if booking_success:
+        prompt += f"\n\nBOOKING CONFIRMATION MESSAGE (use this exact message when a lead confirms they want to book, personalize the placeholders):\n{booking_success}"
+
+    # Service area schedule
+    schedule_raw = brand.get("sales_bot_service_area_schedule", "") or ""
+    if schedule_raw:
+        try:
+            schedule = json.loads(schedule_raw) if isinstance(schedule_raw, str) else schedule_raw
+            if schedule and isinstance(schedule, dict):
+                lines = []
+                day_order = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+                for day in day_order:
+                    areas = schedule.get(day, "")
+                    if areas:
+                        lines.append(f"  {day.capitalize()}: {areas}")
+                if lines:
+                    prompt += "\n\nSERVICE AREA SCHEDULE (which areas we service on which days):\n" + "\n".join(lines)
+                    prompt += "\n- If a lead mentions their location and it matches a scheduled day, tell them which day(s) you service their area."
+                    prompt += "\n- Don't bring up the schedule unprompted. Only mention it when relevant to the conversation."
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     # Info collection strategy
     collect_fields = brand.get("sales_bot_collect_fields", "") or "name,phone"
     if collect_fields:
@@ -118,6 +156,7 @@ You must respond with valid JSON containing these fields:
     "quote_high": null or number,
     "stage_suggestion": null or "engaged|quoted|qualified|booked",
     "handoff_reason": null or "reason string",
+    "closing_action": null or "push_crm|send_onboarding|both",
     "internal_notes": "Brief note about what you observed and why you chose this action",
     "info_collected": {"name": null, "phone": null, "email": null, "address": null, "service_needed": null},
     "objection_detected": null
@@ -312,6 +351,7 @@ def generate_response(db, brand, thread, messages, channel="sms"):
             "quote_high": result.get("quote_high"),
             "stage_suggestion": result.get("stage_suggestion"),
             "handoff_reason": result.get("handoff_reason"),
+            "closing_action": result.get("closing_action"),
             "internal_notes": (result.get("internal_notes") or "").strip(),
             "info_collected": info_collected,
             "objection_detected": (result.get("objection_detected") or "").strip() or None,
@@ -428,11 +468,33 @@ def process_and_respond(db, brand_id, thread_id, channel="sms"):
     if stage_suggestion:
         advance_stage(db, thread_id, brand_id, f"lead_{stage_suggestion}" if stage_suggestion != "engaged" else "warren_replied")
 
+    # Handle closing actions (CRM push / onboarding link)
+    closing_action = response.get("closing_action")
+    if closing_action in ("push_crm", "both"):
+        try:
+            from webapp.crm_bridge import push_lead
+            lead_data = {
+                "name": thread.get("lead_name", ""),
+                "phone": thread.get("lead_phone", ""),
+                "email": thread.get("lead_email", ""),
+                "source": f"warren_{channel}",
+                "notes": response.get("internal_notes", ""),
+            }
+            success, detail = push_lead(brand, lead_data)
+            if success:
+                db.add_lead_event(brand_id, thread_id, "crm_push", event_value="auto")
+                log.info("Warren auto-pushed lead %s to CRM: %s", thread_id, detail)
+            else:
+                log.warning("Warren CRM push returned failure for thread %s: %s", thread_id, detail)
+        except Exception as exc:
+            log.warning("Warren CRM push failed for thread %s: %s", thread_id, exc)
+
     return {
         "reply": reply_text,
         "action": action,
         "thread_id": thread_id,
         "should_send": should_send,
         "handoff_reason": response.get("handoff_reason"),
+        "closing_action": closing_action,
         "confidence": confidence,
     }

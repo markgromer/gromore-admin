@@ -1127,6 +1127,11 @@ class WebDB:
             ("sales_bot_objection_playbook", "TEXT DEFAULT ''"),
             ("sales_bot_message_templates", "TEXT DEFAULT ''"),
             ("sales_bot_collect_fields", "TEXT DEFAULT 'name,phone'"),
+            ("sales_bot_closing_procedure", "TEXT DEFAULT ''"),
+            ("sales_bot_booking_success_message", "TEXT DEFAULT ''"),
+            ("sales_bot_service_area_schedule", "TEXT DEFAULT ''"),
+            ("sales_bot_closing_action", "TEXT DEFAULT 'none'"),
+            ("sales_bot_onboarding_link", "TEXT DEFAULT ''"),
             ("sales_bot_payment_reminders_enabled", "INTEGER DEFAULT 0"),
             ("sales_bot_payment_reminder_days_before", "INTEGER DEFAULT 3"),
             ("sales_bot_payment_reminder_billing_day", "INTEGER DEFAULT 1"),
@@ -1450,6 +1455,8 @@ class WebDB:
             "sales_bot_disallowed_language", "sales_bot_handoff_rules",
             "sales_bot_quo_webhook_secret", "sales_bot_meta_webhook_secret",
             "sales_bot_objection_playbook", "sales_bot_message_templates", "sales_bot_collect_fields",
+            "sales_bot_closing_procedure", "sales_bot_booking_success_message",
+            "sales_bot_service_area_schedule", "sales_bot_closing_action", "sales_bot_onboarding_link",
             "sales_bot_payment_reminder_channels", "sales_bot_payment_reminder_template",
             "sales_bot_dnd_start", "sales_bot_dnd_end", "sales_bot_dnd_timezone",
             "sales_bot_sms_opt_out_footer",
@@ -1832,6 +1839,16 @@ class WebDB:
         conn.execute(
             "UPDATE lead_threads SET unread_count = 0, updated_at = datetime('now') WHERE id = ?",
             (thread_id,),
+        )
+        conn.commit()
+        conn.close()
+
+    def delete_lead_thread(self, thread_id, brand_id):
+        """Delete a lead thread and all related data (messages, events, quotes cascade)."""
+        conn = self._conn()
+        conn.execute(
+            "DELETE FROM lead_threads WHERE id = ? AND brand_id = ?",
+            (thread_id, brand_id),
         )
         conn.commit()
         conn.close()

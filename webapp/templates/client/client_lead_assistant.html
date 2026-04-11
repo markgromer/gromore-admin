@@ -290,6 +290,64 @@ WIN-BACK (LOST LEAD):
         <p class="la-hint mb-0">Warren asks for one thing at a time, casually, and won't push if they skip it.</p>
     </div>
 
+    <!-- Closing Procedure -->
+    <div class="la-card">
+        <h5><i class="bi bi-check2-circle me-1 text-success"></i> Closing Procedure</h5>
+        <p class="section-copy">When a lead confirms they want to book, what should Warren do? Set the closing action and provide any steps or scripts.</p>
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <label class="form-label fw-bold" style="font-size:.82rem;">Closing Action</label>
+                <select class="form-select form-select-sm" name="sales_bot_closing_action">
+                    <option value="none" {{ 'selected' if (brand.sales_bot_closing_action or 'none') == 'none' }}>None - just confirm booking</option>
+                    <option value="push_crm" {{ 'selected' if brand.sales_bot_closing_action == 'push_crm' }}>Push to CRM</option>
+                    <option value="send_onboarding" {{ 'selected' if brand.sales_bot_closing_action == 'send_onboarding' }}>Send onboarding link</option>
+                    <option value="both" {{ 'selected' if brand.sales_bot_closing_action == 'both' }}>Push to CRM + send onboarding link</option>
+                </select>
+            </div>
+            <div class="col-md-8" id="onboardingLinkWrap" style="{{ '' if brand.sales_bot_closing_action in ('send_onboarding', 'both') else 'display:none' }}">
+                <label class="form-label fw-bold" style="font-size:.82rem;">Onboarding Link URL</label>
+                <input type="url" class="form-control form-control-sm" name="sales_bot_onboarding_link" value="{{ brand.sales_bot_onboarding_link or '' }}" placeholder="https://app.example.com/onboarding?ref=warren">
+                <div class="form-text">Warren will send this link to the lead after booking. Use a signup page, intake form, or scheduling link.</div>
+            </div>
+        </div>
+        <label class="form-label fw-bold" style="font-size:.82rem;">Closing Script / Steps</label>
+        <textarea class="form-control la-textarea" name="sales_bot_closing_procedure" rows="5" placeholder="Example:
+1. Confirm the service, date, and price range with the lead
+2. Collect their service address if we don't have it
+3. Let them know they'll get a reminder text the day before
+4. If they have pets that need to be secured, mention it now
+5. Thank them and tell them you'll send a confirmation">{{ brand.sales_bot_closing_procedure or '' }}</textarea>
+    </div>
+
+    <!-- Booking Success Message -->
+    <div class="la-card">
+        <h5><i class="bi bi-trophy me-1 text-warning"></i> Booking Confirmation Message</h5>
+        <p class="section-copy">The exact message Warren sends after a lead successfully books. Use [name], [service], and [date] as placeholders.</p>
+        <textarea class="form-control la-textarea" name="sales_bot_booking_success_message" rows="4" placeholder="Example:
+You're all set, [name]! We've got you down for [service]. We'll text you a reminder the day before. If anything changes, just shoot us a message. Thanks for choosing us!">{{ brand.sales_bot_booking_success_message or '' }}</textarea>
+    </div>
+
+    <!-- Service Area Schedule -->
+    <div class="la-card">
+        <h5><i class="bi bi-calendar-week me-1 text-info"></i> Service Area Schedule</h5>
+        <p class="section-copy">If you service different areas on specific days, list the zip codes or neighborhoods for each day. Warren will tell leads which day you're in their area.</p>
+        {% set schedule = {} %}
+        {% if brand.sales_bot_service_area_schedule %}
+            {% set schedule = brand.sales_bot_service_area_schedule | from_json %}
+        {% endif %}
+        <div class="row g-2">
+            {% for day in ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] %}
+            <div class="col-lg-6 col-xl-4">
+                <div class="d-flex align-items-start gap-2">
+                    <span class="badge bg-primary" style="min-width: 40px; margin-top: 6px; font-size:.72rem;">{{ day[:3]|upper }}</span>
+                    <input type="text" class="form-control form-control-sm" name="schedule_{{ day }}" id="schedule_{{ day }}" placeholder="e.g. 75201, 75202, Oak Lawn, Uptown" style="font-size:.82rem;" value="{{ schedule[day] if schedule is mapping and day in schedule else '' }}">
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <p class="la-hint mt-2 mb-0">Leave blank for days you don't have area-specific routes. Warren will only reference specific days when a lead's location matches a scheduled area.</p>
+    </div>
+
     <div class="la-card">
         <p class="section-copy">The goal is not more copy. The goal is a quoting brain that behaves like your best sales rep.</p>
         <div class="la-hint">
@@ -309,4 +367,19 @@ WIN-BACK (LOST LEAD):
         </a>
     </div>
 </form>
+
+<script>
+(function(){
+    const actionSel = document.querySelector('[name="sales_bot_closing_action"]');
+    const linkWrap  = document.getElementById('onboardingLinkWrap');
+    if(actionSel && linkWrap){
+        function toggle(){
+            const v = actionSel.value;
+            linkWrap.style.display = (v==='send_onboarding' || v==='both') ? '' : 'none';
+        }
+        actionSel.addEventListener('change', toggle);
+        toggle();
+    }
+})();
+</script>
 {% endblock %}

@@ -612,6 +612,7 @@ _ENDPOINT_FEATURE_MAP = {
     "client_inbox_thread":         "warren_inbox",
     "client_inbox_reply":          "warren_inbox",
     "client_inbox_stage":          "warren_inbox",
+    "client_inbox_delete":         "warren_inbox",
     "client_inbox_warren_draft":   "warren_inbox",
     "client_gbp":                  "gbp",
     "client_gbp_audit":            "gbp",
@@ -6082,6 +6083,42 @@ def client_save_lead_assistant_profile():
         ",".join(collect) if collect else "",
     )
 
+    # Closing procedure
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_closing_procedure",
+        (request.form.get("sales_bot_closing_procedure") or "").strip()[:4000],
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_closing_action",
+        (request.form.get("sales_bot_closing_action") or "none").strip()[:50],
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_onboarding_link",
+        (request.form.get("sales_bot_onboarding_link") or "").strip()[:500],
+    )
+
+    # Booking success message
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_booking_success_message",
+        (request.form.get("sales_bot_booking_success_message") or "").strip()[:2000],
+    )
+
+    # Service area schedule (JSON)
+    schedule = {}
+    for day in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]:
+        areas = (request.form.get(f"schedule_{day}") or "").strip()[:500]
+        if areas:
+            schedule[day] = areas
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_service_area_schedule",
+        json.dumps(schedule) if schedule else "",
+    )
+
     flash("Lead assistant profile saved.", "success")
     return redirect(url_for("client.client_lead_assistant"))
 
@@ -6181,6 +6218,21 @@ def client_inbox_stage(thread_id):
         db.add_lead_event(brand_id, thread_id, "handoff_triggered", event_value="Manual handoff from inbox")
 
     return jsonify(ok=success)
+
+
+@client_bp.route("/inbox/thread/<int:thread_id>/delete", methods=["POST"])
+@client_login_required
+def client_inbox_delete(thread_id):
+    """Delete a lead thread and all associated data."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread:
+        return jsonify(error="Thread not found"), 404
+
+    db.delete_lead_thread(thread_id, brand_id)
+    return jsonify(ok=True)
 
 
 @client_bp.route("/inbox/thread/<int:thread_id>/warren-draft", methods=["POST"])
