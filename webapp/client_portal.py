@@ -621,6 +621,8 @@ _ENDPOINT_FEATURE_MAP = {
     "client_lead_assistant":       "crm",
     "client_save_lead_assistant_profile": "crm",
     "client_va_services":          "va_services",
+    "client_va_request_create":    "va_services",
+    "client_va_request_cancel":    "va_services",
     "client_inbox":                "warren_inbox",
     "client_inbox_thread":         "warren_inbox",
     "client_inbox_reply":          "warren_inbox",
@@ -6839,11 +6841,88 @@ def client_help():
 @client_bp.route("/va")
 @client_login_required
 def client_va_services():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
     brand_name = session.get("client_brand_name", "")
+    requests = db.get_va_requests(brand_id, limit=25)
+    token_entries = db.get_va_token_entries(brand_id, limit=8)
+    token_balance = db.get_va_token_balance(brand_id)
+    active_statuses = {"submitted", "scoped", "queued", "in_progress", "review"}
+    active_requests = sum(1 for item in requests if item.get("status") in active_statuses)
+    completed_requests = sum(1 for item in requests if item.get("status") == "completed")
+    current_role = session.get("client_role", "owner")
     return render_template(
         "client/client_va_services.html",
         brand_name=brand_name,
+        token_balance=token_balance,
+        token_entries=token_entries,
+        requests=requests,
+        active_requests=active_requests,
+        completed_requests=completed_requests,
+        current_role=current_role,
     )
+
+
+@client_bp.route("/va/request", methods=["POST"])
+@client_login_required
+def client_va_request_create():
+    if not _require_role("owner", "manager"):
+        abort(403)
+
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    title = (request.form.get("title") or "").strip()
+    details = (request.form.get("details") or "").strip()
+    specialty_key = (request.form.get("specialty_key") or "account_va").strip().lower()
+    priority = (request.form.get("priority") or "normal").strip().lower()
+
+    if not title:
+        flash("Request title is required.", "error")
+        return redirect(url_for("client.client_va_services"))
+    if not details:
+        flash("Please add a short description so the VA Desk knows what to do.", "error")
+        return redirect(url_for("client.client_va_services"))
+    if specialty_key not in {"account_va", "wordpress", "development"}:
+        specialty_key = "account_va"
+    if priority not in {"normal", "high", "urgent"}:
+        priority = "normal"
+
+    db.create_va_request(
+        brand_id,
+        title=title,
+        details=details,
+        specialty_key=specialty_key,
+        priority=priority,
+        requested_by=session.get("client_user_id"),
+    )
+    flash("VA request submitted. The desk queue now has your request.", "success")
+    return redirect(url_for("client.client_va_services"))
+
+
+@client_bp.route("/va/request/<int:request_id>/cancel", methods=["POST"])
+@client_login_required
+def client_va_request_cancel(request_id):
+    if not _require_role("owner", "manager"):
+        abort(403)
+
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    request_row = db.get_va_request(request_id, brand_id)
+    if not request_row:
+        abort(404)
+    if request_row.get("status") in {"completed", "cancelled"}:
+        flash("That request is already closed.", "info")
+        return redirect(url_for("client.client_va_services"))
+
+    db.update_va_request(
+        request_id,
+        brand_id,
+        status="cancelled",
+        closed_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        status_note="Cancelled by client",
+    )
+    flash("VA request cancelled.", "success")
+    return redirect(url_for("client.client_va_services"))
 
 
 # ── Beta Signup (public - no auth) ──

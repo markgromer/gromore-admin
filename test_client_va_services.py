@@ -38,8 +38,8 @@ class ClientVAServicesTests(unittest.TestCase):
             conn = db._conn()
             conn.execute(
                 """
-                INSERT INTO client_users (brand_id, email, password_hash, display_name, is_active)
-                VALUES (?, ?, ?, ?, 1)
+                INSERT INTO client_users (brand_id, email, password_hash, display_name, role, is_active)
+                VALUES (?, ?, ?, ?, 'owner', 1)
                 """,
                 (
                     self.brand_id,
@@ -67,7 +67,7 @@ class ClientVAServicesTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.headers["Location"].endswith("/client/login"))
 
-    def test_logged_in_client_can_view_va_coming_soon_page(self):
+    def test_logged_in_client_can_view_va_desk_page(self):
         login_response = self.client.post(
             "/client/login",
             data={"email": "va@example.com", "password": "Password123"},
@@ -78,9 +78,43 @@ class ClientVAServicesTests(unittest.TestCase):
         response = self.client.get("/client/va")
         self.assertEqual(response.status_code, 200)
         body = response.get_data(as_text=True)
-        self.assertIn("VA Desk is coming soon", body)
+        self.assertIn("VA Desk is live", body)
+        self.assertIn("Submit a request", body)
+        self.assertIn("Available tokens", body)
         self.assertIn("10 tokens/hr", body)
         self.assertIn("25 tokens/hr", body)
+
+    def test_owner_can_submit_va_request_and_see_it_in_queue(self):
+        login_response = self.client.post(
+            "/client/login",
+            data={"email": "va@example.com", "password": "Password123"},
+            follow_redirects=False,
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        response = self.client.post(
+            "/client/va/request",
+            data={
+                "title": "Fix footer links",
+                "specialty_key": "wordpress",
+                "priority": "high",
+                "details": "Update the homepage footer links and replace the outdated contact block.",
+            },
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.get_data(as_text=True)
+        self.assertIn("VA request submitted", body)
+        self.assertIn("Fix footer links", body)
+        self.assertIn("WordPress Support", body)
+
+        with self.app.app_context():
+            requests = self.app.db.get_va_requests(self.brand_id)
+            self.assertEqual(len(requests), 1)
+            self.assertEqual(requests[0]["title"], "Fix footer links")
+            self.assertEqual(requests[0]["priority"], "high")
+            self.assertEqual(requests[0]["specialty_key"], "wordpress")
 
 
 if __name__ == "__main__":

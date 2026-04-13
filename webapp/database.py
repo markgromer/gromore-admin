@@ -1016,6 +1016,51 @@ class WebDB:
             ON brand_tasks(brand_id, status, assigned_to);
         """)
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS va_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                details TEXT DEFAULT '',
+                specialty_key TEXT DEFAULT 'account_va',
+                priority TEXT DEFAULT 'normal',
+                status TEXT DEFAULT 'submitted',
+                requested_by INTEGER DEFAULT NULL,
+                estimated_tokens INTEGER DEFAULT 0,
+                actual_tokens_used INTEGER DEFAULT 0,
+                status_note TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                closed_at TEXT DEFAULT '',
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+                FOREIGN KEY (requested_by) REFERENCES client_users(id) ON DELETE SET NULL
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_va_requests_brand
+            ON va_requests(brand_id, status, updated_at DESC, id DESC);
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS va_token_ledger (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                request_id INTEGER DEFAULT NULL,
+                entry_type TEXT DEFAULT 'adjustment',
+                specialty_key TEXT DEFAULT '',
+                token_amount INTEGER NOT NULL DEFAULT 0,
+                note TEXT DEFAULT '',
+                created_by INTEGER DEFAULT NULL,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+                FOREIGN KEY (request_id) REFERENCES va_requests(id) ON DELETE SET NULL,
+                FOREIGN KEY (created_by) REFERENCES client_users(id) ON DELETE SET NULL
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_va_token_ledger_brand
+            ON va_token_ledger(brand_id, created_at DESC, id DESC);
+        """)
+
         # ── Hiring tables ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS hiring_jobs (
@@ -4714,6 +4759,140 @@ class WebDB:
         conn.execute("DELETE FROM brand_tasks WHERE id = ? AND brand_id = ?", (task_id, brand_id))
         conn.commit()
         conn.close()
+
+    # ── VA Desk ──
+
+    def create_va_request(self, brand_id, title, details="", specialty_key="account_va",
+                          priority="normal", requested_by=None, estimated_tokens=0,
+                          status="submitted", status_note=""):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO va_requests
+               (brand_id, title, details, specialty_key, priority, status,
+                requested_by, estimated_tokens, status_note)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                brand_id,
+                title,
+                details,
+                specialty_key,
+                priority,
+                status,
+                requested_by,
+                int(estimated_tokens or 0),
+                status_note,
+            ),
+        )
+        conn.commit()
+        request_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.close()
+        return request_id
+
+    def get_va_requests(self, brand_id, status=None, limit=100):
+        conn = self._conn()
+        sql = (
+            "SELECT vr.*, cu.display_name AS requested_by_name "
+            "FROM va_requests vr "
+            "LEFT JOIN client_users cu ON vr.requested_by = cu.id "
+            "WHERE vr.brand_id = ?"
+        )
+        params = [brand_id]
+        if status:
+            sql += " AND vr.status = ?"
+            params.append(status)
+        sql += " ORDER BY CASE vr.status "
+        sql += "WHEN 'in_progress' THEN 0 WHEN 'review' THEN 1 WHEN 'queued' THEN 2 "
+        sql += "WHEN 'submitted' THEN 3 WHEN 'scoped' THEN 4 WHEN 'completed' THEN 5 ELSE 6 END, "
+        sql += "vr.updated_at DESC, vr.id DESC LIMIT ?"
+        params.append(limit)
+        rows = conn.execute(sql, params).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_va_request(self, request_id, brand_id):
+        conn = self._conn()
+        row = conn.execute(
+            """SELECT vr.*, cu.display_name AS requested_by_name
+               FROM va_requests vr
+               LEFT JOIN client_users cu ON vr.requested_by = cu.id
+               WHERE vr.id = ? AND vr.brand_id = ?""",
+            (request_id, brand_id),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def update_va_request(self, request_id, brand_id, **fields):
+        conn = self._conn()
+        allowed = {
+            "title", "details", "specialty_key", "priority", "status",
+            "estimated_tokens", "actual_tokens_used", "status_note", "closed_at",
+        }
+        sets = []
+        params = []
+        for key, value in fields.items():
+            if key not in allowed:
+                continue
+            sets.append(f"{key} = ?")
+            if key in {"estimated_tokens", "actual_tokens_used"}:
+                params.append(int(value or 0))
+            else:
+                params.append(value)
+        if not sets:
+            conn.close()
+            return
+        sets.append("updated_at = datetime('now')")
+        params.extend([request_id, brand_id])
+        conn.execute(
+            f"UPDATE va_requests SET {', '.join(sets)} WHERE id = ? AND brand_id = ?",
+            params,
+        )
+        conn.commit()
+        conn.close()
+
+    def create_va_token_entry(self, brand_id, token_amount, entry_type="adjustment",
+                              specialty_key="", note="", request_id=None, created_by=None):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO va_token_ledger
+               (brand_id, request_id, entry_type, specialty_key, token_amount, note, created_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                brand_id,
+                request_id,
+                entry_type,
+                specialty_key,
+                int(token_amount or 0),
+                note,
+                created_by,
+            ),
+        )
+        conn.commit()
+        entry_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.close()
+        return entry_id
+
+    def get_va_token_entries(self, brand_id, limit=20):
+        conn = self._conn()
+        rows = conn.execute(
+            """SELECT vtl.*, cu.display_name AS created_by_name
+               FROM va_token_ledger vtl
+               LEFT JOIN client_users cu ON vtl.created_by = cu.id
+               WHERE vtl.brand_id = ?
+               ORDER BY vtl.created_at DESC, vtl.id DESC
+               LIMIT ?""",
+            (brand_id, int(limit or 20)),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_va_token_balance(self, brand_id):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT COALESCE(SUM(token_amount), 0) AS balance FROM va_token_ledger WHERE brand_id = ?",
+            (brand_id,),
+        ).fetchone()
+        conn.close()
+        return int((row["balance"] if row else 0) or 0)
 
     # ── Hiring: Jobs ──
 

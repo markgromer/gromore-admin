@@ -10,9 +10,9 @@
             border-radius: 24px;
             padding: 32px;
             background:
-                radial-gradient(circle at 15% 20%, rgba(245, 158, 11, .18) 0%, rgba(245, 158, 11, 0) 32%),
-                radial-gradient(circle at 80% 15%, rgba(59, 130, 246, .16) 0%, rgba(59, 130, 246, 0) 30%),
-                linear-gradient(145deg, #08111f 0%, #0f172a 50%, #172033 100%);
+                radial-gradient(circle at 12% 18%, rgba(245, 158, 11, .18) 0%, rgba(245, 158, 11, 0) 34%),
+                radial-gradient(circle at 84% 16%, rgba(59, 130, 246, .16) 0%, rgba(59, 130, 246, 0) 30%),
+                linear-gradient(145deg, #08111f 0%, #0f172a 54%, #172033 100%);
             color: #f8fafc;
             box-shadow: 0 18px 48px rgba(15, 23, 42, .28);
             margin-bottom: 24px;
@@ -44,27 +44,83 @@
             line-height: 1.7;
             margin-bottom: 1.2rem;
         }
+        .va-pill-row,
+        .va-stat-grid,
+        .va-rate-grid,
+        .va-main-grid,
+        .va-meta-grid {
+            display: grid;
+            gap: 16px;
+        }
         .va-pill-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: .75rem;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
         }
         .va-pill {
             display: inline-flex;
             align-items: center;
             gap: .5rem;
-            padding: .6rem .9rem;
-            border-radius: 999px;
-            background: rgba(245, 158, 11, .12);
-            border: 1px solid rgba(245, 158, 11, .22);
-            color: #fde68a;
-            font-size: .85rem;
+            padding: .75rem .95rem;
+            border-radius: 16px;
+            background: rgba(255,255,255,.08);
+            border: 1px solid rgba(255,255,255,.12);
+            color: #e2e8f0;
+            font-size: .86rem;
             font-weight: 600;
         }
-        .va-grid {
-            display: grid;
-            grid-template-columns: 1.2fr .8fr;
-            gap: 24px;
+        .va-stat-grid {
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            margin: 20px 0 24px;
+        }
+        .va-stat {
+            border-radius: 18px;
+            padding: 18px;
+            background: rgba(255,255,255,.08);
+            border: 1px solid rgba(255,255,255,.12);
+        }
+        .va-stat-label {
+            font-size: .78rem;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: rgba(226,232,240,.72);
+            font-weight: 700;
+        }
+        .va-stat-value {
+            margin-top: .35rem;
+            font-size: 2rem;
+            font-weight: 800;
+            letter-spacing: -.03em;
+        }
+        .va-rate-grid {
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        }
+        .va-rate-card {
+            border-radius: 18px;
+            padding: 18px;
+            background: rgba(255,255,255,.06);
+            border: 1px solid rgba(255,255,255,.1);
+        }
+        .va-rate-card strong {
+            display: block;
+            margin-bottom: .25rem;
+            color: #fff7ed;
+        }
+        .va-rate-card span {
+            color: rgba(226,232,240,.78);
+            font-size: .9rem;
+            line-height: 1.5;
+        }
+        .va-rate {
+            display: inline-block;
+            margin-top: .65rem;
+            color: #fde68a;
+            font-weight: 800;
+        }
+        .va-main-grid {
+            grid-template-columns: minmax(0, 1.2fr) minmax(320px, .8fr);
+            align-items: start;
+        }
+        .va-meta-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
         }
         .va-card {
             border: 1px solid rgba(226, 232, 240, .95);
@@ -78,55 +134,115 @@
             font-size: 1.05rem;
             font-weight: 700;
             color: #0f172a;
-            margin-bottom: .9rem;
+            margin-bottom: .35rem;
         }
-        .va-card p,
-        .va-card li {
-            color: #475569;
-            line-height: 1.65;
-        }
-        .va-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            display: grid;
-            gap: .8rem;
-        }
-        .va-list li {
-            display: flex;
-            gap: .7rem;
-            align-items: flex-start;
-        }
-        .va-list i {
-            color: #d97706;
-            margin-top: .15rem;
-        }
-        .va-specialties {
-            display: grid;
-            gap: .85rem;
-        }
-        .va-specialty {
-            display: flex;
-            justify-content: space-between;
-            gap: 1rem;
-            padding: .9rem 1rem;
-            border-radius: 14px;
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-        }
-        .va-specialty strong {
-            display: block;
-            color: #0f172a;
-            margin-bottom: .2rem;
-        }
-        .va-specialty span {
+        .va-subhead {
             color: #64748b;
             font-size: .9rem;
+            margin-bottom: 1rem;
         }
-        .va-rate {
-            white-space: nowrap;
+        .va-request-form .form-label {
+            font-size: .84rem;
             font-weight: 700;
-            color: #b45309;
+            color: #334155;
+        }
+        .va-request-form .form-control,
+        .va-request-form .form-select {
+            border-radius: 12px;
+            border-color: #dbe3ef;
+            padding: .72rem .85rem;
+        }
+        .va-empty {
+            border: 1px dashed #cbd5e1;
+            border-radius: 16px;
+            padding: 20px;
+            background: #f8fafc;
+            color: #64748b;
+        }
+        .va-request-list,
+        .va-ledger-list {
+            display: grid;
+            gap: 14px;
+        }
+        .va-request-item,
+        .va-ledger-item {
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 16px 18px;
+            background: #fff;
+        }
+        .va-request-top,
+        .va-ledger-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: .65rem;
+        }
+        .va-request-title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+            color: #0f172a;
+        }
+        .va-request-copy,
+        .va-ledger-copy {
+            color: #475569;
+            line-height: 1.6;
+            font-size: .92rem;
+            margin: 0;
+        }
+        .va-badge-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .45rem;
+            margin-top: .75rem;
+        }
+        .va-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            padding: .38rem .62rem;
+            border-radius: 999px;
+            font-size: .76rem;
+            font-weight: 700;
+            text-transform: capitalize;
+        }
+        .va-badge.status-submitted,
+        .va-badge.status-scoped,
+        .va-badge.status-queued {
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+        .va-badge.status-in_progress,
+        .va-badge.status-review {
+            background: #ecfdf5;
+            color: #047857;
+        }
+        .va-badge.status-completed {
+            background: #f0fdf4;
+            color: #166534;
+        }
+        .va-badge.status-cancelled {
+            background: #f8fafc;
+            color: #64748b;
+        }
+        .va-badge.priority-urgent {
+            background: #fef2f2;
+            color: #b91c1c;
+        }
+        .va-badge.priority-high {
+            background: #fff7ed;
+            color: #c2410c;
+        }
+        .va-badge.priority-normal {
+            background: #f8fafc;
+            color: #475569;
+        }
+        .va-meta {
+            color: #64748b;
+            font-size: .8rem;
+            line-height: 1.55;
         }
         .va-note {
             margin-top: 16px;
@@ -137,10 +253,13 @@
             color: #9a3412;
             font-size: .92rem;
         }
-        @media (max-width: 980px) {
-            .va-grid {
+        @media (max-width: 1080px) {
+            .va-main-grid,
+            .va-meta-grid {
                 grid-template-columns: 1fr;
             }
+        }
+        @media (max-width: 980px) {
             .va-hero {
                 padding: 24px;
             }
@@ -149,58 +268,172 @@
 
     <section class="va-hero">
         <div class="va-kicker"><i class="bi bi-headset"></i> Managed Support</div>
-        <h1 class="va-title">VA Desk is coming soon.</h1>
+        <h1 class="va-title">VA Desk is live.</h1>
         <p class="va-copy">
-            {{ brand_name or 'Your brand' }} will soon be able to tap into managed VA support for recurring account work,
-            WordPress changes, content production, and development requests without carrying fixed payroll when you do not need it.
+            {{ brand_name or 'Your brand' }} can now submit VA Desk requests from inside the portal and track them in one queue.
+            Token purchasing is still being finalized, but the real backend foundation is in place now: request intake, balance tracking, and work status visibility.
         </p>
-        <div class="va-pill-row">
-            <div class="va-pill"><i class="bi bi-coin"></i> Token packs for flexible monthly usage</div>
-            <div class="va-pill"><i class="bi bi-hourglass-split"></i> Billed in hourly blocks</div>
-            <div class="va-pill"><i class="bi bi-diagram-3"></i> Shared internal VA pool across brands</div>
+
+        <div class="va-stat-grid">
+            <div class="va-stat">
+                <div class="va-stat-label">Available tokens</div>
+                <div class="va-stat-value">{{ token_balance or 0 }}</div>
+            </div>
+            <div class="va-stat">
+                <div class="va-stat-label">Open requests</div>
+                <div class="va-stat-value">{{ active_requests or 0 }}</div>
+            </div>
+            <div class="va-stat">
+                <div class="va-stat-label">Completed</div>
+                <div class="va-stat-value">{{ completed_requests or 0 }}</div>
+            </div>
+        </div>
+
+        <div class="va-rate-grid">
+            <div class="va-rate-card">
+                <strong>Account VA</strong>
+                <span>Inbox cleanup, CRM updates, reporting follow-through, and admin work.</span>
+                <div class="va-rate">10 tokens/hr</div>
+            </div>
+            <div class="va-rate-card">
+                <strong>WordPress Support</strong>
+                <span>Site edits, layout changes, page updates, and plugin/config work.</span>
+                <div class="va-rate">15 tokens/hr</div>
+            </div>
+            <div class="va-rate-card">
+                <strong>React / Full Stack Dev</strong>
+                <span>Product changes, front-end implementation, and deeper technical requests.</span>
+                <div class="va-rate">25 tokens/hr</div>
+            </div>
+        </div>
+
+        <div class="va-pill-row mt-4">
+            <div class="va-pill"><i class="bi bi-list-task"></i> Submit requests into one queue</div>
+            <div class="va-pill"><i class="bi bi-coin"></i> Token balance is tracked in the backend</div>
+            <div class="va-pill"><i class="bi bi-activity"></i> Follow request status without emailing back and forth</div>
         </div>
     </section>
 
-    <div class="va-grid">
+    <div class="va-main-grid">
         <section class="va-card">
-            <h2><i class="bi bi-stars"></i> What this section will handle</h2>
-            <ul class="va-list">
-                <li><i class="bi bi-check2-circle"></i><span>Buy token blocks that can be used only when support is needed, instead of committing to a flat monthly VA cost.</span></li>
-                <li><i class="bi bi-check2-circle"></i><span>Submit requests for account admin work, WordPress updates, creative tasks, or development projects from one queue.</span></li>
-                <li><i class="bi bi-check2-circle"></i><span>Let the GroMore team dispatch the right VA or specialist based on workload and specialty, so brands are not locked into one person.</span></li>
-                <li><i class="bi bi-check2-circle"></i><span>Track token usage, request status, and where support hours are going each month.</span></li>
-            </ul>
+            <h2><i class="bi bi-send-plus"></i> Submit a request</h2>
+            <p class="va-subhead">Owners and managers can queue work here for the VA Desk to scope and execute.</p>
+
+            {% if current_role in ('owner', 'manager') %}
+            <form class="va-request-form" method="POST" action="{{ url_for('client.client_va_request_create') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label class="form-label">Request title</label>
+                    <input class="form-control" type="text" name="title" maxlength="140" placeholder="Example: Update homepage CTA and fix footer links" required>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Specialty</label>
+                        <select class="form-select" name="specialty_key">
+                            <option value="account_va">Account VA</option>
+                            <option value="wordpress">WordPress Support</option>
+                            <option value="development">React / Full Stack Dev</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Priority</label>
+                        <select class="form-select" name="priority">
+                            <option value="normal">Normal</option>
+                            <option value="high">High</option>
+                            <option value="urgent">Urgent</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <label class="form-label">What needs to happen?</label>
+                    <textarea class="form-control" name="details" rows="5" placeholder="Describe the task, links involved, login context, deadlines, and what 'done' should look like." required></textarea>
+                </div>
+                <div class="d-flex flex-wrap justify-content-between gap-3 mt-3 align-items-center">
+                    <div class="va-meta">Purchasing and auto-deduction are still being wired in. Requests can already be queued and tracked here.</div>
+                    <button class="btn btn-primary px-4" type="submit"><i class="bi bi-send-check me-1"></i> Submit request</button>
+                </div>
+            </form>
+            {% else %}
+            <div class="va-empty">
+                Managers and owners can submit VA Desk requests. Your account can still review token activity and request status from this page.
+            </div>
+            {% endif %}
+
             <div class="va-note">
-                Launch scope will be intentionally simple: token balance, request intake, and work status tracking first. The full staffing and purchasing workflow is still being wired in.
+                First release scope: token balance visibility, request intake, and work status tracking. Buying packs and specialist dispatch automation come next.
             </div>
         </section>
 
-        <aside class="va-card">
-            <h2><i class="bi bi-grid-1x2"></i> Planned specialties</h2>
-            <div class="va-specialties">
-                <div class="va-specialty">
-                    <div>
-                        <strong>Account VA</strong>
-                        <span>Inbox cleanup, CRM updates, reporting support, admin follow-through</span>
+        <div class="va-meta-grid">
+            <aside class="va-card">
+                <h2><i class="bi bi-kanban"></i> Request queue</h2>
+                <p class="va-subhead">Recent VA Desk requests for this brand.</p>
+
+                {% if requests %}
+                <div class="va-request-list">
+                    {% for request in requests %}
+                    <div class="va-request-item">
+                        <div class="va-request-top">
+                            <div>
+                                <p class="va-request-title">{{ request.title }}</p>
+                                <div class="va-meta">
+                                    Submitted {{ request.created_at or '' }}
+                                    {% if request.requested_by_name %} by {{ request.requested_by_name }}{% endif %}
+                                </div>
+                            </div>
+                            {% if current_role in ('owner', 'manager') and request.status not in ('completed', 'cancelled') %}
+                            <form method="POST" action="{{ url_for('client.client_va_request_cancel', request_id=request.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-outline-secondary btn-sm" type="submit">Cancel</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                        <p class="va-request-copy">{{ request.details }}</p>
+                        <div class="va-badge-row">
+                            <span class="va-badge status-{{ request.status }}">{{ request.status.replace('_', ' ') }}</span>
+                            <span class="va-badge priority-{{ request.priority }}">{{ request.priority }} priority</span>
+                            <span class="va-badge">{% if request.specialty_key == 'wordpress' %}WordPress Support{% elif request.specialty_key == 'development' %}React / Full Stack Dev{% else %}Account VA{% endif %}</span>
+                            {% if request.estimated_tokens %}<span class="va-badge">{{ request.estimated_tokens }} est. tokens</span>{% endif %}
+                            {% if request.actual_tokens_used %}<span class="va-badge">{{ request.actual_tokens_used }} used</span>{% endif %}
+                        </div>
+                        {% if request.status_note %}
+                        <div class="va-meta mt-2">{{ request.status_note }}</div>
+                        {% endif %}
                     </div>
-                    <div class="va-rate">10 tokens/hr</div>
+                    {% endfor %}
                 </div>
-                <div class="va-specialty">
-                    <div>
-                        <strong>WordPress Support</strong>
-                        <span>Site edits, layout changes, content updates, plugin/config work</span>
+                {% else %}
+                <div class="va-empty">No VA requests yet. Submit the first request to start building the queue.</div>
+                {% endif %}
+            </aside>
+
+            <aside class="va-card">
+                <h2><i class="bi bi-coin"></i> Token activity</h2>
+                <p class="va-subhead">Recent ledger entries for this brand.</p>
+
+                {% if token_entries %}
+                <div class="va-ledger-list">
+                    {% for entry in token_entries %}
+                    <div class="va-ledger-item">
+                        <div class="va-ledger-top">
+                            <strong>{% if entry.token_amount >= 0 %}+{{ entry.token_amount }}{% else %}{{ entry.token_amount }}{% endif %} tokens</strong>
+                            <span class="va-meta">{{ entry.created_at or '' }}</span>
+                        </div>
+                        <p class="va-ledger-copy">{{ entry.note or 'Manual token adjustment recorded.' }}</p>
+                        <div class="va-meta mt-2">
+                            {{ entry.entry_type.replace('_', ' ')|title }}
+                            {% if entry.specialty_key %} - {{ entry.specialty_key.replace('_', ' ')|title }}{% endif %}
+                        </div>
                     </div>
-                    <div class="va-rate">15 tokens/hr</div>
+                    {% endfor %}
                 </div>
-                <div class="va-specialty">
-                    <div>
-                        <strong>React / Full Stack Dev</strong>
-                        <span>Product changes, front-end implementation, deeper technical work</span>
-                    </div>
-                    <div class="va-rate">25 tokens/hr</div>
+                {% else %}
+                <div class="va-empty">
+                    No token activity yet. The ledger is ready, but purchasing and manual credits have not been added for this brand.
                 </div>
-            </div>
-        </aside>
+                {% endif %}
+            </aside>
+        </div>
     </div>
 </div>
 {% endblock %}
