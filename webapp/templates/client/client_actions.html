@@ -363,11 +363,54 @@
         font-size: .78rem;
         font-weight: 700;
         text-decoration: none;
+        transition: all .18s ease;
     }
     .track-btn.active {
         background: #1d4ed8;
         border-color: #1d4ed8;
         color: #fff;
+    }
+    .track-btn.pending {
+        background: #dbeafe;
+        border-color: #60a5fa;
+        color: #1d4ed8;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, .12);
+        pointer-events: none;
+    }
+    .track-btn.pending i {
+        animation: missionTrackSpin .8s linear infinite;
+    }
+    .mission-loading-note {
+        display: none;
+        align-items: center;
+        gap: .55rem;
+        margin-top: .85rem;
+        padding: .75rem .9rem;
+        border-radius: 12px;
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        color: #1e3a8a;
+        font-size: .82rem;
+        font-weight: 600;
+    }
+    .mission-loading-note.show {
+        display: inline-flex;
+    }
+    .mission-loading-note i {
+        animation: missionTrackSpin .8s linear infinite;
+    }
+    .mission-loading-note small {
+        display: block;
+        color: #475569;
+        font-size: .75rem;
+        font-weight: 500;
+    }
+    .mission-form-pending {
+        opacity: .7;
+        pointer-events: none;
+    }
+    @keyframes missionTrackSpin {
+        to { transform: rotate(360deg); }
     }
     .advanced-controls {
         margin-bottom: 1rem;
@@ -483,7 +526,7 @@
             <span class="tagline">Complete missions. Earn XP. Level up your marketing.</span>
         </div>
         <div class="d-flex align-items-center gap-2">
-            <form method="GET" style="margin:0;" onsubmit="var b=this.querySelector('button');b.disabled=true;b.innerHTML='<i class=\'bi bi-hourglass-split me-1\'></i> Regenerating...';">
+            <form method="GET" class="mission-load-form" data-loader-label="fresh missions" data-loader-messages='["Refreshing your mission queue...", "Re-ranking priorities for this month...", "Building a fresh set of missions..."]' style="margin:0;" onsubmit="var b=this.querySelector('button');b.disabled=true;b.innerHTML='<i class=\'bi bi-hourglass-split me-1\'></i> Regenerating...';">
                 <input type="hidden" name="month" value="{{ month }}">
                 <input type="hidden" name="ai_model" value="{{ ai_model or '' }}">
                 <input type="hidden" name="skill_level" value="{{ requested_skill_level }}">
@@ -497,11 +540,12 @@
                 <span class="lvl-num">{{ level_num }}</span>
                 {{ level_name }}
             </div>
-            <form method="GET" class="d-flex" style="margin:0;">
+            <form method="GET" class="d-flex mission-load-form" data-loader-label="{{ month }} missions" data-loader-messages='["Loading mission history for {{ month }}...", "Checking completed missions and XP...", "Preparing the selected month..."]' style="margin:0;">
                 <input type="month" name="month" value="{{ month }}" class="form-control form-control-sm"
                        style="width:140px; background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.2); color:#fff; font-size:.78rem;"
                        onchange="this.form.submit()">
                 <input type="hidden" name="ai_model" value="{{ ai_model or '' }}">
+                <input type="hidden" name="skill_level" value="{{ requested_skill_level }}">
             </form>
         </div>
     </div>
@@ -531,11 +575,20 @@
     <div class="mission-track-switch">
         {% for value, label in [('auto', 'Auto'), ('beginner', 'Starter'), ('intermediate', 'Builder'), ('advanced', 'Operator')] %}
         <a class="track-btn {% if requested_skill_level == value or (value == 'auto' and requested_skill_level not in ['beginner','intermediate','advanced']) %}active{% endif %}"
+           data-loader-label="{{ label }} missions"
+           data-loader-messages='["Loading {{ label|lower }} missions...", "Re-scoring your mission track...", "Preparing the {{ label|lower }} queue..."]'
            href="{{ url_for('client.client_actions', month=month, ai_model=ai_model or '', skill_level=value) }}">
             {% if value == 'auto' %}<i class="bi bi-magic"></i>{% elif value == 'beginner' %}<i class="bi bi-flag"></i>{% elif value == 'intermediate' %}<i class="bi bi-hammer"></i>{% else %}<i class="bi bi-lightning-charge"></i>{% endif %}
             {{ label }}
         </a>
         {% endfor %}
+    </div>
+    <div class="mission-loading-note" id="missionLoadingNote">
+        <i class="bi bi-arrow-repeat"></i>
+        <div>
+            Loading a new mission track...
+            <small>We are rebuilding this queue for the selected difficulty so you know the click registered.</small>
+        </div>
     </div>
 </div>
 
@@ -546,7 +599,7 @@
     </summary>
     <div class="settings-bar" style="margin:0; border:none; border-radius:0 0 12px 12px;">
         <div class="d-flex flex-wrap align-items-center gap-2">
-            <form method="GET" class="d-flex align-items-center gap-2">
+            <form method="GET" class="d-flex align-items-center gap-2 mission-load-form" data-loader-label="updated mission model" data-loader-messages='["Applying your selected AI model...", "Rebuilding mission instructions...", "Refreshing Mission Control..."]'>
                 <input type="hidden" name="month" value="{{ month }}">
                 <input type="hidden" name="skill_level" value="{{ requested_skill_level }}">
                 <label class="form-label mb-0" style="font-size:.8rem; font-weight:600; color:#64748b;">AI Model</label>
@@ -561,7 +614,7 @@
                 </select>
                 <button class="btn btn-outline-secondary btn-sm" type="submit" style="font-size:.78rem;">Apply</button>
             </form>
-            <form method="GET">
+            <form method="GET" class="mission-load-form" data-loader-label="deep analysis missions" data-loader-messages='["Running a deeper mission analysis...", "Scanning account signals and patterns...", "Building a more detailed mission queue..."]'>
                 <input type="hidden" name="month" value="{{ month }}">
                 <input type="hidden" name="ai_model" value="{{ ai_model or '' }}">
                 <input type="hidden" name="skill_level" value="{{ requested_skill_level }}">
@@ -912,6 +965,67 @@ function showXpPopup(xp) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    function safeParseMessages(value) {
+        if (!value) return null;
+        try {
+            return JSON.parse(value);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function beginMissionLoading(options) {
+        var note = document.getElementById('missionLoadingNote');
+        var label = (options && options.label) || 'new missions';
+        var messages = (options && options.messages) || [
+            'Loading new missions...',
+            'Re-ranking the mission queue...',
+            'Preparing the updated track...'
+        ];
+
+        if (note) {
+            note.classList.add('show');
+            note.innerHTML = '<i class="bi bi-arrow-repeat"></i><div>Loading ' + label + '...<small>We are rebuilding this mission set now so you can see the request was received.</small></div>';
+        }
+
+        if (window.showPageLoader) {
+            window.showPageLoader(messages, {
+                label: label,
+                inline: true,
+            });
+        }
+    }
+
+    document.querySelectorAll('.track-btn').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            if (btn.classList.contains('active') || btn.classList.contains('pending')) return;
+            e.preventDefault();
+            document.querySelectorAll('.track-btn.pending').forEach(function(other) {
+                other.classList.remove('pending');
+            });
+            btn.classList.add('pending');
+            beginMissionLoading({
+                label: btn.getAttribute('data-loader-label') || btn.textContent.trim(),
+                messages: safeParseMessages(btn.getAttribute('data-loader-messages')),
+            });
+            if (typeof window._pjaxNavigate === 'function') {
+                window._pjaxNavigate(btn.href, true);
+            } else {
+                window.location.href = btn.href;
+            }
+        });
+    });
+
+    document.querySelectorAll('.mission-load-form').forEach(function(form) {
+        form.addEventListener('submit', function() {
+            form.classList.add('mission-form-pending');
+            beginMissionLoading({
+                label: form.getAttribute('data-loader-label') || 'updated missions',
+                messages: safeParseMessages(form.getAttribute('data-loader-messages')),
+            });
+        });
+    });
+
     document.querySelectorAll('.delegate-copy-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var targetId = btn.getAttribute('data-copy-target');

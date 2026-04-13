@@ -50,6 +50,18 @@ def client_login_required(view_func):
     return _wrapped
 
 
+def _require_role(*allowed_roles):
+    current_role = str(session.get("client_role") or "owner").strip().lower()
+    allowed = {
+        str(role).strip().lower()
+        for role in allowed_roles
+        if str(role).strip()
+    }
+    if not allowed:
+        return True
+    return current_role in allowed
+
+
 def _get_ad_connection_status(db, brand):
     brand_id = int((brand or {}).get("id") or 0)
     connections = db.get_brand_connections(brand_id) if brand_id else {}

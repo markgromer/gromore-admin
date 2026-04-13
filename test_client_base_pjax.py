@@ -66,6 +66,9 @@ class ClientBasePjaxTests(unittest.TestCase):
         self.assertIn("typeof window._pageLoaderMessagesForHref === 'function'", html)
         self.assertIn("loaderMessages = window._pageLoaderMessagesForHref(url);", html)
         self.assertNotIn("window.showPageLoader(messagesForHref(url));", html)
+        self.assertIn("Loading a new mission track", html)
+        self.assertIn("window._pjaxNavigate(btn.href, true)", html)
+        self.assertIn("class=\"track-btn", html)
 
 
 if __name__ == "__main__":
