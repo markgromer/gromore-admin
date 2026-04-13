@@ -3,12 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Client Login</title>
+    <title>W.A.R.R.E.N. Login</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <style>
         body {
-            background: radial-gradient(circle at 0% 0%, #312e81 0%, #1e1b4b 40%, #0f172a 100%);
+            background:
+                radial-gradient(circle at 15% 20%, rgba(245, 158, 11, .22) 0%, rgba(245, 158, 11, 0) 28%),
+                radial-gradient(circle at 85% 15%, rgba(59, 130, 246, .18) 0%, rgba(59, 130, 246, 0) 30%),
+                linear-gradient(145deg, #08111f 0%, #0f172a 45%, #172033 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -19,7 +22,7 @@
             width: 100%;
             max-width: 980px;
             display: grid;
-            grid-template-columns: 1fr 420px;
+            grid-template-columns: 1.15fr 420px;
             background: rgba(255,255,255,.95);
             border: 1px solid rgba(226,232,240,.6);
             border-radius: 20px;
@@ -28,30 +31,90 @@
         }
         .login-left {
             padding: 2.4rem;
-            background: linear-gradient(145deg, #312e81 0%, #4338ca 55%, #6366f1 100%);
-            color: #fff;
+            background:
+                linear-gradient(160deg, rgba(8,17,31,.96) 0%, rgba(15,23,42,.94) 42%, rgba(26,35,56,.95) 100%),
+                linear-gradient(135deg, #0f172a 0%, #172554 100%);
+            color: #f8fafc;
             display: flex;
             flex-direction: column;
             justify-content: center;
+            position: relative;
+        }
+        .login-left::before {
+            content: "";
+            position: absolute;
+            inset: 24px;
+            border: 1px solid rgba(245, 158, 11, .18);
+            border-radius: 18px;
+            pointer-events: none;
+        }
+        .login-lockup {
+            position: relative;
+            z-index: 1;
+        }
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: .5rem;
+            margin-bottom: 1rem;
+            border: 1px solid rgba(248, 250, 252, .18);
+            border-radius: 999px;
+            padding: .42rem .78rem;
+            font-size: .76rem;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            background: rgba(248, 250, 252, .06);
+            color: rgba(248, 250, 252, .78);
         }
         .login-left h1 {
             font-weight: 800;
             letter-spacing: -.02em;
             margin-bottom: .7rem;
+            font-size: clamp(2rem, 3vw, 3rem);
         }
         .login-left p {
-            color: rgba(255,255,255,.88);
+            color: rgba(248,250,252,.8);
             margin-bottom: 0;
+            max-width: 34rem;
+            font-size: 1.02rem;
+            line-height: 1.7;
         }
         .login-left .pill {
             display: inline-flex;
             width: fit-content;
             margin-top: 1rem;
-            border: 1px solid rgba(255,255,255,.35);
+            border: 1px solid rgba(245, 158, 11, .28);
             border-radius: 999px;
             padding: .35rem .7rem;
             font-size: .78rem;
-            background: rgba(255,255,255,.12);
+            background: rgba(245, 158, 11, .12);
+            color: #fcd34d;
+        }
+        .feature-list {
+            position: relative;
+            z-index: 1;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: .85rem;
+            margin-top: 1.6rem;
+            padding: 0;
+            list-style: none;
+        }
+        .feature-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: .6rem;
+            padding: .85rem .9rem;
+            border: 1px solid rgba(148, 163, 184, .18);
+            border-radius: 14px;
+            background: rgba(255,255,255,.04);
+            color: rgba(248,250,252,.88);
+            font-size: .9rem;
+            line-height: 1.5;
+        }
+        .feature-list i {
+            color: #fbbf24;
+            margin-top: .12rem;
         }
         .login-card {
             background: #fff;
@@ -68,15 +131,30 @@
             font-size: .95rem;
             margin-bottom: 1.5rem;
         }
+        .login-card .kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: .4rem;
+            font-size: .74rem;
+            font-weight: 700;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            color: #b45309;
+            background: #fffbeb;
+            border: 1px solid #fcd34d;
+            border-radius: 999px;
+            padding: .38rem .7rem;
+            margin-bottom: .9rem;
+        }
         .btn-primary {
-            background: linear-gradient(135deg, #4f46e5, #4338ca);
-            border-color: #4338ca;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            border-color: #d97706;
             font-weight: 600;
             border-radius: 10px;
         }
         .btn-primary:hover {
-            background: linear-gradient(135deg, #4338ca, #3730a3);
-            border-color: #3730a3;
+            background: linear-gradient(135deg, #d97706, #b45309);
+            border-color: #b45309;
         }
         .form-control {
             border-radius: 10px;
@@ -84,8 +162,23 @@
             min-height: 42px;
         }
         .form-control:focus {
-            border-color: #a5b4fc;
-            box-shadow: 0 0 0 .2rem rgba(79,70,229,.14);
+            border-color: #fdba74;
+            box-shadow: 0 0 0 .2rem rgba(245,158,11,.14);
+        }
+        .forgot-link {
+            color: #b45309;
+            font-size: .88rem;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .forgot-link:hover {
+            color: #92400e;
+        }
+        .brand-note {
+            margin-top: 1rem;
+            color: #64748b;
+            font-size: .82rem;
+            text-align: center;
         }
         @media (max-width: 900px) {
             .login-shell { grid-template-columns: 1fr; }
@@ -96,13 +189,23 @@
 <body>
     <div class="login-shell">
         <div class="login-left">
-            <h1><i class="bi bi-stars"></i> GroMore Client Portal</h1>
-            <p>Track performance, launch campaigns, build creative, and work with your always-on AI assistant in one place.</p>
-            <span class="pill"><i class="bi bi-shield-check me-1"></i> Secure client access</span>
+            <div class="login-lockup">
+                <span class="eyebrow"><i class="bi bi-broadcast-pin"></i> Always-on AI Operator</span>
+                <h1>Meet W.A.R.R.E.N.</h1>
+                <p>Weighted Analysis for Revenue, Reach, Engagement and Navigation. Your campaigns, leads, reporting, and next actions all route through one operator built to keep the business moving.</p>
+                <span class="pill"><i class="bi bi-shield-check me-1"></i> Secure access powered by GroMore Media</span>
+                <ul class="feature-list">
+                    <li><i class="bi bi-chat-dots"></i><span>Lead inbox, responses, handoffs, and follow-up visibility</span></li>
+                    <li><i class="bi bi-graph-up-arrow"></i><span>Performance reporting with plain-English diagnosis</span></li>
+                    <li><i class="bi bi-bullseye"></i><span>Campaign planning, creative direction, and launch support</span></li>
+                    <li><i class="bi bi-list-check"></i><span>Missions, recommendations, and next-best actions</span></li>
+                </ul>
+            </div>
         </div>
         <div class="login-card">
-            <h2><i class="bi bi-bar-chart-line"></i> Client Dashboard</h2>
-            <p class="subtitle">Sign in to manage your growth from a single streamlined workspace.</p>
+            <div class="kicker"><i class="bi bi-stars"></i> Warren Access</div>
+            <h2><i class="bi bi-person-badge"></i> Sign in to your operator</h2>
+            <p class="subtitle">Use your client credentials to open W.A.R.R.E.N. and manage growth inside the GroMore system behind it.</p>
 
             {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -126,9 +229,10 @@
                     <i class="bi bi-box-arrow-in-right"></i> Sign In
                 </button>
                 <div class="text-center mt-3">
-                    <a href="{{ url_for('client.client_forgot_password') }}" style="color:#6366f1;font-size:.88rem;text-decoration:none;">Forgot your password?</a>
+                    <a href="{{ url_for('client.client_forgot_password') }}" class="forgot-link">Forgot your password?</a>
                 </div>
             </form>
+            <div class="brand-note">W.A.R.R.E.N. is the product experience. GroMore Media is the brand and operating company.</div>
         </div>
     </div>
 </body>
