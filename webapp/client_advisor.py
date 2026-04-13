@@ -247,8 +247,8 @@ def _build_delegate_plan(title, category, relevant_data):
         close = "Goal: improve click-through rate without changing the offer."
     else:
         delegate_to = "developer"
-        intro = "Please handle these website and SEO updates from GroMore:"
-        close = "Goal: remove conversion leaks and improve organic visibility on the pages already getting traffic."
+        intro = "Please make the following website and SEO updates from GroMore's latest findings:"
+        close = "Goal: remove conversion leaks, improve clarity above the fold, and lift organic visibility on pages already getting traffic."
 
     bullets = exact_targets or [_trim_copy(title or "Mission update", 140)]
     lines = [intro]
@@ -256,13 +256,19 @@ def _build_delegate_plan(title, category, relevant_data):
         lines.append(f"- {bullet}")
 
     if category == "website":
-        lines.append("- Add a clear call-to-action above the fold, tighten the headline to match the service intent, and reduce friction in the contact form.")
+        lines.append("- For each page above, tighten the hero headline so it clearly matches the service intent, put one primary CTA above the fold, and make the contact path obvious without scrolling.")
+        lines.append("- Reduce friction in the lead form: keep only the fields needed to start the conversation, verify the submit button text is specific, and confirm the form works on mobile.")
+        lines.append("- Keep the existing offer unless something is clearly inaccurate. If copy changes are needed, preserve the service, city, and conversion intent already driving traffic.")
     elif category == "seo":
-        lines.append("- Rewrite the title tag and on-page copy to match the target query, then strengthen internal links and the primary CTA.")
+        lines.append("- Rewrite the title tag, H1, and supporting on-page copy so the page clearly matches the target query and intent without sounding stuffed or repetitive.")
+        lines.append("- Strengthen internal links pointing into the page, make the primary CTA easier to find, and keep the page focused on one main conversion goal.")
     elif category == "creative":
         lines.append("- Keep the offer the same, but refresh the visual and headline so the winner is obvious in one glance.")
     else:
-        lines.append("- Reply with the ETA and any blockers before making the update.")
+        lines.append("- Reply with the ETA, any blockers, and whether anything here needs copy, design, or dev support before you make the update.")
+
+    if delegate_to == "developer":
+        lines.append("- After the changes are live, send back the exact URLs updated, what changed on each page, and anything that still needs copy or design review.")
 
     lines.append(close)
     return {

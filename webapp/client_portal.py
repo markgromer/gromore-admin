@@ -608,6 +608,7 @@ _ENDPOINT_FEATURE_MAP = {
     "client_crm_data":             "crm",
     "client_lead_assistant":       "crm",
     "client_save_lead_assistant_profile": "crm",
+    "client_va_services":          "va_services",
     "client_inbox":                "warren_inbox",
     "client_inbox_thread":         "warren_inbox",
     "client_inbox_reply":          "warren_inbox",
@@ -6820,6 +6821,16 @@ def client_help():
         active_topic=topic,
         help_guide=guide,
         brand_name=session.get("client_brand_name", ""),
+    )
+
+
+@client_bp.route("/va")
+@client_login_required
+def client_va_services():
+    brand_name = session.get("client_brand_name", "")
+    return render_template(
+        "client/client_va_services.html",
+        brand_name=brand_name,
     )
 
 

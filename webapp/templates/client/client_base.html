@@ -25,8 +25,14 @@
             <div class="loader-ring-inner"></div>
             <div class="loader-icon"><i class="bi bi-bar-chart-line"></i></div>
         </div>
+        <div class="loader-title" id="loaderTitle">Opening your workspace</div>
+        <div class="loader-subtitle" id="loaderSubtitle">We are pulling your latest workspace data, keeping your place, and preparing the next screen.</div>
         <div class="loader-bar-track"><div class="loader-bar-fill" id="loaderBar"></div></div>
         <div class="loader-msg" id="loaderMsg">Connecting to ad platforms...</div>
+        <div class="loader-chip-row">
+            <div class="loader-chip"><i class="bi bi-hand-index-thumb"></i><span id="loaderTapAck">Click received</span></div>
+            <div class="loader-chip loader-stage"><i class="bi bi-hourglass-split"></i><span id="loaderStage">Preparing next screen</span></div>
+        </div>
     </div>
 
     <div class="nav-progress" id="navProgress"></div>
@@ -42,35 +48,40 @@
             {# â”€â”€ Primary: always visible â”€â”€ #}
             {% if feature_on('dashboard') %}
             <a href="{{ url_for('client.client_dashboard') }}" class="{% if request.endpoint == 'client.client_dashboard' %}active{% endif %}">
-                <i class="bi bi-speedometer2"></i> Overview
+                <i class="bi bi-speedometer2"></i> <span class="nav-link-label">Overview</span>
             </a>
             {% endif %}
             {% if feature_on('campaigns') %}
             <a href="{{ url_for('client.client_campaigns') }}" class="{% if request.endpoint in ('client.client_campaigns', 'client.client_campaign_detail', 'client.client_campaign_create', 'client.client_campaign_generate', 'client.client_campaign_launch') %}active{% endif %}">
-                <i class="bi bi-megaphone"></i> Campaigns
+                <i class="bi bi-megaphone"></i> <span class="nav-link-label">Campaigns</span>
             </a>
             {% endif %}
             {% if feature_on('crm') %}
             <a href="{{ url_for('client.client_crm') }}" class="{% if request.endpoint in ('client.client_crm',) %}active{% endif %}">
-                <i class="bi bi-people"></i> CRM
+                <i class="bi bi-people"></i> <span class="nav-link-label">CRM</span>
             </a>
             <a href="{{ url_for('client.client_lead_assistant') }}" class="{% if request.endpoint in ('client.client_lead_assistant',) %}active{% endif %}">
-                <i class="bi bi-chat-dots"></i> Lead Assistant
+                <i class="bi bi-chat-dots"></i> <span class="nav-link-label">Lead Assistant</span>
+            </a>
+            {% endif %}
+            {% if feature_on('va_services') %}
+            <a href="{{ url_for('client.client_va_services') }}" class="{% if request.endpoint in ('client.client_va_services',) %}active{% endif %}">
+                <i class="bi bi-headset"></i> <span class="nav-link-label">VA Desk</span>
             </a>
             {% endif %}
             {% if feature_on('warren_inbox') %}
             <a href="{{ url_for('client.client_inbox') }}" class="{% if request.endpoint in ('client.client_inbox',) %}active{% endif %}">
-                <i class="bi bi-inbox"></i> Inbox
+                <i class="bi bi-inbox"></i> <span class="nav-link-label">Inbox</span>
             </a>
             {% endif %}
             {% if feature_on('missions') %}
             <a href="{{ url_for('client.client_actions') }}" class="{% if request.endpoint == 'client.client_actions' %}active{% endif %}">
-                <i class="bi bi-clipboard2-check"></i> Missions
+                <i class="bi bi-clipboard2-check"></i> <span class="nav-link-label">Missions</span>
             </a>
             {% endif %}
             {% if feature_on('hiring') %}
             <a href="{{ url_for('hiring.hiring_dashboard') }}" class="{% if 'hiring' in request.endpoint|default('') %}active{% endif %}">
-                <i class="bi bi-briefcase-fill"></i> Hiring Hub
+                <i class="bi bi-briefcase-fill"></i> <span class="nav-link-label">Hiring Hub</span>
             </a>
             {% endif %}
 
@@ -79,32 +90,32 @@
             <div class="nav-section-group collapsed" data-section="create">
             {% if feature_on('ad_builder') %}
             <a href="{{ url_for('client.client_ad_builder') }}" class="{% if request.endpoint in ('client.client_ad_builder', 'client.client_ad_builder_generate') %}active{% endif %}">
-                <i class="bi bi-brush"></i> Ad Builder
+                <i class="bi bi-brush"></i> <span class="nav-link-label">Ad Builder</span>
             </a>
             {% endif %}
             {% if feature_on('creative') %}
             <a href="{{ url_for('client.client_creative') }}" class="{% if request.endpoint in ('client.client_creative', 'client.client_creative_generate') %}active{% endif %}">
-                <i class="bi bi-palette"></i> Creative
+                <i class="bi bi-palette"></i> <span class="nav-link-label">Creative</span>
             </a>
             {% endif %}
             {% if feature_on('blog') %}
             <a href="{{ url_for('client.client_blog') }}" class="{% if request.endpoint in ('client.client_blog', 'client.client_blog_editor') %}active{% endif %}">
-                <i class="bi bi-journal-richtext"></i> Blog
+                <i class="bi bi-journal-richtext"></i> <span class="nav-link-label">Blog</span>
             </a>
             {% endif %}
             {% if feature_on('post_scheduler') %}
             <a href="{{ url_for('client.client_post_scheduler') }}" class="{% if request.endpoint == 'client.client_post_scheduler' %}active{% endif %}">
-                <i class="bi bi-calendar2-week"></i> Post Scheduler
+                <i class="bi bi-calendar2-week"></i> <span class="nav-link-label">Post Scheduler</span>
             </a>
             {% endif %}
             {% if feature_on('quick_launch') %}
             <a href="{{ url_for('client.client_quick_launch') }}" class="{% if request.endpoint == 'client.client_quick_launch' %}active{% endif %}">
-                <i class="bi bi-rocket-takeoff"></i> Quick Launch
+                <i class="bi bi-rocket-takeoff"></i> <span class="nav-link-label">Quick Launch</span>
             </a>
             {% endif %}
             {% if feature_on('coaching') %}
             <a href="{{ url_for('client.client_coaching') }}" class="{% if request.endpoint == 'client.client_coaching' %}active{% endif %}">
-                <i class="bi bi-mortarboard"></i> Coaching
+                <i class="bi bi-mortarboard"></i> <span class="nav-link-label">Coaching</span>
             </a>
             {% endif %}
             </div>
@@ -114,37 +125,37 @@
             <div class="nav-section-group collapsed" data-section="business">
             {% if feature_on('my_business') %}
             <a href="{{ url_for('client.client_my_business') }}" class="{% if request.endpoint == 'client.client_my_business' %}active{% endif %}">
-                <i class="bi bi-building"></i> My Business
+                <i class="bi bi-building"></i> <span class="nav-link-label">My Business</span>
             </a>
             {% endif %}
             {% if feature_on('gbp') %}
             <a href="{{ url_for('client.client_gbp') }}" class="{% if request.endpoint == 'client.client_gbp' %}active{% endif %}">
-                <i class="bi bi-google"></i> Google Profile
+                <i class="bi bi-google"></i> <span class="nav-link-label">Google Profile</span>
             </a>
             {% endif %}
             {% if feature_on('competitor_intel') %}
             <a href="{{ url_for('client.client_competitors') }}" class="{% if request.endpoint == 'client.client_competitors' %}active{% endif %}">
-                <i class="bi bi-binoculars"></i> Competitor Intel
+                <i class="bi bi-binoculars"></i> <span class="nav-link-label">Competitor Intel</span>
             </a>
             {% endif %}
             {% if feature_on('kpis') %}
             <a href="{{ url_for('client.client_kpis') }}" class="{% if request.endpoint == 'client.client_kpis' %}active{% endif %}">
-                <i class="bi bi-bullseye"></i> KPIs
+                <i class="bi bi-bullseye"></i> <span class="nav-link-label">KPIs</span>
             </a>
             {% endif %}
             {% if feature_on('your_team') %}
             <a href="{{ url_for('client.client_team') }}" class="{% if request.endpoint == 'client.client_team' %}active{% endif %}">
-                <i class="bi bi-robot"></i> Your Team
+                <i class="bi bi-robot"></i> <span class="nav-link-label">Your Team</span>
             </a>
             {% endif %}
             {% if feature_on('staff') and session.get('client_role', 'owner') in ('owner', 'manager') %}
             <a href="{{ url_for('client.client_staff') }}" class="{% if request.endpoint == 'client.client_staff' %}active{% endif %}">
-                <i class="bi bi-people-fill"></i> Staff
+                <i class="bi bi-people-fill"></i> <span class="nav-link-label">Staff</span>
             </a>
             {% endif %}
             {% if feature_on('tasks') %}
             <a href="{{ url_for('client.client_tasks') }}" class="{% if request.endpoint in ('client.client_tasks',) %}active{% endif %}">
-                <i class="bi bi-list-task"></i> Tasks
+                <i class="bi bi-list-task"></i> <span class="nav-link-label">Tasks</span>
             </a>
             {% endif %}
             </div>
@@ -153,17 +164,17 @@
             <div class="nav-divider"></div>
             {% if feature_on('connections') %}
             <a href="{{ url_for('client.client_settings') }}" class="{% if request.endpoint == 'client.client_settings' %}active{% endif %}">
-                <i class="bi bi-plug"></i> Connections
+                <i class="bi bi-plug"></i> <span class="nav-link-label">Connections</span>
             </a>
             {% endif %}
             {% if feature_on('feedback') %}
             <a href="{{ url_for('client.client_feedback') }}" class="{% if request.endpoint in ('client.client_feedback', 'client.client_feedback_submit') %}active{% endif %}">
-                <i class="bi bi-chat-square-text"></i> Feedback
+                <i class="bi bi-chat-square-text"></i> <span class="nav-link-label">Feedback</span>
             </a>
             {% endif %}
             {% if feature_on('help') %}
             <a href="{{ url_for('client.client_help') }}" class="{% if request.endpoint == 'client.client_help' %}active{% endif %}">
-                <i class="bi bi-question-circle"></i> Help
+                <i class="bi bi-question-circle"></i> <span class="nav-link-label">Help</span>
             </a>
             {% endif %}
         </div>
@@ -274,6 +285,22 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
     (function() {
+        var lastLoaderShownAt = 0;
+        var pendingNavLabel = '';
+
+        function labelForHref(href) {
+            try {
+                var u = new URL(href, window.location.origin);
+                var match = document.querySelector('.client-sidebar .nav-links a[href="' + u.pathname + '"] .nav-link-label, .mobile-bottom-nav a[href="' + u.pathname + '"] .nav-link-label');
+                if (match) return match.textContent.trim();
+                var fallback = document.querySelector('.client-sidebar .nav-links a[href="' + u.pathname + '"]');
+                if (fallback) return fallback.textContent.trim();
+                return 'next screen';
+            } catch (e) {
+                return 'next screen';
+            }
+        }
+
         // Only claim assistant width if it's expanded
         var assistantShell = document.getElementById('globalAssistantShell');
         if (assistantShell && !assistantShell.classList.contains('assistant-collapsed')) {
@@ -329,14 +356,24 @@
         // ── PJAX navigation: swap content without full page reload ──
         window._pjaxNavigate = function(url, pushState) {
             var content = document.getElementById('pjaxContent');
+            var fade = document.getElementById('pageFade');
             if (!content) { window.location.href = url; return; }
+
+            pendingNavLabel = labelForHref(url);
 
             if (window.showPageLoader) {
                 var loaderMessages = null;
                 if (typeof window._pageLoaderMessagesForHref === 'function') {
                     loaderMessages = window._pageLoaderMessagesForHref(url);
                 }
-                window.showPageLoader(loaderMessages);
+                window.showPageLoader(loaderMessages, {
+                    label: pendingNavLabel,
+                    inline: true,
+                });
+            }
+
+            if (fade) {
+                fade.classList.add('active');
             }
 
             var navBar = document.getElementById('navProgress');
@@ -350,6 +387,10 @@
             // Show shimmer skeleton after a short delay if fetch is slow
             var shimmerTimer = setTimeout(function() {
                 content.innerHTML = '<div class="shimmer-skeleton">'
+                    + '<div class="loader-chip-row" style="justify-content:flex-start; margin:0 0 1rem;">'
+                    + '<div class="loader-chip"><i class="bi bi-check2-circle"></i> Click received</div>'
+                    + '<div class="loader-chip"><i class="bi bi-window-stack"></i> Opening ' + pendingNavLabel + '</div>'
+                    + '</div>'
                     + '<div class="shimmer-block shimmer-header"></div>'
                     + '<div class="shimmer-block shimmer-card"></div>'
                     + '<div class="shimmer-block shimmer-row"></div>'
@@ -357,7 +398,7 @@
                     + '<div class="shimmer-block shimmer-card"></div>'
                     + '</div>';
                 content.classList.remove('pjax-out');
-            }, 200);
+            }, 120);
 
             fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'PJAX' } })
             .then(function(r) {
@@ -465,6 +506,9 @@
                 if (window.hidePageLoader) {
                     window.hidePageLoader();
                 }
+                if (fade) {
+                    fade.classList.remove('active');
+                }
             })
             .catch(function() {
                 clearTimeout(shimmerTimer);
@@ -472,6 +516,9 @@
                 content.classList.remove('pjax-out');
                 if (window.hidePageLoader) {
                     window.hidePageLoader();
+                }
+                if (fade) {
+                    fade.classList.remove('active');
                 }
                 window.location.href = url;
             });
@@ -501,6 +548,9 @@
                     if (href === window.location.pathname || href === window.location.href) return;
                     if (link.classList.contains('active')) return;
                     e.preventDefault();
+                    document.querySelectorAll('.client-sidebar .nav-links a, .mobile-bottom-nav a').forEach(function(a) {
+                        a.classList.remove('nav-loading');
+                    });
                     link.classList.add('nav-loading');
                     window._pjaxNavigate(href, true);
                 });
@@ -824,6 +874,10 @@
         var loader = document.getElementById('pageLoader');
         var msgEl  = document.getElementById('loaderMsg');
         var barEl  = document.getElementById('loaderBar');
+        var titleEl = document.getElementById('loaderTitle');
+        var subtitleEl = document.getElementById('loaderSubtitle');
+        var tapAckEl = document.getElementById('loaderTapAck');
+        var stageEl = document.getElementById('loaderStage');
         if (!loader) return;
 
         var defaultMsgs = [
@@ -835,6 +889,8 @@
         ];
         var msgs = defaultMsgs.slice();
         var mi = 0, mInt;
+        var loaderShownAt = 0;
+        var minVisibleMs = 450;
 
         function normalizeHref(href) {
             try {
@@ -909,6 +965,27 @@
             }
         }
 
+        function setLoaderCopy(options) {
+            var label = (options && options.label) || 'your next screen';
+            if (titleEl) {
+                titleEl.textContent = 'Opening ' + label;
+            }
+            if (subtitleEl) {
+                subtitleEl.textContent = 'Your click was received. We are loading ' + label + ' and preparing the next view so you do not have to guess whether anything happened.';
+            }
+            if (tapAckEl) {
+                tapAckEl.textContent = 'Click received';
+            }
+            if (stageEl) {
+                stageEl.textContent = 'Loading ' + label;
+            }
+            if (options && options.inline) {
+                loader.classList.add('is-inline');
+            } else {
+                loader.classList.remove('is-inline');
+            }
+        }
+
         function startMessages(){
             mi = 0;
             if (msgEl) { msgEl.textContent = msgs[0]; msgEl.classList.remove('fading'); }
@@ -926,16 +1003,24 @@
         }
 
         function hide(){
+            var elapsed = Date.now() - loaderShownAt;
+            var wait = Math.max(0, minVisibleMs - elapsed);
             clearInterval(mInt);
-            loader.classList.add('hidden');
+            setTimeout(function(){
+                loader.classList.add('hidden');
+                loader.classList.remove('is-inline');
+            }, wait);
         }
 
-        function show(){
+        function show(options){
+            loaderShownAt = Date.now();
             loader.classList.remove('hidden');
+            setLoaderCopy(options || {});
             if (barEl){ barEl.style.animation = 'none'; barEl.offsetHeight; barEl.style.animation = ''; }
             startMessages();
         }
 
+        setLoaderCopy({ label: 'your workspace', inline: false });
         startMessages();
 
         /* Auto-hide once the page is fully loaded */
@@ -949,9 +1034,9 @@
 
         /* Expose so child pages can control the loader */
         window.hidePageLoader = hide;
-        window.showPageLoader = function(customMsgs){
+        window.showPageLoader = function(customMsgs, options){
             setMessages(customMsgs);
-            show();
+            show(options);
         };
     })();
     </script>

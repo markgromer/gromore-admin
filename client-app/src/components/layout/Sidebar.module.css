@@ -96,9 +96,27 @@
   color: var(--sidebar-text-active);
   background: var(--sidebar-hover);
 }
+.link.pending {
+  color: var(--sidebar-text-active);
+  background: linear-gradient(90deg, rgba(255,255,255,0.1), rgba(255,255,255,0.04));
+}
 .link.active {
   color: var(--sidebar-text-active);
   background: var(--sidebar-hover);
+}
+.link.pending::after {
+  content: '';
+  position: absolute;
+  right: 18px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.18);
+  border-top-color: var(--sidebar-accent);
+  border-radius: 50%;
+  animation: pendingSpin 0.8s linear infinite;
+}
+.link.pending span {
+  opacity: 0.84;
 }
 .link.active::before {
   content: '';
@@ -109,6 +127,11 @@
   width: 3px;
   border-radius: 0 2px 2px 0;
   background: var(--sidebar-accent);
+}
+@keyframes pendingSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .footer {

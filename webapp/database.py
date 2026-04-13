@@ -1168,6 +1168,7 @@ class WebDB:
             ("my_business",     "My Business",      "Business profile and details",      "all",   "business", 100),
             ("crm",             "CRM",              "Customer relationship management",  "all",   "business", 110),
             ("warren_inbox",    "Lead Inbox",        "Warren AI lead inbox and pipeline",  "all",  "business", 111),
+            ("va_services",     "VA Desk",           "Managed VA support, token packs, and work requests", "all", "business", 112),
             ("gbp",             "Google Profile",   "Google Business Profile manager",   "all",   "business", 120),
             ("post_scheduler",  "Post Scheduler",   "Social media post scheduling",      "all",   "business", 130),
             ("competitor_intel","Competitor Intel",  "Competitor analysis tools",         "all",   "business", 140),

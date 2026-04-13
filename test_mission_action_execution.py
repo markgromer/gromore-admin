@@ -38,6 +38,8 @@ class MissionActionExecutionTests(unittest.TestCase):
         self.assertEqual(action["execution_mode"], "delegate")
         self.assertTrue(action["delegate_message"])
         self.assertIn("/dog-poop-removal", action["delegate_message"])
+        self.assertIn("what changed on each page", action["delegate_message"])
+        self.assertIn("contact path obvious without scrolling", action["delegate_message"])
         self.assertEqual(action["steps"][0], "Copy the developer brief below and send it today.")
         self.assertNotIn("analytics.google.com", " ".join(action["steps"]))
         self.assertTrue(action["exact_targets"])

@@ -70,6 +70,7 @@ export default function Sidebar({ mobileOpen, onClose }) {
       return JSON.parse(localStorage.getItem('gromore-nav-sections') || '{}')
     } catch { return {} }
   })
+  const [pendingPath, setPendingPath] = useState('')
 
   const toggleSection = (id) => {
     setCollapsed(prev => {
@@ -139,8 +140,13 @@ export default function Sidebar({ mobileOpen, onClose }) {
                             to={item.to}
                             end={item.to === '/'}
                             className={({ isActive }) =>
-                              `${styles.link} ${isActive ? styles.active : ''}`
+                              `${styles.link} ${isActive ? styles.active : ''} ${pendingPath === item.to && !isActive ? styles.pending : ''}`
                             }
+                            onClick={() => {
+                              if (location.pathname !== item.to) {
+                                setPendingPath(item.to)
+                              }
+                            }}
                           >
                             <NavIcon size={18} strokeWidth={1.8} />
                             <span>{item.label}</span>
