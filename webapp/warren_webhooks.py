@@ -3,6 +3,7 @@ Warren Webhooks - inbound message receivers for Quo (OpenPhone) and Meta.
 
 Endpoints:
   POST /webhooks/quo/sms/<brand_slug>     - Quo/OpenPhone inbound SMS
+    POST /webhooks/leads/<brand_slug>       - Generic inbound lead form submissions
   POST /webhooks/meta/leadgen             - Meta Lead Form submissions
   POST /webhooks/meta/messenger           - Meta Messenger inbound messages
   GET  /webhooks/meta/messenger           - Meta webhook verification
@@ -15,7 +16,6 @@ import hmac
 import json
 import logging
 import threading
-from functools import wraps
 
 from flask import Blueprint, request, jsonify, current_app, abort
 
@@ -87,6 +87,222 @@ def _extract_image_urls(payload):
             seen.add(url)
             urls.append(url)
     return urls
+
+
+def _stringify_webhook_value(value):
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple, set)):
+        parts = [_stringify_webhook_value(item) for item in value]
+        return ", ".join(part for part in parts if part)
+    if isinstance(value, dict):
+        return json.dumps(value, sort_keys=True)
+    return str(value).strip()
+
+
+def _payload_value(payload, *keys):
+    for key in keys:
+        value = _stringify_webhook_value((payload or {}).get(key))
+        if value:
+            return value
+    return ""
+
+
+def _merge_nested_fields(target, value):
+    if isinstance(value, str):
+        raw = value.strip()
+        if raw.startswith("{"):
+            try:
+                value = json.loads(raw)
+            except Exception:
+                return
+    if not isinstance(value, dict):
+        return
+    for key, item in value.items():
+        text = _stringify_webhook_value(item)
+        if text:
+            target[str(key).strip()] = text
+
+
+def _extract_generic_form_submission(payload, raw_body):
+    payload = payload or {}
+
+    lead_name = _payload_value(payload, "name", "full_name")
+    if not lead_name:
+        first_name = _payload_value(payload, "first_name", "firstname")
+        last_name = _payload_value(payload, "last_name", "lastname")
+        lead_name = " ".join(part for part in (first_name, last_name) if part).strip()
+
+    lead_email = _payload_value(payload, "email", "email_address")
+    lead_phone = _payload_value(payload, "phone_number", "phone", "mobile", "cell", "cellphone")
+    message_text = _payload_value(payload, "message", "notes", "note", "details", "description", "comments", "inquiry", "text")
+    source = _payload_value(payload, "source", "form_name", "form", "page", "campaign") or "incoming_webhook"
+    external_id = _payload_value(payload, "external_id", "submission_id", "lead_id", "entry_id", "id")
+
+    extra_fields = {}
+    for nested_key in ("fields", "custom_fields", "metadata"):
+        _merge_nested_fields(extra_fields, payload.get(nested_key))
+
+    reserved = {
+        "name", "full_name", "first_name", "firstname", "last_name", "lastname",
+        "email", "email_address", "phone_number", "phone", "mobile", "cell", "cellphone",
+        "message", "notes", "note", "details", "description", "comments", "inquiry", "text",
+        "source", "form_name", "form", "page", "campaign",
+        "external_id", "submission_id", "lead_id", "entry_id", "id",
+        "fields", "custom_fields", "metadata",
+        "secret", "webhook_secret",
+    }
+    for key, value in payload.items():
+        if key in reserved:
+            continue
+        text = _stringify_webhook_value(value)
+        if text:
+            extra_fields[str(key).strip()] = text
+
+    if not external_id:
+        payload_bytes = raw_body or json.dumps(payload, sort_keys=True).encode("utf-8")
+        external_id = f"payload_{hashlib.sha1(payload_bytes).hexdigest()[:20]}"
+
+    return {
+        "lead_name": lead_name,
+        "lead_email": lead_email,
+        "lead_phone": lead_phone,
+        "message_text": message_text,
+        "source": source,
+        "external_id": external_id,
+        "extra_fields": extra_fields,
+    }
+
+
+def _build_lead_submission_summary(lead_name, lead_email, lead_phone, message_text, extra_fields):
+    summary_parts = []
+    if lead_name:
+        summary_parts.append(f"Name: {lead_name}")
+    if lead_email:
+        summary_parts.append(f"Email: {lead_email}")
+    if lead_phone:
+        summary_parts.append(f"Phone: {lead_phone}")
+    if message_text:
+        summary_parts.append(f"Message: {message_text}")
+    for key, value in (extra_fields or {}).items():
+        label = str(key).replace("_", " ").strip().title()
+        summary_parts.append(f"{label}: {value}")
+    return "\n".join(summary_parts).strip()
+
+
+def _ingest_lead_submission(
+    db,
+    brand_id,
+    brand,
+    *,
+    external_id,
+    source,
+    lead_name="",
+    lead_email="",
+    lead_phone="",
+    message_text="",
+    extra_fields=None,
+    message_header="Lead Submission",
+    external_message_id="",
+):
+    extra_fields = extra_fields or {}
+    summary = _build_lead_submission_summary(
+        lead_name,
+        lead_email,
+        lead_phone,
+        message_text,
+        extra_fields,
+    )
+
+    thread_id = db.upsert_lead_thread(
+        brand_id,
+        "lead_form",
+        external_id,
+        data={
+            "lead_name": lead_name,
+            "lead_email": lead_email,
+            "lead_phone": lead_phone,
+            "source": source,
+            "summary": summary,
+        },
+    )
+
+    message_body = summary or "Lead submitted a form without any structured details."
+    db.add_lead_message(
+        thread_id,
+        direction="inbound",
+        role="lead",
+        content=f"[{message_header}]\n{message_body}",
+        channel="lead_form",
+        external_message_id=external_message_id or external_id,
+        metadata={"source": source, "fields": extra_fields},
+    )
+    db.update_lead_thread_status(thread_id, summary=summary)
+
+    if brand.get("sales_bot_enabled"):
+        thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+        if not (thread and thread.get("is_private")):
+            from webapp.warren_brain import process_and_respond
+            from webapp.warren_sender import send_reply
+
+            result = process_and_respond(db, brand_id, thread_id, channel="lead_form")
+            if result and result.get("should_send") and result.get("reply") and lead_phone:
+                send_reply(db, brand, thread_id, result["reply"], channel="sms")
+
+    return thread_id
+
+
+def _extract_incoming_webhook_secret():
+    auth_header = (request.headers.get("Authorization") or "").strip()
+    if auth_header.lower().startswith("bearer "):
+        return auth_header[7:].strip()
+    return (
+        request.headers.get("X-GroMore-Webhook-Secret", "") or
+        request.headers.get("X-Webhook-Secret", "") or
+        request.headers.get("X-Incoming-Webhook-Secret", "") or
+        request.values.get("webhook_secret", "") or
+        request.values.get("secret", "")
+    ).strip()
+
+
+@webhooks_bp.route("/leads/<brand_slug>", methods=["POST"])
+def generic_lead_webhook(brand_slug):
+    """Accept generic lead form submissions from websites and middleware tools."""
+    db = _get_db()
+    brand = db.get_brand_by_slug(brand_slug)
+    if not brand:
+        abort(404)
+
+    configured_secret = (brand.get("sales_bot_incoming_webhook_secret") or "").strip()
+    if not configured_secret:
+        return jsonify({"error": "Incoming lead webhook is not configured for this brand."}), 409
+
+    presented_secret = _extract_incoming_webhook_secret()
+    if not presented_secret or not hmac.compare_digest(presented_secret, configured_secret):
+        abort(401)
+
+    raw_body = request.get_data() or b""
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        payload = request.form.to_dict(flat=True)
+    if not isinstance(payload, dict) or not payload:
+        return jsonify({"error": "Expected a JSON or form-encoded payload."}), 400
+
+    submission = _extract_generic_form_submission(payload, raw_body)
+    thread_id = _ingest_lead_submission(
+        db,
+        brand["id"],
+        brand,
+        external_id=submission["external_id"],
+        source=f"incoming_webhook:{submission['source']}",
+        lead_name=submission["lead_name"],
+        lead_email=submission["lead_email"],
+        lead_phone=submission["lead_phone"],
+        message_text=submission["message_text"],
+        extra_fields=submission["extra_fields"],
+        message_header="Inbound Lead Submission",
+    )
+    return jsonify({"ok": True, "thread_id": thread_id}), 200
 
 
 # ─────────────────────────────────────────────
@@ -493,54 +709,19 @@ def _fetch_and_process_lead(db, brand_id, leadgen_id, form_id, brand):
         else:
             extra_fields[fname] = fval
 
-    # Create thread
-    thread_id = db.upsert_lead_thread(
-        brand_id, "lead_form", leadgen_id,
-        data={
-            "lead_name": lead_name,
-            "lead_email": lead_email,
-            "lead_phone": lead_phone,
-            "source": f"meta_lead_form:{form_id}",
-        },
-    )
-
-    # Add the form submission as a message
-    summary_parts = []
-    if lead_name:
-        summary_parts.append(f"Name: {lead_name}")
-    if lead_email:
-        summary_parts.append(f"Email: {lead_email}")
-    if lead_phone:
-        summary_parts.append(f"Phone: {lead_phone}")
-    for k, v in extra_fields.items():
-        summary_parts.append(f"{k}: {v}")
-
-    summary = "\n".join(summary_parts)
-
-    db.add_lead_message(
-        thread_id,
-        direction="inbound",
-        role="lead",
-        content=f"[Meta Lead Form Submission]\n{summary}",
-        channel="lead_form",
+    _ingest_lead_submission(
+        db,
+        brand_id,
+        brand,
+        external_id=leadgen_id,
+        source=f"meta_lead_form:{form_id}",
+        lead_name=lead_name,
+        lead_email=lead_email,
+        lead_phone=lead_phone,
+        extra_fields=extra_fields,
+        message_header="Meta Lead Form Submission",
         external_message_id=leadgen_id,
-        metadata={"form_id": form_id, "fields": extra_fields},
     )
-
-    # Update thread summary
-    db.update_lead_thread_status(thread_id, summary=summary)
-
-    # Generate and send follow-up if assistant is enabled
-    if brand.get("sales_bot_enabled"):
-        from webapp.warren_brain import process_and_respond
-        from webapp.warren_sender import send_reply
-
-        result = process_and_respond(db, brand_id, thread_id, channel="lead_form")
-        if result and result.get("should_send") and result.get("reply"):
-            # For lead forms, reply via SMS if we have a phone number
-            if lead_phone:
-                send_reply(db, brand, thread_id, result["reply"], channel="sms")
-            # Could also reply via email if we add email sending capability
 
 
 # ─────────────────────────────────────────────

@@ -1306,6 +1306,7 @@ class WebDB:
             ("sales_bot_handoff_rules", "TEXT DEFAULT ''"),
             ("sales_bot_quo_webhook_secret", "TEXT DEFAULT ''"),
             ("sales_bot_meta_webhook_secret", "TEXT DEFAULT ''"),
+            ("sales_bot_incoming_webhook_secret", "TEXT DEFAULT ''"),
             ("sales_bot_transcript_export", "INTEGER DEFAULT 0"),
             ("sales_bot_meta_lead_forms", "INTEGER DEFAULT 0"),
             ("sales_bot_messenger_enabled", "INTEGER DEFAULT 0"),
@@ -1676,6 +1677,7 @@ class WebDB:
             "sales_bot_guardrails", "sales_bot_example_language",
             "sales_bot_disallowed_language", "sales_bot_handoff_rules",
             "sales_bot_quo_webhook_secret", "sales_bot_meta_webhook_secret",
+            "sales_bot_incoming_webhook_secret",
             "sales_bot_objection_playbook", "sales_bot_message_templates", "sales_bot_collect_fields",
             "sales_bot_closing_procedure", "sales_bot_booking_success_message",
             "sales_bot_service_area_schedule", "sales_bot_closing_action", "sales_bot_onboarding_link",
@@ -1958,6 +1960,20 @@ class WebDB:
                 """,
                 (brand_id, int(limit or 100)),
             ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_active_lead_contacts(self, brand_id, limit=500):
+        conn = self._conn()
+        rows = conn.execute(
+            """
+            SELECT * FROM lead_threads
+            WHERE brand_id = ? AND status NOT IN ('won', 'lost')
+            ORDER BY updated_at DESC, last_message_at DESC, id DESC
+            LIMIT ?
+            """,
+            (brand_id, int(limit or 500)),
+        ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 

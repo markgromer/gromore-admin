@@ -329,6 +329,50 @@ class WarrenWebhookTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 403)
 
+    def test_generic_lead_webhook_creates_thread(self):
+        with self.app.app_context():
+            self.db.update_brand_number_field(self.brand_id, "sales_bot_enabled", 0)
+            self.db.update_brand_text_field(self.brand_id, "sales_bot_incoming_webhook_secret", "incoming-secret-123")
+
+        resp = self.client.post(
+            "/webhooks/leads/warren_webhook_test",
+            json={
+                "name": "Jordan Prospect",
+                "email": "Jordan@example.com",
+                "phone": "+15550001111",
+                "message": "Need a fast quote for a drain issue.",
+                "source": "website_contact_form",
+                "submission_id": "lead-submission-001",
+            },
+            headers={"X-GroMore-Webhook-Secret": "incoming-secret-123"},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["ok"])
+
+        with self.app.app_context():
+            thread = self.db.get_lead_thread(data["thread_id"])
+            self.assertEqual(thread["channel"], "lead_form")
+            self.assertEqual(thread["lead_name"], "Jordan Prospect")
+            self.assertEqual(thread["lead_email"], "jordan@example.com")
+            self.assertEqual(thread["source"], "incoming_webhook:website_contact_form")
+
+            messages = self.db.get_lead_messages(data["thread_id"])
+            self.assertEqual(len(messages), 1)
+            self.assertIn("Inbound Lead Submission", messages[0]["content"])
+
+    def test_generic_lead_webhook_rejects_invalid_secret(self):
+        with self.app.app_context():
+            self.db.update_brand_text_field(self.brand_id, "sales_bot_incoming_webhook_secret", "expected-secret")
+
+        resp = self.client.post(
+            "/webhooks/leads/warren_webhook_test",
+            json={"name": "Blocked Lead", "message": "hello"},
+            headers={"X-GroMore-Webhook-Secret": "wrong-secret"},
+        )
+        self.assertEqual(resp.status_code, 401)
+
 
 class WarrenInboxTests(unittest.TestCase):
     """Test inbox UI routes."""
@@ -411,6 +455,7 @@ class WarrenInboxTests(unittest.TestCase):
         resp = self.client.get("/client/inbox")
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"Pipeline", resp.data)
+        self.assertIn(b"Active Contacts", resp.data)
         self.assertIn(b"Test Lead", resp.data)
 
     def test_inbox_thread_detail(self):

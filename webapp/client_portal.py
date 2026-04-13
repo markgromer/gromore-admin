@@ -4374,6 +4374,10 @@ def client_save_leads_assistant_settings():
     if quo_secret:
         db.update_brand_text_field(brand_id, "sales_bot_quo_webhook_secret", quo_secret[:255])
 
+    incoming_secret = (request.form.get("sales_bot_incoming_webhook_secret") or "").strip()
+    if incoming_secret:
+        db.update_brand_text_field(brand_id, "sales_bot_incoming_webhook_secret", incoming_secret[:255])
+
     # ── Nurture cadence ──
     db.update_brand_number_field(brand_id, "sales_bot_nurture_enabled", 1 if request.form.get("sales_bot_nurture_enabled") else 0)
 
@@ -6184,6 +6188,7 @@ def client_inbox():
         abort(404)
 
     threads = db.get_lead_threads(brand_id, limit=200)
+    active_contacts = db.get_active_lead_contacts(brand_id, limit=150)
 
     from webapp.warren_pipeline import get_pipeline_metrics
     metrics = get_pipeline_metrics(db, brand_id)
@@ -6192,6 +6197,7 @@ def client_inbox():
         "client_inbox.html",
         brand=brand,
         threads=threads,
+        active_contacts=active_contacts,
         metrics=metrics,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
@@ -6851,6 +6857,114 @@ def client_va_services():
     active_requests = sum(1 for item in requests if item.get("status") in active_statuses)
     completed_requests = sum(1 for item in requests if item.get("status") == "completed")
     current_role = session.get("client_role", "owner")
+    token_packs = [
+        {
+            "tokens": 50,
+            "price": 59,
+            "bonus_tokens": 0,
+            "label": "Safe entry",
+            "tagline": "Perfect for small fixes and quick tasks.",
+            "outcomes": [
+                "1 landing page audit",
+                "1 small WordPress fix batch",
+                "1 ad creative refresh sprint",
+            ],
+        },
+        {
+            "tokens": 150,
+            "price": 149,
+            "bonus_tokens": 0,
+            "label": "Most popular",
+            "tagline": "Built for ongoing improvements without hiring.",
+            "outcomes": [
+                "1 conversion audit + fixes",
+                "3 ad creative packs",
+                "1 GBP cleanup and tune-up",
+            ],
+        },
+        {
+            "tokens": 400,
+            "price": 349,
+            "bonus_tokens": 40,
+            "label": "Serious operator",
+            "tagline": "For businesses actively shipping and scaling.",
+            "outcomes": [
+                "2 landing page rebuilds",
+                "6 ad creative packs",
+                "Google Ads setup + optimization sprint",
+            ],
+        },
+        {
+            "tokens": 1000,
+            "price": 790,
+            "bonus_tokens": 150,
+            "label": "Best value",
+            "tagline": "Prepaid execution capacity for growing teams.",
+            "outcomes": [
+                "Full funnel rebuild work",
+                "Recurring creative and page execution",
+                "Ongoing WARREN mission delivery",
+            ],
+        },
+        {
+            "tokens": 2500,
+            "price": 1725,
+            "bonus_tokens": 500,
+            "label": "Aggressive growth",
+            "tagline": "For operators removing execution bottlenecks at scale.",
+            "outcomes": [
+                "Multi-month mission backlog coverage",
+                "Large site and ad execution queue",
+                "Always-ready execution capacity",
+            ],
+        },
+    ]
+    mission_catalog = [
+        {
+            "title": "Landing Page Audit",
+            "tokens": 20,
+            "description": "A bounded review with fixes and conversion recommendations WARREN can tee up fast.",
+        },
+        {
+            "title": "Ad Creative Pack",
+            "tokens": 30,
+            "description": "Fresh ad copy and creative direction for campaigns WARREN flags as underperforming.",
+        },
+        {
+            "title": "GBP + Local SEO Boost",
+            "tokens": 45,
+            "description": "Tight local visibility execution for brands losing traction in maps or organic local search.",
+        },
+        {
+            "title": "Conversion Optimization Rebuild",
+            "tokens": 85,
+            "description": "A mission-sized rebuild for pages WARREN identifies as leaking leads.",
+        },
+        {
+            "title": "Google Ads Setup + Optimization",
+            "tokens": 95,
+            "description": "Structured launch and tuning work when WARREN identifies setup gaps or scaling opportunities.",
+        },
+        {
+            "title": "Full Page Build",
+            "tokens": 120,
+            "description": "A clearly scoped page implementation, not open-ended hourly development.",
+        },
+    ]
+    execution_steps = [
+        {
+            "title": "WARREN identifies the problem",
+            "copy": "Performance drops, broken pages, creative fatigue, or local visibility issues surface as a clear opportunity.",
+        },
+        {
+            "title": "System creates the mission",
+            "copy": "The work is packaged into a bounded mission with a defined scope, token cost, and expected outcome.",
+        },
+        {
+            "title": "You approve execution",
+            "copy": "No hiring. No freelancer wrangling. You approve the mission and the execution queue handles the rest.",
+        },
+    ]
     return render_template(
         "client/client_va_services.html",
         brand_name=brand_name,
@@ -6860,6 +6974,9 @@ def client_va_services():
         active_requests=active_requests,
         completed_requests=completed_requests,
         current_role=current_role,
+        token_packs=token_packs,
+        mission_catalog=mission_catalog,
+        execution_steps=execution_steps,
     )
 
 

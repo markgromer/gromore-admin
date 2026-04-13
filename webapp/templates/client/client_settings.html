@@ -775,6 +775,28 @@
                 </div>
             </div>
 
+            <div class="mt-3 p-3" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+                <div class="row g-3 align-items-end">
+                    <div class="col-lg-7">
+                        <label class="form-label mb-1 fw-medium">Generic Incoming Lead Webhook URL</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control form-control-sm bg-light" readonly
+                                   value="{{ request.url_root | replace('http://', 'https://') }}webhooks/leads/{{ brand.slug }}" id="incomingLeadWebhookUrl">
+                            <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('incomingLeadWebhookUrl')">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                        <small class="text-muted d-block mt-2">Use this for website forms, Zapier/Make, or any POST-based lead source. JSON and form-encoded payloads are both accepted.</small>
+                    </div>
+                    <div class="col-lg-5">
+                        <label class="form-label fw-medium" style="font-size:.88rem;">Incoming Lead Webhook Secret</label>
+                        <input type="password" class="form-control" name="sales_bot_incoming_webhook_secret"
+                               placeholder="{{ '••••••' ~ brand.sales_bot_incoming_webhook_secret[-4:] if brand.sales_bot_incoming_webhook_secret else 'Required for generic lead webhook posts' }}"
+                               autocomplete="off">
+                    </div>
+                </div>
+            </div>
+
             <!-- Messenger Connection Status -->
             {% if brand.facebook_page_id %}
             <div class="mt-2 p-3" style="background:#eff6ff; border-radius:10px; border:1px solid #bfdbfe;">

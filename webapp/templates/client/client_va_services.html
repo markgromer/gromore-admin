@@ -45,9 +45,20 @@
             line-height: 1.7;
             margin-bottom: 1.2rem;
         }
+        .va-overline {
+            margin-top: 1rem;
+            color: #fde68a;
+            font-size: .88rem;
+            font-weight: 700;
+            letter-spacing: .03em;
+            text-transform: uppercase;
+        }
         .va-pill-row,
         .va-stat-grid,
         .va-rate-grid,
+        .va-pack-grid,
+        .va-process-grid,
+        .va-mission-grid,
         .va-main-grid,
         .va-meta-grid {
             display: grid;
@@ -94,6 +105,18 @@
         .va-rate-grid {
             grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
         }
+        .va-pack-grid {
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            margin-top: 24px;
+        }
+        .va-process-grid {
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            margin-top: 16px;
+        }
+        .va-mission-grid {
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            margin-top: 18px;
+        }
         .va-rate-card {
             border-radius: 18px;
             padding: 18px;
@@ -115,6 +138,134 @@
             margin-top: .65rem;
             color: #fde68a;
             font-weight: 800;
+        }
+        .va-pack-card {
+            border-radius: 22px;
+            padding: 22px;
+            background: rgba(255,255,255,.08);
+            border: 1px solid rgba(255,255,255,.12);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            min-height: 100%;
+        }
+        .va-pack-card.featured {
+            background: linear-gradient(180deg, rgba(251, 191, 36, .16) 0%, rgba(255,255,255,.08) 100%);
+            border-color: rgba(251, 191, 36, .35);
+            box-shadow: 0 14px 36px rgba(245, 158, 11, .15);
+        }
+        .va-pack-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            align-self: flex-start;
+            padding: .35rem .65rem;
+            border-radius: 999px;
+            background: rgba(255,255,255,.1);
+            border: 1px solid rgba(255,255,255,.12);
+            color: #fff7ed;
+            font-size: .72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            margin-bottom: .9rem;
+        }
+        .va-pack-tokens {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #f8fafc;
+            letter-spacing: -.04em;
+        }
+        .va-pack-price {
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: #fde68a;
+            margin-top: .2rem;
+        }
+        .va-pack-tagline {
+            margin-top: .75rem;
+            color: rgba(226,232,240,.82);
+            font-size: .92rem;
+            line-height: 1.6;
+        }
+        .va-pack-bonus {
+            margin-top: .75rem;
+            color: #fcd34d;
+            font-size: .84rem;
+            font-weight: 700;
+        }
+        .va-pack-list {
+            list-style: none;
+            padding: 0;
+            margin: 1rem 0 0;
+            display: grid;
+            gap: .55rem;
+            color: #e2e8f0;
+            font-size: .88rem;
+        }
+        .va-pack-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: .5rem;
+        }
+        .va-pack-list i {
+            color: #fcd34d;
+            margin-top: .15rem;
+        }
+        .va-pack-cta {
+            margin-top: auto;
+            padding-top: 1rem;
+        }
+        .va-buy-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .5rem;
+            width: 100%;
+            padding: .85rem 1rem;
+            border-radius: 14px;
+            background: #f8fafc;
+            color: #0f172a;
+            font-weight: 700;
+            text-decoration: none;
+            transition: transform .16s ease, box-shadow .16s ease;
+        }
+        .va-buy-link:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 24px rgba(15, 23, 42, .18);
+            color: #0f172a;
+        }
+        .va-process-card,
+        .va-mission-card {
+            border-radius: 18px;
+            padding: 18px;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 10px 26px rgba(15, 23, 42, .05);
+        }
+        .va-process-card h3,
+        .va-mission-card h3 {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: .55rem;
+        }
+        .va-process-card p,
+        .va-mission-card p {
+            margin: 0;
+            color: #475569;
+            line-height: 1.6;
+            font-size: .9rem;
+        }
+        .va-mission-cost {
+            display: inline-flex;
+            margin-top: .9rem;
+            padding: .35rem .6rem;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-weight: 700;
+            font-size: .8rem;
         }
         .va-main-grid {
             grid-template-columns: minmax(0, 1.2fr) minmax(320px, .8fr);
@@ -254,6 +405,61 @@
             color: #9a3412;
             font-size: .92rem;
         }
+        .va-pack-note {
+            margin-top: 18px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            background: rgba(15, 23, 42, .28);
+            border: 1px solid rgba(255,255,255,.12);
+            color: #e2e8f0;
+            font-size: .9rem;
+        }
+        .va-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(2, 6, 23, .64);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            z-index: 3000;
+        }
+        .va-modal-backdrop.show {
+            display: flex;
+        }
+        .va-modal {
+            width: min(520px, 100%);
+            border-radius: 22px;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 30px 80px rgba(15, 23, 42, .32);
+            overflow: hidden;
+        }
+        .va-modal-head {
+            padding: 20px 22px 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .va-modal-head h3 {
+            margin: 0;
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: #0f172a;
+        }
+        .va-modal-body {
+            padding: 0 22px 22px;
+            color: #475569;
+            line-height: 1.7;
+            font-size: .95rem;
+        }
+        .va-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 0 22px 22px;
+        }
         @media (max-width: 1080px) {
             .va-main-grid,
             .va-meta-grid {
@@ -269,10 +475,11 @@
 
     <section class="va-hero">
         <div class="va-kicker"><i class="bi bi-headset"></i> Managed Support</div>
-        <h1 class="va-title">VA Desk is live.</h1>
+        <div class="va-overline">Execution capacity on demand</div>
+        <h1 class="va-title">WARREN identifies the work. Tokens get it done.</h1>
         <p class="va-copy">
-            {{ brand_name or 'Your brand' }} can now submit VA Desk requests from inside the portal and track them in one queue.
-            Token purchasing is still being finalized, but the real backend foundation is in place now: request intake, balance tracking, and work status visibility.
+            {{ brand_name or 'Your brand' }} does not need a VA marketplace or open-ended hourly help.
+            WARREN identifies what needs attention, the system creates a mission, and tokens unlock bounded execution without hiring, managing, or waiting on bottlenecks.
         </p>
 
         <div class="va-stat-grid">
@@ -290,35 +497,90 @@
             </div>
         </div>
 
+        <div class="va-pack-grid">
+            {% for pack in token_packs %}
+            <article class="va-pack-card {% if pack.label in ('Most popular', 'Best value') %}featured{% endif %}">
+                <div class="va-pack-badge">{{ pack.label }}</div>
+                <div class="va-pack-tokens">{{ pack.tokens }} Tokens</div>
+                <div class="va-pack-price">${{ pack.price }}</div>
+                {% if pack.bonus_tokens %}
+                <div class="va-pack-bonus">+{{ pack.bonus_tokens }} bonus tokens included</div>
+                {% endif %}
+                <div class="va-pack-tagline">{{ pack.tagline }}</div>
+                <ul class="va-pack-list">
+                    {% for outcome in pack.outcomes %}
+                    <li><i class="bi bi-check2-circle"></i><span>{{ outcome }}</span></li>
+                    {% endfor %}
+                </ul>
+                <div class="va-pack-cta">
+                    <a href="#" class="va-buy-link js-va-pack-link" data-pack-name="{{ pack.tokens }} Tokens" data-pack-price="${{ pack.price }}">
+                        <i class="bi bi-lightning-charge"></i> Purchase {{ pack.tokens }} Tokens
+                    </a>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+
+        <div class="va-pack-note">
+            Tokens are never presented as abstract units alone. Every pack is tied to real execution outcomes, mission approval, and faster delivery across your highest-value work.
+        </div>
+
         <div class="va-rate-grid">
             <div class="va-rate-card">
-                <strong>Account VA</strong>
-                <span>Inbox cleanup, CRM updates, reporting follow-through, and admin work.</span>
-                <div class="va-rate">10 tokens/hr</div>
+                <strong>No hourly drift</strong>
+                <span>We do not sell vague labor blocks. Missions stay bounded, priced, and outcome-based.</span>
+                <div class="va-rate">Clear scope builds trust</div>
             </div>
             <div class="va-rate-card">
-                <strong>WordPress Support</strong>
-                <span>Site edits, layout changes, page updates, and plugin/config work.</span>
-                <div class="va-rate">15 tokens/hr</div>
+                <strong>Approve missions, not people</strong>
+                <span>You are not hiring a freelancer. You are approving execution WARREN already scoped.</span>
+                <div class="va-rate">Fewer bottlenecks</div>
             </div>
             <div class="va-rate-card">
-                <strong>React / Full Stack Dev</strong>
-                <span>Product changes, front-end implementation, and deeper technical requests.</span>
-                <div class="va-rate">25 tokens/hr</div>
+                <strong>Prepaid execution capacity</strong>
+                <span>Buy ahead when you want speed, lock in stronger value in bigger bundles, and use tokens when needed.</span>
+                <div class="va-rate">Always ready when needed</div>
             </div>
         </div>
 
         <div class="va-pill-row mt-4">
-            <div class="va-pill"><i class="bi bi-list-task"></i> Submit requests into one queue</div>
-            <div class="va-pill"><i class="bi bi-coin"></i> Token balance is tracked in the backend</div>
-            <div class="va-pill"><i class="bi bi-activity"></i> Follow request status without emailing back and forth</div>
+            <div class="va-pill"><i class="bi bi-list-task"></i> WARREN identifies the problem</div>
+            <div class="va-pill"><i class="bi bi-bounding-box"></i> Missions stay tightly scoped</div>
+            <div class="va-pill"><i class="bi bi-activity"></i> Tokens remove execution bottlenecks</div>
+        </div>
+    </section>
+
+    <section class="va-card mb-4">
+        <h2><i class="bi bi-diagram-3"></i> How execution works</h2>
+        <p class="va-subhead">This is not a freelancer marketplace. This is WARREN-backed mission execution.</p>
+        <div class="va-process-grid">
+            {% for step in execution_steps %}
+            <article class="va-process-card">
+                <h3>{{ step.title }}</h3>
+                <p>{{ step.copy }}</p>
+            </article>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="va-card mb-4">
+        <h2><i class="bi bi-box-seam"></i> Bounded mission menu</h2>
+        <p class="va-subhead">We do not position execution as “developer at 15 tokens per hour.” Users approve clearly scoped missions with defined value.</p>
+        <div class="va-mission-grid">
+            {% for mission in mission_catalog %}
+            <article class="va-mission-card">
+                <h3>{{ mission.title }}</h3>
+                <p>{{ mission.description }}</p>
+                <div class="va-mission-cost">{{ mission.tokens }} tokens</div>
+            </article>
+            {% endfor %}
         </div>
     </section>
 
     <div class="va-main-grid">
         <section class="va-card">
             <h2><i class="bi bi-send-plus"></i> Submit a request</h2>
-            <p class="va-subhead">Owners and managers can queue work here for the VA Desk to scope and execute.</p>
+            <p class="va-subhead">Use this when WARREN has surfaced a problem or when you already know the outcome you want delivered.</p>
 
             {% if current_role in ('owner', 'manager') %}
             <form class="va-request-form" method="POST" action="{{ url_for('client.client_va_request_create') }}">
@@ -350,7 +612,7 @@
                     <textarea class="form-control" name="details" rows="5" placeholder="Describe the task, links involved, login context, deadlines, and what 'done' should look like." required></textarea>
                 </div>
                 <div class="d-flex flex-wrap justify-content-between gap-3 mt-3 align-items-center">
-                    <div class="va-meta">Purchasing and auto-deduction are still being wired in. Requests can already be queued and tracked here.</div>
+                    <div class="va-meta">Keep this request bounded. Clear scope creates faster approvals, better execution, and more trust in the token system.</div>
                     <button class="btn btn-primary px-4" type="submit"><i class="bi bi-send-check me-1"></i> Submit request</button>
                 </div>
             </form>
@@ -361,7 +623,7 @@
             {% endif %}
 
             <div class="va-note">
-                First release scope: token balance visibility, request intake, and work status tracking. Buying packs and specialist dispatch automation come next.
+                First release scope: token balance visibility, request intake, and work status tracking. Checkout buttons are wired as coming-soon placeholders until Stripe links are added.
             </div>
         </section>
 
@@ -436,5 +698,60 @@
             </aside>
         </div>
     </div>
+
+    <div class="va-modal-backdrop" id="vaPackModal" aria-hidden="true">
+        <div class="va-modal" role="dialog" aria-modal="true" aria-labelledby="vaPackModalTitle">
+            <div class="va-modal-head">
+                <h3 id="vaPackModalTitle">Execution packs are coming soon</h3>
+                <button class="btn btn-sm btn-outline-secondary" type="button" id="vaPackModalClose">Close</button>
+            </div>
+            <div class="va-modal-body" id="vaPackModalBody">
+                Stripe checkout links are not connected yet. Once live, this pack will open a direct purchase flow here.
+            </div>
+            <div class="va-modal-actions">
+                <button class="btn btn-primary" type="button" id="vaPackModalDone">Got it</button>
+            </div>
+        </div>
+    </div>
 </div>
+
+<script>
+(function() {
+    var modal = document.getElementById('vaPackModal');
+    var modalBody = document.getElementById('vaPackModalBody');
+    var closeBtn = document.getElementById('vaPackModalClose');
+    var doneBtn = document.getElementById('vaPackModalDone');
+
+    function hideModal() {
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+
+    function showModal(packName, packPrice) {
+        modalBody.textContent = packName + ' at ' + packPrice + ' is not connected to Stripe yet. This purchase flow is coming soon. Until then, you can still submit WARREN execution requests and manage the queue here.';
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+    }
+
+    document.querySelectorAll('.js-va-pack-link').forEach(function(link) {
+        link.addEventListener('click', function(event) {
+            event.preventDefault();
+            showModal(link.getAttribute('data-pack-name') || 'This pack', link.getAttribute('data-pack-price') || 'coming soon');
+        });
+    });
+
+    closeBtn.addEventListener('click', hideModal);
+    doneBtn.addEventListener('click', hideModal);
+    modal.addEventListener('click', function(event) {
+        if (event.target === modal) {
+            hideModal();
+        }
+    });
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape' && modal.classList.contains('show')) {
+            hideModal();
+        }
+    });
+})();
+</script>
 {% endblock %}

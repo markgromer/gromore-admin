@@ -132,6 +132,27 @@ class LeadsInboxDatabaseTests(unittest.TestCase):
         threads = self.db.get_lead_threads(self.brand_id)
         self.assertEqual(len(threads), 2)
 
+    def test_get_active_lead_contacts_excludes_closed_threads(self):
+        active_thread = self.db.create_lead_thread(
+            self.brand_id,
+            {"lead_name": "Open Lead", "channel": "sms", "status": "engaged"},
+        )
+        won_thread = self.db.create_lead_thread(
+            self.brand_id,
+            {"lead_name": "Won Lead", "channel": "sms", "status": "won"},
+        )
+        lost_thread = self.db.create_lead_thread(
+            self.brand_id,
+            {"lead_name": "Lost Lead", "channel": "sms", "status": "lost"},
+        )
+
+        contacts = self.db.get_active_lead_contacts(self.brand_id)
+        contact_ids = {thread["id"] for thread in contacts}
+
+        self.assertIn(active_thread, contact_ids)
+        self.assertNotIn(won_thread, contact_ids)
+        self.assertNotIn(lost_thread, contact_ids)
+
 
 class LeadsAssistantSettingsRouteTests(unittest.TestCase):
     def setUp(self):
@@ -203,6 +224,7 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
                 "quo_api_key": "quo_test_key_123",
                 "quo_phone_number": "+15555550123",
                 "sales_bot_quo_webhook_secret": "quo-secret",
+                "sales_bot_incoming_webhook_secret": "incoming-secret",
             },
             follow_redirects=False,
         )
@@ -230,7 +252,14 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertEqual(brand["quo_api_key"], "quo_test_key_123")
         self.assertEqual(brand["quo_phone_number"], "+15555550123")
         self.assertEqual(brand["sales_bot_quo_webhook_secret"], "quo-secret")
+        self.assertEqual(brand["sales_bot_incoming_webhook_secret"], "incoming-secret")
         self.assertEqual(brand["sales_bot_channels"], '["sms", "lead_forms", "calls"]')
+
+    def test_settings_page_shows_generic_lead_webhook_url(self):
+        response = self.client.get("/client/settings")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Generic Incoming Lead Webhook URL", response.data)
+        self.assertIn(b"/webhooks/leads/", response.data)
 
     def test_client_can_open_and_save_lead_assistant_workspace(self):
         response = self.client.get("/client/lead-assistant")

@@ -69,6 +69,14 @@
     .report-card .value { font-size: 1.5rem; font-weight: 800; color: var(--text-strong, #0f172a); }
     .report-card .label { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted, #64748b); font-weight: 600; margin-top: .2rem; }
     .funnel-bar { height: 28px; border-radius: 6px; display: flex; align-items: center; padding: 0 .6rem; font-size: .72rem; font-weight: 700; color: #fff; margin-bottom: .35rem; transition: width .4s ease; }
+    .contact-toolbar { display: flex; gap: .75rem; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: .85rem; }
+    .contact-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; }
+    .contact-card { width: 100%; text-align: left; border: 1px solid var(--border-light, #e2e8f0); border-radius: 12px; padding: .85rem .95rem; background: #fff; transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+    .contact-card:hover { border-color: #bfdbfe; box-shadow: 0 8px 18px rgba(15, 23, 42, .08); transform: translateY(-1px); }
+    .contact-card.active { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, .14); }
+    .contact-name { font-size: .86rem; font-weight: 700; color: var(--text-strong, #0f172a); }
+    .contact-meta { margin-top: .3rem; font-size: .76rem; color: var(--text-muted, #64748b); }
+    .contact-stage { display: inline-flex; align-items: center; gap: .3rem; font-size: .68rem; font-weight: 700; margin-top: .55rem; }
 
     /* Mobile responsive */
     @media (max-width: 768px) {
@@ -118,6 +126,32 @@
         {{ stage|title }} ({{ count }})
     </div>
     {% endfor %}
+</div>
+
+<div class="report-card mb-3">
+    <div class="contact-toolbar">
+        <div>
+            <h6 style="font-weight:700; font-size:.88rem; margin-bottom:.2rem;"><i class="bi bi-people me-1"></i> Active Contacts</h6>
+            <div style="font-size:.78rem; color: var(--text-muted, #64748b);">Open deals only. Won and lost leads drop out automatically.</div>
+        </div>
+        <input type="search" class="form-control form-control-sm" id="activeContactSearch" placeholder="Search active contacts" style="max-width:260px;">
+    </div>
+    <div class="contact-grid" id="activeContactsList">
+        {% for contact in active_contacts %}
+        <button type="button" class="contact-card" data-thread-id="{{ contact.id }}">
+            <div class="contact-name">{{ contact.lead_name or contact.lead_phone or contact.lead_email or 'Unknown Lead' }}</div>
+            <div class="contact-meta">{{ contact.lead_phone or contact.lead_email or contact.source or 'Lead thread' }}</div>
+            <div class="contact-meta">{{ contact.summary[:80] if contact.summary else (contact.channel|replace('_', ' ')|title ~ ' lead') }}</div>
+            <div class="contact-stage">
+                <span class="thread-badge badge-{{ contact.status }}">{{ contact.status|title }}</span>
+                <span style="color: var(--text-muted, #64748b);">{{ contact.last_message_at[:10] if contact.last_message_at else '' }}</span>
+            </div>
+        </button>
+        {% endfor %}
+        {% if not active_contacts %}
+        <div style="grid-column: 1 / -1; font-size:.82rem; color: var(--text-muted, #64748b);">No active contacts yet. As new conversations land, they will appear here.</div>
+        {% endif %}
+    </div>
 </div>
 
 <!-- Inbox -->
@@ -224,22 +258,47 @@
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
     let activeThreadId = null;
 
+    function setActiveThread(threadId) {
+        activeThreadId = threadId;
+        document.querySelectorAll('.thread-item').forEach(item => {
+            item.classList.toggle('active', item.dataset.threadId === String(threadId));
+        });
+        document.querySelectorAll('.contact-card').forEach(card => {
+            card.classList.toggle('active', card.dataset.threadId === String(threadId));
+        });
+    }
+
     // ── Thread list click ──
     document.getElementById('threadListContainer').addEventListener('click', function(e) {
         const item = e.target.closest('.thread-item');
         if (!item) return;
         const threadId = item.dataset.threadId;
         loadThread(threadId);
-        document.querySelectorAll('.thread-item').forEach(i => i.classList.remove('active'));
-        item.classList.add('active');
+        setActiveThread(threadId);
         item.classList.remove('unread');
         const dot = item.querySelector('.unread-dot');
         if (dot) dot.remove();
     });
 
+    document.getElementById('activeContactsList')?.addEventListener('click', function(e) {
+        const card = e.target.closest('.contact-card');
+        if (!card) return;
+        const threadId = card.dataset.threadId;
+        loadThread(threadId);
+        setActiveThread(threadId);
+    });
+
+    document.getElementById('activeContactSearch')?.addEventListener('input', function() {
+        const query = this.value.trim().toLowerCase();
+        document.querySelectorAll('.contact-card').forEach(card => {
+            const matches = !query || card.textContent.toLowerCase().includes(query);
+            card.style.display = matches ? '' : 'none';
+        });
+    });
+
     // ── Load thread messages ──
     async function loadThread(threadId) {
-        activeThreadId = threadId;
+        setActiveThread(threadId);
         try {
             const resp = await fetch(`/client/inbox/thread/${threadId}`, {
                 headers: {'X-Requested-With': 'XMLHttpRequest'}
