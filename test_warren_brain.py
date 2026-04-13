@@ -7,6 +7,7 @@ Tests for the Warren Brain system:
 """
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -359,8 +360,8 @@ class WarrenWebhookTests(unittest.TestCase):
             self.assertEqual(thread["source"], "incoming_webhook:website_contact_form")
 
             messages = self.db.get_lead_messages(data["thread_id"])
-            self.assertEqual(len(messages), 1)
-            self.assertIn("Inbound Lead Submission", messages[0]["content"])
+            self.assertGreaterEqual(len(messages), 1)
+            self.assertTrue(any("Inbound Lead Submission" in message["content"] for message in messages))
 
     def test_generic_lead_webhook_rejects_invalid_secret(self):
         with self.app.app_context():
@@ -435,13 +436,29 @@ class WarrenInboxTests(unittest.TestCase):
             # Create a test thread
             self.thread_id = self.db.create_lead_thread(self.brand_id, {
                 "lead_name": "Test Lead",
+                "lead_email": "lead@test.com",
                 "lead_phone": "+15551112222",
                 "channel": "sms",
                 "source": "openphone",
+                "status": "quoted",
             })
             self.db.add_lead_message(
-                self.thread_id, "inbound", "lead", "Hi, I need help",
+                self.thread_id, "inbound", "lead", "Hi, I need help. We have 3 dogs, but the price seems high and I need to check with my wife.",
                 channel="sms",
+                metadata={"fields": {"dogs": "3", "service_type": "Weekly cleanup"}},
+            )
+            self.db.add_lead_message(
+                self.thread_id, "outbound", "assistant", "We can likely handle this for between $180 and $220.",
+                channel="sms",
+            )
+            self.db.upsert_lead_quote(
+                self.brand_id,
+                self.thread_id,
+                status="sent",
+                amount_low=180,
+                amount_high=220,
+                summary="Dog cleanup and weekly maintenance",
+                follow_up_text="Let us know if you want to book.",
             )
 
     def _login(self):
@@ -455,8 +472,12 @@ class WarrenInboxTests(unittest.TestCase):
         resp = self.client.get("/client/inbox")
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"Pipeline", resp.data)
-        self.assertIn(b"Active Contacts", resp.data)
+        self.assertIn(b"Active Lead Profiles", resp.data)
         self.assertIn(b"Test Lead", resp.data)
+        self.assertIn(b"closeability", resp.data.lower())
+        self.assertIn(b"Waiting on quote approval", resp.data)
+        self.assertIn(b"$180-$220", resp.data)
+        self.assertIn(b"Budget", resp.data)
 
     def test_inbox_thread_detail(self):
         self._login()
@@ -464,8 +485,40 @@ class WarrenInboxTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertEqual(data["thread"]["lead_name"], "Test Lead")
-        self.assertEqual(len(data["messages"]), 1)
-        self.assertEqual(data["messages"][0]["content"], "Hi, I need help")
+        self.assertEqual(len(data["messages"]), 2)
+        self.assertEqual(data["profile"]["dog_count"], 3)
+        self.assertEqual(data["profile"]["quoted_amount"], "$180-$220")
+        self.assertIn("budget", data["profile"]["objections"])
+        self.assertIn("needs partner approval", data["profile"]["objections"])
+        self.assertEqual(data["profile"]["waiting_on"], "Waiting on quote approval")
+        self.assertGreaterEqual(data["profile"]["closeability_pct"], 40)
+        self.assertTrue(len(data["profile"]["closeability_drivers"]) >= 1)
+
+    def test_inbox_profile_override_can_be_saved(self):
+        self._login()
+        resp = self.client.post(
+            f"/client/inbox/thread/{self.thread_id}/profile",
+            json={
+                "lead_name": "Updated Lead",
+                "lead_phone": "+15559990000",
+                "lead_email": "updated@example.com",
+                "dog_count": 5,
+                "closeability_pct": 83,
+                "waiting_on": "Waiting on spouse approval",
+                "objections_text": "budget, timing",
+                "profile_notes": "Asked for a Friday follow-up call.",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["profile"]["lead_name"], "Updated Lead")
+        self.assertEqual(data["profile"]["dog_count"], 5)
+        self.assertEqual(data["profile"]["closeability_pct"], 83)
+        self.assertEqual(data["profile"]["waiting_on"], "Waiting on spouse approval")
+        self.assertEqual(data["profile"]["objections"], ["budget", "timing"])
+        self.assertEqual(data["profile"]["profile_notes"], "Asked for a Friday follow-up call.")
 
     def test_inbox_stage_change(self):
         self._login()

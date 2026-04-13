@@ -81,6 +81,254 @@ def _coerce_action_key(value, fallback):
     return (text or fallback)[:80]
 
 
+def _safe_json_object(raw_value):
+    if isinstance(raw_value, dict):
+        return dict(raw_value)
+    if not raw_value:
+        return {}
+    try:
+        parsed = json.loads(raw_value)
+    except Exception:
+        return {}
+    return dict(parsed) if isinstance(parsed, dict) else {}
+
+
+def _parse_dog_count(value):
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return max(0, int(value))
+    text = str(value).strip().lower()
+    if not text:
+        return None
+    digit_match = re.search(r"\b(\d{1,2})\b", text)
+    if digit_match:
+        return int(digit_match.group(1))
+    word_map = {
+        "one": 1,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+        "six": 6,
+        "seven": 7,
+        "eight": 8,
+        "nine": 9,
+        "ten": 10,
+    }
+    for word, number in word_map.items():
+        if re.search(rf"\b{word}\b", text):
+            return number
+    return None
+
+
+def _extract_objections(text):
+    lowered = (text or "").strip().lower()
+    if not lowered:
+        return []
+    checks = [
+        ("budget", ("budget", "too expensive", "too much", "price seems high", "cost is high", "can't afford")),
+        ("needs partner approval", ("wife", "husband", "spouse", "partner", "need to ask", "need to check with")),
+        ("timing", ("not ready", "later", "next month", "timing", "busy right now", "wait a bit")),
+        ("shopping around", ("shopping around", "getting quotes", "comparing", "checking options", "other quotes")),
+        ("schedule conflict", ("schedule", "calendar", "availability", "out of town", "not home")),
+    ]
+    found = []
+    for label, phrases in checks:
+        if any(phrase in lowered for phrase in phrases):
+            found.append(label)
+    return found
+
+
+def _format_quote_amount(quote):
+    if not quote:
+        return ""
+    try:
+        low = float(quote.get("amount_low") or 0)
+    except (TypeError, ValueError):
+        low = 0.0
+    try:
+        high = float(quote.get("amount_high") or 0)
+    except (TypeError, ValueError):
+        high = 0.0
+    currency = (quote.get("currency") or "USD").strip().upper()
+    symbol = "$" if currency == "USD" else f"{currency} "
+    if low > 0 and high > 0 and abs(low - high) >= 1:
+        return f"{symbol}{int(low):,}-{symbol}{int(high):,}"
+    value = high or low
+    return f"{symbol}{int(value):,}" if value > 0 else ""
+
+
+def _derive_waiting_on(thread, quote, messages):
+    status = (thread.get("status") or "new").strip().lower()
+    last_message = messages[-1] if messages else None
+    last_direction = (last_message or {}).get("direction", "")
+
+    if status == "won":
+        return "Closed won"
+    if status == "lost":
+        return "Closed lost"
+    if status == "booked":
+        return "Waiting on service delivery"
+    if status == "quoted":
+        if quote and (quote.get("status") or "").lower() in {"accepted", "approved"}:
+            return "Waiting on scheduling"
+        return "Waiting on quote approval"
+    if status == "qualified":
+        return "Waiting on booking decision"
+    if last_direction == "inbound":
+        return "Waiting on team follow-up"
+    if last_direction == "outbound":
+        return "Waiting on lead reply"
+    return "Waiting on first real conversation"
+
+
+def _estimate_closeability(thread, quote, objections, messages, waiting_on):
+    stage_scores = {
+        "new": 18,
+        "engaged": 36,
+        "quoted": 58,
+        "qualified": 72,
+        "booked": 88,
+        "won": 100,
+        "lost": 5,
+    }
+    score = stage_scores.get((thread.get("status") or "new").strip().lower(), 20)
+    drivers = []
+    drivers.append(f"Stage: {(thread.get('status') or 'new').strip().title()} baseline")
+    if (thread.get("lead_phone") or "").strip():
+        score += 4
+        drivers.append("Phone captured")
+    if (thread.get("lead_email") or "").strip():
+        score += 4
+        drivers.append("Email captured")
+    inbound_replies = sum(1 for message in messages if message.get("direction") == "inbound")
+    if inbound_replies >= 2:
+        score += 6
+        drivers.append("Multiple inbound replies")
+    if quote and _format_quote_amount(quote):
+        score += 10
+        drivers.append("Quote prepared or sent")
+    if any((message.get("direction") == "inbound") and re.search(r"\b(schedule|book|when can|availability|tomorrow|this week)\b", message.get("content") or "", re.I) for message in messages):
+        score += 8
+        drivers.append("Lead asked about scheduling")
+    if any((message.get("direction") == "inbound") and re.search(r"\b(yes|sounds good|let's do it|move forward|works for me)\b", message.get("content") or "", re.I) for message in messages):
+        score += 10
+        drivers.append("Positive buying language")
+    if waiting_on == "Waiting on team follow-up":
+        score -= 8
+        drivers.append("Team still owes follow-up")
+    objection_penalty = min(20, len(objections) * 7)
+    if objection_penalty:
+        score -= objection_penalty
+        drivers.append("Open objections still unresolved")
+    score = max(5, min(100, int(score)))
+    return score, drivers[:5]
+
+
+def _build_lead_profile(db, thread):
+    thread = dict(thread or {})
+    thread_id = int(thread.get("id") or 0)
+    messages = db.get_lead_messages(thread_id, limit=120) if thread_id else []
+    quote = db.get_lead_quote_for_thread(thread_id) if thread_id else None
+    override = db.get_lead_profile_override(thread_id) if thread_id else None
+
+    phone = (thread.get("lead_phone") or "").strip()
+    email = (thread.get("lead_email") or "").strip().lower()
+    name = (thread.get("lead_name") or "").strip()
+    dog_count = None
+    objections = []
+    known_items = []
+
+    for message in messages:
+        metadata = _safe_json_object(message.get("metadata_json"))
+        fields = _safe_json_object(metadata.get("fields"))
+        combined = {**metadata, **fields}
+
+        for key, value in combined.items():
+            key_text = str(key or "").strip().lower()
+            value_text = str(value or "").strip()
+            if not value_text:
+                continue
+            if key_text in {"name", "full_name"} and not name:
+                name = value_text
+            elif key_text in {"email", "email_address"} and not email:
+                email = value_text.lower()
+            elif key_text in {"phone", "phone_number", "mobile", "cell"} and not phone:
+                phone = value_text
+
+            if dog_count is None and ("dog" in key_text or "pet" in key_text):
+                dog_count = _parse_dog_count(value_text)
+
+            if "objection" in key_text:
+                objections.extend(_extract_objections(value_text) or [value_text.lower()])
+
+            if key_text not in {"from", "conversation_id", "sender_psid", "page_id", "image_urls", "opted_out", "fields"}:
+                label = str(key).replace("_", " ").strip().title()
+                known_items.append((label, value_text))
+
+        if message.get("direction") == "inbound":
+            content = message.get("content") or ""
+            if dog_count is None and re.search(r"\b(dog|dogs|pup|puppy|pet|pets)\b", content, re.I):
+                dog_count = _parse_dog_count(content)
+            objections.extend(_extract_objections(content))
+
+    seen_known = set()
+    deduped_known_items = []
+    for label, value in known_items:
+        marker = (label.lower(), value.lower())
+        if marker in seen_known:
+            continue
+        seen_known.add(marker)
+        deduped_known_items.append({"label": label, "value": value})
+
+    seen_objections = set()
+    deduped_objections = []
+    for item in objections:
+        label = str(item or "").strip().lower()
+        if not label or label in seen_objections:
+            continue
+        seen_objections.add(label)
+        deduped_objections.append(label)
+
+    waiting_on = _derive_waiting_on(thread, quote, messages)
+    quote_amount = _format_quote_amount(quote)
+    quote_status = ((quote or {}).get("status") or thread.get("quote_status") or "").strip()
+    closeability, closeability_drivers = _estimate_closeability(thread, quote, deduped_objections, messages, waiting_on)
+
+    if override:
+        if override.get("dog_count") is not None:
+            dog_count = int(override.get("dog_count"))
+        override_objections = [item.strip().lower() for item in re.split(r"[\n,;]+", override.get("objections_text") or "") if item.strip()]
+        if override_objections:
+            deduped_objections = override_objections
+        if (override.get("waiting_on_text") or "").strip():
+            waiting_on = override.get("waiting_on_text").strip()
+        if override.get("closeability_pct") is not None:
+            closeability = max(0, min(100, int(override.get("closeability_pct") or 0)))
+
+    return {
+        "thread_id": thread_id,
+        "display_name": name or phone or email or "Unknown Lead",
+        "lead_name": name,
+        "lead_phone": phone,
+        "lead_email": email,
+        "status": (thread.get("status") or "new").strip().lower(),
+        "source": thread.get("source") or "",
+        "summary": thread.get("summary") or "",
+        "dog_count": dog_count,
+        "quoted_amount": quote_amount,
+        "quote_status": quote_status,
+        "objections": deduped_objections,
+        "waiting_on": waiting_on,
+        "closeability_pct": closeability,
+        "closeability_drivers": closeability_drivers,
+        "known_items": deduped_known_items[:6],
+        "last_message_at": thread.get("last_message_at") or "",
+        "profile_notes": (override or {}).get("profile_notes") or "",
+    }
+
+
 def _normalize_client_actions(actions):
     normalized = []
     if not isinstance(actions, list):
@@ -6189,6 +6437,7 @@ def client_inbox():
 
     threads = db.get_lead_threads(brand_id, limit=200)
     active_contacts = db.get_active_lead_contacts(brand_id, limit=150)
+    active_profiles = [_build_lead_profile(db, contact) for contact in active_contacts]
 
     from webapp.warren_pipeline import get_pipeline_metrics
     metrics = get_pipeline_metrics(db, brand_id)
@@ -6197,7 +6446,7 @@ def client_inbox():
         "client_inbox.html",
         brand=brand,
         threads=threads,
-        active_contacts=active_contacts,
+        active_profiles=active_profiles,
         metrics=metrics,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
@@ -6218,7 +6467,60 @@ def client_inbox_thread(thread_id):
     db.mark_lead_thread_read(thread_id)
 
     messages = db.get_lead_messages(thread_id)
-    return jsonify(thread=thread, messages=messages)
+    profile = _build_lead_profile(db, thread)
+    return jsonify(thread=thread, messages=messages, profile=profile)
+
+
+@client_bp.route("/inbox/thread/<int:thread_id>/profile", methods=["POST"])
+@client_login_required
+def client_inbox_profile_save(thread_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread:
+        return jsonify(error="Thread not found"), 404
+
+    data = request.get_json(silent=True) or {}
+    db.update_lead_thread_profile_fields(
+        thread_id,
+        brand_id,
+        lead_name=(data.get("lead_name") or "").strip()[:200],
+        lead_phone=(data.get("lead_phone") or "").strip()[:100],
+        lead_email=(data.get("lead_email") or "").strip()[:255],
+        summary=(data.get("summary") or thread.get("summary") or "").strip()[:1000],
+    )
+
+    closeability_override = data.get("closeability_pct")
+    try:
+        if closeability_override not in (None, ""):
+            closeability_override = max(0, min(100, int(closeability_override)))
+        else:
+            closeability_override = None
+    except (TypeError, ValueError):
+        closeability_override = None
+
+    dog_count = data.get("dog_count")
+    try:
+        if dog_count not in (None, ""):
+            dog_count = max(0, min(20, int(dog_count)))
+        else:
+            dog_count = None
+    except (TypeError, ValueError):
+        dog_count = None
+
+    db.save_lead_profile_override(
+        thread_id,
+        dog_count=dog_count,
+        objections_text=(data.get("objections_text") or "").strip()[:1000],
+        waiting_on_text=(data.get("waiting_on") or "").strip()[:500],
+        closeability_pct=closeability_override,
+        profile_notes=(data.get("profile_notes") or "").strip()[:2000],
+    )
+
+    refreshed_thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    profile = _build_lead_profile(db, refreshed_thread)
+    return jsonify(ok=True, profile=profile, thread=refreshed_thread)
 
 
 @client_bp.route("/inbox/thread/<int:thread_id>/reply", methods=["POST"])

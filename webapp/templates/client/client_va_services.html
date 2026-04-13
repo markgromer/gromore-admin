@@ -591,8 +591,8 @@
         <div class="va-process-grid">
             {% for step in execution_steps %}
             <article class="va-process-card">
-                <h3>{{ step.title }}</h3>
-                <p>{{ step.copy }}</p>
+                <h3>{{ step['title'] }}</h3>
+                <p>{{ step['copy'] }}</p>
             </article>
             {% endfor %}
         </div>

@@ -196,6 +196,19 @@ class WebDB:
             CREATE INDEX IF NOT EXISTS idx_lead_events_thread_created
             ON lead_events(thread_id, created_at DESC, id DESC);
 
+            CREATE TABLE IF NOT EXISTS lead_profile_overrides (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                thread_id INTEGER NOT NULL UNIQUE,
+                dog_count INTEGER DEFAULT NULL,
+                objections_text TEXT DEFAULT '',
+                waiting_on_text TEXT DEFAULT '',
+                closeability_pct INTEGER DEFAULT NULL,
+                profile_notes TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (thread_id) REFERENCES lead_threads(id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS sms_consent (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand_id INTEGER NOT NULL,
@@ -2072,6 +2085,30 @@ class WebDB:
         conn.commit()
         conn.close()
 
+    def update_lead_thread_profile_fields(self, thread_id, brand_id, **fields):
+        allowed_fields = {"lead_name", "lead_phone", "lead_email", "summary"}
+        updates = []
+        values = []
+        for field, value in fields.items():
+            if field not in allowed_fields or value is None:
+                continue
+            cleaned = value.strip() if isinstance(value, str) else value
+            if field == "lead_email" and isinstance(cleaned, str):
+                cleaned = cleaned.lower()
+            updates.append(f"{field} = ?")
+            values.append(cleaned)
+        if not updates:
+            return
+        updates.append("updated_at = datetime('now')")
+        values.extend([thread_id, brand_id])
+        conn = self._conn()
+        conn.execute(
+            f"UPDATE lead_threads SET {', '.join(updates)} WHERE id = ? AND brand_id = ?",
+            values,
+        )
+        conn.commit()
+        conn.close()
+
     def mark_lead_thread_read(self, thread_id):
         conn = self._conn()
         conn.execute(
@@ -2201,6 +2238,54 @@ class WebDB:
         row = conn.execute("SELECT * FROM lead_quotes WHERE thread_id = ?", (thread_id,)).fetchone()
         conn.close()
         return dict(row) if row else None
+
+    def get_lead_profile_override(self, thread_id):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM lead_profile_overrides WHERE thread_id = ?",
+            (thread_id,),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def save_lead_profile_override(self, thread_id, **fields):
+        dog_count = fields.get("dog_count")
+        closeability_pct = fields.get("closeability_pct")
+        if dog_count is not None:
+            try:
+                dog_count = int(dog_count)
+            except (TypeError, ValueError):
+                dog_count = None
+        if closeability_pct is not None:
+            try:
+                closeability_pct = int(closeability_pct)
+            except (TypeError, ValueError):
+                closeability_pct = None
+        conn = self._conn()
+        conn.execute(
+            """
+            INSERT INTO lead_profile_overrides (
+                thread_id, dog_count, objections_text, waiting_on_text, closeability_pct, profile_notes, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            ON CONFLICT(thread_id) DO UPDATE SET
+                dog_count = excluded.dog_count,
+                objections_text = excluded.objections_text,
+                waiting_on_text = excluded.waiting_on_text,
+                closeability_pct = excluded.closeability_pct,
+                profile_notes = excluded.profile_notes,
+                updated_at = datetime('now')
+            """,
+            (
+                thread_id,
+                dog_count,
+                (fields.get("objections_text") or "").strip(),
+                (fields.get("waiting_on_text") or "").strip(),
+                closeability_pct,
+                (fields.get("profile_notes") or "").strip(),
+            ),
+        )
+        conn.commit()
+        conn.close()
 
     def upsert_lead_quote(
         self,

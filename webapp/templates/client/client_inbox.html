@@ -77,6 +77,25 @@
     .contact-name { font-size: .86rem; font-weight: 700; color: var(--text-strong, #0f172a); }
     .contact-meta { margin-top: .3rem; font-size: .76rem; color: var(--text-muted, #64748b); }
     .contact-stage { display: inline-flex; align-items: center; gap: .3rem; font-size: .68rem; font-weight: 700; margin-top: .55rem; }
+    .contact-score { display: inline-flex; align-items: center; gap: .35rem; padding: .22rem .5rem; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-size: .68rem; font-weight: 800; }
+    .contact-profile-grid { display: grid; gap: .5rem; margin-top: .8rem; }
+    .contact-profile-row { display: flex; justify-content: space-between; gap: .75rem; align-items: flex-start; font-size: .75rem; }
+    .contact-profile-label { color: var(--text-muted, #64748b); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+    .contact-profile-value { color: var(--text-strong, #0f172a); text-align: right; }
+    .contact-objections { margin-top: .65rem; display: flex; gap: .35rem; flex-wrap: wrap; }
+    .contact-objection-chip { display: inline-flex; align-items: center; padding: .2rem .45rem; border-radius: 999px; background: #fff7ed; color: #9a3412; font-size: .68rem; font-weight: 700; }
+    .profile-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .65rem; padding: .8rem 1rem; background: #f8fafc; border-bottom: 1px solid var(--border-light, #e2e8f0); }
+    .profile-panel-card { border: 1px solid var(--border-light, #e2e8f0); border-radius: 12px; background: #fff; padding: .7rem .8rem; }
+    .profile-panel-card strong { display: block; font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted, #64748b); margin-bottom: .28rem; }
+    .profile-panel-card span { font-size: .84rem; color: var(--text-strong, #0f172a); line-height: 1.5; }
+    .profile-known-list { display: flex; flex-wrap: wrap; gap: .35rem; }
+    .profile-known-chip { display: inline-flex; gap: .25rem; padding: .25rem .45rem; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-size: .7rem; }
+    .profile-editor { padding: .85rem 1rem 1rem; background: #fff; border-bottom: 1px solid var(--border-light, #e2e8f0); }
+    .profile-editor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .75rem; }
+    .profile-editor label { display: block; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted, #64748b); font-weight: 700; margin-bottom: .3rem; }
+    .profile-editor .form-control { font-size: .82rem; }
+    .profile-editor-actions { display: flex; justify-content: space-between; align-items: center; gap: .75rem; margin-top: .8rem; }
+    .profile-save-status { font-size: .75rem; color: var(--text-muted, #64748b); }
 
     /* Mobile responsive */
     @media (max-width: 768px) {
@@ -131,24 +150,52 @@
 <div class="report-card mb-3">
     <div class="contact-toolbar">
         <div>
-            <h6 style="font-weight:700; font-size:.88rem; margin-bottom:.2rem;"><i class="bi bi-people me-1"></i> Active Contacts</h6>
-            <div style="font-size:.78rem; color: var(--text-muted, #64748b);">Open deals only. Won and lost leads drop out automatically.</div>
+            <h6 style="font-weight:700; font-size:.88rem; margin-bottom:.2rem;"><i class="bi bi-people me-1"></i> Active Lead Profiles</h6>
+            <div style="font-size:.78rem; color: var(--text-muted, #64748b);">Open deals only. Profiles roll up what we know, what they are stuck on, and how likely they are to close.</div>
         </div>
         <input type="search" class="form-control form-control-sm" id="activeContactSearch" placeholder="Search active contacts" style="max-width:260px;">
     </div>
     <div class="contact-grid" id="activeContactsList">
-        {% for contact in active_contacts %}
-        <button type="button" class="contact-card" data-thread-id="{{ contact.id }}">
-            <div class="contact-name">{{ contact.lead_name or contact.lead_phone or contact.lead_email or 'Unknown Lead' }}</div>
+        {% for contact in active_profiles %}
+        <button type="button" class="contact-card" data-thread-id="{{ contact.thread_id }}">
+            <div class="d-flex justify-content-between gap-2 align-items-start">
+                <div class="contact-name">{{ contact.display_name }}</div>
+                <div class="contact-score">{{ contact.closeability_pct }}% closeability</div>
+            </div>
             <div class="contact-meta">{{ contact.lead_phone or contact.lead_email or contact.source or 'Lead thread' }}</div>
-            <div class="contact-meta">{{ contact.summary[:80] if contact.summary else (contact.channel|replace('_', ' ')|title ~ ' lead') }}</div>
+            <div class="contact-meta">{{ contact.summary[:90] if contact.summary else 'Profile is building as Warren learns more.' }}</div>
+            <div class="contact-profile-grid">
+                <div class="contact-profile-row">
+                    <span class="contact-profile-label">Status</span>
+                    <span class="contact-profile-value">{{ contact.status|title }}</span>
+                </div>
+                <div class="contact-profile-row">
+                    <span class="contact-profile-label">Waiting on</span>
+                    <span class="contact-profile-value">{{ contact.waiting_on }}</span>
+                </div>
+                <div class="contact-profile-row">
+                    <span class="contact-profile-label">Quote</span>
+                    <span class="contact-profile-value">{{ contact.quoted_amount or 'Not quoted yet' }}</span>
+                </div>
+                <div class="contact-profile-row">
+                    <span class="contact-profile-label">Dogs</span>
+                    <span class="contact-profile-value">{{ contact.dog_count if contact.dog_count is not none else 'Unknown' }}</span>
+                </div>
+            </div>
+            {% if contact.objections %}
+            <div class="contact-objections">
+                {% for objection in contact.objections %}
+                <span class="contact-objection-chip">{{ objection|replace('_', ' ')|title }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
             <div class="contact-stage">
                 <span class="thread-badge badge-{{ contact.status }}">{{ contact.status|title }}</span>
                 <span style="color: var(--text-muted, #64748b);">{{ contact.last_message_at[:10] if contact.last_message_at else '' }}</span>
             </div>
         </button>
         {% endfor %}
-        {% if not active_contacts %}
+        {% if not active_profiles %}
         <div style="grid-column: 1 / -1; font-size:.82rem; color: var(--text-muted, #64748b);">No active contacts yet. As new conversations land, they will appear here.</div>
         {% endif %}
     </div>
@@ -224,6 +271,49 @@
                     {% for stage in ['new','engaged','quoted','qualified','booked','won','lost'] %}
                     <span class="pipeline-stage badge-{{ stage }}" data-stage="{{ stage }}">{{ stage|title }}</span>
                     {% endfor %}
+                </div>
+            </div>
+            <div class="profile-panel" id="profilePanel"></div>
+            <div class="profile-editor">
+                <div class="profile-editor-grid">
+                    <div>
+                        <label for="profileLeadName">Name</label>
+                        <input class="form-control form-control-sm" id="profileLeadName" type="text" placeholder="Lead name">
+                    </div>
+                    <div>
+                        <label for="profileLeadPhone">Phone</label>
+                        <input class="form-control form-control-sm" id="profileLeadPhone" type="text" placeholder="Phone number">
+                    </div>
+                    <div>
+                        <label for="profileLeadEmail">Email</label>
+                        <input class="form-control form-control-sm" id="profileLeadEmail" type="email" placeholder="Email address">
+                    </div>
+                    <div>
+                        <label for="profileDogCount">Dogs</label>
+                        <input class="form-control form-control-sm" id="profileDogCount" type="number" min="0" max="20" placeholder="Count">
+                    </div>
+                    <div>
+                        <label for="profileCloseability">Closeability %</label>
+                        <input class="form-control form-control-sm" id="profileCloseability" type="number" min="0" max="100" placeholder="0-100">
+                    </div>
+                    <div style="grid-column: 1 / -1;">
+                        <label for="profileWaitingOn">What are we waiting on?</label>
+                        <input class="form-control form-control-sm" id="profileWaitingOn" type="text" placeholder="Current blocker or next dependency">
+                    </div>
+                    <div style="grid-column: 1 / -1;">
+                        <label for="profileObjections">Objections</label>
+                        <textarea class="form-control form-control-sm" id="profileObjections" rows="2" placeholder="Budget, timing, spouse approval, shopping around"></textarea>
+                    </div>
+                    <div style="grid-column: 1 / -1;">
+                        <label for="profileNotes">Profile notes</label>
+                        <textarea class="form-control form-control-sm" id="profileNotes" rows="2" placeholder="Anything the team wants to pin to this lead profile"></textarea>
+                    </div>
+                </div>
+                <div class="profile-editor-actions">
+                    <div class="profile-save-status" id="profileSaveStatus">AI-derived profile. You can override it here.</div>
+                    <button class="btn btn-outline-primary btn-sm" type="button" id="saveProfileBtn">
+                        <i class="bi bi-save me-1"></i> Save profile
+                    </button>
                 </div>
             </div>
             <div class="messages-area" id="messagesArea"></div>
@@ -323,6 +413,36 @@
             document.querySelectorAll('.pipeline-stage').forEach(s => {
                 s.classList.toggle('current', s.dataset.stage === data.thread.status);
             });
+
+            const profile = data.profile || {};
+            const knownItems = Array.isArray(profile.known_items) ? profile.known_items : [];
+            const objections = Array.isArray(profile.objections) && profile.objections.length
+                ? profile.objections.map(item => `<span class="contact-objection-chip">${escapeHtml(toTitleCase(item.replaceAll('_', ' ')))}</span>`).join('')
+                : '<span class="contact-meta">No objections logged yet.</span>';
+            const drivers = Array.isArray(profile.closeability_drivers) && profile.closeability_drivers.length
+                ? profile.closeability_drivers.map(item => `<span class="profile-known-chip">${escapeHtml(item)}</span>`).join('')
+                : 'No score drivers available yet.';
+            document.getElementById('profilePanel').innerHTML = `
+                <div class="profile-panel-card"><strong>Phone</strong><span>${escapeHtml(profile.lead_phone || 'Unknown')}</span></div>
+                <div class="profile-panel-card"><strong>Email</strong><span>${escapeHtml(profile.lead_email || 'Unknown')}</span></div>
+                <div class="profile-panel-card"><strong>Dogs</strong><span>${profile.dog_count === null || profile.dog_count === undefined ? 'Unknown' : escapeHtml(String(profile.dog_count))}</span></div>
+                <div class="profile-panel-card"><strong>Quoted Amount</strong><span>${escapeHtml(profile.quoted_amount || 'Not quoted yet')}</span></div>
+                <div class="profile-panel-card"><strong>Waiting On</strong><span>${escapeHtml(profile.waiting_on || 'Unknown')}</span></div>
+                <div class="profile-panel-card"><strong>Closeability</strong><span>${escapeHtml(String(profile.closeability_pct || 0))}%</span></div>
+                <div class="profile-panel-card" style="grid-column: 1 / -1;"><strong>Objections</strong><span class="profile-known-list">${objections}</span></div>
+                <div class="profile-panel-card" style="grid-column: 1 / -1;"><strong>Score drivers</strong><span class="profile-known-list">${drivers}</span></div>
+                <div class="profile-panel-card" style="grid-column: 1 / -1;"><strong>Known Profile Data</strong><span class="profile-known-list">${knownItems.length ? knownItems.map(item => `<span class="profile-known-chip"><strong>${escapeHtml(item.label)}:</strong> ${escapeHtml(item.value)}</span>`).join('') : 'Still building from inbound messages, forms, and quotes.'}</span></div>
+            `;
+
+            document.getElementById('profileLeadName').value = profile.lead_name || data.thread.lead_name || '';
+            document.getElementById('profileLeadPhone').value = profile.lead_phone || data.thread.lead_phone || '';
+            document.getElementById('profileLeadEmail').value = profile.lead_email || data.thread.lead_email || '';
+            document.getElementById('profileDogCount').value = profile.dog_count === null || profile.dog_count === undefined ? '' : String(profile.dog_count);
+            document.getElementById('profileCloseability').value = profile.closeability_pct === null || profile.closeability_pct === undefined ? '' : String(profile.closeability_pct);
+            document.getElementById('profileWaitingOn').value = profile.waiting_on || '';
+            document.getElementById('profileObjections').value = Array.isArray(profile.objections) ? profile.objections.join(', ') : '';
+            document.getElementById('profileNotes').value = profile.profile_notes || '';
+            document.getElementById('profileSaveStatus').textContent = 'AI-derived profile. You can override it here.';
 
             // Render messages
             const area = document.getElementById('messagesArea');
@@ -553,6 +673,53 @@
     document.getElementById('refreshBtn').addEventListener('click', function() {
         location.reload();
     });
+
+    document.getElementById('saveProfileBtn').addEventListener('click', async function() {
+        if (!activeThreadId) return;
+        const button = this;
+        const status = document.getElementById('profileSaveStatus');
+        button.disabled = true;
+        status.textContent = 'Saving profile...';
+        try {
+            const resp = await fetch(`/client/inbox/thread/${activeThreadId}/profile`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+                body: JSON.stringify({
+                    lead_name: document.getElementById('profileLeadName').value,
+                    lead_phone: document.getElementById('profileLeadPhone').value,
+                    lead_email: document.getElementById('profileLeadEmail').value,
+                    dog_count: document.getElementById('profileDogCount').value,
+                    closeability_pct: document.getElementById('profileCloseability').value,
+                    waiting_on: document.getElementById('profileWaitingOn').value,
+                    objections_text: document.getElementById('profileObjections').value,
+                    profile_notes: document.getElementById('profileNotes').value,
+                })
+            });
+            const data = await resp.json();
+            if (!resp.ok || !data.ok) {
+                throw new Error(data.error || 'Failed to save profile');
+            }
+            status.textContent = 'Profile saved.';
+            await loadThread(activeThreadId);
+        } catch (err) {
+            status.textContent = err.message;
+        } finally {
+            button.disabled = false;
+        }
+    });
+
+    function escapeHtml(value) {
+        return String(value || '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+    }
+
+    function toTitleCase(value) {
+        return String(value || '').replace(/\b\w/g, function(letter) { return letter.toUpperCase(); });
+    }
 })();
 </script>
 {% endblock %}

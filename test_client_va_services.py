@@ -101,6 +101,9 @@ class ClientVAServicesTests(unittest.TestCase):
         self.assertIn("CRM / Automation Specialist", body)
         self.assertIn("Generalist VA (fast executor, flexible)", body)
         self.assertIn("Account / QA Reviewer (internal)", body)
+        self.assertIn("Performance drops, broken pages, creative fatigue, or local visibility issues surface as a clear opportunity.", body)
+        self.assertIn("The work is packaged into a bounded mission with a defined scope, token cost, and expected outcome.", body)
+        self.assertIn("No hiring. No freelancer wrangling. You approve the mission and the execution queue handles the rest.", body)
         self.assertIn("Landing Page Audit", body)
         self.assertIn("Full Page Build", body)
 
