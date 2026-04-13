@@ -6857,66 +6857,59 @@ def client_va_services():
     active_requests = sum(1 for item in requests if item.get("status") in active_statuses)
     completed_requests = sum(1 for item in requests if item.get("status") == "completed")
     current_role = session.get("client_role", "owner")
+    specialty_options = [
+        {"key": "wordpress_frontend", "label": "WordPress / Frontend Dev"},
+        {"key": "ads_creative_hybrid", "label": "Ads + Creative Hybrid"},
+        {"key": "local_seo_gbp", "label": "Local SEO / GBP Specialist"},
+        {"key": "crm_automation", "label": "CRM / Automation Specialist"},
+        {"key": "generalist_va", "label": "Generalist VA (fast executor, flexible)"},
+        {"key": "account_qa", "label": "Account / QA Reviewer (internal)"},
+    ]
     token_packs = [
         {
             "tokens": 50,
             "price": 59,
             "bonus_tokens": 0,
             "label": "Safe entry",
-            "tagline": "Perfect for small fixes and quick tasks.",
-            "outcomes": [
-                "1 landing page audit",
-                "1 small WordPress fix batch",
-                "1 ad creative refresh sprint",
-            ],
+            "tagline": "For quick approvals when WARREN finds an obvious win.",
+            "coverage": "Usually enough room for a focused burst of polish, cleanup, or iteration.",
+            "examples": "Think page fixes, creative swaps, funnel cleanup, form repairs, or small SEO and site adjustments.",
         },
         {
             "tokens": 150,
             "price": 149,
             "bonus_tokens": 0,
             "label": "Most popular",
-            "tagline": "Built for ongoing improvements without hiring.",
-            "outcomes": [
-                "1 conversion audit + fixes",
-                "3 ad creative packs",
-                "1 GBP cleanup and tune-up",
-            ],
+            "tagline": "Built for meaningful progress without needing to hire.",
+            "coverage": "Comfortable room for a real sprint, not just a patch.",
+            "examples": "Think audit-plus-implementation work, several creative rounds, landing page refinement, local SEO cleanup, or multiple follow-through tasks.",
         },
         {
             "tokens": 400,
             "price": 349,
             "bonus_tokens": 40,
             "label": "Serious operator",
-            "tagline": "For businesses actively shipping and scaling.",
-            "outcomes": [
-                "2 landing page rebuilds",
-                "6 ad creative packs",
-                "Google Ads setup + optimization sprint",
-            ],
+            "tagline": "For brands actively shipping and clearing bottlenecks.",
+            "coverage": "Strong capacity for larger projects or several approved missions moving at once.",
+            "examples": "Think heavier page work, ad account cleanup, CRO implementation, local search improvements, and backlog-clearing execution in one push.",
         },
         {
             "tokens": 1000,
             "price": 790,
             "bonus_tokens": 150,
             "label": "Best value",
-            "tagline": "Prepaid execution capacity for growing teams.",
-            "outcomes": [
-                "Full funnel rebuild work",
-                "Recurring creative and page execution",
-                "Ongoing WARREN mission delivery",
-            ],
+            "tagline": "Prepaid execution capacity for teams that want speed on standby.",
+            "coverage": "Designed for brands that want execution ready whenever WARREN spots the next move.",
+            "examples": "Think recurring page, creative, CRM, ads, and ops work across a sustained run instead of one-off tickets.",
         },
         {
             "tokens": 2500,
             "price": 1725,
             "bonus_tokens": 500,
             "label": "Aggressive growth",
-            "tagline": "For operators removing execution bottlenecks at scale.",
-            "outcomes": [
-                "Multi-month mission backlog coverage",
-                "Large site and ad execution queue",
-                "Always-ready execution capacity",
-            ],
+            "tagline": "For operators who want backlog pressure gone.",
+            "coverage": "Built for brands running multiple growth tracks and approving execution continuously.",
+            "examples": "Think embedded execution capacity across campaigns, site work, local visibility, reporting, and repeated implementation waves.",
         },
     ]
     mission_catalog = [
@@ -6974,6 +6967,7 @@ def client_va_services():
         active_requests=active_requests,
         completed_requests=completed_requests,
         current_role=current_role,
+        specialty_options=specialty_options,
         token_packs=token_packs,
         mission_catalog=mission_catalog,
         execution_steps=execution_steps,
@@ -6990,8 +6984,16 @@ def client_va_request_create():
     brand_id = session["client_brand_id"]
     title = (request.form.get("title") or "").strip()
     details = (request.form.get("details") or "").strip()
-    specialty_key = (request.form.get("specialty_key") or "account_va").strip().lower()
+    specialty_key = (request.form.get("specialty_key") or "generalist_va").strip().lower()
     priority = (request.form.get("priority") or "normal").strip().lower()
+    allowed_specialties = {
+        "wordpress_frontend",
+        "ads_creative_hybrid",
+        "local_seo_gbp",
+        "crm_automation",
+        "generalist_va",
+        "account_qa",
+    }
 
     if not title:
         flash("Request title is required.", "error")
@@ -6999,8 +7001,8 @@ def client_va_request_create():
     if not details:
         flash("Please add a short description so the VA Desk knows what to do.", "error")
         return redirect(url_for("client.client_va_services"))
-    if specialty_key not in {"account_va", "wordpress", "development"}:
-        specialty_key = "account_va"
+    if specialty_key not in allowed_specialties:
+        specialty_key = "generalist_va"
     if priority not in {"normal", "high", "urgent"}:
         priority = "normal"
 

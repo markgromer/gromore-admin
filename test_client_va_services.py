@@ -78,7 +78,8 @@ class ClientVAServicesTests(unittest.TestCase):
         response = self.client.get("/client/va")
         self.assertEqual(response.status_code, 200)
         body = response.get_data(as_text=True)
-        self.assertIn("WARREN identifies the work. Tokens get it done.", body)
+        self.assertIn("WARREN identifies the work.", body)
+        self.assertIn("Tokens unlock the execution.", body)
         self.assertIn("Submit a request", body)
         self.assertIn("Available tokens", body)
         self.assertIn("50 Tokens", body)
@@ -92,6 +93,14 @@ class ClientVAServicesTests(unittest.TestCase):
         self.assertIn("$790", body)
         self.assertIn("$1725", body)
         self.assertIn("Execution packs are coming soon", body)
+        self.assertIn("Often used for things like", body)
+        self.assertIn("These are not fixed menu items", body)
+        self.assertIn("WordPress / Frontend Dev", body)
+        self.assertIn("Ads + Creative Hybrid", body)
+        self.assertIn("Local SEO / GBP Specialist", body)
+        self.assertIn("CRM / Automation Specialist", body)
+        self.assertIn("Generalist VA (fast executor, flexible)", body)
+        self.assertIn("Account / QA Reviewer (internal)", body)
         self.assertIn("Landing Page Audit", body)
         self.assertIn("Full Page Build", body)
 
@@ -107,7 +116,7 @@ class ClientVAServicesTests(unittest.TestCase):
             "/client/va/request",
             data={
                 "title": "Fix footer links",
-                "specialty_key": "wordpress",
+                "specialty_key": "wordpress_frontend",
                 "priority": "high",
                 "details": "Update the homepage footer links and replace the outdated contact block.",
             },
@@ -118,14 +127,14 @@ class ClientVAServicesTests(unittest.TestCase):
         body = response.get_data(as_text=True)
         self.assertIn("VA request submitted", body)
         self.assertIn("Fix footer links", body)
-        self.assertIn("WordPress Support", body)
+        self.assertIn("WordPress / Frontend Dev", body)
 
         with self.app.app_context():
             requests = self.app.db.get_va_requests(self.brand_id)
             self.assertEqual(len(requests), 1)
             self.assertEqual(requests[0]["title"], "Fix footer links")
             self.assertEqual(requests[0]["priority"], "high")
-            self.assertEqual(requests[0]["specialty_key"], "wordpress")
+            self.assertEqual(requests[0]["specialty_key"], "wordpress_frontend")
 
 
 if __name__ == "__main__":

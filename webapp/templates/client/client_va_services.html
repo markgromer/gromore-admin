@@ -3,6 +3,17 @@
 
 {% block content %}
 <div class="container-fluid py-4">
+    {% set specialty_labels = {
+        'wordpress_frontend': 'WordPress / Frontend Dev',
+        'ads_creative_hybrid': 'Ads + Creative Hybrid',
+        'local_seo_gbp': 'Local SEO / GBP Specialist',
+        'crm_automation': 'CRM / Automation Specialist',
+        'generalist_va': 'Generalist VA (fast executor, flexible)',
+        'account_qa': 'Account / QA Reviewer (internal)',
+        'wordpress': 'WordPress Support',
+        'development': 'React / Full Stack Dev',
+        'account_va': 'Account VA'
+    } %}
     <style>
         .va-hero {
             position: relative;
@@ -36,7 +47,19 @@
             font-size: clamp(2rem, 4vw, 3.1rem);
             font-weight: 800;
             letter-spacing: -.03em;
-            color: #f8fafc;
+            color: #f8fafc !important;
+            max-width: 960px;
+            line-height: 1.06;
+            text-shadow: 0 10px 26px rgba(2, 6, 23, .48);
+            position: relative;
+            z-index: 1;
+        }
+        .va-title span {
+            display: inline;
+            color: inherit !important;
+        }
+        .va-title .va-title-accent {
+            color: #fde68a !important;
         }
         .va-copy {
             max-width: 760px;
@@ -194,23 +217,30 @@
             font-size: .84rem;
             font-weight: 700;
         }
-        .va-pack-list {
-            list-style: none;
-            padding: 0;
-            margin: 1rem 0 0;
+        .va-pack-copy {
+            margin-top: 1rem;
             display: grid;
-            gap: .55rem;
-            color: #e2e8f0;
-            font-size: .88rem;
+            gap: .75rem;
         }
-        .va-pack-list li {
-            display: flex;
-            align-items: flex-start;
-            gap: .5rem;
+        .va-pack-copy-block {
+            padding: .8rem .85rem;
+            border-radius: 14px;
+            background: rgba(255,255,255,.07);
+            border: 1px solid rgba(255,255,255,.1);
         }
-        .va-pack-list i {
+        .va-pack-copy-label {
+            display: block;
+            margin-bottom: .25rem;
             color: #fcd34d;
-            margin-top: .15rem;
+            font-size: .72rem;
+            font-weight: 800;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+        .va-pack-copy-text {
+            color: #e2e8f0;
+            font-size: .9rem;
+            line-height: 1.6;
         }
         .va-pack-cta {
             margin-top: auto;
@@ -476,7 +506,7 @@
     <section class="va-hero">
         <div class="va-kicker"><i class="bi bi-headset"></i> Managed Support</div>
         <div class="va-overline">Execution capacity on demand</div>
-        <h1 class="va-title">WARREN identifies the work. Tokens get it done.</h1>
+        <h1 class="va-title"><span>WARREN identifies the work.</span> <span class="va-title-accent">Tokens unlock the execution.</span></h1>
         <p class="va-copy">
             {{ brand_name or 'Your brand' }} does not need a VA marketplace or open-ended hourly help.
             WARREN identifies what needs attention, the system creates a mission, and tokens unlock bounded execution without hiring, managing, or waiting on bottlenecks.
@@ -507,11 +537,16 @@
                 <div class="va-pack-bonus">+{{ pack.bonus_tokens }} bonus tokens included</div>
                 {% endif %}
                 <div class="va-pack-tagline">{{ pack.tagline }}</div>
-                <ul class="va-pack-list">
-                    {% for outcome in pack.outcomes %}
-                    <li><i class="bi bi-check2-circle"></i><span>{{ outcome }}</span></li>
-                    {% endfor %}
-                </ul>
+                <div class="va-pack-copy">
+                    <div class="va-pack-copy-block">
+                        <span class="va-pack-copy-label">Capacity</span>
+                        <div class="va-pack-copy-text">{{ pack.coverage }}</div>
+                    </div>
+                    <div class="va-pack-copy-block">
+                        <span class="va-pack-copy-label">Often used for things like</span>
+                        <div class="va-pack-copy-text">{{ pack.examples }}</div>
+                    </div>
+                </div>
                 <div class="va-pack-cta">
                     <a href="#" class="va-buy-link js-va-pack-link" data-pack-name="{{ pack.tokens }} Tokens" data-pack-price="${{ pack.price }}">
                         <i class="bi bi-lightning-charge"></i> Purchase {{ pack.tokens }} Tokens
@@ -522,7 +557,7 @@
         </div>
 
         <div class="va-pack-note">
-            Tokens are never presented as abstract units alone. Every pack is tied to real execution outcomes, mission approval, and faster delivery across your highest-value work.
+            These are not fixed menu items. They are reference points so buyers can understand how much real execution room each pack usually creates.
         </div>
 
         <div class="va-rate-grid">
@@ -593,9 +628,9 @@
                     <div class="col-md-6">
                         <label class="form-label">Specialty</label>
                         <select class="form-select" name="specialty_key">
-                            <option value="account_va">Account VA</option>
-                            <option value="wordpress">WordPress Support</option>
-                            <option value="development">React / Full Stack Dev</option>
+                            {% for specialty in specialty_options %}
+                            <option value="{{ specialty.key }}">{{ specialty.label }}</option>
+                            {% endfor %}
                         </select>
                     </div>
                     <div class="col-md-6">
@@ -655,7 +690,7 @@
                         <div class="va-badge-row">
                             <span class="va-badge status-{{ request.status }}">{{ request.status.replace('_', ' ') }}</span>
                             <span class="va-badge priority-{{ request.priority }}">{{ request.priority }} priority</span>
-                            <span class="va-badge">{% if request.specialty_key == 'wordpress' %}WordPress Support{% elif request.specialty_key == 'development' %}React / Full Stack Dev{% else %}Account VA{% endif %}</span>
+                            <span class="va-badge">{{ specialty_labels.get(request.specialty_key, request.specialty_key.replace('_', ' ')|title) }}</span>
                             {% if request.estimated_tokens %}<span class="va-badge">{{ request.estimated_tokens }} est. tokens</span>{% endif %}
                             {% if request.actual_tokens_used %}<span class="va-badge">{{ request.actual_tokens_used }} used</span>{% endif %}
                         </div>
