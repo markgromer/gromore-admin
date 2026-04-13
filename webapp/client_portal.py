@@ -502,7 +502,7 @@ def _resolve_feature_state(db, feature_key, brand_id):
         return "off"
 
     level = flag.get("access_level") or "all"
-    if level == "admin":
+    if level == "admin" and "user_id" not in session:
         return "off"
     if level == "beta" and not (brand_id and db.is_beta_brand(brand_id)):
         return "off"

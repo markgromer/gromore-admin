@@ -125,6 +125,26 @@ class BrandFeatureAccessTests(unittest.TestCase):
         self.assertEqual(recipients[0]["email"], "dev@example.com")
         self.assertEqual(recipients[1]["email"], "designer@example.com")
 
+    def test_admin_only_feature_is_available_to_admin_impersonation(self):
+        with self.app.app_context():
+            self.app.db.update_feature_flag("va_services", "admin", True)
+
+        with self.client.session_transaction() as session:
+            session["user_id"] = self.admin_id
+            session["user_name"] = "Admin User"
+            session["client_user_id"] = self.client_user_id
+            session["client_brand_id"] = self.brand_id
+            session["client_role"] = "owner"
+            session["client_name"] = "Owner User"
+            session["client_brand_name"] = "Feature Test Brand"
+            session["client_admin_impersonating"] = True
+
+        response = self.client.get("/client/va")
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn("VA Desk", html)
+
 
 if __name__ == "__main__":
     unittest.main()
