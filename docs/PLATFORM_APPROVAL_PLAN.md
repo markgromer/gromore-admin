@@ -31,6 +31,7 @@ Public URLs now available on the app domain:
 - Privacy Policy: `/privacy`
 - Terms of Service: `/terms`
 - Meta Data Deletion Instructions: `/meta/data-deletion`
+- Meta Data Deletion Callback: `/meta/data-deletion/callback`
 
 ## Meta Readiness Requirements Before App Review
 
@@ -61,6 +62,7 @@ Public URLs now available on the app domain:
 
 - Publish privacy and terms pages wherever the public website is hosted.
 - Put the same URLs into Meta App Review fields.
-- Add the Meta data deletion URL in the Meta app settings.
+- Add the Meta data deletion callback URL in the Meta app settings.
+- Keep the public Meta deletion instructions page available for reviewer context.
 - Verify the production app domain in Meta and Google where required.
 - Record app-review videos before submission.

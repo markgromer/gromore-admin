@@ -6,6 +6,9 @@ report generation, email delivery, and WordPress publishing.
 """
 import os
 import json
+import base64
+import hashlib
+import hmac
 import secrets
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -29,6 +32,41 @@ from webapp.hiring import hiring_bp
 from webapp.warren_webhooks import webhooks_bp
 
 BASE_DIR = Path(__file__).parent.parent
+
+
+def _base64_url_decode(value):
+    raw = (value or "").encode("utf-8")
+    padding = b"=" * (-len(raw) % 4)
+    return base64.urlsafe_b64decode(raw + padding)
+
+
+def _decode_meta_signed_request(signed_request, app_secret):
+    try:
+        encoded_sig, encoded_payload = (signed_request or "").split(".", 1)
+    except ValueError as exc:
+        raise ValueError("Malformed signed_request") from exc
+
+    signature = _base64_url_decode(encoded_sig)
+    payload_bytes = _base64_url_decode(encoded_payload)
+
+    try:
+        payload = json.loads(payload_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Invalid signed_request payload") from exc
+
+    algorithm = (payload.get("algorithm") or "").upper()
+    if algorithm != "HMAC-SHA256":
+        raise ValueError("Unsupported signed_request algorithm")
+
+    expected = hmac.new(
+        (app_secret or "").encode("utf-8"),
+        encoded_payload.encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    if not hmac.compare_digest(expected, signature):
+        raise ValueError("Invalid signed_request signature")
+
+    return payload
 
 
 def create_app():
@@ -424,6 +462,64 @@ def create_app():
     @app.route("/meta/data-deletion")
     def meta_data_deletion():
         return render_template("meta_data_deletion.html")
+
+    @app.route("/meta/data-deletion/status/<confirmation_code>")
+    def meta_data_deletion_status(confirmation_code):
+        deletion_request = db.get_meta_deletion_request(confirmation_code)
+        if not deletion_request:
+            abort(404)
+        return jsonify(
+            {
+                "confirmation_code": deletion_request["confirmation_code"],
+                "status": deletion_request["status"],
+                "requested_at": deletion_request["requested_at"],
+                "completed_at": deletion_request["completed_at"],
+                "deleted_thread_count": deletion_request["deleted_thread_count"],
+                "notes": deletion_request["notes"],
+            }
+        )
+
+    @app.route("/meta/data-deletion/callback", methods=["POST"])
+    @csrf.exempt
+    def meta_data_deletion_callback():
+        signed_request = (
+            request.form.get("signed_request")
+            or (request.get_json(silent=True) or {}).get("signed_request")
+            or ""
+        ).strip()
+        if not signed_request:
+            return jsonify({"error": "Missing signed_request"}), 400
+
+        app_secret = (db.get_setting("meta_app_secret", "") or app.config.get("META_APP_SECRET", "")).strip()
+        if not app_secret:
+            return jsonify({"error": "Meta app secret is not configured"}), 500
+
+        try:
+            payload = _decode_meta_signed_request(signed_request, app_secret)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+        meta_user_id = str(payload.get("user_id") or "").strip()
+        if not meta_user_id:
+            return jsonify({"error": "signed_request missing user_id"}), 400
+
+        deletion_request = db.create_meta_deletion_request(
+            meta_user_id,
+            json.dumps(payload, sort_keys=True),
+        )
+        deletion_request = db.process_meta_deletion_request(deletion_request["confirmation_code"])
+
+        configured = (app.config.get("APP_URL", "") or "").rstrip("/")
+        request_base = request.host_url.rstrip("/")
+        public_base = request_base if (not configured or "localhost" in configured) else configured
+        status_url = f"{public_base}{url_for('meta_data_deletion_status', confirmation_code=deletion_request['confirmation_code'])}"
+
+        return jsonify(
+            {
+                "url": status_url,
+                "confirmation_code": deletion_request["confirmation_code"],
+            }
+        )
 
     # ── Dashboard ──
     @app.route("/")

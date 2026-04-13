@@ -98,7 +98,8 @@
                         <div>Leadgen callback URL: {{ config.APP_URL.rstrip('/') }}/webhooks/meta/leadgen</div>
                         <div>Privacy Policy URL: {{ config.APP_URL.rstrip('/') }}/privacy</div>
                         <div>Terms of Service URL: {{ config.APP_URL.rstrip('/') }}/terms</div>
-                        <div>Meta Data Deletion URL: {{ config.APP_URL.rstrip('/') }}/meta/data-deletion</div>
+                        <div>Meta Data Deletion Instructions URL: {{ config.APP_URL.rstrip('/') }}/meta/data-deletion</div>
+                        <div>Meta Data Deletion Callback URL: {{ config.APP_URL.rstrip('/') }}/meta/data-deletion/callback</div>
                     </div>
                     <button type="submit" class="btn btn-primary">Save Meta Credentials</button>
                     {% if config.META_APP_ID %}
@@ -122,6 +123,7 @@
                         <div>Google OAuth redirect URI: {{ config.APP_URL.rstrip('/') }}/oauth/google/callback</div>
                         <div>Privacy Policy URL: {{ config.APP_URL.rstrip('/') }}/privacy</div>
                         <div>Terms of Service URL: {{ config.APP_URL.rstrip('/') }}/terms</div>
+                        <div>Meta Data Deletion Callback URL: {{ config.APP_URL.rstrip('/') }}/meta/data-deletion/callback</div>
                     </div>
                         <input type="url" name="app_url" class="form-control"
                                value="{{ config.APP_URL }}"

@@ -7,6 +7,7 @@ contacts, connections (OAuth tokens), reports, and settings.
 import sqlite3
 import json
 import re
+import secrets
 from pathlib import Path
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -287,6 +288,21 @@ class WebDB:
                 key TEXT PRIMARY KEY,
                 value TEXT DEFAULT ''
             );
+
+            CREATE TABLE IF NOT EXISTS meta_deletion_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                confirmation_code TEXT UNIQUE NOT NULL,
+                meta_user_id TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'received',
+                payload_json TEXT DEFAULT '{}',
+                notes TEXT DEFAULT '',
+                deleted_thread_count INTEGER DEFAULT 0,
+                requested_at TEXT DEFAULT (datetime('now')),
+                completed_at TEXT DEFAULT ''
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_meta_deletion_requests_user
+            ON meta_deletion_requests(meta_user_id, requested_at DESC);
 
             CREATE TABLE IF NOT EXISTS client_users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2852,6 +2868,82 @@ class WebDB:
         )
         conn.commit()
         conn.close()
+
+    def create_meta_deletion_request(self, meta_user_id, payload_json="{}"):
+        conn = self._conn()
+        confirmation_code = f"GRO-{secrets.token_hex(8).upper()}"
+        conn.execute(
+            """
+            INSERT INTO meta_deletion_requests (
+                confirmation_code, meta_user_id, status, payload_json
+            ) VALUES (?, ?, 'received', ?)
+            """,
+            (confirmation_code, str(meta_user_id or "").strip(), payload_json or "{}"),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM meta_deletion_requests WHERE confirmation_code = ?",
+            (confirmation_code,),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_meta_deletion_request(self, confirmation_code):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM meta_deletion_requests WHERE confirmation_code = ?",
+            (confirmation_code,),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def process_meta_deletion_request(self, confirmation_code):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM meta_deletion_requests WHERE confirmation_code = ?",
+            (confirmation_code,),
+        ).fetchone()
+        if not row:
+            conn.close()
+            return None
+
+        meta_user_id = (row["meta_user_id"] or "").strip()
+        deleted_thread_count = 0
+        notes = "No directly keyed in-app Meta thread records were found."
+
+        if meta_user_id:
+            deleted_thread_count = conn.execute(
+                "SELECT COUNT(1) FROM lead_threads WHERE channel = 'messenger' AND external_thread_id = ?",
+                (meta_user_id,),
+            ).fetchone()[0]
+            conn.execute(
+                "DELETE FROM lead_threads WHERE channel = 'messenger' AND external_thread_id = ?",
+                (meta_user_id,),
+            )
+            if deleted_thread_count:
+                notes = (
+                    "Removed in-app Messenger thread records keyed by the Meta user identifier. "
+                    "Other records may require manual review if they are not stored against that identifier."
+                )
+
+        conn.execute(
+            """
+            UPDATE meta_deletion_requests
+               SET status = 'completed',
+                   deleted_thread_count = ?,
+                   notes = ?,
+                   completed_at = datetime('now')
+             WHERE confirmation_code = ?
+            """,
+            (deleted_thread_count, notes, confirmation_code),
+        )
+        conn.commit()
+        updated = conn.execute(
+            "SELECT * FROM meta_deletion_requests WHERE confirmation_code = ?",
+            (confirmation_code,),
+        ).fetchone()
+        conn.close()
+        return dict(updated) if updated else None
 
     # ── Aggregate Queries ──
 
