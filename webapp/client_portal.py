@@ -944,6 +944,12 @@ _ENDPOINT_FEATURE_MAP = {
     "client_crm_data":             "crm",
     "client_lead_assistant":       "crm",
     "client_save_lead_assistant_profile": "crm",
+    "client_commercial_prospecting": "crm",
+    "client_commercial_search":    "crm",
+    "client_commercial_import":    "crm",
+    "client_commercial_thread":    "crm",
+    "client_commercial_thread_qualification": "crm",
+    "client_commercial_thread_refresh": "crm",
     "client_va_services":          "va_services",
     "client_va_request_create":    "va_services",
     "client_va_request_cancel":    "va_services",
@@ -6384,6 +6390,45 @@ def client_ghl_test():
 
 # ── CRM Dashboard Tab ──
 
+
+def _build_client_commercial_payload(thread):
+    try:
+        payload = json.loads(thread.get("commercial_data_json") or "{}")
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    payload["name"] = payload.get("name") or thread.get("lead_name") or payload.get("business_name") or "Commercial Prospect"
+    payload["email"] = thread.get("lead_email") or payload.get("email") or ""
+    payload["phone"] = thread.get("lead_phone") or payload.get("phone") or ""
+    payload["business_name"] = payload.get("business_name") or thread.get("lead_name") or payload["name"]
+    payload["source"] = payload.get("source") or thread.get("source") or "commercial_prospecting"
+    payload["stage"] = payload.get("stage") or thread.get("status") or "new"
+    payload["summary"] = thread.get("summary") or payload.get("summary") or ""
+    return payload
+
+
+def _build_client_commercial_brief(thread):
+    from webapp.commercial_strategy import build_commercial_outreach_brief
+
+    payload = _build_client_commercial_payload(thread)
+    return payload, build_commercial_outreach_brief(payload)
+
+
+def _get_client_commercial_threads(db, brand_id, limit=60):
+    threads = db.get_lead_threads(brand_id, limit=limit)
+    items = []
+    for thread in threads:
+        if (thread.get("source") or "") != "commercial_prospecting" and (thread.get("commercial_data_json") or "{}").strip() in {"", "{}"}:
+            continue
+        payload, brief = _build_client_commercial_brief(thread)
+        items.append({
+            "thread": thread,
+            "payload": payload,
+            "brief": brief,
+        })
+    return items
+
 @client_bp.route("/crm")
 @client_login_required
 def client_crm():
@@ -6535,6 +6580,335 @@ def client_save_lead_assistant_profile():
 
     flash("Lead assistant profile saved.", "success")
     return redirect(url_for("client.client_lead_assistant"))
+
+
+@client_bp.route("/commercial")
+@client_login_required
+def client_commercial_prospecting():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    from webapp.commercial_prospector import COMMERCIAL_PROSPECT_TYPES
+
+    maps_api_key = (os.environ.get("GOOGLE_MAPS_API_KEY") or db.get_setting("google_maps_api_key") or "").strip()
+    return render_template(
+        "client_commercial_prospector.html",
+        brand=brand,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+        results=[],
+        location=(brand.get("service_area") or "").strip(),
+        selected_types=[item["key"] for item in COMMERCIAL_PROSPECT_TYPES[:3]],
+        prospect_types=COMMERCIAL_PROSPECT_TYPES,
+        has_maps_api_key=bool(maps_api_key),
+        imported_threads=_get_client_commercial_threads(db, brand_id),
+        search_performed=False,
+    )
+
+
+@client_bp.route("/commercial/search", methods=["POST"])
+@client_login_required
+def client_commercial_search():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    from webapp.commercial_prospector import COMMERCIAL_PROSPECT_TYPES, search_commercial_prospects
+
+    location = request.form.get("location", "").strip()
+    selected_types = [value.strip() for value in request.form.getlist("prospect_types") if value.strip()]
+    max_results = request.form.get("max_results", "8").strip()
+    try:
+        max_results = max(3, min(int(max_results or 8), 15))
+    except ValueError:
+        max_results = 8
+
+    maps_api_key = (os.environ.get("GOOGLE_MAPS_API_KEY") or db.get_setting("google_maps_api_key") or "").strip()
+    results = []
+    if location:
+        try:
+            results = search_commercial_prospects(
+                location,
+                selected_types,
+                api_key=maps_api_key,
+                max_results_per_type=max_results,
+            )
+        except Exception as exc:
+            flash(f"Commercial search failed: {str(exc)[:160]}", "error")
+    else:
+        flash("Enter a location before searching.", "error")
+
+    return render_template(
+        "client_commercial_prospector.html",
+        brand=brand,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+        results=results,
+        location=location,
+        selected_types=selected_types,
+        prospect_types=COMMERCIAL_PROSPECT_TYPES,
+        has_maps_api_key=bool(maps_api_key),
+        imported_threads=_get_client_commercial_threads(db, brand_id),
+        search_performed=True,
+    )
+
+
+@client_bp.route("/commercial/import", methods=["POST"])
+@client_login_required
+def client_commercial_import():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    raw_results = request.form.getlist("selected_results")
+    selected = []
+    for raw in raw_results:
+        try:
+            selected.append(json.loads(raw))
+        except Exception:
+            continue
+
+    if not selected:
+        flash("Select at least one commercial target to import.", "error")
+        return redirect(url_for("client.client_commercial_prospecting"))
+
+    from webapp.commercial_strategy import build_commercial_outreach_brief
+
+    imported = 0
+    updated = 0
+    created_threads = []
+
+    for item in selected:
+        business_name = (item.get("business_name") or item.get("contact_name") or "Commercial Prospect").strip()
+        emails = [value.strip().lower() for value in (item.get("emails") or []) if isinstance(value, str) and value.strip()]
+        primary_email = emails[0] if emails else ""
+        phone = (item.get("phone") or "").strip()
+        website = (item.get("website") or "").strip()
+        service_area = (item.get("service_area") or brand.get("service_area") or "").strip()
+        type_label = (item.get("prospect_type_label") or item.get("prospect_type") or "Commercial Property").strip()
+        source_query = (item.get("source_query") or "").strip()
+        address = (item.get("address") or "").strip()
+        audit_snapshot = item.get("audit_snapshot") if isinstance(item.get("audit_snapshot"), dict) else {}
+
+        source_details = {
+            "emails": emails,
+            "address": address,
+            "phone": phone,
+            "website": website,
+            "service_area": service_area,
+            "prospect_type": item.get("prospect_type") or "",
+            "prospect_type_label": type_label,
+            "source_query": source_query,
+            "rating": item.get("rating"),
+            "review_count": item.get("review_count") or 0,
+            "maps_url": item.get("maps_url") or "",
+        }
+        prospect_payload = {
+            "name": business_name,
+            "email": primary_email,
+            "phone": phone,
+            "business_name": business_name,
+            "website": website,
+            "industry": type_label,
+            "account_type": item.get("prospect_type") or "",
+            "service_area": service_area,
+            "stage": "new",
+            "source": "commercial_prospecting",
+            "source_details_json": json.dumps(source_details),
+            "audit_snapshot_json": json.dumps(audit_snapshot),
+            "qualification_answers_json": "{}",
+            "property_count": "",
+            "decision_maker_role": "",
+            "current_vendor_status": "",
+        }
+        brief = build_commercial_outreach_brief(prospect_payload)
+        prospect_payload.update({
+            "outreach_angle": brief["outreach_angle"],
+            "proposal_status": brief["proposal_readiness"]["status"],
+            "pain_points_json": json.dumps(brief["pain_points"]),
+            "next_action": (brief["next_actions"] or [""])[0],
+        })
+        summary = f"Commercial target imported - {type_label}. Angle: {brief['outreach_angle']}."
+
+        existing = db.find_brand_lead_thread(
+            brand_id,
+            email=primary_email,
+            lead_name=business_name,
+            source="commercial_prospecting",
+        )
+
+        if existing:
+            thread_id = existing["id"]
+            db.update_lead_thread_profile_fields(
+                thread_id,
+                brand_id,
+                lead_name=business_name,
+                lead_email=primary_email or existing.get("lead_email") or "",
+                lead_phone=phone or existing.get("lead_phone") or "",
+                summary=summary,
+            )
+            db.update_lead_thread_commercial_data(thread_id, brand_id, json.dumps(prospect_payload))
+            updated += 1
+        else:
+            thread_id = db.create_lead_thread(
+                brand_id,
+                {
+                    "lead_name": business_name,
+                    "lead_email": primary_email,
+                    "lead_phone": phone,
+                    "source": "commercial_prospecting",
+                    "channel": "commercial",
+                    "status": "new",
+                    "summary": summary,
+                    "commercial_data_json": json.dumps(prospect_payload),
+                },
+            )
+            db.add_lead_message(
+                thread_id,
+                "outbound",
+                "system",
+                f"Commercial target imported. Suggested first step: {prospect_payload['next_action']}",
+                channel="commercial",
+                metadata={
+                    "subject": brief["subject"],
+                    "email_body": brief["email_body"],
+                    "call_opener": brief["call_opener"],
+                },
+            )
+            imported += 1
+        created_threads.append(thread_id)
+
+    flash(f"Commercial import finished. {imported} new, {updated} updated in WARREN's pipeline.", "success")
+    if len(created_threads) == 1:
+        return redirect(url_for("client.client_commercial_thread", thread_id=created_threads[0]))
+    return redirect(url_for("client.client_commercial_prospecting"))
+
+
+@client_bp.route("/commercial/thread/<int:thread_id>")
+@client_login_required
+def client_commercial_thread(thread_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread:
+        abort(404)
+
+    prospect, commercial_brief = _build_client_commercial_brief(thread)
+    if (thread.get("source") or "") != "commercial_prospecting" and (thread.get("commercial_data_json") or "{}").strip() in {"", "{}"}:
+        abort(404)
+
+    return render_template(
+        "client_commercial_detail.html",
+        brand=brand,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+        thread=thread,
+        commercial_prospect=prospect,
+        commercial_brief=commercial_brief,
+    )
+
+
+@client_bp.route("/commercial/thread/<int:thread_id>/qualification", methods=["POST"])
+@client_login_required
+def client_commercial_thread_qualification(thread_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread:
+        abort(404)
+
+    from webapp.commercial_strategy import (
+        COMMERCIAL_QUALIFICATION_CORE_FIELDS,
+        COMMERCIAL_QUALIFICATION_FIELDS,
+        build_commercial_outreach_brief,
+    )
+
+    prospect = _build_client_commercial_payload(thread)
+    try:
+        answers = json.loads(prospect.get("qualification_answers_json") or "{}")
+    except Exception:
+        answers = {}
+    for field in COMMERCIAL_QUALIFICATION_CORE_FIELDS:
+        prospect[field["key"]] = request.form.get(field["key"], "").strip()
+    for field in COMMERCIAL_QUALIFICATION_FIELDS:
+        answers[field["key"]] = request.form.get(field["key"], "").strip()
+    prospect["qualification_answers_json"] = json.dumps(answers)
+
+    brief = build_commercial_outreach_brief(prospect)
+    prospect["outreach_angle"] = brief["outreach_angle"]
+    prospect["proposal_status"] = brief["proposal_readiness"]["status"]
+    prospect["pain_points_json"] = json.dumps(brief["pain_points"])
+    prospect["next_action"] = (brief["next_actions"] or [""])[0]
+
+    db.update_lead_thread_commercial_data(thread_id, brand_id, json.dumps(prospect))
+    db.update_lead_thread_status(
+        thread_id,
+        summary=f"Commercial target - {prospect.get('industry') or prospect.get('account_type') or 'Commercial'}. Proposal: {brief['proposal_readiness']['label']}.",
+    )
+    db.add_lead_message(
+        thread_id,
+        "outbound",
+        "system",
+        f"Commercial qualification updated. {brief['qualification_summary']['complete_count']}/{brief['qualification_summary']['required_count']} required points confirmed.",
+        channel="commercial",
+    )
+    flash("Commercial qualification saved.", "success")
+    return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+
+@client_bp.route("/commercial/thread/<int:thread_id>/refresh", methods=["POST"])
+@client_login_required
+def client_commercial_thread_refresh(thread_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread:
+        abort(404)
+
+    prospect = _build_client_commercial_payload(thread)
+    website = (prospect.get("website") or "").strip()
+    if not website:
+        flash("Add a website before refreshing the commercial audit.", "error")
+        return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+    from webapp.commercial_prospector import _extract_public_emails
+    from webapp.competitor_intel import _scrape_website
+    from webapp.commercial_strategy import build_commercial_outreach_brief
+
+    try:
+        source_details = json.loads(prospect.get("source_details_json") or "{}")
+    except Exception:
+        source_details = {}
+
+    site_data = _scrape_website({"website": website}) or {}
+    source_details.update({
+        "emails": _extract_public_emails(website),
+        "website": website,
+        "service_area": prospect.get("service_area") or source_details.get("service_area") or "",
+        "address": source_details.get("address") or "",
+        "review_count": source_details.get("review_count") or 0,
+        "rating": source_details.get("rating"),
+    })
+    prospect["source_details_json"] = json.dumps(source_details)
+    prospect["audit_snapshot_json"] = json.dumps(site_data)
+    brief = build_commercial_outreach_brief(prospect)
+    prospect["outreach_angle"] = brief["outreach_angle"]
+    prospect["proposal_status"] = brief["proposal_readiness"]["status"]
+    prospect["pain_points_json"] = json.dumps(brief["pain_points"])
+    prospect["next_action"] = (brief["next_actions"] or [""])[0]
+
+    db.update_lead_thread_commercial_data(thread_id, brand_id, json.dumps(prospect))
+    db.update_lead_thread_status(thread_id, summary=f"Commercial audit refreshed - {brief['outreach_angle']}.")
+    flash("Commercial brief refreshed.", "success")
+    return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
 
 
 # ── Warren Inbox ──

@@ -1,0 +1,207 @@
+{% extends "client_base.html" %}
+{% block title %}Commercial Lead Engine{% endblock %}
+
+{% block content %}
+<style>
+    .commercial-hero {
+        background: linear-gradient(135deg, #0f172a 0%, #166534 55%, #84cc16 100%);
+        border-radius: 18px;
+        padding: 1.75rem 1.9rem;
+        color: #fff;
+        margin-bottom: 1.4rem;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, .18);
+    }
+    .commercial-card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 1.35rem;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, .05);
+        margin-bottom: 1.25rem;
+    }
+    .commercial-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+    }
+    .commercial-result {
+        border: 1px solid #dbe4f0;
+        border-radius: 14px;
+        padding: 1rem;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    }
+    .email-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .25rem .55rem;
+        border-radius: 999px;
+        background: #eff6ff;
+        color: #1d4ed8;
+        font-size: .72rem;
+        font-weight: 700;
+        margin: .15rem .25rem .15rem 0;
+    }
+    .imported-item {
+        border: 1px solid #dbe4f0;
+        border-radius: 14px;
+        padding: 1rem;
+        background: #f8fafc;
+        height: 100%;
+    }
+</style>
+
+<div class="commercial-hero">
+    <div class="d-flex justify-content-between gap-3 flex-wrap align-items-start">
+        <div>
+            <div class="text-uppercase" style="font-size:.72rem; font-weight:800; letter-spacing:.05em; opacity:.78;">Commercial Lead Engine</div>
+            <h3 class="mt-2 mb-2" style="font-weight:800; color:#fff !important;">Let {{ brand_name or brand.display_name }} build a commercial pipeline inside WARREN</h3>
+            <p style="margin:0; max-width:800px; opacity:.82;">Search apartment complexes, HOAs, and property managers in your market, pull public contact signals, and drop qualified targets into your brand's own Warren pipeline for outreach, qualification, and follow-up.</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ url_for('client.client_lead_assistant') }}" class="btn btn-light btn-sm"><i class="bi bi-chat-dots me-1"></i> Lead Assistant</a>
+            {% if feature_on('warren_inbox') %}
+            <a href="{{ url_for('client.client_inbox') }}" class="btn btn-outline-light btn-sm"><i class="bi bi-inbox me-1"></i> Warren Inbox</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="commercial-card">
+    <form method="POST" action="{{ url_for('client.client_commercial_search') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row g-3 align-items-end">
+            <div class="col-lg-4">
+                <label class="form-label fw-semibold">Target Location</label>
+                <input type="text" class="form-control" name="location" value="{{ location }}" placeholder="Phoenix, AZ" required>
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label fw-semibold">Results per type</label>
+                <input type="number" class="form-control" name="max_results" value="8" min="3" max="15">
+            </div>
+            <div class="col-lg-6">
+                <label class="form-label fw-semibold">Target groups</label>
+                <div class="d-flex flex-wrap gap-3">
+                    {% for option in prospect_types %}
+                    <label class="form-check-label d-flex align-items-center gap-2">
+                        <input class="form-check-input mt-0" type="checkbox" name="prospect_types" value="{{ option.key }}" {{ 'checked' if option.key in selected_types else '' }}>
+                        <span>{{ option.label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center mt-3 gap-2 flex-wrap">
+            <small class="text-muted">
+                {% if has_maps_api_key %}
+                Google Places is enabled. WARREN will also pull public email and website signals when available.
+                {% else %}
+                No Google Maps API key found, so this search falls back to public web search.
+                {% endif %}
+            </small>
+            <button class="btn btn-success" type="submit"><i class="bi bi-search me-1"></i> Search commercial targets</button>
+        </div>
+    </form>
+</div>
+
+{% if imported_threads %}
+<div class="commercial-card">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div>
+            <h5 style="font-weight:800; margin-bottom:.2rem;">Imported Commercial Targets</h5>
+            <div class="text-muted" style="font-size:.84rem;">These are already tied to your brand's Warren pipeline.</div>
+        </div>
+        {% if feature_on('warren_inbox') %}
+        <a href="{{ url_for('client.client_inbox') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-inbox me-1"></i> Open Inbox</a>
+        {% endif %}
+    </div>
+    <div class="commercial-grid">
+        {% for item in imported_threads %}
+        <div class="imported-item">
+            <div class="d-flex justify-content-between gap-2 align-items-start mb-2">
+                <div>
+                    <div style="font-weight:800;">{{ item.payload.business_name }}</div>
+                    <div class="text-muted" style="font-size:.8rem;">{{ item.payload.account_type or item.payload.industry or 'Commercial target' }}</div>
+                </div>
+                <span class="badge bg-{{ 'success' if item.brief.proposal_readiness.status == 'ready' else 'warning text-dark' }}">{{ item.brief.proposal_readiness.label }}</span>
+            </div>
+            <div style="font-size:.84rem; color:#475569; margin-bottom:.55rem;">{{ item.thread.summary or 'Commercial target in WARREN pipeline.' }}</div>
+            <div style="font-size:.78rem; color:#64748b; margin-bottom:.7rem;">Next: {{ (item.brief.next_actions or ['Review target'])[0] }}</div>
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{{ url_for('client.client_commercial_thread', thread_id=item.thread.id) }}" class="btn btn-primary btn-sm">Open Workspace</a>
+                {% if feature_on('warren_inbox') %}
+                <a href="{{ url_for('client.client_inbox') }}" class="btn btn-outline-secondary btn-sm">Inbox</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if search_performed %}
+<div class="commercial-card">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div>
+            <h5 style="font-weight:800; margin-bottom:.2rem;">Search Results</h5>
+            <div class="text-muted" style="font-size:.84rem;">{{ results|length }} targets found for {{ location or 'your search' }}.</div>
+        </div>
+    </div>
+    {% if results %}
+    <form method="POST" action="{{ url_for('client.client_commercial_import') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" value="1" id="selectAllCommercialResults">
+                <label class="form-check-label fw-semibold" for="selectAllCommercialResults">Select all visible targets</label>
+            </div>
+            <button class="btn btn-success btn-sm" type="submit"><i class="bi bi-cloud-arrow-down me-1"></i> Import selected targets into WARREN</button>
+        </div>
+        <div class="commercial-grid">
+            {% for result in results %}
+            <div class="commercial-result">
+                <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                    <div class="form-check">
+                        <input class="form-check-input commercial-result-check" type="checkbox" name="selected_results" value="{{ result|tojson|forceescape }}" id="commercialResult{{ loop.index }}">
+                        <label class="form-check-label" for="commercialResult{{ loop.index }}"><strong>{{ result.business_name }}</strong></label>
+                    </div>
+                    <span class="badge bg-primary">Score {{ result.score }}</span>
+                </div>
+                <div class="text-muted" style="font-size:.82rem; margin-bottom:.45rem;">
+                    <div><i class="bi bi-buildings me-1"></i> {{ result.prospect_type_label }}</div>
+                    {% if result.address %}<div><i class="bi bi-geo-alt me-1"></i> {{ result.address }}</div>{% endif %}
+                    {% if result.phone %}<div><i class="bi bi-telephone me-1"></i> {{ result.phone }}</div>{% endif %}
+                    {% if result.rating %}<div><i class="bi bi-star-fill me-1"></i> {{ result.rating }}{% if result.review_count %} from {{ result.review_count }} reviews{% endif %}</div>{% endif %}
+                </div>
+                {% if result.website %}<div class="mb-2"><a href="{{ result.website }}" target="_blank" rel="noopener">{{ result.website }}</a></div>{% endif %}
+                <div class="mb-2">
+                    {% if result.emails %}
+                        {% for email in result.emails %}
+                        <span class="email-chip"><i class="bi bi-envelope"></i> {{ email }}</span>
+                        {% endfor %}
+                    {% else %}
+                        <span class="text-muted small">No public email found during scrape.</span>
+                    {% endif %}
+                </div>
+                <div class="text-muted" style="font-size:.78rem;">Query: {{ result.source_query }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </form>
+    <script>
+    (function() {
+        var selectAll = document.getElementById('selectAllCommercialResults');
+        if (!selectAll) return;
+        selectAll.addEventListener('change', function() {
+            document.querySelectorAll('.commercial-result-check').forEach(function(box) {
+                box.checked = selectAll.checked;
+            });
+        });
+    })();
+    </script>
+    {% else %}
+    <div class="text-muted">No commercial targets matched that search. Try a broader metro area or a different target group mix.</div>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

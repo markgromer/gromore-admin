@@ -93,6 +93,14 @@
             <p>This is the operating profile Warren should use when quoting and nurturing leads. Set the pricing posture, hard boundaries, escalation rules, and the exact kind of language that should sound like your brand.</p>
         </div>
         <div class="d-flex flex-wrap gap-2 justify-content-end">
+            <a href="{{ url_for('client.client_commercial_prospecting') }}" class="btn btn-light btn-sm" style="font-weight:700;">
+                <i class="bi bi-buildings me-1"></i> Commercial Lead Engine
+            </a>
+            {% if feature_on('warren_inbox') %}
+            <a href="{{ url_for('client.client_inbox') }}" class="btn btn-outline-light btn-sm" style="font-weight:700;">
+                <i class="bi bi-inbox me-1"></i> Open Warren Inbox
+            </a>
+            {% endif %}
             <span class="la-chip"><i class="bi bi-cash-stack"></i> {{ (brand.sales_bot_quote_mode or 'hybrid')|replace('_', ' ')|title }}</span>
             {% if 'sms' in chatbot_channels %}<span class="la-chip"><i class="bi bi-phone"></i> SMS</span>{% endif %}
             {% if 'lead_forms' in chatbot_channels %}<span class="la-chip"><i class="bi bi-facebook"></i> Lead Forms</span>{% endif %}

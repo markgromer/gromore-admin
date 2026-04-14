@@ -1,0 +1,174 @@
+{% extends "client_base.html" %}
+{% block title %}{{ commercial_prospect.business_name }} - Commercial Workspace{% endblock %}
+
+{% block content %}
+<style>
+    .commercial-detail-card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 1.35rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, .05);
+    }
+    .commercial-detail-card h6 {
+        font-size: .82rem;
+        text-transform: uppercase;
+        color: #64748b;
+        font-weight: 800;
+        margin-bottom: .8rem;
+    }
+    .field-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: .4rem 0;
+        border-bottom: 1px solid #f1f5f9;
+        font-size: .88rem;
+    }
+    .field-row:last-child { border-bottom: none; }
+    .field-label { color: #64748b; }
+    .field-value { font-weight: 600; color: #0f172a; text-align: right; }
+    .brief-box {
+        background: #f8fafc;
+        border: 1px solid #dbe4f0;
+        border-radius: 12px;
+        padding: .95rem 1rem;
+        margin-bottom: .8rem;
+    }
+    .brief-copy {
+        white-space: pre-wrap;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: .85rem;
+        font-size: .86rem;
+    }
+    .qualification-help { font-size: .75rem; color: #64748b; margin-top: .3rem; }
+    .audit-item { padding: .7rem 0; border-bottom: 1px solid #f1f5f9; }
+    .audit-item:last-child { border-bottom: none; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
+    <div>
+        <a href="{{ url_for('client.client_commercial_prospecting') }}" class="text-muted text-decoration-none" style="font-size:.85rem;">
+            <i class="bi bi-arrow-left me-1"></i> Back to Commercial Lead Engine
+        </a>
+        <h3 class="mb-0 mt-1" style="font-weight:800;">{{ commercial_prospect.business_name }}</h3>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <form method="POST" action="{{ url_for('client.client_commercial_thread_refresh', thread_id=thread.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat me-1"></i> Refresh Brief</button>
+        </form>
+        {% if feature_on('warren_inbox') %}
+        <a href="{{ url_for('client.client_inbox') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-inbox me-1"></i> Warren Inbox</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-5">
+        <div class="commercial-detail-card">
+            <h6>Commercial Account</h6>
+            <div class="field-row"><span class="field-label">Status</span><span class="field-value">{{ thread.status|title }}</span></div>
+            <div class="field-row"><span class="field-label">Proposal Readiness</span><span class="field-value">{{ commercial_brief.proposal_readiness.label }}</span></div>
+            <div class="field-row"><span class="field-label">Primary Angle</span><span class="field-value">{{ commercial_brief.outreach_angle }}</span></div>
+            <div class="field-row"><span class="field-label">Website</span><span class="field-value">{{ commercial_prospect.website or '-' }}</span></div>
+            <div class="field-row"><span class="field-label">Email</span><span class="field-value">{{ commercial_prospect.email or '-' }}</span></div>
+            <div class="field-row"><span class="field-label">Phone</span><span class="field-value">{{ commercial_prospect.phone or '-' }}</span></div>
+        </div>
+
+        <div class="commercial-detail-card">
+            <h6>Proposal Qualification</h6>
+            <div class="brief-box">
+                <div class="field-row"><span class="field-label">Completion</span><span class="field-value">{{ commercial_brief.qualification_summary.complete_count }}/{{ commercial_brief.qualification_summary.required_count }}</span></div>
+                <div class="field-row"><span class="field-label">Next Action</span><span class="field-value">{{ (commercial_brief.next_actions or ['-'])[0] }}</span></div>
+            </div>
+            <form method="POST" action="{{ url_for('client.client_commercial_thread_qualification', thread_id=thread.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="row g-2 mb-2">
+                    {% for item in commercial_brief.qualification_form %}
+                    <div class="col-12 {% if not item.multiline %}col-md-6{% endif %}">
+                        <label class="form-label" style="font-size:.78rem;">{{ item.label }}</label>
+                        {% if item.multiline %}
+                        <textarea name="{{ item.key }}" class="form-control form-control-sm" rows="3" placeholder="{{ item.placeholder }}">{{ item.value }}</textarea>
+                        {% else %}
+                        <input type="text" name="{{ item.key }}" class="form-control form-control-sm" value="{{ item.value }}" placeholder="{{ item.placeholder }}">
+                        {% endif %}
+                        <div class="qualification-help {{ 'text-success' if item.complete else '' }}">{{ 'Confirmed' if item.complete else 'Still needed for proposal readiness' }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-check2-square me-1"></i> Save Qualification</button>
+            </form>
+        </div>
+
+        <div class="commercial-detail-card">
+            <h6>Likely Pain Points</h6>
+            <div class="brief-box">
+                <ul style="margin:0; padding-left:1rem; font-size:.88rem; color:#334155;">
+                    {% for item in commercial_brief.pain_points %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="commercial-detail-card">
+            <h6>Commercial Strategy Brief</h6>
+            <div class="brief-box">
+                <div class="field-row"><span class="field-label">Likely Buyer</span><span class="field-value">{{ commercial_brief.role_guess }}</span></div>
+                <div class="field-row"><span class="field-label">Readiness</span><span class="field-value">{{ commercial_brief.proposal_readiness.label }}</span></div>
+            </div>
+            {% if commercial_brief.proposal_readiness.missing %}
+            <div class="text-muted" style="font-size:.82rem; margin-bottom:.8rem;">Missing: {{ commercial_brief.proposal_readiness.missing|join(', ') }}</div>
+            {% endif %}
+            <div class="brief-box">
+                <h6 style="margin-bottom:.5rem;">Qualification Questions</h6>
+                <ul style="margin:0; padding-left:1rem; font-size:.88rem; color:#334155;">
+                    {% for item in commercial_brief.qualification_questions %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="brief-box">
+                <h6 style="margin-bottom:.5rem;">Next Actions</h6>
+                <ul style="margin:0; padding-left:1rem; font-size:.88rem; color:#334155;">
+                    {% for item in commercial_brief.next_actions %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <div class="commercial-detail-card">
+            <h6>Commercial Audit Snapshot</h6>
+            {% for item in commercial_brief.audit_findings %}
+            <div class="audit-item">
+                <div style="font-weight:700; color:#0f172a;">{{ item.title }}</div>
+                <div style="font-size:.86rem; color:#475569;">{{ item.detail }}</div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="commercial-detail-card">
+            <h6>Outreach Assets</h6>
+            <div class="mb-3">
+                <div class="text-muted" style="font-size:.76rem; font-weight:700; text-transform:uppercase;">Subject Line</div>
+                <div class="brief-copy">{{ commercial_brief.subject }}</div>
+            </div>
+            <div class="mb-3">
+                <div class="text-muted" style="font-size:.76rem; font-weight:700; text-transform:uppercase;">First Email</div>
+                <div class="brief-copy">{{ commercial_brief.email_body }}</div>
+            </div>
+            <div>
+                <div class="text-muted" style="font-size:.76rem; font-weight:700; text-transform:uppercase;">Call Opener</div>
+                <div class="brief-copy">{{ commercial_brief.call_opener }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -129,6 +129,7 @@ class WebDB:
                 assigned_to TEXT DEFAULT '',
                 unread_count INTEGER DEFAULT 0,
                 summary TEXT DEFAULT '',
+                commercial_data_json TEXT DEFAULT '{}',
                 last_message_at TEXT DEFAULT (datetime('now')),
                 last_inbound_at TEXT DEFAULT '',
                 last_outbound_at TEXT DEFAULT '',
@@ -1444,6 +1445,7 @@ class WebDB:
         lt_columns = {r[1] for r in conn.execute("PRAGMA table_info(lead_threads)").fetchall()}
         new_lt_cols = [
             ("is_private", "INTEGER DEFAULT 0"),
+            ("commercial_data_json", "TEXT DEFAULT '{}'"),
         ]
         for col_name, col_def in new_lt_cols:
             if col_name not in lt_columns:
@@ -1952,9 +1954,9 @@ class WebDB:
             """
             INSERT INTO lead_threads (
                 brand_id, lead_name, lead_email, lead_phone, source, channel,
-                external_thread_id, status, quote_status, assigned_to, summary,
+                external_thread_id, status, quote_status, assigned_to, summary, commercial_data_json,
                 last_message_at, last_inbound_at, last_outbound_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, datetime('now'))
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, datetime('now'))
             """,
             (
                 brand_id,
@@ -1968,6 +1970,7 @@ class WebDB:
                 (data.get("quote_status") or "not_started").strip() or "not_started",
                 (data.get("assigned_to") or "").strip(),
                 (data.get("summary") or "").strip(),
+                (data.get("commercial_data_json") or "{}").strip() or "{}",
                 (data.get("last_inbound_at") or "").strip(),
                 (data.get("last_outbound_at") or "").strip(),
             ),
@@ -2028,6 +2031,37 @@ class WebDB:
         conn.close()
         return [dict(r) for r in rows]
 
+    def find_brand_lead_thread(self, brand_id, *, email="", lead_name="", source=""):
+        conn = self._conn()
+        normalized_email = self._normalize_email(email)
+        normalized_name = (lead_name or "").strip().lower()
+        normalized_source = (source or "").strip().lower()
+        row = None
+        if normalized_email:
+            if normalized_source:
+                row = conn.execute(
+                    "SELECT * FROM lead_threads WHERE brand_id = ? AND lower(lead_email) = ? AND lower(source) = ? ORDER BY id DESC LIMIT 1",
+                    (brand_id, normalized_email, normalized_source),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM lead_threads WHERE brand_id = ? AND lower(lead_email) = ? ORDER BY id DESC LIMIT 1",
+                    (brand_id, normalized_email),
+                ).fetchone()
+        if not row and normalized_name:
+            if normalized_source:
+                row = conn.execute(
+                    "SELECT * FROM lead_threads WHERE brand_id = ? AND lower(lead_name) = ? AND lower(source) = ? ORDER BY id DESC LIMIT 1",
+                    (brand_id, normalized_name, normalized_source),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM lead_threads WHERE brand_id = ? AND lower(lead_name) = ? ORDER BY id DESC LIMIT 1",
+                    (brand_id, normalized_name),
+                ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
     def upsert_lead_thread(self, brand_id, channel, external_thread_id, data=None):
         data = data or {}
         normalized_channel = (channel or "sms").strip() or "sms"
@@ -2050,7 +2084,7 @@ class WebDB:
         if row:
             updates = []
             values = []
-            for field in ("lead_name", "lead_email", "lead_phone", "source", "status", "quote_status", "assigned_to", "summary"):
+            for field in ("lead_name", "lead_email", "lead_phone", "source", "status", "quote_status", "assigned_to", "summary", "commercial_data_json"):
                 if field in data and data.get(field) is not None:
                     updates.append(f"{field} = ?")
                     value = data.get(field) or ""
@@ -2073,9 +2107,9 @@ class WebDB:
                 """
                 INSERT INTO lead_threads (
                     brand_id, lead_name, lead_email, lead_phone, source, channel,
-                    external_thread_id, status, quote_status, assigned_to, summary,
+                    external_thread_id, status, quote_status, assigned_to, summary, commercial_data_json,
                     last_message_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
                 """,
                 (
                     brand_id,
@@ -2089,6 +2123,7 @@ class WebDB:
                     (data.get("quote_status") or "not_started").strip() or "not_started",
                     (data.get("assigned_to") or "").strip(),
                     (data.get("summary") or "").strip(),
+                    (data.get("commercial_data_json") or "{}").strip() or "{}",
                 ),
             )
             conn.commit()
@@ -2143,6 +2178,15 @@ class WebDB:
         conn.execute(
             f"UPDATE lead_threads SET {', '.join(updates)} WHERE id = ? AND brand_id = ?",
             values,
+        )
+        conn.commit()
+        conn.close()
+
+    def update_lead_thread_commercial_data(self, thread_id, brand_id, commercial_data_json):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE lead_threads SET commercial_data_json = ?, updated_at = datetime('now') WHERE id = ? AND brand_id = ?",
+            ((commercial_data_json or "{}").strip() or "{}", thread_id, brand_id),
         )
         conn.commit()
         conn.close()
