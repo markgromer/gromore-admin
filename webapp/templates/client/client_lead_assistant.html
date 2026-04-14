@@ -93,9 +93,11 @@
             <p>This is the operating profile Warren should use when quoting and nurturing leads. Set the pricing posture, hard boundaries, escalation rules, and the exact kind of language that should sound like your brand.</p>
         </div>
         <div class="d-flex flex-wrap gap-2 justify-content-end">
+            {% if feature_on('commercial') %}
             <a href="{{ url_for('client.client_commercial_prospecting') }}" class="btn btn-light btn-sm" style="font-weight:700;">
                 <i class="bi bi-buildings me-1"></i> Commercial Lead Engine
             </a>
+            {% endif %}
             {% if feature_on('warren_inbox') %}
             <a href="{{ url_for('client.client_inbox') }}" class="btn btn-outline-light btn-sm" style="font-weight:700;">
                 <i class="bi bi-inbox me-1"></i> Open Warren Inbox

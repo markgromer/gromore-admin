@@ -64,6 +64,11 @@
                 <i class="bi bi-chat-dots"></i> <span class="nav-link-label">Lead Assistant</span>
             </a>
             {% endif %}
+            {% if feature_on('commercial') %}
+            <a href="{{ url_for('client.client_commercial_prospecting') }}" class="{% if 'client.client_commercial' in request.endpoint|default('') %}active{% endif %}">
+                <i class="bi bi-buildings"></i> <span class="nav-link-label">Commercial</span>
+            </a>
+            {% endif %}
             {% if feature_on('va_services') %}
             <a href="{{ url_for('client.client_va_services') }}" class="{% if request.endpoint in ('client.client_va_services',) %}active{% endif %}">
                 <i class="bi bi-headset"></i> <span class="nav-link-label">VA Desk</span>

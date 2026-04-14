@@ -47,6 +47,22 @@
     .qualification-help { font-size: .75rem; color: #64748b; margin-top: .3rem; }
     .audit-item { padding: .7rem 0; border-bottom: 1px solid #f1f5f9; }
     .audit-item:last-child { border-bottom: none; }
+    .package-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: .75rem;
+    }
+    .package-card {
+        border: 1px solid #dbe4f0;
+        border-radius: 12px;
+        padding: .9rem;
+        background: #fff;
+    }
+    .package-card.active {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 1px rgba(37, 99, 235, .12);
+        background: #f8fbff;
+    }
 </style>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
@@ -105,6 +121,73 @@
         </div>
 
         <div class="commercial-detail-card">
+            <h6>Commercial Walkthrough</h6>
+            <div class="brief-box">
+                <div class="field-row"><span class="field-label">Property Label</span><span class="field-value">{{ commercial_prospect.walkthrough_property_label or '-' }}</span></div>
+                <div class="field-row"><span class="field-label">Stations / Areas</span><span class="field-value">{{ commercial_prospect.walkthrough_waste_station_count or 0 }} stations, {{ commercial_prospect.walkthrough_common_area_count or 0 }} common, {{ commercial_prospect.walkthrough_relief_area_count or 0 }} relief</span></div>
+                <div class="field-row"><span class="field-label">Walkthrough Saved</span><span class="field-value">{{ commercial_prospect.walkthrough_completed_at or '-' }}</span></div>
+            </div>
+            <form method="POST" action="{{ url_for('client.client_commercial_thread_walkthrough', thread_id=thread.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="row g-2 mb-2">
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:.78rem;">Property / Site Label</label>
+                        <input type="text" name="walkthrough_property_label" class="form-control form-control-sm" value="{{ commercial_prospect.walkthrough_property_label }}" placeholder="North dog park / main apartment grounds">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:.78rem;">Portfolio Size / Units</label>
+                        <input type="text" name="property_count" class="form-control form-control-sm" value="{{ commercial_prospect.property_count }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" style="font-size:.78rem;">Waste Stations</label>
+                        <input type="number" min="0" name="walkthrough_waste_station_count" class="form-control form-control-sm" value="{{ commercial_prospect.walkthrough_waste_station_count or 0 }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" style="font-size:.78rem;">Common Areas</label>
+                        <input type="number" min="0" name="walkthrough_common_area_count" class="form-control form-control-sm" value="{{ commercial_prospect.walkthrough_common_area_count or 0 }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" style="font-size:.78rem;">Relief Areas</label>
+                        <input type="number" min="0" name="walkthrough_relief_area_count" class="form-control form-control-sm" value="{{ commercial_prospect.walkthrough_relief_area_count or 0 }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:.78rem;">Pet Traffic Estimate</label>
+                        <input type="text" name="pet_traffic_estimate" class="form-control form-control-sm" value="{{ commercial_prospect.pet_traffic_estimate }}" placeholder="High after 5pm and weekends">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:.78rem;">Site Condition</label>
+                        <input type="text" name="site_condition" class="form-control form-control-sm" value="{{ commercial_prospect.site_condition }}" placeholder="Clean, inconsistent, high complaint risk">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" style="font-size:.78rem;">Access Notes</label>
+                        <textarea name="access_notes" class="form-control form-control-sm" rows="2">{{ commercial_prospect.access_notes }}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:.78rem;">Gate / Security Notes</label>
+                        <textarea name="gate_notes" class="form-control form-control-sm" rows="2">{{ commercial_prospect.gate_notes }}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:.78rem;">Disposal Notes</label>
+                        <textarea name="disposal_notes" class="form-control form-control-sm" rows="2">{{ commercial_prospect.disposal_notes }}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:.78rem;">Required Add-Ons</label>
+                        <textarea name="required_add_ons" class="form-control form-control-sm" rows="3" placeholder="Bag refill&#10;Deodorizer&#10;Sanitizer">{{ (commercial_prospect.required_add_ons or [])|join('\n') }}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:.78rem;">Walkthrough Photo URLs</label>
+                        <textarea name="walkthrough_photo_urls" class="form-control form-control-sm" rows="3" placeholder="One URL per line">{{ (commercial_prospect.walkthrough_photo_urls or [])|join('\n') }}</textarea>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" style="font-size:.78rem;">Walkthrough Notes</label>
+                        <textarea name="walkthrough_notes" class="form-control form-control-sm" rows="3">{{ commercial_prospect.walkthrough_notes }}</textarea>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-outline-primary btn-sm w-100"><i class="bi bi-map me-1"></i> Save Commercial Walkthrough</button>
+            </form>
+        </div>
+
+        <div class="commercial-detail-card">
             <h6>Likely Pain Points</h6>
             <div class="brief-box">
                 <ul style="margin:0; padding-left:1rem; font-size:.88rem; color:#334155;">
@@ -114,9 +197,186 @@
                 </ul>
             </div>
         </div>
+
+        <div class="commercial-detail-card">
+            <h6>Nurture Controls</h6>
+            <div class="brief-box">
+                <div class="field-row"><span class="field-label">SMTP Ready</span><span class="field-value">{{ 'Yes' if smtp_ready else 'No' }}</span></div>
+                <div class="field-row"><span class="field-label">Active Sequences</span><span class="field-value">{{ nurture_sequences|length }}</span></div>
+                <div class="field-row"><span class="field-label">Enrollment History</span><span class="field-value">{{ nurture_enrollments|length }}</span></div>
+            </div>
+            <form method="POST" action="{{ url_for('client.client_commercial_thread_enroll_drip', thread_id=thread.id) }}" class="mb-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label class="form-label" style="font-size:.78rem;">Commercial Nurture Sequence</label>
+                <select name="sequence_id" class="form-select form-select-sm mb-2">
+                    <option value="">Choose a sequence</option>
+                    {% for sequence in nurture_sequences %}
+                    <option value="{{ sequence.id }}">{{ sequence.name }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-outline-primary btn-sm w-100" {% if not nurture_sequences or not commercial_prospect.email %}disabled{% endif %}>
+                    <i class="bi bi-send-check me-1"></i> Enroll In Commercial Nurture
+                </button>
+            </form>
+            {% if nurture_enrollments %}
+            <div class="brief-box" style="margin-bottom:0;">
+                {% for enrollment in nurture_enrollments %}
+                <div class="audit-item">
+                    <div style="font-weight:700; color:#0f172a;">{{ enrollment.sequence_name }}</div>
+                    <div style="font-size:.82rem; color:#475569;">{{ enrollment.status|title }} - step {{ enrollment.current_step }} - {{ enrollment.enrolled_at }}</div>
+                    {% if enrollment.sends %}
+                    <div style="font-size:.78rem; color:#64748b; margin-top:.35rem;">Latest send: {{ enrollment.sends[0].status|title }} at {{ enrollment.sends[0].sent_at }}</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="commercial-detail-card">
+            <h6>Commercial Proposal Builder</h6>
+            <div class="brief-box">
+                <div class="field-row"><span class="field-label">Monthly Recurring</span><span class="field-value">${{ '%.2f'|format(proposal_preview.monthly_total) }}</span></div>
+                <div class="field-row"><span class="field-label">One-Time Setup</span><span class="field-value">${{ '%.2f'|format(proposal_preview.setup_total) }}</span></div>
+                <div class="field-row"><span class="field-label">Quote Status</span><span class="field-value">{{ (proposal_quote.status if proposal_quote else thread.quote_status or 'draft')|title }}</span></div>
+                <div class="field-row"><span class="field-label">Selected Package</span><span class="field-value">{{ proposal_preview.builder.package_label }}</span></div>
+            </div>
+            <form method="POST" action="{{ url_for('client.client_commercial_thread_build_proposal', thread_id=thread.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="row g-2 mb-2">
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:.78rem;">Proposal Package</label>
+                        <select name="selected_package" class="form-select form-select-sm">
+                            {% for key, option in proposal_package_options.items() %}
+                            <option value="{{ key }}" {% if proposal_preview.selected_package == key %}selected{% endif %}>{{ option.label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:.78rem;">Quote Status</label>
+                        <select name="quote_status" class="form-select form-select-sm">
+                            <option value="draft" {% if not proposal_quote or proposal_quote.status == 'draft' %}selected{% endif %}>Draft</option>
+                            <option value="sent" {% if proposal_quote and proposal_quote.status == 'sent' %}selected{% endif %}>Sent</option>
+                            <option value="approved" {% if proposal_quote and proposal_quote.status == 'approved' %}selected{% endif %}>Approved</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:.78rem;">Service Frequency</label>
+                        <select name="service_frequency" class="form-select form-select-sm">
+                            {% for key, option in proposal_frequency_options.items() %}
+                            <option value="{{ key }}" {% if proposal_preview.builder.service_frequency == key %}selected{% endif %}>{{ option.label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:.78rem;">Service Days</label>
+                        <input type="text" name="service_days" class="form-control form-control-sm" value="{{ proposal_preview.builder.service_days }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:.78rem;">Portfolio Size / Units</label>
+                        <input type="text" name="property_count" class="form-control form-control-sm" value="{{ proposal_preview.builder.property_count }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" style="font-size:.78rem;">Waste Stations</label>
+                        <input type="number" min="0" name="waste_station_count" class="form-control form-control-sm" value="{{ proposal_preview.builder.waste_station_count }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" style="font-size:.78rem;">Rate / Station / Visit</label>
+                        <input type="number" min="0" step="0.01" name="waste_station_rate" class="form-control form-control-sm" value="{{ proposal_preview.builder.waste_station_rate }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" style="font-size:.78rem;">Common Areas</label>
+                        <input type="number" min="0" name="common_area_count" class="form-control form-control-sm" value="{{ proposal_preview.builder.common_area_count }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" style="font-size:.78rem;">Rate / Area / Visit</label>
+                        <input type="number" min="0" step="0.01" name="common_area_rate" class="form-control form-control-sm" value="{{ proposal_preview.builder.common_area_rate }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" style="font-size:.78rem;">Relief Areas</label>
+                        <input type="number" min="0" name="relief_area_count" class="form-control form-control-sm" value="{{ proposal_preview.builder.relief_area_count }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" style="font-size:.78rem;">Rate / Relief Area / Visit</label>
+                        <input type="number" min="0" step="0.01" name="relief_area_rate" class="form-control form-control-sm" value="{{ proposal_preview.builder.relief_area_rate }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" style="font-size:.78rem;">Bag Refill Fee</label>
+                        <input type="number" min="0" step="0.01" name="bag_refill_fee" class="form-control form-control-sm" value="{{ proposal_preview.builder.bag_refill_fee }}">
+                        <div class="form-check mt-1"><input class="form-check-input" type="checkbox" name="bag_refill_included" value="1" id="bagRefillIncluded" {% if proposal_preview.builder.bag_refill_included %}checked{% endif %}><label class="form-check-label" for="bagRefillIncluded" style="font-size:.76rem;">Include bag refill</label></div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" style="font-size:.78rem;">Deodorizer Fee</label>
+                        <input type="number" min="0" step="0.01" name="deodorizer_fee" class="form-control form-control-sm" value="{{ proposal_preview.builder.deodorizer_fee }}">
+                        <div class="form-check mt-1"><input class="form-check-input" type="checkbox" name="deodorizer_included" value="1" id="deodorizerIncluded" {% if proposal_preview.builder.deodorizer_included %}checked{% endif %}><label class="form-check-label" for="deodorizerIncluded" style="font-size:.76rem;">Include deodorizer</label></div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" style="font-size:.78rem;">Initial Cleanup Fee</label>
+                        <input type="number" min="0" step="0.01" name="initial_cleanup_fee" class="form-control form-control-sm" value="{{ proposal_preview.builder.initial_cleanup_fee }}">
+                        <div class="form-check mt-1"><input class="form-check-input" type="checkbox" name="initial_cleanup_required" value="1" id="initialCleanupRequired" {% if proposal_preview.builder.initial_cleanup_required %}checked{% endif %}><label class="form-check-label" for="initialCleanupRequired" style="font-size:.76rem;">Include initial cleanup</label></div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" style="font-size:.78rem;">Monthly Mgmt Fee</label>
+                        <input type="number" min="0" step="0.01" name="monthly_management_fee" class="form-control form-control-sm" value="{{ proposal_preview.builder.monthly_management_fee }}">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" style="font-size:.78rem;">Scope Summary</label>
+                        <textarea name="scope_summary" class="form-control form-control-sm" rows="2">{{ proposal_preview.builder.scope_summary }}</textarea>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" style="font-size:.78rem;">Proposal Notes</label>
+                        <textarea name="notes" class="form-control form-control-sm" rows="3">{{ proposal_preview.builder.notes }}</textarea>
+                    </div>
+                </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="mark_sent" value="1" id="markProposalSent" {% if proposal_quote and proposal_quote.status == 'sent' %}checked{% endif %}>
+                    <label class="form-check-label" for="markProposalSent" style="font-size:.8rem;">Legacy sent toggle</label>
+                </div>
+                <button type="submit" class="btn btn-success btn-sm w-100"><i class="bi bi-calculator me-1"></i> Build Commercial Proposal</button>
+            </form>
+        </div>
     </div>
 
     <div class="col-lg-7">
+        <div class="commercial-detail-card">
+            <h6>Proposal Preview</h6>
+            <div class="package-grid mb-3">
+                {% for package in proposal_preview.packages %}
+                <div class="package-card {% if proposal_preview.selected_package == package.key %}active{% endif %}">
+                    <div style="font-weight:800; color:#0f172a;">{{ package.label }}</div>
+                    <div style="font-size:.8rem; color:#64748b; margin:.2rem 0 .55rem;">{{ package.description }}</div>
+                    <div style="font-size:.86rem; color:#0f172a; font-weight:700;">${{ '%.2f'|format(package.monthly_total) }}/mo</div>
+                    <div style="font-size:.78rem; color:#64748b; margin-bottom:.45rem;">First invoice: ${{ '%.2f'|format(package.grand_total) }}</div>
+                    <ul style="margin:0; padding-left:1rem; font-size:.8rem; color:#334155;">
+                        {% for feature in package.included_features %}
+                        <li>{{ feature }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="brief-box">
+                <div class="field-row"><span class="field-label">Service Cadence</span><span class="field-value">{{ proposal_preview.frequency.label }}</span></div>
+                <div class="field-row"><span class="field-label">Package</span><span class="field-value">{{ proposal_preview.builder.package_label }}</span></div>
+                <div class="field-row"><span class="field-label">Scope</span><span class="field-value">{{ proposal_preview.scope_summary }}</span></div>
+                <div class="field-row"><span class="field-label">Recurring Monthly</span><span class="field-value">${{ '%.2f'|format(proposal_preview.monthly_total) }}</span></div>
+                <div class="field-row"><span class="field-label">First Invoice Total</span><span class="field-value">${{ '%.2f'|format(proposal_preview.grand_total) }}</span></div>
+            </div>
+            {% if proposal_preview.quote.line_items %}
+            <div class="brief-box">
+                {% for item in proposal_preview.quote.line_items %}
+                <div class="audit-item">
+                    <div style="font-weight:700; color:#0f172a;">{{ item.label }}</div>
+                    <div style="font-size:.86rem; color:#475569;">{{ item.quantity }} x ${{ '%.2f'|format(item.unit_rate) }} {{ item.unit_label }} - {{ item.frequency }}</div>
+                    <div style="font-size:.82rem; color:#0f172a; font-weight:700;">${{ '%.2f'|format(item.amount) }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            <div class="brief-copy">{{ proposal_preview.quote.summary }}</div>
+            <div class="brief-copy mt-2">{{ proposal_preview.quote.follow_up_text }}</div>
+        </div>
+
         <div class="commercial-detail-card">
             <h6>Commercial Strategy Brief</h6>
             <div class="brief-box">
@@ -156,6 +416,21 @@
 
         <div class="commercial-detail-card">
             <h6>Outreach Assets</h6>
+            <form method="POST" action="{{ url_for('client.client_commercial_thread_send_email', thread_id=thread.id) }}" class="mb-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-2">
+                    <label class="form-label" style="font-size:.78rem;">Send Subject</label>
+                    <input type="text" name="subject" class="form-control form-control-sm" value="{{ commercial_brief.subject }}" maxlength="255">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label" style="font-size:.78rem;">Send Message</label>
+                    <textarea name="message" class="form-control form-control-sm" rows="9">{{ commercial_brief.email_body }}</textarea>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm w-100" {% if not smtp_ready or not commercial_prospect.email %}disabled{% endif %}>
+                    <i class="bi bi-envelope-paper me-1"></i> Send Commercial Email Now
+                </button>
+                <div class="qualification-help">{% if not commercial_prospect.email %}No email found for this account yet.{% elif not smtp_ready %}SMTP is not configured in this environment.{% else %}This sends immediately and logs the outreach on the WARREN thread.{% endif %}</div>
+            </form>
             <div class="mb-3">
                 <div class="text-muted" style="font-size:.76rem; font-weight:700; text-transform:uppercase;">Subject Line</div>
                 <div class="brief-copy">{{ commercial_brief.subject }}</div>
@@ -168,6 +443,107 @@
                 <div class="text-muted" style="font-size:.76rem; font-weight:700; text-transform:uppercase;">Call Opener</div>
                 <div class="brief-copy">{{ commercial_brief.call_opener }}</div>
             </div>
+        </div>
+
+        <div class="commercial-detail-card">
+            <h6>Service Proof Log</h6>
+            <form method="POST" action="{{ url_for('client.client_commercial_thread_service_visit', thread_id=thread.id) }}" class="mb-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="row g-2 mb-2">
+                    <div class="col-md-4">
+                        <label class="form-label" style="font-size:.78rem;">Service Date</label>
+                        <input type="date" name="service_date" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" style="font-size:.78rem;">Completed By</label>
+                        <input type="text" name="completed_by" class="form-control form-control-sm" value="{{ brand_name }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" style="font-size:.78rem;">Property Label</label>
+                        <input type="text" name="property_label" class="form-control form-control-sm" value="{{ commercial_prospect.walkthrough_property_label or commercial_prospect.business_name }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" style="font-size:.78rem;">Stations Serviced</label>
+                        <input type="number" min="0" name="waste_station_count_serviced" class="form-control form-control-sm" value="{{ commercial_prospect.walkthrough_waste_station_count or 0 }}">
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <div class="form-check me-3"><input class="form-check-input" type="checkbox" name="bags_restocked" value="1" id="bagsRestocked"><label class="form-check-label" for="bagsRestocked" style="font-size:.8rem;">Bags restocked</label></div>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <div class="form-check"><input class="form-check-input" type="checkbox" name="gate_secured" value="1" id="gateSecured"><label class="form-check-label" for="gateSecured" style="font-size:.8rem;">Gate secured</label></div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" style="font-size:.78rem;">Visit Summary</label>
+                        <textarea name="summary" class="form-control form-control-sm" rows="2" placeholder="What was completed on this visit?"></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:.78rem;">Issues / Exceptions</label>
+                        <textarea name="issues" class="form-control form-control-sm" rows="3" placeholder="One item per line"></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:.78rem;">Photo URLs</label>
+                        <textarea name="photo_urls" class="form-control form-control-sm" rows="3" placeholder="One URL per line"></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:.78rem;">Client Note</label>
+                        <textarea name="client_note" class="form-control form-control-sm" rows="2"></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:.78rem;">Internal Note</label>
+                        <textarea name="internal_note" class="form-control form-control-sm" rows="2"></textarea>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-outline-success btn-sm w-100"><i class="bi bi-clipboard-check me-1"></i> Log Service Visit</button>
+            </form>
+            {% if service_visits %}
+            <div class="brief-box" style="margin-bottom:0;">
+                {% for visit in service_visits %}
+                <div class="audit-item">
+                    <div style="font-weight:700; color:#0f172a;">{{ visit.property_label or commercial_prospect.business_name }} - {{ visit.service_date }}</div>
+                    <div style="font-size:.85rem; color:#475569;">{{ visit.summary }}</div>
+                    <div style="font-size:.78rem; color:#64748b; margin-top:.25rem;">Stations serviced: {{ visit.waste_station_count_serviced }} | Bags restocked: {{ 'Yes' if visit.bags_restocked else 'No' }} | Gate secured: {{ 'Yes' if visit.gate_secured else 'No' }}</div>
+                    {% if visit.issues %}
+                    <div style="font-size:.78rem; color:#64748b; margin-top:.35rem;">Issues: {{ visit.issues|join(', ') }}</div>
+                    {% endif %}
+                    {% if visit.client_note %}
+                    <div style="font-size:.78rem; color:#475569; margin-top:.35rem;">Client note: {{ visit.client_note }}</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="qualification-help">No proof-of-service visits logged yet.</div>
+            {% endif %}
+        </div>
+
+        <div class="commercial-detail-card">
+            <h6>Manager Recap Preview</h6>
+            <div class="brief-box">
+                <div class="field-row"><span class="field-label">Logged Visits</span><span class="field-value">{{ service_recap.total_visits }}</span></div>
+                <div class="field-row"><span class="field-label">Stations Serviced</span><span class="field-value">{{ service_recap.stations_serviced }}</span></div>
+                <div class="field-row"><span class="field-label">Last Service Date</span><span class="field-value">{{ service_recap.last_service_date or '-' }}</span></div>
+            </div>
+            <div class="brief-copy">{{ service_recap.summary }}</div>
+            {% if service_recap.issues %}
+            <div class="brief-box mt-2">
+                <h6 style="margin-bottom:.5rem;">Open Issues</h6>
+                <ul style="margin:0; padding-left:1rem; font-size:.88rem; color:#334155;">
+                    {% for item in service_recap.issues %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            {% if service_recap.recommendations %}
+            <div class="brief-box">
+                <h6 style="margin-bottom:.5rem;">Recommended Next Step</h6>
+                <ul style="margin:0; padding-left:1rem; font-size:.88rem; color:#334155;">
+                    {% for item in service_recap.recommendations %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>

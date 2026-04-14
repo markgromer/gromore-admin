@@ -211,6 +211,7 @@ Do not flatten the site into a giant feature dump. These are the major pillars t
 - Blog tools
 - Post scheduler
 - Creative tools
+- Commercial account engine for service businesses selling to apartments, HOAs, and property managers should be treated as a supporting product page or expansion page, not a homepage-first pillar
 
 ### Pillar 7: Flexible Support Layer
 
@@ -234,6 +235,7 @@ These belong lower on the page or on product detail pages:
 - Blog tools
 - Post scheduler
 - Hiring hub
+- Commercial account workflows
 - Drive integration
 - Creative canvas details
 - Deep admin features

@@ -1,6 +1,15 @@
-# Home Services Ad Agency - Analytics & Reporting System
+# Home Services Ad Agency - Analytics, Client Portal, and WARREN System
 
-A complete analytics platform for home services ad agencies. Ingests exports from Google Analytics, Meta Business Suite, and Google Search Console - then interprets the data, generates month-over-month comparisons, makes actionable improvement suggestions, and produces two report types:
+A complete operating platform for home service growth teams. It started as an analytics and reporting system, and now includes the client portal, W.A.R.R.E.N. lead workflows, campaign tooling, AI assistance, and commercial account operations.
+
+Core platform areas include:
+
+1. Analytics ingestion and reporting across Google Analytics, Meta, and Search Console
+2. Client portal dashboards, campaign tools, and AI guidance
+3. W.A.R.R.E.N. lead inbox, follow-up, and nurture workflows
+4. Commercial account discovery, qualification, proposal building, and service-proof logging
+
+The reporting engine still produces two report types:
 
 1. **Internal Team Reports** - Detailed tactical reports for the ad account team
 2. **Client-Facing Reports** - Clean, professional monthly reports for clients

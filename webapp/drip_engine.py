@@ -13,6 +13,60 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 
+def _log_client_commercial_drip_activity(db, pending_item, status, subject, body_text, detail=""):
+    if (pending_item.get("lead_source") or "").strip() != "client_commercial":
+        return
+
+    thread_id = pending_item.get("lead_id")
+    if not thread_id:
+        return
+
+    thread = db.get_lead_thread(thread_id)
+    if not thread:
+        return
+
+    brand_id = thread.get("brand_id")
+    if not brand_id:
+        return
+
+    sequence_name = pending_item.get("sequence_name") or f"Sequence #{pending_item.get('sequence_id')}"
+    metadata = {
+        "enrollment_id": pending_item.get("enrollment_id"),
+        "sequence_id": pending_item.get("sequence_id"),
+        "sequence_name": sequence_name,
+        "step_id": pending_item.get("step_id"),
+        "step_order": (pending_item.get("current_step") or 0) + 1,
+        "subject": subject,
+    }
+    if detail:
+        metadata["detail"] = str(detail)[:500]
+
+    if status == "sent":
+        db.add_lead_message(
+            thread_id,
+            "outbound",
+            "assistant",
+            (body_text or subject or "Commercial nurture email sent.").strip(),
+            channel="email",
+            metadata={**metadata, "commercial_nurture": True},
+        )
+        db.add_lead_event(
+            brand_id,
+            thread_id,
+            "commercial_drip_step_sent",
+            event_value=subject[:200],
+            metadata=metadata,
+        )
+    else:
+        db.add_lead_event(
+            brand_id,
+            thread_id,
+            "commercial_drip_step_failed",
+            event_value=subject[:200],
+            metadata=metadata,
+        )
+
+
 def _merge(template, data):
     """Simple {{key}} replacement."""
     result = template
@@ -51,6 +105,7 @@ def process_pending_drips(app_config, db):
         # Can't connect - record failures
         for p in pending:
             db.record_drip_send(p["enrollment_id"], p["step_id"], p["current_step"], "failed", "SMTP connection error")
+            _log_client_commercial_drip_activity(db, p, "failed", p.get("subject") or "", p.get("body_text") or "", "SMTP connection error")
         return 0, len(pending)
 
     for p in pending:
@@ -90,9 +145,11 @@ def process_pending_drips(app_config, db):
 
             server.sendmail(from_email, p["email"], msg.as_string())
             db.record_drip_send(p["enrollment_id"], p["step_id"], p["current_step"], "sent")
+            _log_client_commercial_drip_activity(db, p, "sent", subject, body_text, "")
             sent += 1
         except Exception as exc:
             db.record_drip_send(p["enrollment_id"], p["step_id"], p["current_step"], "failed", str(exc)[:200])
+            _log_client_commercial_drip_activity(db, p, "failed", subject, body_text, str(exc))
             failed += 1
 
     try:

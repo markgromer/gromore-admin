@@ -10,6 +10,7 @@ import re
 import secrets
 from pathlib import Path
 from datetime import datetime, timedelta
+from urllib.parse import urlparse
 from werkzeug.security import generate_password_hash, check_password_hash
 
 
@@ -33,6 +34,31 @@ class WebDB:
             seen.add(email)
             emails.append(email)
         return emails
+
+    @staticmethod
+    def _safe_json_object(raw_value):
+        if isinstance(raw_value, dict):
+            return dict(raw_value)
+        if not raw_value:
+            return {}
+        try:
+            parsed = json.loads(raw_value)
+        except Exception:
+            return {}
+        return dict(parsed) if isinstance(parsed, dict) else {}
+
+    @staticmethod
+    def _normalize_website(value):
+        website = (value or "").strip()
+        if not website:
+            return ""
+        parsed = urlparse(website if website.startswith(("http://", "https://")) else f"https://{website}")
+        host = (parsed.netloc or parsed.path or "").strip().lower()
+        path = parsed.path if parsed.netloc else ""
+        normalized = f"{host}{path}".rstrip("/")
+        if normalized.startswith("www."):
+            normalized = normalized[4:]
+        return normalized
 
     @staticmethod
     def _normalize_feature_state(state):
@@ -196,6 +222,31 @@ class WebDB:
 
             CREATE INDEX IF NOT EXISTS idx_lead_events_thread_created
             ON lead_events(thread_id, created_at DESC, id DESC);
+
+            CREATE TABLE IF NOT EXISTS commercial_service_visits (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                thread_id INTEGER NOT NULL,
+                service_date TEXT DEFAULT '',
+                completed_at TEXT DEFAULT '',
+                completed_by TEXT DEFAULT '',
+                property_label TEXT DEFAULT '',
+                summary TEXT DEFAULT '',
+                waste_station_count_serviced INTEGER DEFAULT 0,
+                bags_restocked INTEGER DEFAULT 0,
+                gate_secured INTEGER DEFAULT 0,
+                issues_json TEXT DEFAULT '[]',
+                photos_json TEXT DEFAULT '[]',
+                client_note TEXT DEFAULT '',
+                internal_note TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+                FOREIGN KEY (thread_id) REFERENCES lead_threads(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_commercial_service_visits_thread_date
+            ON commercial_service_visits(thread_id, service_date DESC, id DESC);
 
             CREATE TABLE IF NOT EXISTS lead_profile_overrides (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1244,6 +1295,7 @@ class WebDB:
             ("blog",            "Blog",             "Blog post creation and publishing", "all",   "create",   90),
             ("my_business",     "My Business",      "Business profile and details",      "all",   "business", 100),
             ("crm",             "CRM",              "Customer relationship management",  "all",   "business", 110),
+                ("commercial",      "Commercial",       "Commercial prospecting, proposals, and service follow-up", "all", "business", 110),
             ("warren_inbox",    "Lead Inbox",        "Warren AI lead inbox and pipeline",  "all",  "business", 111),
             ("va_services",     "VA Desk",           "Managed VA support, token packs, and work requests", "all", "business", 112),
             ("gbp",             "Google Profile",   "Google Business Profile manager",   "all",   "business", 120),
@@ -2031,11 +2083,12 @@ class WebDB:
         conn.close()
         return [dict(r) for r in rows]
 
-    def find_brand_lead_thread(self, brand_id, *, email="", lead_name="", source=""):
+    def find_brand_lead_thread(self, brand_id, *, email="", lead_name="", source="", website=""):
         conn = self._conn()
         normalized_email = self._normalize_email(email)
         normalized_name = (lead_name or "").strip().lower()
         normalized_source = (source or "").strip().lower()
+        normalized_website = self._normalize_website(website)
         row = None
         if normalized_email:
             if normalized_source:
@@ -2048,6 +2101,28 @@ class WebDB:
                     "SELECT * FROM lead_threads WHERE brand_id = ? AND lower(lead_email) = ? ORDER BY id DESC LIMIT 1",
                     (brand_id, normalized_email),
                 ).fetchone()
+        if not row and normalized_website:
+            if normalized_source:
+                rows = conn.execute(
+                    "SELECT * FROM lead_threads WHERE brand_id = ? AND lower(source) = ? ORDER BY id DESC LIMIT 250",
+                    (brand_id, normalized_source),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM lead_threads WHERE brand_id = ? ORDER BY id DESC LIMIT 250",
+                    (brand_id,),
+                ).fetchall()
+            for candidate in rows:
+                payload = self._safe_json_object(candidate["commercial_data_json"])
+                source_details = self._safe_json_object(payload.get("source_details_json"))
+                candidate_websites = {
+                    self._normalize_website(payload.get("website")),
+                    self._normalize_website(source_details.get("website")),
+                }
+                candidate_websites.discard("")
+                if normalized_website in candidate_websites:
+                    row = candidate
+                    break
         if not row and normalized_name:
             if normalized_source:
                 row = conn.execute(
@@ -2312,6 +2387,73 @@ class WebDB:
         sql += " ORDER BY created_at DESC, id DESC LIMIT ?"
         params.append(int(limit or 100))
         rows = conn.execute(sql, params).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def add_commercial_service_visit(
+        self,
+        brand_id,
+        thread_id,
+        *,
+        service_date="",
+        completed_at="",
+        completed_by="",
+        property_label="",
+        summary="",
+        waste_station_count_serviced=0,
+        bags_restocked=False,
+        gate_secured=False,
+        issues=None,
+        photos=None,
+        client_note="",
+        internal_note="",
+    ):
+        conn = self._conn()
+        cur = conn.execute(
+            """
+            INSERT INTO commercial_service_visits (
+                brand_id, thread_id, service_date, completed_at, completed_by, property_label, summary,
+                waste_station_count_serviced, bags_restocked, gate_secured, issues_json, photos_json,
+                client_note, internal_note, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            """,
+            (
+                brand_id,
+                thread_id,
+                (service_date or "").strip(),
+                (completed_at or "").strip(),
+                (completed_by or "").strip(),
+                (property_label or "").strip(),
+                (summary or "").strip(),
+                max(0, int(waste_station_count_serviced or 0)),
+                1 if bags_restocked else 0,
+                1 if gate_secured else 0,
+                json.dumps(issues or []),
+                json.dumps(photos or []),
+                (client_note or "").strip(),
+                (internal_note or "").strip(),
+            ),
+        )
+        conn.commit()
+        visit_id = cur.lastrowid
+        row = conn.execute(
+            "SELECT * FROM commercial_service_visits WHERE id = ?",
+            (visit_id,),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_commercial_service_visits(self, thread_id, limit=25):
+        conn = self._conn()
+        rows = conn.execute(
+            """
+            SELECT * FROM commercial_service_visits
+            WHERE thread_id = ?
+            ORDER BY COALESCE(NULLIF(service_date, ''), created_at) DESC, id DESC
+            LIMIT ?
+            """,
+            (thread_id, int(limit or 25)),
+        ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
@@ -4518,12 +4660,38 @@ class WebDB:
         conn.close()
         return [dict(r) for r in rows]
 
+    def get_drip_enrollment(self, enrollment_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM drip_enrollments WHERE id = ?", (enrollment_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_lead_drip_enrollments(self, lead_source, lead_id, status=None, limit=20):
+        conn = self._conn()
+        sql = """
+            SELECT e.*, seq.name AS sequence_name, seq.trigger AS sequence_trigger, seq.is_active AS sequence_active
+            FROM drip_enrollments e
+            JOIN drip_sequences seq ON seq.id = e.sequence_id
+            WHERE e.lead_source = ? AND e.lead_id = ?
+        """
+        params = [(lead_source or "").strip(), lead_id]
+        if status:
+            sql += " AND e.status = ?"
+            params.append((status or "").strip())
+        sql += " ORDER BY e.enrolled_at DESC, e.id DESC LIMIT ?"
+        params.append(int(limit or 20))
+        rows = conn.execute(sql, params).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
     def get_pending_drip_sends(self):
         """Return active enrollments that have a next step due based on delay_days."""
         conn = self._conn()
         rows = conn.execute("""
             SELECT e.id AS enrollment_id, e.sequence_id, e.email, e.name,
                    e.current_step, e.enrolled_at, e.lead_source,
+                   e.lead_id,
+                   seq.name AS sequence_name,
                    s.id AS step_id, s.step_order, s.delay_days,
                    s.subject, s.body_html, s.body_text
             FROM drip_enrollments e

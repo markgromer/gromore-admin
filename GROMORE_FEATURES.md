@@ -83,6 +83,40 @@
 
 ---
 
+## CLIENT PORTAL - Commercial Accounts
+
+### Commercial Lead Engine
+- **Commercial Target Search** - Search by location and commercial account type
+- **Website + Contact Enrichment** - Pull website, phone, public email, and basic site signals
+- **Brand-Scoped Import** - Import commercial targets directly into the client's WARREN pipeline
+- **Website-Aware Dedupe** - Match imported accounts by website, email, or business identity
+- **Commercial Strategy Brief** - Generate outreach angle, likely buyer, pain points, and next actions
+
+### Qualification + Walkthrough
+- **Proposal Qualification Form** - Capture decision-maker role, buying process, budget, goals, and timeline
+- **Commercial Walkthrough Capture** - Record property label, waste station count, common areas, relief areas, access notes, gate notes, and disposal constraints
+- **Add-On Capture** - Track refill, deodorizer, sanitizer, and other service requirements
+- **Walkthrough Media Links** - Store walkthrough photo URLs in the commercial record
+- **Proposal Readiness Tracking** - Keep qualification and walkthrough inputs tied to proposal prep
+
+### Proposal + Nurture
+- **Commercial Email Outreach** - Send manual outbound emails from the commercial thread
+- **Commercial Drip Enrollment** - Enroll accounts into commercial nurture sequences
+- **Thread-Aware Drip Logging** - Write drip sends and failures back into the same account timeline
+- **Structured Proposal Builder** - Itemized recurring pricing for stations, common areas, relief areas, setup, and add-ons
+- **Package Comparison** - Generate Basic, Standard, and Premium commercial packages from one scoped proposal model
+- **Quote Status Tracking** - Track draft, sent, and approved commercial proposals
+
+### Service Proof
+- **Service Visit Log** - Store dated proof-of-service entries per commercial account
+- **Station + Gate Confirmation** - Track stations serviced, bag restocks, and gate-secured confirmation
+- **Issue Tracking** - Log issues and exceptions found during service visits
+- **Client-Facing Notes** - Capture visit notes suitable for manager recap
+- **Manager Recap Preview** - Generate an account-level summary from logged service visits inside the commercial workspace
+- **Thread Timeline Integration** - Service visits also log timeline events and system messages in WARREN
+
+---
+
 ## CLIENT PORTAL - Dashboard & Performance
 
 ### Overview

@@ -8,12 +8,14 @@ action instructions, and manage their ad campaigns directly.
 import os
 import json
 import re
+import html
 import time
 import threading
 import logging
 import uuid
 from functools import wraps
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
 from flask import (
     Blueprint, render_template, request, redirect,
@@ -91,6 +93,609 @@ def _safe_json_object(raw_value):
     except Exception:
         return {}
     return dict(parsed) if isinstance(parsed, dict) else {}
+
+
+def _safe_json_list(raw_value):
+    if isinstance(raw_value, list):
+        return list(raw_value)
+    if not raw_value:
+        return []
+    try:
+        parsed = json.loads(raw_value)
+    except Exception:
+        return []
+    return list(parsed) if isinstance(parsed, list) else []
+
+
+def _normalize_client_commercial_text(value, max_len=4000):
+    if value is None:
+        return ""
+    if isinstance(value, (dict, list)):
+        value = json.dumps(value)
+    return str(value).strip()[:max_len]
+
+
+def _normalize_client_commercial_website(value):
+    website = _normalize_client_commercial_text(value, 500)
+    if not website:
+        return ""
+    parsed = urlparse(website if website.startswith(("http://", "https://")) else f"https://{website}")
+    host = (parsed.netloc or parsed.path or "").strip().lower()
+    path = parsed.path if parsed.netloc else ""
+    normalized = f"{host}{path}".rstrip("/")
+    if normalized.startswith("www."):
+        normalized = normalized[4:]
+    if not normalized:
+        return ""
+    if parsed.scheme in {"http", "https"}:
+        return f"{parsed.scheme}://{normalized}"
+    return f"https://{normalized}"
+
+
+def _normalize_client_commercial_emails(raw_value):
+    if isinstance(raw_value, (list, tuple, set)):
+        parts = list(raw_value)
+    else:
+        parts = re.split(r"[;,\n]+", str(raw_value or ""))
+    emails = []
+    seen = set()
+    for part in parts:
+        email = _normalize_client_commercial_text(part, 255).lower().strip(".,;:()[]{}<>")
+        if not email or "@" not in email or email in seen:
+            continue
+        seen.add(email)
+        emails.append(email)
+    return emails[:5]
+
+
+def _normalize_client_commercial_list(raw_value, *, max_items=10, item_max_len=180):
+    if isinstance(raw_value, list):
+        parts = raw_value
+    else:
+        parts = re.split(r"[\n,;]+", raw_value or "")
+    items = []
+    seen = set()
+    for part in parts:
+        value = _normalize_client_commercial_text(part, item_max_len)
+        if not value:
+            continue
+        dedupe_key = value.lower()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        items.append(value)
+    return items[:max_items]
+
+
+def _normalize_client_commercial_payload(raw_item, *, default_service_area=""):
+    item = dict(raw_item) if isinstance(raw_item, dict) else {}
+    source_details = _safe_json_object(item.get("source_details_json"))
+    audit_snapshot = item.get("audit_snapshot") if isinstance(item.get("audit_snapshot"), dict) else _safe_json_object(item.get("audit_snapshot_json"))
+    pain_points = item.get("pain_points") if isinstance(item.get("pain_points"), list) else _safe_json_list(item.get("pain_points_json"))
+    qualification_answers = _safe_json_object(item.get("qualification_answers_json"))
+    required_add_ons = item.get("required_add_ons") if isinstance(item.get("required_add_ons"), list) else _safe_json_list(item.get("required_add_ons_json"))
+    walkthrough_photos = item.get("walkthrough_photo_urls") if isinstance(item.get("walkthrough_photo_urls"), list) else _safe_json_list(item.get("walkthrough_photo_urls_json"))
+    website = _normalize_client_commercial_website(item.get("website") or source_details.get("website"))
+    business_name = _normalize_client_commercial_text(
+        item.get("business_name") or item.get("name") or item.get("contact_name") or "Commercial Prospect",
+        160,
+    ) or "Commercial Prospect"
+    account_type = _normalize_client_commercial_text(item.get("prospect_type") or item.get("account_type"), 80)
+    industry = _normalize_client_commercial_text(item.get("prospect_type_label") or item.get("industry") or account_type or "Commercial Property", 120)
+    emails = _normalize_client_commercial_emails(item.get("emails") or source_details.get("emails") or item.get("email"))
+    primary_email = emails[0] if emails else _normalize_client_commercial_text(item.get("email"), 255).lower()
+    phone = _normalize_client_commercial_text(item.get("phone") or source_details.get("phone"), 80)
+    source_query = _normalize_client_commercial_text(item.get("source_query") or source_details.get("source_query"), 255)
+    address = _normalize_client_commercial_text(item.get("address") or source_details.get("address"), 255)
+    maps_url = _normalize_client_commercial_text(item.get("maps_url") or source_details.get("maps_url"), 500)
+    service_area = _normalize_client_commercial_text(item.get("service_area") or source_details.get("service_area") or default_service_area, 160)
+    normalized_source_details = {
+        "emails": emails,
+        "address": address,
+        "phone": phone,
+        "website": website,
+        "service_area": service_area,
+        "prospect_type": account_type,
+        "prospect_type_label": industry,
+        "source_query": source_query,
+        "rating": item.get("rating") if item.get("rating") is not None else source_details.get("rating"),
+        "review_count": item.get("review_count") if item.get("review_count") is not None else source_details.get("review_count") or 0,
+        "maps_url": maps_url,
+    }
+    return {
+        "name": business_name,
+        "email": primary_email,
+        "phone": phone,
+        "business_name": business_name,
+        "website": website,
+        "industry": industry,
+        "account_type": account_type,
+        "service_area": service_area,
+        "stage": _normalize_client_commercial_text(item.get("stage") or item.get("status") or "new", 40).lower() or "new",
+        "source": _normalize_client_commercial_text(item.get("source") or "commercial_prospecting", 80) or "commercial_prospecting",
+        "summary": _normalize_client_commercial_text(item.get("summary"), 400),
+        "source_details_json": json.dumps(normalized_source_details),
+        "audit_snapshot_json": json.dumps(audit_snapshot if isinstance(audit_snapshot, dict) else {}),
+        "qualification_answers_json": json.dumps(qualification_answers),
+        "property_count": _normalize_client_commercial_text(item.get("property_count"), 160),
+        "walkthrough_property_label": _normalize_client_commercial_text(item.get("walkthrough_property_label"), 160),
+        "walkthrough_waste_station_count": _parse_int_range(item.get("walkthrough_waste_station_count"), maximum=500, default=0),
+        "walkthrough_common_area_count": _parse_int_range(item.get("walkthrough_common_area_count"), maximum=500, default=0),
+        "walkthrough_relief_area_count": _parse_int_range(item.get("walkthrough_relief_area_count"), maximum=500, default=0),
+        "pet_traffic_estimate": _normalize_client_commercial_text(item.get("pet_traffic_estimate"), 120),
+        "site_condition": _normalize_client_commercial_text(item.get("site_condition"), 220),
+        "access_notes": _normalize_client_commercial_text(item.get("access_notes"), 1000),
+        "gate_notes": _normalize_client_commercial_text(item.get("gate_notes"), 500),
+        "disposal_notes": _normalize_client_commercial_text(item.get("disposal_notes"), 500),
+        "walkthrough_notes": _normalize_client_commercial_text(item.get("walkthrough_notes"), 1200),
+        "required_add_ons_json": json.dumps(_normalize_client_commercial_list(required_add_ons, max_items=8, item_max_len=120)),
+        "walkthrough_photo_urls_json": json.dumps(_normalize_client_commercial_list(walkthrough_photos, max_items=8, item_max_len=500)),
+        "walkthrough_completed_at": _normalize_client_commercial_text(item.get("walkthrough_completed_at"), 40),
+        "decision_maker_role": _normalize_client_commercial_text(item.get("decision_maker_role"), 160),
+        "current_vendor_status": _normalize_client_commercial_text(item.get("current_vendor_status"), 220),
+        "outreach_angle": _normalize_client_commercial_text(item.get("outreach_angle"), 160),
+        "proposal_status": _normalize_client_commercial_text(item.get("proposal_status"), 80),
+        "pain_points_json": json.dumps([_normalize_client_commercial_text(point, 220) for point in pain_points if _normalize_client_commercial_text(point, 220)]),
+        "next_action": _normalize_client_commercial_text(item.get("next_action"), 220),
+        "proposal_builder_json": json.dumps(_normalize_client_commercial_proposal_builder(item.get("proposal_builder_json"), prospect=item)),
+    }
+
+
+def _merge_client_commercial_payload(existing_payload, incoming_payload):
+    existing = _normalize_client_commercial_payload(existing_payload)
+    incoming = _normalize_client_commercial_payload(incoming_payload, default_service_area=existing.get("service_area") or "")
+    existing_source_details = _safe_json_object(existing.get("source_details_json"))
+    incoming_source_details = _safe_json_object(incoming.get("source_details_json"))
+    existing_audit_snapshot = _safe_json_object(existing.get("audit_snapshot_json"))
+    incoming_audit_snapshot = _safe_json_object(incoming.get("audit_snapshot_json"))
+    existing_answers = _safe_json_object(existing.get("qualification_answers_json"))
+    incoming_answers = _safe_json_object(incoming.get("qualification_answers_json"))
+    merged_emails = _normalize_client_commercial_emails(
+        (incoming_source_details.get("emails") or [])
+        + (existing_source_details.get("emails") or [])
+        + [incoming.get("email"), existing.get("email")]
+    )
+    merged_source_details = {
+        **existing_source_details,
+        **incoming_source_details,
+        "emails": merged_emails,
+        "address": incoming_source_details.get("address") or existing_source_details.get("address") or "",
+        "phone": incoming_source_details.get("phone") or existing_source_details.get("phone") or incoming.get("phone") or existing.get("phone") or "",
+        "website": incoming_source_details.get("website") or existing_source_details.get("website") or incoming.get("website") or existing.get("website") or "",
+        "service_area": incoming_source_details.get("service_area") or existing_source_details.get("service_area") or incoming.get("service_area") or existing.get("service_area") or "",
+        "prospect_type": incoming_source_details.get("prospect_type") or existing_source_details.get("prospect_type") or incoming.get("account_type") or existing.get("account_type") or "",
+        "prospect_type_label": incoming_source_details.get("prospect_type_label") or existing_source_details.get("prospect_type_label") or incoming.get("industry") or existing.get("industry") or "",
+        "source_query": incoming_source_details.get("source_query") or existing_source_details.get("source_query") or "",
+        "maps_url": incoming_source_details.get("maps_url") or existing_source_details.get("maps_url") or "",
+        "rating": incoming_source_details.get("rating") if incoming_source_details.get("rating") is not None else existing_source_details.get("rating"),
+        "review_count": incoming_source_details.get("review_count") if incoming_source_details.get("review_count") not in (None, "") else existing_source_details.get("review_count") or 0,
+    }
+    merged_payload = {
+        "name": incoming.get("name") or existing.get("name") or "Commercial Prospect",
+        "email": merged_emails[0] if merged_emails else incoming.get("email") or existing.get("email") or "",
+        "phone": incoming.get("phone") or existing.get("phone") or "",
+        "business_name": incoming.get("business_name") or existing.get("business_name") or incoming.get("name") or existing.get("name") or "Commercial Prospect",
+        "website": incoming.get("website") or existing.get("website") or "",
+        "industry": incoming.get("industry") or existing.get("industry") or "Commercial Property",
+        "account_type": incoming.get("account_type") or existing.get("account_type") or "",
+        "service_area": incoming.get("service_area") or existing.get("service_area") or "",
+        "stage": existing.get("stage") or incoming.get("stage") or "new",
+        "source": incoming.get("source") or existing.get("source") or "commercial_prospecting",
+        "summary": incoming.get("summary") or existing.get("summary") or "",
+        "source_details_json": json.dumps(merged_source_details),
+        "audit_snapshot_json": json.dumps(incoming_audit_snapshot or existing_audit_snapshot),
+        "qualification_answers_json": json.dumps(incoming_answers or existing_answers),
+        "property_count": incoming.get("property_count") or existing.get("property_count") or "",
+        "walkthrough_property_label": incoming.get("walkthrough_property_label") or existing.get("walkthrough_property_label") or "",
+        "walkthrough_waste_station_count": incoming.get("walkthrough_waste_station_count") if incoming.get("walkthrough_waste_station_count") not in (None, "") else existing.get("walkthrough_waste_station_count") or 0,
+        "walkthrough_common_area_count": incoming.get("walkthrough_common_area_count") if incoming.get("walkthrough_common_area_count") not in (None, "") else existing.get("walkthrough_common_area_count") or 0,
+        "walkthrough_relief_area_count": incoming.get("walkthrough_relief_area_count") if incoming.get("walkthrough_relief_area_count") not in (None, "") else existing.get("walkthrough_relief_area_count") or 0,
+        "pet_traffic_estimate": incoming.get("pet_traffic_estimate") or existing.get("pet_traffic_estimate") or "",
+        "site_condition": incoming.get("site_condition") or existing.get("site_condition") or "",
+        "access_notes": incoming.get("access_notes") or existing.get("access_notes") or "",
+        "gate_notes": incoming.get("gate_notes") or existing.get("gate_notes") or "",
+        "disposal_notes": incoming.get("disposal_notes") or existing.get("disposal_notes") or "",
+        "walkthrough_notes": incoming.get("walkthrough_notes") or existing.get("walkthrough_notes") or "",
+        "required_add_ons_json": incoming.get("required_add_ons_json") if _safe_json_list(incoming.get("required_add_ons_json")) else existing.get("required_add_ons_json") or "[]",
+        "walkthrough_photo_urls_json": incoming.get("walkthrough_photo_urls_json") if _safe_json_list(incoming.get("walkthrough_photo_urls_json")) else existing.get("walkthrough_photo_urls_json") or "[]",
+        "walkthrough_completed_at": incoming.get("walkthrough_completed_at") or existing.get("walkthrough_completed_at") or "",
+        "decision_maker_role": incoming.get("decision_maker_role") or existing.get("decision_maker_role") or "",
+        "current_vendor_status": incoming.get("current_vendor_status") or existing.get("current_vendor_status") or "",
+        "outreach_angle": incoming.get("outreach_angle") or existing.get("outreach_angle") or "",
+        "proposal_status": incoming.get("proposal_status") or existing.get("proposal_status") or "",
+        "pain_points_json": incoming.get("pain_points_json") if _safe_json_list(incoming.get("pain_points_json")) else existing.get("pain_points_json") or "[]",
+        "next_action": incoming.get("next_action") or existing.get("next_action") or "",
+        "proposal_builder_json": incoming.get("proposal_builder_json") or existing.get("proposal_builder_json") or "{}",
+    }
+    return _normalize_client_commercial_payload(merged_payload)
+
+
+def _build_client_commercial_summary(prospect, brief):
+    type_label = prospect.get("industry") or prospect.get("account_type") or "Commercial"
+    return f"Commercial target - {type_label}. Proposal: {brief['proposal_readiness']['label']}."
+
+
+def _client_commercial_identity_key(prospect):
+    website = _normalize_client_commercial_website(prospect.get("website"))
+    email = _normalize_client_commercial_text(prospect.get("email"), 255).lower()
+    business_name = _normalize_client_commercial_text(prospect.get("business_name") or prospect.get("name"), 160).lower()
+    return website or email or business_name
+
+
+def _parse_int_range(value, *, minimum=0, maximum=100000, default=0):
+    try:
+        parsed = int(float(value or 0))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, parsed))
+
+
+def _parse_float_range(value, *, minimum=0.0, maximum=1000000.0, default=0.0):
+    try:
+        parsed = float(value or 0)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, parsed))
+
+
+def _parse_bool_flag(value):
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+COMMERCIAL_PROPOSAL_FREQUENCY = {
+    "1x_week": {"label": "1x per week", "visits_per_month": 4.33},
+    "2x_week": {"label": "2x per week", "visits_per_month": 8.66},
+    "3x_week": {"label": "3x per week", "visits_per_month": 13.0},
+    "5x_week": {"label": "5x per week", "visits_per_month": 21.67},
+    "7x_week": {"label": "7x per week", "visits_per_month": 30.33},
+}
+
+COMMERCIAL_PROPOSAL_PACKAGES = {
+    "basic": {
+        "label": "Basic",
+        "description": "Core cleanup coverage for common pet-waste problem areas.",
+    },
+    "standard": {
+        "label": "Standard",
+        "description": "Cleanup plus station support and manager-ready reporting.",
+    },
+    "premium": {
+        "label": "Premium",
+        "description": "Full presentation package with service-proof and deodorizer support.",
+    },
+}
+
+
+def _default_client_commercial_proposal_builder(brand=None, prospect=None):
+    average_ticket = _parse_float_range((brand or {}).get("crm_avg_service_price"), minimum=0, maximum=5000, default=65.0)
+    seed_rate = max(14.0, round(average_ticket / 4.0, 2))
+    property_count = _normalize_client_commercial_text((prospect or {}).get("property_count"), 120)
+    waste_station_count = _parse_int_range((prospect or {}).get("walkthrough_waste_station_count"), maximum=500, default=0)
+    common_area_count = _parse_int_range((prospect or {}).get("walkthrough_common_area_count"), maximum=500, default=1)
+    relief_area_count = _parse_int_range((prospect or {}).get("walkthrough_relief_area_count"), maximum=500, default=0)
+    return {
+        "selected_package": "standard",
+        "service_frequency": "5x_week",
+        "service_days": "Monday-Friday",
+        "property_count": property_count,
+        "waste_station_count": waste_station_count,
+        "waste_station_rate": seed_rate,
+        "common_area_count": common_area_count,
+        "common_area_rate": round(seed_rate * 2.25, 2),
+        "relief_area_count": relief_area_count,
+        "relief_area_rate": round(seed_rate * 2.75, 2),
+        "bag_refill_included": True,
+        "bag_refill_fee": round(seed_rate * 1.5, 2),
+        "deodorizer_included": False,
+        "deodorizer_fee": round(seed_rate * 1.2, 2),
+        "initial_cleanup_required": True,
+        "initial_cleanup_fee": round(seed_rate * 8.0, 2),
+        "monthly_management_fee": 0.0,
+        "notes": "",
+        "scope_summary": "Commercial pet waste stations, common area policing, and service reporting.",
+    }
+
+
+def _normalize_client_commercial_proposal_builder(raw_value, *, brand=None, prospect=None):
+    defaults = _default_client_commercial_proposal_builder(brand=brand, prospect=prospect)
+    raw = _safe_json_object(raw_value)
+    package_key = _normalize_client_commercial_text(raw.get("selected_package"), 40).lower() or defaults["selected_package"]
+    if package_key not in COMMERCIAL_PROPOSAL_PACKAGES:
+        package_key = defaults["selected_package"]
+    frequency_key = _normalize_client_commercial_text(raw.get("service_frequency"), 40).lower() or defaults["service_frequency"]
+    if frequency_key not in COMMERCIAL_PROPOSAL_FREQUENCY:
+        frequency_key = defaults["service_frequency"]
+    normalized = {
+        "selected_package": package_key,
+        "service_frequency": frequency_key,
+        "service_days": _normalize_client_commercial_text(raw.get("service_days"), 120) or defaults["service_days"],
+        "property_count": _normalize_client_commercial_text(raw.get("property_count"), 120) or defaults["property_count"],
+        "waste_station_count": _parse_int_range(raw.get("waste_station_count"), maximum=500, default=defaults["waste_station_count"]),
+        "waste_station_rate": _parse_float_range(raw.get("waste_station_rate"), maximum=5000, default=defaults["waste_station_rate"]),
+        "common_area_count": _parse_int_range(raw.get("common_area_count"), maximum=500, default=defaults["common_area_count"]),
+        "common_area_rate": _parse_float_range(raw.get("common_area_rate"), maximum=5000, default=defaults["common_area_rate"]),
+        "relief_area_count": _parse_int_range(raw.get("relief_area_count"), maximum=500, default=defaults["relief_area_count"]),
+        "relief_area_rate": _parse_float_range(raw.get("relief_area_rate"), maximum=5000, default=defaults["relief_area_rate"]),
+        "bag_refill_included": _parse_bool_flag(raw.get("bag_refill_included")) if raw else defaults["bag_refill_included"],
+        "bag_refill_fee": _parse_float_range(raw.get("bag_refill_fee"), maximum=5000, default=defaults["bag_refill_fee"]),
+        "deodorizer_included": _parse_bool_flag(raw.get("deodorizer_included")) if raw else defaults["deodorizer_included"],
+        "deodorizer_fee": _parse_float_range(raw.get("deodorizer_fee"), maximum=5000, default=defaults["deodorizer_fee"]),
+        "initial_cleanup_required": _parse_bool_flag(raw.get("initial_cleanup_required")) if raw else defaults["initial_cleanup_required"],
+        "initial_cleanup_fee": _parse_float_range(raw.get("initial_cleanup_fee"), maximum=25000, default=defaults["initial_cleanup_fee"]),
+        "monthly_management_fee": _parse_float_range(raw.get("monthly_management_fee"), maximum=25000, default=defaults["monthly_management_fee"]),
+        "scope_summary": _normalize_client_commercial_text(raw.get("scope_summary"), 300) or defaults["scope_summary"],
+        "notes": _normalize_client_commercial_text(raw.get("notes"), 1200),
+    }
+    return normalized
+
+
+def _client_commercial_builder_for_package(builder, package_key):
+    package = COMMERCIAL_PROPOSAL_PACKAGES.get(package_key, COMMERCIAL_PROPOSAL_PACKAGES["standard"])
+    packaged = dict(builder)
+    packaged["selected_package"] = package_key
+    if package_key == "basic":
+        packaged["bag_refill_included"] = False
+        packaged["deodorizer_included"] = False
+        packaged["monthly_management_fee"] = 0.0
+    elif package_key == "standard":
+        packaged["bag_refill_included"] = True
+        packaged["monthly_management_fee"] = max(_parse_float_range(builder.get("monthly_management_fee"), maximum=25000, default=0.0), 35.0)
+    elif package_key == "premium":
+        packaged["bag_refill_included"] = True
+        packaged["deodorizer_included"] = True
+        packaged["monthly_management_fee"] = max(_parse_float_range(builder.get("monthly_management_fee"), maximum=25000, default=0.0), 95.0)
+    packaged["package_label"] = package["label"]
+    packaged["package_description"] = package["description"]
+    return packaged
+
+
+def _client_commercial_calculate_proposal(builder, prospect, frequency):
+    line_items = []
+    visits_per_month = frequency["visits_per_month"]
+
+    def add_monthly_item(label, quantity, unit_rate, unit_label):
+        quantity = int(quantity or 0)
+        rate = float(unit_rate or 0)
+        if quantity <= 0 or rate <= 0:
+            return 0.0
+        monthly_total = round(quantity * rate * visits_per_month, 2)
+        line_items.append({
+            "label": label,
+            "quantity": quantity,
+            "unit_rate": round(rate, 2),
+            "unit_label": unit_label,
+            "frequency": frequency["label"],
+            "billing": "monthly",
+            "amount": monthly_total,
+        })
+        return monthly_total
+
+    monthly_total = 0.0
+    monthly_total += add_monthly_item("Waste station servicing", builder["waste_station_count"], builder["waste_station_rate"], "per station / visit")
+    monthly_total += add_monthly_item("Common area policing", builder["common_area_count"], builder["common_area_rate"], "per area / visit")
+    monthly_total += add_monthly_item("Dog relief area treatment", builder["relief_area_count"], builder["relief_area_rate"], "per zone / visit")
+
+    if builder["bag_refill_included"] and builder["bag_refill_fee"] > 0:
+        monthly_total += round(builder["bag_refill_fee"], 2)
+        line_items.append({
+            "label": "Bag refill and consumables",
+            "quantity": 1,
+            "unit_rate": round(builder["bag_refill_fee"], 2),
+            "unit_label": "monthly",
+            "frequency": "Monthly",
+            "billing": "monthly",
+            "amount": round(builder["bag_refill_fee"], 2),
+        })
+
+    if builder["deodorizer_included"] and builder["deodorizer_fee"] > 0:
+        monthly_total += round(builder["deodorizer_fee"], 2)
+        line_items.append({
+            "label": "Deodorizer treatment",
+            "quantity": 1,
+            "unit_rate": round(builder["deodorizer_fee"], 2),
+            "unit_label": "monthly",
+            "frequency": "Monthly",
+            "billing": "monthly",
+            "amount": round(builder["deodorizer_fee"], 2),
+        })
+
+    if builder["monthly_management_fee"] > 0:
+        monthly_total += round(builder["monthly_management_fee"], 2)
+        line_items.append({
+            "label": "Site reporting and management",
+            "quantity": 1,
+            "unit_rate": round(builder["monthly_management_fee"], 2),
+            "unit_label": "monthly",
+            "frequency": "Monthly",
+            "billing": "monthly",
+            "amount": round(builder["monthly_management_fee"], 2),
+        })
+
+    setup_total = 0.0
+    if builder["initial_cleanup_required"] and builder["initial_cleanup_fee"] > 0:
+        setup_total = round(builder["initial_cleanup_fee"], 2)
+        line_items.append({
+            "label": "Initial cleanup and site setup",
+            "quantity": 1,
+            "unit_rate": setup_total,
+            "unit_label": "one-time",
+            "frequency": "One-time",
+            "billing": "one_time",
+            "amount": setup_total,
+        })
+
+    account_name = prospect.get("business_name") or prospect.get("name") or "Commercial account"
+    scope_summary = builder["scope_summary"] or "Commercial pet waste services."
+    property_context = builder["property_count"] or prospect.get("property_count") or "portfolio size pending confirmation"
+    package_label = builder.get("package_label") or COMMERCIAL_PROPOSAL_PACKAGES[builder["selected_package"]]["label"]
+    summary = (
+        f"{package_label} proposal for {account_name}: {frequency['label']} commercial pet waste coverage for {property_context}. "
+        f"Monthly recurring service totals ${monthly_total:,.2f}."
+    )
+    if setup_total > 0:
+        summary += f" One-time setup is ${setup_total:,.2f}."
+
+    follow_up_text = (
+        f"We scoped the {package_label.lower()} package around {frequency['label']} service for {account_name}, covering waste stations, common areas, and onsite presentation. "
+        f"If this scope looks right, we can finalize routing, start date, and site access details next."
+    )
+    if builder["notes"]:
+        follow_up_text += f" Notes: {builder['notes']}"
+
+    included_features = [
+        f"{frequency['label']} service cadence",
+        f"{builder['waste_station_count']} waste stations",
+        f"{builder['common_area_count']} common areas",
+    ]
+    if builder["bag_refill_included"]:
+        included_features.append("Bag refill support")
+    if builder["deodorizer_included"]:
+        included_features.append("Deodorizer treatment")
+    if builder["monthly_management_fee"] > 0:
+        included_features.append("Manager-facing reporting")
+
+    return {
+        "builder": builder,
+        "scope_summary": scope_summary,
+        "line_items": line_items,
+        "monthly_total": round(monthly_total, 2),
+        "setup_total": round(setup_total, 2),
+        "grand_total": round(monthly_total + setup_total, 2),
+        "summary": summary,
+        "follow_up_text": follow_up_text,
+        "included_features": included_features,
+    }
+
+
+def _build_client_commercial_proposal(prospect, *, brand=None, existing_quote=None):
+    builder = _normalize_client_commercial_proposal_builder(
+        prospect.get("proposal_builder_json"),
+        brand=brand,
+        prospect=prospect,
+    )
+    frequency = COMMERCIAL_PROPOSAL_FREQUENCY[builder["service_frequency"]]
+    packages = []
+    for package_key in ("basic", "standard", "premium"):
+        package_builder = _client_commercial_builder_for_package(builder, package_key)
+        package_preview = _client_commercial_calculate_proposal(package_builder, prospect, frequency)
+        packages.append({
+            "key": package_key,
+            "label": package_builder["package_label"],
+            "description": package_builder["package_description"],
+            "monthly_total": package_preview["monthly_total"],
+            "setup_total": package_preview["setup_total"],
+            "grand_total": package_preview["grand_total"],
+            "included_features": package_preview["included_features"],
+        })
+
+    selected_builder = _client_commercial_builder_for_package(builder, builder["selected_package"])
+    selected_preview = _client_commercial_calculate_proposal(selected_builder, prospect, frequency)
+    proposal_quote = {
+        "status": (existing_quote or {}).get("status") or "draft",
+        "quote_mode": "structured",
+        "amount_low": selected_preview["monthly_total"],
+        "amount_high": selected_preview["grand_total"],
+        "currency": (existing_quote or {}).get("currency") or "USD",
+        "line_items": selected_preview["line_items"],
+        "summary": selected_preview["summary"],
+        "follow_up_text": selected_preview["follow_up_text"],
+    }
+    return {
+        "builder": selected_builder,
+        "frequency": frequency,
+        "scope_summary": selected_preview["scope_summary"],
+        "packages": packages,
+        "selected_package": builder["selected_package"],
+        "monthly_total": selected_preview["monthly_total"],
+        "setup_total": selected_preview["setup_total"],
+        "grand_total": selected_preview["grand_total"],
+        "quote": proposal_quote,
+    }
+
+
+def _build_client_commercial_email_html(message_text):
+    body = html.escape(message_text or "").replace("\n", "<br>")
+    return (
+        "<div style=\"font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#111827;\">"
+        f"{body}"
+        "</div>"
+    )
+
+
+def _prepare_client_commercial_service_visits(raw_visits):
+    visits = []
+    for visit in raw_visits or []:
+        item = dict(visit)
+        item["issues"] = _safe_json_list(item.get("issues_json"))
+        item["photos"] = _safe_json_list(item.get("photos_json"))
+        visits.append(item)
+    return visits
+
+
+def _build_client_commercial_service_recap(prospect, service_visits):
+    visits = service_visits or []
+    total_visits = len(visits)
+    stations_serviced = sum(int(visit.get("waste_station_count_serviced") or 0) for visit in visits)
+    bags_restocked_count = sum(1 for visit in visits if visit.get("bags_restocked"))
+    gate_secured_count = sum(1 for visit in visits if visit.get("gate_secured"))
+    issue_list = []
+    seen = set()
+    for visit in visits:
+        for issue in visit.get("issues") or []:
+            key = issue.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            issue_list.append(issue)
+    account_name = prospect.get("business_name") or prospect.get("name") or "the property"
+    last_service_date = visits[0].get("service_date") if visits else ""
+    if visits:
+        summary = (
+            f"{account_name} received {total_visits} logged service visit{'s' if total_visits != 1 else ''}. "
+            f"Teams serviced {stations_serviced} station stop{'s' if stations_serviced != 1 else ''} across the recorded visits, "
+            f"with bag restocks completed on {bags_restocked_count} visit{'s' if bags_restocked_count != 1 else ''} and gate security confirmed on {gate_secured_count} visit{'s' if gate_secured_count != 1 else ''}."
+        )
+    else:
+        summary = f"No commercial service visits have been logged for {account_name} yet."
+
+    recommendations = []
+    if issue_list:
+        recommendations.append(f"Resolve the top open field issue: {issue_list[0]}.")
+    if total_visits and gate_secured_count < total_visits:
+        recommendations.append("Tighten gate-close confirmation on every visit.")
+    if total_visits and bags_restocked_count == 0:
+        recommendations.append("Confirm whether bag refill should be part of the active scope.")
+    if not recommendations and total_visits:
+        recommendations.append("Use this recap in monthly client reporting and renewal conversations.")
+
+    return {
+        "total_visits": total_visits,
+        "stations_serviced": stations_serviced,
+        "bags_restocked_count": bags_restocked_count,
+        "gate_secured_count": gate_secured_count,
+        "issues": issue_list[:5],
+        "last_service_date": last_service_date,
+        "summary": summary,
+        "recommendations": recommendations,
+    }
+
+
+def _get_client_commercial_nurture_sequences(db):
+    sequences = []
+    for sequence in db.get_drip_sequences():
+        if (sequence.get("trigger") or "").strip().lower() != "commercial":
+            continue
+        if not sequence.get("is_active"):
+            continue
+        sequences.append(sequence)
+    return sequences
+
+
+def _get_client_commercial_nurture_state(db, thread_id):
+    enrollments = db.get_lead_drip_enrollments("client_commercial", thread_id)
+    for enrollment in enrollments:
+        enrollment["sends"] = db.get_drip_sends(enrollment_id=enrollment["id"], limit=10)
+    return enrollments
 
 
 def _parse_dog_count(value):
@@ -944,12 +1549,17 @@ _ENDPOINT_FEATURE_MAP = {
     "client_crm_data":             "crm",
     "client_lead_assistant":       "crm",
     "client_save_lead_assistant_profile": "crm",
-    "client_commercial_prospecting": "crm",
-    "client_commercial_search":    "crm",
-    "client_commercial_import":    "crm",
-    "client_commercial_thread":    "crm",
-    "client_commercial_thread_qualification": "crm",
-    "client_commercial_thread_refresh": "crm",
+    "client_commercial_prospecting": "commercial",
+    "client_commercial_search":    "commercial",
+    "client_commercial_import":    "commercial",
+    "client_commercial_thread":    "commercial",
+    "client_commercial_thread_qualification": "commercial",
+    "client_commercial_thread_walkthrough": "commercial",
+    "client_commercial_thread_refresh": "commercial",
+    "client_commercial_thread_send_email": "commercial",
+    "client_commercial_thread_enroll_drip": "commercial",
+    "client_commercial_thread_build_proposal": "commercial",
+    "client_commercial_thread_service_visit": "commercial",
     "client_va_services":          "va_services",
     "client_va_request_create":    "va_services",
     "client_va_request_cancel":    "va_services",
@@ -6392,20 +7002,15 @@ def client_ghl_test():
 
 
 def _build_client_commercial_payload(thread):
-    try:
-        payload = json.loads(thread.get("commercial_data_json") or "{}")
-    except Exception:
-        payload = {}
-    if not isinstance(payload, dict):
-        payload = {}
-    payload["name"] = payload.get("name") or thread.get("lead_name") or payload.get("business_name") or "Commercial Prospect"
-    payload["email"] = thread.get("lead_email") or payload.get("email") or ""
-    payload["phone"] = thread.get("lead_phone") or payload.get("phone") or ""
-    payload["business_name"] = payload.get("business_name") or thread.get("lead_name") or payload["name"]
-    payload["source"] = payload.get("source") or thread.get("source") or "commercial_prospecting"
-    payload["stage"] = payload.get("stage") or thread.get("status") or "new"
-    payload["summary"] = thread.get("summary") or payload.get("summary") or ""
-    return payload
+    payload = _normalize_client_commercial_payload(_safe_json_object(thread.get("commercial_data_json")))
+    payload["name"] = payload.get("name") or (thread.get("lead_name") or "").strip() or payload.get("business_name") or "Commercial Prospect"
+    payload["email"] = (thread.get("lead_email") or "").strip().lower() or payload.get("email") or ""
+    payload["phone"] = (thread.get("lead_phone") or "").strip() or payload.get("phone") or ""
+    payload["business_name"] = payload.get("business_name") or (thread.get("lead_name") or "").strip() or payload["name"]
+    payload["source"] = payload.get("source") or (thread.get("source") or "").strip() or "commercial_prospecting"
+    payload["stage"] = payload.get("stage") or (thread.get("status") or "").strip() or "new"
+    payload["summary"] = (thread.get("summary") or "").strip() or payload.get("summary") or ""
+    return _normalize_client_commercial_payload(payload)
 
 
 def _build_client_commercial_brief(thread):
@@ -6682,85 +7287,63 @@ def client_commercial_import():
     imported = 0
     updated = 0
     created_threads = []
+    seen_identities = set()
 
     for item in selected:
-        business_name = (item.get("business_name") or item.get("contact_name") or "Commercial Prospect").strip()
-        emails = [value.strip().lower() for value in (item.get("emails") or []) if isinstance(value, str) and value.strip()]
-        primary_email = emails[0] if emails else ""
-        phone = (item.get("phone") or "").strip()
-        website = (item.get("website") or "").strip()
-        service_area = (item.get("service_area") or brand.get("service_area") or "").strip()
-        type_label = (item.get("prospect_type_label") or item.get("prospect_type") or "Commercial Property").strip()
-        source_query = (item.get("source_query") or "").strip()
-        address = (item.get("address") or "").strip()
-        audit_snapshot = item.get("audit_snapshot") if isinstance(item.get("audit_snapshot"), dict) else {}
+        incoming_payload = _normalize_client_commercial_payload(item, default_service_area=brand.get("service_area") or "")
+        identity_key = _client_commercial_identity_key(incoming_payload)
+        if not identity_key or identity_key in seen_identities:
+            continue
+        seen_identities.add(identity_key)
 
-        source_details = {
-            "emails": emails,
-            "address": address,
-            "phone": phone,
-            "website": website,
-            "service_area": service_area,
-            "prospect_type": item.get("prospect_type") or "",
-            "prospect_type_label": type_label,
-            "source_query": source_query,
-            "rating": item.get("rating"),
-            "review_count": item.get("review_count") or 0,
-            "maps_url": item.get("maps_url") or "",
-        }
-        prospect_payload = {
-            "name": business_name,
-            "email": primary_email,
-            "phone": phone,
-            "business_name": business_name,
-            "website": website,
-            "industry": type_label,
-            "account_type": item.get("prospect_type") or "",
-            "service_area": service_area,
-            "stage": "new",
-            "source": "commercial_prospecting",
-            "source_details_json": json.dumps(source_details),
-            "audit_snapshot_json": json.dumps(audit_snapshot),
-            "qualification_answers_json": "{}",
-            "property_count": "",
-            "decision_maker_role": "",
-            "current_vendor_status": "",
-        }
+        existing = db.find_brand_lead_thread(
+            brand_id,
+            email=incoming_payload.get("email") or "",
+            lead_name=incoming_payload.get("business_name") or incoming_payload.get("name") or "",
+            source="commercial_prospecting",
+            website=incoming_payload.get("website") or "",
+        )
+        existing_payload = _build_client_commercial_payload(existing) if existing else {}
+        prospect_payload = _merge_client_commercial_payload(existing_payload, incoming_payload) if existing else incoming_payload
         brief = build_commercial_outreach_brief(prospect_payload)
         prospect_payload.update({
             "outreach_angle": brief["outreach_angle"],
             "proposal_status": brief["proposal_readiness"]["status"],
             "pain_points_json": json.dumps(brief["pain_points"]),
             "next_action": (brief["next_actions"] or [""])[0],
+            "summary": _build_client_commercial_summary(prospect_payload, brief),
         })
-        summary = f"Commercial target imported - {type_label}. Angle: {brief['outreach_angle']}."
-
-        existing = db.find_brand_lead_thread(
-            brand_id,
-            email=primary_email,
-            lead_name=business_name,
-            source="commercial_prospecting",
-        )
+        summary = prospect_payload["summary"]
 
         if existing:
             thread_id = existing["id"]
             db.update_lead_thread_profile_fields(
                 thread_id,
                 brand_id,
-                lead_name=business_name,
-                lead_email=primary_email or existing.get("lead_email") or "",
-                lead_phone=phone or existing.get("lead_phone") or "",
+                lead_name=prospect_payload["business_name"],
+                lead_email=prospect_payload["email"] or existing.get("lead_email") or "",
+                lead_phone=prospect_payload["phone"] or existing.get("lead_phone") or "",
                 summary=summary,
             )
             db.update_lead_thread_commercial_data(thread_id, brand_id, json.dumps(prospect_payload))
+            db.add_lead_event(
+                brand_id,
+                thread_id,
+                "commercial_imported",
+                "updated",
+                metadata={
+                    "account_name": prospect_payload["business_name"],
+                    "website": prospect_payload.get("website") or "",
+                },
+            )
             updated += 1
         else:
             thread_id = db.create_lead_thread(
                 brand_id,
                 {
-                    "lead_name": business_name,
-                    "lead_email": primary_email,
-                    "lead_phone": phone,
+                    "lead_name": prospect_payload["business_name"],
+                    "lead_email": prospect_payload["email"],
+                    "lead_phone": prospect_payload["phone"],
                     "source": "commercial_prospecting",
                     "channel": "commercial",
                     "status": "new",
@@ -6778,6 +7361,16 @@ def client_commercial_import():
                     "subject": brief["subject"],
                     "email_body": brief["email_body"],
                     "call_opener": brief["call_opener"],
+                },
+            )
+            db.add_lead_event(
+                brand_id,
+                thread_id,
+                "commercial_imported",
+                "created",
+                metadata={
+                    "account_name": prospect_payload["business_name"],
+                    "website": prospect_payload.get("website") or "",
                 },
             )
             imported += 1
@@ -6803,6 +7396,12 @@ def client_commercial_thread(thread_id):
         abort(404)
 
     prospect, commercial_brief = _build_client_commercial_brief(thread)
+    prospect["required_add_ons"] = _safe_json_list(prospect.get("required_add_ons_json"))
+    prospect["walkthrough_photo_urls"] = _safe_json_list(prospect.get("walkthrough_photo_urls_json"))
+    proposal_quote = db.get_lead_quote_for_thread(thread_id)
+    proposal_preview = _build_client_commercial_proposal(prospect, brand=brand, existing_quote=proposal_quote)
+    service_visits = _prepare_client_commercial_service_visits(db.get_commercial_service_visits(thread_id))
+    service_recap = _build_client_commercial_service_recap(prospect, service_visits)
     if (thread.get("source") or "") != "commercial_prospecting" and (thread.get("commercial_data_json") or "{}").strip() in {"", "{}"}:
         abort(404)
 
@@ -6813,7 +7412,233 @@ def client_commercial_thread(thread_id):
         thread=thread,
         commercial_prospect=prospect,
         commercial_brief=commercial_brief,
+        proposal_quote=proposal_quote,
+        proposal_preview=proposal_preview,
+        service_visits=service_visits,
+        service_recap=service_recap,
+        proposal_frequency_options=COMMERCIAL_PROPOSAL_FREQUENCY,
+        proposal_package_options=COMMERCIAL_PROPOSAL_PACKAGES,
+        nurture_sequences=_get_client_commercial_nurture_sequences(db),
+        nurture_enrollments=_get_client_commercial_nurture_state(db, thread_id),
+        smtp_ready=bool(current_app.config.get("SMTP_USER") and current_app.config.get("SMTP_PASSWORD")),
     )
+
+
+@client_bp.route("/commercial/thread/<int:thread_id>/proposal", methods=["POST"])
+@client_login_required
+def client_commercial_thread_build_proposal(thread_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread:
+        abort(404)
+
+    prospect = _build_client_commercial_payload(thread)
+    builder = _normalize_client_commercial_proposal_builder(
+        {
+            "selected_package": request.form.get("selected_package"),
+            "service_frequency": request.form.get("service_frequency"),
+            "service_days": request.form.get("service_days"),
+            "property_count": request.form.get("property_count") or prospect.get("property_count"),
+            "waste_station_count": request.form.get("waste_station_count"),
+            "waste_station_rate": request.form.get("waste_station_rate"),
+            "common_area_count": request.form.get("common_area_count"),
+            "common_area_rate": request.form.get("common_area_rate"),
+            "relief_area_count": request.form.get("relief_area_count"),
+            "relief_area_rate": request.form.get("relief_area_rate"),
+            "bag_refill_included": request.form.get("bag_refill_included"),
+            "bag_refill_fee": request.form.get("bag_refill_fee"),
+            "deodorizer_included": request.form.get("deodorizer_included"),
+            "deodorizer_fee": request.form.get("deodorizer_fee"),
+            "initial_cleanup_required": request.form.get("initial_cleanup_required"),
+            "initial_cleanup_fee": request.form.get("initial_cleanup_fee"),
+            "monthly_management_fee": request.form.get("monthly_management_fee"),
+            "scope_summary": request.form.get("scope_summary"),
+            "notes": request.form.get("notes"),
+        },
+        brand=brand,
+        prospect=prospect,
+    )
+    prospect["proposal_builder_json"] = json.dumps(builder)
+
+    existing_quote = db.get_lead_quote_for_thread(thread_id)
+    proposal = _build_client_commercial_proposal(prospect, brand=brand, existing_quote=existing_quote)
+    quote_status = (request.form.get("quote_status") or "").strip().lower()
+    if quote_status not in {"draft", "sent", "approved"}:
+        quote_status = "sent" if _parse_bool_flag(request.form.get("mark_sent")) else "draft"
+
+    sent_at = (existing_quote or {}).get("sent_at") or ""
+    accepted_at = (existing_quote or {}).get("accepted_at") or ""
+    now_text = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    if quote_status in {"sent", "approved"} and not sent_at:
+        sent_at = now_text
+    if quote_status == "approved":
+        accepted_at = accepted_at or now_text
+    elif quote_status != "approved":
+        accepted_at = ""
+
+    db.update_lead_thread_commercial_data(thread_id, brand_id, json.dumps(prospect))
+    db.upsert_lead_quote(
+        brand_id,
+        thread_id,
+        status=quote_status,
+        quote_mode=proposal["quote"]["quote_mode"],
+        amount_low=proposal["quote"]["amount_low"],
+        amount_high=proposal["quote"]["amount_high"],
+        currency=proposal["quote"]["currency"],
+        line_items=proposal["quote"]["line_items"],
+        summary=proposal["quote"]["summary"],
+        follow_up_text=proposal["quote"]["follow_up_text"],
+        sent_at=sent_at,
+        accepted_at=accepted_at,
+    )
+    db.update_lead_thread_status(thread_id, quote_status=quote_status)
+    db.add_lead_event(
+        brand_id,
+        thread_id,
+        "commercial_proposal_built",
+        event_value=f"{proposal['builder']['package_label']} - ${proposal['monthly_total']:,.2f} monthly",
+        metadata={
+            "monthly_total": proposal["monthly_total"],
+            "setup_total": proposal["setup_total"],
+            "quote_status": quote_status,
+            "selected_package": proposal["selected_package"],
+        },
+    )
+    flash("Commercial proposal updated.", "success")
+    return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+
+@client_bp.route("/commercial/thread/<int:thread_id>/send-email", methods=["POST"])
+@client_login_required
+def client_commercial_thread_send_email(thread_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread:
+        abort(404)
+
+    prospect = _build_client_commercial_payload(thread)
+    email_address = (prospect.get("email") or thread.get("lead_email") or "").strip().lower()
+    if not email_address:
+        flash("This commercial target does not have an email address yet.", "error")
+        return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+    subject = (request.form.get("subject") or "").strip()[:255]
+    message_text = (request.form.get("message") or "").strip()[:6000]
+    if not subject or not message_text:
+        flash("Subject and message are required before sending outreach.", "error")
+        return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+    from webapp.email_sender import send_simple_email
+
+    try:
+        send_simple_email(
+            current_app.config,
+            email_address,
+            subject,
+            message_text,
+            html=_build_client_commercial_email_html(message_text),
+        )
+    except Exception as exc:
+        db.add_lead_event(
+            brand_id,
+            thread_id,
+            "commercial_email_failed",
+            event_value=subject[:200],
+            metadata={"detail": str(exc)[:500], "to": email_address},
+        )
+        flash(f"Commercial outreach email failed: {str(exc)[:160]}", "error")
+        return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+    db.add_lead_message(
+        thread_id,
+        "outbound",
+        "user",
+        message_text,
+        channel="email",
+        metadata={
+            "manual": True,
+            "commercial_outreach": True,
+            "subject": subject,
+            "to": email_address,
+        },
+    )
+    db.add_lead_event(
+        brand_id,
+        thread_id,
+        "commercial_email_sent",
+        event_value=subject[:200],
+        metadata={"to": email_address},
+    )
+    flash("Commercial outreach email sent.", "success")
+    return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+
+@client_bp.route("/commercial/thread/<int:thread_id>/enroll-drip", methods=["POST"])
+@client_login_required
+def client_commercial_thread_enroll_drip(thread_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread:
+        abort(404)
+
+    try:
+        sequence_id = int(request.form.get("sequence_id") or 0)
+    except (TypeError, ValueError):
+        sequence_id = 0
+    if sequence_id <= 0:
+        flash("Choose a commercial nurture sequence before enrolling.", "error")
+        return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+    sequence = db.get_drip_sequence(sequence_id)
+    if not sequence or not sequence.get("is_active") or (sequence.get("trigger") or "").strip().lower() != "commercial":
+        flash("That nurture sequence is not available.", "error")
+        return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+    prospect = _build_client_commercial_payload(thread)
+    email_address = (prospect.get("email") or thread.get("lead_email") or "").strip().lower()
+    if not email_address:
+        flash("This commercial target needs an email address before drip enrollment.", "error")
+        return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+    enrollment_id = db.enroll_in_drip(
+        sequence_id,
+        email_address,
+        prospect.get("business_name") or prospect.get("name") or thread.get("lead_name") or "Commercial Prospect",
+        lead_source="client_commercial",
+        lead_id=thread_id,
+    )
+    if not enrollment_id:
+        flash("This target is already active in that nurture sequence.", "warning")
+        return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+    db.add_lead_message(
+        thread_id,
+        "outbound",
+        "system",
+        f"Enrolled in commercial nurture sequence '{sequence['name']}'.",
+        channel="email",
+        metadata={
+            "commercial_nurture": True,
+            "sequence_id": sequence_id,
+            "enrollment_id": enrollment_id,
+        },
+    )
+    db.add_lead_event(
+        brand_id,
+        thread_id,
+        "commercial_drip_enrolled",
+        event_value=sequence["name"][:200],
+        metadata={"sequence_id": sequence_id, "enrollment_id": enrollment_id},
+    )
+    flash(f"Enrolled in '{sequence['name']}'.", "success")
+    return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
 
 
 @client_bp.route("/commercial/thread/<int:thread_id>/qualification", methods=["POST"])
@@ -6847,11 +7672,20 @@ def client_commercial_thread_qualification(thread_id):
     prospect["proposal_status"] = brief["proposal_readiness"]["status"]
     prospect["pain_points_json"] = json.dumps(brief["pain_points"])
     prospect["next_action"] = (brief["next_actions"] or [""])[0]
+    prospect["summary"] = _build_client_commercial_summary(prospect, brief)
 
     db.update_lead_thread_commercial_data(thread_id, brand_id, json.dumps(prospect))
+    db.update_lead_thread_profile_fields(
+        thread_id,
+        brand_id,
+        lead_name=prospect.get("business_name") or prospect.get("name") or "Commercial Prospect",
+        lead_email=prospect.get("email") or "",
+        lead_phone=prospect.get("phone") or "",
+        summary=prospect["summary"],
+    )
     db.update_lead_thread_status(
         thread_id,
-        summary=f"Commercial target - {prospect.get('industry') or prospect.get('account_type') or 'Commercial'}. Proposal: {brief['proposal_readiness']['label']}.",
+        summary=prospect["summary"],
     )
     db.add_lead_message(
         thread_id,
@@ -6860,7 +7694,162 @@ def client_commercial_thread_qualification(thread_id):
         f"Commercial qualification updated. {brief['qualification_summary']['complete_count']}/{brief['qualification_summary']['required_count']} required points confirmed.",
         channel="commercial",
     )
+    db.add_lead_event(
+        brand_id,
+        thread_id,
+        "commercial_qualified",
+        brief["proposal_readiness"]["status"],
+        metadata={
+            "complete_required": brief["qualification_summary"]["complete_count"],
+            "required_total": brief["qualification_summary"]["required_count"],
+        },
+    )
     flash("Commercial qualification saved.", "success")
+    return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+
+@client_bp.route("/commercial/thread/<int:thread_id>/walkthrough", methods=["POST"])
+@client_login_required
+def client_commercial_thread_walkthrough(thread_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread or not brand:
+        abort(404)
+
+    from webapp.commercial_strategy import build_commercial_outreach_brief
+
+    prospect = _build_client_commercial_payload(thread)
+    prospect["property_count"] = (request.form.get("property_count") or prospect.get("property_count") or "").strip()[:160]
+    prospect["walkthrough_property_label"] = (request.form.get("walkthrough_property_label") or "").strip()[:160]
+    prospect["walkthrough_waste_station_count"] = _parse_int_range(request.form.get("walkthrough_waste_station_count"), maximum=500, default=prospect.get("walkthrough_waste_station_count") or 0)
+    prospect["walkthrough_common_area_count"] = _parse_int_range(request.form.get("walkthrough_common_area_count"), maximum=500, default=prospect.get("walkthrough_common_area_count") or 0)
+    prospect["walkthrough_relief_area_count"] = _parse_int_range(request.form.get("walkthrough_relief_area_count"), maximum=500, default=prospect.get("walkthrough_relief_area_count") or 0)
+    prospect["pet_traffic_estimate"] = (request.form.get("pet_traffic_estimate") or "").strip()[:120]
+    prospect["site_condition"] = (request.form.get("site_condition") or "").strip()[:220]
+    prospect["access_notes"] = (request.form.get("access_notes") or "").strip()[:1000]
+    prospect["gate_notes"] = (request.form.get("gate_notes") or "").strip()[:500]
+    prospect["disposal_notes"] = (request.form.get("disposal_notes") or "").strip()[:500]
+    prospect["walkthrough_notes"] = (request.form.get("walkthrough_notes") or "").strip()[:1200]
+    prospect["required_add_ons_json"] = json.dumps(_normalize_client_commercial_list(request.form.get("required_add_ons") or "", max_items=8, item_max_len=120))
+    prospect["walkthrough_photo_urls_json"] = json.dumps(_normalize_client_commercial_list(request.form.get("walkthrough_photo_urls") or "", max_items=8, item_max_len=500))
+
+    if any([
+        prospect.get("walkthrough_property_label"),
+        prospect.get("walkthrough_waste_station_count"),
+        prospect.get("walkthrough_common_area_count"),
+        prospect.get("walkthrough_relief_area_count"),
+        prospect.get("access_notes"),
+        prospect.get("walkthrough_notes"),
+    ]):
+        prospect["walkthrough_completed_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    builder = _normalize_client_commercial_proposal_builder(prospect.get("proposal_builder_json"), brand=brand, prospect=prospect)
+    if not builder.get("property_count"):
+        builder["property_count"] = prospect.get("property_count") or ""
+    builder["waste_station_count"] = prospect.get("walkthrough_waste_station_count") or builder.get("waste_station_count") or 0
+    builder["common_area_count"] = prospect.get("walkthrough_common_area_count") or builder.get("common_area_count") or 0
+    builder["relief_area_count"] = prospect.get("walkthrough_relief_area_count") or builder.get("relief_area_count") or 0
+    prospect["proposal_builder_json"] = json.dumps(builder)
+
+    brief = build_commercial_outreach_brief(prospect)
+    prospect["outreach_angle"] = brief["outreach_angle"]
+    prospect["proposal_status"] = brief["proposal_readiness"]["status"]
+    prospect["pain_points_json"] = json.dumps(brief["pain_points"])
+    prospect["next_action"] = (brief["next_actions"] or [""])[0]
+    prospect["summary"] = _build_client_commercial_summary(prospect, brief)
+
+    db.update_lead_thread_commercial_data(thread_id, brand_id, json.dumps(prospect))
+    db.update_lead_thread_profile_fields(
+        thread_id,
+        brand_id,
+        lead_name=prospect.get("business_name") or prospect.get("name") or "Commercial Prospect",
+        lead_email=prospect.get("email") or "",
+        lead_phone=prospect.get("phone") or "",
+        summary=prospect["summary"],
+    )
+    db.update_lead_thread_status(thread_id, summary=prospect["summary"])
+    db.add_lead_event(
+        brand_id,
+        thread_id,
+        "commercial_walkthrough_saved",
+        event_value=(prospect.get("walkthrough_property_label") or prospect.get("business_name") or "Walkthrough")[:200],
+        metadata={
+            "waste_station_count": prospect.get("walkthrough_waste_station_count") or 0,
+            "common_area_count": prospect.get("walkthrough_common_area_count") or 0,
+            "relief_area_count": prospect.get("walkthrough_relief_area_count") or 0,
+        },
+    )
+    flash("Commercial walkthrough saved.", "success")
+    return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+
+@client_bp.route("/commercial/thread/<int:thread_id>/service-visit", methods=["POST"])
+@client_login_required
+def client_commercial_thread_service_visit(thread_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread:
+        abort(404)
+
+    prospect = _build_client_commercial_payload(thread)
+    service_date = (request.form.get("service_date") or "").strip()[:20]
+    summary = (request.form.get("summary") or "").strip()[:500]
+    if not service_date or not summary:
+        flash("Service date and visit summary are required.", "error")
+        return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+    property_label = (request.form.get("property_label") or prospect.get("walkthrough_property_label") or prospect.get("business_name") or "Commercial site").strip()[:160]
+    completed_by = (request.form.get("completed_by") or session.get("client_brand_name") or "Operations").strip()[:120]
+    issues = _normalize_client_commercial_list(request.form.get("issues") or "", max_items=8, item_max_len=180)
+    photos = _normalize_client_commercial_list(request.form.get("photo_urls") or "", max_items=8, item_max_len=500)
+    client_note = (request.form.get("client_note") or "").strip()[:1200]
+    internal_note = (request.form.get("internal_note") or "").strip()[:1200]
+    waste_station_count_serviced = _parse_int_range(request.form.get("waste_station_count_serviced"), maximum=500, default=0)
+    bags_restocked = _parse_bool_flag(request.form.get("bags_restocked"))
+    gate_secured = _parse_bool_flag(request.form.get("gate_secured"))
+
+    visit = db.add_commercial_service_visit(
+        brand_id,
+        thread_id,
+        service_date=service_date,
+        completed_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        completed_by=completed_by,
+        property_label=property_label,
+        summary=summary,
+        waste_station_count_serviced=waste_station_count_serviced,
+        bags_restocked=bags_restocked,
+        gate_secured=gate_secured,
+        issues=issues,
+        photos=photos,
+        client_note=client_note,
+        internal_note=internal_note,
+    )
+
+    db.add_lead_message(
+        thread_id,
+        "outbound",
+        "system",
+        f"Service visit logged for {property_label} on {service_date}. {summary}",
+        channel="commercial",
+        metadata={"commercial_service_visit": True, "visit_id": (visit or {}).get("id")},
+    )
+    db.add_lead_event(
+        brand_id,
+        thread_id,
+        "commercial_service_visit_logged",
+        event_value=summary[:200],
+        metadata={
+            "visit_id": (visit or {}).get("id"),
+            "service_date": service_date,
+            "property_label": property_label,
+            "bags_restocked": bags_restocked,
+            "gate_secured": gate_secured,
+        },
+    )
+    flash("Commercial service visit logged.", "success")
     return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
 
 
@@ -6889,24 +7878,54 @@ def client_commercial_thread_refresh(thread_id):
         source_details = {}
 
     site_data = _scrape_website({"website": website}) or {}
-    source_details.update({
-        "emails": _extract_public_emails(website),
-        "website": website,
-        "service_area": prospect.get("service_area") or source_details.get("service_area") or "",
-        "address": source_details.get("address") or "",
-        "review_count": source_details.get("review_count") or 0,
-        "rating": source_details.get("rating"),
-    })
-    prospect["source_details_json"] = json.dumps(source_details)
-    prospect["audit_snapshot_json"] = json.dumps(site_data)
+    refresh_payload = _normalize_client_commercial_payload(
+        {
+            **prospect,
+            "website": website,
+            "emails": _extract_public_emails(website),
+            "audit_snapshot": site_data,
+            "source_details_json": json.dumps(
+                {
+                    **source_details,
+                    "website": website,
+                    "service_area": prospect.get("service_area") or source_details.get("service_area") or "",
+                    "address": source_details.get("address") or "",
+                    "review_count": source_details.get("review_count") or 0,
+                    "rating": source_details.get("rating"),
+                    "maps_url": source_details.get("maps_url") or "",
+                }
+            ),
+        },
+        default_service_area=prospect.get("service_area") or "",
+    )
+    prospect = _merge_client_commercial_payload(prospect, refresh_payload)
     brief = build_commercial_outreach_brief(prospect)
     prospect["outreach_angle"] = brief["outreach_angle"]
     prospect["proposal_status"] = brief["proposal_readiness"]["status"]
     prospect["pain_points_json"] = json.dumps(brief["pain_points"])
     prospect["next_action"] = (brief["next_actions"] or [""])[0]
+    prospect["summary"] = _build_client_commercial_summary(prospect, brief)
 
     db.update_lead_thread_commercial_data(thread_id, brand_id, json.dumps(prospect))
-    db.update_lead_thread_status(thread_id, summary=f"Commercial audit refreshed - {brief['outreach_angle']}.")
+    db.update_lead_thread_profile_fields(
+        thread_id,
+        brand_id,
+        lead_name=prospect.get("business_name") or prospect.get("name") or "Commercial Prospect",
+        lead_email=prospect.get("email") or "",
+        lead_phone=prospect.get("phone") or "",
+        summary=prospect["summary"],
+    )
+    db.update_lead_thread_status(thread_id, summary=prospect["summary"])
+    db.add_lead_event(
+        brand_id,
+        thread_id,
+        "commercial_refreshed",
+        brief["proposal_readiness"]["status"],
+        metadata={
+            "outreach_angle": brief["outreach_angle"],
+            "website": website,
+        },
+    )
     flash("Commercial brief refreshed.", "success")
     return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
 

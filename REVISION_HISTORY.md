@@ -418,6 +418,25 @@ Complete development history from initial commit to present. Each entry referenc
 - Layer management panel with reorder and delete
 - Properties panel: edit text, font, color, size, opacity, position per element
 - Canvas size selector for all 6 ad formats
+
+---
+
+## Phase 13: Commercial Account System (Uncommitted)
+
+### Client-Side Commercial Foundation
+- Commercial prospecting moved into the client portal and WARREN lead-thread model
+- Commercial import, dedupe, refresh, qualification, nurture enrollment, and manual outreach
+- Structured commercial proposal builder built on top of `lead_quotes`
+- Commercial drip activity logged back into the same WARREN thread
+
+### Commercial Walkthrough + Service Proof
+- Commercial walkthrough capture added to the client account workspace
+- Package-aware proposals with Basic, Standard, and Premium options
+- Quote status support for draft, sent, and approved states
+- `commercial_service_visits` table added for proof-of-service logging
+- Service visit form and history added to the commercial account detail view
+- Manager recap preview generated from logged commercial service visits
+- Service visits log both structured records and thread timeline activity
 - Export as PNG at full resolution with auto-save to Drive
 - Server Generate button (legacy Pillow path) still available
 - Drive Images panel: pull images from brand's Drive Images folder
