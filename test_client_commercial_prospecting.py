@@ -108,6 +108,25 @@ class ClientCommercialProspectingTests(unittest.TestCase):
         self.assertIn(b"Mesa Property Group", response.data)
         self.assertIn(b"Import selected targets into WARREN", response.data)
 
+    @patch("webapp.commercial_prospector.search_commercial_prospects")
+    def test_client_commercial_search_uses_brand_google_maps_api_key(self, search_mock):
+        search_mock.return_value = []
+
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "google_maps_api_key", "brand-maps-key")
+
+        response = self.client.post(
+            "/client/commercial/search",
+            data={
+                "location": "Mesa, AZ",
+                "prospect_types": ["property_manager"],
+                "max_results": "5",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(search_mock.call_args.kwargs["api_key"], "brand-maps-key")
+
     def test_client_commercial_import_creates_brand_thread(self):
         payload = {
             "business_name": "Skyline HOA Services",

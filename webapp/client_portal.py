@@ -7198,7 +7198,12 @@ def client_commercial_prospecting():
 
     from webapp.commercial_prospector import COMMERCIAL_PROSPECT_TYPES
 
-    maps_api_key = (os.environ.get("GOOGLE_MAPS_API_KEY") or db.get_setting("google_maps_api_key") or "").strip()
+    maps_api_key = (
+        brand.get("google_maps_api_key")
+        or os.environ.get("GOOGLE_MAPS_API_KEY")
+        or db.get_setting("google_maps_api_key")
+        or ""
+    ).strip()
     return render_template(
         "client_commercial_prospector.html",
         brand=brand,
@@ -7232,7 +7237,12 @@ def client_commercial_search():
     except ValueError:
         max_results = 8
 
-    maps_api_key = (os.environ.get("GOOGLE_MAPS_API_KEY") or db.get_setting("google_maps_api_key") or "").strip()
+    maps_api_key = (
+        brand.get("google_maps_api_key")
+        or os.environ.get("GOOGLE_MAPS_API_KEY")
+        or db.get_setting("google_maps_api_key")
+        or ""
+    ).strip()
     results = []
     if location:
         try:
