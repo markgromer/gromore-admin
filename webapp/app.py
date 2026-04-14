@@ -2096,6 +2096,211 @@ def create_app():
                                stages=stages, current_stage=stage_filter,
                                revenue=revenue)
 
+    @app.route("/crm/commercial")
+    @login_required
+    def agency_crm_commercial():
+        from webapp.commercial_prospector import COMMERCIAL_PROSPECT_TYPES
+
+        sequences = db.get_drip_sequences()
+        maps_api_key = (os.environ.get("GOOGLE_MAPS_API_KEY") or db.get_setting("google_maps_api_key") or "").strip()
+        return render_template(
+            "crm/commercial_prospector.html",
+            results=[],
+            location="",
+            selected_types=[item["key"] for item in COMMERCIAL_PROSPECT_TYPES[:3]],
+            prospect_types=COMMERCIAL_PROSPECT_TYPES,
+            sequences=sequences,
+            has_maps_api_key=bool(maps_api_key),
+            search_performed=False,
+        )
+
+    @app.route("/crm/commercial/search", methods=["POST"])
+    @login_required
+    def agency_crm_commercial_search():
+        from webapp.commercial_prospector import COMMERCIAL_PROSPECT_TYPES, search_commercial_prospects
+
+        location = request.form.get("location", "").strip()
+        selected_types = [value.strip() for value in request.form.getlist("prospect_types") if value.strip()]
+        max_results = request.form.get("max_results", "8").strip()
+        try:
+            max_results = max(3, min(int(max_results or 8), 15))
+        except ValueError:
+            max_results = 8
+
+        maps_api_key = (os.environ.get("GOOGLE_MAPS_API_KEY") or db.get_setting("google_maps_api_key") or "").strip()
+        results = []
+        if location:
+            try:
+                results = search_commercial_prospects(
+                    location,
+                    selected_types,
+                    api_key=maps_api_key,
+                    max_results_per_type=max_results,
+                )
+            except Exception as exc:
+                flash(f"Commercial search failed: {str(exc)[:160]}", "error")
+        else:
+            flash("Enter a location before searching.", "error")
+
+        sequences = db.get_drip_sequences()
+        return render_template(
+            "crm/commercial_prospector.html",
+            results=results,
+            location=location,
+            selected_types=selected_types,
+            prospect_types=COMMERCIAL_PROSPECT_TYPES,
+            sequences=sequences,
+            has_maps_api_key=bool(maps_api_key),
+            search_performed=True,
+        )
+
+    @app.route("/crm/commercial/import", methods=["POST"])
+    @login_required
+    def agency_crm_commercial_import():
+        raw_results = request.form.getlist("selected_results")
+        selected = []
+        for raw in raw_results:
+            try:
+                selected.append(json.loads(raw))
+            except Exception:
+                continue
+
+        if not selected:
+            flash("Select at least one scraped prospect to import.", "error")
+            return redirect(url_for("agency_crm_commercial"))
+
+        sequence_id = request.form.get("sequence_id", "").strip()
+        try:
+            sequence_id = int(sequence_id) if sequence_id else 0
+        except ValueError:
+            sequence_id = 0
+
+        imported = 0
+        updated = 0
+        enrolled = 0
+        skipped_no_email = 0
+
+        for item in selected:
+            business_name = (item.get("business_name") or item.get("contact_name") or "Commercial Prospect").strip()
+            contact_name = (item.get("contact_name") or business_name).strip()
+            emails = [value.strip().lower() for value in (item.get("emails") or []) if isinstance(value, str) and value.strip()]
+            primary_email = emails[0] if emails else ""
+            phone = (item.get("phone") or "").strip()
+            website = (item.get("website") or "").strip()
+            service_area = (item.get("service_area") or "").strip()
+            source_query = (item.get("source_query") or "").strip()
+            type_label = (item.get("prospect_type_label") or item.get("prospect_type") or "Commercial Property").strip()
+            address = (item.get("address") or "").strip()
+            score = int(item.get("score") or 0)
+            audit_snapshot = item.get("audit_snapshot") if isinstance(item.get("audit_snapshot"), dict) else {}
+            source_details = {
+                "emails": emails,
+                "address": address,
+                "phone": phone,
+                "website": website,
+                "service_area": service_area,
+                "prospect_type": item.get("prospect_type") or "",
+                "prospect_type_label": type_label,
+                "source_query": source_query,
+                "rating": item.get("rating"),
+                "review_count": item.get("review_count") or 0,
+                "maps_url": item.get("maps_url") or "",
+            }
+            note_lines = [
+                f"Commercial scraper import - {type_label}",
+                f"Search: {source_query}" if source_query else "",
+                f"Address: {address}" if address else "",
+                f"Public emails: {', '.join(emails)}" if emails else "No public email found during scrape.",
+            ]
+            note_text = "\n".join(line for line in note_lines if line)
+            from webapp.commercial_strategy import build_commercial_outreach_brief
+            preview = {
+                "name": contact_name,
+                "email": primary_email,
+                "phone": phone,
+                "business_name": business_name,
+                "website": website,
+                "industry": type_label,
+                "account_type": item.get("prospect_type") or "",
+                "service_area": service_area,
+                "stage": "new",
+                "source": "commercial_scrape",
+                "source_details_json": json.dumps(source_details),
+                "audit_snapshot_json": json.dumps(audit_snapshot),
+            }
+            brief = build_commercial_outreach_brief(preview)
+
+            existing = db.find_agency_prospect(email=primary_email, website=website, business_name=business_name)
+            if existing:
+                db.update_agency_prospect(
+                    existing["id"],
+                    name=contact_name or existing.get("name") or business_name,
+                    email=primary_email or existing.get("email") or "",
+                    phone=phone or existing.get("phone") or "",
+                    business_name=business_name or existing.get("business_name") or "",
+                    website=website or existing.get("website") or "",
+                    industry=type_label,
+                    service_area=service_area or existing.get("service_area") or "",
+                    source="commercial_scrape",
+                    score=max(score, int(existing.get("score") or 0)),
+                    account_type=item.get("prospect_type") or existing.get("account_type") or "",
+                    source_details_json=json.dumps(source_details),
+                    outreach_angle=brief["outreach_angle"],
+                    proposal_status=brief["proposal_readiness"]["status"],
+                    pain_points_json=json.dumps(brief["pain_points"]),
+                    next_action=(brief["next_actions"] or [""])[0],
+                    audit_snapshot_json=json.dumps(audit_snapshot),
+                )
+                prospect_id = existing["id"]
+                updated += 1
+            else:
+                prospect_id = db.create_agency_prospect(
+                    name=contact_name,
+                    email=primary_email,
+                    phone=phone,
+                    business_name=business_name,
+                    website=website,
+                    industry=type_label,
+                    service_area=service_area,
+                    source="commercial_scrape",
+                    stage="new",
+                    score=score,
+                    notes=note_text,
+                    account_type=item.get("prospect_type") or "",
+                    source_details_json=json.dumps(source_details),
+                    outreach_angle=brief["outreach_angle"],
+                    proposal_status=brief["proposal_readiness"]["status"],
+                    pain_points_json=json.dumps(brief["pain_points"]),
+                    next_action=(brief["next_actions"] or [""])[0],
+                    audit_snapshot_json=json.dumps(audit_snapshot),
+                )
+                imported += 1
+
+            db.add_agency_prospect_note(prospect_id, note_text, note_type="system", created_by="admin")
+
+            if sequence_id and primary_email:
+                enrollment = db.enroll_in_drip(sequence_id, primary_email, contact_name, lead_source="commercial_scrape", lead_id=prospect_id)
+                if enrollment:
+                    enrolled += 1
+                    db.add_agency_prospect_message(
+                        prospect_id,
+                        content=f"Enrolled in drip sequence #{sequence_id} from commercial prospecting workspace.",
+                        direction="outbound",
+                        channel="email",
+                        subject="Drip enrollment",
+                        status="queued",
+                    )
+            elif sequence_id and not primary_email:
+                skipped_no_email += 1
+
+        summary = f"Commercial import finished. {imported} new, {updated} updated"
+        if sequence_id:
+            summary += f", {enrolled} enrolled"
+            if skipped_no_email:
+                summary += f", {skipped_no_email} skipped for nurture because no public email was found"
+        flash(summary + ".", "success")
+        return redirect(url_for("agency_crm"))
+
     @app.route("/crm/prospect/new", methods=["POST"])
     @login_required
     def agency_crm_new_prospect():
@@ -2122,19 +2327,32 @@ def create_app():
             abort(404)
         notes = db.get_agency_prospect_notes(prospect_id)
         messages = db.get_agency_prospect_messages(prospect_id)
+        from webapp.commercial_strategy import build_commercial_outreach_brief
 
-        # Get Stripe plans for billing section
-        from webapp.stripe_billing import get_plans
-        plans = get_plans(db)
+        # Billing data should be optional for CRM review flows.
+        try:
+            from webapp.stripe_billing import get_plans
+            plans = get_plans(db)
+        except Exception:
+            plans = []
 
         # If converted to brand, get brand info
         brand = None
         if prospect.get("converted_brand_id"):
             brand = db.get_brand(prospect["converted_brand_id"])
 
+        is_commercial = bool(
+            (prospect.get("source") == "commercial_scrape")
+            or (prospect.get("account_type") or "").strip()
+            or (prospect.get("source_details_json") or "").strip()
+        )
+        commercial_brief = build_commercial_outreach_brief(prospect) if is_commercial else None
+
         return render_template("crm/prospect_detail.html",
                                prospect=prospect, notes=notes,
-                               messages=messages, plans=plans, brand=brand)
+                               messages=messages, plans=plans, brand=brand,
+                               is_commercial=is_commercial,
+                               commercial_brief=commercial_brief)
 
     @app.route("/crm/prospect/<int:prospect_id>/update", methods=["POST"])
     @login_required
@@ -2142,7 +2360,10 @@ def create_app():
         fields = {}
         for key in ["name", "email", "phone", "business_name", "website",
                      "industry", "service_area", "stage", "score",
-                     "monthly_budget", "notes", "assigned_to", "next_follow_up"]:
+                     "monthly_budget", "notes", "assigned_to", "next_follow_up",
+                     "account_type", "decision_maker_role", "property_count",
+                     "current_vendor_status", "outreach_angle", "proposal_status",
+                     "next_action"]:
             val = request.form.get(key)
             if val is not None:
                 fields[key] = val.strip()
@@ -2153,6 +2374,60 @@ def create_app():
                 fields["score"] = 0
         db.update_agency_prospect(prospect_id, **fields)
         flash("Prospect updated.", "success")
+        return redirect(url_for("agency_crm_detail", prospect_id=prospect_id))
+
+    @app.route("/crm/prospect/<int:prospect_id>/commercial-refresh", methods=["POST"])
+    @login_required
+    def agency_crm_refresh_commercial_brief(prospect_id):
+        prospect = db.get_agency_prospect(prospect_id)
+        if not prospect:
+            abort(404)
+
+        website = (prospect.get("website") or "").strip()
+        if not website:
+            flash("Add a website before refreshing the commercial audit.", "error")
+            return redirect(url_for("agency_crm_detail", prospect_id=prospect_id))
+
+        from webapp.commercial_prospector import _extract_public_emails
+        from webapp.competitor_intel import _scrape_website
+        from webapp.commercial_strategy import build_commercial_outreach_brief
+
+        try:
+            source_details = json.loads(prospect.get("source_details_json") or "{}")
+        except Exception:
+            source_details = {}
+
+        site_data = _scrape_website({"website": website}) or {}
+        source_details.update({
+            "emails": _extract_public_emails(website),
+            "website": website,
+            "service_area": prospect.get("service_area") or source_details.get("service_area") or "",
+            "address": source_details.get("address") or "",
+            "review_count": source_details.get("review_count") or 0,
+            "rating": source_details.get("rating"),
+        })
+
+        preview = dict(prospect)
+        preview["source_details_json"] = json.dumps(source_details)
+        preview["audit_snapshot_json"] = json.dumps(site_data)
+        brief = build_commercial_outreach_brief(preview)
+
+        db.update_agency_prospect(
+            prospect_id,
+            source_details_json=json.dumps(source_details),
+            audit_snapshot_json=json.dumps(site_data),
+            outreach_angle=brief["outreach_angle"],
+            proposal_status=brief["proposal_readiness"]["status"],
+            pain_points_json=json.dumps(brief["pain_points"]),
+            next_action=(brief["next_actions"] or [""])[0],
+        )
+        db.add_agency_prospect_note(
+            prospect_id,
+            f"Commercial audit refreshed. Angle: {brief['outreach_angle']}.",
+            note_type="system",
+            created_by="admin",
+        )
+        flash("Commercial brief refreshed.", "success")
         return redirect(url_for("agency_crm_detail", prospect_id=prospect_id))
 
     @app.route("/crm/prospect/<int:prospect_id>/note", methods=["POST"])

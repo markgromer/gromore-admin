@@ -27,6 +27,13 @@
     .msg-item { padding: .6rem 0; border-bottom: 1px solid #f1f3f5; }
     .msg-out { border-left: 3px solid #4361ee; padding-left: .75rem; }
     .msg-in { border-left: 3px solid #2ecc71; padding-left: .75rem; }
+    .brief-card { background: #f8fafc; border: 1px solid #dbe4f0; border-radius: 10px; padding: .9rem 1rem; margin-bottom: .9rem; }
+    .brief-card h6 { margin-bottom: .5rem; }
+    .brief-list { margin: 0; padding-left: 1rem; font-size: .88rem; color: #334155; }
+    .brief-copy { white-space: pre-wrap; font-size: .86rem; color: #1f2937; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: .85rem; }
+    .severity-positive { color: #15803d; }
+    .severity-warning { color: #b45309; }
+    .severity-info { color: #1d4ed8; }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -37,6 +44,12 @@
         <h4 class="mb-0 mt-1">{{ prospect.business_name or prospect.name }}</h4>
     </div>
     <div class="d-flex gap-2">
+        {% if is_commercial %}
+        <form method="POST" action="{{ url_for('agency_crm_refresh_commercial_brief', prospect_id=prospect.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat me-1"></i> Refresh Brief</button>
+        </form>
+        {% endif %}
         {% if not prospect.converted_brand_id %}
         <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#convertModal">
             <i class="bi bi-arrow-up-circle me-1"></i> Convert to Client
@@ -114,6 +127,34 @@
                         <label class="form-label" style="font-size:.78rem;">Next Follow-up</label>
                         <input type="date" name="next_follow_up" class="form-control form-control-sm" value="{{ prospect.next_follow_up }}">
                     </div>
+                    <div class="col-6">
+                        <label class="form-label" style="font-size:.78rem;">Account Type</label>
+                        <input type="text" name="account_type" class="form-control form-control-sm" value="{{ prospect.account_type }}" placeholder="hoa, apartment, property_manager">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label" style="font-size:.78rem;">Decision-Maker Role</label>
+                        <input type="text" name="decision_maker_role" class="form-control form-control-sm" value="{{ prospect.decision_maker_role }}" placeholder="regional manager, board president">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label" style="font-size:.78rem;">Property Count / Units</label>
+                        <input type="text" name="property_count" class="form-control form-control-sm" value="{{ prospect.property_count }}" placeholder="4 sites / 312 units">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label" style="font-size:.78rem;">Current Vendor Status</label>
+                        <input type="text" name="current_vendor_status" class="form-control form-control-sm" value="{{ prospect.current_vendor_status }}" placeholder="in-house, incumbent agency, unknown">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label" style="font-size:.78rem;">Outreach Angle</label>
+                        <input type="text" name="outreach_angle" class="form-control form-control-sm" value="{{ prospect.outreach_angle }}" placeholder="occupancy, trust, lead flow">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label" style="font-size:.78rem;">Proposal Status</label>
+                        <input type="text" name="proposal_status" class="form-control form-control-sm" value="{{ prospect.proposal_status }}" placeholder="needs_qualification or ready">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" style="font-size:.78rem;">Next Action</label>
+                        <input type="text" name="next_action" class="form-control form-control-sm" value="{{ prospect.next_action }}" placeholder="Call regional manager and confirm portfolio size">
+                    </div>
                     <div class="col-12">
                         <label class="form-label" style="font-size:.78rem;">Notes</label>
                         <textarea name="notes" class="form-control form-control-sm" rows="3">{{ prospect.notes }}</textarea>
@@ -147,6 +188,56 @@
             {% endif %}
         </div>
 
+        {% if is_commercial and commercial_brief %}
+        <div class="detail-card">
+            <h6>Commercial Strategy Brief</h6>
+            <div class="brief-card">
+                <div class="field-row">
+                    <span class="field-label">Likely Buyer</span>
+                    <span class="field-value">{{ commercial_brief.role_guess }}</span>
+                </div>
+                <div class="field-row">
+                    <span class="field-label">Primary Angle</span>
+                    <span class="field-value">{{ commercial_brief.outreach_angle }}</span>
+                </div>
+                <div class="field-row">
+                    <span class="field-label">Proposal Readiness</span>
+                    <span class="field-value">{{ commercial_brief.proposal_readiness.label }}</span>
+                </div>
+                {% if commercial_brief.proposal_readiness.missing %}
+                <div class="mt-2 small text-muted">Missing: {{ commercial_brief.proposal_readiness.missing|join(', ') }}</div>
+                {% endif %}
+            </div>
+
+            <div class="brief-card">
+                <h6>Likely Pain Points</h6>
+                <ul class="brief-list">
+                    {% for item in commercial_brief.pain_points %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <div class="brief-card">
+                <h6>Qualification Questions</h6>
+                <ul class="brief-list">
+                    {% for item in commercial_brief.qualification_questions %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <div class="brief-card">
+                <h6>Next Actions</h6>
+                <ul class="brief-list">
+                    {% for item in commercial_brief.next_actions %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+
         {% if brand and brand.stripe_customer_id %}
         <div class="detail-card">
             <h6><i class="bi bi-credit-card me-1"></i> Billing</h6>
@@ -172,6 +263,34 @@
 
     <!-- Right: Notes + Messages -->
     <div class="col-lg-7">
+        {% if is_commercial and commercial_brief %}
+        <div class="detail-card">
+            <h6>Commercial Audit Snapshot</h6>
+            {% for item in commercial_brief.audit_findings %}
+            <div class="note-item">
+                <div class="fw-semibold severity-{{ item.severity|default('info') }}">{{ item.title }}</div>
+                <div>{{ item.detail }}</div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="detail-card">
+            <h6>Outreach Assets</h6>
+            <div class="mb-3">
+                <div class="text-muted" style="font-size:.76rem; font-weight:700; text-transform:uppercase;">Subject Line</div>
+                <div class="brief-copy">{{ commercial_brief.subject }}</div>
+            </div>
+            <div class="mb-3">
+                <div class="text-muted" style="font-size:.76rem; font-weight:700; text-transform:uppercase;">First Email</div>
+                <div class="brief-copy">{{ commercial_brief.email_body }}</div>
+            </div>
+            <div>
+                <div class="text-muted" style="font-size:.76rem; font-weight:700; text-transform:uppercase;">Call Opener</div>
+                <div class="brief-copy">{{ commercial_brief.call_opener }}</div>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="detail-card">
             <h6>Activity Notes</h6>
             <form method="POST" action="{{ url_for('agency_crm_add_note', prospect_id=prospect.id) }}" class="mb-3">

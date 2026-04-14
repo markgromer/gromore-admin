@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Commercial Prospecting{% endblock %}
+{% block content %}
+<style>
+    .prospector-hero {
+        background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 58%, #93c5fd 100%);
+        border-radius: 18px;
+        color: #fff;
+        padding: 1.5rem;
+        margin-bottom: 1.25rem;
+        box-shadow: 0 12px 32px rgba(15, 23, 42, .18);
+    }
+    .prospector-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+    }
+    .prospect-result {
+        background: #fff;
+        border: 1px solid #dbe4f0;
+        border-radius: 14px;
+        padding: 1rem;
+        height: 100%;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, .05);
+    }
+    .prospect-result .meta {
+        font-size: .82rem;
+        color: #64748b;
+    }
+    .email-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .25rem .55rem;
+        border-radius: 999px;
+        background: #eff6ff;
+        color: #1d4ed8;
+        font-size: .72rem;
+        font-weight: 700;
+        margin: .15rem .25rem .15rem 0;
+    }
+</style>
+
+<div class="prospector-hero">
+    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+        <div>
+            <div class="text-uppercase" style="font-size:.72rem; font-weight:800; letter-spacing:.05em; opacity:.82;">Commercial Lead Engine</div>
+            <h3 class="mt-2 mb-2">Scrape property targets by location, then push them straight into nurture</h3>
+            <p class="mb-0" style="max-width:760px; color:rgba(255,255,255,.82);">This workspace searches public commercial-property targets like HOAs, apartment complexes, and property managers. It pulls website and contact signals, captures public emails when available, and lets you import them into CRM with optional drip enrollment.</p>
+        </div>
+        <a href="{{ url_for('agency_crm') }}" class="btn btn-light btn-sm">
+            <i class="bi bi-arrow-left me-1"></i> Back to CRM
+        </a>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('agency_crm_commercial_search') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row g-3 align-items-end">
+                <div class="col-lg-4">
+                    <label class="form-label fw-semibold">Location</label>
+                    <input type="text" class="form-control" name="location" value="{{ location }}" placeholder="Phoenix, AZ" required>
+                </div>
+                <div class="col-lg-2">
+                    <label class="form-label fw-semibold">Results per type</label>
+                    <input type="number" class="form-control" name="max_results" value="8" min="3" max="15">
+                </div>
+                <div class="col-lg-6">
+                    <label class="form-label fw-semibold">Target groups</label>
+                    <div class="d-flex flex-wrap gap-3">
+                        {% for option in prospect_types %}
+                        <label class="form-check-label d-flex align-items-center gap-2">
+                            <input class="form-check-input mt-0" type="checkbox" name="prospect_types" value="{{ option.key }}" {{ 'checked' if option.key in selected_types else '' }}>
+                            <span>{{ option.label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+                <small class="text-muted">
+                    {% if has_maps_api_key %}
+                    Google Places is enabled. Public website email extraction will run on matched results.
+                    {% else %}
+                    No Google Maps API key found, so this will fall back to public web search only.
+                    {% endif %}
+                </small>
+                <button class="btn btn-primary" type="submit"><i class="bi bi-search me-1"></i> Search commercial prospects</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if search_performed %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h5 class="mb-0">Search Results</h5>
+            <small class="text-muted">{{ results|length }} prospects found for {{ location or 'your search' }}.</small>
+        </div>
+    </div>
+    <div class="card-body">
+        {% if results %}
+        <form method="POST" action="{{ url_for('agency_crm_commercial_import') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="1" id="selectAllProspects">
+                    <label class="form-check-label fw-semibold" for="selectAllProspects">Select all visible prospects</label>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <label class="form-label mb-0 small text-muted">Optional drip sequence</label>
+                    <select name="sequence_id" class="form-select form-select-sm" style="min-width:240px;">
+                        <option value="">Import only, no drip</option>
+                        {% for sequence in sequences %}
+                        <option value="{{ sequence.id }}">{{ sequence.name }}{% if sequence.trigger %} - {{ sequence.trigger }}{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn btn-success btn-sm" type="submit"><i class="bi bi-cloud-arrow-down me-1"></i> Import selected prospects</button>
+                </div>
+            </div>
+
+            <div class="prospector-grid">
+                {% for result in results %}
+                <div class="prospect-result">
+                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                        <div class="form-check">
+                            <input class="form-check-input commercial-prospect-check" type="checkbox" name="selected_results" value="{{ result|tojson|forceescape }}" id="prospect{{ loop.index }}">
+                            <label class="form-check-label" for="prospect{{ loop.index }}">
+                                <strong>{{ result.business_name }}</strong>
+                            </label>
+                        </div>
+                        <span class="badge bg-primary">Score {{ result.score }}</span>
+                    </div>
+                    <div class="meta mb-2">
+                        <div><i class="bi bi-buildings me-1"></i> {{ result.prospect_type_label }}</div>
+                        {% if result.address %}<div><i class="bi bi-geo-alt me-1"></i> {{ result.address }}</div>{% endif %}
+                        {% if result.phone %}<div><i class="bi bi-telephone me-1"></i> {{ result.phone }}</div>{% endif %}
+                        {% if result.rating %}<div><i class="bi bi-star-fill me-1"></i> {{ result.rating }}{% if result.review_count %} from {{ result.review_count }} reviews{% endif %}</div>{% endif %}
+                    </div>
+                    {% if result.website %}
+                    <div class="mb-2"><a href="{{ result.website }}" target="_blank" rel="noopener">{{ result.website }}</a></div>
+                    {% endif %}
+                    <div class="mb-2">
+                        {% if result.emails %}
+                            {% for email in result.emails %}
+                            <span class="email-chip"><i class="bi bi-envelope"></i> {{ email }}</span>
+                            {% endfor %}
+                        {% else %}
+                            <span class="text-muted small">No public email found on the site during scrape.</span>
+                        {% endif %}
+                    </div>
+                    <div class="meta">Query: {{ result.source_query }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </form>
+        <script>
+        (function() {
+            var selectAll = document.getElementById('selectAllProspects');
+            if (!selectAll) return;
+            selectAll.addEventListener('change', function() {
+                document.querySelectorAll('.commercial-prospect-check').forEach(function(box) {
+                    box.checked = selectAll.checked;
+                });
+            });
+        })();
+        </script>
+        {% else %}
+        <p class="text-muted mb-0">No commercial prospects matched that search. Try a broader metro area or a different property group mix.</p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

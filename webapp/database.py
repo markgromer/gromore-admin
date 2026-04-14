@@ -1484,6 +1484,25 @@ class WebDB:
                 self._safe_add_column(conn, "hiring_candidates", col_name, col_def)
         conn.commit()
 
+        # ── agency_prospects migrations ──
+        ap_columns = {r[1] for r in conn.execute("PRAGMA table_info(agency_prospects)").fetchall()}
+        new_ap_cols = [
+            ("account_type", "TEXT DEFAULT ''"),
+            ("decision_maker_role", "TEXT DEFAULT ''"),
+            ("property_count", "TEXT DEFAULT ''"),
+            ("current_vendor_status", "TEXT DEFAULT ''"),
+            ("outreach_angle", "TEXT DEFAULT ''"),
+            ("proposal_status", "TEXT DEFAULT 'not_ready'"),
+            ("next_action", "TEXT DEFAULT ''"),
+            ("source_details_json", "TEXT DEFAULT '{}'"),
+            ("audit_snapshot_json", "TEXT DEFAULT '{}'"),
+            ("pain_points_json", "TEXT DEFAULT '[]'"),
+        ]
+        for col_name, col_def in new_ap_cols:
+            if col_name not in ap_columns:
+                self._safe_add_column(conn, "agency_prospects", col_name, col_def)
+        conn.commit()
+
         # ── Legacy migration: brands.competitors (text) -> competitors table ──
         # Older deployments stored competitor names in a free-form text field.
         # The client portal uses the structured competitors table.
@@ -5449,13 +5468,40 @@ class WebDB:
         conn.close()
         return dict(row) if row else None
 
+    def find_agency_prospect(self, *, email="", website="", business_name=""):
+        conn = self._conn()
+        normalized_email = self._normalize_email(email)
+        normalized_website = (website or "").strip().lower().rstrip("/")
+        normalized_name = (business_name or "").strip().lower()
+        row = None
+        if normalized_email:
+            row = conn.execute(
+                "SELECT * FROM agency_prospects WHERE lower(email) = ? ORDER BY id DESC LIMIT 1",
+                (normalized_email,),
+            ).fetchone()
+        if not row and normalized_website:
+            row = conn.execute(
+                "SELECT * FROM agency_prospects WHERE lower(rtrim(website, '/')) = ? ORDER BY id DESC LIMIT 1",
+                (normalized_website,),
+            ).fetchone()
+        if not row and normalized_name:
+            row = conn.execute(
+                "SELECT * FROM agency_prospects WHERE lower(coalesce(business_name, name)) = ? ORDER BY id DESC LIMIT 1",
+                (normalized_name,),
+            ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
     def create_agency_prospect(self, **fields):
         conn = self._conn()
         allowed = {
             "name", "email", "phone", "business_name", "website", "industry",
             "service_area", "source", "stage", "score", "monthly_budget",
             "notes", "assigned_to", "assessment_lead_id", "signup_lead_id",
-            "next_follow_up",
+            "next_follow_up", "account_type", "decision_maker_role",
+            "property_count", "current_vendor_status", "outreach_angle",
+            "proposal_status", "next_action", "source_details_json",
+            "audit_snapshot_json", "pain_points_json",
         }
         data = {k: v for k, v in fields.items() if k in allowed and v}
         cols = ", ".join(data.keys())
@@ -5475,7 +5521,10 @@ class WebDB:
             "name", "email", "phone", "business_name", "website", "industry",
             "service_area", "source", "stage", "score", "monthly_budget",
             "notes", "assigned_to", "converted_brand_id", "last_contact_at",
-            "next_follow_up",
+            "next_follow_up", "account_type", "decision_maker_role",
+            "property_count", "current_vendor_status", "outreach_angle",
+            "proposal_status", "next_action", "source_details_json",
+            "audit_snapshot_json", "pain_points_json",
         }
         sets, params = [], []
         for k, v in fields.items():
