@@ -49,6 +49,87 @@
         background: #f8fafc;
         height: 100%;
     }
+    .commercial-search-shell.is-searching {
+        position: relative;
+    }
+    .commercial-search-status {
+        display: none;
+        margin-top: 1rem;
+        border: 1px solid #bbf7d0;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #f0fdf4 0%, #ecfeff 100%);
+        padding: 1rem 1.1rem;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55);
+    }
+    .commercial-search-shell.is-searching .commercial-search-status {
+        display: block;
+    }
+    .commercial-search-status-head {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        margin-bottom: .45rem;
+    }
+    .commercial-search-pulse {
+        width: 42px;
+        height: 42px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(22, 101, 52, .12);
+        color: #166534;
+        flex: 0 0 auto;
+    }
+    .commercial-search-pulse i {
+        font-size: 1rem;
+        animation: commercial-search-spin 1.15s linear infinite;
+    }
+    .commercial-search-status-title {
+        font-size: .95rem;
+        font-weight: 800;
+        color: #14532d;
+        margin: 0;
+    }
+    .commercial-search-status-copy {
+        font-size: .83rem;
+        color: #166534;
+        margin: 0;
+    }
+    .commercial-search-steps {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: .55rem;
+        margin-top: .85rem;
+    }
+    .commercial-search-step {
+        border-radius: 12px;
+        background: rgba(255, 255, 255, .72);
+        border: 1px solid rgba(22, 101, 52, .12);
+        padding: .7rem .8rem;
+    }
+    .commercial-search-step-label {
+        font-size: .72rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: #166534;
+        opacity: .75;
+        margin-bottom: .2rem;
+    }
+    .commercial-search-step-copy {
+        font-size: .82rem;
+        color: #14532d;
+        margin: 0;
+    }
+    .commercial-search-btn.is-searching {
+        pointer-events: none;
+        opacity: .94;
+    }
+    @keyframes commercial-search-spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
 </style>
 
 <div class="commercial-hero">
@@ -68,7 +149,7 @@
 </div>
 
 <div class="commercial-card">
-    <form method="POST" action="{{ url_for('client.client_commercial_search') }}">
+    <form method="POST" action="{{ url_for('client.client_commercial_search') }}" id="commercialSearchForm" class="commercial-search-shell">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="row g-3 align-items-end">
             <div class="col-lg-4">
@@ -99,7 +180,30 @@
                 No Google Maps API key found, so this search falls back to public web search.
                 {% endif %}
             </small>
-            <button class="btn btn-success" type="submit"><i class="bi bi-search me-1"></i> Search commercial targets</button>
+            <button class="btn btn-success commercial-search-btn" id="commercialSearchBtn" type="submit"><i class="bi bi-search me-1"></i><span class="commercial-search-btn-label"> Search commercial targets</span></button>
+        </div>
+        <div class="commercial-search-status" id="commercialSearchStatus" aria-live="polite">
+            <div class="commercial-search-status-head">
+                <div class="commercial-search-pulse"><i class="bi bi-arrow-repeat"></i></div>
+                <div>
+                    <p class="commercial-search-status-title">WARREN is building your commercial target list</p>
+                    <p class="commercial-search-status-copy" id="commercialSearchStatusCopy">Checking the market, pulling listing data, and looking for contact signals now.</p>
+                </div>
+            </div>
+            <div class="commercial-search-steps">
+                <div class="commercial-search-step">
+                    <div class="commercial-search-step-label">Step 1</div>
+                    <p class="commercial-search-step-copy">Scanning commercial listings in your selected market.</p>
+                </div>
+                <div class="commercial-search-step">
+                    <div class="commercial-search-step-label">Step 2</div>
+                    <p class="commercial-search-step-copy">Matching websites, phones, ratings, and Maps signals.</p>
+                </div>
+                <div class="commercial-search-step">
+                    <div class="commercial-search-step-label">Step 3</div>
+                    <p class="commercial-search-step-copy">Pulling public contact paths so the results are ready to import.</p>
+                </div>
+            </div>
         </div>
     </form>
 </div>
@@ -204,4 +308,53 @@
     {% endif %}
 </div>
 {% endif %}
+<script>
+(function() {
+    var searchForm = document.getElementById('commercialSearchForm');
+    var searchBtn = document.getElementById('commercialSearchBtn');
+    var searchBtnLabel = searchBtn ? searchBtn.querySelector('.commercial-search-btn-label') : null;
+    var statusCopy = document.getElementById('commercialSearchStatusCopy');
+    var messages = [
+        'Scanning the market for apartments, HOAs, and property managers near your target area.',
+        'Pulling Google listing details and pairing them with public website signals.',
+        'Looking for websites, phones, ratings, and reachable contact paths before results load.',
+        'Packaging the strongest targets so you can import them straight into WARREN.'
+    ];
+    var loaderMessages = [
+        'Scanning commercial targets in your market...',
+        'Checking Google listing data and public site signals...',
+        'Pulling contact paths and ranking the best targets...',
+        'Preparing your commercial results for import...'
+    ];
+    var messageTimer = null;
+
+    if (!searchForm || !searchBtn || !statusCopy) {
+        return;
+    }
+
+    searchForm.addEventListener('submit', function() {
+        var index = 0;
+        searchForm.classList.add('is-searching');
+        searchBtn.classList.add('is-searching');
+        searchBtn.disabled = true;
+        searchBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i><span class="commercial-search-btn-label"> Building target list...</span>';
+        statusCopy.textContent = messages[0];
+
+        if (messageTimer) {
+            window.clearInterval(messageTimer);
+        }
+        messageTimer = window.setInterval(function() {
+            index = (index + 1) % messages.length;
+            statusCopy.textContent = messages[index];
+        }, 1500);
+
+        if (window.showPageLoader) {
+            window.showPageLoader(loaderMessages, {
+                label: 'commercial targets',
+                inline: true,
+            });
+        }
+    });
+})();
+</script>
 {% endblock %}
