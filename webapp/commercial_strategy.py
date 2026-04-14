@@ -1,6 +1,70 @@
 import json
 
 
+COMMERCIAL_QUALIFICATION_CORE_FIELDS = [
+    {
+        "key": "property_count",
+        "label": "Property Count Or Units",
+        "prompt": "How many properties or units are under management right now?",
+        "placeholder": "4 sites / 312 units",
+        "multiline": False,
+    },
+    {
+        "key": "decision_maker_role",
+        "label": "Buyer Role",
+        "prompt": "Who owns leasing and marketing decisions for those properties?",
+        "placeholder": "Regional manager, board president, operations lead",
+        "multiline": False,
+    },
+    {
+        "key": "current_vendor_status",
+        "label": "Current Vendor Status",
+        "prompt": "Are you replacing an existing vendor or trying to improve current performance?",
+        "placeholder": "Incumbent agency, in-house, evaluating options",
+        "multiline": False,
+    },
+]
+
+
+COMMERCIAL_QUALIFICATION_FIELDS = [
+    {
+        "key": "service_scope",
+        "label": "Services In Scope",
+        "prompt": "Which services are actually in scope for this account right now?",
+        "placeholder": "Paid ads, landing pages, review generation, reporting",
+        "multiline": True,
+    },
+    {
+        "key": "buying_timeline",
+        "label": "Buying Timeline",
+        "prompt": "What timeline are they working against for a decision or vendor change?",
+        "placeholder": "Need options before the next board meeting in 3 weeks",
+        "multiline": True,
+    },
+    {
+        "key": "decision_process",
+        "label": "Decision Process",
+        "prompt": "Who signs off, and what does the approval process look like?",
+        "placeholder": "Regional manager shortlists, ownership approves, board signs contract",
+        "multiline": True,
+    },
+    {
+        "key": "commercial_goal",
+        "label": "Primary Commercial Goal",
+        "prompt": "What commercial outcome matters most right now: occupancy, reputation, or operational consistency?",
+        "placeholder": "Increase occupancy across two underperforming properties",
+        "multiline": True,
+    },
+    {
+        "key": "budget_range",
+        "label": "Budget Or Contract Range",
+        "prompt": "Is there a working monthly budget or contract range?",
+        "placeholder": "$3k-$5k per month approved if the rollout is phased",
+        "multiline": True,
+    },
+]
+
+
 def _json_object(raw_value, fallback=None):
     if fallback is None:
         fallback = {}
@@ -28,6 +92,10 @@ def _clip(value, max_len=220):
     return text[:max_len]
 
 
+def _text(value):
+    return str(value or "").strip()
+
+
 def _prospect_label(prospect):
     return (prospect.get("business_name") or prospect.get("name") or "this property group").strip()
 
@@ -42,6 +110,50 @@ def _role_guess(prospect):
     if "apartment" in industry or "leasing" in industry:
         return "property manager or regional manager"
     return "property manager or operations lead"
+
+
+def _qualification_answers(prospect):
+    raw = _json_object(prospect.get("qualification_answers_json"))
+    return {field["key"]: _text(raw.get(field["key"])) for field in COMMERCIAL_QUALIFICATION_FIELDS}
+
+
+def _build_qualification_items(prospect, answers):
+    items = []
+    direct_values = {
+        "property_count": _text(prospect.get("property_count")),
+        "decision_maker_role": _text(prospect.get("decision_maker_role")),
+        "current_vendor_status": _text(prospect.get("current_vendor_status")),
+        "confirmed_contact": _text(prospect.get("email")) or _text(prospect.get("phone")),
+    }
+    for field in COMMERCIAL_QUALIFICATION_CORE_FIELDS:
+        value = direct_values.get(field["key"], "")
+        items.append({
+            "key": field["key"],
+            "label": field["label"],
+            "prompt": field["prompt"],
+            "value": value,
+            "required": True,
+            "complete": bool(value),
+        })
+    items.append({
+        "key": "confirmed_contact",
+        "label": "Confirmed Decision-Maker Contact",
+        "prompt": "What is the best direct email or phone for the buying contact?",
+        "value": direct_values["confirmed_contact"],
+        "required": True,
+        "complete": bool(direct_values["confirmed_contact"]),
+    })
+    for field in COMMERCIAL_QUALIFICATION_FIELDS:
+        value = answers.get(field["key"], "")
+        items.append({
+            "key": field["key"],
+            "label": field["label"],
+            "prompt": field["prompt"],
+            "value": value,
+            "required": True,
+            "complete": bool(value),
+        })
+    return items
 
 
 def _derive_pain_points(prospect, audit_snapshot, source_details):
@@ -164,28 +276,20 @@ def _choose_outreach_angle(prospect, pain_points, audit_findings):
 def build_commercial_outreach_brief(prospect):
     source_details = _json_object(prospect.get("source_details_json"))
     audit_snapshot = _json_object(prospect.get("audit_snapshot_json"))
+    qualification_answers = _qualification_answers(prospect)
+    qualification_items = _build_qualification_items(prospect, qualification_answers)
     pain_points = _json_list(prospect.get("pain_points_json")) or _derive_pain_points(prospect, audit_snapshot, source_details)
     audit_findings = _derive_audit_findings(prospect, audit_snapshot, source_details)
     outreach_angle = (prospect.get("outreach_angle") or "").strip() or _choose_outreach_angle(prospect, pain_points, audit_findings)
 
-    property_count = (prospect.get("property_count") or "").strip()
-    current_vendor_status = (prospect.get("current_vendor_status") or "").strip()
     role_guess = _role_guess(prospect)
     stage = (prospect.get("stage") or "new").strip().lower()
     business_name = _prospect_label(prospect)
     service_area = (prospect.get("service_area") or source_details.get("service_area") or "their market").strip() or "their market"
 
-    missing_for_proposal = []
-    if not property_count:
-        missing_for_proposal.append("property count or unit count")
-    if not current_vendor_status:
-        missing_for_proposal.append("current vendor status")
-    if not (prospect.get("email") or prospect.get("phone")):
-        missing_for_proposal.append("confirmed decision-maker contact")
-    if not (prospect.get("decision_maker_role") or ""):
-        missing_for_proposal.append("buyer role confirmation")
+    missing_for_proposal = [item["label"] for item in qualification_items if item["required"] and not item["complete"]]
 
-    readiness_status = "ready" if stage in {"proposal", "negotiation"} and not missing_for_proposal else "needs_qualification"
+    readiness_status = "ready" if not missing_for_proposal else "needs_qualification"
     if stage in {"won", "lost"}:
         readiness_status = stage
 
@@ -195,16 +299,37 @@ def build_commercial_outreach_brief(prospect):
         f"Lead the first outreach with {outreach_angle}, not a generic services pitch.",
     ]
     if missing_for_proposal:
+        for missing in missing_for_proposal[:2]:
+            next_actions.append(f"Lock down {missing.lower()} before building a proposal.")
         next_actions.append("Do not build a full proposal until the missing qualification data is confirmed.")
     else:
         next_actions.append("Prepare a scoped proposal tied to the confirmed portfolio size and current vendor gaps.")
 
-    qualification_questions = [
-        "How many properties or units are under management right now?",
-        "Who owns leasing and marketing decisions for those properties?",
-        "Are you replacing an existing vendor or trying to improve current performance?",
-        "What is the most important commercial outcome right now: occupancy, reputation, or operational consistency?",
-    ]
+    qualification_questions = [item["prompt"] for item in qualification_items if not item["complete"]][:5]
+    if not qualification_questions:
+        qualification_questions = [field["prompt"] for field in COMMERCIAL_QUALIFICATION_FIELDS[:3]]
+
+    qualification_form = []
+    for field in COMMERCIAL_QUALIFICATION_CORE_FIELDS:
+        value = _text(prospect.get(field["key"]))
+        qualification_form.append({
+            "key": field["key"],
+            "label": field["label"],
+            "placeholder": field["placeholder"],
+            "multiline": field["multiline"],
+            "value": value,
+            "complete": bool(value),
+        })
+    for field in COMMERCIAL_QUALIFICATION_FIELDS:
+        value = qualification_answers.get(field["key"], "")
+        qualification_form.append({
+            "key": field["key"],
+            "label": field["label"],
+            "placeholder": field["placeholder"],
+            "multiline": field["multiline"],
+            "value": value,
+            "complete": bool(value),
+        })
 
     subject = f"Quick idea for {business_name} in {service_area}"
     first_email = (
@@ -228,6 +353,12 @@ def build_commercial_outreach_brief(prospect):
         "audit_findings": audit_findings,
         "qualification_questions": qualification_questions,
         "next_actions": next_actions,
+        "qualification_form": qualification_form,
+        "qualification_summary": {
+            "items": qualification_items,
+            "required_count": len([item for item in qualification_items if item["required"]]),
+            "complete_count": len([item for item in qualification_items if item["required"] and item["complete"]]),
+        },
         "proposal_readiness": {
             "status": readiness_status,
             "label": "Proposal-ready" if readiness_status == "ready" else "Needs qualification" if readiness_status == "needs_qualification" else readiness_status.title(),

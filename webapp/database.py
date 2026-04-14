@@ -1497,6 +1497,7 @@ class WebDB:
             ("source_details_json", "TEXT DEFAULT '{}'"),
             ("audit_snapshot_json", "TEXT DEFAULT '{}'"),
             ("pain_points_json", "TEXT DEFAULT '[]'"),
+            ("qualification_answers_json", "TEXT DEFAULT '{}'"),
         ]
         for col_name, col_def in new_ap_cols:
             if col_name not in ap_columns:
@@ -5501,7 +5502,7 @@ class WebDB:
             "next_follow_up", "account_type", "decision_maker_role",
             "property_count", "current_vendor_status", "outreach_angle",
             "proposal_status", "next_action", "source_details_json",
-            "audit_snapshot_json", "pain_points_json",
+            "audit_snapshot_json", "pain_points_json", "qualification_answers_json",
         }
         data = {k: v for k, v in fields.items() if k in allowed and v}
         cols = ", ".join(data.keys())
@@ -5524,7 +5525,7 @@ class WebDB:
             "next_follow_up", "account_type", "decision_maker_role",
             "property_count", "current_vendor_status", "outreach_angle",
             "proposal_status", "next_action", "source_details_json",
-            "audit_snapshot_json", "pain_points_json",
+            "audit_snapshot_json", "pain_points_json", "qualification_answers_json",
         }
         sets, params = [], []
         for k, v in fields.items():

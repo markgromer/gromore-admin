@@ -152,6 +152,7 @@ class CommercialProspectingTests(unittest.TestCase):
         response = self.client.get(f"/crm/prospect/{prospect_id}")
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Proposal Qualification", response.data)
         self.assertIn(b"Commercial Strategy Brief", response.data)
         self.assertIn(b"Outreach Assets", response.data)
         self.assertIn(b"Qualification Questions", response.data)
@@ -194,6 +195,110 @@ class CommercialProspectingTests(unittest.TestCase):
             self.assertTrue((prospect.get("next_action") or "").strip())
             self.assertIn("hello@skyline-hoa.example.com", prospect.get("source_details_json") or "")
             self.assertIn("Skyline HOA Services", prospect.get("audit_snapshot_json") or "")
+
+    def test_commercial_qualification_save_marks_proposal_ready(self):
+        with self.app.app_context():
+            prospect_id = self.app.db.create_agency_prospect(
+                name="Mesa Property Group",
+                email="leasing@mesaproperty.example.com",
+                phone="+14805551234",
+                business_name="Mesa Property Group",
+                website="https://mesaproperty.example.com",
+                industry="Property Managers",
+                service_area="Mesa, AZ",
+                source="commercial_scrape",
+                account_type="property_manager",
+                stage="new",
+            )
+
+        response = self.client.post(
+            f"/crm/prospect/{prospect_id}/qualification",
+            data={
+                "property_count": "6 properties / 420 units",
+                "decision_maker_role": "regional manager",
+                "current_vendor_status": "replacing incumbent agency",
+                "service_scope": "paid ads, landing page cleanup, reporting",
+                "buying_timeline": "needs recommendation before next month",
+                "decision_process": "regional manager recommends, ownership approves",
+                "commercial_goal": "increase occupancy on two underperforming sites",
+                "budget_range": "$4k-$6k monthly",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith(f"/crm/prospect/{prospect_id}"))
+
+        with self.app.app_context():
+            prospect = self.app.db.get_agency_prospect(prospect_id)
+            self.assertEqual(prospect["proposal_status"], "ready")
+            self.assertEqual(prospect["stage"], "qualified")
+            self.assertIn("ownership approves", prospect.get("qualification_answers_json") or "")
+
+    def test_commercial_proposal_stage_is_blocked_until_qualified(self):
+        with self.app.app_context():
+            prospect_id = self.app.db.create_agency_prospect(
+                name="Skyline HOA Services",
+                email="board@skyline-hoa.example.com",
+                business_name="Skyline HOA Services",
+                website="https://skyline-hoa.example.com",
+                industry="HOAs",
+                service_area="Phoenix, AZ",
+                source="commercial_scrape",
+                account_type="hoa",
+                stage="qualified",
+            )
+
+        response = self.client.post(
+            f"/crm/prospect/{prospect_id}/stage",
+            data={"stage": "proposal"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        with self.app.app_context():
+            prospect = self.app.db.get_agency_prospect(prospect_id)
+            self.assertEqual(prospect["stage"], "qualified")
+            self.assertEqual(prospect["proposal_status"], "needs_qualification")
+
+    def test_commercial_proposal_stage_allows_ready_accounts(self):
+        with self.app.app_context():
+            prospect_id = self.app.db.create_agency_prospect(
+                name="Mesa Property Group",
+                email="leasing@mesaproperty.example.com",
+                phone="+14805551234",
+                business_name="Mesa Property Group",
+                website="https://mesaproperty.example.com",
+                industry="Property Managers",
+                service_area="Mesa, AZ",
+                source="commercial_scrape",
+                account_type="property_manager",
+                stage="qualified",
+                property_count="6 properties / 420 units",
+                decision_maker_role="regional manager",
+                current_vendor_status="replacing incumbent agency",
+                qualification_answers_json=json.dumps({
+                    "service_scope": "paid ads, landing page cleanup, reporting",
+                    "buying_timeline": "needs recommendation before next month",
+                    "decision_process": "regional manager recommends, ownership approves",
+                    "commercial_goal": "increase occupancy on two underperforming sites",
+                    "budget_range": "$4k-$6k monthly",
+                }),
+            )
+
+        response = self.client.post(
+            f"/crm/prospect/{prospect_id}/stage",
+            data={"stage": "proposal"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        with self.app.app_context():
+            prospect = self.app.db.get_agency_prospect(prospect_id)
+            self.assertEqual(prospect["stage"], "proposal")
+            self.assertEqual(prospect["proposal_status"], "ready")
 
 
 if __name__ == "__main__":

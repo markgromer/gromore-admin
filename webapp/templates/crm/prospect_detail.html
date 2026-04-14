@@ -34,6 +34,7 @@
     .severity-positive { color: #15803d; }
     .severity-warning { color: #b45309; }
     .severity-info { color: #1d4ed8; }
+    .qualification-help { font-size: .75rem; color: #64748b; margin-top: .3rem; }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -80,6 +81,9 @@
                 </form>
                 {% endfor %}
             </div>
+            {% if is_commercial and commercial_brief and commercial_brief.proposal_readiness.status != 'ready' %}
+            <div class="small text-muted mt-2">Proposal and negotiation are blocked until the qualification checklist is complete.</div>
+            {% endif %}
         </div>
 
         <div class="detail-card">
@@ -131,26 +135,6 @@
                         <label class="form-label" style="font-size:.78rem;">Account Type</label>
                         <input type="text" name="account_type" class="form-control form-control-sm" value="{{ prospect.account_type }}" placeholder="hoa, apartment, property_manager">
                     </div>
-                    <div class="col-6">
-                        <label class="form-label" style="font-size:.78rem;">Decision-Maker Role</label>
-                        <input type="text" name="decision_maker_role" class="form-control form-control-sm" value="{{ prospect.decision_maker_role }}" placeholder="regional manager, board president">
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label" style="font-size:.78rem;">Property Count / Units</label>
-                        <input type="text" name="property_count" class="form-control form-control-sm" value="{{ prospect.property_count }}" placeholder="4 sites / 312 units">
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label" style="font-size:.78rem;">Current Vendor Status</label>
-                        <input type="text" name="current_vendor_status" class="form-control form-control-sm" value="{{ prospect.current_vendor_status }}" placeholder="in-house, incumbent agency, unknown">
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label" style="font-size:.78rem;">Outreach Angle</label>
-                        <input type="text" name="outreach_angle" class="form-control form-control-sm" value="{{ prospect.outreach_angle }}" placeholder="occupancy, trust, lead flow">
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label" style="font-size:.78rem;">Proposal Status</label>
-                        <input type="text" name="proposal_status" class="form-control form-control-sm" value="{{ prospect.proposal_status }}" placeholder="needs_qualification or ready">
-                    </div>
                     <div class="col-12">
                         <label class="form-label" style="font-size:.78rem;">Next Action</label>
                         <input type="text" name="next_action" class="form-control form-control-sm" value="{{ prospect.next_action }}" placeholder="Call regional manager and confirm portfolio size">
@@ -189,6 +173,43 @@
         </div>
 
         {% if is_commercial and commercial_brief %}
+        <div class="detail-card">
+            <h6>Proposal Qualification</h6>
+            <div class="brief-card">
+                <div class="field-row">
+                    <span class="field-label">Completion</span>
+                    <span class="field-value">{{ commercial_brief.qualification_summary.complete_count }}/{{ commercial_brief.qualification_summary.required_count }} required points confirmed</span>
+                </div>
+                <div class="field-row">
+                    <span class="field-label">Readiness</span>
+                    <span class="field-value">{{ commercial_brief.proposal_readiness.label }}</span>
+                </div>
+                <div class="field-row">
+                    <span class="field-label">Primary Next Action</span>
+                    <span class="field-value">{{ (commercial_brief.next_actions or ['-'])[0] }}</span>
+                </div>
+            </div>
+            <form method="POST" action="{{ url_for('agency_crm_save_commercial_qualification', prospect_id=prospect.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="row g-2 mb-2">
+                    {% for item in commercial_brief.qualification_form %}
+                    <div class="col-12 {% if not item.multiline %}col-md-6{% endif %}">
+                        <label class="form-label" style="font-size:.78rem;">{{ item.label }}</label>
+                        {% if item.multiline %}
+                        <textarea name="{{ item.key }}" class="form-control form-control-sm" rows="3" placeholder="{{ item.placeholder }}">{{ item.value }}</textarea>
+                        {% else %}
+                        <input type="text" name="{{ item.key }}" class="form-control form-control-sm" value="{{ item.value }}" placeholder="{{ item.placeholder }}">
+                        {% endif %}
+                        <div class="qualification-help {{ 'text-success' if item.complete else '' }}">{{ 'Confirmed' if item.complete else 'Still needed for proposal readiness' }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm w-100">
+                    <i class="bi bi-check2-square me-1"></i> Save Qualification
+                </button>
+            </form>
+        </div>
+
         <div class="detail-card">
             <h6>Commercial Strategy Brief</h6>
             <div class="brief-card">

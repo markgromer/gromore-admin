@@ -2096,6 +2096,23 @@ def create_app():
                                stages=stages, current_stage=stage_filter,
                                revenue=revenue)
 
+    def _is_commercial_agency_prospect(prospect):
+        prospect = prospect or {}
+        return bool(
+            (prospect.get("source") == "commercial_scrape")
+            or (prospect.get("account_type") or "").strip()
+            or (prospect.get("source_details_json") or "").strip()
+        )
+
+    def _build_commercial_brief_preview(prospect, overrides=None):
+        from webapp.commercial_strategy import build_commercial_outreach_brief
+
+        preview = dict(prospect or {})
+        for key, value in (overrides or {}).items():
+            if value is not None:
+                preview[key] = value
+        return build_commercial_outreach_brief(preview)
+
     @app.route("/crm/commercial")
     @login_required
     def agency_crm_commercial():
@@ -2327,8 +2344,6 @@ def create_app():
             abort(404)
         notes = db.get_agency_prospect_notes(prospect_id)
         messages = db.get_agency_prospect_messages(prospect_id)
-        from webapp.commercial_strategy import build_commercial_outreach_brief
-
         # Billing data should be optional for CRM review flows.
         try:
             from webapp.stripe_billing import get_plans
@@ -2341,12 +2356,8 @@ def create_app():
         if prospect.get("converted_brand_id"):
             brand = db.get_brand(prospect["converted_brand_id"])
 
-        is_commercial = bool(
-            (prospect.get("source") == "commercial_scrape")
-            or (prospect.get("account_type") or "").strip()
-            or (prospect.get("source_details_json") or "").strip()
-        )
-        commercial_brief = build_commercial_outreach_brief(prospect) if is_commercial else None
+        is_commercial = _is_commercial_agency_prospect(prospect)
+        commercial_brief = _build_commercial_brief_preview(prospect) if is_commercial else None
 
         return render_template("crm/prospect_detail.html",
                                prospect=prospect, notes=notes,
@@ -2357,13 +2368,15 @@ def create_app():
     @app.route("/crm/prospect/<int:prospect_id>/update", methods=["POST"])
     @login_required
     def agency_crm_update_prospect(prospect_id):
+        prospect = db.get_agency_prospect(prospect_id)
+        if not prospect:
+            abort(404)
         fields = {}
         for key in ["name", "email", "phone", "business_name", "website",
                      "industry", "service_area", "stage", "score",
                      "monthly_budget", "notes", "assigned_to", "next_follow_up",
                      "account_type", "decision_maker_role", "property_count",
-                     "current_vendor_status", "outreach_angle", "proposal_status",
-                     "next_action"]:
+                     "current_vendor_status", "next_action"]:
             val = request.form.get(key)
             if val is not None:
                 fields[key] = val.strip()
@@ -2372,8 +2385,64 @@ def create_app():
                 fields["score"] = int(fields["score"])
             except ValueError:
                 fields["score"] = 0
+        blocked_stage = ""
+        brief = None
+        if _is_commercial_agency_prospect({**prospect, **fields}):
+            brief = _build_commercial_brief_preview(prospect, fields)
+            requested_stage = (fields.get("stage") or "").strip().lower()
+            if requested_stage in {"proposal", "negotiation"} and brief["proposal_readiness"]["status"] != "ready":
+                blocked_stage = requested_stage
+                fields["stage"] = prospect.get("stage") or "qualified"
+            fields["outreach_angle"] = brief["outreach_angle"]
+            fields["proposal_status"] = brief["proposal_readiness"]["status"]
+            fields["pain_points_json"] = json.dumps(brief["pain_points"])
+            if not (fields.get("next_action") or "").strip():
+                fields["next_action"] = (brief["next_actions"] or [""])[0]
         db.update_agency_prospect(prospect_id, **fields)
-        flash("Prospect updated.", "success")
+        if blocked_stage and brief:
+            missing = ", ".join(brief["proposal_readiness"]["missing"][:4])
+            flash(f"Saved prospect changes, but blocked move to {blocked_stage}. Missing: {missing}.", "error")
+        else:
+            flash("Prospect updated.", "success")
+        return redirect(url_for("agency_crm_detail", prospect_id=prospect_id))
+
+    @app.route("/crm/prospect/<int:prospect_id>/qualification", methods=["POST"])
+    @login_required
+    def agency_crm_save_commercial_qualification(prospect_id):
+        prospect = db.get_agency_prospect(prospect_id)
+        if not prospect:
+            abort(404)
+
+        from webapp.commercial_strategy import COMMERCIAL_QUALIFICATION_CORE_FIELDS, COMMERCIAL_QUALIFICATION_FIELDS
+
+        try:
+            answers = json.loads(prospect.get("qualification_answers_json") or "{}")
+        except Exception:
+            answers = {}
+
+        fields = {}
+        for field in COMMERCIAL_QUALIFICATION_CORE_FIELDS:
+            fields[field["key"]] = request.form.get(field["key"], "").strip()
+        for field in COMMERCIAL_QUALIFICATION_FIELDS:
+            answers[field["key"]] = request.form.get(field["key"], "").strip()
+
+        fields["qualification_answers_json"] = json.dumps(answers)
+        brief = _build_commercial_brief_preview(prospect, fields)
+        fields["outreach_angle"] = brief["outreach_angle"]
+        fields["proposal_status"] = brief["proposal_readiness"]["status"]
+        fields["pain_points_json"] = json.dumps(brief["pain_points"])
+        fields["next_action"] = (brief["next_actions"] or [""])[0]
+        if brief["proposal_readiness"]["status"] == "ready" and (prospect.get("stage") or "new") in {"new", "contacted"}:
+            fields["stage"] = "qualified"
+
+        db.update_agency_prospect(prospect_id, **fields)
+        db.add_agency_prospect_note(
+            prospect_id,
+            f"Commercial qualification saved. {brief['qualification_summary']['complete_count']}/{brief['qualification_summary']['required_count']} required points confirmed.",
+            note_type="system",
+            created_by="admin",
+        )
+        flash("Commercial qualification saved.", "success")
         return redirect(url_for("agency_crm_detail", prospect_id=prospect_id))
 
     @app.route("/crm/prospect/<int:prospect_id>/commercial-refresh", methods=["POST"])
@@ -2441,9 +2510,31 @@ def create_app():
     @app.route("/crm/prospect/<int:prospect_id>/stage", methods=["POST"])
     @login_required
     def agency_crm_update_stage(prospect_id):
+        prospect = db.get_agency_prospect(prospect_id)
+        if not prospect:
+            abort(404)
         stage = request.form.get("stage", "").strip()
         if stage:
-            db.update_agency_prospect(prospect_id, stage=stage)
+            updates = {"stage": stage}
+            if _is_commercial_agency_prospect(prospect):
+                brief = _build_commercial_brief_preview(prospect, {"stage": stage})
+                if stage in {"proposal", "negotiation"} and brief["proposal_readiness"]["status"] != "ready":
+                    db.update_agency_prospect(
+                        prospect_id,
+                        proposal_status=brief["proposal_readiness"]["status"],
+                        pain_points_json=json.dumps(brief["pain_points"]),
+                        next_action=(brief["next_actions"] or [""])[0],
+                    )
+                    missing = ", ".join(brief["proposal_readiness"]["missing"][:4])
+                    flash(f"Cannot move to {stage} until qualification is complete. Missing: {missing}.", "error")
+                    return redirect(request.referrer or url_for("agency_crm"))
+                updates.update({
+                    "outreach_angle": brief["outreach_angle"],
+                    "proposal_status": brief["proposal_readiness"]["status"],
+                    "pain_points_json": json.dumps(brief["pain_points"]),
+                    "next_action": (brief["next_actions"] or [""])[0],
+                })
+            db.update_agency_prospect(prospect_id, **updates)
             db.add_agency_prospect_note(prospect_id, f"Stage changed to {stage}",
                                          note_type="system", created_by="admin")
         return redirect(request.referrer or url_for("agency_crm"))
