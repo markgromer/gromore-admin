@@ -357,6 +357,24 @@ class WebDB:
                 updated_at TEXT DEFAULT (datetime('now')),
                 FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
             );
+
+            CREATE TABLE IF NOT EXISTS client_onboarding_progress (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                client_user_id INTEGER NOT NULL,
+                item_key TEXT NOT NULL,
+                is_completed INTEGER DEFAULT 0,
+                is_dismissed INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(brand_id, client_user_id, item_key),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+                FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_client_onboarding_progress_user
+            ON client_onboarding_progress(client_user_id, brand_id, item_key);
+
             CREATE TABLE IF NOT EXISTS dismissed_actions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand_id INTEGER NOT NULL,
@@ -2761,6 +2779,43 @@ class WebDB:
         row = conn.execute("SELECT * FROM client_users WHERE id = ?", (client_user_id,)).fetchone()
         conn.close()
         return dict(row) if row else None
+
+    def get_client_onboarding_progress(self, brand_id, client_user_id):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM client_onboarding_progress WHERE brand_id = ? AND client_user_id = ?",
+            (brand_id, client_user_id),
+        ).fetchall()
+        conn.close()
+        return {
+            row["item_key"]: {
+                "is_completed": bool(row["is_completed"]),
+                "is_dismissed": bool(row["is_dismissed"]),
+                "updated_at": row["updated_at"],
+            }
+            for row in rows
+        }
+
+    def save_client_onboarding_progress(self, brand_id, client_user_id, item_key, *, is_completed=None, is_dismissed=None):
+        existing = self.get_client_onboarding_progress(brand_id, client_user_id).get(item_key, {})
+        completed_value = existing.get("is_completed", False) if is_completed is None else bool(is_completed)
+        dismissed_value = existing.get("is_dismissed", False) if is_dismissed is None else bool(is_dismissed)
+
+        conn = self._conn()
+        conn.execute(
+            """
+            INSERT INTO client_onboarding_progress (
+                brand_id, client_user_id, item_key, is_completed, is_dismissed, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            ON CONFLICT(brand_id, client_user_id, item_key) DO UPDATE SET
+                is_completed = excluded.is_completed,
+                is_dismissed = excluded.is_dismissed,
+                updated_at = datetime('now')
+            """,
+            (brand_id, client_user_id, (item_key or "").strip(), 1 if completed_value else 0, 1 if dismissed_value else 0),
+        )
+        conn.commit()
+        conn.close()
 
     def create_client_user(self, brand_id, email, password, display_name, role="owner", invited_by=None):
         email = self._normalize_email(email)

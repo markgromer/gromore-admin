@@ -94,6 +94,67 @@ class ClientDashboardMonthFallbackTests(unittest.TestCase):
         self.assertTrue(payload["used_month_fallback"])
         self.assertEqual(payload["dashboard"]["health_summary"]["summary"], "March data ready.")
 
+    def test_dashboard_page_renders_onboarding_checklist(self):
+        response = self.client.get("/client/dashboard")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Learn the app in the right order", html)
+        self.assertIn("0 of 5 done", html)
+        self.assertIn("Go to Quick Launch", html)
+        self.assertIn("Open Leads", html)
+
+    def test_dashboard_page_reflects_auto_completed_onboarding_items(self):
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "website", "https://example.com")
+            self.app.db.update_brand_text_field(self.brand_id, "service_area", "Phoenix")
+            self.app.db.update_brand_text_field(self.brand_id, "primary_services", "Google Ads")
+            self.app.db.upsert_connection(self.brand_id, "google", {"account_id": "123", "account_name": "Test Google"})
+
+        response = self.client.get("/client/dashboard")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("2 of 5 done", html)
+        self.assertIn("Connect Google or Meta", html)
+        self.assertIn("Fill out your business profile", html)
+
+    def test_dashboard_onboarding_update_marks_manual_item_complete(self):
+        response = self.client.post(
+            "/client/dashboard/onboarding",
+            json={"item_key": "quick_launch_visit", "action": "complete"},
+        )
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["onboarding"]["completed_count"], 1)
+
+        page = self.client.get("/client/dashboard")
+        self.assertIn("1 of 5 done", page.get_data(as_text=True))
+
+    def test_dashboard_onboarding_can_dismiss_and_restore_checklist(self):
+        dismiss_response = self.client.post(
+            "/client/dashboard/onboarding",
+            json={"item_key": "dashboard_checklist", "action": "dismiss"},
+        )
+        dismiss_payload = dismiss_response.get_json()
+
+        self.assertEqual(dismiss_response.status_code, 200)
+        self.assertTrue(dismiss_payload["onboarding"]["is_dismissed"])
+
+        dismissed_page = self.client.get("/client/dashboard")
+        self.assertIn("Restore checklist", dismissed_page.get_data(as_text=True))
+
+        restore_response = self.client.post(
+            "/client/dashboard/onboarding",
+            json={"item_key": "dashboard_checklist", "action": "restore"},
+        )
+        restore_payload = restore_response.get_json()
+
+        self.assertEqual(restore_response.status_code, 200)
+        self.assertFalse(restore_payload["onboarding"]["is_dismissed"])
+
 
 if __name__ == "__main__":
     unittest.main()

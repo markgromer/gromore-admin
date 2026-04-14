@@ -402,26 +402,173 @@
     .dash-content { display: none; }
     .dash-content.visible { display: block; }
 
-    /* First-Run Welcome */
-    .welcome-wrap { max-width: 720px; margin: 1.5rem auto 0; text-align: center; }
-    .welcome-hero {
-        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4f46e5 100%);
-        border-radius: 18px; padding: 2.5rem 2rem; color: #fff; margin-bottom: 1.5rem;
-        box-shadow: 0 12px 36px rgba(30,27,75,.3);
+    /* Dashboard onboarding */
+    .onboarding-shell { margin: 1.5rem 0 0; }
+    .onboarding-card,
+    .onboarding-restore {
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        border: 1px solid #dbe4f0;
+        border-radius: 18px;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, .08);
     }
-    .welcome-hero h3 { font-weight: 800; font-size: 1.6rem; margin-bottom: .5rem; }
-    .welcome-hero p { color: rgba(255,255,255,.75); font-size: 1rem; margin: 0; }
-    .welcome-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; text-align: left; }
-    .welcome-step { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 1.25rem; box-shadow: 0 4px 12px rgba(15,23,42,.05); }
-    .welcome-step.done { opacity: .55; }
-    .welcome-step .ws-num {
-        display: inline-flex; align-items: center; justify-content: center;
-        width: 28px; height: 28px; border-radius: 50%;
-        background: #eef2ff; color: #4f46e5; font-weight: 800; font-size: .82rem; margin-bottom: .5rem;
+    .onboarding-card { padding: 1.4rem; }
+    .onboarding-restore {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1rem 1.15rem;
     }
-    .welcome-step.done .ws-num { background: #d1fae5; color: #10b981; }
-    .welcome-step h6 { font-weight: 700; font-size: .95rem; margin-bottom: .25rem; }
-    .welcome-step p { font-size: .84rem; color: #64748b; margin-bottom: .75rem; }
+    .onboarding-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .3rem .6rem;
+        border-radius: 999px;
+        background: #e0e7ff;
+        color: #3730a3;
+        font-size: .72rem;
+        font-weight: 800;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        margin-bottom: .75rem;
+    }
+    .onboarding-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    .onboarding-title {
+        font-size: 1.25rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0 0 .35rem;
+    }
+    .onboarding-copy {
+        margin: 0;
+        color: #475569;
+        max-width: 760px;
+        font-size: .94rem;
+    }
+    .onboarding-progress-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .45rem;
+        border-radius: 999px;
+        background: #eff6ff;
+        color: #1d4ed8;
+        padding: .45rem .8rem;
+        font-size: .82rem;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+    .onboarding-progress {
+        height: 10px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: #e2e8f0;
+        margin-bottom: 1rem;
+    }
+    .onboarding-progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #1d4ed8 0%, #4f46e5 55%, #10b981 100%);
+        transition: width .25s ease;
+    }
+    .onboarding-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+    }
+    .onboarding-item {
+        border: 1px solid #dbe4f0;
+        border-radius: 14px;
+        background: #fff;
+        padding: 1rem;
+        min-height: 100%;
+    }
+    .onboarding-item.done {
+        border-color: #bbf7d0;
+        background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
+    }
+    .onboarding-item-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: .75rem;
+        margin-bottom: .75rem;
+    }
+    .onboarding-step-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        background: #eef2ff;
+        color: #4338ca;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: .95rem;
+        flex-shrink: 0;
+    }
+    .onboarding-item.done .onboarding-step-icon {
+        background: #dcfce7;
+        color: #15803d;
+    }
+    .onboarding-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        border-radius: 999px;
+        padding: .2rem .5rem;
+        font-size: .68rem;
+        font-weight: 800;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+    }
+    .onboarding-chip.auto { background: #fef3c7; color: #92400e; }
+    .onboarding-chip.manual { background: #e0f2fe; color: #0369a1; }
+    .onboarding-item h6 {
+        font-size: .95rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0 0 .35rem;
+    }
+    .onboarding-item p {
+        font-size: .84rem;
+        color: #64748b;
+        margin: 0 0 .85rem;
+    }
+    .onboarding-item-meta {
+        font-size: .76rem;
+        color: #64748b;
+        margin-bottom: .75rem;
+    }
+    .onboarding-item.done .onboarding-item-meta {
+        color: #15803d;
+    }
+    .onboarding-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid #e2e8f0;
+    }
+    .onboarding-footer-copy {
+        font-size: .84rem;
+        color: #475569;
+        margin: 0;
+    }
+    @media (max-width: 767.98px) {
+        .onboarding-header,
+        .onboarding-restore,
+        .onboarding-footer {
+            flex-direction: column;
+            align-items: stretch;
+        }
+    }
 </style>
 <div class="page-head">
     <div>
@@ -439,35 +586,78 @@
     </div>
 </div>
 
-{% if first_run %}
-<div class="welcome-wrap">
-    <div class="welcome-hero">
-        <h3>Welcome{% if client_name %}, {{ client_name }}{% endif %}! Let's get your first ad running.</h3>
-        <p>Three steps, five minutes, no experience needed.</p>
+{% if onboarding %}
+<div id="dashboardOnboardingWrap" class="onboarding-shell" data-onboarding-endpoint="{{ url_for('client.client_dashboard_onboarding_update') }}">
+    {% if onboarding['is_dismissed'] and not onboarding['all_done'] %}
+    <div class="onboarding-restore">
+        <div>
+            <div class="onboarding-kicker"><i class="bi bi-compass"></i> Getting Started</div>
+            <p class="onboarding-footer-copy mb-0">Your checklist is hidden for now. Restore it whenever you want a clear next step.</p>
+        </div>
+        <button type="button" class="btn btn-outline-primary" data-onboarding-restore>
+            <i class="bi bi-arrow-counterclockwise me-1"></i> Restore checklist
+        </button>
     </div>
-    <div class="welcome-steps">
-        <div class="welcome-step {{ 'done' if has_google or has_meta else '' }}">
-            <div class="ws-num">{{ '&#10003;' if has_google or has_meta else '1' }}</div>
-            <h6>Connect an ad account</h6>
-            <p>Link your Google or Facebook ad account so we can run ads for you.</p>
-            {% if not has_google and not has_meta %}
-            <a href="{{ url_for('client.client_settings') }}" class="btn btn-sm btn-primary"><i class="bi bi-plug me-1"></i> Connect Now</a>
-            {% else %}
-            <span style="font-size:.82rem; color:#10b981; font-weight:600;"><i class="bi bi-check-circle me-1"></i> Connected</span>
+    {% else %}
+    <div class="onboarding-card">
+        <div class="onboarding-kicker"><i class="bi bi-compass"></i> Getting Started</div>
+        <div class="onboarding-header">
+            <div>
+                <h3 class="onboarding-title">Learn the app in the right order</h3>
+                <p class="onboarding-copy">Start with setup, then move through the two places that matter most on day one: Quick Launch and Leads. The checklist stays here until you finish it or dismiss it.</p>
+            </div>
+            <div class="onboarding-progress-pill">
+                <i class="bi bi-check2-square"></i>
+                <span>{{ onboarding['completed_count'] }} of {{ onboarding['total_count'] }} done</span>
+            </div>
+        </div>
+        <div class="onboarding-progress" aria-hidden="true">
+            <div class="onboarding-progress-bar" data-onboarding-progress="{{ onboarding['progress_pct'] }}"></div>
+        </div>
+        <div class="onboarding-grid">
+            {% for item in onboarding['items'] %}
+            <div class="onboarding-item {{ 'done' if item['completed'] else '' }}">
+                <div class="onboarding-item-top">
+                    <span class="onboarding-step-icon">
+                        <i class="bi {{ 'bi-check2' if item['completed'] else 'bi-arrow-right' }}"></i>
+                    </span>
+                    <span class="onboarding-chip {{ 'auto' if item['auto'] else 'manual' }}">{{ 'Auto' if item['auto'] else 'Visit' }}</span>
+                </div>
+                <h6>{{ item['title'] }}</h6>
+                <p>{{ item['description'] }}</p>
+                <div class="onboarding-item-meta">
+                    {% if item['completed'] %}
+                    <i class="bi bi-check-circle me-1"></i> Complete
+                    {% elif item['auto'] %}
+                    Completes automatically when this setup is in place.
+                    {% else %}
+                    We will mark this complete after you open it.
+                    {% endif %}
+                </div>
+                {% if item['completed'] %}
+                <span class="btn btn-sm btn-light disabled" aria-disabled="true">Done</span>
+                {% else %}
+                <a href="{{ item['href'] }}" class="btn btn-sm btn-primary" data-onboarding-link="{{ item['key'] }}">{{ item['cta_label'] }}</a>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        <div class="onboarding-footer">
+            <p class="onboarding-footer-copy mb-0">
+                {% if onboarding['all_done'] %}
+                You have cleared the day-one setup. From here, use the dashboard for results and Missions for next actions.
+                {% else %}
+                Dismiss this card if you want a cleaner dashboard. You can restore it later.
+                {% endif %}
+            </p>
+            {% if not onboarding['all_done'] %}
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-onboarding-dismiss>
+                <i class="bi bi-eye-slash me-1"></i> Dismiss
+            </button>
             {% endif %}
         </div>
-        <div class="welcome-step">
-            <div class="ws-num">2</div>
-            <h6>Tell us what to promote</h6>
-            <p>Pick your service and goal. Our AI handles the rest.</p>
-            <a href="{{ url_for('client.client_quick_launch') }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-rocket-takeoff me-1"></i> Quick Launch</a>
-        </div>
-        <div class="welcome-step">
-            <div class="ws-num">3</div>
-            <h6>Watch leads roll in</h6>
-            <p>Your dashboard will light up with real results once your ads are live.</p>
-        </div>
     </div>
+    {% endif %}
 </div>
 {% endif %}
 
@@ -1276,6 +1466,71 @@ function toggleMovesRows(platform, btn) {
         ? 'Show all ' + rows.length + ' campaigns <i class="bi bi-chevron-down"></i>'
         : 'Show fewer <i class="bi bi-chevron-up"></i>';
 }
+
+(function() {
+    var wrap = document.getElementById('dashboardOnboardingWrap');
+    if (!wrap) return;
+
+    wrap.querySelectorAll('[data-onboarding-progress]').forEach(function(el) {
+        var width = parseFloat(el.getAttribute('data-onboarding-progress') || '0');
+        el.style.width = Math.max(0, Math.min(100, width)) + '%';
+    });
+
+    function getCsrfToken() {
+        var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+        return csrfMeta ? csrfMeta.getAttribute('content') : '';
+    }
+
+    function postOnboarding(itemKey, action) {
+        return fetch(wrap.getAttribute('data-onboarding-endpoint'), {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({ item_key: itemKey, action: action })
+        });
+    }
+
+    wrap.querySelectorAll('[data-onboarding-link]').forEach(function(link) {
+        link.addEventListener('click', function(event) {
+            event.preventDefault();
+            var href = link.getAttribute('href');
+            var itemKey = link.getAttribute('data-onboarding-link');
+            link.classList.add('disabled');
+            postOnboarding(itemKey, 'complete')
+                .catch(function() {})
+                .finally(function() {
+                    window.location.href = href;
+                });
+        });
+    });
+
+    var dismissBtn = wrap.querySelector('[data-onboarding-dismiss]');
+    if (dismissBtn) {
+        dismissBtn.addEventListener('click', function() {
+            dismissBtn.disabled = true;
+            postOnboarding('dashboard_checklist', 'dismiss')
+                .catch(function() {})
+                .finally(function() {
+                    window.location.reload();
+                });
+        });
+    }
+
+    var restoreBtn = wrap.querySelector('[data-onboarding-restore]');
+    if (restoreBtn) {
+        restoreBtn.addEventListener('click', function() {
+            restoreBtn.disabled = true;
+            postOnboarding('dashboard_checklist', 'restore')
+                .catch(function() {})
+                .finally(function() {
+                    window.location.reload();
+                });
+        });
+    }
+})();
 </script>
 {% else %}
 

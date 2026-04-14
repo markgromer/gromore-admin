@@ -816,6 +816,82 @@ def _build_feature_upgrade_request(brand, feature_flag, note=""):
         detail_lines.extend(["", "Client note:", note.strip()])
     return "\n".join(detail_lines)
 
+
+def _build_getting_started_checklist(db, brand, brand_id, client_user_id):
+    progress = db.get_client_onboarding_progress(brand_id, client_user_id) if client_user_id else {}
+    connections = db.get_brand_connections(brand_id) or {}
+    google_connected = (connections.get("google", {}).get("status") == "connected")
+    meta_connected = (connections.get("meta", {}).get("status") == "connected")
+    active_leads = db.get_active_lead_contacts(brand_id, limit=1)
+
+    def _saved(key, field="is_completed"):
+        return bool((progress.get(key) or {}).get(field))
+
+    has_brand_profile = bool(
+        ((brand or {}).get("website") or "").strip()
+        and ((brand or {}).get("service_area") or "").strip()
+        and ((brand or {}).get("primary_services") or "").strip()
+    )
+
+    items = [
+        {
+            "key": "connect_accounts",
+            "title": "Connect Google or Meta",
+            "description": "Start by linking at least one ad channel so Warren can read data and help you act on it.",
+            "href": url_for("client.client_settings"),
+            "cta_label": "Open Settings",
+            "completed": google_connected or meta_connected,
+            "auto": True,
+        },
+        {
+            "key": "brand_profile",
+            "title": "Fill out your business profile",
+            "description": "Add your website, service area, and primary services so the rest of the app has real business context.",
+            "href": url_for("client.client_settings"),
+            "cta_label": "Finish Profile",
+            "completed": has_brand_profile,
+            "auto": True,
+        },
+        {
+            "key": "quick_launch_visit",
+            "title": "Open Quick Launch",
+            "description": "Use the simplest campaign setup flow first. It is the fastest way to understand how the platform guides action.",
+            "href": url_for("client.client_quick_launch"),
+            "cta_label": "Go to Quick Launch",
+            "completed": _saved("quick_launch_visit"),
+            "auto": False,
+        },
+        {
+            "key": "review_leads",
+            "title": "Review Leads and profiles",
+            "description": "Open Leads to see objections, blockers, and closeability so you know what Warren is tracking for each deal.",
+            "href": url_for("client.client_inbox"),
+            "cta_label": "Open Leads",
+            "completed": bool(active_leads) or _saved("review_leads"),
+            "auto": bool(active_leads),
+        },
+        {
+            "key": "help_center",
+            "title": "Open Help",
+            "description": "Keep the Help Center as your fallback reference any time a page feels unfamiliar or you need the next step.",
+            "href": url_for("client.client_help"),
+            "cta_label": "Open Help",
+            "completed": _saved("help_center"),
+            "auto": False,
+        },
+    ]
+
+    completed_count = sum(1 for item in items if item["completed"])
+    dismissed = _saved("dashboard_checklist", "is_dismissed")
+    return {
+        "items": items,
+        "completed_count": completed_count,
+        "total_count": len(items),
+        "all_done": completed_count >= len(items),
+        "is_dismissed": dismissed,
+        "progress_pct": int((completed_count / max(len(items), 1)) * 100),
+    }
+
 # Map route function names → feature flag keys.
 # Routes not listed here are ungated (login, logout, assistant, etc.).
 _ENDPOINT_FEATURE_MAP = {
@@ -1298,6 +1374,7 @@ def client_dashboard():
     except Exception:
         latest_dashboard_month = None
     first_run = not has_google and not has_meta and not latest_dashboard_month
+    onboarding = _build_getting_started_checklist(db, brand, brand_id, session.get("client_user_id"))
 
     return render_template(
         "client_dashboard.html",
@@ -1309,6 +1386,7 @@ def client_dashboard():
         error="",
         async_load=True,
         first_run=first_run,
+        onboarding=onboarding,
         has_google=has_google,
         has_meta=has_meta,
         google_connected=google_connected,
@@ -1316,6 +1394,41 @@ def client_dashboard():
         client_name=session.get("client_name", ""),
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
+
+
+@client_bp.route("/dashboard/onboarding", methods=["POST"])
+@client_login_required
+def client_dashboard_onboarding_update():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    client_user_id = session["client_user_id"]
+    data = request.get_json(silent=True) or {}
+    item_key = (data.get("item_key") or "").strip()
+    action = (data.get("action") or "complete").strip().lower()
+
+    allowed_items = {
+        "dashboard_checklist",
+        "quick_launch_visit",
+        "review_leads",
+        "help_center",
+    }
+    if item_key not in allowed_items:
+        return jsonify({"error": "Invalid onboarding item."}), 400
+
+    if action == "dismiss":
+        db.save_client_onboarding_progress(brand_id, client_user_id, item_key, is_dismissed=True)
+    elif action == "restore":
+        db.save_client_onboarding_progress(brand_id, client_user_id, item_key, is_dismissed=False)
+    elif action == "complete":
+        db.save_client_onboarding_progress(brand_id, client_user_id, item_key, is_completed=True)
+    elif action == "reset":
+        db.save_client_onboarding_progress(brand_id, client_user_id, item_key, is_completed=False, is_dismissed=False)
+    else:
+        return jsonify({"error": "Invalid onboarding action."}), 400
+
+    brand = db.get_brand(brand_id) or {}
+    onboarding = _build_getting_started_checklist(db, brand, brand_id, client_user_id)
+    return jsonify({"ok": True, "onboarding": onboarding})
 
 
 @client_bp.route("/dashboard/data")
