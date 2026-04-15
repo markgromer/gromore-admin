@@ -300,6 +300,119 @@ WIN-BACK (LOST LEAD):
         <p class="la-hint mb-0">Warren asks for one thing at a time, casually, and won't push if they skip it.</p>
     </div>
 
+    <div class="la-card">
+        <div class="d-flex justify-content-between gap-3 flex-wrap align-items-start mb-3">
+            <div>
+                <h5>Warren Lead Form</h5>
+                <p class="section-copy">Create one clean hosted form for this brand, publish it with a link, or embed it on the site. Every submission lands in Warren as a lead thread, and Warren can text back a quote when consent is captured.</p>
+            </div>
+            {% if lead_form_config.enabled %}
+            <a href="{{ url_for('client_public.public_lead_form', brand_slug=brand.slug) }}" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-box-arrow-up-right me-1"></i> Preview Live Form
+            </a>
+            {% endif %}
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" role="switch" id="leadFormEnabled" name="lead_form_enabled" value="1" {{ 'checked' if lead_form_config.enabled }}>
+                    <label class="form-check-label fw-semibold" for="leadFormEnabled">Form is live</label>
+                </div>
+                <div class="la-hint">When this is on, your public form URL starts accepting leads immediately.</div>
+            </div>
+            <div class="col-md-4">
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" role="switch" id="leadFormAutoText" name="lead_form_auto_text_enabled" value="1" {{ 'checked' if lead_form_config.auto_text_enabled }}>
+                    <label class="form-check-label fw-semibold" for="leadFormAutoText">Auto-text quote or next step</label>
+                </div>
+                <div class="la-hint">Uses Warren's existing quote + SMS flow when the lead provides a mobile number and consent.</div>
+            </div>
+            <div class="col-md-4">
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" role="switch" id="leadFormRequireConsent" name="lead_form_require_sms_consent" value="1" {{ 'checked' if lead_form_config.require_sms_consent }}>
+                    <label class="form-check-label fw-semibold" for="leadFormRequireConsent">Require SMS consent</label>
+                </div>
+                <div class="la-hint">Recommended if Warren will text anything automatically after the form submit.</div>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-lg-7">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Headline</label>
+                        <input type="text" class="form-control" name="lead_form_headline" value="{{ lead_form_config.headline }}" maxlength="140">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Intro Copy</label>
+                        <textarea class="form-control" name="lead_form_intro" rows="4">{{ lead_form_config.intro }}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">CTA Button</label>
+                        <input type="text" class="form-control" name="lead_form_cta_label" value="{{ lead_form_config.cta_label }}" maxlength="60">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Success Title</label>
+                        <input type="text" class="form-control" name="lead_form_success_title" value="{{ lead_form_config.success_title }}" maxlength="80">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Success Message</label>
+                        <textarea class="form-control" name="lead_form_success_message" rows="3">{{ lead_form_config.success_message }}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Service Field Label</label>
+                        <input type="text" class="form-control" name="lead_form_service_label" value="{{ lead_form_config.service_label }}" maxlength="80">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Details Field Label</label>
+                        <input type="text" class="form-control" name="lead_form_details_label" value="{{ lead_form_config.details_label }}" maxlength="80">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Service Options</label>
+                        <textarea class="form-control" name="lead_form_service_options" rows="5" placeholder="One option per line. Leave blank if you want a plain text field instead.">{{ '\n'.join(lead_form_config.service_options or []) }}</textarea>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Consent Label</label>
+                        <input type="text" class="form-control" name="lead_form_consent_label" value="{{ lead_form_config.consent_label }}" maxlength="220">
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <div class="la-kpi mb-3">
+                    <div class="value">{{ 'Live' if lead_form_config.enabled else 'Draft' }}</div>
+                    <div class="label">Public Form Status</div>
+                </div>
+
+                <label class="form-label fw-semibold">Public Link</label>
+                <textarea class="form-control mb-3" rows="3" readonly>{{ lead_form_share.public_url }}</textarea>
+
+                <label class="form-label fw-semibold">Embed Code</label>
+                <textarea class="form-control mb-3" rows="7" readonly>{{ lead_form_share.embed_code }}</textarea>
+
+                <div class="la-hint mb-3">The embed snippet uses an iframe so the form can be dropped onto almost any website without custom backend work.</div>
+
+                <label class="form-label fw-semibold d-block">Visible Fields</label>
+                <div class="d-flex flex-wrap gap-3 mb-2">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="lead_form_show_email" id="leadFormShowEmail" value="1" {{ 'checked' if lead_form_config.show_email }}>
+                        <label class="form-check-label" for="leadFormShowEmail">Show email</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="lead_form_show_address" id="leadFormShowAddress" value="1" {{ 'checked' if lead_form_config.show_address }}>
+                        <label class="form-check-label" for="leadFormShowAddress">Require address</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="lead_form_show_message" id="leadFormShowMessage" value="1" {{ 'checked' if lead_form_config.show_message }}>
+                        <label class="form-check-label" for="leadFormShowMessage">Require job details</label>
+                    </div>
+                </div>
+
+                <div class="la-hint">Name and mobile number stay required so the lead lands in Warren with enough data to respond usefully.</div>
+            </div>
+        </div>
+    </div>
+
     <!-- Closing Procedure -->
     <div class="la-card">
         <h5><i class="bi bi-check2-circle me-1 text-success"></i> Closing Procedure</h5>

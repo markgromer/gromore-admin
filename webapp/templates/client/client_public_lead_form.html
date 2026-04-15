@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ lead_form_config.headline }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #14213d;
+            --ink-soft: #52607a;
+            --panel: rgba(255, 255, 255, 0.92);
+            --line: rgba(20, 33, 61, 0.12);
+            --accent: #0f766e;
+            --accent-deep: #155e75;
+            --sun: #f4a261;
+            --bg-a: #f6efe4;
+            --bg-b: #d8f1ee;
+            --danger: #b91c1c;
+            --success: #166534;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: 'Manrope', sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(circle at top left, rgba(244,162,97,.34), transparent 32%),
+                radial-gradient(circle at top right, rgba(15,118,110,.18), transparent 28%),
+                linear-gradient(160deg, var(--bg-a) 0%, #fbfaf7 42%, var(--bg-b) 100%);
+            min-height: 100vh;
+        }
+        body.embed {
+            background: transparent;
+            min-height: auto;
+        }
+        .shell {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 32px 20px;
+        }
+        body.embed .shell {
+            padding: 10px;
+        }
+        .panel {
+            display: grid;
+            grid-template-columns: 1.05fr .95fr;
+            border-radius: 28px;
+            overflow: hidden;
+            background: var(--panel);
+            border: 1px solid rgba(255,255,255,.45);
+            box-shadow: 0 32px 80px rgba(20, 33, 61, 0.16);
+            backdrop-filter: blur(16px);
+        }
+        .story {
+            padding: 42px 38px;
+            background:
+                linear-gradient(160deg, rgba(20,33,61,.97) 0%, rgba(21,94,117,.94) 50%, rgba(15,118,110,.88) 100%);
+            color: #fff;
+            position: relative;
+        }
+        .story::after {
+            content: "";
+            position: absolute;
+            inset: auto 28px 26px auto;
+            width: 120px;
+            height: 120px;
+            border-radius: 999px;
+            background: radial-gradient(circle, rgba(244,162,97,.75), rgba(244,162,97,0));
+            filter: blur(2px);
+        }
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(255,255,255,.12);
+            border: 1px solid rgba(255,255,255,.14);
+            font-size: 12px;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            font-weight: 800;
+        }
+        .story h1 {
+            margin: 18px 0 12px;
+            font-family: 'Instrument Serif', serif;
+            font-size: clamp(2.2rem, 4vw, 4rem);
+            line-height: .96;
+            font-weight: 400;
+        }
+        .story p {
+            margin: 0;
+            max-width: 520px;
+            color: rgba(255,255,255,.84);
+            font-size: 15px;
+            line-height: 1.7;
+        }
+        .story-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 28px;
+        }
+        .story-card {
+            padding: 14px;
+            border-radius: 18px;
+            background: rgba(255,255,255,.09);
+            border: 1px solid rgba(255,255,255,.08);
+        }
+        .story-card strong {
+            display: block;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+        .story-card span {
+            font-size: 12px;
+            color: rgba(255,255,255,.74);
+            line-height: 1.5;
+        }
+        .form-wrap {
+            padding: 34px 30px;
+        }
+        .form-wrap h2 {
+            margin: 0 0 6px;
+            font-size: 26px;
+            font-weight: 800;
+            color: var(--ink);
+        }
+        .form-wrap .subcopy {
+            margin: 0 0 22px;
+            color: var(--ink-soft);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .alert {
+            border-radius: 16px;
+            padding: 14px 16px;
+            margin-bottom: 18px;
+            font-size: 14px;
+            line-height: 1.55;
+        }
+        .alert.error {
+            background: rgba(185, 28, 28, .08);
+            border: 1px solid rgba(185, 28, 28, .18);
+            color: var(--danger);
+        }
+        .alert.success {
+            background: rgba(22, 101, 52, .08);
+            border: 1px solid rgba(22, 101, 52, .18);
+            color: var(--success);
+        }
+        form {
+            display: grid;
+            gap: 16px;
+        }
+        .row {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+        label {
+            display: block;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            font-weight: 800;
+            margin: 0 0 8px;
+            color: var(--ink-soft);
+        }
+        input, select, textarea {
+            width: 100%;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 14px 15px;
+            font: inherit;
+            color: var(--ink);
+            background: rgba(255,255,255,.84);
+            transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+        }
+        textarea {
+            min-height: 132px;
+            resize: vertical;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: rgba(21, 94, 117, .46);
+            box-shadow: 0 0 0 4px rgba(21, 94, 117, .10);
+            transform: translateY(-1px);
+        }
+        .checkbox {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            padding: 16px;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            background: rgba(255,255,255,.76);
+        }
+        .checkbox input {
+            width: 18px;
+            height: 18px;
+            margin-top: 2px;
+            flex: 0 0 auto;
+        }
+        .checkbox label {
+            margin: 0;
+            text-transform: none;
+            letter-spacing: 0;
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--ink);
+        }
+        button {
+            border: 0;
+            border-radius: 18px;
+            padding: 16px 18px;
+            background: linear-gradient(135deg, var(--ink) 0%, var(--accent-deep) 100%);
+            color: #fff;
+            font: inherit;
+            font-weight: 800;
+            letter-spacing: .01em;
+            cursor: pointer;
+            box-shadow: 0 18px 28px rgba(20, 33, 61, .18);
+        }
+        .fine-print {
+            margin-top: 12px;
+            font-size: 12px;
+            color: var(--ink-soft);
+            line-height: 1.6;
+        }
+        .brand-line {
+            margin-top: 22px;
+            font-size: 12px;
+            color: rgba(255,255,255,.7);
+        }
+        @media (max-width: 900px) {
+            .panel {
+                grid-template-columns: 1fr;
+            }
+            .story-grid,
+            .row {
+                grid-template-columns: 1fr;
+            }
+            .story,
+            .form-wrap {
+                padding: 28px 22px;
+            }
+        }
+    </style>
+</head>
+<body class="{{ 'embed' if is_embed else '' }}">
+    <div class="shell">
+        <div class="panel">
+            <section class="story">
+                <div class="eyebrow">Warren Lead Intake</div>
+                <h1>{{ lead_form_config.headline }}</h1>
+                <p>{{ lead_form_config.intro }}</p>
+
+                <div class="story-grid">
+                    <div class="story-card">
+                        <strong>Fast intake</strong>
+                        <span>Your request lands directly in Warren as a live lead thread.</span>
+                    </div>
+                    <div class="story-card">
+                        <strong>Clear next step</strong>
+                        <span>We can text back a quote or triage response when texting is enabled.</span>
+                    </div>
+                    <div class="story-card">
+                        <strong>No dead-end form</strong>
+                        <span>Real context travels with the lead instead of disappearing into email.</span>
+                    </div>
+                </div>
+
+                <div class="brand-line">Powered for {{ brand.display_name }}</div>
+            </section>
+
+            <section class="form-wrap">
+                <h2>Request your quote</h2>
+                <p class="subcopy">Fill this out once. Warren will route the request, keep the details organized, and respond using this brand's lead workflow.</p>
+
+                {% if submitted %}
+                <div class="alert success">
+                    <strong>{{ lead_form_config.success_title }}</strong><br>
+                    {{ lead_form_config.success_message }}
+                </div>
+                {% endif %}
+
+                {% if errors %}
+                <div class="alert error">
+                    {% for error in errors %}
+                    <div>{{ error }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <form method="post" action="{{ url_for('client_public.public_lead_form', brand_slug=brand.slug, embed=1 if is_embed else None) }}">
+                    <div class="row">
+                        <div>
+                            <label for="leadName">Full name</label>
+                            <input id="leadName" type="text" name="name" value="{{ form_values.name }}" maxlength="120" required>
+                        </div>
+                        <div>
+                            <label for="leadPhone">Mobile number</label>
+                            <input id="leadPhone" type="tel" name="phone" value="{{ form_values.phone }}" maxlength="40" required>
+                        </div>
+                    </div>
+
+                    {% if lead_form_config.show_email %}
+                    <div>
+                        <label for="leadEmail">Email</label>
+                        <input id="leadEmail" type="email" name="email" value="{{ form_values.email }}" maxlength="160">
+                    </div>
+                    {% endif %}
+
+                    <div>
+                        <label for="leadService">{{ lead_form_config.service_label }}</label>
+                        {% if lead_form_config.service_options %}
+                        <select id="leadService" name="service_needed" required>
+                            <option value="">Choose one</option>
+                            {% for option in lead_form_config.service_options %}
+                            <option value="{{ option }}" {{ 'selected' if form_values.service_needed == option else '' }}>{{ option }}</option>
+                            {% endfor %}
+                        </select>
+                        {% else %}
+                        <input id="leadService" type="text" name="service_needed" value="{{ form_values.service_needed }}" maxlength="160" placeholder="Service needed">
+                        {% endif %}
+                    </div>
+
+                    {% if lead_form_config.show_address %}
+                    <div>
+                        <label for="leadAddress">Service address</label>
+                        <input id="leadAddress" type="text" name="address" value="{{ form_values.address }}" maxlength="220" required>
+                    </div>
+                    {% endif %}
+
+                    {% if lead_form_config.show_message %}
+                    <div>
+                        <label for="leadMessage">{{ lead_form_config.details_label }}</label>
+                        <textarea id="leadMessage" name="message" maxlength="1500" required>{{ form_values.message }}</textarea>
+                    </div>
+                    {% endif %}
+
+                    {% if lead_form_config.auto_text_enabled %}
+                    <div class="checkbox">
+                        <input id="smsConsent" type="checkbox" name="sms_consent" value="1" {{ 'checked' if form_values.sms_consent }} {{ 'required' if lead_form_config.require_sms_consent else '' }}>
+                        <label for="smsConsent">{{ lead_form_config.consent_label }}</label>
+                    </div>
+                    {% endif %}
+
+                    <button type="submit">{{ lead_form_config.cta_label }}</button>
+                </form>
+
+                <div class="fine-print">By submitting, you are asking {{ brand.display_name }} to contact you about this request. Message frequency varies. Standard carrier rates may apply.</div>
+            </section>
+        </div>
+    </div>
+</body>
+</html>

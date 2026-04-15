@@ -30,6 +30,12 @@ client_bp = Blueprint(
     url_prefix="/client",
 )
 
+client_public_bp = Blueprint(
+    "client_public",
+    __name__,
+    template_folder="templates/client",
+)
+
 
 log = logging.getLogger(__name__)
 
@@ -120,6 +126,114 @@ def _safe_json_list(raw_value):
     except Exception:
         return []
     return list(parsed) if isinstance(parsed, list) else []
+
+
+def _split_text_lines(value, limit=24):
+    parts = []
+    seen = set()
+    for raw_part in re.split(r"[\n,;|]+", str(value or "")):
+        item = re.sub(r"\s+", " ", raw_part).strip()
+        if not item:
+            continue
+        lowered = item.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        parts.append(item[:120])
+        if len(parts) >= limit:
+            break
+    return parts
+
+
+def _default_lead_form_service_options(brand):
+    options = _split_text_lines((brand or {}).get("primary_services") or "")
+    if options:
+        return options
+    options = _split_text_lines((brand or {}).get("sales_bot_service_menu") or "")
+    cleaned = []
+    for option in options:
+        cleaned.append(re.sub(r"^[-*\d.)\s]+", "", option).strip())
+        if len(cleaned) >= 8:
+            break
+    return [item for item in cleaned if item]
+
+
+def _default_warren_lead_form_config(brand=None):
+    brand = brand or {}
+    brand_name = (brand.get("display_name") or "Your Team").strip() or "Your Team"
+    return {
+        "enabled": False,
+        "headline": f"Get a fast quote from {brand_name}",
+        "intro": "Tell us what you need, where the job is, and how to reach you. Warren will open the lead instantly and can text back a quote or next step when texting is enabled.",
+        "cta_label": "Request My Quote",
+        "success_title": "Request received",
+        "success_message": "We have your request. If texting is enabled for this brand and you opted in, watch for a text with a quote or next step shortly.",
+        "service_label": "What do you need help with?",
+        "details_label": "Tell us about the job",
+        "service_options": _default_lead_form_service_options(brand),
+        "show_email": True,
+        "show_address": True,
+        "show_message": True,
+        "auto_text_enabled": True,
+        "require_sms_consent": True,
+        "consent_label": "I agree to receive text messages about my request, scheduling, and pricing.",
+    }
+
+
+def _normalize_warren_lead_form_config(raw_config, brand=None):
+    defaults = _default_warren_lead_form_config(brand)
+    config = dict(defaults)
+    if isinstance(raw_config, str):
+        raw_config = _safe_json_object(raw_config)
+    if not isinstance(raw_config, dict):
+        raw_config = {}
+
+    for key in ("enabled", "show_email", "show_address", "show_message", "auto_text_enabled", "require_sms_consent"):
+        if key in raw_config:
+            config[key] = bool(raw_config.get(key))
+
+    for key, max_len in (
+        ("headline", 140),
+        ("intro", 800),
+        ("cta_label", 60),
+        ("success_title", 80),
+        ("success_message", 400),
+        ("service_label", 80),
+        ("details_label", 80),
+        ("consent_label", 220),
+    ):
+        value = raw_config.get(key)
+        if value is None:
+            continue
+        config[key] = str(value).strip()[:max_len] or defaults[key]
+
+    options = raw_config.get("service_options")
+    if isinstance(options, str):
+        options = _split_text_lines(options)
+    elif isinstance(options, list):
+        options = _split_text_lines("\n".join(str(item or "") for item in options))
+    else:
+        options = []
+    config["service_options"] = options or defaults["service_options"]
+    return config
+
+
+def _lead_form_config_for_brand(brand):
+    return _normalize_warren_lead_form_config((brand or {}).get("sales_bot_lead_form_config") or "{}", brand=brand)
+
+
+def _lead_form_share_payload(brand):
+    public_url = f"{_external_app_url()}{url_for('client_public.public_lead_form', brand_slug=brand['slug'])}"
+    embed_url = f"{public_url}?embed=1"
+    embed_code = (
+        f'<iframe src="{embed_url}" title="{brand.get("display_name") or "Warren lead form"}" '
+        'width="100%" height="840" style="border:0;border-radius:18px;overflow:hidden;" loading="lazy"></iframe>'
+    )
+    return {
+        "public_url": public_url,
+        "embed_url": embed_url,
+        "embed_code": embed_code,
+    }
 
 
 def _normalize_client_commercial_text(value, max_len=4000):
@@ -7796,10 +7910,15 @@ def client_lead_assistant():
     except Exception:
         chatbot_channels = set()
 
+    lead_form_config = _lead_form_config_for_brand(brand)
+    lead_form_share = _lead_form_share_payload(brand)
+
     return render_template(
         "client_lead_assistant.html",
         brand=brand,
         chatbot_channels=chatbot_channels,
+        lead_form_config=lead_form_config,
+        lead_form_share=lead_form_share,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
 
@@ -7809,6 +7928,7 @@ def client_lead_assistant():
 def client_save_lead_assistant_profile():
     db = _get_db()
     brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id) or {}
 
     db.update_brand_number_field(
         brand_id,
@@ -7910,8 +8030,138 @@ def client_save_lead_assistant_profile():
         json.dumps(schedule) if schedule else "",
     )
 
+    lead_form_config = _normalize_warren_lead_form_config(
+        {
+            "enabled": bool(request.form.get("lead_form_enabled")),
+            "headline": (request.form.get("lead_form_headline") or "").strip()[:140],
+            "intro": (request.form.get("lead_form_intro") or "").strip()[:800],
+            "cta_label": (request.form.get("lead_form_cta_label") or "").strip()[:60],
+            "success_title": (request.form.get("lead_form_success_title") or "").strip()[:80],
+            "success_message": (request.form.get("lead_form_success_message") or "").strip()[:400],
+            "service_label": (request.form.get("lead_form_service_label") or "").strip()[:80],
+            "details_label": (request.form.get("lead_form_details_label") or "").strip()[:80],
+            "service_options": (request.form.get("lead_form_service_options") or "").strip(),
+            "show_email": bool(request.form.get("lead_form_show_email")),
+            "show_address": bool(request.form.get("lead_form_show_address")),
+            "show_message": bool(request.form.get("lead_form_show_message")),
+            "auto_text_enabled": bool(request.form.get("lead_form_auto_text_enabled")),
+            "require_sms_consent": bool(request.form.get("lead_form_require_sms_consent")),
+            "consent_label": (request.form.get("lead_form_consent_label") or "").strip()[:220],
+        },
+        brand=brand,
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_lead_form_config",
+        json.dumps(lead_form_config, separators=(",", ":")),
+    )
+
     flash("Lead assistant profile saved.", "success")
     return redirect(url_for("client.client_lead_assistant"))
+
+
+@client_public_bp.route("/warren/form/<brand_slug>", methods=["GET", "POST"])
+def public_lead_form(brand_slug):
+    db = _get_db()
+    brand = db.get_brand_by_slug(brand_slug)
+    if not brand:
+        abort(404)
+
+    lead_form_config = _lead_form_config_for_brand(brand)
+    if not lead_form_config.get("enabled"):
+        abort(404)
+
+    is_embed = str(request.args.get("embed") or "").strip().lower() in {"1", "true", "yes"}
+    errors = []
+    submitted = str(request.args.get("submitted") or "").strip().lower() in {"1", "true", "yes"}
+    form_values = {
+        "name": "",
+        "phone": "",
+        "email": "",
+        "service_needed": "",
+        "address": "",
+        "message": "",
+        "sms_consent": False,
+    }
+
+    if request.method == "POST":
+        form_values = {
+            "name": (request.form.get("name") or "").strip()[:120],
+            "phone": (request.form.get("phone") or "").strip()[:40],
+            "email": (request.form.get("email") or "").strip()[:160],
+            "service_needed": (request.form.get("service_needed") or "").strip()[:160],
+            "address": (request.form.get("address") or "").strip()[:220],
+            "message": (request.form.get("message") or "").strip()[:1500],
+            "sms_consent": bool(request.form.get("sms_consent")),
+        }
+
+        normalized_phone = _normalize_client_phone_number(form_values["phone"])
+        if not form_values["name"]:
+            errors.append("Name is required.")
+        if not normalized_phone:
+            errors.append("A valid mobile number is required.")
+        if lead_form_config.get("show_email") and form_values["email"] and "@" not in form_values["email"]:
+            errors.append("Enter a valid email address.")
+        if lead_form_config.get("show_address") and not form_values["address"]:
+            errors.append("Service address is required.")
+        if lead_form_config.get("show_message") and not form_values["message"]:
+            errors.append("Job details are required.")
+        if lead_form_config.get("service_options") and not form_values["service_needed"]:
+            errors.append("Choose the service you need.")
+        if lead_form_config.get("auto_text_enabled") and lead_form_config.get("require_sms_consent") and not form_values["sms_consent"]:
+            errors.append("Text consent is required before Warren can text a quote.")
+
+        if not errors:
+            from webapp.warren_webhooks import _ingest_lead_submission
+
+            message_text = form_values["message"]
+            if not message_text and form_values["service_needed"]:
+                message_text = f"Requested service: {form_values['service_needed']}"
+
+            extra_fields = {
+                "service_needed": form_values["service_needed"],
+                "service_address": form_values["address"],
+                "sms_consent": "yes" if form_values["sms_consent"] else "no",
+                "form_type": "warren_hosted_form",
+                "embed_mode": "iframe" if is_embed else "direct",
+            }
+            extra_fields = {key: value for key, value in extra_fields.items() if value}
+
+            allow_auto_send = bool(
+                lead_form_config.get("auto_text_enabled")
+                and form_values["sms_consent"]
+                and normalized_phone
+            )
+
+            _ingest_lead_submission(
+                db,
+                brand["id"],
+                brand,
+                external_id=f"warren_form_{brand_slug}_{uuid.uuid4().hex[:20]}",
+                source="warren_hosted_form",
+                lead_name=form_values["name"],
+                lead_email=form_values["email"].lower(),
+                lead_phone=normalized_phone,
+                message_text=message_text,
+                extra_fields=extra_fields,
+                message_header="Warren Hosted Lead Form",
+                allow_auto_send=allow_auto_send,
+            )
+
+            redirect_args = {"brand_slug": brand_slug, "submitted": 1}
+            if is_embed:
+                redirect_args["embed"] = 1
+            return redirect(url_for("client_public.public_lead_form", **redirect_args))
+
+    return render_template(
+        "client/client_public_lead_form.html",
+        brand=brand,
+        lead_form_config=lead_form_config,
+        submitted=submitted,
+        errors=errors,
+        form_values=form_values,
+        is_embed=is_embed,
+    )
 
 
 @client_bp.route("/commercial")

@@ -1,3 +1,4 @@
+import json
 import os
 import unittest
 import uuid
@@ -342,6 +343,161 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertEqual(brand["sales_bot_example_language"], "Most jobs like this land between $125 and $175.")
         self.assertEqual(brand["sales_bot_disallowed_language"], "Do not say guaranteed lowest price.")
         self.assertEqual(brand["sales_bot_handoff_rules"], "Escalate angry leads and commercial jobs.")
+
+    def test_client_can_save_warren_hosted_lead_form_config(self):
+        response = self.client.post(
+            "/client/lead-assistant",
+            data={
+                "lead_form_enabled": "1",
+                "lead_form_auto_text_enabled": "1",
+                "lead_form_require_sms_consent": "1",
+                "lead_form_show_email": "1",
+                "lead_form_show_address": "1",
+                "lead_form_show_message": "1",
+                "lead_form_headline": "Get a pet waste quote",
+                "lead_form_intro": "Tell us about the property and Warren will open the lead instantly.",
+                "lead_form_cta_label": "Text me pricing",
+                "lead_form_success_title": "We got it",
+                "lead_form_success_message": "Watch your phone for pricing.",
+                "lead_form_service_label": "Service type",
+                "lead_form_details_label": "Property notes",
+                "lead_form_service_options": "Weekly pet waste\nTwice weekly pet waste",
+                "lead_form_consent_label": "I agree to receive text messages about my quote.",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/client/lead-assistant"))
+
+        with self.app.app_context():
+            brand = self.app.db.get_brand(self.brand_id)
+
+        config = json.loads(brand["sales_bot_lead_form_config"])
+        self.assertTrue(config["enabled"])
+        self.assertTrue(config["auto_text_enabled"])
+        self.assertTrue(config["require_sms_consent"])
+        self.assertEqual(config["headline"], "Get a pet waste quote")
+        self.assertEqual(config["cta_label"], "Text me pricing")
+        self.assertEqual(config["service_options"], ["Weekly pet waste", "Twice weekly pet waste"])
+
+    @patch("webapp.warren_sender.send_reply")
+    @patch("webapp.warren_brain.process_and_respond")
+    def test_public_warren_lead_form_creates_thread_and_can_auto_text(self, mock_process_and_respond, mock_send_reply):
+        mock_process_and_respond.return_value = {
+            "reply": "We can help with that. I just sent pricing.",
+            "action": "quote",
+            "thread_id": 1,
+            "should_send": True,
+            "handoff_reason": "",
+        }
+        mock_send_reply.return_value = (True, "queued")
+
+        with self.app.app_context():
+            self.app.db.update_brand_number_field(self.brand_id, "sales_bot_enabled", 1)
+            self.app.db.update_brand_text_field(
+                self.brand_id,
+                "sales_bot_lead_form_config",
+                json.dumps({
+                    "enabled": True,
+                    "headline": "Fast quote form",
+                    "service_options": ["Weekly service", "Initial cleanup"],
+                    "show_email": True,
+                    "show_address": True,
+                    "show_message": True,
+                    "auto_text_enabled": True,
+                    "require_sms_consent": True,
+                }),
+            )
+            brand = self.app.db.get_brand(self.brand_id)
+
+        response = self.client.get(f"/warren/form/{brand['slug']}")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Fast quote form", response.data)
+
+        submit_response = self.client.post(
+            f"/warren/form/{brand['slug']}",
+            data={
+                "name": "Taylor Prospect",
+                "phone": "5208672540",
+                "email": "taylor@example.com",
+                "service_needed": "Weekly service",
+                "address": "123 Main St",
+                "message": "Need service for a dog run and side yard.",
+                "sms_consent": "1",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(submit_response.status_code, 302)
+        self.assertIn("submitted=1", submit_response.headers["Location"])
+        self.assertTrue(mock_process_and_respond.called)
+        self.assertTrue(mock_process_and_respond.call_args.kwargs["allow_auto_send"])
+        mock_send_reply.assert_called_once()
+
+        with self.app.app_context():
+            threads = self.app.db.get_lead_threads(self.brand_id)
+            self.assertEqual(len(threads), 1)
+            thread = threads[0]
+            self.assertEqual(thread["lead_name"], "Taylor Prospect")
+            self.assertEqual(thread["lead_phone"], "+15208672540")
+            self.assertEqual(thread["source"], "warren_hosted_form")
+
+            messages = self.app.db.get_lead_messages(thread["id"])
+            self.assertEqual(len(messages), 1)
+            self.assertIn("Warren Hosted Lead Form", messages[0]["content"])
+
+    @patch("webapp.warren_sender.send_reply")
+    @patch("webapp.warren_brain.process_and_respond")
+    def test_public_warren_lead_form_does_not_auto_text_without_consent(self, mock_process_and_respond, mock_send_reply):
+        mock_process_and_respond.return_value = {
+            "reply": "Drafted reply only.",
+            "action": "reply",
+            "thread_id": 1,
+            "should_send": False,
+            "handoff_reason": "",
+        }
+
+        with self.app.app_context():
+            self.app.db.update_brand_number_field(self.brand_id, "sales_bot_enabled", 1)
+            self.app.db.update_brand_text_field(
+                self.brand_id,
+                "sales_bot_lead_form_config",
+                json.dumps({
+                    "enabled": True,
+                    "headline": "Fast quote form",
+                    "service_options": ["Weekly service"],
+                    "show_email": True,
+                    "show_address": True,
+                    "show_message": True,
+                    "auto_text_enabled": True,
+                    "require_sms_consent": False,
+                }),
+            )
+            brand = self.app.db.get_brand(self.brand_id)
+
+        submit_response = self.client.post(
+            f"/warren/form/{brand['slug']}",
+            data={
+                "name": "No Consent Lead",
+                "phone": "5208672540",
+                "email": "noconsent@example.com",
+                "service_needed": "Weekly service",
+                "address": "123 Main St",
+                "message": "Need help weekly.",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(submit_response.status_code, 302)
+        self.assertTrue(mock_process_and_respond.called)
+        self.assertFalse(mock_process_and_respond.call_args.kwargs["allow_auto_send"])
+        mock_send_reply.assert_not_called()
+
+        with self.app.app_context():
+            threads = self.app.db.get_lead_threads(self.brand_id)
+            self.assertEqual(len(threads), 1)
+            self.assertEqual(threads[0]["lead_name"], "No Consent Lead")
 
 
 if __name__ == "__main__":

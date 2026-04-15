@@ -362,7 +362,7 @@ def generate_response(db, brand, thread, messages, channel="sms"):
         return None
 
 
-def process_and_respond(db, brand_id, thread_id, channel="sms"):
+def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=True):
     """Full pipeline: generate response, log it, advance pipeline, return action.
 
     This is the main entry point called by webhook handlers.
@@ -421,7 +421,7 @@ def process_and_respond(db, brand_id, thread_id, channel="sms"):
 
     # Determine if we should auto-send or hold for review
     confidence = response.get("confidence", 0)
-    should_send = confidence >= 0.7 and action != "handoff"
+    should_send = allow_auto_send and confidence >= 0.7 and action != "handoff"
 
     # Log Warren's response as an outbound message
     if reply_text:

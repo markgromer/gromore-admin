@@ -204,6 +204,7 @@ def _ingest_lead_submission(
     extra_fields=None,
     message_header="Lead Submission",
     external_message_id="",
+    allow_auto_send=True,
 ):
     extra_fields = extra_fields or {}
     summary = _build_lead_submission_summary(
@@ -245,7 +246,13 @@ def _ingest_lead_submission(
             from webapp.warren_brain import process_and_respond
             from webapp.warren_sender import send_reply
 
-            result = process_and_respond(db, brand_id, thread_id, channel="lead_form")
+            result = process_and_respond(
+                db,
+                brand_id,
+                thread_id,
+                channel="lead_form",
+                allow_auto_send=allow_auto_send,
+            )
             if result and result.get("should_send") and result.get("reply") and lead_phone:
                 send_reply(db, brand, thread_id, result["reply"], channel="sms")
 

@@ -27,7 +27,7 @@ from webapp.oauth_meta import meta_bp
 from webapp.client_oauth_google import client_google_bp
 from webapp.client_oauth_meta import client_meta_bp
 from webapp.jobs import jobs_bp
-from webapp.client_portal import client_bp
+from webapp.client_portal import client_bp, client_public_bp
 from webapp.hiring import hiring_bp
 from webapp.warren_webhooks import webhooks_bp
 
@@ -276,6 +276,7 @@ def create_app():
     app.register_blueprint(webhooks_bp, url_prefix="/webhooks")
     csrf.exempt(webhooks_bp)  # Public webhook endpoints (verified by signature)
     app.register_blueprint(client_bp)
+    app.register_blueprint(client_public_bp)
 
     # ── Static asset cache headers ──
     @app.after_request
@@ -313,6 +314,8 @@ def create_app():
     csrf.exempt("webapp.client_portal.public_assess")
     csrf.exempt("client.public_signup")
     csrf.exempt("client.public_assess")
+    csrf.exempt("client_public.public_lead_form")
+    csrf.exempt("webapp.client_portal.public_lead_form")
 
     # Exempt React SPA JSON API endpoints from CSRF
     csrf.exempt("client.api_login")
