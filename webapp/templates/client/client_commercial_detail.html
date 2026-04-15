@@ -63,6 +63,31 @@
         box-shadow: 0 0 0 1px rgba(37, 99, 235, .12);
         background: #f8fbff;
     }
+    .outreach-studio-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: .75rem;
+        margin-bottom: .9rem;
+    }
+    .outreach-studio-stat {
+        border: 1px solid #dbe4f0;
+        border-radius: 12px;
+        background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+        padding: .85rem;
+    }
+    .outreach-studio-stat-label {
+        font-size: .72rem;
+        text-transform: uppercase;
+        color: #64748b;
+        font-weight: 800;
+        letter-spacing: .04em;
+        margin-bottom: .2rem;
+    }
+    .outreach-studio-stat-copy {
+        font-size: .84rem;
+        color: #0f172a;
+        font-weight: 700;
+    }
 </style>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
@@ -76,6 +101,10 @@
         <form method="POST" action="{{ url_for('client.client_commercial_thread_refresh', thread_id=thread.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat me-1"></i> Refresh Brief</button>
+        </form>
+        <form method="POST" action="{{ url_for('client.client_commercial_thread_delete', thread_id=thread.id) }}" onsubmit="return confirm('Delete this commercial target from WARREN?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash3 me-1"></i> Delete Target</button>
         </form>
         {% if feature_on('warren_inbox') %}
         <a href="{{ url_for('client.client_inbox') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-inbox me-1"></i> Warren Inbox</a>
@@ -416,32 +445,64 @@
 
         <div class="commercial-detail-card">
             <h6>Outreach Assets</h6>
-            <form method="POST" action="{{ url_for('client.client_commercial_thread_send_email', thread_id=thread.id) }}" class="mb-3">
+            <div class="outreach-studio-grid">
+                <div class="outreach-studio-stat">
+                    <div class="outreach-studio-stat-label">Mode</div>
+                    <div class="outreach-studio-stat-copy">{{ 'Custom draft' if commercial_brief.has_outreach_overrides else 'Auto-generated' }}</div>
+                </div>
+                <div class="outreach-studio-stat">
+                    <div class="outreach-studio-stat-label">Service Pitch</div>
+                    <div class="outreach-studio-stat-copy">{{ commercial_brief.service_pitch }}</div>
+                </div>
+                <div class="outreach-studio-stat">
+                    <div class="outreach-studio-stat-label">Angle</div>
+                    <div class="outreach-studio-stat-copy">{{ commercial_brief.outreach_angle }}</div>
+                </div>
+                <div class="outreach-studio-stat">
+                    <div class="outreach-studio-stat-label">Automation</div>
+                    <div class="outreach-studio-stat-copy">{{ 'AI rewrite ready' if outreach_ai_ready else 'Manual editing only' }}</div>
+                </div>
+            </div>
+            <form method="POST" action="{{ url_for('client.client_commercial_thread_save_outreach', thread_id=thread.id) }}" class="mb-3">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="mb-2">
-                    <label class="form-label" style="font-size:.78rem;">Send Subject</label>
+                    <label class="form-label" style="font-size:.78rem;">Email Subject</label>
                     <input type="text" name="subject" class="form-control form-control-sm" value="{{ commercial_brief.subject }}" maxlength="255">
                 </div>
                 <div class="mb-2">
-                    <label class="form-label" style="font-size:.78rem;">Send Message</label>
+                    <label class="form-label" style="font-size:.78rem;">Email Body</label>
                     <textarea name="message" class="form-control form-control-sm" rows="9">{{ commercial_brief.email_body }}</textarea>
                 </div>
-                <button type="submit" class="btn btn-primary btn-sm w-100" {% if not smtp_ready or not commercial_prospect.email %}disabled{% endif %}>
-                    <i class="bi bi-envelope-paper me-1"></i> Send Commercial Email Now
-                </button>
-                <div class="qualification-help">{% if not commercial_prospect.email %}No email found for this account yet.{% elif not smtp_ready %}SMTP is not configured in this environment.{% else %}This sends immediately and logs the outreach on the WARREN thread.{% endif %}</div>
+                <div class="mb-2">
+                    <label class="form-label" style="font-size:.78rem;">Call Opener</label>
+                    <textarea name="call_opener" class="form-control form-control-sm" rows="3">{{ commercial_brief.call_opener }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" style="font-size:.78rem;">Prompt WARREN To Edit</label>
+                    <textarea name="rewrite_prompt" class="form-control form-control-sm" rows="2" placeholder="Example: tighten this for a regional property manager, make it more direct, mention station upkeep and reporting.">{{ commercial_brief.rewrite_prompt }}</textarea>
+                    <div class="qualification-help">
+                        {{ 'Last AI rewrite: ' ~ commercial_brief.outreach_last_rewrite_at if commercial_brief.outreach_last_rewrite_at else 'Use this to push the draft in a specific direction without rewriting it by hand.' }}
+                    </div>
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-save me-1"></i> Save Draft</button>
+                    <button type="submit" formaction="{{ url_for('client.client_commercial_thread_rewrite_outreach', thread_id=thread.id) }}" class="btn btn-primary btn-sm" {% if not outreach_ai_ready %}disabled{% endif %}><i class="bi bi-stars me-1"></i> Prompt Rewrite</button>
+                    <button type="submit" formaction="{{ url_for('client.client_commercial_thread_send_email', thread_id=thread.id) }}" class="btn btn-success btn-sm" {% if not smtp_ready or not commercial_prospect.email %}disabled{% endif %}><i class="bi bi-envelope-paper me-1"></i> Send Email Now</button>
+                    <button type="submit" formaction="{{ url_for('client.client_commercial_thread_reset_outreach', thread_id=thread.id) }}" class="btn btn-outline-secondary btn-sm" formnovalidate><i class="bi bi-arrow-counterclockwise me-1"></i> Reset To Generated</button>
+                </div>
+                <div class="qualification-help">{% if not commercial_prospect.email %}No email found for this account yet.{% elif not smtp_ready %}SMTP is not configured in this environment.{% elif not outreach_ai_ready %}Manual edits and sending are ready. Add an OpenAI key in Connections to unlock prompt-based rewrites.{% else %}Edit by hand, prompt WARREN to rewrite, or send immediately from the same workspace.{% endif %}</div>
             </form>
-            <div class="mb-3">
-                <div class="text-muted" style="font-size:.76rem; font-weight:700; text-transform:uppercase;">Subject Line</div>
-                <div class="brief-copy">{{ commercial_brief.subject }}</div>
+            <div class="mb-3 brief-box">
+                <div class="text-muted" style="font-size:.76rem; font-weight:700; text-transform:uppercase;">WARREN Baseline Subject</div>
+                <div class="brief-copy">{{ commercial_brief.generated_subject }}</div>
             </div>
-            <div class="mb-3">
-                <div class="text-muted" style="font-size:.76rem; font-weight:700; text-transform:uppercase;">First Email</div>
-                <div class="brief-copy">{{ commercial_brief.email_body }}</div>
+            <div class="mb-3 brief-box">
+                <div class="text-muted" style="font-size:.76rem; font-weight:700; text-transform:uppercase;">WARREN Baseline Email</div>
+                <div class="brief-copy">{{ commercial_brief.generated_email_body }}</div>
             </div>
-            <div>
-                <div class="text-muted" style="font-size:.76rem; font-weight:700; text-transform:uppercase;">Call Opener</div>
-                <div class="brief-copy">{{ commercial_brief.call_opener }}</div>
+            <div class="brief-box">
+                <div class="text-muted" style="font-size:.76rem; font-weight:700; text-transform:uppercase;">WARREN Baseline Call Opener</div>
+                <div class="brief-copy">{{ commercial_brief.generated_call_opener }}</div>
             </div>
         </div>
 

@@ -368,6 +368,154 @@ class ClientCommercialProspectingTests(unittest.TestCase):
             self.assertEqual(len(events), 1)
             self.assertIn("Quick idea", events[0]["event_value"])
 
+    def test_client_commercial_outreach_save_persists_custom_assets(self):
+        with self.app.app_context():
+            thread_id = self.app.db.create_lead_thread(
+                self.brand_id,
+                {
+                    "lead_name": "Mesa Property Group",
+                    "lead_email": "leasing@mesaproperty.example.com",
+                    "source": "commercial_prospecting",
+                    "channel": "commercial",
+                    "status": "new",
+                    "summary": "Commercial target - Property Managers.",
+                    "commercial_data_json": json.dumps({
+                        "name": "Mesa Property Group",
+                        "email": "leasing@mesaproperty.example.com",
+                        "business_name": "Mesa Property Group",
+                        "industry": "Property Managers",
+                        "account_type": "property_manager",
+                        "source": "commercial_prospecting",
+                        "stage": "new",
+                        "source_details_json": json.dumps({"emails": ["leasing@mesaproperty.example.com"]}),
+                        "audit_snapshot_json": json.dumps({}),
+                        "qualification_answers_json": "{}",
+                    }),
+                },
+            )
+
+        response = self.client.post(
+            f"/client/commercial/thread/{thread_id}/outreach",
+            data={
+                "subject": "Cleanup idea for Mesa Property Group",
+                "message": "Hi team,\n\nWe can tighten station upkeep and reporting without adding manager overhead.",
+                "call_opener": "We help commercial properties tighten station upkeep and service reporting.",
+                "rewrite_prompt": "Make it more direct for a regional manager.",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        with self.app.app_context():
+            thread = self.app.db.get_lead_thread(thread_id, brand_id=self.brand_id)
+            payload = json.loads(thread["commercial_data_json"])
+            self.assertEqual(payload["outreach_subject_override"], "Cleanup idea for Mesa Property Group")
+            self.assertIn("station upkeep", payload["outreach_email_body_override"])
+            self.assertIn("regional manager", payload["outreach_rewrite_prompt"])
+
+    @patch("requests.post")
+    def test_client_commercial_outreach_rewrite_uses_ai_prompt(self, post_mock):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "subject": "Mesa property cleanup idea",
+                                "email_body": "Hi team,\n\nWe can tighten station upkeep, proof-of-service, and manager reporting.",
+                                "call_opener": "We help properties tighten station upkeep and reporting.",
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+        post_mock.return_value = mock_response
+
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "openai_api_key", "sk-test-key")
+            thread_id = self.app.db.create_lead_thread(
+                self.brand_id,
+                {
+                    "lead_name": "Mesa Property Group",
+                    "lead_email": "leasing@mesaproperty.example.com",
+                    "source": "commercial_prospecting",
+                    "channel": "commercial",
+                    "status": "new",
+                    "summary": "Commercial target - Property Managers.",
+                    "commercial_data_json": json.dumps({
+                        "name": "Mesa Property Group",
+                        "email": "leasing@mesaproperty.example.com",
+                        "business_name": "Mesa Property Group",
+                        "industry": "Property Managers",
+                        "account_type": "property_manager",
+                        "service_area": "Mesa, AZ",
+                        "source": "commercial_prospecting",
+                        "stage": "new",
+                        "source_details_json": json.dumps({"emails": ["leasing@mesaproperty.example.com"]}),
+                        "audit_snapshot_json": json.dumps({}),
+                        "qualification_answers_json": "{}",
+                    }),
+                },
+            )
+
+        response = self.client.post(
+            f"/client/commercial/thread/{thread_id}/outreach/rewrite",
+            data={"rewrite_prompt": "Make this more direct for a regional property manager."},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        post_mock.assert_called_once()
+
+        with self.app.app_context():
+            thread = self.app.db.get_lead_thread(thread_id, brand_id=self.brand_id)
+            payload = json.loads(thread["commercial_data_json"])
+            self.assertEqual(payload["outreach_subject_override"], "Mesa property cleanup idea")
+            self.assertIn("manager reporting", payload["outreach_email_body_override"])
+            self.assertIn("regional property manager", payload["outreach_rewrite_prompt"])
+
+    def test_client_commercial_target_can_be_deleted(self):
+        with self.app.app_context():
+            thread_id = self.app.db.create_lead_thread(
+                self.brand_id,
+                {
+                    "lead_name": "Mesa Property Group",
+                    "lead_email": "leasing@mesaproperty.example.com",
+                    "source": "commercial_prospecting",
+                    "channel": "commercial",
+                    "status": "new",
+                    "summary": "Commercial target - Property Managers.",
+                    "commercial_data_json": json.dumps({
+                        "name": "Mesa Property Group",
+                        "email": "leasing@mesaproperty.example.com",
+                        "business_name": "Mesa Property Group",
+                        "industry": "Property Managers",
+                        "account_type": "property_manager",
+                        "source": "commercial_prospecting",
+                        "stage": "new",
+                        "source_details_json": json.dumps({"emails": ["leasing@mesaproperty.example.com"]}),
+                        "audit_snapshot_json": json.dumps({}),
+                        "qualification_answers_json": "{}",
+                    }),
+                },
+            )
+
+        response = self.client.post(
+            f"/client/commercial/thread/{thread_id}/delete",
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/client/commercial"))
+
+        with self.app.app_context():
+            thread = self.app.db.get_lead_thread(thread_id, brand_id=self.brand_id)
+            self.assertIsNone(thread)
+
     def test_client_commercial_can_enroll_in_drip(self):
         with self.app.app_context():
             thread_id = self.app.db.create_lead_thread(

@@ -237,6 +237,11 @@ def _normalize_client_commercial_payload(raw_item, *, default_service_area=""):
         "proposal_status": _normalize_client_commercial_text(item.get("proposal_status"), 80),
         "pain_points_json": json.dumps([_normalize_client_commercial_text(point, 220) for point in pain_points if _normalize_client_commercial_text(point, 220)]),
         "next_action": _normalize_client_commercial_text(item.get("next_action"), 220),
+        "outreach_subject_override": _normalize_client_commercial_text(item.get("outreach_subject_override"), 255),
+        "outreach_email_body_override": _normalize_client_commercial_text(item.get("outreach_email_body_override"), 6000),
+        "outreach_call_opener_override": _normalize_client_commercial_text(item.get("outreach_call_opener_override"), 2000),
+        "outreach_rewrite_prompt": _normalize_client_commercial_text(item.get("outreach_rewrite_prompt"), 1000),
+        "outreach_last_rewrite_at": _normalize_client_commercial_text(item.get("outreach_last_rewrite_at"), 40),
         "proposal_builder_json": json.dumps(_normalize_client_commercial_proposal_builder(item.get("proposal_builder_json"), prospect=item)),
     }
 
@@ -305,6 +310,11 @@ def _merge_client_commercial_payload(existing_payload, incoming_payload):
         "proposal_status": incoming.get("proposal_status") or existing.get("proposal_status") or "",
         "pain_points_json": incoming.get("pain_points_json") if _safe_json_list(incoming.get("pain_points_json")) else existing.get("pain_points_json") or "[]",
         "next_action": incoming.get("next_action") or existing.get("next_action") or "",
+        "outreach_subject_override": incoming.get("outreach_subject_override") or existing.get("outreach_subject_override") or "",
+        "outreach_email_body_override": incoming.get("outreach_email_body_override") or existing.get("outreach_email_body_override") or "",
+        "outreach_call_opener_override": incoming.get("outreach_call_opener_override") or existing.get("outreach_call_opener_override") or "",
+        "outreach_rewrite_prompt": incoming.get("outreach_rewrite_prompt") or existing.get("outreach_rewrite_prompt") or "",
+        "outreach_last_rewrite_at": incoming.get("outreach_last_rewrite_at") or existing.get("outreach_last_rewrite_at") or "",
         "proposal_builder_json": incoming.get("proposal_builder_json") or existing.get("proposal_builder_json") or "{}",
     }
     return _normalize_client_commercial_payload(merged_payload)
@@ -610,6 +620,127 @@ def _build_client_commercial_proposal(prospect, *, brand=None, existing_quote=No
         "setup_total": selected_preview["setup_total"],
         "grand_total": selected_preview["grand_total"],
         "quote": proposal_quote,
+    }
+
+
+def _apply_client_commercial_outreach_overrides(prospect, brief):
+    updated = dict(brief or {})
+    generated_subject = _normalize_client_commercial_text(updated.get("subject"), 255)
+    generated_email_body = _normalize_client_commercial_text(updated.get("email_body"), 6000)
+    generated_call_opener = _normalize_client_commercial_text(updated.get("call_opener"), 2000)
+    subject_override = _normalize_client_commercial_text((prospect or {}).get("outreach_subject_override"), 255)
+    email_override = _normalize_client_commercial_text((prospect or {}).get("outreach_email_body_override"), 6000)
+    call_override = _normalize_client_commercial_text((prospect or {}).get("outreach_call_opener_override"), 2000)
+
+    updated["generated_subject"] = generated_subject
+    updated["generated_email_body"] = generated_email_body
+    updated["generated_call_opener"] = generated_call_opener
+    updated["subject"] = subject_override or generated_subject
+    updated["email_body"] = email_override or generated_email_body
+    updated["call_opener"] = call_override or generated_call_opener
+    updated["rewrite_prompt"] = _normalize_client_commercial_text((prospect or {}).get("outreach_rewrite_prompt"), 1000)
+    updated["has_outreach_overrides"] = bool(subject_override or email_override or call_override)
+    updated["outreach_last_rewrite_at"] = _normalize_client_commercial_text((prospect or {}).get("outreach_last_rewrite_at"), 40)
+    return updated
+
+
+def _extract_json_object_from_ai_text(raw_text):
+    text = (raw_text or "").strip()
+    if not text:
+        return {}
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if not match:
+            return {}
+        try:
+            parsed = json.loads(match.group(0))
+        except Exception:
+            return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _rewrite_client_commercial_outreach_assets(brand, prospect, brief, rewrite_prompt):
+    api_key = _get_openai_api_key(brand)
+    if not api_key:
+        raise ValueError("No OpenAI API key configured. Add one in Connections.")
+
+    import requests as req
+
+    model = _pick_ai_model(brand, "chat")
+    context = {
+        "brand": {
+            "display_name": (brand or {}).get("display_name") or "",
+            "industry": (brand or {}).get("industry") or "",
+            "service_area": (brand or {}).get("service_area") or "",
+            "primary_services": (brand or {}).get("primary_services") or "",
+            "active_offers": (brand or {}).get("active_offers") or "",
+            "sales_bot_service_menu": (brand or {}).get("sales_bot_service_menu") or "",
+        },
+        "prospect": {
+            "business_name": (prospect or {}).get("business_name") or (prospect or {}).get("name") or "Commercial Prospect",
+            "industry": (prospect or {}).get("industry") or "",
+            "account_type": (prospect or {}).get("account_type") or "",
+            "service_area": (prospect or {}).get("service_area") or "",
+            "website": (prospect or {}).get("website") or "",
+            "email": (prospect or {}).get("email") or "",
+        },
+        "strategy": {
+            "service_pitch": (brief or {}).get("service_pitch") or "",
+            "outreach_angle": (brief or {}).get("outreach_angle") or "",
+            "pain_points": (brief or {}).get("pain_points") or [],
+            "next_actions": (brief or {}).get("next_actions") or [],
+        },
+        "current_assets": {
+            "subject": (brief or {}).get("subject") or "",
+            "email_body": (brief or {}).get("email_body") or "",
+            "call_opener": (brief or {}).get("call_opener") or "",
+        },
+        "rewrite_prompt": _normalize_client_commercial_text(rewrite_prompt, 1000),
+    }
+    system_prompt = (
+        "You rewrite commercial outreach for a local service brand selling its real services to commercial properties. "
+        "Do not drift into generic agency language unless the brand clearly sells marketing services. "
+        "Keep the copy practical, specific, and easy for an operator to use. Do not use em dashes. Return valid JSON only."
+    )
+    user_prompt = (
+        "Rewrite the outreach assets using the supplied context and user instruction. Keep the email under 180 words and the call opener under 60 words. "
+        "Return JSON with keys: subject, email_body, call_opener.\n\n"
+        + json.dumps(context)
+    )
+
+    response = req.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json={
+            "model": model,
+            "temperature": 0.7,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        },
+        timeout=45,
+    )
+    if response.status_code >= 400:
+        raise ValueError(f"OpenAI request failed ({response.status_code}): {response.text[:200]}")
+
+    payload = response.json() if hasattr(response, "json") else {}
+    content = ((((payload or {}).get("choices") or [{}])[0].get("message") or {}).get("content") or "")
+    parsed = _extract_json_object_from_ai_text(content)
+    subject = _normalize_client_commercial_text(parsed.get("subject"), 255)
+    email_body = _normalize_client_commercial_text(parsed.get("email_body"), 6000)
+    call_opener = _normalize_client_commercial_text(parsed.get("call_opener"), 2000)
+    if not subject or not email_body or not call_opener:
+        raise ValueError("AI rewrite returned an incomplete outreach draft.")
+    return {
+        "subject": subject,
+        "email_body": email_body,
+        "call_opener": call_opener,
     }
 
 
@@ -1071,6 +1202,8 @@ def _warm_client_snapshots_async(*, brand_id: int, month: str) -> None:
     except Exception:
         return
 
+        # Adding outreach deletion confirmation
+        flash("Commercial outreach deleted.", "success")
     def _runner():
         try:
             with app.app_context():
@@ -1556,10 +1689,14 @@ _ENDPOINT_FEATURE_MAP = {
     "client_commercial_thread_qualification": "commercial",
     "client_commercial_thread_walkthrough": "commercial",
     "client_commercial_thread_refresh": "commercial",
+    "client_commercial_thread_save_outreach": "commercial",
+    "client_commercial_thread_rewrite_outreach": "commercial",
+    "client_commercial_thread_reset_outreach": "commercial",
     "client_commercial_thread_send_email": "commercial",
     "client_commercial_thread_enroll_drip": "commercial",
     "client_commercial_thread_build_proposal": "commercial",
     "client_commercial_thread_service_visit": "commercial",
+    "client_commercial_thread_delete": "commercial",
     "client_va_services":          "va_services",
     "client_va_request_create":    "va_services",
     "client_va_request_cancel":    "va_services",
@@ -7017,7 +7154,8 @@ def _build_client_commercial_brief(thread, brand=None):
     from webapp.commercial_strategy import build_commercial_outreach_brief
 
     payload = _build_client_commercial_payload(thread)
-    return payload, build_commercial_outreach_brief(payload, brand=brand)
+    brief = build_commercial_outreach_brief(payload, brand=brand)
+    return payload, _apply_client_commercial_outreach_overrides(payload, brief)
 
 
 def _get_client_commercial_threads(db, brand_id, limit=60):
@@ -7432,6 +7570,7 @@ def client_commercial_thread(thread_id):
         nurture_sequences=_get_client_commercial_nurture_sequences(db),
         nurture_enrollments=_get_client_commercial_nurture_state(db, thread_id),
         smtp_ready=bool(current_app.config.get("SMTP_USER") and current_app.config.get("SMTP_PASSWORD")),
+        outreach_ai_ready=bool(_get_openai_api_key(brand)),
     )
 
 
@@ -7587,6 +7726,105 @@ def client_commercial_thread_send_email(thread_id):
         metadata={"to": email_address},
     )
     flash("Commercial outreach email sent.", "success")
+    return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+
+@client_bp.route("/commercial/thread/<int:thread_id>/outreach", methods=["POST"])
+@client_login_required
+def client_commercial_thread_save_outreach(thread_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread:
+        abort(404)
+
+    prospect = _build_client_commercial_payload(thread)
+    subject = _normalize_client_commercial_text(request.form.get("subject"), 255)
+    email_body = _normalize_client_commercial_text(request.form.get("message"), 6000)
+    call_opener = _normalize_client_commercial_text(request.form.get("call_opener"), 2000)
+    rewrite_prompt = _normalize_client_commercial_text(request.form.get("rewrite_prompt"), 1000)
+    if not subject or not email_body:
+        flash("Subject and email body are required to save outreach edits.", "error")
+        return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+    prospect["outreach_subject_override"] = subject
+    prospect["outreach_email_body_override"] = email_body
+    prospect["outreach_call_opener_override"] = call_opener
+    prospect["outreach_rewrite_prompt"] = rewrite_prompt
+    db.update_lead_thread_commercial_data(thread_id, brand_id, json.dumps(prospect))
+    db.add_lead_event(
+        brand_id,
+        thread_id,
+        "commercial_outreach_saved",
+        event_value=subject[:200],
+        metadata={"has_call_opener": bool(call_opener), "customized": True},
+    )
+    flash("Commercial outreach draft saved.", "success")
+    return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+
+@client_bp.route("/commercial/thread/<int:thread_id>/outreach/rewrite", methods=["POST"])
+@client_login_required
+def client_commercial_thread_rewrite_outreach(thread_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread or not brand:
+        abort(404)
+
+    prospect, commercial_brief = _build_client_commercial_brief(thread, brand=brand)
+    rewrite_prompt = _normalize_client_commercial_text(request.form.get("rewrite_prompt"), 1000)
+    if not rewrite_prompt:
+        flash("Add rewrite instructions before asking WARREN to rewrite the outreach.", "error")
+        return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+    try:
+        rewritten = _rewrite_client_commercial_outreach_assets(brand, prospect, commercial_brief, rewrite_prompt)
+    except Exception as exc:
+        flash(f"Outreach rewrite failed: {str(exc)[:180]}", "error")
+        return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+    prospect["outreach_subject_override"] = rewritten["subject"]
+    prospect["outreach_email_body_override"] = rewritten["email_body"]
+    prospect["outreach_call_opener_override"] = rewritten["call_opener"]
+    prospect["outreach_rewrite_prompt"] = rewrite_prompt
+    prospect["outreach_last_rewrite_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    db.update_lead_thread_commercial_data(thread_id, brand_id, json.dumps(prospect))
+    db.add_lead_event(
+        brand_id,
+        thread_id,
+        "commercial_outreach_rewritten",
+        event_value=rewritten["subject"][:200],
+        metadata={"rewrite_prompt": rewrite_prompt[:200]},
+    )
+    flash("WARREN rewrote the outreach draft.", "success")
+    return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+
+@client_bp.route("/commercial/thread/<int:thread_id>/outreach/reset", methods=["POST"])
+@client_login_required
+def client_commercial_thread_reset_outreach(thread_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread:
+        abort(404)
+
+    prospect = _build_client_commercial_payload(thread)
+    prospect["outreach_subject_override"] = ""
+    prospect["outreach_email_body_override"] = ""
+    prospect["outreach_call_opener_override"] = ""
+    prospect["outreach_last_rewrite_at"] = ""
+    db.update_lead_thread_commercial_data(thread_id, brand_id, json.dumps(prospect))
+    db.add_lead_event(
+        brand_id,
+        thread_id,
+        "commercial_outreach_reset",
+        event_value="generated_defaults",
+        metadata={},
+    )
+    flash("Commercial outreach reset to WARREN's generated draft.", "success")
     return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
 
 
@@ -7941,6 +8179,20 @@ def client_commercial_thread_refresh(thread_id):
     )
     flash("Commercial brief refreshed.", "success")
     return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+
+@client_bp.route("/commercial/thread/<int:thread_id>/delete", methods=["POST"])
+@client_login_required
+def client_commercial_thread_delete(thread_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread:
+        abort(404)
+
+    db.delete_lead_thread(thread_id, brand_id)
+    flash("Commercial target deleted.", "success")
+    return redirect(url_for("client.client_commercial_prospecting"))
 
 
 # ── Warren Inbox ──
