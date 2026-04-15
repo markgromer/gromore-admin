@@ -201,6 +201,17 @@ def _normalize_client_commercial_payload(raw_item, *, default_service_area=""):
         "rating": item.get("rating") if item.get("rating") is not None else source_details.get("rating"),
         "review_count": item.get("review_count") if item.get("review_count") is not None else source_details.get("review_count") or 0,
         "maps_url": maps_url,
+        "site_signals": _normalize_client_commercial_list(item.get("site_signals") or source_details.get("site_signals") or [], max_items=8, item_max_len=120),
+        "scraped_page_count": _parse_int_range(item.get("scraped_page_count") or source_details.get("scraped_page_count"), maximum=20, default=0),
+        "service_frequency_hint": _normalize_client_commercial_text(item.get("service_frequency_hint") or source_details.get("service_frequency_hint"), 40).lower(),
+        "service_days_hint": _normalize_client_commercial_text(item.get("service_days_hint") or source_details.get("service_days_hint"), 120),
+        "public_mentions": (item.get("public_mentions") if isinstance(item.get("public_mentions"), list) else source_details.get("public_mentions") or [])[:6],
+        "complaint_signals": (item.get("complaint_signals") if isinstance(item.get("complaint_signals"), list) else source_details.get("complaint_signals") or [])[:8],
+        "decision_maker_contacts": (item.get("decision_maker_contacts") if isinstance(item.get("decision_maker_contacts"), list) else source_details.get("decision_maker_contacts") or [])[:6],
+        "decision_maker_role_hint": _normalize_client_commercial_text(item.get("decision_maker_role") or item.get("decision_maker_role_hint") or source_details.get("decision_maker_role_hint"), 160),
+        "management_company": _normalize_client_commercial_text(item.get("management_company") or source_details.get("management_company"), 160),
+        "management_url": _normalize_client_commercial_text(item.get("management_url") or source_details.get("management_url"), 500),
+        "contact_urls": _normalize_client_commercial_list(item.get("contact_urls") or source_details.get("contact_urls") or [], max_items=6, item_max_len=500),
     }
     return {
         "name": business_name,
@@ -231,7 +242,9 @@ def _normalize_client_commercial_payload(raw_item, *, default_service_area=""):
         "required_add_ons_json": json.dumps(_normalize_client_commercial_list(required_add_ons, max_items=8, item_max_len=120)),
         "walkthrough_photo_urls_json": json.dumps(_normalize_client_commercial_list(walkthrough_photos, max_items=8, item_max_len=500)),
         "walkthrough_completed_at": _normalize_client_commercial_text(item.get("walkthrough_completed_at"), 40),
-        "decision_maker_role": _normalize_client_commercial_text(item.get("decision_maker_role"), 160),
+        "service_frequency_hint": _normalize_client_commercial_text(item.get("service_frequency_hint") or source_details.get("service_frequency_hint"), 40).lower(),
+        "service_days_hint": _normalize_client_commercial_text(item.get("service_days_hint") or source_details.get("service_days_hint"), 120),
+        "decision_maker_role": _normalize_client_commercial_text(item.get("decision_maker_role") or source_details.get("decision_maker_role_hint"), 160),
         "current_vendor_status": _normalize_client_commercial_text(item.get("current_vendor_status"), 220),
         "outreach_angle": _normalize_client_commercial_text(item.get("outreach_angle"), 160),
         "proposal_status": _normalize_client_commercial_text(item.get("proposal_status"), 80),
@@ -274,6 +287,13 @@ def _merge_client_commercial_payload(existing_payload, incoming_payload):
         "maps_url": incoming_source_details.get("maps_url") or existing_source_details.get("maps_url") or "",
         "rating": incoming_source_details.get("rating") if incoming_source_details.get("rating") is not None else existing_source_details.get("rating"),
         "review_count": incoming_source_details.get("review_count") if incoming_source_details.get("review_count") not in (None, "") else existing_source_details.get("review_count") or 0,
+        "public_mentions": (incoming_source_details.get("public_mentions") or existing_source_details.get("public_mentions") or [])[:6],
+        "complaint_signals": (incoming_source_details.get("complaint_signals") or existing_source_details.get("complaint_signals") or [])[:8],
+        "decision_maker_contacts": (incoming_source_details.get("decision_maker_contacts") or existing_source_details.get("decision_maker_contacts") or [])[:6],
+        "decision_maker_role_hint": incoming_source_details.get("decision_maker_role_hint") or existing_source_details.get("decision_maker_role_hint") or "",
+        "management_company": incoming_source_details.get("management_company") or existing_source_details.get("management_company") or "",
+        "management_url": incoming_source_details.get("management_url") or existing_source_details.get("management_url") or "",
+        "contact_urls": incoming_source_details.get("contact_urls") or existing_source_details.get("contact_urls") or [],
     }
     merged_payload = {
         "name": incoming.get("name") or existing.get("name") or "Commercial Prospect",
@@ -304,6 +324,8 @@ def _merge_client_commercial_payload(existing_payload, incoming_payload):
         "required_add_ons_json": incoming.get("required_add_ons_json") if _safe_json_list(incoming.get("required_add_ons_json")) else existing.get("required_add_ons_json") or "[]",
         "walkthrough_photo_urls_json": incoming.get("walkthrough_photo_urls_json") if _safe_json_list(incoming.get("walkthrough_photo_urls_json")) else existing.get("walkthrough_photo_urls_json") or "[]",
         "walkthrough_completed_at": incoming.get("walkthrough_completed_at") or existing.get("walkthrough_completed_at") or "",
+        "service_frequency_hint": incoming.get("service_frequency_hint") or existing.get("service_frequency_hint") or "",
+        "service_days_hint": incoming.get("service_days_hint") or existing.get("service_days_hint") or "",
         "decision_maker_role": incoming.get("decision_maker_role") or existing.get("decision_maker_role") or "",
         "current_vendor_status": incoming.get("current_vendor_status") or existing.get("current_vendor_status") or "",
         "outreach_angle": incoming.get("outreach_angle") or existing.get("outreach_angle") or "",
@@ -323,6 +345,149 @@ def _merge_client_commercial_payload(existing_payload, incoming_payload):
 def _build_client_commercial_summary(prospect, brief):
     type_label = prospect.get("industry") or prospect.get("account_type") or "Commercial"
     return f"Commercial target - {type_label}. Proposal: {brief['proposal_readiness']['label']}."
+
+
+def _build_client_commercial_research(prospect):
+    source_details = _safe_json_object((prospect or {}).get("source_details_json"))
+    raw_mentions = source_details.get("public_mentions") or []
+    raw_complaints = source_details.get("complaint_signals") or []
+    raw_contacts = source_details.get("decision_maker_contacts") or []
+    mentions = []
+    for item in raw_mentions[:6]:
+        if not isinstance(item, dict):
+            continue
+        title = _normalize_client_commercial_text(item.get("title"), 160)
+        url = _normalize_client_commercial_text(item.get("url"), 500)
+        snippet = _normalize_client_commercial_text(item.get("snippet"), 280)
+        if not (title or url or snippet):
+            continue
+        mentions.append({
+            "title": title or url,
+            "url": url,
+            "snippet": snippet,
+            "query": _normalize_client_commercial_text(item.get("query"), 120),
+            "same_domain": bool(item.get("same_domain")),
+        })
+
+    contacts = []
+    for item in raw_contacts[:6]:
+        if not isinstance(item, dict):
+            continue
+        contact = {
+            "name": _normalize_client_commercial_text(item.get("name"), 120),
+            "role": _normalize_client_commercial_text(item.get("role"), 120),
+            "email": _normalize_client_commercial_text(item.get("email"), 255),
+            "phone": _normalize_client_commercial_text(item.get("phone"), 80),
+            "source_url": _normalize_client_commercial_text(item.get("source_url"), 500),
+            "evidence": _normalize_client_commercial_text(item.get("evidence"), 200),
+            "priority_score": int(item.get("priority_score") or 0),
+            "priority_label": _normalize_client_commercial_text(item.get("priority_label"), 40),
+        }
+        if any(contact.values()):
+            contacts.append(contact)
+
+    complaints = []
+    for item in raw_complaints[:8]:
+        if not isinstance(item, dict):
+            continue
+        complaint = {
+            "category": _normalize_client_commercial_text(item.get("category"), 40),
+            "label": _normalize_client_commercial_text(item.get("label"), 120),
+            "title": _normalize_client_commercial_text(item.get("title"), 160),
+            "url": _normalize_client_commercial_text(item.get("url"), 500),
+            "snippet": _normalize_client_commercial_text(item.get("snippet"), 220),
+        }
+        if complaint["label"] or complaint["snippet"]:
+            complaints.append(complaint)
+
+    return {
+        "mentions": mentions,
+        "complaints": complaints,
+        "contacts": contacts,
+        "decision_maker_role_hint": _normalize_client_commercial_text((prospect or {}).get("decision_maker_role") or source_details.get("decision_maker_role_hint"), 160),
+        "management_company": _normalize_client_commercial_text(source_details.get("management_company"), 160),
+        "management_url": _normalize_client_commercial_text(source_details.get("management_url"), 500),
+        "contact_urls": _normalize_client_commercial_list(source_details.get("contact_urls") or [], max_items=6, item_max_len=500),
+    }
+
+
+def _promote_client_commercial_research_to_worksheet(prospect):
+    updated = _normalize_client_commercial_payload(prospect)
+    source_details = _safe_json_object(updated.get("source_details_json"))
+    answers = _safe_json_object(updated.get("qualification_answers_json"))
+    contacts = source_details.get("decision_maker_contacts") or []
+    complaints = source_details.get("complaint_signals") or []
+    categories = {(_normalize_client_commercial_text(item.get("category"), 40) or "") for item in complaints if isinstance(item, dict)}
+    management_company = _normalize_client_commercial_text(source_details.get("management_company"), 160)
+
+    if not updated.get("decision_maker_role"):
+        updated["decision_maker_role"] = _normalize_client_commercial_text(source_details.get("decision_maker_role_hint"), 160)
+
+    if not updated.get("current_vendor_status") and management_company:
+        updated["current_vendor_status"] = f"Managed by {management_company}"
+
+    if not answers.get("service_scope"):
+        scope_items = []
+        if int(updated.get("walkthrough_waste_station_count") or 0) > 0:
+            scope_items.append("Waste station servicing")
+        if int(updated.get("walkthrough_relief_area_count") or 0) > 0:
+            scope_items.append("Dog area cleanup")
+        if int(updated.get("walkthrough_common_area_count") or 0) > 0:
+            scope_items.append("Common-area policing")
+        if scope_items:
+            answers["service_scope"] = ", ".join(scope_items)
+
+    if not answers.get("commercial_goal") and categories:
+        goal_bits = []
+        if "dog_area" in categories:
+            goal_bits.append("reduce dog-area complaints")
+        if "cleanliness" in categories:
+            goal_bits.append("improve cleanliness and odor control")
+        if "pet_waste" in categories:
+            goal_bits.append("tighten pet waste service proof")
+        if goal_bits:
+            answers["commercial_goal"] = ", ".join(goal_bits).capitalize()
+
+    if not updated.get("site_condition") and categories:
+        condition_bits = []
+        if "dog_area" in categories:
+            condition_bits.append("public review snippets point to dog-area friction")
+        if "cleanliness" in categories:
+            condition_bits.append("cleanliness or odor complaints")
+        if "pet_waste" in categories:
+            condition_bits.append("pet waste coverage issues")
+        if condition_bits:
+            updated["site_condition"] = "; ".join(condition_bits).capitalize()
+
+    if not updated.get("walkthrough_notes") and complaints:
+        note_lines = []
+        for item in complaints[:3]:
+            if not isinstance(item, dict):
+                continue
+            snippet = _normalize_client_commercial_text(item.get("snippet"), 180)
+            label = _normalize_client_commercial_text(item.get("label"), 120)
+            if snippet:
+                note_lines.append(f"{label}: {snippet}")
+        if note_lines:
+            updated["walkthrough_notes"] = "Public complaint clues:\n" + "\n".join(note_lines)
+
+    current_add_ons = _safe_json_list(updated.get("required_add_ons_json"))
+    if not current_add_ons:
+        suggested_add_ons = []
+        if int(updated.get("walkthrough_waste_station_count") or 0) > 0:
+            suggested_add_ons.append("Bag refill")
+        if "cleanliness" in categories:
+            suggested_add_ons.append("Deodorizer")
+        if "require removal from the property" in (updated.get("disposal_notes") or "").lower():
+            suggested_add_ons.append("Off-site waste haul")
+        updated["required_add_ons_json"] = json.dumps(_normalize_client_commercial_list(suggested_add_ons, max_items=8, item_max_len=120))
+
+    if not updated.get("contact_name") and contacts:
+        top_contact = contacts[0] if isinstance(contacts[0], dict) else {}
+        updated["contact_name"] = _normalize_client_commercial_text(top_contact.get("name"), 120)
+
+    updated["qualification_answers_json"] = json.dumps(answers)
+    return updated
 
 
 def _client_commercial_identity_key(prospect):
@@ -353,6 +518,7 @@ def _parse_bool_flag(value):
 
 
 COMMERCIAL_PROPOSAL_FREQUENCY = {
+    "every_2_weeks": {"label": "Every 2 weeks", "visits_per_month": 2.17},
     "1x_week": {"label": "1x per week", "visits_per_month": 4.33},
     "2x_week": {"label": "2x per week", "visits_per_month": 8.66},
     "3x_week": {"label": "3x per week", "visits_per_month": 13.0},
@@ -452,10 +618,14 @@ def _default_client_commercial_proposal_builder(brand=None, prospect=None):
     waste_station_count = _parse_int_range((prospect or {}).get("walkthrough_waste_station_count"), maximum=500, default=0)
     common_area_count = _parse_int_range((prospect or {}).get("walkthrough_common_area_count"), maximum=500, default=1)
     relief_area_count = _parse_int_range((prospect or {}).get("walkthrough_relief_area_count"), maximum=500, default=0)
+    service_frequency_hint = _normalize_client_commercial_text((prospect or {}).get("service_frequency_hint"), 40).lower()
+    if service_frequency_hint not in COMMERCIAL_PROPOSAL_FREQUENCY:
+        service_frequency_hint = "5x_week"
+    service_days_hint = _normalize_client_commercial_text((prospect or {}).get("service_days_hint"), 120)
     return {
         "selected_package": "standard",
-        "service_frequency": "5x_week",
-        "service_days": "Monday-Friday",
+        "service_frequency": service_frequency_hint,
+        "service_days": service_days_hint or ("Monday-Friday" if service_frequency_hint in {"5x_week", "7x_week"} else ""),
         "property_count": property_count,
         "waste_station_count": waste_station_count,
         "waste_station_rate": seed_rate,
@@ -588,23 +758,38 @@ def _apply_client_commercial_worksheet_form(prospect, form_data):
     answers = _safe_json_object(updated.get("qualification_answers_json"))
 
     for field in COMMERCIAL_QUALIFICATION_CORE_FIELDS:
-        updated[field["key"]] = _normalize_client_commercial_text(form_data.get(field["key"]), 220)
+        if field["key"] in form_data:
+            updated[field["key"]] = _normalize_client_commercial_text(form_data.get(field["key"]), 220)
     for field in COMMERCIAL_QUALIFICATION_FIELDS:
-        answers[field["key"]] = _normalize_client_commercial_text(form_data.get(field["key"]), 1200)
+        if field["key"] in form_data:
+            answers[field["key"]] = _normalize_client_commercial_text(form_data.get(field["key"]), 1200)
 
     updated["qualification_answers_json"] = json.dumps(answers)
-    updated["walkthrough_property_label"] = _normalize_client_commercial_text(form_data.get("walkthrough_property_label"), 160)
-    updated["pet_traffic_estimate"] = _normalize_client_commercial_text(form_data.get("pet_traffic_estimate"), 120)
-    updated["site_condition"] = _normalize_client_commercial_text(form_data.get("site_condition"), 220)
-    updated["access_notes"] = _normalize_client_commercial_text(form_data.get("access_notes"), 1000)
-    updated["gate_notes"] = _normalize_client_commercial_text(form_data.get("gate_notes"), 500)
-    updated["disposal_notes"] = _normalize_client_commercial_text(form_data.get("disposal_notes"), 500)
-    updated["walkthrough_notes"] = _normalize_client_commercial_text(form_data.get("walkthrough_notes"), 1200)
-    updated["property_count"] = _normalize_client_commercial_text(form_data.get("property_count"), 160)
-    updated["walkthrough_waste_station_count"] = _parse_int_range(form_data.get("walkthrough_waste_station_count"), maximum=500, default=updated.get("walkthrough_waste_station_count") or 0)
-    updated["walkthrough_common_area_count"] = _parse_int_range(form_data.get("walkthrough_common_area_count"), maximum=500, default=updated.get("walkthrough_common_area_count") or 0)
-    updated["walkthrough_relief_area_count"] = _parse_int_range(form_data.get("walkthrough_relief_area_count"), maximum=500, default=updated.get("walkthrough_relief_area_count") or 0)
-    updated["required_add_ons_json"] = json.dumps(_normalize_client_commercial_list(form_data.get("required_add_ons") or "", max_items=8, item_max_len=120))
+    text_fields = {
+        "walkthrough_property_label": 160,
+        "pet_traffic_estimate": 120,
+        "site_condition": 220,
+        "access_notes": 1000,
+        "gate_notes": 500,
+        "disposal_notes": 500,
+        "walkthrough_notes": 1200,
+        "property_count": 160,
+    }
+    for key, max_len in text_fields.items():
+        if key in form_data:
+            updated[key] = _normalize_client_commercial_text(form_data.get(key), max_len)
+
+    count_fields = (
+        "walkthrough_waste_station_count",
+        "walkthrough_common_area_count",
+        "walkthrough_relief_area_count",
+    )
+    for key in count_fields:
+        if key in form_data:
+            updated[key] = _parse_int_range(form_data.get(key), maximum=500, default=updated.get(key) or 0)
+
+    if "required_add_ons" in form_data:
+        updated["required_add_ons_json"] = json.dumps(_normalize_client_commercial_list(form_data.get("required_add_ons") or "", max_items=8, item_max_len=120))
 
     if any([
         updated.get("walkthrough_property_label"),
@@ -2009,6 +2194,7 @@ _ENDPOINT_FEATURE_MAP = {
     "client_commercial_import":    "commercial",
     "client_commercial_thread":    "commercial",
     "client_commercial_thread_save_worksheet": "commercial",
+    "client_commercial_thread_promote_research": "commercial",
     "client_commercial_thread_ai_worksheet": "commercial",
     "client_commercial_thread_qualification": "commercial",
     "client_commercial_thread_walkthrough": "commercial",
@@ -7874,6 +8060,7 @@ def client_commercial_thread(thread_id):
     proposal_quote = db.get_lead_quote_for_thread(thread_id)
     proposal_preview = _build_client_commercial_proposal(prospect, brand=brand, existing_quote=proposal_quote)
     worksheet = _build_client_commercial_worksheet(prospect, commercial_brief, brand=brand)
+    commercial_research = _build_client_commercial_research(prospect)
     service_visits = _prepare_client_commercial_service_visits(db.get_commercial_service_visits(thread_id))
     service_recap = _build_client_commercial_service_recap(prospect, service_visits)
     if (thread.get("source") or "") != "commercial_prospecting" and (thread.get("commercial_data_json") or "{}").strip() in {"", "{}"}:
@@ -7886,6 +8073,7 @@ def client_commercial_thread(thread_id):
         thread=thread,
         commercial_prospect=prospect,
         commercial_brief=commercial_brief,
+        commercial_research=commercial_research,
         worksheet=worksheet,
         proposal_quote=proposal_quote,
         proposal_preview=proposal_preview,
@@ -7951,6 +8139,61 @@ def client_commercial_thread_save_worksheet(thread_id):
         },
     )
     flash("Lead worksheet saved.", "success")
+    return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+
+@client_bp.route("/commercial/thread/<int:thread_id>/worksheet/research", methods=["POST"])
+@client_login_required
+def client_commercial_thread_promote_research(thread_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread or not brand:
+        abort(404)
+
+    from webapp.commercial_strategy import build_commercial_outreach_brief
+
+    prospect = _build_client_commercial_payload(thread)
+    prospect = _apply_client_commercial_worksheet_form(prospect, request.form)
+    prospect = _promote_client_commercial_research_to_worksheet(prospect)
+
+    builder = _normalize_client_commercial_proposal_builder(prospect.get("proposal_builder_json"), brand=brand, prospect=prospect)
+    if not builder.get("property_count"):
+        builder["property_count"] = prospect.get("property_count") or ""
+    builder["waste_station_count"] = prospect.get("walkthrough_waste_station_count") or builder.get("waste_station_count") or 0
+    builder["common_area_count"] = prospect.get("walkthrough_common_area_count") or builder.get("common_area_count") or 0
+    builder["relief_area_count"] = prospect.get("walkthrough_relief_area_count") or builder.get("relief_area_count") or 0
+    prospect["proposal_builder_json"] = json.dumps(builder)
+
+    brief = build_commercial_outreach_brief(prospect, brand=brand)
+    prospect["outreach_angle"] = brief["outreach_angle"]
+    prospect["proposal_status"] = brief["proposal_readiness"]["status"]
+    prospect["pain_points_json"] = json.dumps(brief["pain_points"])
+    prospect["next_action"] = (brief["next_actions"] or [""])[0]
+    prospect["summary"] = _build_client_commercial_summary(prospect, brief)
+
+    db.update_lead_thread_commercial_data(thread_id, brand_id, json.dumps(prospect))
+    db.update_lead_thread_profile_fields(
+        thread_id,
+        brand_id,
+        lead_name=prospect.get("business_name") or prospect.get("name") or "Commercial Prospect",
+        lead_email=prospect.get("email") or "",
+        lead_phone=prospect.get("phone") or "",
+        summary=prospect["summary"],
+    )
+    db.update_lead_thread_status(thread_id, summary=prospect["summary"])
+    db.add_lead_event(
+        brand_id,
+        thread_id,
+        "commercial_research_promoted",
+        event_value=(prospect.get("decision_maker_role") or prospect.get("business_name") or "Research")[:200],
+        metadata={
+            "complaint_count": len(_safe_json_object(prospect.get("source_details_json")).get("complaint_signals") or []),
+            "proposal_status": prospect.get("proposal_status") or "",
+        },
+    )
+    flash("Public research promoted into the worksheet.", "success")
     return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
 
 
@@ -8559,7 +8802,7 @@ def client_commercial_thread_refresh(thread_id):
         flash("Add a website before refreshing the commercial audit.", "error")
         return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
 
-    from webapp.commercial_prospector import _extract_public_emails
+    from webapp.commercial_prospector import _extract_public_emails, extract_commercial_public_intel, extract_commercial_site_intel
     from webapp.competitor_intel import _scrape_website
     from webapp.commercial_strategy import build_commercial_outreach_brief
 
@@ -8569,12 +8812,41 @@ def client_commercial_thread_refresh(thread_id):
         source_details = {}
 
     site_data = _scrape_website({"website": website}) or {}
+    site_intel = extract_commercial_site_intel(
+        website,
+        business_name=prospect.get("business_name") or prospect.get("name") or "",
+        prospect_type=prospect.get("account_type") or "",
+    )
+    public_intel = extract_commercial_public_intel(
+        prospect.get("business_name") or prospect.get("name") or "",
+        website=website,
+        address=source_details.get("address") or "",
+        service_area=prospect.get("service_area") or source_details.get("service_area") or "",
+        prospect_type=prospect.get("account_type") or "",
+        phone=prospect.get("phone") or source_details.get("phone") or "",
+    )
     refresh_payload = _normalize_client_commercial_payload(
         {
             **prospect,
             "website": website,
-            "emails": _extract_public_emails(website),
-            "audit_snapshot": site_data,
+            "emails": (public_intel.get("emails") or []) + _extract_public_emails(website),
+            "audit_snapshot": {
+                **(site_data if isinstance(site_data, dict) else {}),
+                **({"site_intel": site_intel} if site_intel else {}),
+                **({"public_intel": public_intel} if public_intel else {}),
+            },
+            **site_intel,
+            "site_signals": site_intel.get("site_signals") or source_details.get("site_signals") or [],
+            "scraped_page_count": site_intel.get("scraped_page_count") or source_details.get("scraped_page_count") or 0,
+            "service_frequency_hint": site_intel.get("service_frequency_hint") or source_details.get("service_frequency_hint") or "",
+            "service_days_hint": site_intel.get("service_days_hint") or source_details.get("service_days_hint") or "",
+            "public_mentions": public_intel.get("public_mentions") or source_details.get("public_mentions") or [],
+            "complaint_signals": public_intel.get("complaint_signals") or source_details.get("complaint_signals") or [],
+            "decision_maker_contacts": public_intel.get("decision_maker_contacts") or source_details.get("decision_maker_contacts") or [],
+            "decision_maker_role": public_intel.get("decision_maker_role_hint") or prospect.get("decision_maker_role") or source_details.get("decision_maker_role_hint") or "",
+            "management_company": public_intel.get("management_company") or source_details.get("management_company") or "",
+            "management_url": public_intel.get("management_url") or source_details.get("management_url") or "",
+            "contact_urls": public_intel.get("contact_urls") or source_details.get("contact_urls") or [],
             "source_details_json": json.dumps(
                 {
                     **source_details,
@@ -8584,6 +8856,17 @@ def client_commercial_thread_refresh(thread_id):
                     "review_count": source_details.get("review_count") or 0,
                     "rating": source_details.get("rating"),
                     "maps_url": source_details.get("maps_url") or "",
+                    "site_signals": site_intel.get("site_signals") or source_details.get("site_signals") or [],
+                    "scraped_page_count": site_intel.get("scraped_page_count") or source_details.get("scraped_page_count") or 0,
+                    "service_frequency_hint": site_intel.get("service_frequency_hint") or source_details.get("service_frequency_hint") or "",
+                    "service_days_hint": site_intel.get("service_days_hint") or source_details.get("service_days_hint") or "",
+                    "public_mentions": public_intel.get("public_mentions") or source_details.get("public_mentions") or [],
+                    "complaint_signals": public_intel.get("complaint_signals") or source_details.get("complaint_signals") or [],
+                    "decision_maker_contacts": public_intel.get("decision_maker_contacts") or source_details.get("decision_maker_contacts") or [],
+                    "decision_maker_role_hint": public_intel.get("decision_maker_role_hint") or source_details.get("decision_maker_role_hint") or "",
+                    "management_company": public_intel.get("management_company") or source_details.get("management_company") or "",
+                    "management_url": public_intel.get("management_url") or source_details.get("management_url") or "",
+                    "contact_urls": public_intel.get("contact_urls") or source_details.get("contact_urls") or [],
                 }
             ),
         },

@@ -243,9 +243,10 @@
                 {% endfor %}
                 <div class="d-flex gap-2 flex-wrap">
                     <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-save me-1"></i> Save Worksheet</button>
+                    <button type="submit" formaction="{{ url_for('client.client_commercial_thread_promote_research', thread_id=thread.id) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-binoculars me-1"></i> Use Research</button>
                     <button type="submit" formaction="{{ url_for('client.client_commercial_thread_ai_worksheet', thread_id=thread.id) }}" class="btn btn-outline-primary btn-sm" {% if not outreach_ai_ready %}disabled{% endif %}><i class="bi bi-stars me-1"></i> Fill Blank Spots With AI</button>
                 </div>
-                <div class="qualification-help">{% if outreach_ai_ready %}WARREN will only fill the parts that are still missing, using the account context already on the thread.{% else %}Add an OpenAI key in Connections to unlock AI worksheet assist.{% endif %}</div>
+                <div class="qualification-help">Use Research fills blank worksheet fields from saved public intel. {% if outreach_ai_ready %}AI assist can then fill any remaining gaps.{% else %}Add an OpenAI key in Connections to unlock AI worksheet assist.{% endif %}</div>
             </form>
         </div>
 
@@ -474,6 +475,58 @@
                 <div style="font-size:.86rem; color:#475569;">{{ item.detail }}</div>
             </div>
             {% endfor %}
+        </div>
+
+        <div class="commercial-detail-card">
+            <h6>Public Research</h6>
+            <div class="brief-box">
+                <div class="field-row"><span class="field-label">Role Hint</span><span class="field-value">{{ commercial_research.decision_maker_role_hint or '-' }}</span></div>
+                <div class="field-row"><span class="field-label">Management Company</span><span class="field-value">{{ commercial_research.management_company or '-' }}</span></div>
+                <div class="field-row"><span class="field-label">Contact Paths</span><span class="field-value">{{ commercial_research.contact_urls|length }}</span></div>
+            </div>
+            {% if commercial_research.contacts %}
+            <div class="brief-box">
+                <h6 style="margin-bottom:.5rem;">Who To Reach</h6>
+                {% for item in commercial_research.contacts %}
+                <div class="audit-item">
+                    <div class="d-flex justify-content-between gap-2 align-items-start">
+                        <div style="font-weight:700; color:#0f172a;">{{ item.name or item.role }}</div>
+                        {% if item.priority_score %}<span class="badge bg-primary">{{ item.priority_label or 'Priority' }} {{ item.priority_score }}</span>{% endif %}
+                    </div>
+                    <div style="font-size:.85rem; color:#475569;">{{ item.role }}</div>
+                    <div style="font-size:.8rem; color:#64748b; margin-top:.25rem;">{{ item.email or '-' }}{% if item.phone %} | {{ item.phone }}{% endif %}</div>
+                    {% if item.evidence %}<div style="font-size:.78rem; color:#475569; margin-top:.25rem;">{{ item.evidence }}</div>{% endif %}
+                    {% if item.source_url %}<div style="font-size:.78rem; margin-top:.25rem;"><a href="{{ item.source_url }}" target="_blank" rel="noopener">Source</a></div>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if commercial_research.complaints %}
+            <div class="brief-box">
+                <h6 style="margin-bottom:.5rem;">Complaint Signals</h6>
+                {% for item in commercial_research.complaints %}
+                <div class="audit-item">
+                    <div style="font-weight:700; color:#0f172a;">{{ item.label }}</div>
+                    {% if item.snippet %}<div style="font-size:.85rem; color:#475569;">{{ item.snippet }}</div>{% endif %}
+                    {% if item.url %}<div style="font-size:.78rem; margin-top:.25rem;"><a href="{{ item.url }}" target="_blank" rel="noopener">Open source</a></div>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if commercial_research.mentions %}
+            <div class="brief-box" style="margin-bottom:0;">
+                <h6 style="margin-bottom:.5rem;">What The Public Web Says</h6>
+                {% for item in commercial_research.mentions %}
+                <div class="audit-item">
+                    <div style="font-weight:700; color:#0f172a;">{{ item.title }}</div>
+                    {% if item.snippet %}<div style="font-size:.85rem; color:#475569;">{{ item.snippet }}</div>{% endif %}
+                    <div style="font-size:.78rem; margin-top:.25rem;"><a href="{{ item.url }}" target="_blank" rel="noopener">Open source</a>{% if item.query %} <span style="color:#94a3b8;">| Query: {{ item.query }}</span>{% endif %}</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="qualification-help">No outside public mentions have been captured yet.</div>
+            {% endif %}
         </div>
 
         <div class="commercial-detail-card">

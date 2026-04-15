@@ -291,6 +291,20 @@
                         <span class="text-muted small">No public email found during scrape.</span>
                     {% endif %}
                 </div>
+                {% if result.property_count or result.site_signals or result.pet_traffic_estimate %}
+                <div class="brief-box" style="margin-bottom:.6rem; padding:.7rem .8rem;">
+                    <div class="text-muted" style="font-size:.72rem; font-weight:700; text-transform:uppercase; margin-bottom:.3rem;">Auto-Filled Site Intel</div>
+                    {% if result.property_count %}<div style="font-size:.82rem; color:#0f172a; font-weight:700;">{{ result.property_count }}</div>{% endif %}
+                    {% if result.site_signals %}<div style="font-size:.78rem; color:#475569;">{{ result.site_signals|join(' • ') }}</div>{% endif %}
+                    {% if result.pet_traffic_estimate %}<div style="font-size:.78rem; color:#475569; margin-top:.2rem;">{{ result.pet_traffic_estimate }}</div>{% endif %}
+                    {% if result.walkthrough_waste_station_count %}<div style="font-size:.78rem; color:#475569; margin-top:.2rem;">{{ result.walkthrough_waste_station_count }} waste stations detected</div>{% endif %}
+                    {% if result.disposal_notes %}<div style="font-size:.78rem; color:#475569; margin-top:.2rem;">{{ result.disposal_notes }}</div>{% endif %}
+                    {% if result.service_days_hint %}<div style="font-size:.78rem; color:#475569; margin-top:.2rem;">Cadence hint: {{ result.service_days_hint }}</div>{% endif %}
+                    {% if result.decision_maker_role %}<div style="font-size:.78rem; color:#475569; margin-top:.2rem;">Likely contact: {{ result.decision_maker_role }}</div>{% endif %}
+                    {% if result.management_company %}<div style="font-size:.78rem; color:#475569; margin-top:.2rem;">Managed by {{ result.management_company }}</div>{% endif %}
+                    {% if result.complaint_signals %}<div style="font-size:.78rem; color:#475569; margin-top:.2rem;">Complaint clues found: {{ result.complaint_signals|length }}</div>{% endif %}
+                </div>
+                {% endif %}
                 <div class="text-muted" style="font-size:.78rem;">Query: {{ result.source_query }}</div>
             </div>
             {% endfor %}

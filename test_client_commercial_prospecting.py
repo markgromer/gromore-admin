@@ -5,6 +5,9 @@ import uuid
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from webapp.client_portal import _default_client_commercial_proposal_builder
+from webapp.commercial_prospector import extract_commercial_public_intel, extract_commercial_site_intel
+
 _TEST_ROOT = Path(__file__).resolve().parent / ".tmp-test-artifacts"
 _TEST_ROOT.mkdir(exist_ok=True)
 _BOOTSTRAP_DB = str(_TEST_ROOT / "gromore-client-commercial-bootstrap.db")
@@ -165,6 +168,12 @@ class ClientCommercialProspectingTests(unittest.TestCase):
             "service_area": "Phoenix, AZ",
             "source_query": "HOA management companies in Phoenix, AZ",
             "score": 81,
+            "property_count": "214 units across 3 buildings",
+            "walkthrough_common_area_count": 2,
+            "walkthrough_relief_area_count": 1,
+            "pet_traffic_estimate": "Moderate to high around shared pet areas",
+            "site_condition": "214 units footprint with pet-friendly common areas likely need recurring cleanup and visible service proof",
+            "site_signals": ["214 units", "3 buildings", "Dog park", "Pet-friendly"],
             "audit_snapshot": {
                 "title": "Skyline HOA Services",
                 "description": "Community management and board support for Phoenix HOAs.",
@@ -187,10 +196,248 @@ class ClientCommercialProspectingTests(unittest.TestCase):
             self.assertEqual(thread["source"], "commercial_prospecting")
             self.assertEqual(thread["channel"], "commercial")
             self.assertIn("Skyline HOA Services", thread.get("commercial_data_json") or "")
+            self.assertIn("214 units across 3 buildings", thread.get("commercial_data_json") or "")
+            self.assertIn("Moderate to high around shared pet areas", thread.get("commercial_data_json") or "")
 
             messages = self.app.db.get_lead_messages(thread["id"])
             self.assertEqual(len(messages), 1)
             self.assertIn("Commercial target imported", messages[0]["content"])
+
+    @patch("requests.Session.get")
+    def test_extract_commercial_site_intel_fills_units_and_pet_signals(self, session_get_mock):
+        homepage = MagicMock()
+        homepage.status_code = 200
+        homepage.url = "https://palmvista.example.com"
+        homepage.headers = {"Content-Type": "text/html; charset=utf-8"}
+        homepage.text = """
+            <html>
+                <head><title>Palm Vista Apartments</title></head>
+                <body>
+                    <h1>Palm Vista Apartments</h1>
+                    <p>Pet-friendly apartment living with 214 apartment homes across 3 buildings.</p>
+                    <p>Residents enjoy a fenced dog park and 2 courtyards.</p>
+                    <a href=\"/amenities\">Amenities</a>
+                </body>
+            </html>
+        """
+        amenities = MagicMock()
+        amenities.status_code = 200
+        amenities.url = "https://palmvista.example.com/amenities"
+        amenities.headers = {"Content-Type": "text/html; charset=utf-8"}
+        amenities.text = """
+            <html>
+                <head><title>Amenities</title></head>
+                <body>
+                    <p>Our bark park and pet spa keep dog owners happy. Residents also have access to 4 pet waste stations.</p>
+                    <p>Service is handled every other week with onsite dumpster enclosure disposal.</p>
+                </body>
+            </html>
+        """
+        not_found = MagicMock()
+        not_found.status_code = 404
+        not_found.url = "https://palmvista.example.com/about"
+        not_found.headers = {"Content-Type": "text/html; charset=utf-8"}
+        not_found.text = ""
+
+        def _get(url, *args, **kwargs):
+            if url.endswith("/amenities"):
+                return amenities
+            if url.endswith("/community") or url.endswith("/property") or url.endswith("/properties") or url.endswith("/pet-friendly") or url.endswith("/leasing") or url.endswith("/about") or url.endswith("/faq"):
+                return not_found
+            return homepage
+
+        session_get_mock.side_effect = _get
+
+        intel = extract_commercial_site_intel(
+            "https://palmvista.example.com",
+            business_name="Palm Vista Apartments",
+            prospect_type="apartment",
+        )
+
+        self.assertEqual(intel["property_count"], "214 units across 3 buildings")
+        self.assertEqual(intel["walkthrough_common_area_count"], 2)
+        self.assertEqual(intel["walkthrough_relief_area_count"], 1)
+        self.assertEqual(intel["walkthrough_waste_station_count"], 4)
+        self.assertIn("High", intel["pet_traffic_estimate"])
+        self.assertIn("Pet-friendly", intel["site_signals"])
+        self.assertIn("Dog park", intel["site_signals"])
+        self.assertEqual(intel["service_frequency_hint"], "every_2_weeks")
+        self.assertEqual(intel["service_days_hint"], "Every other week")
+        self.assertIn("onsite dumpster", intel["disposal_notes"].lower())
+
+    @patch("requests.get")
+    @patch("requests.Session.get")
+    def test_extract_commercial_public_intel_finds_contacts_and_mentions(self, session_get_mock, get_mock):
+        ddg_response = MagicMock()
+        ddg_response.status_code = 200
+        ddg_response.text = """
+            <html>
+                <body>
+                    <div class="result">
+                        <a class="result__a" href="https://www.apartments.example.com/palm-vista">Palm Vista Apartments - Pet Friendly Community</a>
+                        <div class="result__snippet">Pet-friendly community with fenced dog park. Professionally managed by Desert Residential Management.</div>
+                    </div>
+                    <div class="result">
+                        <a class="result__a" href="https://palmvista.example.com/contact">Palm Vista Apartments Contact</a>
+                        <div class="result__snippet">Call the leasing office or community manager for tours and resident support.</div>
+                    </div>
+                </body>
+            </html>
+        """
+        get_mock.return_value = ddg_response
+
+        homepage = MagicMock()
+        homepage.status_code = 200
+        homepage.url = "https://palmvista.example.com"
+        homepage.headers = {"Content-Type": "text/html; charset=utf-8"}
+        homepage.text = """
+            <html>
+                <body>
+                    <a href="/contact">Contact</a>
+                </body>
+            </html>
+        """
+        contact_page = MagicMock()
+        contact_page.status_code = 200
+        contact_page.url = "https://palmvista.example.com/contact"
+        contact_page.headers = {"Content-Type": "text/html; charset=utf-8"}
+        contact_page.text = """
+            <html>
+                <body>
+                    <p>Jane Doe - Community Manager</p>
+                    <p>manager@palmvista.example.com</p>
+                    <p>(480) 555-9898</p>
+                </body>
+            </html>
+        """
+        not_found = MagicMock()
+        not_found.status_code = 404
+        not_found.url = "https://palmvista.example.com/team"
+        not_found.headers = {"Content-Type": "text/html; charset=utf-8"}
+        not_found.text = ""
+
+        def _session_get(url, *args, **kwargs):
+            if url.endswith("/contact"):
+                return contact_page
+            if url.endswith("/contact-us") or url.endswith("/team") or url.endswith("/staff") or url.endswith("/management") or url.endswith("/leasing") or url.endswith("/about"):
+                return not_found
+            return homepage
+
+        session_get_mock.side_effect = _session_get
+
+        intel = extract_commercial_public_intel(
+            "Palm Vista Apartments",
+            website="https://palmvista.example.com",
+            address="123 Main St, Mesa, AZ",
+            service_area="Mesa, AZ",
+            prospect_type="apartment",
+        )
+
+        self.assertEqual(intel["decision_maker_role_hint"], "Community Manager")
+        self.assertEqual(intel["primary_contact_name"], "Jane Doe")
+        self.assertEqual(intel["management_company"], "Desert Residential Management")
+        self.assertIn("manager@palmvista.example.com", intel["emails"])
+        self.assertIn("+14805559898", intel["phones"])
+        self.assertGreaterEqual(intel["decision_maker_contacts"][0]["priority_score"], 80)
+        self.assertEqual(intel["decision_maker_contacts"][0]["priority_label"], "Best")
+        self.assertTrue(any(item["category"] == "dog_area" for item in intel["complaint_signals"]))
+        self.assertTrue(any(item["snippet"] for item in intel["public_mentions"]))
+
+    def test_default_client_commercial_proposal_builder_uses_cadence_hint(self):
+        builder = _default_client_commercial_proposal_builder(
+            brand={"crm_avg_service_price": 72},
+            prospect={
+                "property_count": "214 units across 3 buildings",
+                "walkthrough_waste_station_count": 4,
+                "walkthrough_common_area_count": 2,
+                "walkthrough_relief_area_count": 1,
+                "service_frequency_hint": "every_2_weeks",
+                "service_days_hint": "Every other week",
+            },
+        )
+
+        self.assertEqual(builder["service_frequency"], "every_2_weeks")
+        self.assertEqual(builder["service_days"], "Every other week")
+
+    def test_client_commercial_research_promote_fills_blank_fields(self):
+        with self.app.app_context():
+            thread_id = self.app.db.create_lead_thread(
+                self.brand_id,
+                {
+                    "lead_name": "Palm Vista Apartments",
+                    "lead_email": "manager@palmvista.example.com",
+                    "source": "commercial_prospecting",
+                    "channel": "commercial",
+                    "status": "new",
+                    "summary": "Commercial target - Apartments.",
+                    "commercial_data_json": json.dumps({
+                        "name": "Palm Vista Apartments",
+                        "email": "manager@palmvista.example.com",
+                        "business_name": "Palm Vista Apartments",
+                        "industry": "Apartment Complexes",
+                        "account_type": "apartment",
+                        "property_count": "214 units across 3 buildings",
+                        "walkthrough_waste_station_count": 4,
+                        "walkthrough_common_area_count": 2,
+                        "walkthrough_relief_area_count": 1,
+                        "disposal_notes": "Waste appears to require removal from the property",
+                        "source": "commercial_prospecting",
+                        "stage": "new",
+                        "source_details_json": json.dumps({
+                            "decision_maker_role_hint": "Community Manager",
+                            "management_company": "Desert Residential Management",
+                            "decision_maker_contacts": [
+                                {
+                                    "name": "Jane Doe",
+                                    "role": "Community Manager",
+                                    "email": "manager@palmvista.example.com",
+                                    "phone": "+14805559898",
+                                    "source_url": "https://palmvista.example.com/contact",
+                                    "evidence": "Jane Doe - Community Manager",
+                                    "priority_score": 92,
+                                    "priority_label": "Best",
+                                }
+                            ],
+                            "complaint_signals": [
+                                {
+                                    "category": "dog_area",
+                                    "label": "Dog area complaints",
+                                    "title": "Palm Vista Reviews",
+                                    "url": "https://reviews.example.com/palm-vista",
+                                    "snippet": "Residents mention the dog park stays messy after weekends.",
+                                },
+                                {
+                                    "category": "cleanliness",
+                                    "label": "Cleanliness or odor complaints",
+                                    "title": "Palm Vista Reviews",
+                                    "url": "https://reviews.example.com/palm-vista",
+                                    "snippet": "Multiple reviews mention odor near pet areas.",
+                                }
+                            ],
+                        }),
+                        "audit_snapshot_json": json.dumps({}),
+                        "qualification_answers_json": "{}",
+                    }),
+                },
+            )
+
+        response = self.client.post(
+            f"/client/commercial/thread/{thread_id}/worksheet/research",
+            data={},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        with self.app.app_context():
+            thread = self.app.db.get_lead_thread(thread_id, brand_id=self.brand_id)
+            payload = json.loads(thread["commercial_data_json"])
+            self.assertEqual(payload["decision_maker_role"], "Community Manager")
+            self.assertIn("Managed by Desert Residential Management", payload["current_vendor_status"])
+            self.assertIn("Public complaint clues", payload["walkthrough_notes"])
+            self.assertIn("dog-area", json.loads(payload["qualification_answers_json"])["commercial_goal"].lower())
+            self.assertIn("Bag refill", payload["required_add_ons_json"])
+            self.assertIn("Off-site waste haul", payload["required_add_ons_json"])
 
     def test_client_commercial_detail_and_qualification_save(self):
         with self.app.app_context():
