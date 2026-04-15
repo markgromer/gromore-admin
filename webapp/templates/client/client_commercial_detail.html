@@ -88,6 +88,71 @@
         color: #0f172a;
         font-weight: 700;
     }
+    .worksheet-progress-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: .75rem;
+        margin-bottom: 1rem;
+    }
+    .worksheet-progress-card {
+        border: 1px solid #dbe4f0;
+        border-radius: 12px;
+        padding: .9rem;
+        background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+    }
+    .worksheet-progress-label {
+        font-size: .72rem;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: #64748b;
+        font-weight: 800;
+        margin-bottom: .18rem;
+    }
+    .worksheet-progress-value {
+        font-size: 1rem;
+        color: #0f172a;
+        font-weight: 800;
+    }
+    .worksheet-section {
+        border: 1px solid #dbe4f0;
+        border-radius: 14px;
+        padding: 1rem;
+        background: #fff;
+        margin-bottom: .9rem;
+    }
+    .worksheet-section-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: flex-start;
+        margin-bottom: .85rem;
+    }
+    .worksheet-section-title {
+        font-size: .92rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0 0 .2rem;
+    }
+    .worksheet-section-copy {
+        font-size: .81rem;
+        color: #64748b;
+        margin: 0;
+    }
+    .worksheet-count-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: .65rem;
+        margin-bottom: .85rem;
+    }
+    .worksheet-count-card {
+        border: 1px solid #dbe4f0;
+        border-radius: 12px;
+        padding: .75rem;
+        background: #f8fafc;
+    }
+    .worksheet-count-card input {
+        margin-top: .35rem;
+    }
 </style>
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
@@ -125,94 +190,62 @@
         </div>
 
         <div class="commercial-detail-card">
-            <h6>Proposal Qualification</h6>
-            <div class="brief-box">
-                <div class="field-row"><span class="field-label">Completion</span><span class="field-value">{{ commercial_brief.qualification_summary.complete_count }}/{{ commercial_brief.qualification_summary.required_count }}</span></div>
-                <div class="field-row"><span class="field-label">Next Action</span><span class="field-value">{{ (commercial_brief.next_actions or ['-'])[0] }}</span></div>
-            </div>
-            <form method="POST" action="{{ url_for('client.client_commercial_thread_qualification', thread_id=thread.id) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="row g-2 mb-2">
-                    {% for item in commercial_brief.qualification_form %}
-                    <div class="col-12 {% if not item.multiline %}col-md-6{% endif %}">
-                        <label class="form-label" style="font-size:.78rem;">{{ item.label }}</label>
-                        {% if item.multiline %}
-                        <textarea name="{{ item.key }}" class="form-control form-control-sm" rows="3" placeholder="{{ item.placeholder }}">{{ item.value }}</textarea>
-                        {% else %}
-                        <input type="text" name="{{ item.key }}" class="form-control form-control-sm" value="{{ item.value }}" placeholder="{{ item.placeholder }}">
-                        {% endif %}
-                        <div class="qualification-help {{ 'text-success' if item.complete else '' }}">{{ 'Confirmed' if item.complete else 'Still needed for proposal readiness' }}</div>
-                    </div>
-                    {% endfor %}
+            <h6>Lead Worksheet</h6>
+            <div class="worksheet-progress-grid">
+                <div class="worksheet-progress-card">
+                    <div class="worksheet-progress-label">Worksheet</div>
+                    <div class="worksheet-progress-value">{{ worksheet.completion_percent }}% complete</div>
                 </div>
-                <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-check2-square me-1"></i> Save Qualification</button>
-            </form>
-        </div>
-
-        <div class="commercial-detail-card">
-            <h6>Commercial Walkthrough</h6>
-            <div class="brief-box">
-                <div class="field-row"><span class="field-label">Property Label</span><span class="field-value">{{ commercial_prospect.walkthrough_property_label or '-' }}</span></div>
-                <div class="field-row"><span class="field-label">Stations / Areas</span><span class="field-value">{{ commercial_prospect.walkthrough_waste_station_count or 0 }} stations, {{ commercial_prospect.walkthrough_common_area_count or 0 }} common, {{ commercial_prospect.walkthrough_relief_area_count or 0 }} relief</span></div>
-                <div class="field-row"><span class="field-label">Walkthrough Saved</span><span class="field-value">{{ commercial_prospect.walkthrough_completed_at or '-' }}</span></div>
+                <div class="worksheet-progress-card">
+                    <div class="worksheet-progress-label">Service Pitch</div>
+                    <div class="worksheet-progress-value">{{ worksheet.service_pitch }}</div>
+                </div>
+                <div class="worksheet-progress-card">
+                    <div class="worksheet-progress-label">Next Move</div>
+                    <div class="worksheet-progress-value">{{ worksheet.next_action }}</div>
+                </div>
             </div>
-            <form method="POST" action="{{ url_for('client.client_commercial_thread_walkthrough', thread_id=thread.id) }}">
+            <form method="POST" action="{{ url_for('client.client_commercial_thread_save_worksheet', thread_id=thread.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="row g-2 mb-2">
-                    <div class="col-md-6">
-                        <label class="form-label" style="font-size:.78rem;">Property / Site Label</label>
-                        <input type="text" name="walkthrough_property_label" class="form-control form-control-sm" value="{{ commercial_prospect.walkthrough_property_label }}" placeholder="North dog park / main apartment grounds">
+                {% for section in worksheet.sections %}
+                <div class="worksheet-section">
+                    <div class="worksheet-section-head">
+                        <div>
+                            <p class="worksheet-section-title">{{ section.title }}</p>
+                            <p class="worksheet-section-copy">{{ section.description }}</p>
+                        </div>
+                        <span class="badge bg-{{ 'success' if section.complete == section.total else 'warning text-dark' }}">{{ section.complete }}/{{ section.total }}</span>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label" style="font-size:.78rem;">Portfolio Size / Units</label>
-                        <input type="text" name="property_count" class="form-control form-control-sm" value="{{ commercial_prospect.property_count }}">
+                    {% if section.count_fields %}
+                    <div class="worksheet-count-grid">
+                        {% for item in section.count_fields %}
+                        <div class="worksheet-count-card">
+                            <label class="form-label mb-0" style="font-size:.78rem;">{{ item.label }}</label>
+                            <input type="number" min="0" name="{{ item.key }}" class="form-control form-control-sm" value="{{ item.value }}">
+                        </div>
+                        {% endfor %}
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label" style="font-size:.78rem;">Waste Stations</label>
-                        <input type="number" min="0" name="walkthrough_waste_station_count" class="form-control form-control-sm" value="{{ commercial_prospect.walkthrough_waste_station_count or 0 }}">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label" style="font-size:.78rem;">Common Areas</label>
-                        <input type="number" min="0" name="walkthrough_common_area_count" class="form-control form-control-sm" value="{{ commercial_prospect.walkthrough_common_area_count or 0 }}">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label" style="font-size:.78rem;">Relief Areas</label>
-                        <input type="number" min="0" name="walkthrough_relief_area_count" class="form-control form-control-sm" value="{{ commercial_prospect.walkthrough_relief_area_count or 0 }}">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label" style="font-size:.78rem;">Pet Traffic Estimate</label>
-                        <input type="text" name="pet_traffic_estimate" class="form-control form-control-sm" value="{{ commercial_prospect.pet_traffic_estimate }}" placeholder="High after 5pm and weekends">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label" style="font-size:.78rem;">Site Condition</label>
-                        <input type="text" name="site_condition" class="form-control form-control-sm" value="{{ commercial_prospect.site_condition }}" placeholder="Clean, inconsistent, high complaint risk">
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label" style="font-size:.78rem;">Access Notes</label>
-                        <textarea name="access_notes" class="form-control form-control-sm" rows="2">{{ commercial_prospect.access_notes }}</textarea>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label" style="font-size:.78rem;">Gate / Security Notes</label>
-                        <textarea name="gate_notes" class="form-control form-control-sm" rows="2">{{ commercial_prospect.gate_notes }}</textarea>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label" style="font-size:.78rem;">Disposal Notes</label>
-                        <textarea name="disposal_notes" class="form-control form-control-sm" rows="2">{{ commercial_prospect.disposal_notes }}</textarea>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label" style="font-size:.78rem;">Required Add-Ons</label>
-                        <textarea name="required_add_ons" class="form-control form-control-sm" rows="3" placeholder="Bag refill&#10;Deodorizer&#10;Sanitizer">{{ (commercial_prospect.required_add_ons or [])|join('\n') }}</textarea>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label" style="font-size:.78rem;">Walkthrough Photo URLs</label>
-                        <textarea name="walkthrough_photo_urls" class="form-control form-control-sm" rows="3" placeholder="One URL per line">{{ (commercial_prospect.walkthrough_photo_urls or [])|join('\n') }}</textarea>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label" style="font-size:.78rem;">Walkthrough Notes</label>
-                        <textarea name="walkthrough_notes" class="form-control form-control-sm" rows="3">{{ commercial_prospect.walkthrough_notes }}</textarea>
+                    {% endif %}
+                    <div class="row g-2">
+                        {% for item in section.fields %}
+                        <div class="col-12 {% if not item.multiline %}col-md-6{% endif %}">
+                            <label class="form-label" style="font-size:.78rem;">{{ item.label }}</label>
+                            {% if item.multiline %}
+                            <textarea name="{{ item.key }}" class="form-control form-control-sm" rows="3" placeholder="{{ item.placeholder }}">{{ item.value }}</textarea>
+                            {% else %}
+                            <input type="text" name="{{ item.key }}" class="form-control form-control-sm" value="{{ item.value }}" placeholder="{{ item.placeholder }}">
+                            {% endif %}
+                            <div class="qualification-help {{ 'text-success' if item.complete else '' }}">{{ item.help }}</div>
+                        </div>
+                        {% endfor %}
                     </div>
                 </div>
-                <button type="submit" class="btn btn-outline-primary btn-sm w-100"><i class="bi bi-map me-1"></i> Save Commercial Walkthrough</button>
+                {% endfor %}
+                <div class="d-flex gap-2 flex-wrap">
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-save me-1"></i> Save Worksheet</button>
+                    <button type="submit" formaction="{{ url_for('client.client_commercial_thread_ai_worksheet', thread_id=thread.id) }}" class="btn btn-outline-primary btn-sm" {% if not outreach_ai_ready %}disabled{% endif %}><i class="bi bi-stars me-1"></i> Fill Blank Spots With AI</button>
+                </div>
+                <div class="qualification-help">{% if outreach_ai_ready %}WARREN will only fill the parts that are still missing, using the account context already on the thread.{% else %}Add an OpenAI key in Connections to unlock AI worksheet assist.{% endif %}</div>
             </form>
         </div>
 

@@ -227,7 +227,7 @@ class ClientCommercialProspectingTests(unittest.TestCase):
 
         response = self.client.get(f"/client/commercial/thread/{thread_id}")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Proposal Qualification", response.data)
+        self.assertIn(b"Lead Worksheet", response.data)
         self.assertIn(b"Commercial Strategy Brief", response.data)
 
         save_response = self.client.post(
@@ -252,6 +252,140 @@ class ClientCommercialProspectingTests(unittest.TestCase):
             thread = self.app.db.get_lead_thread(thread_id, brand_id=self.brand_id)
             self.assertIn("ownership approves", thread.get("commercial_data_json") or "")
             self.assertIn("Proposal-ready", thread.get("summary") or "")
+
+    def test_client_commercial_worksheet_save_updates_buyer_and_site(self):
+        with self.app.app_context():
+            thread_id = self.app.db.create_lead_thread(
+                self.brand_id,
+                {
+                    "lead_name": "Palm Vista Apartments",
+                    "lead_email": "manager@palmvista.example.com",
+                    "lead_phone": "+14805551234",
+                    "source": "commercial_prospecting",
+                    "channel": "commercial",
+                    "status": "new",
+                    "summary": "Commercial target - Apartments.",
+                    "commercial_data_json": json.dumps({
+                        "name": "Palm Vista Apartments",
+                        "email": "manager@palmvista.example.com",
+                        "business_name": "Palm Vista Apartments",
+                        "industry": "Apartment Complexes",
+                        "account_type": "apartment",
+                        "service_area": "Mesa, AZ",
+                        "source": "commercial_prospecting",
+                        "stage": "new",
+                        "source_details_json": json.dumps({"emails": ["manager@palmvista.example.com"]}),
+                        "audit_snapshot_json": json.dumps({}),
+                        "qualification_answers_json": "{}",
+                    }),
+                },
+            )
+
+        response = self.client.post(
+            f"/client/commercial/thread/{thread_id}/worksheet",
+            data={
+                "property_count": "214 units across 3 buildings",
+                "decision_maker_role": "regional manager",
+                "current_vendor_status": "reviewing current vendor performance",
+                "service_scope": "Pet waste removal, bag refill, deodorizer treatment",
+                "buying_timeline": "Needs options before next quarter",
+                "decision_process": "Regional manager recommends, ownership approves",
+                "commercial_goal": "Reduce complaints and tighten reporting",
+                "budget_range": "$2k-$4k monthly",
+                "walkthrough_property_label": "North dog run + courtyard loop",
+                "walkthrough_waste_station_count": "8",
+                "walkthrough_common_area_count": "4",
+                "walkthrough_relief_area_count": "2",
+                "pet_traffic_estimate": "High after work hours",
+                "site_condition": "Complaint-prone around the dog run",
+                "access_notes": "Leasing opens the gate before 8am",
+                "gate_notes": "Photograph latch after each visit",
+                "disposal_notes": "Rear dumpster enclosure",
+                "walkthrough_notes": "Manager wants proof tied to complaints",
+                "required_add_ons": "Bag refill\nDeodorizer",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        with self.app.app_context():
+            thread = self.app.db.get_lead_thread(thread_id, brand_id=self.brand_id)
+            payload = thread.get("commercial_data_json") or ""
+            self.assertIn("North dog run + courtyard loop", payload)
+            self.assertIn("regional manager", payload)
+            self.assertIn("Bag refill", payload)
+
+            events = self.app.db.get_lead_events(thread_id, event_type="commercial_worksheet_saved")
+            self.assertEqual(len(events), 1)
+
+    @patch("requests.post")
+    def test_client_commercial_worksheet_ai_assist_fills_missing_fields(self, post_mock):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "decision_maker_role": "regional manager",
+                                "service_scope": "Pet waste removal, bag refill, deodorizer treatment",
+                                "commercial_goal": "Reduce complaints and improve service proof",
+                                "site_condition": "Likely complaint-prone around pet-heavy common areas",
+                                "required_add_ons": ["Bag refill", "Deodorizer"],
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+        post_mock.return_value = mock_response
+
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "openai_api_key", "sk-test-key")
+            thread_id = self.app.db.create_lead_thread(
+                self.brand_id,
+                {
+                    "lead_name": "Palm Vista Apartments",
+                    "lead_email": "manager@palmvista.example.com",
+                    "source": "commercial_prospecting",
+                    "channel": "commercial",
+                    "status": "new",
+                    "summary": "Commercial target - Apartments.",
+                    "commercial_data_json": json.dumps({
+                        "name": "Palm Vista Apartments",
+                        "email": "manager@palmvista.example.com",
+                        "business_name": "Palm Vista Apartments",
+                        "industry": "Apartment Complexes",
+                        "account_type": "apartment",
+                        "service_area": "Mesa, AZ",
+                        "source": "commercial_prospecting",
+                        "stage": "new",
+                        "source_details_json": json.dumps({"emails": ["manager@palmvista.example.com"]}),
+                        "audit_snapshot_json": json.dumps({}),
+                        "qualification_answers_json": "{}",
+                    }),
+                },
+            )
+
+        response = self.client.post(
+            f"/client/commercial/thread/{thread_id}/worksheet/ai",
+            data={},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        post_mock.assert_called_once()
+
+        with self.app.app_context():
+            thread = self.app.db.get_lead_thread(thread_id, brand_id=self.brand_id)
+            payload = json.loads(thread["commercial_data_json"])
+            self.assertEqual(payload["decision_maker_role"], "regional manager")
+            answers = json.loads(payload["qualification_answers_json"])
+            self.assertIn("Pet waste removal", answers["service_scope"])
+            self.assertIn("Reduce complaints", answers["commercial_goal"])
+            self.assertIn("complaint-prone", payload["site_condition"])
 
     def test_client_commercial_walkthrough_save_updates_payload(self):
         with self.app.app_context():

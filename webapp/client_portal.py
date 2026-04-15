@@ -375,6 +375,75 @@ COMMERCIAL_PROPOSAL_PACKAGES = {
     },
 }
 
+COMMERCIAL_WORKSHEET_SITE_FIELDS = [
+    {
+        "key": "walkthrough_property_label",
+        "label": "Site Label",
+        "placeholder": "North dog park / courtyard loop / Building A grounds",
+        "multiline": False,
+        "help": "Use the label your team would recognize on the route sheet.",
+    },
+    {
+        "key": "property_count",
+        "label": "Units Or Portfolio Size",
+        "placeholder": "214 units across 3 buildings",
+        "multiline": False,
+        "help": "This is the size anchor for scope and pricing.",
+    },
+    {
+        "key": "pet_traffic_estimate",
+        "label": "Traffic Pattern",
+        "placeholder": "Heavy after work hours and weekends",
+        "multiline": False,
+        "help": "Keep this short and operational.",
+    },
+    {
+        "key": "site_condition",
+        "label": "Current Site Condition",
+        "placeholder": "Complaint-prone near dog run, common areas mostly clean",
+        "multiline": True,
+        "help": "What is actually happening onsite right now?",
+    },
+    {
+        "key": "access_notes",
+        "label": "Access Notes",
+        "placeholder": "Gate opened by leasing before 8am. Dumpster access through rear lane.",
+        "multiline": True,
+        "help": "Capture anything that affects service execution.",
+    },
+    {
+        "key": "gate_notes",
+        "label": "Gate / Security Notes",
+        "placeholder": "Photo the latch after each visit. Call manager if gate is jammed.",
+        "multiline": True,
+        "help": "Only add this if it matters operationally.",
+    },
+    {
+        "key": "disposal_notes",
+        "label": "Disposal Notes",
+        "placeholder": "Bag waste goes to rear dumpster enclosure by maintenance shed.",
+        "multiline": True,
+        "help": "Keep disposal instructions practical.",
+    },
+    {
+        "key": "walkthrough_notes",
+        "label": "Internal Notes",
+        "placeholder": "Manager wants recap tied to tenant complaints and station refill proof.",
+        "multiline": True,
+        "help": "Use this for anything your team should not lose.",
+    },
+]
+
+COMMERCIAL_WORKSHEET_SCOPE_FIELDS = [
+    {
+        "key": "required_add_ons",
+        "label": "Add-Ons Needed",
+        "placeholder": "Bag refill\nDeodorizer\nExtra common-area pass",
+        "multiline": True,
+        "help": "One item per line.",
+    },
+]
+
 
 def _default_client_commercial_proposal_builder(brand=None, prospect=None):
     average_ticket = _parse_float_range((brand or {}).get("crm_avg_service_price"), minimum=0, maximum=5000, default=65.0)
@@ -404,6 +473,259 @@ def _default_client_commercial_proposal_builder(brand=None, prospect=None):
         "notes": "",
         "scope_summary": "Commercial pet waste stations, common area policing, and service reporting.",
     }
+
+
+def _build_client_commercial_worksheet(prospect, brief, brand=None):
+    from webapp.commercial_strategy import COMMERCIAL_QUALIFICATION_CORE_FIELDS, COMMERCIAL_QUALIFICATION_FIELDS
+
+    answers = _safe_json_object((prospect or {}).get("qualification_answers_json"))
+    required_add_ons = _safe_json_list((prospect or {}).get("required_add_ons_json"))
+    sections = []
+
+    buyer_fields = []
+    for field in COMMERCIAL_QUALIFICATION_CORE_FIELDS:
+        value = _normalize_client_commercial_text((prospect or {}).get(field["key"]), 160)
+        buyer_fields.append({
+            "key": field["key"],
+            "label": field["label"],
+            "placeholder": field["placeholder"],
+            "multiline": field["multiline"],
+            "value": value,
+            "help": field["prompt"],
+            "complete": bool(value),
+        })
+    for field in COMMERCIAL_QUALIFICATION_FIELDS:
+        value = _normalize_client_commercial_text(answers.get(field["key"]), 1200)
+        buyer_fields.append({
+            "key": field["key"],
+            "label": field["label"],
+            "placeholder": field.get("placeholder") or "",
+            "multiline": field["multiline"],
+            "value": value,
+            "help": field["prompt"],
+            "complete": bool(value),
+        })
+
+    site_fields = []
+    for field in COMMERCIAL_WORKSHEET_SITE_FIELDS:
+        value = _normalize_client_commercial_text((prospect or {}).get(field["key"]), 1200)
+        site_fields.append({
+            **field,
+            "value": value,
+            "complete": bool(value),
+        })
+
+    count_fields = [
+        {
+            "key": "walkthrough_waste_station_count",
+            "label": "Waste Stations",
+            "value": int((prospect or {}).get("walkthrough_waste_station_count") or 0),
+        },
+        {
+            "key": "walkthrough_common_area_count",
+            "label": "Common Areas",
+            "value": int((prospect or {}).get("walkthrough_common_area_count") or 0),
+        },
+        {
+            "key": "walkthrough_relief_area_count",
+            "label": "Relief Areas",
+            "value": int((prospect or {}).get("walkthrough_relief_area_count") or 0),
+        },
+    ]
+
+    scope_fields = []
+    for field in COMMERCIAL_WORKSHEET_SCOPE_FIELDS:
+        value = "\n".join(required_add_ons) if field["key"] == "required_add_ons" else ""
+        scope_fields.append({
+            **field,
+            "value": value,
+            "complete": bool(value.strip()),
+        })
+
+    sections.append({
+        "key": "buyer",
+        "title": "Buyer Snapshot",
+        "description": "Who buys, what they care about, and what has to be true before you quote.",
+        "fields": buyer_fields,
+        "complete": sum(1 for field in buyer_fields if field["complete"]),
+        "total": len(buyer_fields),
+    })
+    sections.append({
+        "key": "site",
+        "title": "Site Reality",
+        "description": "Just enough onsite detail for routing, operations, and a credible scope.",
+        "fields": site_fields,
+        "count_fields": count_fields,
+        "complete": sum(1 for field in site_fields if field["complete"]) + sum(1 for field in count_fields if field["value"] > 0),
+        "total": len(site_fields) + len(count_fields),
+    })
+    sections.append({
+        "key": "scope",
+        "title": "Offer Shape",
+        "description": "What should be in scope if this turns into a real commercial account.",
+        "fields": scope_fields,
+        "complete": sum(1 for field in scope_fields if field["complete"]),
+        "total": len(scope_fields),
+    })
+
+    total_complete = sum(section["complete"] for section in sections)
+    total_fields = sum(section["total"] for section in sections)
+    return {
+        "sections": sections,
+        "total_complete": total_complete,
+        "total_fields": total_fields,
+        "completion_percent": int(round((total_complete / total_fields) * 100)) if total_fields else 0,
+        "service_pitch": (brief or {}).get("service_pitch") or "",
+        "outreach_angle": (brief or {}).get("outreach_angle") or "",
+        "next_action": ((brief or {}).get("next_actions") or [""])[0],
+    }
+
+
+def _apply_client_commercial_worksheet_form(prospect, form_data):
+    from webapp.commercial_strategy import COMMERCIAL_QUALIFICATION_CORE_FIELDS, COMMERCIAL_QUALIFICATION_FIELDS
+
+    updated = _normalize_client_commercial_payload(prospect)
+    answers = _safe_json_object(updated.get("qualification_answers_json"))
+
+    for field in COMMERCIAL_QUALIFICATION_CORE_FIELDS:
+        updated[field["key"]] = _normalize_client_commercial_text(form_data.get(field["key"]), 220)
+    for field in COMMERCIAL_QUALIFICATION_FIELDS:
+        answers[field["key"]] = _normalize_client_commercial_text(form_data.get(field["key"]), 1200)
+
+    updated["qualification_answers_json"] = json.dumps(answers)
+    updated["walkthrough_property_label"] = _normalize_client_commercial_text(form_data.get("walkthrough_property_label"), 160)
+    updated["pet_traffic_estimate"] = _normalize_client_commercial_text(form_data.get("pet_traffic_estimate"), 120)
+    updated["site_condition"] = _normalize_client_commercial_text(form_data.get("site_condition"), 220)
+    updated["access_notes"] = _normalize_client_commercial_text(form_data.get("access_notes"), 1000)
+    updated["gate_notes"] = _normalize_client_commercial_text(form_data.get("gate_notes"), 500)
+    updated["disposal_notes"] = _normalize_client_commercial_text(form_data.get("disposal_notes"), 500)
+    updated["walkthrough_notes"] = _normalize_client_commercial_text(form_data.get("walkthrough_notes"), 1200)
+    updated["property_count"] = _normalize_client_commercial_text(form_data.get("property_count"), 160)
+    updated["walkthrough_waste_station_count"] = _parse_int_range(form_data.get("walkthrough_waste_station_count"), maximum=500, default=updated.get("walkthrough_waste_station_count") or 0)
+    updated["walkthrough_common_area_count"] = _parse_int_range(form_data.get("walkthrough_common_area_count"), maximum=500, default=updated.get("walkthrough_common_area_count") or 0)
+    updated["walkthrough_relief_area_count"] = _parse_int_range(form_data.get("walkthrough_relief_area_count"), maximum=500, default=updated.get("walkthrough_relief_area_count") or 0)
+    updated["required_add_ons_json"] = json.dumps(_normalize_client_commercial_list(form_data.get("required_add_ons") or "", max_items=8, item_max_len=120))
+
+    if any([
+        updated.get("walkthrough_property_label"),
+        updated.get("walkthrough_waste_station_count"),
+        updated.get("walkthrough_common_area_count"),
+        updated.get("walkthrough_relief_area_count"),
+        updated.get("site_condition"),
+        updated.get("access_notes"),
+        updated.get("walkthrough_notes"),
+    ]):
+        updated["walkthrough_completed_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    return updated
+
+
+def _merge_client_commercial_ai_worksheet_suggestions(prospect, suggestions):
+    from webapp.commercial_strategy import COMMERCIAL_QUALIFICATION_CORE_FIELDS, COMMERCIAL_QUALIFICATION_FIELDS
+
+    updated = _normalize_client_commercial_payload(prospect)
+    answers = _safe_json_object(updated.get("qualification_answers_json"))
+
+    direct_keys = {field["key"] for field in COMMERCIAL_QUALIFICATION_CORE_FIELDS}
+    direct_keys.update({
+        "walkthrough_property_label",
+        "pet_traffic_estimate",
+        "site_condition",
+        "access_notes",
+        "gate_notes",
+        "disposal_notes",
+        "walkthrough_notes",
+    })
+    answer_keys = {field["key"] for field in COMMERCIAL_QUALIFICATION_FIELDS}
+
+    for key in direct_keys:
+        current_value = _normalize_client_commercial_text(updated.get(key), 1200)
+        suggested_value = _normalize_client_commercial_text((suggestions or {}).get(key), 1200)
+        if not current_value and suggested_value:
+            updated[key] = suggested_value
+
+    for key in answer_keys:
+        current_value = _normalize_client_commercial_text(answers.get(key), 1200)
+        suggested_value = _normalize_client_commercial_text((suggestions or {}).get(key), 1200)
+        if not current_value and suggested_value:
+            answers[key] = suggested_value
+
+    suggested_add_ons = (suggestions or {}).get("required_add_ons")
+    current_add_ons = _safe_json_list(updated.get("required_add_ons_json"))
+    if not current_add_ons:
+        updated["required_add_ons_json"] = json.dumps(_normalize_client_commercial_list(suggested_add_ons or "", max_items=8, item_max_len=120))
+
+    updated["qualification_answers_json"] = json.dumps(answers)
+    return updated
+
+
+def _assist_client_commercial_worksheet(brand, prospect, brief):
+    api_key = _get_openai_api_key(brand)
+    if not api_key:
+        raise ValueError("No OpenAI API key configured. Add one in Connections.")
+
+    import requests as req
+
+    model = _pick_ai_model(brand, "chat")
+    prompt = {
+        "brand": {
+            "display_name": (brand or {}).get("display_name") or "",
+            "industry": (brand or {}).get("industry") or "",
+            "service_area": (brand or {}).get("service_area") or "",
+            "primary_services": (brand or {}).get("primary_services") or "",
+            "active_offers": (brand or {}).get("active_offers") or "",
+            "sales_bot_service_menu": (brand or {}).get("sales_bot_service_menu") or "",
+        },
+        "prospect": {
+            "business_name": (prospect or {}).get("business_name") or "",
+            "industry": (prospect or {}).get("industry") or "",
+            "account_type": (prospect or {}).get("account_type") or "",
+            "service_area": (prospect or {}).get("service_area") or "",
+            "website": (prospect or {}).get("website") or "",
+            "source_details": _safe_json_object((prospect or {}).get("source_details_json")),
+            "audit_snapshot": _safe_json_object((prospect or {}).get("audit_snapshot_json")),
+            "current_answers": _safe_json_object((prospect or {}).get("qualification_answers_json")),
+        },
+        "brief": {
+            "service_pitch": (brief or {}).get("service_pitch") or "",
+            "outreach_angle": (brief or {}).get("outreach_angle") or "",
+            "pain_points": (brief or {}).get("pain_points") or [],
+            "audit_findings": (brief or {}).get("audit_findings") or [],
+            "qualification_questions": (brief or {}).get("qualification_questions") or [],
+        },
+    }
+    system_prompt = (
+        "You are helping a local service operator fill out a commercial lead worksheet. "
+        "Only suggest concise, plausible worksheet entries grounded in the provided context. "
+        "Do not invent precise counts, addresses, or buyer names if they are not supported. "
+        "Leave unknown fields as empty strings. Do not use em dashes. Return valid JSON only."
+    )
+    user_prompt = (
+        "Fill in helpful draft values for missing commercial worksheet fields. Return JSON only with these keys: "
+        "decision_maker_role, current_vendor_status, service_scope, buying_timeline, decision_process, commercial_goal, budget_range, "
+        "walkthrough_property_label, pet_traffic_estimate, site_condition, access_notes, gate_notes, disposal_notes, walkthrough_notes, required_add_ons.\n\n"
+        + json.dumps(prompt)
+    )
+    response = req.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json={
+            "model": model,
+            "temperature": 0.4,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        },
+        timeout=45,
+    )
+    if response.status_code >= 400:
+        raise ValueError(f"OpenAI request failed ({response.status_code}): {response.text[:200]}")
+    payload = response.json() if hasattr(response, "json") else {}
+    content = ((((payload or {}).get("choices") or [{}])[0].get("message") or {}).get("content") or "")
+    parsed = _extract_json_object_from_ai_text(content)
+    if not parsed:
+        raise ValueError("AI worksheet assist returned an empty result.")
+    return parsed
 
 
 def _normalize_client_commercial_proposal_builder(raw_value, *, brand=None, prospect=None):
@@ -1686,6 +2008,8 @@ _ENDPOINT_FEATURE_MAP = {
     "client_commercial_search":    "commercial",
     "client_commercial_import":    "commercial",
     "client_commercial_thread":    "commercial",
+    "client_commercial_thread_save_worksheet": "commercial",
+    "client_commercial_thread_ai_worksheet": "commercial",
     "client_commercial_thread_qualification": "commercial",
     "client_commercial_thread_walkthrough": "commercial",
     "client_commercial_thread_refresh": "commercial",
@@ -7549,6 +7873,7 @@ def client_commercial_thread(thread_id):
     prospect["walkthrough_photo_urls"] = _safe_json_list(prospect.get("walkthrough_photo_urls_json"))
     proposal_quote = db.get_lead_quote_for_thread(thread_id)
     proposal_preview = _build_client_commercial_proposal(prospect, brand=brand, existing_quote=proposal_quote)
+    worksheet = _build_client_commercial_worksheet(prospect, commercial_brief, brand=brand)
     service_visits = _prepare_client_commercial_service_visits(db.get_commercial_service_visits(thread_id))
     service_recap = _build_client_commercial_service_recap(prospect, service_visits)
     if (thread.get("source") or "") != "commercial_prospecting" and (thread.get("commercial_data_json") or "{}").strip() in {"", "{}"}:
@@ -7561,6 +7886,7 @@ def client_commercial_thread(thread_id):
         thread=thread,
         commercial_prospect=prospect,
         commercial_brief=commercial_brief,
+        worksheet=worksheet,
         proposal_quote=proposal_quote,
         proposal_preview=proposal_preview,
         service_visits=service_visits,
@@ -7572,6 +7898,120 @@ def client_commercial_thread(thread_id):
         smtp_ready=bool(current_app.config.get("SMTP_USER") and current_app.config.get("SMTP_PASSWORD")),
         outreach_ai_ready=bool(_get_openai_api_key(brand)),
     )
+
+
+@client_bp.route("/commercial/thread/<int:thread_id>/worksheet", methods=["POST"])
+@client_login_required
+def client_commercial_thread_save_worksheet(thread_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread or not brand:
+        abort(404)
+
+    from webapp.commercial_strategy import build_commercial_outreach_brief
+
+    prospect = _build_client_commercial_payload(thread)
+    prospect = _apply_client_commercial_worksheet_form(prospect, request.form)
+
+    builder = _normalize_client_commercial_proposal_builder(prospect.get("proposal_builder_json"), brand=brand, prospect=prospect)
+    if not builder.get("property_count"):
+        builder["property_count"] = prospect.get("property_count") or ""
+    builder["waste_station_count"] = prospect.get("walkthrough_waste_station_count") or builder.get("waste_station_count") or 0
+    builder["common_area_count"] = prospect.get("walkthrough_common_area_count") or builder.get("common_area_count") or 0
+    builder["relief_area_count"] = prospect.get("walkthrough_relief_area_count") or builder.get("relief_area_count") or 0
+    prospect["proposal_builder_json"] = json.dumps(builder)
+
+    brief = build_commercial_outreach_brief(prospect, brand=brand)
+    prospect["outreach_angle"] = brief["outreach_angle"]
+    prospect["proposal_status"] = brief["proposal_readiness"]["status"]
+    prospect["pain_points_json"] = json.dumps(brief["pain_points"])
+    prospect["next_action"] = (brief["next_actions"] or [""])[0]
+    prospect["summary"] = _build_client_commercial_summary(prospect, brief)
+
+    db.update_lead_thread_commercial_data(thread_id, brand_id, json.dumps(prospect))
+    db.update_lead_thread_profile_fields(
+        thread_id,
+        brand_id,
+        lead_name=prospect.get("business_name") or prospect.get("name") or "Commercial Prospect",
+        lead_email=prospect.get("email") or "",
+        lead_phone=prospect.get("phone") or "",
+        summary=prospect["summary"],
+    )
+    db.update_lead_thread_status(thread_id, summary=prospect["summary"])
+    db.add_lead_event(
+        brand_id,
+        thread_id,
+        "commercial_worksheet_saved",
+        event_value=(prospect.get("walkthrough_property_label") or prospect.get("business_name") or "Worksheet")[:200],
+        metadata={
+            "property_count": prospect.get("property_count") or "",
+            "proposal_status": prospect.get("proposal_status") or "",
+        },
+    )
+    flash("Lead worksheet saved.", "success")
+    return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+
+@client_bp.route("/commercial/thread/<int:thread_id>/worksheet/ai", methods=["POST"])
+@client_login_required
+def client_commercial_thread_ai_worksheet(thread_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread or not brand:
+        abort(404)
+
+    from webapp.commercial_strategy import build_commercial_outreach_brief
+
+    prospect = _build_client_commercial_payload(thread)
+    prospect = _apply_client_commercial_worksheet_form(prospect, request.form)
+    brief = build_commercial_outreach_brief(prospect, brand=brand)
+
+    try:
+        suggestions = _assist_client_commercial_worksheet(brand, prospect, brief)
+    except Exception as exc:
+        flash(f"AI worksheet assist failed: {str(exc)[:180]}", "error")
+        return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
+
+    prospect = _merge_client_commercial_ai_worksheet_suggestions(prospect, suggestions)
+
+    builder = _normalize_client_commercial_proposal_builder(prospect.get("proposal_builder_json"), brand=brand, prospect=prospect)
+    if not builder.get("property_count"):
+        builder["property_count"] = prospect.get("property_count") or ""
+    builder["waste_station_count"] = prospect.get("walkthrough_waste_station_count") or builder.get("waste_station_count") or 0
+    builder["common_area_count"] = prospect.get("walkthrough_common_area_count") or builder.get("common_area_count") or 0
+    builder["relief_area_count"] = prospect.get("walkthrough_relief_area_count") or builder.get("relief_area_count") or 0
+    prospect["proposal_builder_json"] = json.dumps(builder)
+
+    refreshed_brief = build_commercial_outreach_brief(prospect, brand=brand)
+    prospect["outreach_angle"] = refreshed_brief["outreach_angle"]
+    prospect["proposal_status"] = refreshed_brief["proposal_readiness"]["status"]
+    prospect["pain_points_json"] = json.dumps(refreshed_brief["pain_points"])
+    prospect["next_action"] = (refreshed_brief["next_actions"] or [""])[0]
+    prospect["summary"] = _build_client_commercial_summary(prospect, refreshed_brief)
+
+    db.update_lead_thread_commercial_data(thread_id, brand_id, json.dumps(prospect))
+    db.update_lead_thread_profile_fields(
+        thread_id,
+        brand_id,
+        lead_name=prospect.get("business_name") or prospect.get("name") or "Commercial Prospect",
+        lead_email=prospect.get("email") or "",
+        lead_phone=prospect.get("phone") or "",
+        summary=prospect["summary"],
+    )
+    db.update_lead_thread_status(thread_id, summary=prospect["summary"])
+    db.add_lead_event(
+        brand_id,
+        thread_id,
+        "commercial_worksheet_ai_assisted",
+        event_value=(prospect.get("business_name") or "Commercial Prospect")[:200],
+        metadata={"filled_fields": sorted(list(suggestions.keys()))[:10]},
+    )
+    flash("WARREN filled the blank spots it could from the account context.", "success")
+    return redirect(url_for("client.client_commercial_thread", thread_id=thread_id))
 
 
 @client_bp.route("/commercial/thread/<int:thread_id>/proposal", methods=["POST"])
