@@ -78,6 +78,21 @@ def _get_ad_connection_status(db, brand):
     return has_google, has_meta
 
 
+def _normalize_client_phone_number(value):
+    phone = re.sub(r"[^\d+]", "", str(value or "").strip())
+    if not phone:
+        return ""
+    if phone.startswith("+"):
+        digits = "+" + re.sub(r"\D", "", phone[1:])
+        return digits[:20]
+    digits = re.sub(r"\D", "", phone)
+    if len(digits) == 10:
+        return f"+1{digits}"
+    if len(digits) == 11 and digits.startswith("1"):
+        return f"+{digits}"
+    return f"+{digits}" if digits else ""
+
+
 def _coerce_action_key(value, fallback):
     text = re.sub(r"[^a-z0-9]+", "_", (value or "").strip().lower()).strip("_")
     return (text or fallback)[:80]
@@ -6047,6 +6062,69 @@ def client_save_leads_assistant_settings():
 
 
 # ── Warren Connection Test Endpoints ──
+
+
+@client_bp.route("/api/warren/test-openphone", methods=["POST"])
+@client_login_required
+def client_test_openphone_connection():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    api_key = (brand.get("quo_api_key") or "").strip() if brand else ""
+    if not api_key:
+        return jsonify({"ok": False, "error": "No OpenPhone / Quo API key configured."}), 400
+
+    from webapp.quo_sms import get_phone_numbers
+
+    numbers, err = get_phone_numbers(api_key)
+    if err:
+        return jsonify({"ok": False, "error": err, "phone_numbers": []})
+
+    phone_numbers = []
+    for item in numbers or []:
+        if isinstance(item, dict):
+            number = (
+                item.get("phoneNumber")
+                or item.get("number")
+                or item.get("formattedPhoneNumber")
+                or item.get("e164")
+                or ""
+            )
+        else:
+            number = str(item or "")
+        number = _normalize_client_phone_number(number)
+        if number and number not in phone_numbers:
+            phone_numbers.append(number)
+
+    return jsonify({"ok": True, "phone_numbers": phone_numbers, "count": len(phone_numbers)})
+
+
+@client_bp.route("/api/warren/send-test-sms", methods=["POST"])
+@client_login_required
+def client_send_test_sms():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"ok": False, "error": "Brand not found."}), 404
+
+    api_key = (brand.get("quo_api_key") or "").strip()
+    from_number = _normalize_client_phone_number(brand.get("quo_phone_number") or "")
+    payload = request.get_json(silent=True) or {}
+    to_phone = _normalize_client_phone_number(payload.get("to_phone") or "")
+
+    if not api_key:
+        return jsonify({"ok": False, "error": "No OpenPhone / Quo API key configured."}), 400
+    if not from_number:
+        return jsonify({"ok": False, "error": "No OpenPhone / Quo sending number configured."}), 400
+    if not to_phone:
+        return jsonify({"ok": False, "error": "Enter a valid destination phone number."}), 400
+
+    from webapp.quo_sms import send_test_sms
+
+    result = send_test_sms(api_key, from_number, to_phone)
+    status_code = 200 if result.get("ok") else 502
+    return jsonify(result), status_code
 
 
 @client_bp.route("/api/drive/diagnose")

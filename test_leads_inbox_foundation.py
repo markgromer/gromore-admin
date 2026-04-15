@@ -2,6 +2,7 @@ import os
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 _TEST_ROOT = Path(__file__).resolve().parent / ".tmp-test-artifacts"
 _TEST_ROOT.mkdir(exist_ok=True)
@@ -260,6 +261,54 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Generic Incoming Lead Webhook URL", response.data)
         self.assertIn(b"/webhooks/leads/", response.data)
+
+    @patch("webapp.quo_sms.get_phone_numbers")
+    def test_client_can_test_openphone_connection(self, mock_get_phone_numbers):
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "quo_api_key", "quo_test_key_123")
+
+        mock_get_phone_numbers.return_value = (
+            [
+                {"phoneNumber": "+15555550123"},
+                {"formattedPhoneNumber": "+15555550999"},
+            ],
+            None,
+        )
+
+        response = self.client.post("/client/api/warren/test-openphone", json={})
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["phone_numbers"], ["+15555550123", "+15555550999"])
+        self.assertEqual(data["count"], 2)
+
+    @patch("webapp.quo_sms.send_test_sms")
+    def test_client_can_send_openphone_test_sms(self, mock_send_test_sms):
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "quo_api_key", "quo_test_key_123")
+            self.app.db.update_brand_text_field(self.brand_id, "quo_phone_number", "+15555550123")
+
+        mock_send_test_sms.return_value = {
+            "ok": True,
+            "status_code": 202,
+            "response_body": {"id": "msg_123"},
+            "request_body": {
+                "from": "+15555550123",
+                "to": ["+15208672540"],
+                "content": "Test SMS from Gromore...",
+            },
+        }
+
+        response = self.client.post(
+            "/client/api/warren/send-test-sms",
+            json={"to_phone": "5208672540"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data["ok"])
+        mock_send_test_sms.assert_called_once_with("quo_test_key_123", "+15555550123", "+15208672540")
 
     def test_client_can_open_and_save_lead_assistant_workspace(self):
         response = self.client.get("/client/lead-assistant")
