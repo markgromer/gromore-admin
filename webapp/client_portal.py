@@ -171,7 +171,9 @@ def _default_warren_lead_form_config(brand=None):
         "service_label": "What do you need help with?",
         "details_label": "Tell us about the job",
         "service_options": _default_lead_form_service_options(brand),
+        "show_service": True,
         "show_email": True,
+        "show_company": False,
         "show_address": True,
         "show_message": True,
         "auto_text_enabled": True,
@@ -188,7 +190,16 @@ def _normalize_warren_lead_form_config(raw_config, brand=None):
     if not isinstance(raw_config, dict):
         raw_config = {}
 
-    for key in ("enabled", "show_email", "show_address", "show_message", "auto_text_enabled", "require_sms_consent"):
+    for key in (
+        "enabled",
+        "show_service",
+        "show_email",
+        "show_company",
+        "show_address",
+        "show_message",
+        "auto_text_enabled",
+        "require_sms_consent",
+    ):
         if key in raw_config:
             config[key] = bool(raw_config.get(key))
 
@@ -8041,7 +8052,9 @@ def client_save_lead_assistant_profile():
             "service_label": (request.form.get("lead_form_service_label") or "").strip()[:80],
             "details_label": (request.form.get("lead_form_details_label") or "").strip()[:80],
             "service_options": (request.form.get("lead_form_service_options") or "").strip(),
+            "show_service": bool(request.form.get("lead_form_show_service")),
             "show_email": bool(request.form.get("lead_form_show_email")),
+            "show_company": bool(request.form.get("lead_form_show_company")),
             "show_address": bool(request.form.get("lead_form_show_address")),
             "show_message": bool(request.form.get("lead_form_show_message")),
             "auto_text_enabled": bool(request.form.get("lead_form_auto_text_enabled")),
@@ -8078,6 +8091,7 @@ def public_lead_form(brand_slug):
         "name": "",
         "phone": "",
         "email": "",
+        "company": "",
         "service_needed": "",
         "address": "",
         "message": "",
@@ -8089,6 +8103,7 @@ def public_lead_form(brand_slug):
             "name": (request.form.get("name") or "").strip()[:120],
             "phone": (request.form.get("phone") or "").strip()[:40],
             "email": (request.form.get("email") or "").strip()[:160],
+            "company": (request.form.get("company") or "").strip()[:160],
             "service_needed": (request.form.get("service_needed") or "").strip()[:160],
             "address": (request.form.get("address") or "").strip()[:220],
             "message": (request.form.get("message") or "").strip()[:1500],
@@ -8102,12 +8117,12 @@ def public_lead_form(brand_slug):
             errors.append("A valid mobile number is required.")
         if lead_form_config.get("show_email") and form_values["email"] and "@" not in form_values["email"]:
             errors.append("Enter a valid email address.")
+        if lead_form_config.get("show_service") and not form_values["service_needed"]:
+            errors.append("Choose the service you need.")
         if lead_form_config.get("show_address") and not form_values["address"]:
             errors.append("Service address is required.")
         if lead_form_config.get("show_message") and not form_values["message"]:
             errors.append("Job details are required.")
-        if lead_form_config.get("service_options") and not form_values["service_needed"]:
-            errors.append("Choose the service you need.")
         if lead_form_config.get("auto_text_enabled") and lead_form_config.get("require_sms_consent") and not form_values["sms_consent"]:
             errors.append("Text consent is required before Warren can text a quote.")
 
@@ -8119,6 +8134,7 @@ def public_lead_form(brand_slug):
                 message_text = f"Requested service: {form_values['service_needed']}"
 
             extra_fields = {
+                "company_name": form_values["company"],
                 "service_needed": form_values["service_needed"],
                 "service_address": form_values["address"],
                 "sms_consent": "yes" if form_values["sms_consent"] else "no",

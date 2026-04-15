@@ -392,11 +392,19 @@ WIN-BACK (LOST LEAD):
 
                 <div class="la-hint mb-3">The embed snippet uses an iframe so the form can be dropped onto almost any website without custom backend work.</div>
 
-                <label class="form-label fw-semibold d-block">Visible Fields</label>
+                <label class="form-label fw-semibold d-block">Extra Fields</label>
                 <div class="d-flex flex-wrap gap-3 mb-2">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="lead_form_show_service" id="leadFormShowService" value="1" {{ 'checked' if lead_form_config.show_service }}>
+                        <label class="form-check-label" for="leadFormShowService">Show service needed</label>
+                    </div>
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="lead_form_show_email" id="leadFormShowEmail" value="1" {{ 'checked' if lead_form_config.show_email }}>
                         <label class="form-check-label" for="leadFormShowEmail">Show email</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="lead_form_show_company" id="leadFormShowCompany" value="1" {{ 'checked' if lead_form_config.show_company }}>
+                        <label class="form-check-label" for="leadFormShowCompany">Show company name</label>
                     </div>
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="lead_form_show_address" id="leadFormShowAddress" value="1" {{ 'checked' if lead_form_config.show_address }}>
@@ -408,7 +416,7 @@ WIN-BACK (LOST LEAD):
                     </div>
                 </div>
 
-                <div class="la-hint">Name and mobile number stay required so the lead lands in Warren with enough data to respond usefully.</div>
+                <div class="la-hint">Name and mobile number always stay required. Use these checkboxes to choose which extra fields the business owner wants on the public form.</div>
             </div>
         </div>
     </div>

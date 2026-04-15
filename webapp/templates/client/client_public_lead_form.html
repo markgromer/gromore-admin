@@ -315,6 +315,14 @@
                     </div>
                     {% endif %}
 
+                    {% if lead_form_config.show_company %}
+                    <div>
+                        <label for="leadCompany">Company name</label>
+                        <input id="leadCompany" type="text" name="company" value="{{ form_values.company }}" maxlength="160">
+                    </div>
+                    {% endif %}
+
+                    {% if lead_form_config.show_service %}
                     <div>
                         <label for="leadService">{{ lead_form_config.service_label }}</label>
                         {% if lead_form_config.service_options %}
@@ -325,9 +333,10 @@
                             {% endfor %}
                         </select>
                         {% else %}
-                        <input id="leadService" type="text" name="service_needed" value="{{ form_values.service_needed }}" maxlength="160" placeholder="Service needed">
+                        <input id="leadService" type="text" name="service_needed" value="{{ form_values.service_needed }}" maxlength="160" placeholder="Service needed" required>
                         {% endif %}
                     </div>
+                    {% endif %}
 
                     {% if lead_form_config.show_address %}
                     <div>

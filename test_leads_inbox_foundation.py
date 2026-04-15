@@ -351,7 +351,9 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
                 "lead_form_enabled": "1",
                 "lead_form_auto_text_enabled": "1",
                 "lead_form_require_sms_consent": "1",
+                "lead_form_show_service": "1",
                 "lead_form_show_email": "1",
+                "lead_form_show_company": "1",
                 "lead_form_show_address": "1",
                 "lead_form_show_message": "1",
                 "lead_form_headline": "Get a pet waste quote",
@@ -377,8 +379,10 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertTrue(config["enabled"])
         self.assertTrue(config["auto_text_enabled"])
         self.assertTrue(config["require_sms_consent"])
+        self.assertTrue(config["show_service"])
         self.assertEqual(config["headline"], "Get a pet waste quote")
         self.assertEqual(config["cta_label"], "Text me pricing")
+        self.assertTrue(config["show_company"])
         self.assertEqual(config["service_options"], ["Weekly pet waste", "Twice weekly pet waste"])
 
     @patch("webapp.warren_sender.send_reply")
@@ -401,8 +405,10 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
                 json.dumps({
                     "enabled": True,
                     "headline": "Fast quote form",
+                    "show_service": True,
                     "service_options": ["Weekly service", "Initial cleanup"],
                     "show_email": True,
+                    "show_company": True,
                     "show_address": True,
                     "show_message": True,
                     "auto_text_enabled": True,
@@ -421,6 +427,7 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
                 "name": "Taylor Prospect",
                 "phone": "5208672540",
                 "email": "taylor@example.com",
+                "company": "Taylor Property Services",
                 "service_needed": "Weekly service",
                 "address": "123 Main St",
                 "message": "Need service for a dog run and side yard.",
@@ -446,6 +453,7 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
             messages = self.app.db.get_lead_messages(thread["id"])
             self.assertEqual(len(messages), 1)
             self.assertIn("Warren Hosted Lead Form", messages[0]["content"])
+            self.assertIn("Company Name: Taylor Property Services", messages[0]["content"])
 
     @patch("webapp.warren_sender.send_reply")
     @patch("webapp.warren_brain.process_and_respond")
@@ -466,6 +474,7 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
                 json.dumps({
                     "enabled": True,
                     "headline": "Fast quote form",
+                    "show_service": False,
                     "service_options": ["Weekly service"],
                     "show_email": True,
                     "show_address": True,
@@ -482,7 +491,6 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
                 "name": "No Consent Lead",
                 "phone": "5208672540",
                 "email": "noconsent@example.com",
-                "service_needed": "Weekly service",
                 "address": "123 Main St",
                 "message": "Need help weekly.",
             },
@@ -498,6 +506,32 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
             threads = self.app.db.get_lead_threads(self.brand_id)
             self.assertEqual(len(threads), 1)
             self.assertEqual(threads[0]["lead_name"], "No Consent Lead")
+
+    def test_public_warren_lead_form_hides_unchecked_fields(self):
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(
+                self.brand_id,
+                "sales_bot_lead_form_config",
+                json.dumps({
+                    "enabled": True,
+                    "headline": "Fast quote form",
+                    "show_service": False,
+                    "show_email": False,
+                    "show_company": False,
+                    "show_address": False,
+                    "show_message": False,
+                }),
+            )
+            brand = self.app.db.get_brand(self.brand_id)
+
+        response = self.client.get(f"/warren/form/{brand['slug']}")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Full name", response.data)
+        self.assertIn(b"Mobile number", response.data)
+        self.assertNotIn(b"Email", response.data)
+        self.assertNotIn(b"Company name", response.data)
+        self.assertNotIn(b"Service address", response.data)
+        self.assertNotIn(b"Tell us about the job", response.data)
 
 
 if __name__ == "__main__":
