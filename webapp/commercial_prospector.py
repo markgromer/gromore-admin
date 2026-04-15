@@ -180,7 +180,7 @@ def _same_domain(url, website):
     return bool(left and right and left == right)
 
 
-def _extract_contact_pages(website, *, max_pages=4):
+def _extract_contact_pages(website, *, max_pages=4, request_timeout=10):
     normalized = _normalize_website(website)
     if not normalized:
         return []
@@ -198,7 +198,7 @@ def _extract_contact_pages(website, *, max_pages=4):
             continue
         visited.add(current)
         try:
-            resp = session.get(current, timeout=10, allow_redirects=True, headers=headers)
+            resp = session.get(current, timeout=request_timeout, allow_redirects=True, headers=headers)
         except Exception:
             continue
         if resp.status_code != 200 or "html" not in (resp.headers.get("Content-Type") or "text/html").lower():
@@ -255,8 +255,8 @@ def _extract_name_from_contact_line(line):
     return _clean_page_text(match.group(1), 80) if match else ""
 
 
-def _extract_contact_candidates(website):
-    pages = _extract_contact_pages(website)
+def _extract_contact_candidates(website, *, max_pages=4, request_timeout=10):
+    pages = _extract_contact_pages(website, max_pages=max_pages, request_timeout=request_timeout)
     contacts = []
     all_emails = []
     all_phones = []
@@ -358,7 +358,19 @@ def _extract_public_complaint_signals(mentions):
     return signals[:8]
 
 
-def extract_commercial_public_intel(business_name, *, website="", address="", service_area="", prospect_type="", phone=""):
+def extract_commercial_public_intel(
+    business_name,
+    *,
+    website="",
+    address="",
+    service_area="",
+    prospect_type="",
+    phone="",
+    max_queries=5,
+    max_results_per_query=5,
+    contact_page_limit=4,
+    request_timeout=10,
+):
     business_name = _clean_page_text(business_name, 160)
     if not business_name:
         return {}
@@ -380,8 +392,8 @@ def extract_commercial_public_intel(business_name, *, website="", address="", se
     role_hint = ""
     seen_urls = set()
 
-    for query in queries[:5]:
-        for result in _search_duckduckgo(query, 5):
+    for query in queries[:max(1, int(max_queries or 1))]:
+        for result in _search_duckduckgo(query, max_results_per_query, request_timeout=request_timeout):
             url = _normalize_public_url(result.get("websiteUri"))
             title = _clean_page_text(((result.get("displayName") or {}).get("text") or ""), 160)
             snippet = _clean_page_text(result.get("formattedAddress") or "", 220)
@@ -413,7 +425,11 @@ def extract_commercial_public_intel(business_name, *, website="", address="", se
         if len(mentions) >= 8:
             break
 
-    contact_intel = _extract_contact_candidates(website) if website else {"decision_maker_contacts": [], "emails": [], "phones": [], "contact_urls": []}
+    contact_intel = _extract_contact_candidates(
+        website,
+        max_pages=max(1, int(contact_page_limit or 1)),
+        request_timeout=request_timeout,
+    ) if website else {"decision_maker_contacts": [], "emails": [], "phones": [], "contact_urls": []}
     contacts = contact_intel.get("decision_maker_contacts") or []
     if contacts:
         for item in contacts:
@@ -438,7 +454,7 @@ def extract_commercial_public_intel(business_name, *, website="", address="", se
     }
 
 
-def _fetch_site_intel_pages(website, *, max_pages=3):
+def _fetch_site_intel_pages(website, *, max_pages=3, request_timeout=10):
     normalized = _normalize_website(website)
     if not normalized:
         return []
@@ -456,7 +472,7 @@ def _fetch_site_intel_pages(website, *, max_pages=3):
             continue
         visited.add(current)
         try:
-            resp = session.get(current, timeout=10, allow_redirects=True, headers=headers)
+            resp = session.get(current, timeout=request_timeout, allow_redirects=True, headers=headers)
         except Exception:
             continue
         if resp.status_code != 200 or "html" not in (resp.headers.get("Content-Type") or "text/html").lower():
@@ -556,8 +572,8 @@ def _infer_service_cadence(text):
     return {}
 
 
-def extract_commercial_site_intel(website, *, business_name="", prospect_type=""):
-    pages = _fetch_site_intel_pages(website)
+def extract_commercial_site_intel(website, *, business_name="", prospect_type="", max_pages=3, request_timeout=10):
+    pages = _fetch_site_intel_pages(website, max_pages=max_pages, request_timeout=request_timeout)
     if not pages:
         return {}
 
@@ -647,7 +663,7 @@ def extract_commercial_site_intel(website, *, business_name="", prospect_type=""
     }
 
 
-def _extract_public_emails(website):
+def _extract_public_emails(website, *, max_pages=5, request_timeout=10):
     normalized = _normalize_website(website)
     if not normalized:
         return []
@@ -660,13 +676,13 @@ def _extract_public_emails(website):
     visited = set()
     candidate_paths = ["/contact", "/contact-us", "/about", "/management", "/leasing", "/team"]
 
-    while urls_to_visit and len(visited) < 5 and len(emails) < 3:
+    while urls_to_visit and len(visited) < max(1, int(max_pages or 1)) and len(emails) < 3:
         current = urls_to_visit.pop(0)
         if current in visited:
             continue
         visited.add(current)
         try:
-            resp = session.get(current, timeout=10, allow_redirects=True, headers=headers)
+            resp = session.get(current, timeout=request_timeout, allow_redirects=True, headers=headers)
         except Exception:
             continue
         if resp.status_code != 200 or "text/html" not in (resp.headers.get("Content-Type") or "text/html"):
@@ -715,10 +731,10 @@ def _search_google_places(query, api_key, max_results):
     return resp.json().get("places", [])
 
 
-def _search_duckduckgo(query, max_results):
+def _search_duckduckgo(query, max_results, request_timeout=20):
     url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
     try:
-        resp = requests.get(url, timeout=20, headers={"User-Agent": "Mozilla/5.0"})
+        resp = requests.get(url, timeout=request_timeout, headers={"User-Agent": "Mozilla/5.0"})
     except Exception:
         return []
     if resp.status_code != 200:
@@ -804,27 +820,10 @@ def search_commercial_prospects(location, prospect_types, *, api_key="", max_res
             existing = lookup.get(key, {})
             emails = existing.get("emails") or []
             if website and not emails:
-                emails = _extract_public_emails(website)
+                emails = _extract_public_emails(website, max_pages=1, request_timeout=4)
             audit_snapshot = existing.get("audit_snapshot") or {}
-            if website and not audit_snapshot:
-                audit_snapshot = _extract_site_snapshot(website)
             site_intel = existing.get("site_intel") or {}
-            if website and not site_intel:
-                site_intel = extract_commercial_site_intel(
-                    website,
-                    business_name=business_name or existing.get("business_name") or "",
-                    prospect_type=item["key"],
-                )
             public_intel = existing.get("public_intel") or {}
-            if (website or business_name) and not public_intel:
-                public_intel = extract_commercial_public_intel(
-                    business_name or existing.get("business_name") or "",
-                    website=website or existing.get("website") or "",
-                    address=(raw.get("formattedAddress") or existing.get("address") or "").strip(),
-                    service_area=location,
-                    prospect_type=item["key"],
-                    phone=(raw.get("nationalPhoneNumber") or existing.get("phone") or "").strip(),
-                )
             if public_intel.get("emails"):
                 emails = _clean_email_candidates((public_intel.get("emails") or []) + emails)
             merged = {
@@ -841,11 +840,7 @@ def search_commercial_prospects(location, prospect_types, *, api_key="", max_res
                 "prospect_type_label": item["label"],
                 "service_area": location,
                 "source_query": query,
-                "audit_snapshot": {
-                    **(audit_snapshot or {}),
-                    **({"site_intel": site_intel} if site_intel else {}),
-                    **({"public_intel": public_intel} if public_intel else {}),
-                },
+                "audit_snapshot": audit_snapshot or {},
                 "site_intel": site_intel,
                 "public_intel": public_intel,
                 "property_count": site_intel.get("property_count") or existing.get("property_count") or "",

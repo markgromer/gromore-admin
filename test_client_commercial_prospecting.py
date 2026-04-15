@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from webapp.client_portal import _default_client_commercial_proposal_builder
-from webapp.commercial_prospector import extract_commercial_public_intel, extract_commercial_site_intel
+from webapp.commercial_prospector import extract_commercial_public_intel, extract_commercial_site_intel, search_commercial_prospects
 
 _TEST_ROOT = Path(__file__).resolve().parent / ".tmp-test-artifacts"
 _TEST_ROOT.mkdir(exist_ok=True)
@@ -1284,6 +1284,37 @@ class ClientCommercialProspectingTests(unittest.TestCase):
             events = self.app.db.get_lead_events(thread_id, event_type="commercial_refreshed")
             self.assertEqual(len(events), 1)
             self.assertEqual(events[0]["event_value"], "needs_qualification")
+
+    @patch("webapp.commercial_prospector._extract_public_emails")
+    @patch("webapp.commercial_prospector._search_google_places")
+    @patch("webapp.commercial_prospector.extract_commercial_site_intel")
+    @patch("webapp.commercial_prospector.extract_commercial_public_intel")
+    def test_search_commercial_prospects_skips_deep_enrichment(self, public_intel_mock, site_intel_mock, search_mock, email_mock):
+        search_mock.return_value = [
+            {
+                "id": f"place-{index}",
+                "displayName": {"text": f"Property {index}"},
+                "websiteUri": f"https://property{index}.example.com",
+                "formattedAddress": f"{index} Main St, Mesa, AZ",
+                "nationalPhoneNumber": f"+14805550{index:03d}",
+            }
+            for index in range(7)
+        ]
+        email_mock.return_value = ["team@example.com"]
+        site_intel_mock.return_value = {"property_count": "120 units", "site_signals": ["Pet-friendly"]}
+        public_intel_mock.return_value = {"decision_maker_role_hint": "Property Manager", "emails": ["manager@example.com"]}
+
+        results = search_commercial_prospects(
+            "Mesa, AZ",
+            ["property_manager"],
+            api_key="maps-key",
+            max_results_per_type=8,
+        )
+
+        self.assertEqual(len(results), 7)
+        self.assertEqual(email_mock.call_count, 7)
+        self.assertEqual(site_intel_mock.call_count, 0)
+        self.assertEqual(public_intel_mock.call_count, 0)
 
 
 if __name__ == "__main__":
