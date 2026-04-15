@@ -13,6 +13,7 @@ os.environ.setdefault("SECRET_KEY", "test-secret")
 os.environ.setdefault("APP_URL", "http://localhost:5000")
 
 from webapp.app import create_app
+from webapp.commercial_strategy import build_commercial_outreach_brief
 
 
 class ClientCommercialProspectingTests(unittest.TestCase):
@@ -126,6 +127,30 @@ class ClientCommercialProspectingTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(search_mock.call_args.kwargs["api_key"], "brand-maps-key")
+
+    def test_client_commercial_brief_uses_brand_service_context(self):
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "primary_services", "Pet waste removal, waste station refill, deodorizer treatment")
+            self.app.db.update_brand_text_field(self.brand_id, "active_offers", "Apartment dog park cleanup, HOA common-area service")
+            brand = self.app.db.get_brand(self.brand_id)
+
+        brief = build_commercial_outreach_brief(
+            {
+                "business_name": "Palm Vista Apartments",
+                "industry": "Apartment Complexes",
+                "account_type": "apartment",
+                "service_area": "Mesa, AZ",
+                "source_details_json": json.dumps({"emails": ["manager@palmvista.example.com"]}),
+                "audit_snapshot_json": json.dumps({}),
+                "qualification_answers_json": json.dumps({}),
+            },
+            brand=brand,
+        )
+
+        self.assertIn("pet waste removal", brief["email_body"].lower())
+        self.assertIn("site cleanliness", brief["outreach_angle"].lower())
+        self.assertNotIn("lead flow", brief["email_body"].lower())
+        self.assertNotIn("website conversion", brief["call_opener"].lower())
 
     def test_client_commercial_import_creates_brand_thread(self):
         payload = {

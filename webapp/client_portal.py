@@ -7013,20 +7013,21 @@ def _build_client_commercial_payload(thread):
     return _normalize_client_commercial_payload(payload)
 
 
-def _build_client_commercial_brief(thread):
+def _build_client_commercial_brief(thread, brand=None):
     from webapp.commercial_strategy import build_commercial_outreach_brief
 
     payload = _build_client_commercial_payload(thread)
-    return payload, build_commercial_outreach_brief(payload)
+    return payload, build_commercial_outreach_brief(payload, brand=brand)
 
 
 def _get_client_commercial_threads(db, brand_id, limit=60):
     threads = db.get_lead_threads(brand_id, limit=limit)
+    brand = db.get_brand(brand_id)
     items = []
     for thread in threads:
         if (thread.get("source") or "") != "commercial_prospecting" and (thread.get("commercial_data_json") or "{}").strip() in {"", "{}"}:
             continue
-        payload, brief = _build_client_commercial_brief(thread)
+        payload, brief = _build_client_commercial_brief(thread, brand=brand)
         items.append({
             "thread": thread,
             "payload": payload,
@@ -7315,7 +7316,7 @@ def client_commercial_import():
         )
         existing_payload = _build_client_commercial_payload(existing) if existing else {}
         prospect_payload = _merge_client_commercial_payload(existing_payload, incoming_payload) if existing else incoming_payload
-        brief = build_commercial_outreach_brief(prospect_payload)
+        brief = build_commercial_outreach_brief(prospect_payload, brand=brand)
         prospect_payload.update({
             "outreach_angle": brief["outreach_angle"],
             "proposal_status": brief["proposal_readiness"]["status"],
@@ -7405,7 +7406,7 @@ def client_commercial_thread(thread_id):
     if not thread:
         abort(404)
 
-    prospect, commercial_brief = _build_client_commercial_brief(thread)
+    prospect, commercial_brief = _build_client_commercial_brief(thread, brand=brand)
     prospect["required_add_ons"] = _safe_json_list(prospect.get("required_add_ons_json"))
     prospect["walkthrough_photo_urls"] = _safe_json_list(prospect.get("walkthrough_photo_urls_json"))
     proposal_quote = db.get_lead_quote_for_thread(thread_id)
@@ -7659,6 +7660,7 @@ def client_commercial_thread_qualification(thread_id):
     thread = db.get_lead_thread(thread_id, brand_id=brand_id)
     if not thread:
         abort(404)
+    brand = db.get_brand(brand_id)
 
     from webapp.commercial_strategy import (
         COMMERCIAL_QUALIFICATION_CORE_FIELDS,
@@ -7677,7 +7679,7 @@ def client_commercial_thread_qualification(thread_id):
         answers[field["key"]] = request.form.get(field["key"], "").strip()
     prospect["qualification_answers_json"] = json.dumps(answers)
 
-    brief = build_commercial_outreach_brief(prospect)
+    brief = build_commercial_outreach_brief(prospect, brand=brand)
     prospect["outreach_angle"] = brief["outreach_angle"]
     prospect["proposal_status"] = brief["proposal_readiness"]["status"]
     prospect["pain_points_json"] = json.dumps(brief["pain_points"])
@@ -7763,7 +7765,7 @@ def client_commercial_thread_walkthrough(thread_id):
     builder["relief_area_count"] = prospect.get("walkthrough_relief_area_count") or builder.get("relief_area_count") or 0
     prospect["proposal_builder_json"] = json.dumps(builder)
 
-    brief = build_commercial_outreach_brief(prospect)
+    brief = build_commercial_outreach_brief(prospect, brand=brand)
     prospect["outreach_angle"] = brief["outreach_angle"]
     prospect["proposal_status"] = brief["proposal_readiness"]["status"]
     prospect["pain_points_json"] = json.dumps(brief["pain_points"])
@@ -7871,6 +7873,7 @@ def client_commercial_thread_refresh(thread_id):
     thread = db.get_lead_thread(thread_id, brand_id=brand_id)
     if not thread:
         abort(404)
+    brand = db.get_brand(brand_id)
 
     prospect = _build_client_commercial_payload(thread)
     website = (prospect.get("website") or "").strip()
@@ -7909,7 +7912,7 @@ def client_commercial_thread_refresh(thread_id):
         default_service_area=prospect.get("service_area") or "",
     )
     prospect = _merge_client_commercial_payload(prospect, refresh_payload)
-    brief = build_commercial_outreach_brief(prospect)
+    brief = build_commercial_outreach_brief(prospect, brand=brand)
     prospect["outreach_angle"] = brief["outreach_angle"]
     prospect["proposal_status"] = brief["proposal_readiness"]["status"]
     prospect["pain_points_json"] = json.dumps(brief["pain_points"])

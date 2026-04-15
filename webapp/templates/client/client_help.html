@@ -202,6 +202,10 @@
                 <span class="nav-icon"><i class="bi bi-folder2-open"></i></span>
                 Google Drive
             </a>
+            <a href="#openphone-quo" class="{{ 'active' if active_topic == 'openphone-quo' }}">
+                <span class="nav-icon"><i class="bi bi-phone"></i></span>
+                OpenPhone / Quo
+            </a>
             <a href="#wordpress" class="{{ 'active' if active_topic == 'wordpress' }}">
                 <span class="nav-icon"><i class="bi bi-wordpress"></i></span>
                 WordPress
@@ -319,6 +323,11 @@
                         <td><i class="bi bi-wordpress me-1" style="color:#21759b;"></i> <strong>WordPress</strong></td>
                         <td>Site URL + App Password</td>
                         <td>Publish AI-generated blog posts directly to your WordPress site without copy-pasting. The AI writes SEO-optimized content and pushes it to your site as a draft or published post. <a href="#wordpress">Full setup guide below.</a></td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-phone me-1 text-success"></i> <strong>OpenPhone / Quo</strong></td>
+                        <td>API key + phone number + webhook</td>
+                        <td>Connect Warren to your SMS number so inbound texts can create lead threads, outbound texts can be sent from the platform, and lead conversations stay inside the Warren inbox. <a href="#openphone-quo">Full setup guide below.</a></td>
                     </tr>
                     <tr>
                         <td><i class="bi bi-people me-1 text-secondary"></i> <strong>CRM (Sweep and Go)</strong></td>
@@ -708,6 +717,76 @@
                 Drive folder: <code>https://drive.google.com/drive/folders/<strong>ABC123...</strong></code> - copy the bold part<br>
                 Google Sheet: <code>https://docs.google.com/spreadsheets/d/<strong>ABC123...</strong>/edit</code> - copy the bold part
             </div>
+        </div>
+
+        <!-- OpenPhone / Quo -->
+        <div class="help-topic" id="openphone-quo">
+            <h4><i class="bi bi-phone text-success"></i> OpenPhone / Quo SMS</h4>
+            <p class="topic-desc">Connect Quo, formerly OpenPhone, so Warren can receive inbound SMS, create or update lead threads, and send outbound texts from your configured business number.</p>
+
+            <h5>What This Connection Does</h5>
+            <ul>
+                <li>Turns SMS into a Warren lead channel instead of keeping those conversations trapped in a separate app.</li>
+                <li>Lets inbound text replies create or update lead threads in the inbox.</li>
+                <li>Lets Warren send outbound texts from your configured Quo number.</li>
+                <li>Gives you connection testing, phone-number lookup, and test-SMS tools on the Connections page.</li>
+            </ul>
+
+            <h5>What You Need</h5>
+            <ul>
+                <li>A Quo / OpenPhone account with API access.</li>
+                <li>Your Quo API key.</li>
+                <li>Your sending number in E.164 format, for example <code>+15551234567</code>.</li>
+                <li>Access to your webhook settings in Quo / OpenPhone.</li>
+            </ul>
+
+            <h5>Step 1: Save The API Key And Number</h5>
+            <ol>
+                <li>Go to your <a href="{{ url_for('client.client_settings') }}">Connections</a> page.</li>
+                <li>Find the Warren setup section.</li>
+                <li>Paste your <strong>OpenPhone / Quo API Key</strong>.</li>
+                <li>Enter your <strong>OpenPhone / Quo Number</strong> in E.164 format.</li>
+                <li>Save the settings.</li>
+            </ol>
+
+            <div class="step-callout">
+                <strong>Important:</strong> the number should be a full SMS-capable business number in the format <code>+1XXXXXXXXXX</code>. If the number format is wrong, sends and matching can fail even if the API key is valid.
+            </div>
+
+            <h5>Step 2: Add The Inbound Webhook</h5>
+            <ol>
+                <li>After saving your key, stay on the Warren section of the <a href="{{ url_for('client.client_settings') }}">Connections</a> page.</li>
+                <li>Copy the <strong>Inbound SMS Webhook URL</strong> shown there.</li>
+                <li>In Quo / OpenPhone, open <strong>Settings &gt; Webhooks</strong>.</li>
+                <li>Add a webhook using the copied URL.</li>
+                <li>Select the <strong>message.received</strong> event so incoming SMS posts back to Warren.</li>
+            </ol>
+
+            <div class="tip-box">
+                <i class="bi bi-lightbulb me-1"></i> <strong>What Warren expects:</strong> inbound SMS is received through the brand-specific webhook URL and processed as a <code>message.received</code> event. That is what creates or updates the right lead thread in the inbox.
+            </div>
+
+            <h5>Step 3: Optional Webhook Secret</h5>
+            <p>If you want signature verification turned on, copy your webhook secret from Quo / OpenPhone and save it in the <strong>OpenPhone Webhook Secret</strong> field on the Connections page.</p>
+            <ul>
+                <li>If a secret is saved, Warren verifies signed webhook requests before accepting them.</li>
+                <li>If you leave the field blank, the webhook can still work, but you lose that validation layer.</li>
+            </ul>
+
+            <h5>Step 4: Test It Before You Rely On It</h5>
+            <ol>
+                <li>Use <strong>Test Connection</strong> on the Connections page to confirm Warren can reach the Quo account and list available phone numbers.</li>
+                <li>Use <strong>Send Test SMS</strong> to text your own phone.</li>
+                <li>Reply to that SMS from your phone and confirm the reply appears in Warren.</li>
+            </ol>
+
+            <div class="warning-box">
+                <i class="bi bi-exclamation-triangle me-1"></i> <strong>Most common setup problems:</strong> wrong number format, webhook not set to <code>message.received</code>, or a missing webhook secret when signed requests are expected.
+            </div>
+
+            <p>Once connected, SMS can feed directly into Warren's lead qualification, quoting, and follow-up flow instead of forcing your team to bounce between tools.</p>
+
+            <a href="https://www.quo.com/docs/api-reference/introduction" target="_blank" rel="noopener" class="ext-link">Quo API docs <i class="bi bi-box-arrow-up-right"></i></a>
         </div>
 
         <!-- WordPress -->
