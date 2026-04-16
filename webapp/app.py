@@ -2821,14 +2821,116 @@ def create_app():
 
     # ── Beta Testers Admin ──
 
+    def _feedback_ai_model():
+        return (
+            db.get_setting("openai_model", "").strip()
+            or os.environ.get("OPENAI_MODEL", "").strip()
+            or app.config.get("OPENAI_MODEL")
+            or "gpt-4o-mini"
+        )
+
+    def _feedback_ai_key():
+        return db.get_setting("openai_api_key", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip()
+
+    def _feedback_ai_scope():
+        scope = (request.form.get("scope") or "new").strip().lower()
+        category = (request.form.get("category") or "").strip().lower() or None
+        ids_raw = (request.form.get("feedback_ids") or "").strip()
+        selected_ids = [part.strip() for part in ids_raw.split(",") if part.strip()]
+
+        filters = {}
+        scope_label = "New feedback"
+        items = []
+
+        if selected_ids:
+            items = db.get_beta_feedback_by_ids(selected_ids)
+            scope = "selected"
+            scope_label = f"Selected feedback ({len(items)})"
+            filters["feedback_ids"] = [int(fid) for fid in selected_ids]
+        elif scope == "all":
+            items = db.get_beta_feedback_filtered(category=category, limit=100)
+            scope_label = "Recent feedback"
+        else:
+            items = db.get_beta_feedback_filtered(status="new", category=category, limit=100)
+            scope = "new"
+            scope_label = "New feedback"
+
+        if category:
+            filters["category"] = category
+            scope_label += f" - {category.replace('_', ' ').title()}"
+
+        return scope, scope_label, filters, items
+
+    def _run_feedback_ai_review(feedback_items, api_key, model):
+        payload = []
+        for item in feedback_items:
+            payload.append({
+                "id": item.get("id"),
+                "brand_name": item.get("brand_name") or "",
+                "tester_name": item.get("tester_name") or "",
+                "tester_email": item.get("tester_email") or "",
+                "category": item.get("category") or "general",
+                "rating": int(item.get("rating") or 0),
+                "status": item.get("status") or "new",
+                "page": item.get("page") or "",
+                "message": item.get("message") or "",
+                "created_at": item.get("created_at") or "",
+            })
+
+        prompt = (
+            "You are a product operations assistant helping a SaaS team triage customer feedback. "
+            "You will receive a JSON array of feedback items. Return ONLY valid JSON with these top-level keys: "
+            "summary, dev_plan, reply_drafts.\n\n"
+            "Rules:\n"
+            "- Do not use em dashes.\n"
+            "- Be concrete, concise, and evidence-based.\n"
+            "- Never promise a fix date in customer replies.\n"
+            "- Keep customer replies warm, brief, and non-technical.\n"
+            "- recommended_status must be one of: new, reviewed, resolved.\n"
+            "- reply_drafts must include one entry for every feedback item id.\n\n"
+            "summary must include: executive_summary, counts, top_themes, priority_recommendations.\n"
+            "counts must include: total_feedback, bugs, feature_requests, ui_ux, likes, dislikes, general.\n"
+            "top_themes must be an array of objects with: title, category, frequency, why_it_matters, evidence_ids.\n"
+            "priority_recommendations must be an array of objects with: title, reason, urgency.\n\n"
+            "dev_plan must include: title, objective, likely_areas, implementation_steps, qa_checks, rollout_order, customer_comms.\n"
+            "likely_areas and rollout_order must be arrays of strings. implementation_steps and qa_checks must be arrays of strings.\n"
+            "customer_comms must be an array of short bullets.\n\n"
+            "reply_drafts must be an array of objects with: feedback_id, reply_subject, reply_draft, internal_note, recommended_status, confidence, needs_manual_review.\n"
+            "confidence should be a number between 0 and 1.\n\n"
+            f"Feedback items JSON:\n{json.dumps(payload)}"
+        )
+
+        import openai
+
+        client = openai.OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "You convert product feedback into structured summaries, implementation plans, and customer reply drafts."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.2,
+            response_format={"type": "json_object"},
+        )
+        raw = (response.choices[0].message.content or "{}").strip()
+        result = json.loads(raw)
+        return {
+            "summary": result.get("summary") or {},
+            "dev_plan": result.get("dev_plan") or {},
+            "reply_drafts": result.get("reply_drafts") or [],
+        }
+
     @app.route("/beta")
     @login_required
     def beta_dashboard():
         stats = db.get_beta_stats()
         testers = db.get_beta_testers()
         feedback = db.get_beta_feedback(limit=50)
+        drafts = db.get_feedback_ai_drafts([item["id"] for item in feedback])
+        drafts_by_feedback = {item["feedback_id"]: item for item in drafts}
         fb_summary = db.get_beta_feedback_summary()
         themes = db.get_feedback_themes()
+        latest_feedback_ai_run = db.get_latest_feedback_ai_run()
         considerations = db.get_upgrade_considerations()
         upgrade_stats = db.get_upgrade_stats()
         return render_template(
@@ -2836,11 +2938,119 @@ def create_app():
             stats=stats,
             testers=testers,
             feedback=feedback,
+            drafts_by_feedback=drafts_by_feedback,
             fb_summary=fb_summary,
             themes=themes,
+            latest_feedback_ai_run=latest_feedback_ai_run,
             considerations=considerations,
             upgrade_stats=upgrade_stats,
         )
+
+    @app.route("/beta/feedback/ai/generate", methods=["POST"])
+    @login_required
+    def beta_feedback_ai_generate():
+        api_key = _feedback_ai_key()
+        if not api_key:
+            flash("OpenAI is not configured. Add your OpenAI API key in Settings.", "error")
+            return redirect(url_for("beta_dashboard"))
+
+        scope_type, scope_label, filters, items = _feedback_ai_scope()
+        if not items:
+            flash("No feedback matched that AI review scope.", "warning")
+            return redirect(url_for("beta_dashboard"))
+
+        try:
+            model = _feedback_ai_model()
+            result = _run_feedback_ai_review(items, api_key, model)
+            run_id = db.create_feedback_ai_run({
+                "scope_type": scope_type,
+                "scope_label": scope_label,
+                "feedback_ids": [item["id"] for item in items],
+                "filters": filters,
+                "model": model,
+                "prompt_version": "feedback-review-v1",
+                "summary": result["summary"],
+                "dev_plan": result["dev_plan"],
+                "created_by": session.get("user_id"),
+            })
+
+            feedback_ids = {item["id"] for item in items}
+            draft_count = 0
+            for draft in result["reply_drafts"]:
+                feedback_id = int(draft.get("feedback_id") or 0)
+                if feedback_id not in feedback_ids:
+                    continue
+                db.save_feedback_ai_draft({
+                    "feedback_id": feedback_id,
+                    "run_id": run_id,
+                    "reply_subject": draft.get("reply_subject") or "Reply to your GroMore feedback",
+                    "reply_draft": draft.get("reply_draft") or "",
+                    "internal_note": draft.get("internal_note") or "",
+                    "recommended_status": draft.get("recommended_status") or "reviewed",
+                    "confidence": draft.get("confidence") or 0,
+                    "needs_manual_review": bool(draft.get("needs_manual_review")),
+                })
+                draft_count += 1
+
+            flash(f"AI review generated for {len(items)} feedback item(s), with {draft_count} reply drafts.", "success")
+        except Exception as exc:
+            flash(f"AI feedback review failed: {exc}", "error")
+
+        return redirect(url_for("beta_dashboard") + "#tab-feedback")
+
+    @app.route("/beta/feedback/<int:feedback_id>/draft/use", methods=["POST"])
+    @login_required
+    def beta_feedback_use_draft(feedback_id):
+        draft = db.get_feedback_ai_draft(feedback_id)
+        if not draft:
+            flash("AI draft not found for that feedback item.", "warning")
+            return redirect(url_for("beta_dashboard"))
+
+        status = draft.get("recommended_status") or "reviewed"
+        admin_response = (draft.get("reply_draft") or "").strip()
+        db.update_beta_feedback_status(feedback_id, status, admin_response)
+        db.approve_feedback_ai_draft(feedback_id, session.get("user_id"))
+        flash("AI draft copied into the feedback reply.", "success")
+        return redirect(url_for("beta_dashboard") + "#tab-feedback")
+
+    @app.route("/beta/feedback/<int:feedback_id>/draft/send", methods=["POST"])
+    @login_required
+    def beta_feedback_send_draft(feedback_id):
+        draft = db.get_feedback_ai_draft(feedback_id)
+        if not draft:
+            flash("AI draft not found for that feedback item.", "warning")
+            return redirect(url_for("beta_dashboard"))
+
+        if draft.get("sent_at"):
+            flash("That feedback reply was already sent.", "info")
+            return redirect(url_for("beta_dashboard") + "#tab-feedback")
+
+        feedback_items = db.get_beta_feedback_by_ids([feedback_id])
+        if not feedback_items:
+            abort(404)
+        item = feedback_items[0]
+        recipient = (item.get("tester_email") or "").strip()
+        if not recipient:
+            flash("That feedback item has no reply email available.", "warning")
+            return redirect(url_for("beta_dashboard") + "#tab-feedback")
+
+        status = draft.get("recommended_status") or "reviewed"
+        reply_body = (draft.get("reply_draft") or "").strip()
+        subject = (draft.get("reply_subject") or "Reply to your GroMore feedback").strip()
+
+        try:
+            from webapp.email_sender import send_simple_email
+
+            send_simple_email(app.config, recipient, subject, reply_body)
+            db.update_beta_feedback_status(feedback_id, status, reply_body)
+            db.approve_feedback_ai_draft(feedback_id, session.get("user_id"))
+            db.mark_feedback_ai_draft_sent(feedback_id)
+            flash(f"Feedback reply sent to {recipient}.", "success")
+        except Exception as exc:
+            db.mark_feedback_ai_draft_sent(feedback_id, str(exc)[:300])
+            flash(f"Feedback reply failed: {exc}", "warning")
+
+        return redirect(url_for("beta_dashboard") + "#tab-feedback")
 
     @app.route("/beta/broadcast", methods=["POST"])
     @login_required

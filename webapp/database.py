@@ -48,6 +48,18 @@ class WebDB:
         return dict(parsed) if isinstance(parsed, dict) else {}
 
     @staticmethod
+    def _safe_json_list(raw_value):
+        if isinstance(raw_value, list):
+            return list(raw_value)
+        if not raw_value:
+            return []
+        try:
+            parsed = json.loads(raw_value)
+        except Exception:
+            return []
+        return list(parsed) if isinstance(parsed, list) else []
+
+    @staticmethod
     def _normalize_website(value):
         website = (value or "").strip()
         if not website:
@@ -693,6 +705,55 @@ class WebDB:
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_beta_feedback_brand
             ON beta_feedback(brand_id, created_at);
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS feedback_ai_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scope_type TEXT NOT NULL DEFAULT 'status',
+                scope_label TEXT DEFAULT '',
+                feedback_ids_json TEXT DEFAULT '[]',
+                filters_json TEXT DEFAULT '{}',
+                model TEXT DEFAULT '',
+                prompt_version TEXT DEFAULT '',
+                summary_json TEXT DEFAULT '{}',
+                dev_plan_json TEXT DEFAULT '{}',
+                created_by INTEGER DEFAULT NULL,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_feedback_ai_runs_created
+            ON feedback_ai_runs(created_at DESC, id DESC);
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS feedback_ai_drafts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                feedback_id INTEGER NOT NULL UNIQUE,
+                run_id INTEGER DEFAULT NULL,
+                reply_subject TEXT DEFAULT '',
+                reply_draft TEXT DEFAULT '',
+                internal_note TEXT DEFAULT '',
+                recommended_status TEXT DEFAULT 'reviewed',
+                confidence REAL DEFAULT 0,
+                needs_manual_review INTEGER DEFAULT 0,
+                approved INTEGER DEFAULT 0,
+                approved_by INTEGER DEFAULT NULL,
+                approved_at TEXT DEFAULT '',
+                sent_at TEXT DEFAULT '',
+                send_error TEXT DEFAULT '',
+                generated_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (feedback_id) REFERENCES beta_feedback(id) ON DELETE CASCADE,
+                FOREIGN KEY (run_id) REFERENCES feedback_ai_runs(id) ON DELETE SET NULL,
+                FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_feedback_ai_drafts_run
+            ON feedback_ai_drafts(run_id, updated_at DESC);
         """)
 
         conn.execute("""
@@ -1479,6 +1540,47 @@ class WebDB:
         for col_name, col_def in new_bt_cols:
             if col_name not in bt_columns:
                 self._safe_add_column(conn, "beta_testers", col_name, col_def)
+        conn.commit()
+
+        # ── feedback_ai_runs migrations ──
+        fair_columns = {r[1] for r in conn.execute("PRAGMA table_info(feedback_ai_runs)").fetchall()}
+        new_fair_cols = [
+            ("scope_type", "TEXT NOT NULL DEFAULT 'status'"),
+            ("scope_label", "TEXT DEFAULT ''"),
+            ("feedback_ids_json", "TEXT DEFAULT '[]'"),
+            ("filters_json", "TEXT DEFAULT '{}'"),
+            ("model", "TEXT DEFAULT ''"),
+            ("prompt_version", "TEXT DEFAULT ''"),
+            ("summary_json", "TEXT DEFAULT '{}'"),
+            ("dev_plan_json", "TEXT DEFAULT '{}'"),
+            ("created_by", "INTEGER DEFAULT NULL"),
+        ]
+        for col_name, col_def in new_fair_cols:
+            if col_name not in fair_columns:
+                self._safe_add_column(conn, "feedback_ai_runs", col_name, col_def)
+        conn.commit()
+
+        # ── feedback_ai_drafts migrations ──
+        faid_columns = {r[1] for r in conn.execute("PRAGMA table_info(feedback_ai_drafts)").fetchall()}
+        new_faid_cols = [
+            ("run_id", "INTEGER DEFAULT NULL"),
+            ("reply_subject", "TEXT DEFAULT ''"),
+            ("reply_draft", "TEXT DEFAULT ''"),
+            ("internal_note", "TEXT DEFAULT ''"),
+            ("recommended_status", "TEXT DEFAULT 'reviewed'"),
+            ("confidence", "REAL DEFAULT 0"),
+            ("needs_manual_review", "INTEGER DEFAULT 0"),
+            ("approved", "INTEGER DEFAULT 0"),
+            ("approved_by", "INTEGER DEFAULT NULL"),
+            ("approved_at", "TEXT DEFAULT ''"),
+            ("sent_at", "TEXT DEFAULT ''"),
+            ("send_error", "TEXT DEFAULT ''"),
+            ("generated_at", "TEXT DEFAULT (datetime('now'))"),
+            ("updated_at", "TEXT DEFAULT (datetime('now'))"),
+        ]
+        for col_name, col_def in new_faid_cols:
+            if col_name not in faid_columns:
+                self._safe_add_column(conn, "feedback_ai_drafts", col_name, col_def)
         conn.commit()
 
         # ── client_users migrations ──
@@ -4334,24 +4436,79 @@ class WebDB:
         conn = self._conn()
         if status:
             rows = conn.execute(
-                "SELECT bf.*, bt.name as tester_name, bt.email as tester_email, "
+                "SELECT bf.*, COALESCE(bt.name, cu.display_name, '') as tester_name, "
+                "COALESCE(bt.email, cu.email, '') as tester_email, "
                 "b.display_name as brand_name "
                 "FROM beta_feedback bf "
                 "LEFT JOIN beta_testers bt ON bt.client_user_id = bf.client_user_id "
+                "LEFT JOIN client_users cu ON cu.id = bf.client_user_id "
                 "LEFT JOIN brands b ON b.id = bf.brand_id "
                 "WHERE bf.status = ? ORDER BY bf.created_at DESC LIMIT ?",
                 (status, limit),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT bf.*, bt.name as tester_name, bt.email as tester_email, "
+                "SELECT bf.*, COALESCE(bt.name, cu.display_name, '') as tester_name, "
+                "COALESCE(bt.email, cu.email, '') as tester_email, "
                 "b.display_name as brand_name "
                 "FROM beta_feedback bf "
                 "LEFT JOIN beta_testers bt ON bt.client_user_id = bf.client_user_id "
+                "LEFT JOIN client_users cu ON cu.id = bf.client_user_id "
                 "LEFT JOIN brands b ON b.id = bf.brand_id "
                 "ORDER BY bf.created_at DESC LIMIT ?",
                 (limit,),
             ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_beta_feedback_by_ids(self, feedback_ids):
+        ids = [int(fid) for fid in (feedback_ids or []) if str(fid).strip()]
+        if not ids:
+            return []
+        conn = self._conn()
+        placeholders = ",".join("?" for _ in ids)
+        rows = conn.execute(
+            "SELECT bf.*, COALESCE(bt.name, cu.display_name, '') as tester_name, "
+            "COALESCE(bt.email, cu.email, '') as tester_email, "
+            "b.display_name as brand_name "
+            "FROM beta_feedback bf "
+            "LEFT JOIN beta_testers bt ON bt.client_user_id = bf.client_user_id "
+            "LEFT JOIN client_users cu ON cu.id = bf.client_user_id "
+            "LEFT JOIN brands b ON b.id = bf.brand_id "
+            f"WHERE bf.id IN ({placeholders}) ORDER BY bf.created_at DESC",
+            ids,
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_beta_feedback_filtered(self, status=None, category=None, limit=100, feedback_ids=None):
+        clauses = []
+        params = []
+        if status:
+            clauses.append("bf.status = ?")
+            params.append(status)
+        if category:
+            clauses.append("bf.category = ?")
+            params.append(category)
+        ids = [int(fid) for fid in (feedback_ids or []) if str(fid).strip()]
+        if ids:
+            placeholders = ",".join("?" for _ in ids)
+            clauses.append(f"bf.id IN ({placeholders})")
+            params.extend(ids)
+
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT bf.*, COALESCE(bt.name, cu.display_name, '') as tester_name, "
+            "COALESCE(bt.email, cu.email, '') as tester_email, "
+            "b.display_name as brand_name "
+            "FROM beta_feedback bf "
+            "LEFT JOIN beta_testers bt ON bt.client_user_id = bf.client_user_id "
+            "LEFT JOIN client_users cu ON cu.id = bf.client_user_id "
+            "LEFT JOIN brands b ON b.id = bf.brand_id "
+            f"{where_sql} ORDER BY bf.created_at DESC LIMIT ?",
+            tuple(params + [limit]),
+        ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
@@ -4425,6 +4582,138 @@ class WebDB:
                 })
         result.sort(key=lambda x: x["count"], reverse=True)
         return result
+
+    def create_feedback_ai_run(self, data):
+        conn = self._conn()
+        cur = conn.execute(
+            "INSERT INTO feedback_ai_runs "
+            "(scope_type, scope_label, feedback_ids_json, filters_json, model, prompt_version, "
+            "summary_json, dev_plan_json, created_by) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                data.get("scope_type", "status"),
+                data.get("scope_label", ""),
+                json.dumps(data.get("feedback_ids") or []),
+                json.dumps(data.get("filters") or {}),
+                data.get("model", ""),
+                data.get("prompt_version", ""),
+                json.dumps(data.get("summary") or {}),
+                json.dumps(data.get("dev_plan") or {}),
+                data.get("created_by"),
+            ),
+        )
+        conn.commit()
+        run_id = cur.lastrowid
+        conn.close()
+        return run_id
+
+    def get_feedback_ai_run(self, run_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM feedback_ai_runs WHERE id = ?", (run_id,)).fetchone()
+        conn.close()
+        if not row:
+            return None
+        item = dict(row)
+        item["feedback_ids"] = self._safe_json_list(item.get("feedback_ids_json"))
+        item["filters"] = self._safe_json_object(item.get("filters_json"))
+        item["summary"] = self._safe_json_object(item.get("summary_json"))
+        item["dev_plan"] = self._safe_json_object(item.get("dev_plan_json"))
+        return item
+
+    def get_latest_feedback_ai_run(self):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM feedback_ai_runs ORDER BY id DESC LIMIT 1").fetchone()
+        conn.close()
+        if not row:
+            return None
+        item = dict(row)
+        item["feedback_ids"] = self._safe_json_list(item.get("feedback_ids_json"))
+        item["filters"] = self._safe_json_object(item.get("filters_json"))
+        item["summary"] = self._safe_json_object(item.get("summary_json"))
+        item["dev_plan"] = self._safe_json_object(item.get("dev_plan_json"))
+        return item
+
+    def save_feedback_ai_draft(self, data):
+        conn = self._conn()
+        conn.execute(
+            "INSERT INTO feedback_ai_drafts "
+            "(feedback_id, run_id, reply_subject, reply_draft, internal_note, recommended_status, "
+            "confidence, needs_manual_review, approved, approved_by, approved_at, sent_at, send_error, generated_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')) "
+            "ON CONFLICT(feedback_id) DO UPDATE SET "
+            "run_id=excluded.run_id, reply_subject=excluded.reply_subject, reply_draft=excluded.reply_draft, "
+            "internal_note=excluded.internal_note, recommended_status=excluded.recommended_status, "
+            "confidence=excluded.confidence, needs_manual_review=excluded.needs_manual_review, approved=0, "
+            "approved_by=NULL, approved_at='', sent_at='', send_error='', generated_at=datetime('now'), updated_at=datetime('now')",
+            (
+                data.get("feedback_id"),
+                data.get("run_id"),
+                data.get("reply_subject", ""),
+                data.get("reply_draft", ""),
+                data.get("internal_note", ""),
+                data.get("recommended_status", "reviewed"),
+                float(data.get("confidence") or 0),
+                1 if data.get("needs_manual_review") else 0,
+                1 if data.get("approved") else 0,
+                data.get("approved_by"),
+                data.get("approved_at", ""),
+                data.get("sent_at", ""),
+                data.get("send_error", ""),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_feedback_ai_drafts(self, feedback_ids=None):
+        clauses = []
+        params = []
+        ids = [int(fid) for fid in (feedback_ids or []) if str(fid).strip()]
+        if ids:
+            placeholders = ",".join("?" for _ in ids)
+            clauses.append(f"d.feedback_id IN ({placeholders})")
+            params.extend(ids)
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT d.* FROM feedback_ai_drafts d "
+            f"{where_sql} ORDER BY d.updated_at DESC, d.id DESC",
+            tuple(params),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_feedback_ai_draft(self, feedback_id):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM feedback_ai_drafts WHERE feedback_id = ?",
+            (feedback_id,),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def approve_feedback_ai_draft(self, feedback_id, approved_by):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE feedback_ai_drafts SET approved = 1, approved_by = ?, approved_at = datetime('now'), updated_at = datetime('now') WHERE feedback_id = ?",
+            (approved_by, feedback_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def mark_feedback_ai_draft_sent(self, feedback_id, send_error=""):
+        conn = self._conn()
+        if send_error:
+            conn.execute(
+                "UPDATE feedback_ai_drafts SET send_error = ?, updated_at = datetime('now') WHERE feedback_id = ?",
+                (send_error, feedback_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE feedback_ai_drafts SET sent_at = datetime('now'), send_error = '', updated_at = datetime('now') WHERE feedback_id = ?",
+                (feedback_id,),
+            )
+        conn.commit()
+        conn.close()
 
     # ── Upgrade Considerations ──
 

@@ -258,8 +258,100 @@
         </div>
         {% endif %}
 
+        <div class="card mb-4" style="border:none;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.05);">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                    <div>
+                        <h5 class="mb-1"><i class="bi bi-stars"></i> AI Feedback Review</h5>
+                        <p class="text-muted mb-0" style="font-size:.88rem;">Generate a grouped summary, a dev-team action plan, and ready-to-send reply drafts for the current feedback queue.</p>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <form method="POST" action="{{ url_for('beta_feedback_ai_generate') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="scope" value="new">
+                            <button class="btn btn-sm btn-primary"><i class="bi bi-magic"></i> Review New Feedback</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('beta_feedback_ai_generate') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="scope" value="all">
+                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-card-list"></i> Review Recent Feedback</button>
+                        </form>
+                    </div>
+                </div>
+
+                {% if latest_feedback_ai_run %}
+                <div class="mt-4 pt-3 border-top">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                        <div>
+                            <strong>Latest AI Review</strong>
+                            <div class="text-muted" style="font-size:.82rem;">
+                                {{ latest_feedback_ai_run.scope_label or 'Feedback review' }}
+                                {% if latest_feedback_ai_run.created_at %} - {{ latest_feedback_ai_run.created_at[:16] }}{% endif %}
+                                {% if latest_feedback_ai_run.model %} - {{ latest_feedback_ai_run.model }}{% endif %}
+                            </div>
+                        </div>
+                        {% if latest_feedback_ai_run.summary.get('counts', {}).get('total_feedback') %}
+                        <span class="badge bg-dark">{{ latest_feedback_ai_run.summary.get('counts', {}).get('total_feedback') }} items</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-lg-6">
+                            <div class="p-3" style="background:#f8fafc;border-radius:10px;height:100%;">
+                                <div class="fw-semibold mb-2"><i class="bi bi-clipboard-data"></i> Summary</div>
+                                <p style="font-size:.88rem;" class="mb-3">{{ latest_feedback_ai_run.summary.get('executive_summary', 'No summary yet.') }}</p>
+
+                                {% set top_themes = latest_feedback_ai_run.summary.get('top_themes', []) %}
+                                {% if top_themes %}
+                                <div class="small text-uppercase text-muted fw-semibold mb-2">Top Themes</div>
+                                {% for theme in top_themes[:4] %}
+                                <div class="mb-2 p-2" style="background:#fff;border-radius:8px;">
+                                    <div class="fw-semibold" style="font-size:.84rem;">{{ theme.title }}</div>
+                                    <div style="font-size:.8rem;color:#475569;">{{ theme.why_it_matters }}</div>
+                                    <div class="text-muted" style="font-size:.75rem;">{{ theme.frequency }} mentions{% if theme.evidence_ids %} - IDs {{ theme.evidence_ids|join(', ') }}{% endif %}</div>
+                                </div>
+                                {% endfor %}
+                                {% endif %}
+
+                                {% set priorities = latest_feedback_ai_run.summary.get('priority_recommendations', []) %}
+                                {% if priorities %}
+                                <div class="small text-uppercase text-muted fw-semibold mb-2 mt-3">Priority Recommendations</div>
+                                <ul class="mb-0" style="font-size:.82rem;padding-left:1.1rem;">
+                                    {% for priority in priorities[:4] %}
+                                    <li><strong>{{ priority.title }}</strong>: {{ priority.reason }}{% if priority.urgency %} ({{ priority.urgency }}){% endif %}</li>
+                                    {% endfor %}
+                                </ul>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="p-3" style="background:#fff7ed;border-radius:10px;height:100%;">
+                                <div class="fw-semibold mb-2"><i class="bi bi-kanban"></i> Dev Plan</div>
+                                <p style="font-size:.88rem;" class="mb-2"><strong>{{ latest_feedback_ai_run.dev_plan.get('title', 'Working plan') }}</strong></p>
+                                <p style="font-size:.84rem;" class="mb-3">{{ latest_feedback_ai_run.dev_plan.get('objective', 'No dev plan yet.') }}</p>
+
+                                {% for label, key in [('Likely Areas', 'likely_areas'), ('Implementation Steps', 'implementation_steps'), ('QA Checks', 'qa_checks'), ('Rollout Order', 'rollout_order')] %}
+                                    {% set items = latest_feedback_ai_run.dev_plan.get(key, []) %}
+                                    {% if items %}
+                                    <div class="small text-uppercase text-muted fw-semibold mb-2 {% if not loop.first %}mt-3{% endif %}">{{ label }}</div>
+                                    <ul class="mb-0" style="font-size:.82rem;padding-left:1.1rem;">
+                                        {% for item in items[:5] %}
+                                        <li>{{ item }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
         {% if feedback %}
             {% for fb in feedback %}
+            {% set draft = drafts_by_feedback.get(fb.id) %}
             <div class="card mb-3" style="border:none;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.05);">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start mb-2">
@@ -281,6 +373,40 @@
                     {% if fb.admin_response %}
                     <div class="mt-2 p-2" style="background:#eff6ff;border-radius:8px;font-size:.85rem;">
                         <strong><i class="bi bi-reply"></i> Reply:</strong> {{ fb.admin_response }}
+                    </div>
+                    {% endif %}
+
+                    {% if draft and draft.reply_draft %}
+                    <div class="mt-3 p-3" style="background:#f8fafc;border:1px solid #dbeafe;border-radius:10px;">
+                        <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
+                            <div>
+                                <strong style="font-size:.86rem;"><i class="bi bi-stars"></i> AI Draft Reply</strong>
+                                {% if draft.reply_subject %}<div class="text-muted" style="font-size:.78rem;">Subject: {{ draft.reply_subject }}</div>{% endif %}
+                            </div>
+                            <div class="d-flex gap-1 flex-wrap">
+                                <span class="badge bg-light text-dark">{{ draft.recommended_status or 'reviewed' }}</span>
+                                <span class="badge bg-{{ 'warning text-dark' if draft.needs_manual_review else 'success' }}">{{ 'Needs review' if draft.needs_manual_review else 'Ready' }}</span>
+                                <span class="badge bg-secondary">{{ ((draft.confidence or 0) * 100)|round|int }}% confidence</span>
+                                {% if draft.sent_at %}<span class="badge bg-success">Sent</span>{% elif draft.approved %}<span class="badge bg-primary">Approved</span>{% endif %}
+                            </div>
+                        </div>
+                        <div style="font-size:.84rem;white-space:pre-wrap;">{{ draft.reply_draft }}</div>
+                        {% if draft.internal_note %}
+                        <div class="mt-2 text-muted" style="font-size:.78rem;"><strong>Internal note:</strong> {{ draft.internal_note }}</div>
+                        {% endif %}
+                        {% if draft.send_error %}
+                        <div class="mt-2 text-danger" style="font-size:.78rem;"><strong>Send error:</strong> {{ draft.send_error }}</div>
+                        {% endif %}
+                        <div class="mt-3 d-flex gap-2 flex-wrap">
+                            <form method="POST" action="{{ url_for('beta_feedback_use_draft', feedback_id=fb.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-sm btn-outline-primary"><i class="bi bi-clipboard-check"></i> Use Draft</button>
+                            </form>
+                            <form method="POST" action="{{ url_for('beta_feedback_send_draft', feedback_id=fb.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-sm btn-primary" {% if draft.sent_at %}disabled{% endif %}><i class="bi bi-send-check"></i> {{ 'Already Sent' if draft.sent_at else 'Send Draft Reply' }}</button>
+                            </form>
+                        </div>
                     </div>
                     {% endif %}
 
@@ -608,6 +734,13 @@ function escHtml(str) {
 document.addEventListener('DOMContentLoaded', function() {
     toggleSingleEmailField();
     loadBroadcasts();
+
+    if (window.location.hash) {
+        const trigger = document.querySelector(`a[data-bs-toggle="tab"][href="${window.location.hash}"]`);
+        if (trigger && window.bootstrap && window.bootstrap.Tab) {
+            new window.bootstrap.Tab(trigger).show();
+        }
+    }
 });
 </script>
 {% endblock %}

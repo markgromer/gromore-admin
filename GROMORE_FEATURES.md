@@ -464,6 +464,9 @@
 - **Broadcast History** - View all past broadcasts with recipient-level drill-down
 - **Feedback Collection** - Read feedback with categories, ratings, and themes
 - **Feedback Responses** - Reply to feedback
+- **AI Feedback Digest** - Generate GPT summaries of recent feedback, recurring themes, and recommended priorities
+- **AI Dev Rollout Briefs** - Build an internal implementation plan with likely code areas, rollout steps, and QA checks from live feedback batches
+- **Draft Reply Suggestions** - Generate per-feedback draft replies with recommended status, confidence, and one-click apply/send actions
 - **Feature Request Promotion** - Convert feedback into tracked upgrade considerations
 - **Upgrade Tracking** - Priority, feasibility, safety risk, status per consideration
 
