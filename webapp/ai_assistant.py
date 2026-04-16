@@ -1065,6 +1065,8 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
         },
         "website_detail": {
             "top_landing_pages": (analysis.get("top_landing_pages") or _pick(ga, "by_page") or [])[:15],
+            "top_sources": (analysis.get("top_sources") or _pick(ga, "top_sources") or [])[:10],
+            "top_converting_sources": (analysis.get("top_converting_sources") or _pick(ga, "top_converting_sources") or [])[:10],
         },
         "google_ads_detail": {
             "campaigns": (google_ads.get("campaign_analysis") or [])[:20],

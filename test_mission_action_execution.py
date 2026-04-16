@@ -113,6 +113,62 @@ class MissionActionExecutionTests(unittest.TestCase):
         self.assertIn("Please do not build new city or local pages yet.", action["delegate_message"])
         self.assertEqual(action["platform_url"], "")
 
+    def test_strategy_diagnostic_mission_stays_direct_for_owner(self):
+        analysis = {
+            "client_config": {"display_name": "Ace Plumbing", "industry": "plumbing"},
+            "google_analytics": {
+                "metrics": {"sessions": 212, "conversions": 8, "conversion_rate": 3.77, "bounce_rate": 54.2},
+                "month_over_month": {"sessions": {"current": 212, "previous": 377, "change_pct": -43.8}},
+            },
+            "top_sources": [
+                {"source": "google / organic", "sessions": 96, "conversions": 4},
+                {"source": "google / cpc", "sessions": 58, "conversions": 3},
+            ],
+            "top_converting_sources": [
+                {"source": "google / organic", "conversions": 4},
+            ],
+            "top_landing_pages": [
+                {"page": "/emergency-plumber", "sessions": 82, "conversions": 3, "bounce_rate": 49.2},
+            ],
+            "search_console": {
+                "metrics": {"clicks": 140, "impressions": 2100, "ctr": 6.7, "avg_position": 10.4},
+                "top_queries": [
+                    {"query": "emergency plumber mesa", "clicks": 41, "impressions": 510, "ctr": 8.0, "position": 5.6},
+                ],
+            },
+            "google_ads": {
+                "metrics": {"spend": 900, "results": 12, "clicks": 180, "cpc": 5.0},
+                "campaign_analysis": [
+                    {"campaign_name": "Emergency Search", "spend": 540, "results": 7},
+                ],
+            },
+            "highlights": [],
+            "concerns": [],
+        }
+        suggestions = [
+            {
+                "title": "Traffic Dropped 44% - Down to 212 Sessions",
+                "detail": "Sessions fell from 377 to 212. Check which traffic sources declined and whether ad activity changed.",
+                "category": "strategy",
+                "priority": "high",
+                "data_point": "Sessions: 212 (was 377)",
+            }
+        ]
+
+        actions = _build_action_cards(analysis, suggestions, brand={})
+
+        self.assertEqual(len(actions), 1)
+        action = actions[0]
+        self.assertEqual(action["execution_mode"], "direct")
+        self.assertEqual(action["delegate_message"], "")
+        self.assertEqual(action["delegate_to"], "")
+        self.assertEqual(action["platform_url"], "https://analytics.google.com")
+        self.assertIn("analytics.google.com", " ".join(action["steps"]))
+        self.assertIn("google / organic", " ".join(action["steps"]))
+        self.assertIn("/emergency-plumber", " ".join(action["steps"]))
+        self.assertIn("emergency plumber mesa", " ".join(action["steps"]))
+        self.assertIn("Emergency Search", " ".join(action["steps"]))
+
 
 if __name__ == "__main__":
     unittest.main()

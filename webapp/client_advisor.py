@@ -182,6 +182,16 @@ def _resolve_action_platform(title, category, relevant_data=None, detail=""):
         return "analytics"
     if category == "organic_social":
         return "meta_business"
+    if category == "strategy":
+        if any(word in combined for word in ("traffic", "sessions", "analytics", "source/medium", "acquisition")):
+            return "analytics"
+        if any(word in combined for word in ("search console", "rank", "ranking", "impressions", "clicks", "organic")):
+            return "search_console"
+        if any(word in combined for word in ("campaign", "ad spend", "ads manager", "meta ads", "facebook ads", "instagram ads")) and has_meta and not has_google:
+            return "meta_ads"
+        if any(word in combined for word in ("campaign", "ad spend", "google ads", "ppc", "cpc")) and has_google:
+            return "google_ads"
+        return ""
     if category == "creative":
         if has_google and not has_meta:
             return "google_ads"
@@ -243,8 +253,22 @@ def _build_action_items(suggestions, analysis_summary):
         if category in web_categories:
             item["relevant_data"]["website_kpis"] = kpis.get("ga", {})
             item["relevant_data"]["website_landing_pages"] = (website_detail.get("top_landing_pages") or [])[:10]
+            item["relevant_data"]["website_traffic_sources"] = (website_detail.get("top_sources") or [])[:10]
+            item["relevant_data"]["website_top_converting_sources"] = (website_detail.get("top_converting_sources") or [])[:10]
             item["relevant_data"]["seo_top_pages"] = (seo_detail.get("top_pages") or [])[:10]
             item["relevant_data"]["seo_keyword_opportunities"] = (seo_detail.get("keyword_opportunities") or [])[:10]
+
+        if category == "strategy":
+            item["relevant_data"]["website_kpis"] = kpis.get("ga", {})
+            item["relevant_data"]["website_landing_pages"] = (website_detail.get("top_landing_pages") or [])[:10]
+            item["relevant_data"]["website_traffic_sources"] = (website_detail.get("top_sources") or [])[:10]
+            item["relevant_data"]["website_top_converting_sources"] = (website_detail.get("top_converting_sources") or [])[:10]
+            item["relevant_data"]["seo_top_queries"] = (seo_detail.get("top_queries") or [])[:10]
+            item["relevant_data"]["seo_top_pages"] = (seo_detail.get("top_pages") or [])[:10]
+            item["relevant_data"]["google_ads_campaigns"] = (google_ads_detail.get("campaigns") or [])[:10]
+            item["relevant_data"]["meta_campaigns"] = (meta_detail.get("campaigns") or [])[:10]
+            item["relevant_data"]["google_ads_kpis"] = kpis.get("google_ads", {})
+            item["relevant_data"]["meta_kpis"] = kpis.get("meta", {})
 
         if category in organic_categories or "organic" in suggestion["title"].lower():
             item["relevant_data"]["fb_organic_top_posts"] = (fb_organic_detail.get("top_posts") or [])[:10]
@@ -295,12 +319,163 @@ def _format_exact_targets(category, relevant_data):
                 parts.append(f"position {round(float(position), 1)}")
             targets.append(" - ".join(parts))
 
+    if category == "strategy":
+        for row in (relevant_data.get("website_traffic_sources") or [])[:3]:
+            source = str(row.get("source") or row.get("source_medium") or "").strip()
+            if not source:
+                continue
+            sessions = row.get("sessions")
+            conversions = row.get("conversions")
+            parts = [source]
+            if sessions is not None:
+                parts.append(f"{int(float(sessions))} sessions")
+            if conversions is not None:
+                parts.append(f"{int(float(conversions))} conversions")
+            targets.append(" - ".join(parts))
+
+        for page in (relevant_data.get("website_landing_pages") or [])[:2]:
+            path = page.get("page") or page.get("path") or page.get("url")
+            if not path:
+                continue
+            sessions = page.get("sessions")
+            conversions = page.get("conversions")
+            parts = [str(path)]
+            if sessions is not None:
+                parts.append(f"{int(float(sessions))} sessions")
+            if conversions is not None:
+                parts.append(f"{int(float(conversions))} conversions")
+            targets.append(" - ".join(parts))
+
+        for campaign in (relevant_data.get("google_ads_campaigns") or [])[:2]:
+            name = campaign.get("name") or campaign.get("campaign_name")
+            if not name:
+                continue
+            metrics = campaign.get("metrics") or campaign
+            spend = metrics.get("spend")
+            results = metrics.get("results") or metrics.get("conversions")
+            parts = [str(name)]
+            if spend is not None:
+                parts.append(f"${round(float(spend), 2)} spend")
+            if results is not None:
+                parts.append(f"{int(float(results))} results")
+            targets.append(" - ".join(parts))
+
+        for campaign in (relevant_data.get("meta_campaigns") or [])[:2]:
+            name = campaign.get("name") or campaign.get("campaign_name")
+            if not name:
+                continue
+            metrics = campaign.get("metrics") or campaign
+            spend = metrics.get("spend")
+            results = metrics.get("results") or metrics.get("conversions")
+            parts = [str(name)]
+            if spend is not None:
+                parts.append(f"${round(float(spend), 2)} spend")
+            if results is not None:
+                parts.append(f"{int(float(results))} results")
+            targets.append(" - ".join(parts))
+
     deduped = []
     for target in targets:
         cleaned = _trim_copy(target, 180)
         if cleaned and cleaned not in deduped:
             deduped.append(cleaned)
     return deduped[:4]
+
+
+def _pick_primary_target(rows, *keys):
+    for row in rows or []:
+        for key in keys:
+            value = str(row.get(key) or "").strip()
+            if value:
+                return row, value
+    return None, ""
+
+
+def _pick_primary_campaign(rows):
+    return _pick_primary_target(rows, "name", "campaign_name")
+
+
+def _pick_primary_ad(rows):
+    return _pick_primary_target(rows, "name", "ad_name")
+
+
+def _pick_primary_query(rows):
+    return _pick_primary_target(rows, "query", "keyword")
+
+
+def _pick_primary_page(rows):
+    return _pick_primary_target(rows, "page", "path", "url")
+
+
+def _pick_primary_search_term(rows):
+    return _pick_primary_target(rows, "search_term", "query", "term")
+
+
+def _strategy_traffic_drop_steps(data_point, relevant_data):
+    steps = []
+    source_rows = list(relevant_data.get("website_traffic_sources") or [])
+    landing_pages = list(relevant_data.get("website_landing_pages") or [])
+    converting_sources = list(relevant_data.get("website_top_converting_sources") or [])
+    seo_queries = list(relevant_data.get("seo_top_queries") or [])
+    google_campaigns = list(relevant_data.get("google_ads_campaigns") or [])
+    meta_campaigns = list(relevant_data.get("meta_campaigns") or [])
+
+    source_row, source_name = _pick_primary_target(source_rows, "source", "source_medium")
+    if source_row and source_name:
+        steps.append(
+            f"Go to analytics.google.com. Click \"Reports\", then \"Acquisition\", then \"Traffic acquisition\". Start with \"{source_name}\" because it drove about {int(_to_float(source_row.get('sessions'), 0))} sessions and {int(_to_float(source_row.get('conversions'), 0))} conversions in the current data."
+        )
+    else:
+        steps.append(
+            f"Go to analytics.google.com. Click \"Reports\", then \"Acquisition\", then \"Traffic acquisition\".{f' Current metric: {data_point}.' if data_point else ''} Sort by sessions so you can see which source is carrying the most traffic right now."
+        )
+
+    page_row, page_path = _pick_primary_target(landing_pages, "page", "path", "url")
+    if page_row and page_path:
+        steps.append(
+            f"Then click \"Landing page\" or open Pages and screens, and compare the page \"{page_path}\" first. It already has about {int(_to_float(page_row.get('sessions'), 0))} sessions and {int(_to_float(page_row.get('conversions'), 0))} conversions, so any drop there matters."
+        )
+
+    query_row, query_name = _pick_primary_target(seo_queries, "query", "keyword")
+    if query_row and query_name:
+        steps.append(
+            f"Go to search.google.com/search-console. Click \"Performance\" and check the query \"{query_name}\" first. It is one of the real search terms already in the account data, so confirm whether impressions, clicks, or position slipped."
+        )
+
+    top_paid = None
+    paid_platform = ""
+    if google_campaigns:
+        top_paid = google_campaigns[0]
+        paid_platform = "google"
+    elif meta_campaigns:
+        top_paid = meta_campaigns[0]
+        paid_platform = "meta"
+
+    if top_paid:
+        campaign_name = top_paid.get("name") or top_paid.get("campaign_name") or "the top campaign"
+        metrics = top_paid.get("metrics") or top_paid
+        spend = _to_float(metrics.get("spend"), 0)
+        results = _to_float(metrics.get("results") or metrics.get("conversions"), 0)
+        if paid_platform == "google":
+            steps.append(
+                f"Open ads.google.com and inspect \"{campaign_name}\" next. It spent about ${spend:.0f} and produced {int(results)} results in the current month, so check whether budget, status, or search-term quality changed when traffic fell."
+            )
+        else:
+            steps.append(
+                f"Open business.facebook.com/adsmanager and inspect \"{campaign_name}\" next. It spent about ${spend:.0f} and produced {int(results)} results in the current month, so check whether spend, delivery, or audience changes line up with the traffic drop."
+            )
+
+    best_source_row, best_source_name = _pick_primary_target(converting_sources, "source", "source_medium")
+    if best_source_row and best_source_name:
+        steps.append(
+            f"Write down what changed and compare it to \"{best_source_name}\", one of your current converting sources, so you know whether to restore a lost winner or shift attention somewhere else."
+        )
+    else:
+        steps.append(
+            "Write down the source, page, or campaign that dropped the hardest, then compare it to the sources still producing leads before you change budget or copy."
+        )
+
+    return steps[:5]
 
 
 def _seo_execution_context(relevant_data):
@@ -454,12 +629,30 @@ def _apply_platform_reality_checks(card, suggestion, action_item, delegate_plan=
         card["steps"] = _fallback_steps(suggestion, action_item=action_item, delegate_plan=delegate_plan)
 
 
+def _needs_delegate_plan(title, category, relevant_data):
+    title_lower = str(title or "").lower()
+    category = str(category or "").strip().lower()
+    exact_targets = _format_exact_targets(category, relevant_data)
+
+    if category in {"website", "seo", "creative"}:
+        return True
+
+    delegate_words = ("page", "website", "landing", "seo", "headline", "design", "copy")
+    direct_words = ("investigate", "diagnose", "check", "review", "compare", "audit", "traffic drop")
+
+    if any(word in title_lower for word in direct_words):
+        return False
+
+    if category == "strategy":
+        return bool(exact_targets) and any(word in title_lower for word in delegate_words)
+
+    return any(word in title_lower for word in delegate_words)
+
+
 def _build_delegate_plan(title, category, relevant_data):
     title_lower = str(title or "").lower()
     exact_targets = _format_exact_targets(category, relevant_data)
-    needs_delegate = category in {"website", "seo", "strategy", "creative"} or any(
-        word in title_lower for word in ("page", "website", "landing", "seo", "headline", "design", "copy", "competitor")
-    )
+    needs_delegate = _needs_delegate_plan(title, category, relevant_data)
     if not needs_delegate:
         return {
             "execution_mode": "direct",
@@ -1185,14 +1378,19 @@ def _fallback_steps(suggestion, action_item=None, delegate_plan=None):
         steps.append("Once the update is live, mark the mission complete so GroMore can re-check performance on the next refresh.")
         return steps[:5]
 
+    if category == "strategy" and any(word in title_lower for word in ("traffic", "sessions", "traffic drop", "dropped")):
+        return _strategy_traffic_drop_steps(dp, relevant_data)
+
     # --- Google Ads: CPC / Cost related ---
     if platform_key == "google_ads" and any(w in title_lower for w in ("cost per click", "cpc", "lower cost")):
+        wasted_row, wasted_term = _pick_primary_search_term(relevant_data.get("google_ads_search_terms") or [])
+        campaign_row, campaign_name = _pick_primary_campaign(relevant_data.get("google_ads_campaigns") or [])
         return [
             f"Go to ads.google.com. Click \"Campaigns\" in the left sidebar. Click \"Keywords\" then \"Search terms\" at the top.{f' Your CPC right now is {dp}.' if dp else ''}",
-            "Sort the list by \"Cost\" (highest first). Find search terms that have spent money but show 0 conversions. Check the box next to each one.",
+            (f"Start with the search term \"{wasted_term}\" if it is still spending without conversions. Check the box next to it and any similar wasted terms." if wasted_term else "Sort the list by \"Cost\" (highest first). Find search terms that have spent money but show 0 conversions. Check the box next to each one."),
             "Click the blue \"Add as negative keyword\" button at the top. Choose \"Account level\" so they're blocked everywhere.",
             "Now click \"Keywords\" (not search terms). Sort by \"Cost/conv.\" highest first. Any keyword over 2x your target CPA, click the green dot and change it to \"Paused.\"",
-            "Click on your highest-spending campaign. Click \"Settings.\" Lower the daily budget by 10-15% and move that money to your best-converting campaign instead.",
+            (f"Click into \"{campaign_name}\" if that is your main spender. Open \"Settings\" and lower the daily budget by 10-15% only if it is still eating spend without enough conversions." if campaign_name else "Click on your highest-spending campaign. Click \"Settings.\" Lower the daily budget by 10-15% and move that money to your best-converting campaign instead."),
         ]
 
     # --- Meta: duplicate / clone ad ---
@@ -1207,18 +1405,21 @@ def _fallback_steps(suggestion, action_item=None, delegate_plan=None):
 
     # --- Paid advertising optimization, routed by real platform ---
     if category == "paid_advertising" and platform_key == "google_ads":
+        campaign_row, campaign_name = _pick_primary_campaign(relevant_data.get("google_ads_campaigns") or [])
+        search_term_row, search_term = _pick_primary_search_term(relevant_data.get("google_ads_search_terms") or [])
         return [
-            f"Go to ads.google.com. Click \"Campaigns\" on the left side.{f' Data point: {dp}.' if dp else ''} Sort by \"Cost\" to see which campaign spends the most.",
-            "Click the campaign name that's spending the most. Click \"Ad groups\" to see all ad groups inside it. Look for any with a high cost but 0 conversions.",
+            (f"Go to ads.google.com. Click \"Campaigns\" on the left side and open \"{campaign_name}\" first.{f' Data point: {dp}.' if dp else ''}" if campaign_name else f"Go to ads.google.com. Click \"Campaigns\" on the left side.{f' Data point: {dp}.' if dp else ''} Sort by \"Cost\" to see which campaign spends the most."),
+            (f"Inside \"{campaign_name}\", click \"Ad groups\" and look for any group spending money without conversions." if campaign_name else "Click the campaign name that's spending the most. Click \"Ad groups\" to see all ad groups inside it. Look for any with a high cost but 0 conversions."),
             "For ad groups with 0 conversions: click the green dot next to it and choose \"Paused.\" This stops wasting money on ads that don't work.",
-            "Go back to the campaign. Click \"Keywords\" then \"Search terms.\" Add anything irrelevant as a negative keyword (check the box, then click \"Add as negative keyword\").",
+            (f"Go back to the campaign. Click \"Keywords\" then \"Search terms\" and review \"{search_term}\" first if it is not converting. Add it as a negative keyword if it does not belong." if search_term else "Go back to the campaign. Click \"Keywords\" then \"Search terms.\" Add anything irrelevant as a negative keyword (check the box, then click \"Add as negative keyword\")."),
             "Click \"Ads & assets.\" If any ad has a CTR below 2%, click the pencil icon and rewrite the headline to include your main service + city name.",
         ]
 
     if category == "paid_advertising" and platform_key == "meta_ads":
+        campaign_row, campaign_name = _pick_primary_campaign(relevant_data.get("meta_campaigns") or [])
         return [
-            f"Go to business.facebook.com/adsmanager. Click \"Campaigns\" at the top.{f' Data point: {dp}.' if dp else ''} Sort by \"Amount spent\" so the biggest spenders are at the top.",
-            "Open the campaign spending the most. Click \"Ad sets\" and pause any ad set that has spent hard but still has 0 leads or a cost per result far above your target.",
+            (f"Go to business.facebook.com/adsmanager. Click \"Campaigns\" at the top and open \"{campaign_name}\" first.{f' Data point: {dp}.' if dp else ''}" if campaign_name else f"Go to business.facebook.com/adsmanager. Click \"Campaigns\" at the top.{f' Data point: {dp}.' if dp else ''} Sort by \"Amount spent\" so the biggest spenders are at the top."),
+            (f"Inside \"{campaign_name}\", click \"Ad sets\" and pause any set that has spent hard but still has 0 leads or a cost per result far above your target." if campaign_name else "Open the campaign spending the most. Click \"Ad sets\" and pause any ad set that has spent hard but still has 0 leads or a cost per result far above your target."),
             "Click into the ad sets still working. Open \"Edit\" and move a little more budget toward the one getting leads at the lowest cost.",
             "Click \"Ads\" and compare \"CTR (link)\" and \"Cost per result.\" Duplicate the best ad if you need a new variation, and pause weak ads that keep spending without leads.",
             "Check results again in 3-5 days so you can keep the winners running and cut the losers faster.",
@@ -1236,11 +1437,13 @@ def _fallback_steps(suggestion, action_item=None, delegate_plan=None):
 
     # --- SEO / Search Console ---
     if category == "seo" or any(w in title_lower for w in ("seo", "ranking", "organic", "search console")):
+        query_row, query_name = _pick_primary_query((relevant_data.get("seo_keyword_opportunities") or []) + (relevant_data.get("seo_top_queries") or []))
+        page_row, page_path = _pick_primary_page(relevant_data.get("seo_top_pages") or [])
         return [
             f"Go to search.google.com/search-console. Click \"Performance\" on the left side.{f' Current data: {dp}.' if dp else ''} Make sure \"Average position\" is checked at the top.",
-            "Click the \"Pages\" tab. Sort by \"Impressions\" (highest first). Find pages with lots of impressions but very few clicks - those need better titles.",
-            "Click on a page with high impressions but low clicks. Go to your website editor and change that page's title tag to include the exact keyword people searched.",
-            "Now click the \"Queries\" tab in Search Console. Look for keywords in positions 8-20 (page 1-2 of Google). These are close to ranking. Write a new section on your page about that exact topic.",
+            (f"Click the \"Pages\" tab and inspect \"{page_path}\" first if it is already earning impressions. That page is one of your best current SEO opportunities." if page_path else "Click the \"Pages\" tab. Sort by \"Impressions\" (highest first). Find pages with lots of impressions but very few clicks - those need better titles."),
+            (f"Go to your website editor and update \"{page_path}\" so the title tag and headline match the query people actually searched for." if page_path else "Click on a page with high impressions but low clicks. Go to your website editor and change that page's title tag to include the exact keyword people searched."),
+            (f"Now click the \"Queries\" tab and review \"{query_name}\" first. If it is close to page 1, add a section to the matching page that answers that exact search intent more clearly." if query_name else "Now click the \"Queries\" tab in Search Console. Look for keywords in positions 8-20 (page 1-2 of Google). These are close to ranking. Write a new section on your page about that exact topic."),
             "Go to your website. Make sure every service page has at least 500 words, your city name in the title, and a clear \"Call Now\" or \"Get a Quote\" button at the top.",
         ]
 
@@ -1265,10 +1468,11 @@ def _fallback_steps(suggestion, action_item=None, delegate_plan=None):
     # --- Budget / Spend efficiency ---
     if category == "budget":
         if platform_key == "meta_ads":
+            campaign_row, campaign_name = _pick_primary_campaign(relevant_data.get("meta_campaigns") or [])
             return [
                 f"Go to business.facebook.com/adsmanager. Click \"Campaigns\" at the top.{f' Budget data: {dp}.' if dp else ''} Write down how much each campaign spent this month and how many leads it produced.",
                 "Divide each campaign's spend by its leads. The campaign with the lowest cost per lead is your best use of budget. The one with the highest cost per lead, or 0 leads, is your weakest.",
-                "Open your weakest campaign. If it is still spending without results, lower the budget or pause it so it stops eating money.",
+                (f"Start with \"{campaign_name}\" if that is the main active campaign and verify whether it still deserves the budget it is getting." if campaign_name else "Open your weakest campaign. If it is still spending without results, lower the budget or pause it so it stops eating money."),
                 "Move a small amount of that budget into the campaign already producing leads at the best cost. Keep the move modest so you can watch what happens.",
                 "Set a reminder for 7 days from now and compare cost per lead again before making the next shift.",
             ]
@@ -1290,8 +1494,9 @@ def _fallback_steps(suggestion, action_item=None, delegate_plan=None):
 
     # --- Creative / Ad copy ---
     if category == "creative" and platform_key == "google_ads":
+        campaign_row, campaign_name = _pick_primary_campaign(relevant_data.get("google_ads_campaigns") or [])
         return [
-            f"Go to ads.google.com. Click \"Ads & assets\" inside your top-spending campaign.{f' Creative data: {dp}.' if dp else ''}",
+            (f"Go to ads.google.com. Open \"{campaign_name}\" and click \"Ads & assets\".{f' Creative data: {dp}.' if dp else ''}" if campaign_name else f"Go to ads.google.com. Click \"Ads & assets\" inside your top-spending campaign.{f' Creative data: {dp}.' if dp else ''}"),
             "Sort the ads by CTR and write down what the best headline says. That is the angle already getting attention.",
             "Edit the weakest ad and rewrite the headline so it sounds closer to the winner, but test one new promise, hook, or offer angle.",
             "Keep the landing page and offer aligned with the ad so the click feels consistent after people land.",
@@ -1299,9 +1504,10 @@ def _fallback_steps(suggestion, action_item=None, delegate_plan=None):
         ]
 
     if category == "creative":
+        ad_row, ad_name = _pick_primary_ad(relevant_data.get("meta_top_ads") or [])
         return [
             f"Go to your ads platform (ads.google.com or business.facebook.com/adsmanager).{f' Creative data: {dp}.' if dp else ''} Click into your top-spending campaign, then click \"Ads\" or \"Ads & assets.\"",
-            "Look at each ad's CTR (Click-Through Rate). Find the ad with the HIGHEST CTR. That's your winning style. Write down what its headline and image look like.",
+            (f"Start with the ad \"{ad_name}\" if it is one of your top current performers. Write down what its headline and image are doing better than the rest." if ad_name else "Look at each ad's CTR (Click-Through Rate). Find the ad with the HIGHEST CTR. That's your winning style. Write down what its headline and image look like."),
             "Find ads with the LOWEST CTR. Click the pencil/edit icon. Rewrite the headline to match the style of your winning ad, but test a different angle (urgency, price, guarantee).",
             "For image ads: make sure the image shows your actual work, team, or a real before/after. Remove any ad that uses a generic stock photo. Replace with a real photo from your phone.",
             "Duplicate your best-performing ad. Change ONLY the headline (keep the image). This lets you test which words get more clicks without losing what already works.",
