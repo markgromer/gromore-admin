@@ -1,5 +1,5 @@
 # GroMore Platform - Complete Feature Inventory
-> Last updated: April 12, 2026 - Audited against live codebase
+> Last updated: April 16, 2026 - Audited against live codebase
 
 ---
 
@@ -11,6 +11,7 @@
 - **SMS** (via Quo/OpenPhone) - Two-way text conversations with leads
 - **Facebook Messenger** - Full Messenger integration with 24-hour response window enforcement
 - **Meta Lead Forms** - Auto-capture from Facebook/Instagram lead gen campaigns
+- **Hosted Warren Lead Forms** - Brand-specific public lead form pages with standalone link and iframe embed support
 - **Email** - Billing reminder delivery channel
 
 ### Autonomous Capabilities
@@ -18,10 +19,12 @@
 - **Confidence Gating** - Only auto-sends when confidence score is >= 0.7, otherwise holds for human review
 - **Configurable Reply Delay** - 0 to 300 second delay before sending, so replies feel natural
 - **Information Collection** - Progressively gathers name, phone, email, address, service needed (one field per message)
+- **Hosted Form Intake** - Public form submissions create Warren lead threads with structured field capture and channel tagging
 - **Objection Detection** - Identifies objections (too expensive, competitor quote, not ready, timing, etc.) and logs them for context-aware follow-up
 - **Quote Generation** - Three modes: simple (single price), hybrid (range with explanation), structured (line-itemized)
 - **Pipeline Auto-Advance** - Moves leads through stages automatically based on conversation progress (new > engaged > quoted > qualified > booked > won)
 - **Handoff Detection** - Recognizes when to escalate to a human based on configurable rules, stops auto-replying on that thread
+- **Consent-Aware Auto-Texting** - Hosted form leads only receive Warren text follow-up when texting is enabled and consent rules are satisfied
 - **CRM Auto-Push** - Pushes closed leads to connected CRM (GoHighLevel, HubSpot, webhook) with full contact details
 
 ### Follow-Up & Nurture Engine
@@ -45,6 +48,7 @@
 - Service area schedule (day-by-area routing)
 - Nurture timing per temperature tier
 - DND timezone, hours, weekend toggle
+- Hosted lead form copy, CTA, consent text, success state, and optional field controls
 
 ### SMS Compliance
 - A2P opt-out footer on all messages
@@ -57,8 +61,8 @@
 ## CLIENT PORTAL - Lead Inbox
 
 ### Thread Management
-- **Multi-Channel Thread List** - All leads from SMS, Messenger, and Lead Forms in one unified inbox
-- **Channel Avatars** - Visual icons distinguishing SMS, Messenger, and Lead Form threads
+- **Multi-Channel Thread List** - All leads from SMS, Messenger, Meta Lead Forms, and hosted Warren forms in one unified inbox
+- **Channel Avatars** - Visual icons distinguishing SMS, Messenger, and lead-form threads
 - **Unread Indicators** - Blue dot and bold name for threads with unread messages
 - **Pipeline Status Badges** - Color-coded stage labels (new, engaged, quoted, qualified, booked, won, lost)
 - **Private Thread Lock** - Lock icon on threads marked private (Warren won't auto-reply)
@@ -80,6 +84,14 @@
 - **Close Rate** - Won / (Won + Lost) percentage
 - **Average Response Time** - Minutes between first inbound and first outbound
 - **Pipeline Funnel** - Horizontal stacked bars showing lead distribution by stage
+
+### Hosted Lead Form Builder
+- **Brand-Specific Public Form URL** - Each brand can publish a hosted Warren form at its own public link
+- **Iframe Embed Code** - Copy/paste embed snippet for dropping the Warren form onto almost any website
+- **Always-Required Contact Fields** - Full name and mobile number stay required on every hosted form
+- **Selectable Extra Fields** - Owners can toggle service needed, email, company name, service address, and job details from the backend
+- **Service Menu Support** - Optional service list can render as guided choices instead of free text
+- **Consent + Success State Controls** - Customize SMS consent copy, CTA text, headline, intro, and success message per brand
 
 ---
 
@@ -196,7 +208,12 @@
 
 - **AI-Generated Missions** - Prioritized action items based on real performance data
 - **Skill Level Profiles** - Beginner, Intermediate, Advanced tracks with different complexity
-- **Step-by-Step Instructions** - Each action includes exactly how to implement it
+- **Step-by-Step Instructions** - Each action includes exactly how to implement it with platform-specific steps
+- **Exact Targets From Live Data** - Missions can name real pages, queries, campaigns, ads, and other connected-data targets instead of generic placeholders
+- **Delegate-Ready Handoff Notes** - Website, SEO, and creative missions can generate copy-and-send notes for a developer or designer
+- **Platform-Aware Routing** - Paid-media missions use the actual connected channel context so Meta-only accounts are not sent to Google Ads, and vice versa
+- **SEO Reality Checks** - Low-volume SEO opportunities can be rewritten to improve existing pages first instead of recommending unnecessary new local pages
+- **Owner-Friendly Copy** - Mission notes and handoff messages are written in plainer language for small business owners
 - **Difficulty Ratings** - 1 to 3 stars so users know what they can handle
 - **XP & Leveling** - Progress from Rookie to Legend as actions are completed
 - **Skill Categories** - Organized by Ad Optimization, SEO, Website Performance, Budget Strategy, Creative, Social, Strategy
@@ -375,6 +392,7 @@
 - **Master Enable/Disable** - Turn Warren on/off entirely
 - **Reply Delay** - 0-300 second delay timer
 - **Channel Toggles** - Enable/disable SMS and Meta lead forms independently
+- **Hosted Lead Form Builder** - Configure the public Warren form, share link, iframe embed, and optional intake fields per brand
 
 ### Feedback
 - **Bug Reports** - Submit bugs with category tagging
