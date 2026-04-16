@@ -44,6 +44,75 @@ class MissionActionExecutionTests(unittest.TestCase):
         self.assertNotIn("analytics.google.com", " ".join(action["steps"]))
         self.assertTrue(action["exact_targets"])
 
+    def test_meta_only_paid_mission_routes_to_ads_manager(self):
+        analysis = {
+            "client_config": {"display_name": "Ace Plumbing", "industry": "plumbing"},
+            "meta_business": {
+                "metrics": {"spend": 1200, "results": 18, "cost_per_result": 66.67, "ctr": 1.9},
+                "campaign_analysis": [
+                    {"campaign_name": "Plumbing Leads", "spend": 840, "results": 14, "cost_per_result": 60.0}
+                ],
+                "top_ads": [
+                    {"ad_name": "Emergency Drain Ad", "ctr": 2.4, "results": 9, "cost_per_result": 48.0}
+                ],
+            },
+            "highlights": [],
+            "concerns": [],
+        }
+        suggestions = [
+            {
+                "title": "Clone Your Best Ad",
+                "detail": "Duplicate the current winner and test one new headline.",
+                "category": "paid_advertising",
+                "priority": "high",
+                "data_point": "Best ad CTR: 2.4%",
+            }
+        ]
+
+        actions = _build_action_cards(analysis, suggestions, brand={})
+
+        self.assertEqual(len(actions), 1)
+        action = actions[0]
+        self.assertEqual(action["platform_url"], "https://business.facebook.com/adsmanager")
+        self.assertEqual(action["platform_label"], "Open Ads Manager")
+        self.assertIn("business.facebook.com/adsmanager", " ".join(action["steps"]))
+        self.assertNotIn("ads.google.com", " ".join(action["steps"]))
+
+    def test_low_volume_local_page_mission_gets_rewritten(self):
+        analysis = {
+            "client_config": {"display_name": "Scoop Doggy Logs", "industry": "pet waste removal"},
+            "google_analytics": {
+                "metrics": {"sessions": 240, "conversions": 2, "conversion_rate": 0.83, "bounce_rate": 78.4},
+            },
+            "top_landing_pages": [
+                {"page": "/dog-poop-removal", "sessions": 92, "conversions": 0, "bounce_rate": 81.2},
+            ],
+            "search_console": {
+                "top_pages": [{"page": "/dog-poop-removal", "clicks": 18, "impressions": 120, "ctr": 4.2, "position": 11.4}],
+                "keyword_opportunities": [{"query": "dog poop removal tucson", "page": "/dog-poop-removal", "impressions": 120, "position": 11.4}],
+            },
+            "highlights": [],
+            "concerns": [],
+        }
+        suggestions = [
+            {
+                "title": "Build More Local Pages",
+                "detail": "Create new city pages to win more local traffic.",
+                "category": "seo",
+                "priority": "high",
+                "data_point": "Top opportunity: 120 impressions",
+            }
+        ]
+
+        actions = _build_action_cards(analysis, suggestions, brand={})
+
+        self.assertEqual(len(actions), 1)
+        action = actions[0]
+        self.assertEqual(action["mission_name"], "Tighten The Page You Have")
+        self.assertIn("not a missing page", action["why"])
+        self.assertIn("Please do not build new city or local pages yet.", action["delegate_message"])
+        self.assertEqual(action["platform_url"], "")
+
 
 if __name__ == "__main__":
     unittest.main()

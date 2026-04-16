@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 _CATEGORY_META = {
     "paid_advertising": {"icon": "bi-megaphone-fill", "color": "#6366f1", "skill": "Ad Optimization",
-                         "platform_url": "https://ads.google.com", "platform_label": "Open Google Ads"},
+                         "platform_url": "", "platform_label": ""},
     "seo":              {"icon": "bi-search",         "color": "#059669", "skill": "Search Visibility",
                          "platform_url": "https://search.google.com/search-console", "platform_label": "Open Search Console"},
     "website":          {"icon": "bi-globe2",         "color": "#2563eb", "skill": "Website Performance",
@@ -32,9 +32,17 @@ _CATEGORY_META = {
     "creative":         {"icon": "bi-palette-fill",   "color": "#db2777", "skill": "Creative Impact",
                          "platform_url": "https://business.facebook.com/adsmanager", "platform_label": "Open Ads Manager"},
     "budget":           {"icon": "bi-piggy-bank-fill","color": "#d97706", "skill": "Budget Strategy",
-                         "platform_url": "https://ads.google.com", "platform_label": "Open Google Ads"},
+                         "platform_url": "", "platform_label": ""},
     "organic_social":   {"icon": "bi-people-fill",    "color": "#0891b2", "skill": "Social Engagement",
                          "platform_url": "https://business.facebook.com", "platform_label": "Open Meta Business Suite"},
+}
+
+_PLATFORM_META = {
+    "google_ads": {"url": "https://ads.google.com", "label": "Open Google Ads"},
+    "meta_ads": {"url": "https://business.facebook.com/adsmanager", "label": "Open Ads Manager"},
+    "search_console": {"url": "https://search.google.com/search-console", "label": "Open Search Console"},
+    "analytics": {"url": "https://analytics.google.com", "label": "Open Google Analytics"},
+    "meta_business": {"url": "https://business.facebook.com", "label": "Open Meta Business Suite"},
 }
 
 MONTH_LEVELS = [
@@ -122,6 +130,74 @@ def _normalize_text_list(value):
         if text:
             items.append(text)
     return items
+
+
+def _to_float(value, default=0.0):
+    try:
+        if value in (None, ""):
+            return float(default)
+        return float(value)
+    except Exception:
+        return float(default)
+
+
+def _has_channel_signal(value):
+    if isinstance(value, dict):
+        for nested in value.values():
+            if isinstance(nested, dict):
+                if _has_channel_signal(nested):
+                    return True
+            elif nested not in (None, "", 0, 0.0, False, []):
+                return True
+        return False
+    if isinstance(value, (list, tuple, set)):
+        return any(bool(item) for item in value)
+    return value not in (None, "", 0, 0.0, False)
+
+
+def _resolve_action_platform(title, category, relevant_data=None, detail=""):
+    category = str(category or "").strip().lower()
+    relevant_data = relevant_data or {}
+    combined = " ".join(str(part or "") for part in (title, detail)).lower()
+
+    has_meta = any(
+        _has_channel_signal(relevant_data.get(key))
+        for key in ("meta_campaigns", "meta_top_ads", "meta_kpis")
+    )
+    has_google = any(
+        _has_channel_signal(relevant_data.get(key))
+        for key in ("google_ads_campaigns", "google_ads_search_terms", "google_ads_kpis")
+    )
+
+    meta_words = ("facebook", "meta", "instagram", "ads manager")
+    google_words = ("google ads", "ads.google.com", "search terms", "keyword", "keywords", "ppc", "cpc")
+    if any(word in combined for word in meta_words) and not any(word in combined for word in google_words):
+        return "meta_ads"
+    if any(word in combined for word in google_words) and not any(word in combined for word in meta_words):
+        return "google_ads"
+
+    if category == "seo":
+        return "search_console"
+    if category == "website":
+        return "analytics"
+    if category == "organic_social":
+        return "meta_business"
+    if category == "creative":
+        if has_google and not has_meta:
+            return "google_ads"
+        return "meta_ads"
+    if category in {"paid_advertising", "budget"}:
+        if has_meta and not has_google:
+            return "meta_ads"
+        if has_google and not has_meta:
+            return "google_ads"
+        return ""
+    return ""
+
+
+def _platform_link(platform_key):
+    meta = _PLATFORM_META.get(platform_key) or {}
+    return meta.get("url", ""), meta.get("label", "")
 
 
 def _build_action_items(suggestions, analysis_summary):
@@ -227,6 +303,157 @@ def _format_exact_targets(category, relevant_data):
     return deduped[:4]
 
 
+def _seo_execution_context(relevant_data):
+    keyword_opportunities = list(relevant_data.get("seo_keyword_opportunities") or [])
+    seo_pages = list(relevant_data.get("seo_top_pages") or [])
+    landing_pages = list(relevant_data.get("website_landing_pages") or [])
+
+    pages_with_traffic = []
+    for row in seo_pages + landing_pages:
+        page = str(row.get("page") or row.get("path") or row.get("url") or "").strip()
+        if page and page not in pages_with_traffic:
+            pages_with_traffic.append(page)
+
+    impressions = [_to_float(row.get("impressions"), 0) for row in keyword_opportunities]
+    best_impressions = max(impressions) if impressions else 0.0
+    total_impressions = sum(impressions) if impressions else 0.0
+    existing_page_matches = sum(1 for row in keyword_opportunities if str(row.get("page") or row.get("url") or "").strip())
+
+    low_volume = bool(keyword_opportunities) and best_impressions < 150 and total_impressions < 400
+    optimize_existing_first = bool(pages_with_traffic) and (low_volume or existing_page_matches > 0)
+
+    if optimize_existing_first and low_volume:
+        summary = (
+            f"The best search opportunity is only around {int(best_impressions)} impressions, so this looks more like a low-demand problem "
+            "than a missing-page problem. Improve the page you already have before building new local pages."
+        )
+    elif optimize_existing_first:
+        summary = "Search Console already points to existing pages, so tighten those pages first instead of spinning up more local pages."
+    else:
+        summary = "There may be room for a new page, but only if the mission can name the query, the demand, and why an existing page is not enough."
+
+    return {
+        "keyword_opportunities": keyword_opportunities,
+        "pages_with_traffic": pages_with_traffic,
+        "best_impressions": best_impressions,
+        "total_impressions": total_impressions,
+        "low_volume": low_volume,
+        "optimize_existing_first": optimize_existing_first,
+        "summary": summary,
+    }
+
+
+def _looks_like_new_page_mission(*values):
+    combined = " ".join(str(v or "") for v in values).lower()
+    needles = (
+        "new page",
+        "create page",
+        "build page",
+        "local page",
+        "location page",
+        "city page",
+        "area page",
+    )
+    return any(needle in combined for needle in needles)
+
+
+def _rewrite_low_volume_seo_mission(card, relevant_data):
+    seo_context = _seo_execution_context(relevant_data)
+    exact_targets = _format_exact_targets("seo", relevant_data) or _format_exact_targets("website", relevant_data)
+    page_list = seo_context.get("pages_with_traffic") or []
+    primary_page = page_list[0] if page_list else "the main service page"
+    best_impressions = int(seo_context.get("best_impressions") or 0)
+
+    card["mission_name"] = "Tighten The Page You Have"
+    card["execution_mode"] = "delegate"
+    card["delegate_to"] = "developer"
+    card["platform_url"] = ""
+    card["platform_label"] = ""
+    card["exact_targets"] = exact_targets
+    card["why"] = (
+        f"The problem is not a missing page yet. The best search opportunity is only around {best_impressions} impressions, "
+        "so building more local pages is unlikely to move the needle right now."
+    )
+    card["reward"] = "You improve the page already getting seen in Google, which gives your current traffic a better shot at turning into calls and quote requests."
+    card["impact"] = "Could lift clicks and leads from the traffic you already have without wasting time on low-demand pages."
+    card["time"] = "10 minutes"
+    card["delegate_message"] = "\n".join([
+        "Hi - GroMore flagged an SEO update for us.",
+        "",
+        "Please do not build new city or local pages yet.",
+        "The search volume is still too light to justify more pages, and Search Console is already pointing traffic toward pages we have.",
+        "",
+        "Please focus on improving these existing pages first:",
+        *[f"- {target}" for target in (exact_targets or [_trim_copy(primary_page, 140)])],
+        "",
+        "What I need changed:",
+        f"- Make the headline on {primary_page} clearly match the main service people are searching for.",
+        "- Make the first call-to-action easy to see without scrolling.",
+        "- Tighten the title tag, H1, and opening copy so the page matches the real search intent more clearly.",
+        "- Keep the page focused on one clear action: call, quote request, or booking.",
+        "",
+        "When done, send me the page URLs you updated, a short list of what changed, and anything that still needs copy help.",
+    ])
+    card["steps"] = [
+        "Copy the website update note below and send it today.",
+        "Ask for updates to the page you already have before anyone builds a new city or local page.",
+        "When the update is live, check that the headline, first call-to-action, and service wording are easier to understand.",
+        "Mark the mission complete after the page is updated so GroMore can re-check clicks and leads on the next refresh.",
+    ]
+
+
+def _apply_mission_reality_checks(card, suggestion, action_item):
+    category = str(suggestion.get("category") or "").strip().lower()
+    title = str(card.get("mission_name") or card.get("title") or "")
+    steps_text = " ".join(card.get("steps") or [])
+    delegate_message = str(card.get("delegate_message") or "")
+    relevant_data = (action_item or {}).get("relevant_data") or {}
+
+    if category not in {"seo", "website"}:
+        return
+
+    seo_context = _seo_execution_context(relevant_data)
+    if seo_context.get("optimize_existing_first") and _looks_like_new_page_mission(title, steps_text, delegate_message):
+        _rewrite_low_volume_seo_mission(card, relevant_data)
+
+
+def _apply_platform_reality_checks(card, suggestion, action_item, delegate_plan=None):
+    category = str(suggestion.get("category") or "").strip().lower()
+    relevant_data = (action_item or {}).get("relevant_data") or {}
+    platform_key = _resolve_action_platform(
+        suggestion.get("title", ""),
+        category,
+        relevant_data,
+        suggestion.get("detail", ""),
+    )
+
+    if card.get("execution_mode") == "delegate" and category in {"website", "seo", "strategy", "creative"}:
+        card["platform_url"] = ""
+        card["platform_label"] = ""
+        return
+
+    platform_url, platform_label = _platform_link(platform_key)
+    card["platform_url"] = platform_url
+    card["platform_label"] = platform_label
+
+    steps_text = " ".join(card.get("steps") or []).lower()
+    if card.get("execution_mode") != "direct" or category not in {"paid_advertising", "budget", "creative"}:
+        return
+
+    google_words = ("ads.google.com", "google ads")
+    meta_words = ("business.facebook.com/adsmanager", "ads manager", "meta business suite")
+    mismatch = False
+    if platform_key == "meta_ads" and any(word in steps_text for word in google_words):
+        mismatch = True
+    elif platform_key == "google_ads" and any(word in steps_text for word in meta_words):
+        mismatch = True
+    elif not platform_key and any(word in steps_text for word in (*google_words, *meta_words)):
+        mismatch = True
+
+    if mismatch:
+        card["steps"] = _fallback_steps(suggestion, action_item=action_item, delegate_plan=delegate_plan)
+
+
 def _build_delegate_plan(title, category, relevant_data):
     title_lower = str(title or "").lower()
     exact_targets = _format_exact_targets(category, relevant_data)
@@ -243,12 +470,12 @@ def _build_delegate_plan(title, category, relevant_data):
 
     if category == "creative" or any(word in title_lower for word in ("design", "image", "creative", "headline")):
         delegate_to = "designer"
-        intro = "Please update these creative assets based on GroMore's latest findings:"
-        close = "Goal: improve click-through rate without changing the offer."
+        intro = "Hi - GroMore flagged a creative update for us. Please make these ad changes next:"
+        close = "Goal: keep the same offer, but make the ad easier to notice and click."
     else:
         delegate_to = "developer"
-        intro = "Please make the following website and SEO updates from GroMore's latest findings:"
-        close = "Goal: remove conversion leaks, improve clarity above the fold, and lift organic visibility on pages already getting traffic."
+        intro = "Hi - GroMore flagged these website updates for us. Please handle the items below:"
+        close = "Goal: make the page easier to understand, easier to contact from, and stronger for the traffic it already gets."
 
     bullets = exact_targets or [_trim_copy(title or "Mission update", 140)]
     lines = [intro]
@@ -256,16 +483,16 @@ def _build_delegate_plan(title, category, relevant_data):
         lines.append(f"- {bullet}")
 
     if category == "website":
-        lines.append("- For each page above, tighten the hero headline so it clearly matches the service intent, put one primary CTA above the fold, and make the contact path obvious without scrolling.")
-        lines.append("- Reduce friction in the lead form: keep only the fields needed to start the conversation, verify the submit button text is specific, and confirm the form works on mobile.")
-        lines.append("- Keep the existing offer unless something is clearly inaccurate. If copy changes are needed, preserve the service, city, and conversion intent already driving traffic.")
+        lines.append("- For each page above, make the main headline clearly say what service is being offered, put one clear call-to-action near the top, and make the contact path obvious without scrolling.")
+        lines.append("- Keep the lead form simple: only ask for the fields needed to start the conversation, make the button text specific, and confirm the page works cleanly on mobile.")
+        lines.append("- Keep the current offer unless something is wrong. If copy needs to change, keep the service, city, and intent that already bring traffic in.")
     elif category == "seo":
-        lines.append("- Rewrite the title tag, H1, and supporting on-page copy so the page clearly matches the target query and intent without sounding stuffed or repetitive.")
-        lines.append("- Strengthen internal links pointing into the page, make the primary CTA easier to find, and keep the page focused on one main conversion goal.")
+        lines.append("- Rewrite the title tag, H1, and opening copy so the page clearly matches what people are searching for without sounding stuffed or awkward.")
+        lines.append("- Add stronger internal links into the page, make the main call-to-action easier to find, and keep the page focused on one main conversion goal.")
     elif category == "creative":
-        lines.append("- Keep the offer the same, but refresh the visual and headline so the winner is obvious in one glance.")
+        lines.append("- Keep the offer the same, but refresh the image and headline so the main promise is obvious in one glance.")
     else:
-        lines.append("- Reply with the ETA, any blockers, and whether anything here needs copy, design, or dev support before you make the update.")
+        lines.append("- Reply with the ETA, any blockers, and whether this needs copy, design, or dev help before you make the update.")
 
     if delegate_to == "developer":
         lines.append("- After the changes are live, send back the exact URLs updated, what changed on each page, and anything that still needs copy or design review.")
@@ -829,7 +1056,7 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None, mission_pro
 
     # Build basic card structure first
     actions = []
-    for s in selected:
+    for index, s in enumerate(selected):
         cat_key = s.get("category", "")
         cat_meta = _CATEGORY_META.get(
             cat_key,
@@ -838,17 +1065,17 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None, mission_pro
         )
         xp = 150 if s["priority"] == "high" else (100 if s["priority"] == "medium" else 75)
 
-        # Detect platform from title when category is ambiguous
-        title_lower = s["title"].lower()
-        platform_url = cat_meta.get("platform_url", "")
-        platform_label = cat_meta.get("platform_label", "")
-        if cat_key in ("paid_advertising", "budget", "creative"):
-            if any(w in title_lower for w in ("facebook", "meta", "instagram")):
-                platform_url = "https://business.facebook.com/adsmanager"
-                platform_label = "Open Ads Manager"
-            elif any(w in title_lower for w in ("google", "search", "cpc", "ppc")):
-                platform_url = "https://ads.google.com"
-                platform_label = "Open Google Ads"
+        action_item = action_items[index] if index < len(action_items) else {"relevant_data": {}}
+        platform_key = _resolve_action_platform(
+            s.get("title", ""),
+            cat_key,
+            (action_item.get("relevant_data") or {}),
+            s.get("detail", ""),
+        )
+        platform_url, platform_label = _platform_link(platform_key)
+        if not platform_url:
+            platform_url = cat_meta.get("platform_url", "")
+            platform_label = cat_meta.get("platform_label", "")
 
         card = {
             "title": _client_friendly_title(s["title"]),
@@ -926,9 +1153,8 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None, mission_pro
         # Fallback mission name
         if not card["mission_name"]:
             card["mission_name"] = card["title"]
-        if card.get("execution_mode") == "delegate" and selected[i].get("category") in {"website", "seo", "strategy", "creative"}:
-            card["platform_url"] = ""
-            card["platform_label"] = ""
+        _apply_mission_reality_checks(card, selected[i], action_item)
+        _apply_platform_reality_checks(card, selected[i], action_item, delegate_plan=delegate_plan)
         # Calculate difficulty from time
         card["difficulty"] = _parse_difficulty(card["time"])
 
@@ -948,6 +1174,7 @@ def _fallback_steps(suggestion, action_item=None, delegate_plan=None):
     title_lower = title.lower()
     relevant_data = (action_item or {}).get("relevant_data") or {}
     delegate_plan = delegate_plan or {"execution_mode": "direct", "delegate_message": "", "exact_targets": []}
+    platform_key = _resolve_action_platform(title, category, relevant_data, detail)
 
     dp = data_point  # short alias
 
@@ -959,7 +1186,7 @@ def _fallback_steps(suggestion, action_item=None, delegate_plan=None):
         return steps[:5]
 
     # --- Google Ads: CPC / Cost related ---
-    if any(w in title_lower for w in ("cost per click", "cpc", "lower cost")):
+    if platform_key == "google_ads" and any(w in title_lower for w in ("cost per click", "cpc", "lower cost")):
         return [
             f"Go to ads.google.com. Click \"Campaigns\" in the left sidebar. Click \"Keywords\" then \"Search terms\" at the top.{f' Your CPC right now is {dp}.' if dp else ''}",
             "Sort the list by \"Cost\" (highest first). Find search terms that have spent money but show 0 conversions. Check the box next to each one.",
@@ -968,14 +1195,33 @@ def _fallback_steps(suggestion, action_item=None, delegate_plan=None):
             "Click on your highest-spending campaign. Click \"Settings.\" Lower the daily budget by 10-15% and move that money to your best-converting campaign instead.",
         ]
 
-    # --- Google Ads: general campaign optimization ---
-    if category == "paid_advertising" and any(w in title_lower for w in ("google", "campaign", "search ad")):
+    # --- Meta: duplicate / clone ad ---
+    if platform_key == "meta_ads" and any(w in title_lower for w in ("clone", "duplicate")) and "ad" in title_lower:
+        return [
+            f"Go to business.facebook.com/adsmanager. Click \"Ads\" at the top.{f' Current note: {dp}.' if dp else ''}",
+            "Sort by \"Results\" or \"CTR (link)\" and find the ad already bringing in the best response at the lowest cost.",
+            "Check the box next to that ad. Click \"Duplicate.\" Keep it in the same campaign and ad set unless you already know you need a separate test.",
+            "In the duplicated ad, change just one thing first - either the primary text, headline, or image - so you can see exactly what improved or got worse.",
+            "Click \"Publish\" and leave the original ad running. Check results in 3-5 days before making another change.",
+        ]
+
+    # --- Paid advertising optimization, routed by real platform ---
+    if category == "paid_advertising" and platform_key == "google_ads":
         return [
             f"Go to ads.google.com. Click \"Campaigns\" on the left side.{f' Data point: {dp}.' if dp else ''} Sort by \"Cost\" to see which campaign spends the most.",
             "Click the campaign name that's spending the most. Click \"Ad groups\" to see all ad groups inside it. Look for any with a high cost but 0 conversions.",
             "For ad groups with 0 conversions: click the green dot next to it and choose \"Paused.\" This stops wasting money on ads that don't work.",
             "Go back to the campaign. Click \"Keywords\" then \"Search terms.\" Add anything irrelevant as a negative keyword (check the box, then click \"Add as negative keyword\").",
             "Click \"Ads & assets.\" If any ad has a CTR below 2%, click the pencil icon and rewrite the headline to include your main service + city name.",
+        ]
+
+    if category == "paid_advertising" and platform_key == "meta_ads":
+        return [
+            f"Go to business.facebook.com/adsmanager. Click \"Campaigns\" at the top.{f' Data point: {dp}.' if dp else ''} Sort by \"Amount spent\" so the biggest spenders are at the top.",
+            "Open the campaign spending the most. Click \"Ad sets\" and pause any ad set that has spent hard but still has 0 leads or a cost per result far above your target.",
+            "Click into the ad sets still working. Open \"Edit\" and move a little more budget toward the one getting leads at the lowest cost.",
+            "Click \"Ads\" and compare \"CTR (link)\" and \"Cost per result.\" Duplicate the best ad if you need a new variation, and pause weak ads that keep spending without leads.",
+            "Check results again in 3-5 days so you can keep the winners running and cut the losers faster.",
         ]
 
     # --- Facebook / Meta Ads ---
@@ -1018,6 +1264,22 @@ def _fallback_steps(suggestion, action_item=None, delegate_plan=None):
 
     # --- Budget / Spend efficiency ---
     if category == "budget":
+        if platform_key == "meta_ads":
+            return [
+                f"Go to business.facebook.com/adsmanager. Click \"Campaigns\" at the top.{f' Budget data: {dp}.' if dp else ''} Write down how much each campaign spent this month and how many leads it produced.",
+                "Divide each campaign's spend by its leads. The campaign with the lowest cost per lead is your best use of budget. The one with the highest cost per lead, or 0 leads, is your weakest.",
+                "Open your weakest campaign. If it is still spending without results, lower the budget or pause it so it stops eating money.",
+                "Move a small amount of that budget into the campaign already producing leads at the best cost. Keep the move modest so you can watch what happens.",
+                "Set a reminder for 7 days from now and compare cost per lead again before making the next shift.",
+            ]
+        if platform_key != "google_ads":
+            return [
+                f"Open the ad platform this account is actually using.{f' Budget data: {dp}.' if dp else ''} Pull up the campaigns that spent money this month.",
+                "Write down spend and leads for each campaign so you can see which one is cheapest and which one is wasting money.",
+                "Reduce budget on the weak campaign that is spending without leads or has the highest cost per lead.",
+                "Move a small amount of that budget into the campaign already producing leads at the best cost.",
+                "Check the same numbers again in 7 days before making another budget move.",
+            ]
         return [
             f"Go to ads.google.com. Click \"Campaigns\" on the left.{f' Budget data: {dp}.' if dp else ''} Write down how much each campaign spent this month and how many leads it got.",
             "Divide each campaign's spend by its leads. The one with the LOWEST cost per lead is your best campaign. The one with the HIGHEST cost per lead (or 0 leads) is your worst.",
@@ -1027,6 +1289,15 @@ def _fallback_steps(suggestion, action_item=None, delegate_plan=None):
         ]
 
     # --- Creative / Ad copy ---
+    if category == "creative" and platform_key == "google_ads":
+        return [
+            f"Go to ads.google.com. Click \"Ads & assets\" inside your top-spending campaign.{f' Creative data: {dp}.' if dp else ''}",
+            "Sort the ads by CTR and write down what the best headline says. That is the angle already getting attention.",
+            "Edit the weakest ad and rewrite the headline so it sounds closer to the winner, but test one new promise, hook, or offer angle.",
+            "Keep the landing page and offer aligned with the ad so the click feels consistent after people land.",
+            "Save the change and compare CTR and conversions again after enough traffic comes through.",
+        ]
+
     if category == "creative":
         return [
             f"Go to your ads platform (ads.google.com or business.facebook.com/adsmanager).{f' Creative data: {dp}.' if dp else ''} Click into your top-spending campaign, then click \"Ads\" or \"Ads & assets.\"",
@@ -1047,27 +1318,7 @@ def _fallback_steps(suggestion, action_item=None, delegate_plan=None):
         ]
 
     # --- Catch-all with platform detection ---
-    if any(w in title_lower for w in ("facebook", "meta", "instagram")):
-        url = "business.facebook.com/adsmanager"
-        label = "Ads Manager"
-    elif any(w in title_lower for w in ("google ads", "cpc", "ppc")):
-        url = "ads.google.com"
-        label = "Google Ads"
-    elif any(w in title_lower for w in ("seo", "ranking", "search console")):
-        url = "search.google.com/search-console"
-        label = "Search Console"
-    elif "analytic" in title_lower:
-        url = "analytics.google.com"
-        label = "Google Analytics"
-    else:
-        url, label = {
-            "paid_advertising": ("ads.google.com", "Google Ads"),
-            "budget": ("ads.google.com", "Google Ads"),
-            "creative": ("business.facebook.com/adsmanager", "Ads Manager"),
-            "seo": ("search.google.com/search-console", "Search Console"),
-            "website": ("analytics.google.com", "Google Analytics"),
-            "organic_social": ("business.facebook.com", "Meta Business Suite"),
-        }.get(category, ("", ""))
+    url, label = _platform_link(platform_key)
 
     steps = []
     if url:
@@ -1186,6 +1437,9 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_pr
         "- The user should NEVER have to hunt through analytics, Search Console, or ad dashboards for targets that are already in the connected data.\n"
         "- Name the exact page, query, campaign, ad, keyword, or search term from the provided data whenever one exists.\n"
         "- If the work belongs with a developer, designer, or assistant, do NOT send the owner into the tool to figure it out. Write a delegation-ready mission and include a ready-to-send handoff note.\n"
+        "- If relevant_data only includes Meta campaigns or Meta ads and no Google Ads campaigns/search terms, NEVER send the owner to ads.google.com or mention Google Ads.\n"
+        "- If relevant_data only includes Google Ads campaigns/search terms and no Meta campaigns/top ads, NEVER send the owner to business.facebook.com or Ads Manager.\n"
+        "- If the SEO data already points to existing pages and the search volume is light, do NOT recommend new city or local pages. Rewrite the current page instead.\n"
         "- Avoid verbs like 'look for', 'review', 'find', 'evaluate', or 'assess' unless the exact thing to inspect is named in the same sentence.\n\n"
 
         "OUTPUT FORMAT (JSON only):\n"

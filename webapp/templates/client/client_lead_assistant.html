@@ -81,6 +81,65 @@
         font-size: .82rem;
         color: #475569;
     }
+    .la-subcard {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 1rem;
+        height: 100%;
+    }
+    .la-subcard-title {
+        font-size: .78rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: #475569;
+        margin-bottom: .65rem;
+    }
+    .la-pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .55rem;
+    }
+    .la-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .45rem .7rem;
+        border-radius: 999px;
+        font-size: .78rem;
+        font-weight: 700;
+        background: #e0f2fe;
+        border: 1px solid #bae6fd;
+        color: #0f172a;
+    }
+    .la-field-grid {
+        display: grid;
+        gap: .75rem;
+    }
+    .la-field-option {
+        display: flex;
+        align-items: flex-start;
+        gap: .7rem;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: .8rem .9rem;
+    }
+    .la-field-option .form-check-input {
+        margin-top: .15rem;
+    }
+    .la-field-option label {
+        display: block;
+        font-weight: 700;
+        color: #0f172a;
+        margin-bottom: .15rem;
+    }
+    .la-field-option small {
+        display: block;
+        color: #64748b;
+        line-height: 1.45;
+    }
     .la-textarea {
         min-height: 180px;
     }
@@ -341,6 +400,62 @@ WIN-BACK (LOST LEAD):
             <div class="col-lg-7">
                 <div class="row g-3">
                     <div class="col-12">
+                        <div class="row g-3">
+                            <div class="col-md-5">
+                                <div class="la-subcard">
+                                    <div class="la-subcard-title">Always Required</div>
+                                    <div class="la-pill-row">
+                                        <span class="la-pill"><i class="bi bi-person"></i> Full name</span>
+                                        <span class="la-pill"><i class="bi bi-phone"></i> Mobile number</span>
+                                    </div>
+                                    <div class="la-hint mt-3 mb-0">These stay on every Warren hosted form so the lead arrives with the minimum contact info needed to message them back.</div>
+                                </div>
+                            </div>
+                            <div class="col-md-7">
+                                <div class="la-subcard">
+                                    <div class="la-subcard-title">Selectable Extra Fields</div>
+                                    <div class="la-field-grid">
+                                        <div class="la-field-option">
+                                            <input class="form-check-input" type="checkbox" name="lead_form_show_service" id="leadFormShowService" value="1" {{ 'checked' if lead_form_config.show_service }}>
+                                            <div>
+                                                <label for="leadFormShowService">Service needed</label>
+                                                <small>Lets the lead pick or type what they need help with.</small>
+                                            </div>
+                                        </div>
+                                        <div class="la-field-option">
+                                            <input class="form-check-input" type="checkbox" name="lead_form_show_email" id="leadFormShowEmail" value="1" {{ 'checked' if lead_form_config.show_email }}>
+                                            <div>
+                                                <label for="leadFormShowEmail">Email</label>
+                                                <small>Useful if you want an email fallback in addition to mobile.</small>
+                                            </div>
+                                        </div>
+                                        <div class="la-field-option">
+                                            <input class="form-check-input" type="checkbox" name="lead_form_show_company" id="leadFormShowCompany" value="1" {{ 'checked' if lead_form_config.show_company }}>
+                                            <div>
+                                                <label for="leadFormShowCompany">Company name</label>
+                                                <small>Useful for commercial jobs or B2B leads.</small>
+                                            </div>
+                                        </div>
+                                        <div class="la-field-option">
+                                            <input class="form-check-input" type="checkbox" name="lead_form_show_address" id="leadFormShowAddress" value="1" {{ 'checked' if lead_form_config.show_address }}>
+                                            <div>
+                                                <label for="leadFormShowAddress">Service address</label>
+                                                <small>Collects the job location up front when routing or pricing depends on it.</small>
+                                            </div>
+                                        </div>
+                                        <div class="la-field-option">
+                                            <input class="form-check-input" type="checkbox" name="lead_form_show_message" id="leadFormShowMessage" value="1" {{ 'checked' if lead_form_config.show_message }}>
+                                            <div>
+                                                <label for="leadFormShowMessage">Job details</label>
+                                                <small>Lets the lead explain the job in their own words before Warren replies.</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12">
                         <label class="form-label fw-semibold">Headline</label>
                         <input type="text" class="form-control" name="lead_form_headline" value="{{ lead_form_config.headline }}" maxlength="140">
                     </div>
@@ -371,6 +486,7 @@ WIN-BACK (LOST LEAD):
                     <div class="col-12">
                         <label class="form-label fw-semibold">Service Options</label>
                         <textarea class="form-control" name="lead_form_service_options" rows="5" placeholder="One option per line. Leave blank if you want a plain text field instead.">{{ '\n'.join(lead_form_config.service_options or []) }}</textarea>
+                        <div class="form-text">These only show when the Service needed field is turned on above.</div>
                     </div>
                     <div class="col-12">
                         <label class="form-label fw-semibold">Consent Label</label>
@@ -391,32 +507,7 @@ WIN-BACK (LOST LEAD):
                 <textarea class="form-control mb-3" rows="7" readonly>{{ lead_form_share.embed_code }}</textarea>
 
                 <div class="la-hint mb-3">The embed snippet uses an iframe so the form can be dropped onto almost any website without custom backend work.</div>
-
-                <label class="form-label fw-semibold d-block">Extra Fields</label>
-                <div class="d-flex flex-wrap gap-3 mb-2">
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="lead_form_show_service" id="leadFormShowService" value="1" {{ 'checked' if lead_form_config.show_service }}>
-                        <label class="form-check-label" for="leadFormShowService">Show service needed</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="lead_form_show_email" id="leadFormShowEmail" value="1" {{ 'checked' if lead_form_config.show_email }}>
-                        <label class="form-check-label" for="leadFormShowEmail">Show email</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="lead_form_show_company" id="leadFormShowCompany" value="1" {{ 'checked' if lead_form_config.show_company }}>
-                        <label class="form-check-label" for="leadFormShowCompany">Show company name</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="lead_form_show_address" id="leadFormShowAddress" value="1" {{ 'checked' if lead_form_config.show_address }}>
-                        <label class="form-check-label" for="leadFormShowAddress">Require address</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="lead_form_show_message" id="leadFormShowMessage" value="1" {{ 'checked' if lead_form_config.show_message }}>
-                        <label class="form-check-label" for="leadFormShowMessage">Require job details</label>
-                    </div>
-                </div>
-
-                <div class="la-hint">Name and mobile number always stay required. Use these checkboxes to choose which extra fields the business owner wants on the public form.</div>
+                <div class="la-hint">Field selection happens in the setup section on the left. Public link and embed code update automatically after you save the form configuration.</div>
             </div>
         </div>
     </div>

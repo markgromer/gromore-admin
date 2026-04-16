@@ -736,7 +736,7 @@
                 {% if featured_action.delegate_message %}
                 <div class="delegate-box">
                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
-                        <strong>Send This To Your {{ featured_action.delegate_to|default('Developer', true)|title }}</strong>
+                        <strong>Copy This Note For Your {{ featured_action.delegate_to|default('Developer', true)|title }}</strong>
                         <button type="button" class="delegate-copy-btn" data-copy-target="featuredDelegateMessage">
                             <i class="bi bi-clipboard me-1"></i> Copy message
                         </button>
@@ -844,7 +844,7 @@
                 {% if action.delegate_message %}
                 <div class="delegate-box">
                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
-                        <strong>Send This To Your {{ action.delegate_to|default('Developer', true)|title }}</strong>
+                        <strong>Copy This Note For Your {{ action.delegate_to|default('Developer', true)|title }}</strong>
                         <button type="button" class="delegate-copy-btn" data-copy-target="delegateMessage{{ loop.index0 }}">
                             <i class="bi bi-clipboard me-1"></i> Copy message
                         </button>
