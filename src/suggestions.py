@@ -73,7 +73,7 @@ def generate_suggestions(analysis):
     # ── Search Console suggestions ──
     gsc = analysis.get("search_console")
     if gsc:
-        suggestions.extend(_gsc_suggestions(gsc, industry, client_config))
+        suggestions.extend(_gsc_suggestions(gsc, industry, client_config, analysis))
 
     # ── Cross-platform suggestions ──
     suggestions.extend(_cross_platform_suggestions(analysis))
@@ -492,7 +492,7 @@ def _facebook_organic_suggestions(fb_organic, industry, goals):
     return suggestions
 
 
-def _gsc_suggestions(gsc, industry, client_config):
+def _gsc_suggestions(gsc, industry, client_config, analysis=None):
     suggestions = []
     metrics = gsc.get("metrics", {})
     scores = gsc.get("scores", {})
@@ -569,8 +569,7 @@ def _gsc_suggestions(gsc, industry, client_config):
         suggestions.append(make_suggestion(
             f"Overall SEO Visibility Weak - Avg Position {avg_pos:.0f}",
             f"Your average search position is {avg_pos:.0f} (page 2+). "
-            f"Focus on Google Business Profile optimization, building local citations, "
-            f"and generating customer reviews that mention specific services and your city name.",
+            f"{_seo_foundation_detail(analysis)}",
             PRIORITY_HIGH, CATEGORY_SEO, "organic_traffic",
             data_point=f"Avg position: {avg_pos:.0f}"
         ))
@@ -811,6 +810,50 @@ def _safe_num(val):
         return 0.0
 
 
+def _gbp_snapshot(analysis):
+    gbp = analysis.get("google_business_profile") or analysis.get("gbp") or {}
+    return gbp if isinstance(gbp, dict) else {}
+
+
+def _gbp_is_effectively_healthy(analysis):
+    gbp = _gbp_snapshot(analysis)
+    if not gbp or gbp.get("error") or not gbp.get("connected"):
+        return False
+
+    completeness = gbp.get("completeness") or {}
+    audit = gbp.get("audit") or {}
+    completeness_score = _safe_num(completeness.get("score") or 0)
+    audit_score = _safe_num(audit.get("overall_score") or 0)
+    quests = audit.get("quests") or []
+    critical_fields = {"verification", "address", "phone", "website", "hours"}
+    critical_gaps = [
+        quest for quest in quests
+        if quest.get("field") in critical_fields and not quest.get("complete")
+    ]
+
+    if completeness_score >= 100 and not critical_gaps:
+        return True
+    return audit_score >= 85 and completeness_score >= 88 and not critical_gaps
+
+
+def _seo_foundation_detail(analysis):
+    if _gbp_is_effectively_healthy(analysis):
+        return (
+            "Focus on local citations, service-area page coverage, and customer reviews "
+            "that mention specific services and your city name."
+        )
+    return (
+        "Focus on Google Business Profile optimization, building local citations, "
+        "and generating customer reviews that mention specific services and your city name."
+    )
+
+
+def _organic_growth_start_detail(analysis):
+    if _gbp_is_effectively_healthy(analysis):
+        return "Start with service-area page coverage, local citations, and local SEO improvements."
+    return "Start with Google Business Profile optimization and local SEO."
+
+
 def _cross_platform_suggestions(analysis):
     """Suggestions that span multiple data sources."""
     suggestions = []
@@ -876,7 +919,7 @@ def _cross_platform_suggestions(analysis):
                     f"Only {organic_conv_pct:.0f}% of conversions come from organic. "
                     "This creates risk if ad costs rise or budgets get cut. "
                     "Invest in SEO as a long-term lead generation channel. "
-                    "Start with Google Business Profile optimization and local SEO.",
+                    f"{_organic_growth_start_detail(analysis)}",
                     PRIORITY_MEDIUM, CATEGORY_STRATEGY, "channel_mix",
                 ))
 

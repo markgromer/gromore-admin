@@ -95,6 +95,44 @@ def _facebook_organic_has_signal(payload):
     return isinstance(top_posts, list) and len(top_posts) > 0
 
 
+def _attach_gbp_context(db, brand, analysis):
+    """Attach Google Business Profile audit context when available."""
+    if not isinstance(analysis, dict):
+        return analysis
+
+    brand_id = (brand or {}).get("id")
+    if not brand_id:
+        return analysis
+
+    try:
+        from webapp.google_business import build_gbp_context, run_gbp_audit
+
+        gbp_ctx = build_gbp_context(db, brand_id)
+        if not isinstance(gbp_ctx, dict):
+            return analysis
+
+        gbp_analysis = {
+            "connected": not bool(gbp_ctx.get("error")),
+            "error": gbp_ctx.get("error"),
+            "status": gbp_ctx.get("status", ""),
+            "review_count": gbp_ctx.get("review_count", 0),
+            "rating": gbp_ctx.get("rating", 0),
+            "completeness": gbp_ctx.get("completeness") or {},
+        }
+
+        if not gbp_ctx.get("error"):
+            audit = run_gbp_audit(gbp_ctx)
+            if isinstance(audit, dict):
+                gbp_analysis["audit"] = audit
+
+        analysis["google_business_profile"] = gbp_analysis
+        analysis["gbp"] = gbp_analysis
+    except Exception:
+        pass
+
+    return analysis
+
+
 def build_analysis_and_suggestions_for_brand(db, brand, month):
     """Build analysis + suggestions for a brand/month without generating HTML reports."""
     slug = brand["slug"]
@@ -170,6 +208,7 @@ def build_analysis_and_suggestions_for_brand(db, brand, month):
         pass
 
     analysis = build_full_analysis(slug, month, data, client_config)
+    _attach_gbp_context(db, brand, analysis)
     suggestions = generate_suggestions(analysis)
     return analysis, suggestions
 
@@ -215,6 +254,7 @@ def get_analysis_and_suggestions_for_brand(db, brand, month, *, force_refresh: b
                     pass
 
                 analysis = build_full_analysis(slug, month, data, client_config)
+                _attach_gbp_context(db, brand, analysis)
                 suggestions = generate_suggestions(analysis)
                 try:
                     store_monthly_summary(slug, month, analysis, suggestions)
@@ -229,7 +269,14 @@ def get_analysis_and_suggestions_for_brand(db, brand, month, *, force_refresh: b
             init_db()
             cached = get_monthly_summary(slug, month)
             if cached and isinstance(cached.get("summary"), dict):
-                return cached["summary"], (cached.get("suggestions") or [])
+                analysis = cached["summary"]
+                _attach_gbp_context(db, brand, analysis)
+                suggestions = generate_suggestions(analysis)
+                try:
+                    store_monthly_summary(slug, month, analysis, suggestions)
+                except Exception:
+                    pass
+                return analysis, suggestions
         except Exception:
             pass
 
@@ -261,6 +308,7 @@ def get_analysis_and_suggestions_for_brand(db, brand, month, *, force_refresh: b
                     pass
 
                 analysis = build_full_analysis(slug, month, data, client_config)
+                _attach_gbp_context(db, brand, analysis)
                 suggestions = generate_suggestions(analysis)
                 try:
                     store_monthly_summary(slug, month, analysis, suggestions)
@@ -276,6 +324,7 @@ def get_analysis_and_suggestions_for_brand(db, brand, month, *, force_refresh: b
             cached = get_monthly_summary(slug, month)
             if cached and isinstance(cached.get("summary"), dict):
                 analysis = cached["summary"]
+                _attach_gbp_context(db, brand, analysis)
                 suggestions = generate_suggestions(analysis)
                 try:
                     store_monthly_summary(slug, month, analysis, suggestions)
