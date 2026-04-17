@@ -299,6 +299,101 @@ def _sng_extract_contact_info(client_record, fallback_client_id=""):
     }
 
 
+def _sng_truthy(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    text = str(value or "").strip().lower()
+    return text in {"1", "true", "yes", "y", "on"}
+
+
+def _sng_job_key(job_row, target_date):
+    if not isinstance(job_row, dict):
+        return ""
+    job_id = str(job_row.get("id") or "").strip()
+    if job_id and job_id != "0":
+        return f"job:{job_id}"
+
+    location_id = str(job_row.get("client_location_id") or job_row.get("commercial_location_id") or "").strip()
+    client_id = str(job_row.get("client_id") or job_row.get("commercial_client_id") or job_row.get("client") or "").strip()
+    address = str(job_row.get("address") or "").strip().lower()
+    job_type = str(job_row.get("type") or "").strip().lower()
+    order = str(job_row.get("order") or "").strip()
+    return "undispatched:{target}:{location}:{client}:{job_type}:{order}:{address}".format(
+        target=target_date,
+        location=location_id or "na",
+        client=client_id or "na",
+        job_type=job_type or "unknown",
+        order=order or "na",
+        address=address or "na",
+    )
+
+
+def sng_get_day_ahead_appointment_candidates(brand, target_date, max_jobs=None):
+    if hasattr(target_date, "isoformat"):
+        target_date = target_date.isoformat()
+    target_date = str(target_date or "").strip()
+    if not target_date:
+        return [], "A target date is required"
+
+    result, error = sng_get_dispatch_board(brand, target_date)
+    if error or not isinstance(result, dict):
+        return [], error or "Sweep and Go dispatch board returned no data"
+
+    candidates = []
+    seen_keys = set()
+    allowed_statuses = {"pending", "dispatched"}
+    rows = result.get("data") or []
+    for job_row in rows:
+        if not isinstance(job_row, dict):
+            continue
+        status_name = str(job_row.get("status_name") or "").strip().lower()
+        if status_name not in allowed_statuses:
+            continue
+
+        job_key = _sng_job_key(job_row, target_date)
+        if not job_key or job_key in seen_keys:
+            continue
+        seen_keys.add(job_key)
+
+        contact = _sng_extract_contact_info(job_row, fallback_client_id=job_key)
+        if not contact["client_email"] and not contact["client_phone"]:
+            continue
+
+        preferred_channel = str(job_row.get("channel") or "").strip().lower()
+        if preferred_channel not in {"sms", "email", "call"}:
+            preferred_channel = ""
+
+        address_bits = [
+            str(job_row.get("address") or "").strip(),
+            str(job_row.get("city") or "").strip(),
+            str(job_row.get("state_name") or "").strip(),
+        ]
+        address_label = ", ".join(bit for bit in address_bits if bit)
+
+        candidates.append({
+            **contact,
+            "appointment_key": job_key,
+            "appointment_date": target_date,
+            "appointment_date_obj": _sng_parse_date(target_date),
+            "job_id": str(job_row.get("id") or "").strip(),
+            "job_type": str(job_row.get("type") or "").strip().lower(),
+            "status_name": status_name,
+            "assigned_to_name": str(job_row.get("assigned_to_name") or "").strip(),
+            "address": address_label,
+            "preferred_channel": preferred_channel,
+            "prefers_sms": _sng_truthy(job_row.get("on_the_way")),
+            "prefers_email": preferred_channel == "email",
+            "raw": job_row,
+        })
+
+        if max_jobs and len(candidates) >= max(0, int(max_jobs)):
+            break
+
+    return candidates, None
+
+
 def sng_get_payment_reminder_candidates(brand, billing_day, days_before=3, today=None, max_clients=None):
     today = today or datetime.utcnow().date()
     due_date = _next_uniform_billing_date(billing_day, today=today)

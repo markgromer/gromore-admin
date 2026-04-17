@@ -2949,14 +2949,21 @@ def create_app():
     @app.route("/beta/feedback/ai/generate", methods=["POST"])
     @login_required
     def beta_feedback_ai_generate():
+        is_ajax = request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest"
         api_key = _feedback_ai_key()
         if not api_key:
-            flash("OpenAI is not configured. Add your OpenAI API key in Settings.", "error")
+            message = "OpenAI is not configured. Add your OpenAI API key in Settings."
+            if is_ajax:
+                return jsonify({"ok": False, "message": message}), 400
+            flash(message, "error")
             return redirect(url_for("beta_dashboard"))
 
         scope_type, scope_label, filters, items = _feedback_ai_scope()
         if not items:
-            flash("No feedback matched that AI review scope.", "warning")
+            message = "No feedback matched that AI review scope."
+            if is_ajax:
+                return jsonify({"ok": False, "message": message}), 400
+            flash(message, "warning")
             return redirect(url_for("beta_dashboard"))
 
         try:
@@ -2992,9 +2999,22 @@ def create_app():
                 })
                 draft_count += 1
 
-            flash(f"AI review generated for {len(items)} feedback item(s), with {draft_count} reply drafts.", "success")
+            message = f"AI review generated for {len(items)} feedback item(s), with {draft_count} reply drafts."
+            if is_ajax:
+                return jsonify({
+                    "ok": True,
+                    "message": message,
+                    "run_id": run_id,
+                    "item_count": len(items),
+                    "draft_count": draft_count,
+                    "redirect_url": url_for("beta_dashboard") + "#tab-feedback",
+                })
+            flash(message, "success")
         except Exception as exc:
-            flash(f"AI feedback review failed: {exc}", "error")
+            message = f"AI feedback review failed: {exc}"
+            if is_ajax:
+                return jsonify({"ok": False, "message": message}), 500
+            flash(message, "error")
 
         return redirect(url_for("beta_dashboard") + "#tab-feedback")
 

@@ -6072,10 +6072,14 @@ def client_save_leads_assistant_settings():
 
     valid_channels = {"sms", "messenger", "lead_forms", "calls"}
     valid_payment_channels = {"email", "sms"}
+    valid_appointment_channels = {"email", "sms"}
     selected_channels = [c for c in request.form.getlist("sales_bot_channels") if c in valid_channels]
     selected_payment_channels = [c for c in request.form.getlist("sales_bot_payment_reminder_channels") if c in valid_payment_channels]
+    selected_appointment_channels = [c for c in request.form.getlist("sales_bot_appointment_reminder_channels") if c in valid_appointment_channels]
     if not selected_payment_channels:
         selected_payment_channels = ["email"]
+    if not selected_appointment_channels:
+        selected_appointment_channels = ["sms"]
     quote_mode = (request.form.get("sales_bot_quote_mode") or "hybrid").strip().lower()
     if quote_mode not in {"simple", "hybrid", "structured"}:
         quote_mode = "hybrid"
@@ -6118,6 +6122,31 @@ def client_save_leads_assistant_settings():
         brand_id,
         "sales_bot_payment_reminder_template",
         (request.form.get("sales_bot_payment_reminder_template") or "").strip()[:2000],
+    )
+    db.update_brand_number_field(brand_id, "sales_bot_appointment_reminders_enabled", 1 if request.form.get("sales_bot_appointment_reminders_enabled") else 0)
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_appointment_reminder_send_time",
+        (request.form.get("sales_bot_appointment_reminder_send_time") or "17:00").strip()[:10],
+    )
+    appointment_timezone = (request.form.get("sales_bot_appointment_reminder_timezone") or "America/New_York").strip()
+    if appointment_timezone not in {"America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"}:
+        appointment_timezone = "America/New_York"
+    db.update_brand_text_field(brand_id, "sales_bot_appointment_reminder_timezone", appointment_timezone)
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_appointment_reminder_channels",
+        json.dumps(selected_appointment_channels),
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_appointment_reminder_template",
+        (request.form.get("sales_bot_appointment_reminder_template") or "").strip()[:2000],
+    )
+    db.update_brand_number_field(
+        brand_id,
+        "sales_bot_appointment_reminder_respect_client_channel",
+        1 if request.form.get("sales_bot_appointment_reminder_respect_client_channel") else 0,
     )
     db.update_brand_number_field(brand_id, "sales_bot_transcript_export", 1 if request.form.get("sales_bot_transcript_export") else 0)
     db.update_brand_number_field(brand_id, "sales_bot_meta_lead_forms", 1 if request.form.get("sales_bot_meta_lead_forms") else 0)

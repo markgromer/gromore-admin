@@ -140,6 +140,70 @@ class FeedbackAiWorkflowTests(unittest.TestCase):
         self.assertEqual(len(drafts), 2)
         self.assertIn("workflow needs to move faster", drafts[0]["reply_draft"] + drafts[1]["reply_draft"])
 
+    @patch("openai.OpenAI")
+    def test_ai_review_ajax_returns_json_result(self, mock_openai):
+        payload = {
+            "summary": {
+                "executive_summary": "Recent feedback points to faster triage needs.",
+                "counts": {
+                    "total_feedback": 2,
+                    "bugs": 1,
+                    "feature_requests": 1,
+                    "ui_ux": 0,
+                    "likes": 0,
+                    "dislikes": 0,
+                    "general": 0,
+                },
+                "top_themes": [],
+                "priority_recommendations": [],
+            },
+            "dev_plan": {
+                "title": "Feedback AI rollout",
+                "objective": "Speed up beta feedback handling.",
+                "likely_areas": ["webapp/app.py"],
+                "implementation_steps": ["Return inline status for review actions"],
+                "qa_checks": ["Verify success and error states render"],
+                "rollout_order": ["Backend", "Frontend"],
+                "customer_comms": ["Acknowledge input promptly"],
+            },
+            "reply_drafts": [
+                {
+                    "feedback_id": self.feedback_ids[0],
+                    "reply_subject": "Thanks for the feedback",
+                    "reply_draft": "We are reviewing ways to speed this up.",
+                    "internal_note": "Handle with AI workflow.",
+                    "recommended_status": "reviewed",
+                    "confidence": 0.9,
+                    "needs_manual_review": False,
+                },
+                {
+                    "feedback_id": self.feedback_ids[1],
+                    "reply_subject": "Thanks for reporting this issue",
+                    "reply_draft": "We are checking the slowdown now.",
+                    "internal_note": "Review performance path.",
+                    "recommended_status": "reviewed",
+                    "confidence": 0.85,
+                    "needs_manual_review": False,
+                },
+            ],
+        }
+        mock_client = mock_openai.return_value
+        mock_client.chat.completions.create.return_value = _FakeChatResponse(json.dumps(payload))
+
+        response = self.client.post(
+            "/beta/feedback/ai/generate",
+            data={"scope": "new"},
+            headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["item_count"], 2)
+        self.assertEqual(body["draft_count"], 2)
+        self.assertIn("#tab-feedback", body["redirect_url"])
+
     @patch("webapp.email_sender.send_simple_email")
     def test_send_draft_reply_uses_client_user_email_and_marks_sent(self, mock_send_simple_email):
         with self.app.app_context():

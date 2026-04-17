@@ -266,18 +266,20 @@
                         <p class="text-muted mb-0" style="font-size:.88rem;">Generate a grouped summary, a dev-team action plan, and ready-to-send reply drafts for the current feedback queue.</p>
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
-                        <form method="POST" action="{{ url_for('beta_feedback_ai_generate') }}">
+                        <form method="POST" action="{{ url_for('beta_feedback_ai_generate') }}" class="js-feedback-ai-form" data-loading-label="Reviewing new feedback...">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="scope" value="new">
-                            <button class="btn btn-sm btn-primary"><i class="bi bi-magic"></i> Review New Feedback</button>
+                            <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-magic"></i> Review New Feedback</button>
                         </form>
-                        <form method="POST" action="{{ url_for('beta_feedback_ai_generate') }}">
+                        <form method="POST" action="{{ url_for('beta_feedback_ai_generate') }}" class="js-feedback-ai-form" data-loading-label="Reviewing recent feedback...">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="scope" value="all">
-                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-card-list"></i> Review Recent Feedback</button>
+                            <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-card-list"></i> Review Recent Feedback</button>
                         </form>
                     </div>
                 </div>
+
+                <div id="feedbackAiStatus" class="alert d-none mt-3 mb-0" role="alert"></div>
 
                 {% if latest_feedback_ai_run %}
                 <div class="mt-4 pt-3 border-top">
@@ -734,6 +736,66 @@ function escHtml(str) {
 document.addEventListener('DOMContentLoaded', function() {
     toggleSingleEmailField();
     loadBroadcasts();
+
+    const aiStatus = document.getElementById('feedbackAiStatus');
+    const aiForms = Array.from(document.querySelectorAll('.js-feedback-ai-form'));
+
+    function setAiStatus(kind, message) {
+        if (!aiStatus) return;
+        aiStatus.className = `alert alert-${kind} mt-3 mb-0`;
+        aiStatus.textContent = message || '';
+        aiStatus.classList.remove('d-none');
+        aiStatus.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function setAiButtonsDisabled(disabled) {
+        aiForms.forEach(function(form) {
+            const button = form.querySelector('button[type="submit"]');
+            if (button) button.disabled = disabled;
+        });
+    }
+
+    aiForms.forEach(function(form) {
+        form.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const button = form.querySelector('button[type="submit"]');
+            const originalHtml = button ? button.innerHTML : '';
+            const loadingLabel = form.getAttribute('data-loading-label') || 'Reviewing feedback...';
+
+            setAiButtonsDisabled(true);
+            if (button) {
+                button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' + loadingLabel;
+            }
+            setAiStatus('info', loadingLabel);
+
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    body: new FormData(form),
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    }
+                });
+                const payload = await response.json().catch(function() {
+                    return { ok: false, message: 'Unexpected server response from AI review.' };
+                });
+
+                if (!response.ok || !payload.ok) {
+                    throw new Error(payload.message || 'AI review failed.');
+                }
+
+                setAiStatus('success', payload.message || 'AI review completed.');
+                window.setTimeout(function() {
+                    window.location.href = payload.redirect_url || (window.location.pathname + '#tab-feedback');
+                }, 500);
+            } catch (error) {
+                setAiStatus('danger', error.message || 'AI review failed.');
+                setAiButtonsDisabled(false);
+                if (button) button.innerHTML = originalHtml;
+            }
+        });
+    });
 
     if (window.location.hash) {
         const trigger = document.querySelector(`a[data-bs-toggle="tab"][href="${window.location.hash}"]`);
