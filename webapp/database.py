@@ -79,6 +79,13 @@ class WebDB:
             return "on"
         return value
 
+    @staticmethod
+    def _normalize_feature_access_level(level):
+        value = (level or "all").strip().lower()
+        if value not in {"all", "beta", "brand", "admin"}:
+            return "all"
+        return value
+
     def _conn(self):
         conn = sqlite3.connect(self.db_path, timeout=10)
         conn.row_factory = sqlite3.Row
@@ -4825,7 +4832,7 @@ class WebDB:
         conn = self._conn()
         conn.execute(
             "UPDATE feature_flags SET access_level = ?, enabled = ? WHERE feature_key = ?",
-            (access_level, 1 if enabled else 0, feature_key),
+            (self._normalize_feature_access_level(access_level), 1 if enabled else 0, feature_key),
         )
         conn.commit()
         conn.close()

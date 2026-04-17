@@ -363,9 +363,13 @@ def create_app():
             return "off"
         if level == "beta" and not (brand_id and db.is_beta_brand(brand_id)):
             return "off"
+        if level == "brand" and not brand_id:
+            return "off"
 
         if brand_id:
             overrides = db.get_brand_feature_access(brand_id)
+            if level == "brand":
+                return overrides.get(feature_key, "off")
             return overrides.get(feature_key, "on")
         return "on"
 
@@ -2073,7 +2077,7 @@ def create_app():
             key = f["feature_key"]
             level = request.form.get(f"level_{key}", f["access_level"])
             enabled = "1" in request.form.getlist(f"enabled_{key}")
-            if level not in ("all", "beta", "admin"):
+            if level not in ("all", "beta", "admin", "brand"):
                 level = "all"
             db.update_feature_flag(key, level, enabled)
         flash("Feature flags updated.", "success")

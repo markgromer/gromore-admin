@@ -287,9 +287,30 @@ RotoRooter">{{ brand.competitors or '' }}</textarea>
                         </div>
                     </div>
 
+                    {% set feature_counts = namespace(selected_brand=0, total=0) %}
+                    {% for grouped_flags in feature_categories.values() %}
+                        {% for grouped_flag in grouped_flags %}
+                            {% set feature_counts.total = feature_counts.total + 1 %}
+                            {% if grouped_flag.access_level == 'brand' %}
+                                {% set feature_counts.selected_brand = feature_counts.selected_brand + 1 %}
+                            {% endif %}
+                        {% endfor %}
+                    {% endfor %}
+
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 border rounded p-3 bg-light mb-3">
+                        <div>
+                            <div class="fw-semibold">Selected-brand rollouts</div>
+                            <div class="small text-muted">{{ feature_counts.selected_brand }} of {{ feature_counts.total }} flags currently require per-brand enablement.</div>
+                        </div>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Feature access filters">
+                            <button type="button" class="btn btn-outline-secondary active" id="featureFilterAll">All features</button>
+                            <button type="button" class="btn btn-outline-secondary" id="featureFilterBrandOnly">Selected-brand only</button>
+                        </div>
+                    </div>
+
                     {% set cat_labels = {"main": "Main", "create": "Create", "business": "Business", "settings": "Settings", "general": "General"} %}
                     {% for cat, flags in feature_categories.items() %}
-                    <div class="card mb-3 border">
+                    <div class="card mb-3 border js-feature-category-card">
                         <div class="card-header py-2 bg-light">
                             <strong>{{ cat_labels.get(cat, cat|title) }}</strong>
                         </div>
@@ -304,12 +325,16 @@ RotoRooter">{{ brand.competitors or '' }}</textarea>
                                     </thead>
                                     <tbody>
                                         {% for flag in flags %}
-                                        {% set current_state = brand_feature_access.get(flag.feature_key, 'on') %}
-                                        <tr>
+                                        {% set default_state = 'off' if flag.access_level == 'brand' else 'on' %}
+                                        {% set current_state = brand_feature_access.get(flag.feature_key, default_state) %}
+                                        <tr class="js-feature-flag-row" data-access-level="{{ flag.access_level or 'all' }}">
                                             <td>
                                                 <strong>{{ flag.label }}</strong>
+                                                {% if flag.access_level == 'brand' %}
+                                                <span class="badge bg-info text-dark ms-2">Selected-brand rollout</span>
+                                                {% endif %}
                                                 {% if flag.description %}<br><small class="text-muted">{{ flag.description }}</small>{% endif %}
-                                                <br><small class="text-muted">Global rule: {{ (flag.access_level or 'all')|replace('_', ' ')|title }}</small>
+                                                <br><small class="text-muted">Global rule: {% if flag.access_level == 'brand' %}Selected Brands Only{% else %}{{ (flag.access_level or 'all')|replace('_', ' ')|title }}{% endif %}</small>
                                             </td>
                                             <td>
                                                 <select name="feature_state_{{ flag.feature_key }}" class="form-select form-select-sm">
@@ -396,5 +421,43 @@ function syncCrmRevenue(brandId) {
         resultEl.className = 'small d-block mt-1 text-danger fw-medium';
     });
 }
+
+(function() {
+    var allButton = document.getElementById('featureFilterAll');
+    var brandOnlyButton = document.getElementById('featureFilterBrandOnly');
+    var rows = Array.prototype.slice.call(document.querySelectorAll('.js-feature-flag-row'));
+    var categoryCards = Array.prototype.slice.call(document.querySelectorAll('.js-feature-category-card'));
+
+    if (!allButton || !brandOnlyButton || !rows.length) {
+        return;
+    }
+
+    function setActiveButton(mode) {
+        allButton.classList.toggle('active', mode === 'all');
+        brandOnlyButton.classList.toggle('active', mode === 'brand');
+    }
+
+    function applyFilter(mode) {
+        rows.forEach(function(row) {
+            var isBrandOnly = row.getAttribute('data-access-level') === 'brand';
+            row.style.display = (mode === 'brand' && !isBrandOnly) ? 'none' : '';
+        });
+
+        categoryCards.forEach(function(card) {
+            var visibleRows = card.querySelectorAll('.js-feature-flag-row:not([style*="display: none"])');
+            card.style.display = visibleRows.length ? '' : 'none';
+        });
+
+        setActiveButton(mode);
+    }
+
+    allButton.addEventListener('click', function() {
+        applyFilter('all');
+    });
+
+    brandOnlyButton.addEventListener('click', function() {
+        applyFilter('brand');
+    });
+})();
 </script>
 {% endblock %}

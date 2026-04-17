@@ -145,6 +145,57 @@ class BrandFeatureAccessTests(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertIn("VA Desk", html)
 
+    def test_feature_flags_page_accepts_selected_brands_only_level(self):
+        self._login_admin()
+
+        response = self.client.post(
+            "/features/update",
+            data={
+                "enabled_blog": "1",
+                "level_blog": "brand",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            flag = self.app.db.get_feature_flag("blog")
+
+        self.assertEqual(flag["access_level"], "brand")
+        self.assertEqual(flag["enabled"], 1)
+
+    def test_selected_brand_only_feature_is_hidden_until_brand_enables_it(self):
+        with self.app.app_context():
+            self.app.db.update_feature_flag("blog", "brand", True)
+
+        self._login_client()
+        response = self.client.get("/client/", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertNotIn('<span class="nav-link-label">Blog</span>', html)
+
+        with self.app.app_context():
+            self.app.db.update_brand_feature_access(self.brand_id, {"blog": "on"})
+
+        enabled_response = self.client.get("/client/", follow_redirects=False)
+        self.assertEqual(enabled_response.status_code, 200)
+        enabled_html = enabled_response.get_data(as_text=True)
+        self.assertIn('<span class="nav-link-label">Blog</span>', enabled_html)
+
+    def test_brand_settings_page_highlights_selected_brand_rollouts(self):
+        with self.app.app_context():
+            self.app.db.update_feature_flag("blog", "brand", True)
+
+        self._login_admin()
+        response = self.client.get(f"/brands/{self.brand_id}/settings")
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn("Selected-brand rollouts", html)
+        self.assertIn("Selected-brand only", html)
+        self.assertIn("Selected-brand rollout", html)
+
 
 if __name__ == "__main__":
     unittest.main()
