@@ -62,7 +62,7 @@ services:
     name: warren-appointment-reminders
     runtime: python
     buildCommand: pip install -r requirements.txt
-    schedule: "0 * * * *"
+    schedule: "*/5 * * * *"
     startCommand: python -c "import requests,os;requests.post(os.environ['RENDER_EXTERNAL_URL']+'/jobs/cron/warren-appointment-reminders',headers={'Authorization':'Bearer '+os.environ['SECRET_KEY']},timeout=300)"
     envVars:
       - key: SECRET_KEY

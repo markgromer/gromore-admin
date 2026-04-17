@@ -929,7 +929,7 @@
                     <div class="col-md-3">
                         <label class="form-label mb-1" style="font-size:.82rem;">Send after this local time</label>
                         <input type="time" class="form-control form-control-sm" name="sales_bot_appointment_reminder_send_time" value="{{ brand.sales_bot_appointment_reminder_send_time|default('17:00') }}">
-                        <small class="text-muted">Cron can run multiple times. Warren only sends once per appointment.</small>
+                        <small class="text-muted">Checks run every 5 minutes. Warren sends on the first check after this time, and only once per appointment.</small>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label mb-1" style="font-size:.82rem;">Timezone</label>
