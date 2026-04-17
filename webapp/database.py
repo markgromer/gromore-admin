@@ -342,6 +342,24 @@ class WebDB:
             CREATE INDEX IF NOT EXISTS idx_client_billing_reminders_brand_due
             ON client_billing_reminders(brand_id, due_date, channel, reminder_type);
 
+            CREATE TABLE IF NOT EXISTS sng_webhook_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                external_event_id TEXT NOT NULL,
+                event_type TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'received',
+                detail TEXT DEFAULT '',
+                summary_json TEXT DEFAULT '',
+                payload_json TEXT DEFAULT '',
+                received_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(brand_id, external_event_id),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_sng_webhook_events_brand_received
+            ON sng_webhook_events(brand_id, received_at DESC);
+
             CREATE TABLE IF NOT EXISTS appointment_reminder_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand_id INTEGER NOT NULL,
@@ -1516,6 +1534,7 @@ class WebDB:
             ("sales_bot_appointment_reminder_channels", "TEXT DEFAULT 'sms'"),
             ("sales_bot_appointment_reminder_template", "TEXT DEFAULT ''"),
             ("sales_bot_appointment_reminder_respect_client_channel", "INTEGER DEFAULT 1"),
+            ("sales_bot_sng_webhook_secret", "TEXT DEFAULT ''"),
             ("hiring_design", "TEXT DEFAULT '{}'"),
             # Stripe billing
             ("stripe_customer_id", "TEXT DEFAULT ''"),
@@ -1916,7 +1935,7 @@ class WebDB:
             "sales_bot_guardrails", "sales_bot_example_language",
             "sales_bot_disallowed_language", "sales_bot_handoff_rules",
             "sales_bot_quo_webhook_secret", "sales_bot_meta_webhook_secret",
-            "sales_bot_incoming_webhook_secret", "sales_bot_lead_form_config",
+            "sales_bot_incoming_webhook_secret", "sales_bot_sng_webhook_secret", "sales_bot_lead_form_config",
             "sales_bot_objection_playbook", "sales_bot_message_templates", "sales_bot_collect_fields",
             "sales_bot_closing_procedure", "sales_bot_booking_success_message",
             "sales_bot_service_area_schedule", "sales_bot_closing_action", "sales_bot_onboarding_link",
@@ -2856,6 +2875,98 @@ class WebDB:
                 """,
                 (brand_id, limit),
             ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def ensure_brand_sng_webhook_secret(self, brand_id):
+        brand = self.get_brand(brand_id)
+        existing = ((brand or {}).get("sales_bot_sng_webhook_secret") or "").strip()
+        if existing:
+            return existing
+
+        secret_value = secrets.token_urlsafe(24)
+        conn = self._conn()
+        conn.execute(
+            "UPDATE brands SET sales_bot_sng_webhook_secret = ?, updated_at = datetime('now') WHERE id = ?",
+            (secret_value, brand_id),
+        )
+        conn.commit()
+        conn.close()
+        return secret_value
+
+    def record_sng_webhook_event(
+        self,
+        brand_id,
+        external_event_id,
+        event_type="",
+        status="received",
+        detail="",
+        summary=None,
+        payload=None,
+    ):
+        summary = summary if isinstance(summary, dict) else {"value": summary}
+        payload = payload if isinstance(payload, dict) else {"value": payload}
+
+        summary_json = json.dumps(summary or {}, separators=(",", ":"))
+        if len(summary_json) > 2000:
+            summary_json = json.dumps(
+                {
+                    "truncated": True,
+                    "preview": summary_json[:1900],
+                },
+                separators=(",", ":"),
+            )
+
+        payload_json = json.dumps(payload or {}, separators=(",", ":"))
+        if len(payload_json) > 20000:
+            payload_json = json.dumps(
+                {
+                    "truncated": True,
+                    "preview": payload_json[:19800],
+                },
+                separators=(",", ":"),
+            )
+
+        conn = self._conn()
+        conn.execute(
+            """
+            INSERT INTO sng_webhook_events (
+                brand_id, external_event_id, event_type, status,
+                detail, summary_json, payload_json, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(brand_id, external_event_id)
+            DO UPDATE SET
+                event_type = excluded.event_type,
+                status = excluded.status,
+                detail = excluded.detail,
+                summary_json = excluded.summary_json,
+                payload_json = excluded.payload_json,
+                updated_at = datetime('now')
+            """,
+            (
+                brand_id,
+                str(external_event_id or "")[:255],
+                str(event_type or "")[:255],
+                str(status or "received")[:50],
+                str(detail or "")[:1000],
+                summary_json,
+                payload_json,
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_sng_webhook_events(self, brand_id, limit=20):
+        conn = self._conn()
+        rows = conn.execute(
+            """
+            SELECT * FROM sng_webhook_events
+            WHERE brand_id = ?
+            ORDER BY received_at DESC, id DESC
+            LIMIT ?
+            """,
+            (brand_id, limit),
+        ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 

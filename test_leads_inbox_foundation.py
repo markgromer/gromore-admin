@@ -263,6 +263,16 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertIn(b"Generic Incoming Lead Webhook URL", response.data)
         self.assertIn(b"/webhooks/leads/", response.data)
 
+    def test_settings_page_shows_sng_webhook_url_and_generates_secret(self):
+        response = self.client.get("/client/settings")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Sweep and Go Webhook URL", response.data)
+        self.assertIn(b"/webhooks/sng/", response.data)
+
+        with self.app.app_context():
+            brand = self.app.db.get_brand(self.brand_id)
+            self.assertTrue((brand.get("sales_bot_sng_webhook_secret") or "").strip())
+
     def test_settings_page_shows_appointment_reminder_reports(self):
         with self.app.app_context():
             self.app.db.record_appointment_reminder_run(

@@ -172,6 +172,7 @@ class WarrenWebhookTests(unittest.TestCase):
                 (self.brand_id,),
             )
             conn.commit()
+            self.sng_secret = self.db.ensure_brand_sng_webhook_secret(self.brand_id)
 
             # Ensure beta tester
             existing = conn.execute(
@@ -185,6 +186,46 @@ class WarrenWebhookTests(unittest.TestCase):
                 )
                 conn.commit()
             conn.close()
+
+    def test_sng_webhook_logs_event(self):
+        payload = {
+            "id": "evt_sng_001",
+            "event": {"type": "client:client_payment_declined"},
+            "client": {
+                "id": "client_123",
+                "name": "Taylor Prospect",
+                "email": "taylor@example.com",
+                "phone": "+15551234567",
+            },
+            "payment": {"id": "pay_123", "status": "failed"},
+        }
+
+        resp = self.client.post(
+            f"/webhooks/sng/warren_webhook_test/{self.sng_secret}",
+            json=payload,
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["event_type"], "client:client_payment_declined")
+        self.assertEqual(data["event_id"], "evt_sng_001")
+
+        with self.app.app_context():
+            events = self.db.get_sng_webhook_events(self.brand_id, limit=5)
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0]["external_event_id"], "evt_sng_001")
+            self.assertEqual(events[0]["event_type"], "client:client_payment_declined")
+            self.assertIn("Taylor Prospect", events[0]["detail"])
+
+    def test_sng_webhook_rejects_invalid_secret(self):
+        resp = self.client.post(
+            "/webhooks/sng/warren_webhook_test/not_the_secret",
+            json={"id": "evt_bad", "event": {"type": "client:invoice_finalized"}},
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 401)
 
     @patch("webapp.warren_webhooks.threading.Thread")
     def test_quo_sms_webhook_creates_thread(self, mock_thread):

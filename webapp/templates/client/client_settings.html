@@ -305,6 +305,45 @@
 
         <div id="sngTestResult" class="mt-2" style="display:none;"></div>
 
+        <div class="mt-3 p-3" style="background:#f8fafc; border:1px solid #dbeafe; border-radius:10px;">
+            <div class="row g-3 align-items-start">
+                <div class="col-lg-7">
+                    <label class="form-label mb-1 fw-medium" style="font-size:.88rem;">Sweep and Go Webhook URL</label>
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control form-control-sm bg-light" readonly
+                               value="{{ sng_webhook_url }}" id="sngWebhookUrl">
+                        <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('sngWebhookUrl')">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                    </div>
+                    <small class="text-muted d-block mt-2">Paste this into Sweep and Go when you create the webhook. Recommended events: <strong>client:client_payment_declined</strong>, <strong>client:client_payment_accepted</strong>, <strong>client:invoice_finalized</strong>, <strong>client:subscription_created</strong>, <strong>client:subscription_canceled</strong>, <strong>client:subscription_paused</strong>, and <strong>client:subscription_unpaused</strong>.</small>
+                </div>
+                <div class="col-lg-5">
+                    <div class="fw-medium mb-2" style="font-size:.88rem;">Recent webhook events</div>
+                    {% if sng_webhook_events %}
+                    <div style="max-height:220px; overflow:auto;">
+                        {% for event in sng_webhook_events %}
+                        <div class="p-2 {% if not loop.last %}mb-2{% endif %}" style="background:#fff; border:1px solid #e5e7eb; border-radius:8px;">
+                            <div class="d-flex align-items-center justify-content-between gap-2 mb-1">
+                                <div class="fw-medium" style="font-size:.82rem;">{{ event.event_type or 'unknown' }}</div>
+                                <span class="badge bg-{{ event.status_badge }}">{{ event.status or 'received' }}</span>
+                            </div>
+                            <div style="font-size:.8rem; color:#111827;">{{ event.detail or 'Webhook received.' }}</div>
+                            <div class="text-muted mt-1" style="font-size:.75rem;">
+                                {{ event.received_at }}
+                                {% if event.summary.client_email %}<span class="ms-2">{{ event.summary.client_email }}</span>{% endif %}
+                                {% if event.summary.client_phone %}<span class="ms-2">{{ event.summary.client_phone }}</span>{% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-muted" style="font-size:.82rem;">No Sweep and Go events received yet. Once the token-side webhook is live, deliveries will appear here.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
         <div class="mt-3 p-3" style="background:#f0fdf4; border-radius:8px;">
             <div class="d-flex align-items-start gap-2">
                 <i class="bi bi-info-circle text-success mt-1"></i>

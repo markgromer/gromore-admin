@@ -5954,6 +5954,9 @@ def client_settings():
         chatbot_channels = set()
 
     try:
+        sng_secret = db.ensure_brand_sng_webhook_secret(brand_id)
+        sng_webhook_url = f"{_external_app_url()}{url_for('webhooks.sng_webhook', brand_slug=brand['slug'], secret=sng_secret)}"
+
         appointment_runs = db.get_appointment_reminder_runs(brand_id, limit=8)
         for run in appointment_runs:
             summary = _safe_json_object(run.get("summary_json"))
@@ -5975,6 +5978,16 @@ def client_settings():
             attempt["detail_data"] = _safe_json_object(attempt.get("detail"))
             attempt["detail_summary"] = _summarize_delivery_detail(attempt.get("detail"))
 
+        sng_webhook_events = db.get_sng_webhook_events(brand_id, limit=10)
+        for event in sng_webhook_events:
+            event["summary"] = _safe_json_object(event.get("summary_json"))
+            event["status_badge"] = {
+                "received": "success",
+                "processed": "primary",
+                "ignored": "secondary",
+                "failed": "danger",
+            }.get((event.get("status") or "").strip().lower(), "secondary")
+
         return render_template(
             "client_settings.html",
             brand=brand,
@@ -5984,6 +5997,8 @@ def client_settings():
             google_conn=google_conn,
             meta_conn=meta_conn,
             chatbot_channels=chatbot_channels,
+            sng_webhook_url=sng_webhook_url,
+            sng_webhook_events=sng_webhook_events,
             appointment_reminder_runs=appointment_runs,
             appointment_reminder_attempts=appointment_attempts,
             brand_name=session.get("client_brand_name", brand.get("display_name", "")),

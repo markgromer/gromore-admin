@@ -2,11 +2,12 @@
 Warren Webhooks - inbound message receivers for Quo (OpenPhone) and Meta.
 
 Endpoints:
-  POST /webhooks/quo/sms/<brand_slug>     - Quo/OpenPhone inbound SMS
-    POST /webhooks/leads/<brand_slug>       - Generic inbound lead form submissions
-  POST /webhooks/meta/leadgen             - Meta Lead Form submissions
-  POST /webhooks/meta/messenger           - Meta Messenger inbound messages
-  GET  /webhooks/meta/messenger           - Meta webhook verification
+    POST /webhooks/leads/<brand_slug>             - Generic inbound lead form submissions
+    POST /webhooks/sng/<brand_slug>/<secret>      - Sweep and Go inbound events
+    POST /webhooks/quo/sms/<brand_slug>           - Quo/OpenPhone inbound SMS
+    POST /webhooks/meta/leadgen                   - Meta Lead Form submissions
+    POST /webhooks/meta/messenger                 - Meta Messenger inbound messages
+    GET  /webhooks/meta/messenger                 - Meta webhook verification
 
 All webhook endpoints are public (no login) but verified via signatures
 or secrets configured per-brand.
@@ -272,6 +273,94 @@ def _extract_incoming_webhook_secret():
     ).strip()
 
 
+def _sng_find_first(payload, *keys):
+    key_set = {str(key).strip().lower() for key in keys if str(key).strip()}
+    if not key_set:
+        return ""
+
+    queue = [payload]
+    depth = 0
+    while queue and depth < 5:
+        next_queue = []
+        for item in queue:
+            if isinstance(item, dict):
+                for key, value in item.items():
+                    if str(key).strip().lower() in key_set:
+                        text = _stringify_webhook_value(value)
+                        if text:
+                            return text
+                    if isinstance(value, (dict, list)):
+                        next_queue.append(value)
+            elif isinstance(item, list):
+                next_queue.extend(value for value in item if isinstance(value, (dict, list)))
+        queue = next_queue
+        depth += 1
+    return ""
+
+
+def _extract_sng_event_type(payload):
+    if isinstance(payload, dict):
+        direct_value = _stringify_webhook_value(payload.get("event_type"))
+        if direct_value:
+            return direct_value[:255]
+
+        event_block = payload.get("event")
+        if isinstance(event_block, dict):
+            for key in ("type", "name", "topic"):
+                nested_value = _stringify_webhook_value(event_block.get(key))
+                if nested_value:
+                    return nested_value[:255]
+
+        for key in ("type", "name", "topic"):
+            direct_candidate = _stringify_webhook_value(payload.get(key))
+            if direct_candidate and direct_candidate.lower() != "event":
+                return direct_candidate[:255]
+
+    for candidate in (
+        _sng_find_first(payload, "event_type"),
+        _sng_find_first(payload.get("event") if isinstance(payload, dict) else {}, "type", "name", "topic"),
+        _sng_find_first(payload, "type", "topic"),
+    ):
+        text = str(candidate or "").strip()
+        if text and text.lower() != "event":
+            return text[:255]
+    return "unknown"
+
+
+def _extract_sng_event_id(payload, raw_body):
+    event_id = _sng_find_first(payload, "event_id", "eventid", "id", "webhook_id", "webhookid")
+    if event_id:
+        return event_id[:255]
+    digest = hashlib.sha1(raw_body or b"").hexdigest()[:24]
+    return f"sng_{digest}"
+
+
+def _extract_sng_summary(payload, event_type):
+    summary = {
+        "event_type": event_type,
+        "client_id": _sng_find_first(payload, "client_id", "clientid"),
+        "client_name": _sng_find_first(payload, "client_name", "clientname", "name"),
+        "client_email": _sng_find_first(payload, "client_email", "clientemail", "email"),
+        "client_phone": _sng_find_first(payload, "client_phone", "clientphone", "phone", "mobile"),
+        "payment_id": _sng_find_first(payload, "payment_id", "paymentid"),
+        "invoice_id": _sng_find_first(payload, "invoice_id", "invoiceid"),
+        "subscription_id": _sng_find_first(payload, "subscription_id", "subscriptionid"),
+        "status": _sng_find_first(payload, "status", "payment_status", "paymentstatus"),
+    }
+    return {key: value for key, value in summary.items() if value}
+
+
+def _build_sng_event_detail(event_type, summary):
+    parts = [event_type or "Sweep and Go event"]
+    if summary.get("client_name"):
+        parts.append(summary["client_name"])
+    elif summary.get("client_id"):
+        parts.append(f"client {summary['client_id']}")
+    if summary.get("status"):
+        parts.append(summary["status"])
+    return " - ".join(part for part in parts if part)[:1000]
+
+
 @webhooks_bp.route("/leads/<brand_slug>", methods=["POST"])
 def generic_lead_webhook(brand_slug):
     """Accept generic lead form submissions from websites and middleware tools."""
@@ -310,6 +399,46 @@ def generic_lead_webhook(brand_slug):
         message_header="Inbound Lead Submission",
     )
     return jsonify({"ok": True, "thread_id": thread_id}), 200
+
+
+@webhooks_bp.route("/sng/<brand_slug>/<secret>", methods=["POST"])
+def sng_webhook(brand_slug, secret):
+    db = _get_db()
+    brand = db.get_brand_by_slug(brand_slug)
+    if not brand:
+        abort(404)
+
+    expected_secret = (brand.get("sales_bot_sng_webhook_secret") or "").strip()
+    if not expected_secret or not secret or not hmac.compare_digest(secret, expected_secret):
+        abort(401)
+
+    raw_body = request.get_data() or b""
+    parsed = request.get_json(silent=True)
+    if isinstance(parsed, dict):
+        payload = parsed
+    elif isinstance(parsed, list):
+        payload = {"items": parsed}
+    else:
+        payload = {}
+
+    if not payload:
+        return jsonify({"error": "Expected a JSON payload."}), 400
+
+    event_type = _extract_sng_event_type(payload)
+    event_id = _extract_sng_event_id(payload, raw_body)
+    summary = _extract_sng_summary(payload, event_type)
+    detail = _build_sng_event_detail(event_type, summary)
+
+    db.record_sng_webhook_event(
+        brand["id"],
+        event_id,
+        event_type=event_type,
+        status="received",
+        detail=detail,
+        summary=summary,
+        payload=payload,
+    )
+    return jsonify({"ok": True, "event_type": event_type, "event_id": event_id}), 200
 
 
 # ─────────────────────────────────────────────
