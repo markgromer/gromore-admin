@@ -263,6 +263,36 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertIn(b"Generic Incoming Lead Webhook URL", response.data)
         self.assertIn(b"/webhooks/leads/", response.data)
 
+    def test_settings_page_shows_appointment_reminder_reports(self):
+        with self.app.app_context():
+            self.app.db.record_appointment_reminder_run(
+                self.brand_id,
+                "2026-04-18",
+                status="completed",
+                reason="Processed 1 appointment candidate(s): 1 sent, 0 failed, 0 skipped.",
+                candidates=1,
+                sent=1,
+                summary={"local_time": "2026-04-17 17:00", "send_after": "17:00", "timezone": "America/New_York"},
+            )
+            self.app.db.record_client_billing_reminder(
+                self.brand_id,
+                "job:123",
+                "2026-04-18",
+                "sms",
+                recipient="+15555550123",
+                status="sent",
+                detail='{"result":{"id":"msg_123","status":"queued"}}',
+                reminder_type="appointment_day_ahead",
+            )
+
+        response = self.client.get("/client/settings")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Recent appointment reminder runs", response.data)
+        self.assertIn(b"Processed 1 appointment candidate", response.data)
+        self.assertIn(b"Recent delivery attempts", response.data)
+        self.assertIn(b"+15555550123", response.data)
+        self.assertIn(b"queued - msg_123", response.data)
+
     @patch("webapp.quo_sms.get_phone_numbers")
     def test_client_can_test_openphone_connection(self, mock_get_phone_numbers):
         with self.app.app_context():

@@ -128,6 +128,33 @@ def _safe_json_list(raw_value):
     return list(parsed) if isinstance(parsed, list) else []
 
 
+def _summarize_delivery_detail(raw_value):
+    detail = _safe_json_object(raw_value)
+    if not detail:
+        text = str(raw_value or "").strip()
+        return text[:160]
+
+    result = detail.get("result")
+    if isinstance(result, dict):
+        status = str(result.get("status") or result.get("state") or result.get("type") or "").strip()
+        message_id = str(result.get("id") or result.get("messageId") or result.get("message_id") or "").strip()
+        if status and message_id:
+            return f"{status} - {message_id}"[:160]
+        if status:
+            return status[:160]
+        if message_id:
+            return f"Message ID {message_id}"[:160]
+        rendered = json.dumps(result, separators=(",", ":"))
+        return rendered[:160]
+
+    if result:
+        return str(result)[:160]
+    if detail.get("error"):
+        return str(detail.get("error"))[:160]
+    rendered = json.dumps(detail, separators=(",", ":"))
+    return rendered[:160]
+
+
 def _split_text_lines(value, limit=24):
     parts = []
     seen = set()
@@ -5927,6 +5954,27 @@ def client_settings():
         chatbot_channels = set()
 
     try:
+        appointment_runs = db.get_appointment_reminder_runs(brand_id, limit=8)
+        for run in appointment_runs:
+            summary = _safe_json_object(run.get("summary_json"))
+            run["summary"] = summary
+            run["status_badge"] = {
+                "completed": "success",
+                "partial": "warning",
+                "failed": "danger",
+                "waiting": "secondary",
+                "config_error": "danger",
+            }.get((run.get("status") or "").strip().lower(), "secondary")
+
+        appointment_attempts = db.get_brand_client_billing_reminders(
+            brand_id,
+            reminder_type="appointment_day_ahead",
+            limit=20,
+        )
+        for attempt in appointment_attempts:
+            attempt["detail_data"] = _safe_json_object(attempt.get("detail"))
+            attempt["detail_summary"] = _summarize_delivery_detail(attempt.get("detail"))
+
         return render_template(
             "client_settings.html",
             brand=brand,
@@ -5936,6 +5984,8 @@ def client_settings():
             google_conn=google_conn,
             meta_conn=meta_conn,
             chatbot_channels=chatbot_channels,
+            appointment_reminder_runs=appointment_runs,
+            appointment_reminder_attempts=appointment_attempts,
             brand_name=session.get("client_brand_name", brand.get("display_name", "")),
         )
     except Exception:

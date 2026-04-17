@@ -139,6 +139,16 @@ class WarrenAppointmentReminderTests(unittest.TestCase):
         )
         self.assertEqual(sms_row["status"], "sent")
 
+        runs = self.db.get_appointment_reminder_runs(self.brand_id, limit=3)
+        self.assertEqual(len(runs), 3)
+        self.assertEqual(runs[0]["status"], "completed")
+        self.assertEqual(runs[0]["sent"], 0)
+        self.assertGreaterEqual(runs[0]["skipped"], 1)
+        self.assertEqual(runs[1]["status"], "completed")
+        self.assertEqual(runs[1]["sent"], 1)
+        self.assertEqual(runs[2]["status"], "waiting")
+        self.assertIn("before the send time", runs[2]["reason"])
+
 
 if __name__ == "__main__":
     unittest.main()

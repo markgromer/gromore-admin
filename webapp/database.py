@@ -342,6 +342,24 @@ class WebDB:
             CREATE INDEX IF NOT EXISTS idx_client_billing_reminders_brand_due
             ON client_billing_reminders(brand_id, due_date, channel, reminder_type);
 
+            CREATE TABLE IF NOT EXISTS appointment_reminder_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                target_date TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'completed',
+                reason TEXT DEFAULT '',
+                candidates INTEGER NOT NULL DEFAULT 0,
+                sent INTEGER NOT NULL DEFAULT 0,
+                failed INTEGER NOT NULL DEFAULT 0,
+                skipped INTEGER NOT NULL DEFAULT 0,
+                summary_json TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_appointment_reminder_runs_brand_created
+            ON appointment_reminder_runs(brand_id, created_at DESC);
+
             CREATE TABLE IF NOT EXISTS ai_briefs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand_id INTEGER NOT NULL,
@@ -2815,6 +2833,80 @@ class WebDB:
         )
         conn.commit()
         conn.close()
+
+    def get_brand_client_billing_reminders(self, brand_id, reminder_type=None, limit=20):
+        conn = self._conn()
+        if reminder_type:
+            rows = conn.execute(
+                """
+                SELECT * FROM client_billing_reminders
+                WHERE brand_id = ? AND reminder_type = ?
+                ORDER BY updated_at DESC, id DESC
+                LIMIT ?
+                """,
+                (brand_id, reminder_type, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT * FROM client_billing_reminders
+                WHERE brand_id = ?
+                ORDER BY updated_at DESC, id DESC
+                LIMIT ?
+                """,
+                (brand_id, limit),
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def record_appointment_reminder_run(
+        self,
+        brand_id,
+        target_date,
+        status="completed",
+        reason="",
+        candidates=0,
+        sent=0,
+        failed=0,
+        skipped=0,
+        summary=None,
+    ):
+        conn = self._conn()
+        conn.execute(
+            """
+            INSERT INTO appointment_reminder_runs (
+                brand_id, target_date, status, reason,
+                candidates, sent, failed, skipped, summary_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                brand_id,
+                str(target_date or ""),
+                (status or "completed").strip() or "completed",
+                (reason or "").strip()[:500],
+                int(candidates or 0),
+                int(sent or 0),
+                int(failed or 0),
+                int(skipped or 0),
+                json.dumps(summary or {}, separators=(",", ":"))[:2000],
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_appointment_reminder_runs(self, brand_id, limit=10):
+        conn = self._conn()
+        rows = conn.execute(
+            """
+            SELECT * FROM appointment_reminder_runs
+            WHERE brand_id = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
+            (brand_id, limit),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
 
     # ── Reports ──
 

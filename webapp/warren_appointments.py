@@ -55,6 +55,13 @@ def _parse_send_minutes(value):
     return hour * 60 + minute
 
 
+def _format_minutes(total_minutes):
+    total_minutes = max(0, int(total_minutes or 0))
+    hour = total_minutes // 60
+    minute = total_minutes % 60
+    return f"{hour:02d}:{minute:02d}"
+
+
 def _brand_local_now(brand, now=None):
     if now is None:
         now = datetime.now(timezone.utc)
@@ -169,16 +176,38 @@ def process_appointment_reminders(db, app_config, now=None, max_per_brand=None):
     for brand in db.get_all_brands():
         if int(brand.get("sales_bot_appointment_reminders_enabled") or 0) != 1:
             continue
-        if (brand.get("crm_type") or "").strip().lower() != "sweepandgo" or not (brand.get("crm_api_key") or "").strip():
-            continue
 
         local_now = _brand_local_now(brand, now=now)
+        target_date = local_now.date() + timedelta(days=1)
+        send_after_minutes = _parse_send_minutes(brand.get("sales_bot_appointment_reminder_send_time"))
+        base_summary = {
+            "local_time": local_now.strftime("%Y-%m-%d %H:%M"),
+            "timezone": (brand.get("sales_bot_appointment_reminder_timezone") or "America/New_York").strip() or "America/New_York",
+            "send_after": _format_minutes(send_after_minutes),
+        }
+
+        if (brand.get("crm_type") or "").strip().lower() != "sweepandgo" or not (brand.get("crm_api_key") or "").strip():
+            db.record_appointment_reminder_run(
+                brand["id"],
+                target_date,
+                status="config_error",
+                reason="Sweep and Go CRM is not fully configured for appointment reminders.",
+                summary=base_summary,
+            )
+            continue
+
         send_after_minutes = _parse_send_minutes(brand.get("sales_bot_appointment_reminder_send_time"))
         if (local_now.hour * 60 + local_now.minute) < send_after_minutes:
+            db.record_appointment_reminder_run(
+                brand["id"],
+                target_date,
+                status="waiting",
+                reason=f"Current local time {local_now.strftime('%H:%M')} is before the send time {_format_minutes(send_after_minutes)}.",
+                summary=base_summary,
+            )
             continue
 
         stats["brands"] += 1
-        target_date = local_now.date() + timedelta(days=1)
         candidates, error = sng_get_day_ahead_appointment_candidates(
             brand,
             target_date=target_date,
@@ -186,25 +215,42 @@ def process_appointment_reminders(db, app_config, now=None, max_per_brand=None):
         )
         if error:
             stats["errors"].append(str(error)[:200])
+            db.record_appointment_reminder_run(
+                brand["id"],
+                target_date,
+                status="failed",
+                reason=str(error)[:500],
+                summary=base_summary,
+            )
             continue
 
         configured_channels = _parse_channels(brand.get("sales_bot_appointment_reminder_channels"))
         reminder_type = "appointment_day_ahead"
+        brand_stats = {
+            "candidates": 0,
+            "sent": 0,
+            "failed": 0,
+            "skipped": 0,
+        }
         for candidate in candidates:
             stats["candidates"] += 1
+            brand_stats["candidates"] += 1
             appointment_key = candidate.get("appointment_key") or ""
             appointment_date = candidate.get("appointment_date") or target_date.isoformat()
             if not appointment_key:
                 stats["skipped"] += 1
+                brand_stats["skipped"] += 1
                 continue
 
             for channel in _candidate_channels(brand, candidate, configured_channels):
                 recipient = candidate.get("client_phone") if channel == "sms" else candidate.get("client_email")
                 if not recipient:
                     stats["skipped"] += 1
+                    brand_stats["skipped"] += 1
                     continue
                 if db.has_sent_client_billing_reminder(brand["id"], appointment_key, appointment_date, channel, reminder_type=reminder_type):
                     stats["skipped"] += 1
+                    brand_stats["skipped"] += 1
                     continue
 
                 detail_payload = {
@@ -234,8 +280,10 @@ def process_appointment_reminders(db, app_config, now=None, max_per_brand=None):
                     )
                     if ok:
                         stats["sent"] += 1
+                        brand_stats["sent"] += 1
                     else:
                         stats["failed"] += 1
+                        brand_stats["failed"] += 1
                 except Exception as exc:
                     log.warning(
                         "Appointment reminder failed: brand=%s appointment=%s channel=%s err=%s",
@@ -255,6 +303,33 @@ def process_appointment_reminders(db, app_config, now=None, max_per_brand=None):
                         reminder_type=reminder_type,
                     )
                     stats["failed"] += 1
+                    brand_stats["failed"] += 1
+
+        if brand_stats["failed"]:
+            run_status = "partial" if brand_stats["sent"] else "failed"
+        else:
+            run_status = "completed"
+        if not brand_stats["candidates"]:
+            run_reason = "No eligible Sweep and Go jobs were found for tomorrow."
+        else:
+            run_reason = (
+                f"Processed {brand_stats['candidates']} appointment candidate(s): "
+                f"{brand_stats['sent']} sent, {brand_stats['failed']} failed, {brand_stats['skipped']} skipped."
+            )
+        db.record_appointment_reminder_run(
+            brand["id"],
+            target_date,
+            status=run_status,
+            reason=run_reason,
+            candidates=brand_stats["candidates"],
+            sent=brand_stats["sent"],
+            failed=brand_stats["failed"],
+            skipped=brand_stats["skipped"],
+            summary={
+                **base_summary,
+                "channels": configured_channels,
+            },
+        )
 
     stats["errors"] = stats["errors"][:10]
     return stats

@@ -966,6 +966,85 @@
                     <textarea class="form-control form-control-sm" name="sales_bot_appointment_reminder_template" rows="4" placeholder="Hi {client_name}, this is a reminder from {brand_name} that we have you scheduled for tomorrow, {appointment_date}. Reply here if anything changed.">{{ brand.sales_bot_appointment_reminder_template or '' }}</textarea>
                     <small class="text-muted">Available placeholders: {client_name}, {brand_name}, {appointment_date}, {assigned_to_name}, {address}</small>
                 </div>
+
+                <div class="mt-4 p-3" style="background:#ffffff; border-radius:10px; border:1px solid #d1fae5;">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                        <div>
+                            <div class="fw-semibold">Recent appointment reminder runs</div>
+                            <div class="text-muted" style="font-size:.8rem;">Each cron check records whether it sent, skipped, or was still waiting for your send window.</div>
+                        </div>
+                    </div>
+
+                    {% if appointment_reminder_runs %}
+                    <div class="row g-3">
+                        {% for run in appointment_reminder_runs %}
+                        <div class="col-md-6">
+                            <div class="border rounded-3 p-3 h-100" style="background:#f8fafc; border-color:#dbeafe !important;">
+                                <div class="d-flex justify-content-between align-items-start gap-2">
+                                    <div>
+                                        <div class="fw-semibold">Tomorrow target: {{ run.target_date }}</div>
+                                        <div class="text-muted" style="font-size:.78rem;">Run logged {{ run.created_at[:16] if run.created_at else '' }}</div>
+                                    </div>
+                                    <span class="badge bg-{{ run.status_badge }}{% if run.status_badge == 'warning' %} text-dark{% endif %}">{{ (run.status or 'unknown')|replace('_', ' ')|title }}</span>
+                                </div>
+                                {% if run.summary.local_time or run.summary.send_after %}
+                                <div class="text-muted mt-2" style="font-size:.78rem;">
+                                    {% if run.summary.local_time %}Local check time: {{ run.summary.local_time }}{% endif %}
+                                    {% if run.summary.send_after %}<br>Configured send time: {{ run.summary.send_after }} {{ run.summary.timezone or '' }}{% endif %}
+                                </div>
+                                {% endif %}
+                                <div class="mt-2" style="font-size:.85rem;">{{ run.reason or 'No notes recorded.' }}</div>
+                                <div class="d-flex flex-wrap gap-3 mt-3 text-muted" style="font-size:.78rem;">
+                                    <span>Candidates: {{ run.candidates or 0 }}</span>
+                                    <span>Sent: {{ run.sent or 0 }}</span>
+                                    <span>Failed: {{ run.failed or 0 }}</span>
+                                    <span>Skipped: {{ run.skipped or 0 }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-muted" style="font-size:.85rem;">No appointment reminder runs have been logged for this brand yet.</div>
+                    {% endif %}
+
+                    <div class="mt-4">
+                        <div class="fw-semibold mb-1">Recent delivery attempts</div>
+                        <div class="text-muted mb-2" style="font-size:.8rem;">SMS rows show the immediate OpenPhone API result we received back. That confirms acceptance or failure at send time.</div>
+                        {% if appointment_reminder_attempts %}
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>When</th>
+                                        <th>Appointment</th>
+                                        <th>Recipient</th>
+                                        <th>Channel</th>
+                                        <th>Status</th>
+                                        <th>Provider detail</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for attempt in appointment_reminder_attempts %}
+                                    <tr>
+                                        <td class="text-muted" style="font-size:.78rem;">{{ attempt.updated_at[:16] if attempt.updated_at else '' }}</td>
+                                        <td style="font-size:.82rem;">{{ attempt.due_date }}<br><span class="text-muted">{{ attempt.external_client_id }}</span></td>
+                                        <td style="font-size:.82rem;">{{ attempt.recipient or 'No recipient recorded' }}</td>
+                                        <td class="text-capitalize" style="font-size:.82rem;">{{ attempt.channel }}</td>
+                                        <td>
+                                            <span class="badge bg-{{ 'success' if attempt.status == 'sent' else 'danger' if attempt.status == 'failed' else 'secondary' }}{% if attempt.status not in ('sent', 'failed') %} text-dark{% endif %}">{{ (attempt.status or 'unknown')|title }}</span>
+                                        </td>
+                                        <td style="font-size:.78rem; max-width:260px;">{{ attempt.detail_summary or '-' }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="text-muted" style="font-size:.85rem;">No appointment reminder attempts have been recorded yet.</div>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
 
             <!-- Nurture Cadence -->
