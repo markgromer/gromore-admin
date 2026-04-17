@@ -171,6 +171,9 @@
             <a href="{{ url_for('client.client_settings') }}" class="{% if request.endpoint == 'client.client_settings' %}active{% endif %}">
                 <i class="bi bi-plug"></i> <span class="nav-link-label">Connections</span>
             </a>
+            <a href="{{ url_for('client.client_automations') }}" class="{% if request.endpoint == 'client.client_automations' %}active{% endif %}">
+                <i class="bi bi-magic"></i> <span class="nav-link-label">Automations</span>
+            </a>
             {% endif %}
             {% if feature_on('feedback') %}
             <a href="{{ url_for('client.client_feedback') }}" class="{% if request.endpoint in ('client.client_feedback', 'client.client_feedback_submit') %}active{% endif %}">

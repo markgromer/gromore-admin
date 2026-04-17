@@ -1,0 +1,614 @@
+{% extends "client_base.html" %}
+{% block title %}Automations{% endblock %}
+
+{% block content %}
+<style>
+.automation-hero {
+    border: 1px solid #dbeafe;
+    border-radius: 24px;
+    background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 45%, #ecfeff 100%);
+    padding: 24px;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+}
+.automation-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 14px;
+}
+.automation-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    background: #fff;
+    padding: 16px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+.automation-section {
+    margin-top: 22px;
+    border: 1px solid #e5e7eb;
+    border-radius: 22px;
+    background: #fff;
+    box-shadow: 0 12px 26px rgba(15, 23, 42, 0.05);
+    overflow: hidden;
+}
+.automation-section-header {
+    padding: 18px 22px;
+    border-bottom: 1px solid #e5e7eb;
+    background: linear-gradient(90deg, #ffffff 0%, #f8fafc 100%);
+}
+.automation-section-body {
+    padding: 22px;
+}
+.automation-anchor-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.automation-anchor-row a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 13px;
+    border-radius: 999px;
+    border: 1px solid #dbeafe;
+    background: #fff;
+    color: #0f172a;
+    text-decoration: none;
+    font-size: .84rem;
+    font-weight: 600;
+}
+.automation-note {
+    border-radius: 14px;
+    border: 1px solid #dbeafe;
+    background: #f8fafc;
+    padding: 14px 16px;
+    color: #475569;
+    font-size: .84rem;
+}
+</style>
+
+<div class="page-title-bar d-flex flex-wrap justify-content-between align-items-start gap-3">
+    <div>
+        <h5><i class="bi bi-magic"></i>Automations</h5>
+        <p>Manage the messages and rules Warren runs after a trigger happens. Connections stay on the Connections page. Behavior lives here.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('client.client_settings') }}" class="btn btn-outline-secondary"><i class="bi bi-plug me-1"></i> Connections</a>
+        <button type="submit" form="automationsForm" class="btn btn-dark"><i class="bi bi-save me-1"></i> Save Automations</button>
+    </div>
+</div>
+
+<div class="automation-hero">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+        <div>
+            <div class="text-uppercase text-muted fw-semibold" style="font-size:.72rem; letter-spacing:.08em;">Automation Control Center</div>
+            <h4 class="mt-2 mb-2">One place for message rules, reminder timing, and follow-up behavior</h4>
+            <p class="text-muted mb-0" style="max-width:760px;">Use this page to decide what Warren should send, when it should send it, and which channels it should use. The CRM event action area is also here so Sweep and Go-triggered messages have a single home.</p>
+        </div>
+        <div class="automation-note" style="max-width:300px;">
+            <strong>Important split:</strong> credentials, tokens, and webhook URLs are on <a href="{{ url_for('client.client_settings') }}">Connections</a>. Trigger logic and outbound message behavior are here.
+        </div>
+    </div>
+
+    <div class="automation-card-grid mt-4">
+        <div class="automation-card">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+                <strong>Lead Assistant</strong>
+                {% if brand.sales_bot_enabled %}<span class="badge bg-success">On</span>{% else %}<span class="badge bg-secondary">Off</span>{% endif %}
+            </div>
+            <div class="text-muted mt-2" style="font-size:.82rem;">Controls auto-replies, intake channels, quoting style, and business-hours guardrails.</div>
+        </div>
+        <div class="automation-card">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+                <strong>Billing</strong>
+                {% if brand.sales_bot_payment_reminders_enabled %}<span class="badge bg-success">On</span>{% else %}<span class="badge bg-secondary">Off</span>{% endif %}
+            </div>
+            <div class="text-muted mt-2" style="font-size:.82rem;">Monthly payment reminders with channel and template control.</div>
+        </div>
+        <div class="automation-card">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+                <strong>Appointments</strong>
+                {% if brand.sales_bot_appointment_reminders_enabled %}<span class="badge bg-success">On</span>{% else %}<span class="badge bg-secondary">Off</span>{% endif %}
+            </div>
+            <div class="text-muted mt-2" style="font-size:.82rem;">Day-ahead reminders, send time, timezone, and recent run history.</div>
+        </div>
+        <div class="automation-card">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+                <strong>Follow-Up</strong>
+                {% if brand.sales_bot_nurture_enabled|default(1) %}<span class="badge bg-success">On</span>{% else %}<span class="badge bg-secondary">Off</span>{% endif %}
+            </div>
+            <div class="text-muted mt-2" style="font-size:.82rem;">Hot, warm, and cold cadence plus quiet hours and ghost thresholds.</div>
+        </div>
+        <div class="automation-card">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+                <strong>CRM Event Messages</strong>
+                {% if sng_webhook_events %}<span class="badge bg-success">Receiving events</span>{% else %}<span class="badge bg-secondary">No events yet</span>{% endif %}
+            </div>
+            <div class="text-muted mt-2" style="font-size:.82rem;">Home for Sweep and Go-triggered actions like failed-payment follow-up.</div>
+        </div>
+    </div>
+
+    <div class="automation-anchor-row mt-4">
+        <a href="#lead-assistant"><i class="bi bi-chat-dots"></i> Lead Assistant</a>
+        <a href="#billing"><i class="bi bi-calendar-check"></i> Billing</a>
+        <a href="#appointments"><i class="bi bi-calendar2-event"></i> Appointments</a>
+        <a href="#follow-up"><i class="bi bi-alarm"></i> Follow-Up</a>
+        <a href="#quiet-hours"><i class="bi bi-moon"></i> Quiet Hours</a>
+        <a href="#crm-events"><i class="bi bi-broadcast"></i> CRM Events</a>
+    </div>
+</div>
+
+<form method="POST" action="{{ url_for('client.client_save_automations') }}" id="automationsForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <section class="automation-section" id="lead-assistant">
+        <div class="automation-section-header">
+            <h5 class="mb-1 fw-semibold">Lead Assistant</h5>
+            <div class="text-muted" style="font-size:.85rem;">Set how Warren talks, when it replies, and which lead sources it is allowed to work.</div>
+        </div>
+        <div class="automation-section-body">
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" role="switch" id="salesBotEnabled" name="sales_bot_enabled" value="1" {{ 'checked' if brand.sales_bot_enabled }}>
+                <label class="form-check-label fw-medium" for="salesBotEnabled">Turn on the lead assistant for this brand</label>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-lg-6">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">Channels Warren can work</label>
+                    <div class="row g-2">
+                        <div class="col-sm-6">
+                            <label class="border rounded-3 p-3 w-100 h-100" style="cursor:pointer; background:#f8fafc;">
+                                <input class="form-check-input me-2" type="checkbox" name="sales_bot_channels" value="sms" {{ 'checked' if 'sms' in chatbot_channels }}>
+                                <span class="fw-medium">OpenPhone SMS</span>
+                                <small class="text-muted d-block mt-1">Two-way texting with leads.</small>
+                            </label>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="border rounded-3 p-3 w-100 h-100" style="cursor:pointer; background:#f8fafc;">
+                                <input class="form-check-input me-2" type="checkbox" name="sales_bot_channels" value="lead_forms" {{ 'checked' if 'lead_forms' in chatbot_channels }}>
+                                <span class="fw-medium">Meta Lead Forms</span>
+                                <small class="text-muted d-block mt-1">Threads created from lead form submissions.</small>
+                            </label>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="border rounded-3 p-3 w-100 h-100" style="cursor:pointer; background:#f8fafc;">
+                                <input class="form-check-input me-2" type="checkbox" name="sales_bot_channels" value="messenger" {{ 'checked' if 'messenger' in chatbot_channels }}>
+                                <span class="fw-medium">Facebook Messenger</span>
+                                <small class="text-muted d-block mt-1">Keep page messaging ready when scopes are live.</small>
+                            </label>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="border rounded-3 p-3 w-100 h-100" style="cursor:pointer; background:#f8fafc;">
+                                <input class="form-check-input me-2" type="checkbox" name="sales_bot_channels" value="calls" {{ 'checked' if 'calls' in chatbot_channels }}>
+                                <span class="fw-medium">Call Logging</span>
+                                <small class="text-muted d-block mt-1">Track inbound calls as lead events.</small>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">Quote Mode</label>
+                    <select class="form-select" name="sales_bot_quote_mode">
+                        <option value="simple" {{ 'selected' if (brand.sales_bot_quote_mode or 'hybrid') == 'simple' else '' }}>Simple AI quote replies</option>
+                        <option value="hybrid" {{ 'selected' if (brand.sales_bot_quote_mode or 'hybrid') == 'hybrid' else '' }}>Hybrid - stored quote plus AI explanation</option>
+                        <option value="structured" {{ 'selected' if (brand.sales_bot_quote_mode or 'hybrid') == 'structured' else '' }}>Structured quote records</option>
+                    </select>
+                    <small class="text-muted d-block mt-2">Hybrid is the strongest middle ground because it keeps searchable quote records without forcing a full estimating engine.</small>
+
+                    <label class="form-label fw-medium mt-3" style="font-size:.88rem;">Reply Tone</label>
+                    <input type="text" class="form-control" name="sales_bot_reply_tone" value="{{ brand.sales_bot_reply_tone or '' }}" placeholder="Helpful, direct, blue-collar, premium, calm">
+
+                    <label class="form-label fw-medium mt-3" style="font-size:.88rem;">Auto-reply delay (seconds)</label>
+                    <input type="number" class="form-control" name="sales_bot_reply_delay_seconds" value="{{ brand.sales_bot_reply_delay_seconds|default(0) }}" min="0" max="300" step="1">
+                    <small class="text-muted d-block mt-2">Set this above 0 if you want Warren to pause before an automated reply sends.</small>
+                </div>
+            </div>
+
+            <div class="mt-3">
+                <label class="form-label fw-medium" style="font-size:.88rem;">Business Hours / Escalation Notes</label>
+                <textarea class="form-control" name="sales_bot_business_hours" rows="4" maxlength="1000" placeholder="Mon-Fri 8am-5pm. After-hours emergencies should still be escalated.">{{ brand.sales_bot_business_hours or '' }}</textarea>
+            </div>
+
+            <div class="row g-3 mt-2">
+                <div class="col-md-3">
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" name="sales_bot_transcript_export" id="salesBotTranscriptExport" value="1" {{ 'checked' if brand.sales_bot_transcript_export }}>
+                        <label class="form-check-label" for="salesBotTranscriptExport">Export transcripts to Google Drive</label>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" name="sales_bot_meta_lead_forms" id="salesBotLeadForms" value="1" {{ 'checked' if brand.sales_bot_meta_lead_forms }}>
+                        <label class="form-check-label" for="salesBotLeadForms">Auto-ingest Meta lead forms</label>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" name="sales_bot_messenger_enabled" id="salesBotMessenger" value="1" {{ 'checked' if brand.sales_bot_messenger_enabled }}>
+                        <label class="form-check-label" for="salesBotMessenger">Enable Messenger when scopes are ready</label>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" name="sales_bot_call_logging" id="salesBotCallLogging" value="1" {{ 'checked' if brand.sales_bot_call_logging }}>
+                        <label class="form-check-label" for="salesBotCallLogging">Log calls as lead events</label>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" name="sales_bot_auto_push_crm" id="salesBotAutoPushCrm" value="1" {{ 'checked' if brand.sales_bot_auto_push_crm }}>
+                        <label class="form-check-label" for="salesBotAutoPushCrm">Push qualified leads to connected CRM</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% set payment_reminder_channels = (brand.sales_bot_payment_reminder_channels or 'email').replace('[', '').replace(']', '').replace('"', '').replace(', ', ',').split(',') %}
+    <section class="automation-section" id="billing">
+        <div class="automation-section-header">
+            <h5 class="mb-1 fw-semibold">Billing Reminders</h5>
+            <div class="text-muted" style="font-size:.85rem;">Monthly reminder timing, channels, and billing-specific message template.</div>
+        </div>
+        <div class="automation-section-body">
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" role="switch" id="paymentRemindersEnabled" name="sales_bot_payment_reminders_enabled" value="1" {{ 'checked' if brand.sales_bot_payment_reminders_enabled }}>
+                <label class="form-check-label fw-medium" for="paymentRemindersEnabled">Enable automated billing reminders</label>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label mb-1" style="font-size:.82rem;">Main billing day</label>
+                    <input type="number" class="form-control form-control-sm" name="sales_bot_payment_reminder_billing_day" value="{{ brand.sales_bot_payment_reminder_billing_day|default(1) }}" min="1" max="31" step="1">
+                    <small class="text-muted">Use the calendar day you bill everyone on.</small>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label mb-1" style="font-size:.82rem;">Send this many days before</label>
+                    <input type="number" class="form-control form-control-sm" name="sales_bot_payment_reminder_days_before" value="{{ brand.sales_bot_payment_reminder_days_before|default(3) }}" min="0" max="21" step="1">
+                    <small class="text-muted">Set 0 if you want the reminder on billing day.</small>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label mb-1" style="font-size:.82rem;">Reminder channels</label>
+                    <div class="d-flex gap-3 flex-wrap pt-1">
+                        <label class="form-check-label d-flex align-items-center gap-2"><input class="form-check-input" type="checkbox" name="sales_bot_payment_reminder_channels" value="email" {{ 'checked' if 'email' in payment_reminder_channels }}> <span>Email</span></label>
+                        <label class="form-check-label d-flex align-items-center gap-2"><input class="form-check-input" type="checkbox" name="sales_bot_payment_reminder_channels" value="sms" {{ 'checked' if 'sms' in payment_reminder_channels }}> <span>SMS</span></label>
+                    </div>
+                    <small class="text-muted d-block mt-2">SMS uses your connected phone setup and still respects opt-outs.</small>
+                </div>
+            </div>
+            <div class="mt-3">
+                <label class="form-label mb-1 fw-medium" style="font-size:.82rem;">Custom reminder template</label>
+                <textarea class="form-control form-control-sm" name="sales_bot_payment_reminder_template" rows="4" placeholder="Hi {client_name}, this is a reminder from {brand_name} that your billing date is {due_date}.">{{ brand.sales_bot_payment_reminder_template or '' }}</textarea>
+                <small class="text-muted">Available placeholders: {client_name}, {brand_name}, {due_date}, {days_before}</small>
+            </div>
+
+            <div class="mt-4">
+                <div class="fw-semibold mb-2">Recent billing reminder deliveries</div>
+                {% if billing_reminder_attempts %}
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr><th>When</th><th>Client</th><th>Recipient</th><th>Channel</th><th>Status</th><th>Provider detail</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for attempt in billing_reminder_attempts %}
+                            <tr>
+                                <td class="text-muted" style="font-size:.78rem;">{{ attempt.updated_at[:16] if attempt.updated_at else '' }}</td>
+                                <td style="font-size:.82rem;">{{ attempt.external_client_id }}</td>
+                                <td style="font-size:.82rem;">{{ attempt.recipient or 'No recipient recorded' }}</td>
+                                <td class="text-capitalize" style="font-size:.82rem;">{{ attempt.channel }}</td>
+                                <td><span class="badge bg-{{ 'success' if attempt.status == 'sent' else 'danger' if attempt.status == 'failed' else 'secondary' }}{% if attempt.status not in ('sent', 'failed') %} text-dark{% endif %}">{{ (attempt.status or 'unknown')|title }}</span></td>
+                                <td style="font-size:.78rem; max-width:260px;">{{ attempt.detail_summary or '-' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-muted" style="font-size:.85rem;">No billing reminder deliveries have been recorded yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    {% set appointment_reminder_channels = (brand.sales_bot_appointment_reminder_channels or 'sms').replace('[', '').replace(']', '').replace('"', '').replace(', ', ',').split(',') %}
+    {% set appointment_tz = brand.sales_bot_appointment_reminder_timezone|default('America/New_York') %}
+    <section class="automation-section" id="appointments">
+        <div class="automation-section-header d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div>
+                <h5 class="mb-1 fw-semibold">Day-Ahead Appointment Reminders</h5>
+                <div class="text-muted" style="font-size:.85rem;">Warren checks tomorrow's Sweep and Go dispatch list after your chosen local send time.</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-success" id="runAppointmentReminderBtn" onclick="runAppointmentReminderCheckNow()"><i class="bi bi-play-circle me-1"></i>Run Check Now</button>
+        </div>
+        <div class="automation-section-body">
+            <div id="appointmentReminderRunResult" class="mb-3" style="display:none;"></div>
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" role="switch" id="appointmentRemindersEnabled" name="sales_bot_appointment_reminders_enabled" value="1" {{ 'checked' if brand.sales_bot_appointment_reminders_enabled }}>
+                <label class="form-check-label fw-medium" for="appointmentRemindersEnabled">Enable automated appointment reminders</label>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label mb-1" style="font-size:.82rem;">Send after this local time</label>
+                    <input type="time" class="form-control form-control-sm" name="sales_bot_appointment_reminder_send_time" value="{{ brand.sales_bot_appointment_reminder_send_time|default('17:00') }}">
+                    <small class="text-muted">Checks run every 5 minutes and send on the first eligible check.</small>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label mb-1" style="font-size:.82rem;">Timezone</label>
+                    <select class="form-select form-select-sm" name="sales_bot_appointment_reminder_timezone">
+                        <option value="America/New_York" {{ 'selected' if appointment_tz == 'America/New_York' }}>Eastern</option>
+                        <option value="America/Chicago" {{ 'selected' if appointment_tz == 'America/Chicago' }}>Central</option>
+                        <option value="America/Denver" {{ 'selected' if appointment_tz == 'America/Denver' }}>Mountain</option>
+                        <option value="America/Los_Angeles" {{ 'selected' if appointment_tz == 'America/Los_Angeles' }}>Pacific</option>
+                        <option value="America/Anchorage" {{ 'selected' if appointment_tz == 'America/Anchorage' }}>Alaska</option>
+                        <option value="Pacific/Honolulu" {{ 'selected' if appointment_tz == 'Pacific/Honolulu' }}>Hawaii</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label mb-1" style="font-size:.82rem;">Reminder channels</label>
+                    <div class="d-flex gap-3 flex-wrap pt-1">
+                        <label class="form-check-label d-flex align-items-center gap-2"><input class="form-check-input" type="checkbox" name="sales_bot_appointment_reminder_channels" value="sms" {{ 'checked' if 'sms' in appointment_reminder_channels }}> <span>SMS via OpenPhone</span></label>
+                        <label class="form-check-label d-flex align-items-center gap-2"><input class="form-check-input" type="checkbox" name="sales_bot_appointment_reminder_channels" value="email" {{ 'checked' if 'email' in appointment_reminder_channels }}> <span>Email fallback</span></label>
+                    </div>
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" name="sales_bot_appointment_reminder_respect_client_channel" id="appointmentRespectChannel" value="1" {{ 'checked' if brand.sales_bot_appointment_reminder_respect_client_channel|default(1) }}>
+                        <label class="form-check-label" for="appointmentRespectChannel" style="font-size:.85rem;">Prefer the client's Sweep and Go notification channel when it matches an enabled channel</label>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-3">
+                <label class="form-label mb-1 fw-medium" style="font-size:.82rem;">Custom appointment template</label>
+                <textarea class="form-control form-control-sm" name="sales_bot_appointment_reminder_template" rows="4" placeholder="Hi {client_name}, this is a reminder from {brand_name} that we have you scheduled for tomorrow.">{{ brand.sales_bot_appointment_reminder_template or '' }}</textarea>
+                <small class="text-muted">Available placeholders: {client_name}, {brand_name}, {appointment_date}, {assigned_to_name}, {address}</small>
+            </div>
+
+            <div class="mt-4 p-3" style="background:#ffffff; border-radius:10px; border:1px solid #d1fae5;">
+                <div class="fw-semibold mb-1">Recent appointment reminder runs</div>
+                <div class="text-muted mb-3" style="font-size:.8rem;">Each cron check records whether it sent, skipped, or was still waiting for your send window.</div>
+                {% if appointment_reminder_runs %}
+                <div class="row g-3">
+                    {% for run in appointment_reminder_runs %}
+                    <div class="col-md-6">
+                        <div class="border rounded-3 p-3 h-100" style="background:#f8fafc; border-color:#dbeafe !important;">
+                            <div class="d-flex justify-content-between align-items-start gap-2">
+                                <div>
+                                    <div class="fw-semibold">Tomorrow target: {{ run.target_date }}</div>
+                                    <div class="text-muted" style="font-size:.78rem;">Run logged {{ run.created_at[:16] if run.created_at else '' }}</div>
+                                </div>
+                                <span class="badge bg-{{ run.status_badge }}{% if run.status_badge == 'warning' %} text-dark{% endif %}">{{ (run.status or 'unknown')|replace('_', ' ')|title }}</span>
+                            </div>
+                            {% if run.summary.local_time or run.summary.send_after %}
+                            <div class="text-muted mt-2" style="font-size:.78rem;">
+                                {% if run.summary.local_time %}Local check time: {{ run.summary.local_time }}{% endif %}
+                                {% if run.summary.send_after %}<br>Configured send time: {{ run.summary.send_after }} {{ run.summary.timezone or '' }}{% endif %}
+                            </div>
+                            {% endif %}
+                            <div class="mt-2" style="font-size:.85rem;">{{ run.reason or 'No notes recorded.' }}</div>
+                            <div class="d-flex flex-wrap gap-3 mt-3 text-muted" style="font-size:.78rem;">
+                                <span>Candidates: {{ run.candidates or 0 }}</span>
+                                <span>Sent: {{ run.sent or 0 }}</span>
+                                <span>Failed: {{ run.failed or 0 }}</span>
+                                <span>Skipped: {{ run.skipped or 0 }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-muted" style="font-size:.85rem;">No appointment reminder runs have been logged for this brand yet.</div>
+                {% endif %}
+
+                <div class="mt-4">
+                    <div class="fw-semibold mb-1">Recent delivery attempts</div>
+                    <div class="text-muted mb-2" style="font-size:.8rem;">SMS rows show the immediate provider result we received back.</div>
+                    {% if appointment_reminder_attempts %}
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr><th>When</th><th>Appointment</th><th>Recipient</th><th>Channel</th><th>Status</th><th>Provider detail</th></tr></thead>
+                            <tbody>
+                                {% for attempt in appointment_reminder_attempts %}
+                                <tr>
+                                    <td class="text-muted" style="font-size:.78rem;">{{ attempt.updated_at[:16] if attempt.updated_at else '' }}</td>
+                                    <td style="font-size:.82rem;">{{ attempt.due_date }}<br><span class="text-muted">{{ attempt.external_client_id }}</span></td>
+                                    <td style="font-size:.82rem;">{{ attempt.recipient or 'No recipient recorded' }}</td>
+                                    <td class="text-capitalize" style="font-size:.82rem;">{{ attempt.channel }}</td>
+                                    <td><span class="badge bg-{{ 'success' if attempt.status == 'sent' else 'danger' if attempt.status == 'failed' else 'secondary' }}{% if attempt.status not in ('sent', 'failed') %} text-dark{% endif %}">{{ (attempt.status or 'unknown')|title }}</span></td>
+                                    <td style="font-size:.78rem; max-width:260px;">{{ attempt.detail_summary or '-' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-muted" style="font-size:.85rem;">No appointment reminder attempts have been recorded yet.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="automation-section" id="follow-up">
+        <div class="automation-section-header">
+            <h5 class="mb-1 fw-semibold">Follow-Up Cadence</h5>
+            <div class="text-muted" style="font-size:.85rem;">Control how aggressively Warren follows up when leads go quiet.</div>
+        </div>
+        <div class="automation-section-body">
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" role="switch" id="nurtureEnabled" name="sales_bot_nurture_enabled" value="1" {{ 'checked' if brand.sales_bot_nurture_enabled|default(1) }}>
+                <label class="form-check-label fw-medium" for="nurtureEnabled">Enable automated follow-ups</label>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="p-3 rounded-3" style="background:#fff; border:1px solid #e2e8f0;">
+                        <span class="badge bg-danger mb-2">Hot</span>
+                        <small class="text-muted d-block mb-1">New and engaged leads</small>
+                        <label class="form-label mb-1" style="font-size:.82rem;">Wait (hours)</label>
+                        <input type="number" class="form-control form-control-sm" name="sales_bot_nurture_hot_hours" value="{{ brand.sales_bot_nurture_hot_hours|default(2) }}" min="0.5" max="168" step="0.5">
+                        <label class="form-label mb-1 mt-2" style="font-size:.82rem;">Max attempts</label>
+                        <input type="number" class="form-control form-control-sm" name="sales_bot_nurture_hot_max" value="{{ brand.sales_bot_nurture_hot_max|default(3) }}" min="1" max="10">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="p-3 rounded-3" style="background:#fff; border:1px solid #e2e8f0;">
+                        <span class="badge bg-warning text-dark mb-2">Warm</span>
+                        <small class="text-muted d-block mb-1">Quoted, waiting on decision</small>
+                        <label class="form-label mb-1" style="font-size:.82rem;">Wait (hours)</label>
+                        <input type="number" class="form-control form-control-sm" name="sales_bot_nurture_warm_hours" value="{{ brand.sales_bot_nurture_warm_hours|default(24) }}" min="1" max="336" step="1">
+                        <label class="form-label mb-1 mt-2" style="font-size:.82rem;">Max attempts</label>
+                        <input type="number" class="form-control form-control-sm" name="sales_bot_nurture_warm_max" value="{{ brand.sales_bot_nurture_warm_max|default(2) }}" min="1" max="10">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="p-3 rounded-3" style="background:#fff; border:1px solid #e2e8f0;">
+                        <span class="badge bg-info text-dark mb-2">Cold</span>
+                        <small class="text-muted d-block mb-1">Qualified but stalling</small>
+                        <label class="form-label mb-1" style="font-size:.82rem;">Wait (hours)</label>
+                        <input type="number" class="form-control form-control-sm" name="sales_bot_nurture_cold_hours" value="{{ brand.sales_bot_nurture_cold_hours|default(48) }}" min="1" max="720" step="1">
+                        <label class="form-label mb-1 mt-2" style="font-size:.82rem;">Max attempts</label>
+                        <input type="number" class="form-control form-control-sm" name="sales_bot_nurture_cold_max" value="{{ brand.sales_bot_nurture_cold_max|default(2) }}" min="1" max="10">
+                    </div>
+                </div>
+            </div>
+            <div class="row g-3 mt-2">
+                <div class="col-md-4">
+                    <label class="form-label mb-1" style="font-size:.82rem;">Ghost threshold (hours)</label>
+                    <input type="number" class="form-control form-control-sm" name="sales_bot_nurture_ghost_hours" value="{{ brand.sales_bot_nurture_ghost_hours|default(72) }}" min="24" max="720" step="1">
+                    <small class="text-muted">Mark a lead as lost after this many hours with no reply.</small>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="automation-section" id="quiet-hours">
+        <div class="automation-section-header">
+            <h5 class="mb-1 fw-semibold">Do Not Disturb</h5>
+            <div class="text-muted" style="font-size:.85rem;">Hold messages during quiet hours and release them when the window reopens.</div>
+        </div>
+        <div class="automation-section-body">
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" role="switch" id="dndEnabled" name="sales_bot_dnd_enabled" value="1" {{ 'checked' if brand.sales_bot_dnd_enabled }}>
+                <label class="form-check-label fw-medium" for="dndEnabled">Enforce quiet hours</label>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label mb-1" style="font-size:.82rem;">Quiet starts at</label>
+                    <input type="time" class="form-control form-control-sm" name="sales_bot_dnd_start" value="{{ brand.sales_bot_dnd_start|default('21:00') }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label mb-1" style="font-size:.82rem;">Quiet ends at</label>
+                    <input type="time" class="form-control form-control-sm" name="sales_bot_dnd_end" value="{{ brand.sales_bot_dnd_end|default('08:00') }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label mb-1" style="font-size:.82rem;">Timezone</label>
+                    {% set dnd_tz = brand.sales_bot_dnd_timezone|default('America/New_York') %}
+                    <select class="form-select form-select-sm" name="sales_bot_dnd_timezone">
+                        <option value="America/New_York" {{ 'selected' if dnd_tz == 'America/New_York' }}>Eastern</option>
+                        <option value="America/Chicago" {{ 'selected' if dnd_tz == 'America/Chicago' }}>Central</option>
+                        <option value="America/Denver" {{ 'selected' if dnd_tz == 'America/Denver' }}>Mountain</option>
+                        <option value="America/Los_Angeles" {{ 'selected' if dnd_tz == 'America/Los_Angeles' }}>Pacific</option>
+                        <option value="America/Anchorage" {{ 'selected' if dnd_tz == 'America/Anchorage' }}>Alaska</option>
+                        <option value="Pacific/Honolulu" {{ 'selected' if dnd_tz == 'Pacific/Honolulu' }}>Hawaii</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="sales_bot_dnd_weekends" id="dndWeekends" value="1" {{ 'checked' if brand.sales_bot_dnd_weekends }}>
+                        <label class="form-check-label" for="dndWeekends">Apply on weekends too</label>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-3">
+                <label class="form-label mb-1 fw-medium" style="font-size:.82rem;">SMS opt-out footer</label>
+                <input type="text" class="form-control form-control-sm" name="sales_bot_sms_opt_out_footer" value="{{ brand.sales_bot_sms_opt_out_footer or '' }}" placeholder="Reply STOP to opt out.">
+            </div>
+        </div>
+    </section>
+
+    <section class="automation-section" id="crm-events">
+        <div class="automation-section-header">
+            <h5 class="mb-1 fw-semibold">CRM Event Messages</h5>
+            <div class="text-muted" style="font-size:.85rem;">This is where Sweep and Go-triggered actions, like failed-payment follow-up, belong.</div>
+        </div>
+        <div class="automation-section-body">
+            <div class="automation-note mb-3">
+                <strong>Foundation is live.</strong> Warren is already receiving and logging Sweep and Go webhook events. The next action layer, such as failed-payment automations and other CRM-triggered message rules, will be configured in this section.
+            </div>
+            {% if sng_webhook_events %}
+            <div class="row g-3">
+                {% for event in sng_webhook_events %}
+                <div class="col-md-6 col-xl-4">
+                    <div class="border rounded-3 p-3 h-100" style="background:#f8fafc; border-color:#dbeafe !important;">
+                        <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                            <div class="fw-semibold" style="font-size:.85rem;">{{ event.event_type or 'unknown' }}</div>
+                            <span class="badge bg-{{ event.status_badge }}">{{ event.status or 'received' }}</span>
+                        </div>
+                        <div style="font-size:.83rem; color:#0f172a;">{{ event.detail or 'Webhook received.' }}</div>
+                        <div class="text-muted mt-2" style="font-size:.76rem;">{{ event.received_at }}</div>
+                        {% if event.summary.client_email or event.summary.client_phone %}
+                        <div class="text-muted mt-1" style="font-size:.76rem;">{{ event.summary.client_email or '' }}{% if event.summary.client_email and event.summary.client_phone %} - {% endif %}{{ event.summary.client_phone or '' }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-muted" style="font-size:.85rem;">No CRM events have been logged for this brand yet.</div>
+            {% endif %}
+        </div>
+    </section>
+
+    <div class="d-flex justify-content-end gap-2 mt-4 mb-2">
+        <a href="{{ url_for('client.client_settings') }}" class="btn btn-outline-secondary">Back to Connections</a>
+        <button class="btn btn-dark" type="submit"><i class="bi bi-save me-1"></i> Save Automations</button>
+    </div>
+</form>
+
+<script>
+function runAppointmentReminderCheckNow() {
+    var btn = document.getElementById('runAppointmentReminderBtn');
+    var resultDiv = document.getElementById('appointmentReminderRunResult');
+    var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+    if (!btn || !resultDiv) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Running...';
+    resultDiv.style.display = 'none';
+
+    fetch('/client/api/warren/run-appointment-reminders', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({})
+    })
+    .then(function(r) {
+        return r.json().then(function(data) {
+            return {ok: r.ok, data: data};
+        });
+    })
+    .then(function(result) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-circle me-1"></i>Run Check Now';
+        resultDiv.style.display = '';
+
+        if (result.ok && result.data.ok) {
+            resultDiv.innerHTML = '<div class="alert alert-success py-2 mb-0" style="font-size:.82rem;">' +
+                '<i class="bi bi-check-circle me-1"></i>' + (result.data.message || 'Appointment reminder check completed.') +
+                '<br><small class="text-muted">Refreshing to show the latest run log.</small>' +
+                '</div>';
+            setTimeout(function() {
+                window.location.reload();
+            }, 1200);
+            return;
+        }
+
+        resultDiv.innerHTML = '<div class="alert alert-danger py-2 mb-0" style="font-size:.82rem;">' +
+            '<i class="bi bi-x-circle me-1"></i>' + ((result.data && (result.data.error || result.data.message)) || 'Appointment reminder check failed.') +
+            '</div>';
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-circle me-1"></i>Run Check Now';
+        resultDiv.style.display = '';
+        resultDiv.innerHTML = '<div class="alert alert-danger py-2 mb-0" style="font-size:.82rem;">Network error: ' + err + '</div>';
+    });
+}
+</script>
+{% endblock %}

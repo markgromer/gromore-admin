@@ -5957,27 +5957,6 @@ def client_settings():
         sng_secret = db.ensure_brand_sng_webhook_secret(brand_id)
         sng_webhook_url = f"{_external_app_url()}{url_for('webhooks.sng_webhook', brand_slug=brand['slug'], secret=sng_secret)}"
 
-        appointment_runs = db.get_appointment_reminder_runs(brand_id, limit=8)
-        for run in appointment_runs:
-            summary = _safe_json_object(run.get("summary_json"))
-            run["summary"] = summary
-            run["status_badge"] = {
-                "completed": "success",
-                "partial": "warning",
-                "failed": "danger",
-                "waiting": "secondary",
-                "config_error": "danger",
-            }.get((run.get("status") or "").strip().lower(), "secondary")
-
-        appointment_attempts = db.get_brand_client_billing_reminders(
-            brand_id,
-            reminder_type="appointment_day_ahead",
-            limit=20,
-        )
-        for attempt in appointment_attempts:
-            attempt["detail_data"] = _safe_json_object(attempt.get("detail"))
-            attempt["detail_summary"] = _summarize_delivery_detail(attempt.get("detail"))
-
         sng_webhook_events = db.get_sng_webhook_events(brand_id, limit=10)
         for event in sng_webhook_events:
             event["summary"] = _safe_json_object(event.get("summary_json"))
@@ -5989,24 +5968,257 @@ def client_settings():
             }.get((event.get("status") or "").strip().lower(), "secondary")
 
         return render_template(
-            "client_settings.html",
+            "client_connections.html",
             brand=brand,
             google_connected=(google_conn.get("status") == "connected"),
             meta_connected=(meta_conn.get("status") == "connected"),
             drive_scoped=drive_scoped,
             google_conn=google_conn,
             meta_conn=meta_conn,
-            chatbot_channels=chatbot_channels,
             sng_webhook_url=sng_webhook_url,
             sng_webhook_events=sng_webhook_events,
-            appointment_reminder_runs=appointment_runs,
-            appointment_reminder_attempts=appointment_attempts,
             brand_name=session.get("client_brand_name", brand.get("display_name", "")),
         )
     except Exception:
         current_app.logger.exception("client_settings render error for brand %s", brand_id)
         flash("Settings page failed to load. The error has been logged.", "error")
         return redirect(url_for("client.client_dashboard"))
+
+
+def _load_client_automation_context(db, brand_id):
+    chatbot_channels = set()
+    brand = db.get_brand(brand_id) or {}
+    try:
+        chatbot_channels = set(json.loads(brand.get("sales_bot_channels") or "[]"))
+    except Exception:
+        chatbot_channels = set()
+
+    appointment_runs = db.get_appointment_reminder_runs(brand_id, limit=8)
+    for run in appointment_runs:
+        summary = _safe_json_object(run.get("summary_json"))
+        run["summary"] = summary
+        run["status_badge"] = {
+            "completed": "success",
+            "partial": "warning",
+            "failed": "danger",
+            "waiting": "secondary",
+            "config_error": "danger",
+        }.get((run.get("status") or "").strip().lower(), "secondary")
+
+    appointment_attempts = db.get_brand_client_billing_reminders(
+        brand_id,
+        reminder_type="appointment_day_ahead",
+        limit=20,
+    )
+    for attempt in appointment_attempts:
+        attempt["detail_data"] = _safe_json_object(attempt.get("detail"))
+        attempt["detail_summary"] = _summarize_delivery_detail(attempt.get("detail"))
+
+    billing_attempts = db.get_brand_client_billing_reminders(
+        brand_id,
+        reminder_type="payment_due",
+        limit=12,
+    )
+    for attempt in billing_attempts:
+        attempt["detail_data"] = _safe_json_object(attempt.get("detail"))
+        attempt["detail_summary"] = _summarize_delivery_detail(attempt.get("detail"))
+
+    sng_webhook_events = db.get_sng_webhook_events(brand_id, limit=10)
+    for event in sng_webhook_events:
+        event["summary"] = _safe_json_object(event.get("summary_json"))
+        event["status_badge"] = {
+            "received": "success",
+            "processed": "primary",
+            "ignored": "secondary",
+            "failed": "danger",
+        }.get((event.get("status") or "").strip().lower(), "secondary")
+
+    return {
+        "brand": brand,
+        "chatbot_channels": chatbot_channels,
+        "appointment_reminder_runs": appointment_runs,
+        "appointment_reminder_attempts": appointment_attempts,
+        "billing_reminder_attempts": billing_attempts,
+        "sng_webhook_events": sng_webhook_events,
+    }
+
+
+@client_bp.route("/automations")
+@client_login_required
+def client_automations():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    automation_context = _load_client_automation_context(db, brand_id)
+    brand = automation_context.get("brand")
+    if not brand:
+        abort(404)
+
+    return render_template(
+        "client_automations.html",
+        brand=brand,
+        chatbot_channels=automation_context["chatbot_channels"],
+        appointment_reminder_runs=automation_context["appointment_reminder_runs"],
+        appointment_reminder_attempts=automation_context["appointment_reminder_attempts"],
+        billing_reminder_attempts=automation_context["billing_reminder_attempts"],
+        sng_webhook_events=automation_context["sng_webhook_events"],
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/settings/warren-channels", methods=["POST"])
+@client_login_required
+def client_save_warren_channels_settings():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    quo_api_key = (request.form.get("quo_api_key") or "").strip()
+    if quo_api_key:
+        db.update_brand_text_field(brand_id, "quo_api_key", quo_api_key[:500])
+
+    db.update_brand_text_field(
+        brand_id,
+        "quo_phone_number",
+        (request.form.get("quo_phone_number") or "").strip()[:100],
+    )
+
+    quo_secret = (request.form.get("sales_bot_quo_webhook_secret") or "").strip()
+    if quo_secret:
+        db.update_brand_text_field(brand_id, "sales_bot_quo_webhook_secret", quo_secret[:255])
+
+    incoming_secret = (request.form.get("sales_bot_incoming_webhook_secret") or "").strip()
+    if incoming_secret:
+        db.update_brand_text_field(brand_id, "sales_bot_incoming_webhook_secret", incoming_secret[:255])
+
+    flash("Warren channel settings saved.", "success")
+    return redirect(url_for("client.client_settings"))
+
+
+@client_bp.route("/automations/save", methods=["POST"])
+@client_login_required
+def client_save_automations():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    valid_channels = {"sms", "messenger", "lead_forms", "calls"}
+    valid_payment_channels = {"email", "sms"}
+    valid_appointment_channels = {"email", "sms"}
+
+    selected_channels = [c for c in request.form.getlist("sales_bot_channels") if c in valid_channels]
+    selected_payment_channels = [c for c in request.form.getlist("sales_bot_payment_reminder_channels") if c in valid_payment_channels]
+    selected_appointment_channels = [c for c in request.form.getlist("sales_bot_appointment_reminder_channels") if c in valid_appointment_channels]
+    if not selected_payment_channels:
+        selected_payment_channels = ["email"]
+    if not selected_appointment_channels:
+        selected_appointment_channels = ["sms"]
+
+    quote_mode = (request.form.get("sales_bot_quote_mode") or "hybrid").strip().lower()
+    if quote_mode not in {"simple", "hybrid", "structured"}:
+        quote_mode = "hybrid"
+
+    db.update_brand_number_field(brand_id, "sales_bot_enabled", 1 if request.form.get("sales_bot_enabled") else 0)
+    db.update_brand_text_field(brand_id, "sales_bot_channels", json.dumps(selected_channels))
+    db.update_brand_text_field(brand_id, "sales_bot_quote_mode", quote_mode)
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_business_hours",
+        (request.form.get("sales_bot_business_hours") or "").strip()[:1000],
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_reply_tone",
+        (request.form.get("sales_bot_reply_tone") or "").strip()[:500],
+    )
+    try:
+        reply_delay_seconds = max(0, min(300, float(request.form.get("sales_bot_reply_delay_seconds") or 0)))
+    except (ValueError, TypeError):
+        reply_delay_seconds = 0
+    db.update_brand_number_field(brand_id, "sales_bot_reply_delay_seconds", reply_delay_seconds)
+
+    db.update_brand_number_field(brand_id, "sales_bot_payment_reminders_enabled", 1 if request.form.get("sales_bot_payment_reminders_enabled") else 0)
+    try:
+        payment_days_before = max(0, min(21, int(float(request.form.get("sales_bot_payment_reminder_days_before") or 3))))
+    except (ValueError, TypeError):
+        payment_days_before = 3
+    db.update_brand_number_field(brand_id, "sales_bot_payment_reminder_days_before", payment_days_before)
+    try:
+        payment_billing_day = max(1, min(31, int(float(request.form.get("sales_bot_payment_reminder_billing_day") or 1))))
+    except (ValueError, TypeError):
+        payment_billing_day = 1
+    db.update_brand_number_field(brand_id, "sales_bot_payment_reminder_billing_day", payment_billing_day)
+    db.update_brand_text_field(brand_id, "sales_bot_payment_reminder_channels", json.dumps(selected_payment_channels))
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_payment_reminder_template",
+        (request.form.get("sales_bot_payment_reminder_template") or "").strip()[:2000],
+    )
+
+    db.update_brand_number_field(brand_id, "sales_bot_appointment_reminders_enabled", 1 if request.form.get("sales_bot_appointment_reminders_enabled") else 0)
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_appointment_reminder_send_time",
+        (request.form.get("sales_bot_appointment_reminder_send_time") or "17:00").strip()[:10],
+    )
+    appointment_timezone = (request.form.get("sales_bot_appointment_reminder_timezone") or "America/New_York").strip()
+    if appointment_timezone not in {"America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"}:
+        appointment_timezone = "America/New_York"
+    db.update_brand_text_field(brand_id, "sales_bot_appointment_reminder_timezone", appointment_timezone)
+    db.update_brand_text_field(brand_id, "sales_bot_appointment_reminder_channels", json.dumps(selected_appointment_channels))
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_appointment_reminder_template",
+        (request.form.get("sales_bot_appointment_reminder_template") or "").strip()[:2000],
+    )
+    db.update_brand_number_field(
+        brand_id,
+        "sales_bot_appointment_reminder_respect_client_channel",
+        1 if request.form.get("sales_bot_appointment_reminder_respect_client_channel") else 0,
+    )
+
+    db.update_brand_number_field(brand_id, "sales_bot_transcript_export", 1 if request.form.get("sales_bot_transcript_export") else 0)
+    db.update_brand_number_field(brand_id, "sales_bot_meta_lead_forms", 1 if request.form.get("sales_bot_meta_lead_forms") else 0)
+    db.update_brand_number_field(brand_id, "sales_bot_messenger_enabled", 1 if request.form.get("sales_bot_messenger_enabled") else 0)
+    db.update_brand_number_field(brand_id, "sales_bot_call_logging", 1 if request.form.get("sales_bot_call_logging") else 0)
+    db.update_brand_number_field(brand_id, "sales_bot_auto_push_crm", 1 if request.form.get("sales_bot_auto_push_crm") else 0)
+
+    db.update_brand_number_field(brand_id, "sales_bot_nurture_enabled", 1 if request.form.get("sales_bot_nurture_enabled") else 0)
+    for tier in ("hot", "warm", "cold"):
+        hours_key = f"sales_bot_nurture_{tier}_hours"
+        max_key = f"sales_bot_nurture_{tier}_max"
+        try:
+            hours_val = max(0.5, min(720, float(request.form.get(hours_key) or 0)))
+        except (ValueError, TypeError):
+            hours_val = {"hot": 2, "warm": 24, "cold": 48}[tier]
+        try:
+            max_val = max(1, min(10, int(request.form.get(max_key) or 0)))
+        except (ValueError, TypeError):
+            max_val = {"hot": 3, "warm": 2, "cold": 2}[tier]
+        db.update_brand_number_field(brand_id, hours_key, hours_val)
+        db.update_brand_number_field(brand_id, max_key, max_val)
+
+    try:
+        ghost_hours = max(24, min(720, float(request.form.get("sales_bot_nurture_ghost_hours") or 72)))
+    except (ValueError, TypeError):
+        ghost_hours = 72
+    db.update_brand_number_field(brand_id, "sales_bot_nurture_ghost_hours", ghost_hours)
+
+    db.update_brand_number_field(brand_id, "sales_bot_dnd_enabled", 1 if request.form.get("sales_bot_dnd_enabled") else 0)
+    db.update_brand_text_field(brand_id, "sales_bot_dnd_start", (request.form.get("sales_bot_dnd_start") or "21:00").strip()[:5])
+    db.update_brand_text_field(brand_id, "sales_bot_dnd_end", (request.form.get("sales_bot_dnd_end") or "08:00").strip()[:5])
+    db.update_brand_number_field(brand_id, "sales_bot_dnd_weekends", 1 if request.form.get("sales_bot_dnd_weekends") else 0)
+    valid_tz = {"America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"}
+    tz = (request.form.get("sales_bot_dnd_timezone") or "America/New_York").strip()
+    if tz not in valid_tz:
+        tz = "America/New_York"
+    db.update_brand_text_field(brand_id, "sales_bot_dnd_timezone", tz)
+
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_sms_opt_out_footer",
+        (request.form.get("sales_bot_sms_opt_out_footer") or "").strip()[:200],
+    )
+
+    flash("Automations saved.", "success")
+    return redirect(url_for("client.client_automations"))
 
 
 @client_bp.route("/settings/ads-id", methods=["POST"])

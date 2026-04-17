@@ -1,0 +1,961 @@
+{% extends "client_base.html" %}
+{% block title %}Connections{% endblock %}
+
+{% block content %}
+<style>
+.connection-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+}
+.connection-summary-card {
+    width: 100%;
+    border: 1px solid #e5e7eb;
+    border-radius: 18px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    text-align: left;
+    padding: 18px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.connection-summary-card:hover,
+.connection-summary-card:focus {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 36px rgba(15, 23, 42, 0.1);
+    border-color: #cbd5e1;
+}
+.connection-summary-card.active {
+    border-color: #0f766e;
+    box-shadow: 0 18px 38px rgba(15, 118, 110, 0.15);
+}
+.connection-summary-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+    color: #fff;
+    font-size: 1.35rem;
+}
+.connection-summary-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+.connection-summary-meta {
+    font-size: .82rem;
+    color: #475569;
+    line-height: 1.45;
+}
+.connection-summary-power {
+    margin-top: 10px;
+    font-size: .78rem;
+    color: #0f172a;
+    font-weight: 600;
+}
+.connection-workspace {
+    margin-top: 24px;
+    border: 1px solid #e2e8f0;
+    border-radius: 24px;
+    background: #ffffff;
+    box-shadow: 0 20px 45px rgba(15, 23, 42, 0.07);
+    overflow: hidden;
+}
+.connection-workspace-header {
+    padding: 18px 22px;
+    border-bottom: 1px solid #e2e8f0;
+    background: linear-gradient(90deg, #f8fafc 0%, #ffffff 100%);
+}
+.connection-panel {
+    display: none;
+    padding: 22px;
+}
+.connection-panel.active {
+    display: block;
+}
+.connection-panel-shell {
+    border-radius: 18px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+.connection-panel-shell + .connection-panel-shell {
+    margin-top: 16px;
+}
+.connection-panel-shell .card-body {
+    padding: 24px;
+}
+.connection-panel-note {
+    border-radius: 14px;
+    padding: 14px 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    font-size: .84rem;
+}
+@media (max-width: 767px) {
+    .connection-panel {
+        padding: 16px;
+    }
+    .connection-panel-shell .card-body {
+        padding: 18px;
+    }
+}
+</style>
+
+<div class="page-title-bar d-flex flex-wrap justify-content-between align-items-start gap-3">
+    <div>
+        <h5><i class="bi bi-plug"></i>Connections</h5>
+        <p>Each connection card tells you what it powers, whether it is ready, and lets you open just that setup area.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('client.client_automations') }}" class="btn btn-dark">
+            <i class="bi bi-magic me-1"></i> Automations
+        </a>
+        <a href="{{ url_for('client.client_help', guide='connections') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-question-circle me-1"></i> Help
+        </a>
+    </div>
+</div>
+
+<div class="connection-summary-grid">
+    <button type="button" class="connection-summary-card" data-panel-target="google">
+        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#2563eb,#60a5fa);"><i class="bi bi-google"></i></span>
+        <div class="connection-summary-label">
+            <strong>Google</strong>
+            {% if google_connected %}<span class="badge bg-success">Connected</span>{% else %}<span class="badge bg-secondary">Not connected</span>{% endif %}
+        </div>
+        <div class="connection-summary-meta">Analytics, Search Console, and Google Ads identity. This is the main data pipe for traffic and campaign reporting.</div>
+        <div class="connection-summary-power">Powers: reports, search data, ad account access</div>
+    </button>
+
+    <button type="button" class="connection-summary-card" data-panel-target="meta">
+        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#0369a1,#0ea5e9);"><i class="bi bi-meta"></i></span>
+        <div class="connection-summary-label">
+            <strong>Meta</strong>
+            {% if meta_connected %}<span class="badge bg-success">Connected</span>{% else %}<span class="badge bg-secondary">Not connected</span>{% endif %}
+        </div>
+        <div class="connection-summary-meta">Facebook and Instagram ad account access plus page reference handling for organic and Messenger workflows.</div>
+        <div class="connection-summary-power">Powers: Meta ads, page-linked workflows</div>
+    </button>
+
+    <button type="button" class="connection-summary-card" data-panel-target="drive">
+        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#15803d,#4ade80);"><i class="bi bi-cloud-arrow-up"></i></span>
+        <div class="connection-summary-label">
+            <strong>Drive Sync</strong>
+            {% if google_connected and drive_scoped %}<span class="badge bg-success">Ready</span>{% elif google_connected %}<span class="badge bg-warning text-dark">Needs scope</span>{% else %}<span class="badge bg-secondary">Not connected</span>{% endif %}
+        </div>
+        <div class="connection-summary-meta">Choose where exports, reports, and sheets land so the team has a shared destination for generated assets.</div>
+        <div class="connection-summary-power">Powers: exports, sheets, file delivery</div>
+    </button>
+
+    <button type="button" class="connection-summary-card" data-panel-target="sng">
+        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#059669,#10b981);"><i class="bi bi-recycle"></i></span>
+        <div class="connection-summary-label">
+            <strong>Sweep and Go</strong>
+            {% if brand.crm_type == 'sweepandgo' and brand.crm_api_key %}<span class="badge bg-success">Connected</span>{% else %}<span class="badge bg-secondary">Not connected</span>{% endif %}
+        </div>
+        <div class="connection-summary-meta">CRM and revenue data connection, plus the webhook endpoint that feeds Warren live SNG events.</div>
+        <div class="connection-summary-power">Powers: client sync, revenue, inbound CRM events</div>
+    </button>
+
+    <button type="button" class="connection-summary-card" data-panel-target="ghl">
+        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#f97316,#fb923c);"><i class="bi bi-lightning-charge-fill"></i></span>
+        <div class="connection-summary-label">
+            <strong>GoHighLevel</strong>
+            {% if brand.crm_type == 'gohighlevel' and brand.crm_api_key %}<span class="badge bg-success">Connected</span>{% else %}<span class="badge bg-secondary">Not connected</span>{% endif %}
+        </div>
+        <div class="connection-summary-meta">Alternative CRM connection for pipeline revenue, lead pushing, and sub-account reporting.</div>
+        <div class="connection-summary-power">Powers: pipeline sync, lead push</div>
+    </button>
+
+    <button type="button" class="connection-summary-card" data-panel-target="wordpress">
+        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#0f172a,#475569);"><i class="bi bi-wordpress"></i></span>
+        <div class="connection-summary-label">
+            <strong>WordPress</strong>
+            {% if brand.wp_site_url and brand.wp_username and brand.wp_app_password %}<span class="badge bg-success">Connected</span>{% else %}<span class="badge bg-secondary">Not connected</span>{% endif %}
+        </div>
+        <div class="connection-summary-meta">Blog publishing connection for pushing finished posts from the client app straight to the site.</div>
+        <div class="connection-summary-power">Powers: publishing, blog workflow</div>
+    </button>
+
+    <button type="button" class="connection-summary-card" data-panel-target="ai">
+        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#4338ca,#818cf8);"><i class="bi bi-cpu"></i></span>
+        <div class="connection-summary-label">
+            <strong>AI</strong>
+            {% if brand.openai_api_key %}<span class="badge bg-success">Configured</span>{% else %}<span class="badge bg-secondary">Not configured</span>{% endif %}
+        </div>
+        <div class="connection-summary-meta">Your OpenAI key and quality tier. This powers the assistant, generation tools, and higher-level automation logic.</div>
+        <div class="connection-summary-power">Powers: AI chat, content, workflows</div>
+    </button>
+
+    <button type="button" class="connection-summary-card" data-panel-target="warren">
+        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#0f766e,#14b8a6);"><i class="bi bi-chat-dots"></i></span>
+        <div class="connection-summary-label">
+            <strong>Warren Channels</strong>
+            {% if brand.quo_api_key or brand.sales_bot_incoming_webhook_secret or brand.facebook_page_id %}<span class="badge bg-success">Configured</span>{% else %}<span class="badge bg-secondary">Not configured</span>{% endif %}
+        </div>
+        <div class="connection-summary-meta">OpenPhone, inbound webhooks, and callback URLs that let Warren receive messages and leads from outside systems.</div>
+        <div class="connection-summary-power">Powers: SMS, webhooks, inbound lead intake</div>
+    </button>
+</div>
+
+<div class="connection-workspace">
+    <div class="connection-workspace-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <div class="fw-semibold">Connection Workspace</div>
+            <div class="text-muted" style="font-size:.85rem;">Open one connection at a time so the page stays readable and focused.</div>
+        </div>
+        <div class="text-muted" style="font-size:.8rem;">Your last-opened panel stays selected on reload.</div>
+    </div>
+
+    <section class="connection-panel" data-panel="google">
+        <div class="connection-panel-shell card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                    <div>
+                        <h5 class="fw-semibold mb-1">Google</h5>
+                        <p class="text-muted mb-0">Connect one Google sign-in to power Analytics, Search Console, and ad account access.</p>
+                    </div>
+                    {% if google_connected %}<span class="badge bg-success rounded-pill px-3 py-2">Connected</span>{% else %}<span class="badge bg-secondary rounded-pill px-3 py-2">Not connected</span>{% endif %}
+                </div>
+
+                {% if google_connected %}
+                <div class="mt-3 p-3" style="background:#f8fafc; border-radius:12px; border:1px solid #e2e8f0;">
+                    <div class="row g-3">
+                        {% if brand.ga4_property_id %}<div class="col-md-4"><small class="text-muted d-block">GA4 Property</small><span class="fw-medium">{{ brand.ga4_property_id }}</span></div>{% endif %}
+                        {% if brand.gsc_site_url %}<div class="col-md-4"><small class="text-muted d-block">Search Console</small><span class="fw-medium">{{ brand.gsc_site_url }}</span></div>{% endif %}
+                        {% if brand.google_ads_customer_id %}<div class="col-md-4"><small class="text-muted d-block">Google Ads Customer ID</small><span class="fw-medium">{{ brand.google_ads_customer_id }}</span></div>{% endif %}
+                    </div>
+                </div>
+                <div class="mt-3 d-flex gap-2 flex-wrap">
+                    <a href="{{ url_for('client_google_oauth.connect') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat me-1"></i>Reconnect Google</a>
+                    <form method="POST" action="{{ url_for('client_google_oauth.disconnect') }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Disconnect Google? This will remove access to Analytics, Search Console, and Ads data.')"><i class="bi bi-x-circle me-1"></i>Disconnect</button>
+                    </form>
+                </div>
+                {% else %}
+                <div class="mt-3">
+                    <a href="{{ url_for('client_google_oauth.connect') }}" class="btn btn-primary"><i class="bi bi-google me-1"></i>Connect Google Account</a>
+                    <p class="text-muted mt-2 mb-0" style="font-size:.85rem;">Sign in with your Google account to connect Analytics, Search Console, and Google Ads.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="connection-panel-shell card">
+            <div class="card-body">
+                <h6 class="fw-semibold mb-1">Google Ads Customer ID</h6>
+                <p class="text-muted mb-3" style="font-size:.88rem;">Keep your Customer ID on file so Google Ads data and management flows point to the right account.</p>
+                <form method="POST" action="{{ url_for('client.client_save_ads_id') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="input-group" style="max-width:360px;">
+                        <input type="text" class="form-control" name="google_ads_customer_id" value="{{ brand.google_ads_customer_id or '' }}" placeholder="123-456-7890" pattern="[\d\-]+" title="Numbers and dashes only">
+                        <button class="btn btn-primary" type="submit">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <section class="connection-panel" data-panel="meta">
+        <div class="connection-panel-shell card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                    <div>
+                        <h5 class="fw-semibold mb-1">Meta</h5>
+                        <p class="text-muted mb-0">Connect Facebook and Instagram ad access, then lock the correct page reference for organic and messaging workflows.</p>
+                    </div>
+                    {% if meta_connected %}<span class="badge bg-success rounded-pill px-3 py-2">Connected</span>{% else %}<span class="badge bg-secondary rounded-pill px-3 py-2">Not connected</span>{% endif %}
+                </div>
+
+                {% if meta_connected %}
+                <div class="mt-3 p-3" style="background:#f8fafc; border-radius:12px; border:1px solid #e2e8f0;">
+                    <div class="row g-3">
+                        {% if meta_conn.account_name %}<div class="col-md-6"><small class="text-muted d-block">Ad Account</small><span class="fw-medium">{{ meta_conn.account_name }}</span></div>{% endif %}
+                        {% if brand.meta_ad_account_id %}<div class="col-md-6"><small class="text-muted d-block">Account ID</small><span class="fw-medium">{{ brand.meta_ad_account_id }}</span></div>{% endif %}
+                        {% if brand.facebook_page_id %}<div class="col-md-12"><small class="text-muted d-block">Facebook Page Reference</small><span class="fw-medium">{{ brand.facebook_page_id }}</span></div>{% endif %}
+                    </div>
+                </div>
+                <form method="POST" action="{{ url_for('client.client_save_facebook_page_id') }}" class="mt-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">Facebook Page ID or Page URL</label>
+                    <div class="input-group" style="max-width:560px;">
+                        <input type="text" class="form-control" name="facebook_page_id" value="{{ brand.facebook_page_id or '' }}" placeholder="123456789012345 or https://www.facebook.com/yourpage">
+                        <button class="btn btn-primary" type="submit">Save</button>
+                    </div>
+                    <small class="text-muted d-block mt-2">Required for Facebook organic tracking when Meta has access to multiple pages or auto-detection picks the wrong one.</small>
+                </form>
+                <div class="mt-3 d-flex gap-2 flex-wrap">
+                    <a href="{{ url_for('client_meta_oauth.connect') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat me-1"></i>Reconnect Meta</a>
+                    <form method="POST" action="{{ url_for('client_meta_oauth.disconnect') }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Disconnect Meta? This will remove access to Facebook and Instagram Ads data.')"><i class="bi bi-x-circle me-1"></i>Disconnect</button>
+                    </form>
+                </div>
+                {% else %}
+                <div class="mt-3">
+                    <a href="{{ url_for('client_meta_oauth.connect') }}" class="btn btn-primary" style="background:#0081fb; border-color:#0081fb;"><i class="bi bi-meta me-1"></i>Connect Meta Account</a>
+                    <p class="text-muted mt-2 mb-0" style="font-size:.85rem;">Sign in with Facebook to connect your ad accounts for Facebook and Instagram.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <section class="connection-panel" data-panel="drive">
+        <div class="connection-panel-shell card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                    <div>
+                        <h5 class="fw-semibold mb-1">Google Drive + Sheets Sync</h5>
+                        <p class="text-muted mb-0">Pick a Drive folder and optional Sheet destination for exports, trackers, and generated assets.</p>
+                    </div>
+                    {% if google_connected and drive_scoped %}<span class="badge bg-success rounded-pill px-3 py-2">Ready</span>{% elif google_connected %}<span class="badge bg-warning text-dark rounded-pill px-3 py-2">Reconnect to add Drive scope</span>{% else %}<span class="badge bg-secondary rounded-pill px-3 py-2">Not connected</span>{% endif %}
+                </div>
+
+                <div class="mt-3">
+                    {% if not google_connected %}
+                    <p class="text-muted mb-2" style="font-size:.88rem;">Connect Google first, then configure your Drive folder and Sheet destination.</p>
+                    {% elif not drive_scoped %}
+                    <div class="alert alert-warning d-flex align-items-center gap-3 mb-3" style="border-radius:10px">
+                        <i class="bi bi-exclamation-triangle-fill" style="font-size:1.5rem"></i>
+                        <div><strong>Limited Drive access.</strong> Reconnect with full Drive scope if you want the app to browse and save into existing team folders.</div>
+                    </div>
+                    <a href="{{ url_for('client_google_oauth.connect') }}" class="btn btn-primary mb-3"><i class="bi bi-arrow-repeat me-1"></i>Reconnect Google With Full Drive Access</a>
+                    {% endif %}
+                </div>
+
+                <form method="POST" action="{{ url_for('client.client_save_google_drive') }}" class="mt-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Drive Folder ID</label>
+                            <input type="text" class="form-control" name="google_drive_folder_id" value="{{ brand.google_drive_folder_id or '' }}" placeholder="Folder ID from Drive URL" {% if not google_connected %}disabled{% endif %}>
+                            <small class="text-muted">Destination folder for generated reports and exports.</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Google Sheet ID</label>
+                            <input type="text" class="form-control" name="google_drive_sheet_id" value="{{ brand.google_drive_sheet_id or '' }}" placeholder="Sheet ID from docs.google.com URL" {% if not google_connected %}disabled{% endif %}>
+                            <small class="text-muted">Optional destination for action-plan snapshots and operational trackers.</small>
+                        </div>
+                    </div>
+                    <div class="mt-3 d-flex gap-2 align-items-center flex-wrap">
+                        <button class="btn btn-primary" type="submit" {% if not google_connected %}disabled{% endif %}>Save Drive Sync Settings</button>
+                        {% if google_connected %}<a href="{{ url_for('client_google_oauth.connect') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat me-1"></i>Reconnect Google With Drive Access</a>{% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <section class="connection-panel" data-panel="sng">
+        <div class="connection-panel-shell card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                    <div>
+                        <h5 class="fw-semibold mb-1">Sweep and Go</h5>
+                        <p class="text-muted mb-0">Use your API token for CRM reads and your webhook URL for live inbound event delivery.</p>
+                    </div>
+                    {% if brand.crm_type == 'sweepandgo' and brand.crm_api_key %}<span class="badge bg-success rounded-pill px-3 py-2">Connected</span>{% else %}<span class="badge bg-secondary rounded-pill px-3 py-2">Not connected</span>{% endif %}
+                </div>
+
+                <form method="POST" action="{{ url_for('client.client_save_sng') }}" class="mt-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">API Token</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" name="sng_api_key" placeholder="{{ '••••••••' ~ brand.crm_api_key[-4:] if brand.crm_api_key and brand.crm_type == 'sweepandgo' else 'Paste your API token' }}" autocomplete="off" id="sngApiKeyInput">
+                                <button class="btn btn-outline-secondary" type="button" onclick="var i=document.getElementById('sngApiKeyInput');i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=\'bi bi-eye\'></i>':'<i class=\'bi bi-eye-slash\'></i>'"><i class="bi bi-eye"></i></button>
+                            </div>
+                            <small class="text-muted">Leave blank to keep current token.</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Organization Slug</label>
+                            <input type="text" class="form-control" name="sng_org_slug" value="{{ brand.crm_pipeline_id or '' if brand.crm_type == 'sweepandgo' else '' }}" placeholder="e.g. scoop-doggy-logs-1fful">
+                            <small class="text-muted">Found in your Sweep and Go Employee Portal URL.</small>
+                        </div>
+                    </div>
+                    <div class="mt-3 d-flex align-items-center gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Save Sweep and Go Settings</button>
+                        {% if brand.crm_type == 'sweepandgo' and brand.crm_api_key %}<button class="btn btn-outline-primary" type="button" id="sngTestBtn"><i class="bi bi-plug me-1"></i> Test Connection</button>{% endif %}
+                    </div>
+                </form>
+                <div id="sngTestResult" class="mt-2" style="display:none;"></div>
+
+                <div class="mt-3 p-3" style="background:#f8fafc; border:1px solid #dbeafe; border-radius:10px;">
+                    <div class="row g-3 align-items-start">
+                        <div class="col-lg-7">
+                            <label class="form-label mb-1 fw-medium" style="font-size:.88rem;">Sweep and Go Webhook URL</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control form-control-sm bg-light" readonly value="{{ sng_webhook_url }}" id="sngWebhookUrl">
+                                <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('sngWebhookUrl')"><i class="bi bi-clipboard"></i></button>
+                            </div>
+                            <small class="text-muted d-block mt-2">Use this when creating the SNG webhook. Recommended events: <strong>client:client_payment_declined</strong>, <strong>client:client_payment_accepted</strong>, <strong>client:invoice_finalized</strong>, <strong>client:subscription_created</strong>, <strong>client:subscription_canceled</strong>, <strong>client:subscription_paused</strong>, <strong>client:subscription_unpaused</strong>.</small>
+                        </div>
+                        <div class="col-lg-5">
+                            <div class="fw-medium mb-2" style="font-size:.88rem;">Recent webhook events</div>
+                            {% if sng_webhook_events %}
+                            <div style="max-height:220px; overflow:auto;">
+                                {% for event in sng_webhook_events %}
+                                <div class="p-2 {% if not loop.last %}mb-2{% endif %}" style="background:#fff; border:1px solid #e5e7eb; border-radius:8px;">
+                                    <div class="d-flex align-items-center justify-content-between gap-2 mb-1">
+                                        <div class="fw-medium" style="font-size:.82rem;">{{ event.event_type or 'unknown' }}</div>
+                                        <span class="badge bg-{{ event.status_badge }}">{{ event.status or 'received' }}</span>
+                                    </div>
+                                    <div style="font-size:.8rem; color:#111827;">{{ event.detail or 'Webhook received.' }}</div>
+                                    <div class="text-muted mt-1" style="font-size:.75rem;">{{ event.received_at }}</div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <div class="text-muted" style="font-size:.82rem;">No Sweep and Go events received yet.</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-3 p-3" style="background:#f0fdf4; border-radius:8px;">
+                    <div class="d-flex align-items-start gap-2">
+                        <i class="bi bi-info-circle text-success mt-1"></i>
+                        <div>
+                            <div class="fw-medium" style="font-size:.88rem;">How to get your API token</div>
+                            <small class="text-muted">1. Log into <strong>Sweep and Go Employee Portal</strong><br>2. Go to <strong>Settings > Open API</strong><br>3. Generate a token<br>4. Paste it above<br>5. Your organization slug is the text in your portal URL.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="connection-panel" data-panel="ghl">
+        <div class="connection-panel-shell card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                    <div>
+                        <h5 class="fw-semibold mb-1">GoHighLevel</h5>
+                        <p class="text-muted mb-0">Connect a sub-account with either a PIT or API key so Warren can read pipeline data and push leads.</p>
+                    </div>
+                    {% if brand.crm_type == 'gohighlevel' and brand.crm_api_key %}<span class="badge bg-success rounded-pill px-3 py-2">Connected</span>{% else %}<span class="badge bg-secondary rounded-pill px-3 py-2">Not connected</span>{% endif %}
+                </div>
+
+                <form method="POST" action="{{ url_for('client.client_save_ghl') }}" class="mt-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">API Key / PIT</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" name="ghl_api_key" placeholder="{{ '••••••••' ~ brand.crm_api_key[-4:] if brand.crm_api_key and brand.crm_type == 'gohighlevel' else 'Paste your token' }}" autocomplete="off" id="ghlApiKeyInput">
+                                <button class="btn btn-outline-secondary" type="button" onclick="var i=document.getElementById('ghlApiKeyInput');i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=\'bi bi-eye\'></i>':'<i class=\'bi bi-eye-slash\'></i>'"><i class="bi bi-eye"></i></button>
+                            </div>
+                            <small class="text-muted">Leave blank to keep current token.</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Location ID</label>
+                            <input type="text" class="form-control" name="ghl_location_id" value="{{ brand.titan_ghl_location_id or '' }}" placeholder="Paste your GHL location ID">
+                            <small class="text-muted">Required for PIT connections.</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Pipeline ID</label>
+                            <input type="text" class="form-control" name="ghl_pipeline_id" value="{{ brand.crm_pipeline_id or '' if brand.crm_type == 'gohighlevel' else '' }}" placeholder="Leave blank to use your first pipeline">
+                            <small class="text-muted">Optional, but useful if you want a fixed pipeline target.</small>
+                        </div>
+                    </div>
+                    <div class="mt-3 d-flex align-items-center gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Save GoHighLevel Settings</button>
+                        {% if brand.crm_type == 'gohighlevel' and brand.crm_api_key %}<button class="btn btn-outline-primary" type="button" id="ghlTestBtn"><i class="bi bi-plug me-1"></i> Test Connection</button>{% endif %}
+                    </div>
+                </form>
+                <div id="ghlTestResult" class="mt-2" style="display:none;"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="connection-panel" data-panel="wordpress">
+        <div class="connection-panel-shell card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                    <div>
+                        <h5 class="fw-semibold mb-1">WordPress</h5>
+                        <p class="text-muted mb-0">Store your site credentials so blog content can publish directly from the client app.</p>
+                    </div>
+                    {% if brand.wp_site_url and brand.wp_username and brand.wp_app_password %}<span class="badge bg-success rounded-pill px-3 py-2">Connected</span>{% else %}<span class="badge bg-secondary rounded-pill px-3 py-2">Not connected</span>{% endif %}
+                </div>
+
+                <form method="POST" action="{{ url_for('client.client_save_wordpress') }}" class="mt-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">WordPress Site URL</label>
+                            <input type="url" class="form-control" name="wp_site_url" value="{{ brand.wp_site_url or '' }}" placeholder="https://yourbusiness.com">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">WordPress Username</label>
+                            <input type="text" class="form-control" name="wp_username" value="{{ brand.wp_username or '' }}" placeholder="admin" autocomplete="off">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Application Password</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" name="wp_app_password" placeholder="{{ 'xxxx ••••' if brand.wp_app_password else 'xxxx xxxx xxxx xxxx' }}" autocomplete="off">
+                                <button class="btn btn-outline-secondary" type="button" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=\'bi bi-eye\'></i>':'<i class=\'bi bi-eye-slash\'></i>'"><i class="bi bi-eye"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-3 d-flex align-items-center gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Save WordPress Settings</button>
+                        {% if brand.wp_site_url and brand.wp_username and brand.wp_app_password %}<button class="btn btn-outline-primary" type="button" id="wpTestBtn"><i class="bi bi-plug me-1"></i> Test Connection</button>{% endif %}
+                    </div>
+                </form>
+                <div id="wpTestResult" class="mt-2" style="display:none;"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="connection-panel" data-panel="ai">
+        <div class="connection-panel-shell card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                    <div>
+                        <h5 class="fw-semibold mb-1">AI Configuration</h5>
+                        <p class="text-muted mb-0">Your OpenAI key powers the assistant, content tools, and higher-level workflow logic for this brand.</p>
+                    </div>
+                    {% if brand.openai_api_key %}<span class="badge bg-success rounded-pill px-3 py-2">Key configured</span>{% else %}<span class="badge bg-secondary rounded-pill px-3 py-2">No key yet</span>{% endif %}
+                </div>
+
+                <form method="POST" action="{{ url_for('client.client_save_openai') }}" class="mt-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-3">
+                        <div class="col-md-7">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">OpenAI API Key</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" name="openai_api_key" placeholder="{{ 'sk-••••••' ~ brand.openai_api_key[-4:] if brand.openai_api_key else 'sk-...' }}" autocomplete="off">
+                                <button class="btn btn-outline-secondary" type="button" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=\'bi bi-eye\'></i>':'<i class=\'bi bi-eye-slash\'></i>'"><i class="bi bi-eye"></i></button>
+                            </div>
+                            <small class="text-muted">Leave blank to keep the current key.</small>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">AI Quality Tier</label>
+                            {% set current_tier = brand.ai_quality_tier or 'balanced' %}
+                            <select class="form-select" name="ai_quality_tier">
+                                <option value="efficient" {{ 'selected' if current_tier == 'efficient' else '' }}>Efficient</option>
+                                <option value="balanced" {{ 'selected' if current_tier == 'balanced' else '' }}>Balanced</option>
+                                <option value="premium" {{ 'selected' if current_tier == 'premium' else '' }}>Premium</option>
+                            </select>
+                            <small class="text-muted d-block mt-2">Balanced is the default mix of quality and cost.</small>
+                        </div>
+                    </div>
+                    <div class="mt-3 d-flex align-items-center gap-3 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Save AI Settings</button>
+                        <span class="text-muted" style="font-size:.85rem;">Your key is stored on this brand record and is not exposed back in full.</span>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <section class="connection-panel" data-panel="warren">
+        <div class="connection-panel-shell card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                    <div>
+                        <h5 class="fw-semibold mb-1">Warren Channels</h5>
+                        <p class="text-muted mb-0">Connect the inbound channels Warren listens to. Message rules live on the Automations page.</p>
+                    </div>
+                    <a href="{{ url_for('client.client_automations') }}" class="btn btn-outline-dark btn-sm"><i class="bi bi-magic me-1"></i>Go to Automations</a>
+                </div>
+
+                <div class="connection-panel-note mt-3">Use this panel for channel credentials, webhook URLs, and callback wiring. Use Automations for what Warren should actually send.</div>
+
+                <form method="POST" action="{{ url_for('client.client_save_warren_channels_settings') }}" class="mt-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-3">
+                        <div class="col-lg-6">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">OpenPhone / Quo API Key</label>
+                            <input type="password" class="form-control" name="quo_api_key" placeholder="{{ '••••••' ~ brand.quo_api_key[-4:] if brand.quo_api_key else 'Enter your Quo API key' }}" autocomplete="off">
+                            <small class="text-muted">Leave blank to keep the current key.</small>
+                        </div>
+                        <div class="col-lg-6">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">OpenPhone / Quo Number</label>
+                            <input type="text" class="form-control" name="quo_phone_number" value="{{ brand.quo_phone_number or '' }}" placeholder="+15551234567">
+                        </div>
+                    </div>
+
+                    {% if brand.quo_api_key %}
+                    <div class="mt-3 p-3" style="background:#f0fdf4; border-radius:10px; border:1px solid #bbf7d0;">
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                            <div>
+                                <span class="fw-semibold" style="font-size:.88rem;"><i class="bi bi-plug me-1 text-success"></i>OpenPhone Connection</span>
+                                <span class="badge bg-success ms-2" id="quoStatusBadge">Checking...</span>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-success" id="testQuoBtn" onclick="testOpenPhoneConnection()"><i class="bi bi-arrow-repeat me-1"></i>Test Connection</button>
+                        </div>
+                        <div id="quoPhoneNumbers" class="mb-2" style="font-size:.82rem;"></div>
+                        <div style="font-size:.82rem;">
+                            <label class="form-label mb-1 fw-medium">Inbound SMS Webhook URL</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control form-control-sm bg-light" readonly value="{{ request.url_root | replace('http://', 'https://') }}webhooks/quo/sms/{{ brand.slug }}" id="quoWebhookUrl">
+                                <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('quoWebhookUrl')"><i class="bi bi-clipboard"></i></button>
+                            </div>
+                            <small class="text-muted">Paste this URL in OpenPhone > Settings > Webhooks and subscribe to <strong>message.received</strong>.</small>
+                        </div>
+                        <div class="mt-2 pt-2" style="border-top:1px solid #bbf7d0; font-size:.82rem;">
+                            <label class="form-label mb-1 fw-medium">Send Test SMS</label>
+                            <div class="input-group input-group-sm">
+                                <input type="tel" class="form-control form-control-sm" id="testSmsPhone" placeholder="+15551234567 (your personal phone)">
+                                <button class="btn btn-outline-success" type="button" id="sendTestSmsBtn" onclick="sendTestSMS()"><i class="bi bi-send me-1"></i>Send</button>
+                            </div>
+                            <div id="testSmsResult" class="mt-2" style="display:none;"></div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="row g-3 mt-1">
+                        <div class="col-lg-6">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">OpenPhone Webhook Secret</label>
+                            <input type="password" class="form-control" name="sales_bot_quo_webhook_secret" placeholder="{{ '••••••' ~ brand.sales_bot_quo_webhook_secret[-4:] if brand.sales_bot_quo_webhook_secret else 'Secret used to verify inbound webhooks' }}" autocomplete="off">
+                        </div>
+                        <div class="col-lg-6">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Incoming Lead Webhook Secret</label>
+                            <input type="password" class="form-control" name="sales_bot_incoming_webhook_secret" placeholder="{{ '••••••' ~ brand.sales_bot_incoming_webhook_secret[-4:] if brand.sales_bot_incoming_webhook_secret else 'Required for generic lead webhook posts' }}" autocomplete="off">
+                        </div>
+                    </div>
+
+                    <div class="mt-3 p-3" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+                        <div class="row g-3 align-items-end">
+                            <div class="col-lg-7">
+                                <label class="form-label mb-1 fw-medium">Generic Incoming Lead Webhook URL</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control form-control-sm bg-light" readonly value="{{ request.url_root | replace('http://', 'https://') }}webhooks/leads/{{ brand.slug }}" id="incomingLeadWebhookUrl">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('incomingLeadWebhookUrl')"><i class="bi bi-clipboard"></i></button>
+                                </div>
+                                <small class="text-muted d-block mt-2">Use this for website forms, Zapier/Make, or any POST-based lead source. JSON and form-encoded payloads are both accepted.</small>
+                            </div>
+                            <div class="col-lg-5">
+                                <label class="form-label fw-medium" style="font-size:.88rem;">Meta Webhook Setup</label>
+                                <div class="form-control bg-light d-flex align-items-center" style="min-height:38px;">Platform-managed by GroMore admin</div>
+                                <small class="text-muted d-block mt-2">Copy the callback URLs below and let the platform-level Meta app handle verification.</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if brand.facebook_page_id %}
+                    <div class="mt-3 p-3" style="background:#eff6ff; border-radius:10px; border:1px solid #bfdbfe;">
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                            <div>
+                                <span class="fw-semibold" style="font-size:.88rem;"><i class="bi bi-messenger me-1 text-primary"></i>Messenger Connection</span>
+                                <span class="badge bg-primary ms-2" id="messengerStatusBadge">Checking...</span>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="testMessengerBtn" onclick="testMessengerConnection()"><i class="bi bi-arrow-repeat me-1"></i>Test Connection</button>
+                        </div>
+                        <div id="messengerPageInfo" class="mb-2" style="font-size:.82rem;"></div>
+                        <div class="row g-2">
+                            <div class="col-md-6" style="font-size:.82rem;">
+                                <label class="form-label mb-1 fw-medium">Messenger Webhook URL</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control form-control-sm bg-light" readonly value="{{ request.url_root | replace('http://', 'https://') }}webhooks/meta/messenger" id="messengerWebhookUrl">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('messengerWebhookUrl')"><i class="bi bi-clipboard"></i></button>
+                                </div>
+                            </div>
+                            <div class="col-md-6" style="font-size:.82rem;">
+                                <label class="form-label mb-1 fw-medium">Lead Forms Webhook URL</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control form-control-sm bg-light" readonly value="{{ request.url_root | replace('http://', 'https://') }}webhooks/meta/leadgen" id="leadgenWebhookUrl">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('leadgenWebhookUrl')"><i class="bi bi-clipboard"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="mt-3 d-flex gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Save Warren Channel Settings</button>
+                        <a href="{{ url_for('client.client_automations') }}" class="btn btn-outline-dark">Open Message Rules</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
+    var csrfToken = csrfTokenMeta ? csrfTokenMeta.getAttribute('content') : '';
+    var connectionButtons = Array.from(document.querySelectorAll('[data-panel-target]'));
+    var connectionPanels = Array.from(document.querySelectorAll('[data-panel]'));
+
+    function activatePanel(panelKey, updateHash) {
+        connectionButtons.forEach(function(button) {
+            button.classList.toggle('active', button.getAttribute('data-panel-target') === panelKey);
+        });
+        connectionPanels.forEach(function(panel) {
+            panel.classList.toggle('active', panel.getAttribute('data-panel') === panelKey);
+        });
+        try {
+            localStorage.setItem('clientConnectionsPanel', panelKey);
+        } catch (err) {}
+        if (updateHash) {
+            window.location.hash = 'panel-' + panelKey;
+        }
+    }
+
+    connectionButtons.forEach(function(button) {
+        button.addEventListener('click', function() {
+            activatePanel(button.getAttribute('data-panel-target'), true);
+        });
+    });
+
+    var initialPanel = 'google';
+    if (window.location.hash.indexOf('#panel-') === 0) {
+        initialPanel = window.location.hash.replace('#panel-', '') || initialPanel;
+    } else {
+        try {
+            initialPanel = localStorage.getItem('clientConnectionsPanel') || initialPanel;
+        } catch (err) {}
+    }
+    if (!document.querySelector('[data-panel-target="' + initialPanel + '"]')) {
+        initialPanel = 'google';
+    }
+    activatePanel(initialPanel, false);
+
+    var sngTestBtn = document.getElementById('sngTestBtn');
+    if (sngTestBtn) {
+        sngTestBtn.addEventListener('click', function() {
+            var rd = document.getElementById('sngTestResult');
+            sngTestBtn.disabled = true;
+            sngTestBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
+            rd.style.display = 'none';
+            fetch('/client/crm/sng/test', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                sngTestBtn.disabled = false;
+                sngTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
+                rd.innerHTML = data.ok
+                    ? '<span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i> ' + (data.message || 'Connected!') + '</span>'
+                    : '<span class="badge bg-danger rounded-pill px-3 py-2"><i class="bi bi-x-circle me-1"></i> ' + (data.error || 'Connection failed') + '</span>';
+                rd.style.display = '';
+            })
+            .catch(function() {
+                sngTestBtn.disabled = false;
+                sngTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
+                rd.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2">Network error</span>';
+                rd.style.display = '';
+            });
+        });
+    }
+
+    var ghlTestBtn = document.getElementById('ghlTestBtn');
+    if (ghlTestBtn) {
+        ghlTestBtn.addEventListener('click', function() {
+            var rd = document.getElementById('ghlTestResult');
+            ghlTestBtn.disabled = true;
+            ghlTestBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
+            rd.style.display = 'none';
+            fetch('/client/crm/ghl/test', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                ghlTestBtn.disabled = false;
+                ghlTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
+                rd.innerHTML = data.ok
+                    ? '<span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i> ' + (data.message || 'Connected!') + '</span>'
+                    : '<span class="badge bg-danger rounded-pill px-3 py-2"><i class="bi bi-x-circle me-1"></i> ' + (data.error || 'Connection failed') + '</span>';
+                rd.style.display = '';
+            })
+            .catch(function() {
+                ghlTestBtn.disabled = false;
+                ghlTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
+                rd.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2">Network error</span>';
+                rd.style.display = '';
+            });
+        });
+    }
+
+    var wpTestBtn = document.getElementById('wpTestBtn');
+    if (wpTestBtn) {
+        wpTestBtn.addEventListener('click', function() {
+            var rd = document.getElementById('wpTestResult');
+            wpTestBtn.disabled = true;
+            wpTestBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
+            rd.style.display = 'none';
+            fetch('/client/blog/test-connection', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                wpTestBtn.disabled = false;
+                wpTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
+                rd.innerHTML = data.ok
+                    ? '<span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i> ' + (data.message || 'Connected successfully!') + '</span>'
+                    : '<span class="badge bg-danger rounded-pill px-3 py-2"><i class="bi bi-x-circle me-1"></i> ' + (data.error || 'Connection failed') + '</span>';
+                rd.style.display = '';
+            })
+            .catch(function() {
+                wpTestBtn.disabled = false;
+                wpTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
+                rd.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2">Network error</span>';
+                rd.style.display = '';
+            });
+        });
+    }
+});
+
+function copyWebhookUrl(inputId) {
+    var input = document.getElementById(inputId);
+    if (!input) return;
+    navigator.clipboard.writeText(input.value).then(function() {
+        var btn = input.nextElementSibling;
+        var orig = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check"></i>';
+        setTimeout(function() { btn.innerHTML = orig; }, 1500);
+    });
+}
+
+function testOpenPhoneConnection() {
+    var btn = document.getElementById('testQuoBtn');
+    var badge = document.getElementById('quoStatusBadge');
+    var phoneDiv = document.getElementById('quoPhoneNumbers');
+    var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
+    badge.className = 'badge bg-secondary ms-2';
+    badge.textContent = 'Testing...';
+
+    fetch('/client/api/warren/test-openphone', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Test Connection';
+        if (data.ok) {
+            badge.className = 'badge bg-success ms-2';
+            badge.textContent = 'Connected';
+            if (data.phone_numbers && data.phone_numbers.length > 0) {
+                phoneDiv.innerHTML = '<span class="text-muted">Phone numbers: </span>' + data.phone_numbers.map(function(p) {
+                    return '<span class="badge bg-light text-dark border me-1">' + p + '</span>';
+                }).join('');
+            }
+        } else {
+            badge.className = 'badge bg-danger ms-2';
+            badge.textContent = 'Failed';
+            phoneDiv.innerHTML = '<small class="text-danger">' + (data.error || 'Connection failed') + '</small>';
+        }
+    })
+    .catch(function() {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Test Connection';
+        badge.className = 'badge bg-danger ms-2';
+        badge.textContent = 'Error';
+    });
+}
+
+function sendTestSMS() {
+    var btn = document.getElementById('sendTestSmsBtn');
+    var input = document.getElementById('testSmsPhone');
+    var resultDiv = document.getElementById('testSmsResult');
+    var phone = input.value.trim();
+    var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+    if (!phone) { alert('Enter a phone number to send the test to.'); return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    resultDiv.style.display = 'none';
+
+    fetch('/client/api/warren/send-test-sms', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({to_phone: phone})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send me-1"></i>Send';
+        resultDiv.style.display = '';
+
+        if (data.ok) {
+            resultDiv.innerHTML = '<div class="alert alert-success py-2 mb-0" style="font-size:.82rem;">' +
+                '<i class="bi bi-check-circle me-1"></i>SMS sent successfully (HTTP ' + data.status_code + ')' +
+                '<br><small class="text-muted">Check your phone. If it does not arrive, your carrier registration may be incomplete.</small>' +
+                '</div>';
+        } else {
+            var detail = data.error || '';
+            if (data.status_code) detail += ' (HTTP ' + data.status_code + ')';
+            if (data.response_body) {
+                var rb = typeof data.response_body === 'string' ? data.response_body : JSON.stringify(data.response_body, null, 2);
+                detail += '<br><pre style="font-size:.75rem; max-height:120px; overflow:auto; margin:.5rem 0 0; background:#fff; padding:.5rem; border-radius:6px;">' + rb + '</pre>';
+            }
+            if (data.request_body) {
+                detail += '<br><small class="text-muted">Sent from: ' + (data.request_body.from || '?') + ' to: ' + (data.request_body.to || '?') + '</small>';
+            }
+            resultDiv.innerHTML = '<div class="alert alert-danger py-2 mb-0" style="font-size:.82rem;">' +
+                '<i class="bi bi-x-circle me-1"></i>SMS failed' +
+                '<br>' + detail +
+                '</div>';
+        }
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send me-1"></i>Send';
+        resultDiv.style.display = '';
+        resultDiv.innerHTML = '<div class="alert alert-danger py-2 mb-0" style="font-size:.82rem;">Network error: ' + err + '</div>';
+    });
+}
+
+function testMessengerConnection() {
+    var btn = document.getElementById('testMessengerBtn');
+    var badge = document.getElementById('messengerStatusBadge');
+    var infoDiv = document.getElementById('messengerPageInfo');
+    var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
+    badge.className = 'badge bg-secondary ms-2';
+    badge.textContent = 'Testing...';
+
+    fetch('/client/api/warren/test-messenger', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Test Connection';
+        if (data.ok) {
+            badge.className = 'badge bg-success ms-2';
+            badge.textContent = 'Connected';
+            var info = '<span class="text-muted">Page: </span><strong>' + (data.page_name || 'Unknown') + '</strong>';
+            if (data.subscribed_fields && data.subscribed_fields.length > 0) {
+                info += ' <span class="text-muted ms-2">Subscriptions: </span>' + data.subscribed_fields.map(function(f) {
+                    return '<span class="badge bg-light text-dark border me-1">' + f + '</span>';
+                }).join('');
+            }
+            infoDiv.innerHTML = info;
+        } else {
+            badge.className = 'badge bg-danger ms-2';
+            badge.textContent = 'Failed';
+            infoDiv.innerHTML = '<small class="text-danger">' + (data.error || 'Connection failed') + '</small>';
+        }
+    })
+    .catch(function() {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Test Connection';
+        badge.className = 'badge bg-danger ms-2';
+        badge.textContent = 'Error';
+    });
+}
+</script>
+{% endblock %}

@@ -257,11 +257,99 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertEqual(brand["sales_bot_incoming_webhook_secret"], "incoming-secret")
         self.assertEqual(brand["sales_bot_channels"], '["sms", "lead_forms", "calls"]')
 
+    def test_client_can_save_automations(self):
+        response = self.client.post(
+            "/client/automations/save",
+            data={
+                "sales_bot_enabled": "1",
+                "sales_bot_channels": ["sms", "lead_forms"],
+                "sales_bot_quote_mode": "hybrid",
+                "sales_bot_business_hours": "Mon-Fri 8am-5pm.",
+                "sales_bot_reply_tone": "Direct",
+                "sales_bot_reply_delay_seconds": "11",
+                "sales_bot_payment_reminders_enabled": "1",
+                "sales_bot_payment_reminder_days_before": "4",
+                "sales_bot_payment_reminder_billing_day": "2",
+                "sales_bot_payment_reminder_channels": ["email", "sms"],
+                "sales_bot_payment_reminder_template": "Billing reminder for {client_name}",
+                "sales_bot_appointment_reminders_enabled": "1",
+                "sales_bot_appointment_reminder_send_time": "16:30",
+                "sales_bot_appointment_reminder_timezone": "America/Chicago",
+                "sales_bot_appointment_reminder_channels": ["sms"],
+                "sales_bot_appointment_reminder_template": "Appointment reminder for {client_name}",
+                "sales_bot_appointment_reminder_respect_client_channel": "1",
+                "sales_bot_transcript_export": "1",
+                "sales_bot_meta_lead_forms": "1",
+                "sales_bot_call_logging": "1",
+                "sales_bot_auto_push_crm": "1",
+                "sales_bot_nurture_enabled": "1",
+                "sales_bot_nurture_hot_hours": "3",
+                "sales_bot_nurture_hot_max": "4",
+                "sales_bot_nurture_warm_hours": "26",
+                "sales_bot_nurture_warm_max": "2",
+                "sales_bot_nurture_cold_hours": "52",
+                "sales_bot_nurture_cold_max": "2",
+                "sales_bot_nurture_ghost_hours": "96",
+                "sales_bot_dnd_enabled": "1",
+                "sales_bot_dnd_start": "20:30",
+                "sales_bot_dnd_end": "08:30",
+                "sales_bot_dnd_weekends": "1",
+                "sales_bot_dnd_timezone": "America/Los_Angeles",
+                "sales_bot_sms_opt_out_footer": "Reply STOP to opt out.",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/client/automations"))
+
+        with self.app.app_context():
+            brand = self.app.db.get_brand(self.brand_id)
+
+        self.assertEqual(brand["sales_bot_enabled"], 1.0)
+        self.assertEqual(brand["sales_bot_reply_delay_seconds"], 11.0)
+        self.assertEqual(brand["sales_bot_payment_reminder_days_before"], 4.0)
+        self.assertEqual(brand["sales_bot_payment_reminder_billing_day"], 2.0)
+        self.assertEqual(brand["sales_bot_appointment_reminder_send_time"], "16:30")
+        self.assertEqual(brand["sales_bot_appointment_reminder_timezone"], "America/Chicago")
+        self.assertEqual(brand["sales_bot_nurture_hot_hours"], 3.0)
+        self.assertEqual(brand["sales_bot_dnd_start"], "20:30")
+        self.assertEqual(brand["sales_bot_sms_opt_out_footer"], "Reply STOP to opt out.")
+
+    def test_client_can_save_warren_channel_settings(self):
+        response = self.client.post(
+            "/client/settings/warren-channels",
+            data={
+                "quo_api_key": "quo_test_key_abc",
+                "quo_phone_number": "+15555550123",
+                "sales_bot_quo_webhook_secret": "quo-secret",
+                "sales_bot_incoming_webhook_secret": "incoming-secret",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/client/settings"))
+
+        with self.app.app_context():
+            brand = self.app.db.get_brand(self.brand_id)
+
+        self.assertEqual(brand["quo_api_key"], "quo_test_key_abc")
+        self.assertEqual(brand["quo_phone_number"], "+15555550123")
+        self.assertEqual(brand["sales_bot_quo_webhook_secret"], "quo-secret")
+        self.assertEqual(brand["sales_bot_incoming_webhook_secret"], "incoming-secret")
+
     def test_settings_page_shows_generic_lead_webhook_url(self):
         response = self.client.get("/client/settings")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Generic Incoming Lead Webhook URL", response.data)
         self.assertIn(b"/webhooks/leads/", response.data)
+
+    def test_settings_page_shows_connection_workspace_and_automations_link(self):
+        response = self.client.get("/client/settings")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Connection Workspace", response.data)
+        self.assertIn(b"Automations", response.data)
 
     def test_settings_page_shows_sng_webhook_url_and_generates_secret(self):
         response = self.client.get("/client/settings")
@@ -273,7 +361,7 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
             brand = self.app.db.get_brand(self.brand_id)
             self.assertTrue((brand.get("sales_bot_sng_webhook_secret") or "").strip())
 
-    def test_settings_page_shows_appointment_reminder_reports(self):
+    def test_automations_page_shows_appointment_reminder_reports(self):
         with self.app.app_context():
             self.app.db.record_appointment_reminder_run(
                 self.brand_id,
@@ -295,13 +383,19 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
                 reminder_type="appointment_day_ahead",
             )
 
-        response = self.client.get("/client/settings")
+        response = self.client.get("/client/automations")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Recent appointment reminder runs", response.data)
         self.assertIn(b"Processed 1 appointment candidate", response.data)
         self.assertIn(b"Recent delivery attempts", response.data)
         self.assertIn(b"+15555550123", response.data)
         self.assertIn(b"queued - msg_123", response.data)
+
+    def test_automations_page_shows_crm_event_section(self):
+        response = self.client.get("/client/automations")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"CRM Event Messages", response.data)
+        self.assertIn(b"failed-payment", response.data.lower())
 
     @patch("webapp.quo_sms.get_phone_numbers")
     def test_client_can_test_openphone_connection(self, mock_get_phone_numbers):
