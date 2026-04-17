@@ -917,8 +917,14 @@
             {% set appointment_reminder_channels = (brand.sales_bot_appointment_reminder_channels or 'sms').replace('[', '').replace(']', '').replace('"', '').replace(', ', ',').split(',') %}
             {% set appointment_tz = brand.sales_bot_appointment_reminder_timezone|default('America/New_York') %}
             <div class="mt-4 p-3" style="background:#ecfdf5; border-radius:10px; border:1px solid #86efac;">
-                <h6 class="fw-semibold mb-1"><i class="bi bi-calendar2-event me-2"></i>Day-Ahead Appointment Reminders</h6>
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-1">
+                    <h6 class="fw-semibold mb-0"><i class="bi bi-calendar2-event me-2"></i>Day-Ahead Appointment Reminders</h6>
+                    <button type="button" class="btn btn-sm btn-outline-success" id="runAppointmentReminderBtn" onclick="runAppointmentReminderCheckNow()">
+                        <i class="bi bi-play-circle me-1"></i>Run Check Now
+                    </button>
+                </div>
                 <p class="text-muted mb-3" style="font-size:.85rem;">Warren checks tomorrow's Sweep and Go dispatch list after your chosen local send time, then sends one reminder per job with dedupe protection if cron runs more than once.</p>
+                <div id="appointmentReminderRunResult" class="mb-3" style="display:none;"></div>
 
                 <div class="form-check form-switch mb-3">
                     <input class="form-check-input" type="checkbox" role="switch" id="appointmentRemindersEnabled" name="sales_bot_appointment_reminders_enabled" value="1" {{ 'checked' if brand.sales_bot_appointment_reminders_enabled }}>
@@ -1685,6 +1691,55 @@ function sendTestSMS() {
     .catch(function(err) {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-send me-1"></i>Send';
+        resultDiv.style.display = '';
+        resultDiv.innerHTML = '<div class="alert alert-danger py-2 mb-0" style="font-size:.82rem;">Network error: ' + err + '</div>';
+    });
+}
+
+function runAppointmentReminderCheckNow() {
+    var btn = document.getElementById('runAppointmentReminderBtn');
+    var resultDiv = document.getElementById('appointmentReminderRunResult');
+    var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+    if (!btn || !resultDiv) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Running...';
+    resultDiv.style.display = 'none';
+
+    fetch('/client/api/warren/run-appointment-reminders', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({})
+    })
+    .then(function(r) {
+        return r.json().then(function(data) {
+            return {ok: r.ok, data: data};
+        });
+    })
+    .then(function(result) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-circle me-1"></i>Run Check Now';
+        resultDiv.style.display = '';
+
+        if (result.ok && result.data.ok) {
+            resultDiv.innerHTML = '<div class="alert alert-success py-2 mb-0" style="font-size:.82rem;">' +
+                '<i class="bi bi-check-circle me-1"></i>' + (result.data.message || 'Appointment reminder check completed.') +
+                '<br><small class="text-muted">Refreshing this section to show the latest run log.</small>' +
+                '</div>';
+            setTimeout(function() {
+                window.location.reload();
+            }, 1200);
+            return;
+        }
+
+        resultDiv.innerHTML = '<div class="alert alert-danger py-2 mb-0" style="font-size:.82rem;">' +
+            '<i class="bi bi-x-circle me-1"></i>' + ((result.data && (result.data.error || result.data.message)) || 'Appointment reminder check failed.') +
+            '</div>';
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-circle me-1"></i>Run Check Now';
         resultDiv.style.display = '';
         resultDiv.innerHTML = '<div class="alert alert-danger py-2 mb-0" style="font-size:.82rem;">Network error: ' + err + '</div>';
     });

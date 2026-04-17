@@ -6331,6 +6331,46 @@ def client_send_test_sms():
     return jsonify(result), status_code
 
 
+@client_bp.route("/api/warren/run-appointment-reminders", methods=["POST"])
+@client_login_required
+def client_run_appointment_reminders_now():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"ok": False, "error": "Brand not found."}), 404
+
+    from webapp.warren_appointments import process_appointment_reminders
+
+    stats = process_appointment_reminders(
+        db,
+        current_app.config,
+        brand_ids=[brand_id],
+        ignore_send_time=True,
+        include_disabled=True,
+    )
+    latest_runs = db.get_appointment_reminder_runs(brand_id, limit=1)
+    latest_run = latest_runs[0] if latest_runs else None
+
+    if latest_run and (latest_run.get("status") or "").strip().lower() == "config_error":
+        return jsonify({
+            "ok": False,
+            "error": latest_run.get("reason") or "Appointment reminders are not fully configured.",
+            "run": latest_run,
+            "stats": stats,
+        }), 400
+
+    message = "Appointment reminder check finished."
+    if latest_run and latest_run.get("reason"):
+        message = latest_run["reason"]
+    return jsonify({
+        "ok": True,
+        "message": message,
+        "run": latest_run,
+        "stats": stats,
+    })
+
+
 @client_bp.route("/api/drive/diagnose")
 @client_login_required
 def client_drive_diagnose():

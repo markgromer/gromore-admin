@@ -341,6 +341,39 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertTrue(data["ok"])
         mock_send_test_sms.assert_called_once_with("quo_test_key_123", "+15555550123", "+15208672540")
 
+    @patch("webapp.warren_appointments.process_appointment_reminders")
+    def test_client_can_run_appointment_reminder_check_now(self, mock_process_appointment_reminders):
+        with self.app.app_context():
+            self.app.db.record_appointment_reminder_run(
+                self.brand_id,
+                "2026-04-18",
+                status="completed",
+                reason="Processed 1 appointment candidate(s): 1 sent, 0 failed, 0 skipped.",
+                candidates=1,
+                sent=1,
+            )
+
+        mock_process_appointment_reminders.return_value = {
+            "brands": 1,
+            "candidates": 1,
+            "sent": 1,
+            "failed": 0,
+            "skipped": 0,
+            "errors": [],
+        }
+
+        response = self.client.post("/client/api/warren/run-appointment-reminders", json={})
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data["ok"])
+        self.assertIn("Processed 1 appointment candidate", data["message"])
+        mock_process_appointment_reminders.assert_called_once()
+        kwargs = mock_process_appointment_reminders.call_args.kwargs
+        self.assertEqual(kwargs["brand_ids"], [self.brand_id])
+        self.assertTrue(kwargs["ignore_send_time"])
+        self.assertTrue(kwargs["include_disabled"])
+
     def test_client_can_open_and_save_lead_assistant_workspace(self):
         response = self.client.get("/client/lead-assistant")
         self.assertEqual(response.status_code, 200)

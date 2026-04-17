@@ -160,7 +160,15 @@ def _candidate_channels(brand, candidate, configured_channels):
     return available
 
 
-def process_appointment_reminders(db, app_config, now=None, max_per_brand=None):
+def process_appointment_reminders(
+    db,
+    app_config,
+    now=None,
+    max_per_brand=None,
+    brand_ids=None,
+    ignore_send_time=False,
+    include_disabled=False,
+):
     stats = {
         "brands": 0,
         "candidates": 0,
@@ -173,8 +181,11 @@ def process_appointment_reminders(db, app_config, now=None, max_per_brand=None):
     if now.tzinfo is None:
         now = now.replace(tzinfo=timezone.utc)
 
+    scoped_brand_ids = {int(value) for value in (brand_ids or []) if str(value).strip().isdigit()}
     for brand in db.get_all_brands():
-        if int(brand.get("sales_bot_appointment_reminders_enabled") or 0) != 1:
+        if scoped_brand_ids and int(brand.get("id") or 0) not in scoped_brand_ids:
+            continue
+        if not include_disabled and int(brand.get("sales_bot_appointment_reminders_enabled") or 0) != 1:
             continue
 
         local_now = _brand_local_now(brand, now=now)
@@ -197,7 +208,7 @@ def process_appointment_reminders(db, app_config, now=None, max_per_brand=None):
             continue
 
         send_after_minutes = _parse_send_minutes(brand.get("sales_bot_appointment_reminder_send_time"))
-        if (local_now.hour * 60 + local_now.minute) < send_after_minutes:
+        if (not ignore_send_time) and (local_now.hour * 60 + local_now.minute) < send_after_minutes:
             db.record_appointment_reminder_run(
                 brand["id"],
                 target_date,

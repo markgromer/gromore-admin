@@ -149,6 +149,38 @@ class WarrenAppointmentReminderTests(unittest.TestCase):
         self.assertEqual(runs[2]["status"], "waiting")
         self.assertIn("before the send time", runs[2]["reason"])
 
+    def test_process_appointment_reminders_can_force_run_before_send_time(self):
+        candidate = {
+            "appointment_key": "job:force-1",
+            "appointment_date": "2026-04-18",
+            "appointment_date_obj": date(2026, 4, 18),
+            "client_name": "Forced Client",
+            "client_email": "forced@example.com",
+            "client_phone": "+15555550124",
+            "assigned_to_name": "Jordan Tech",
+            "address": "456 Main St, Albany, NY",
+            "preferred_channel": "sms",
+            "prefers_sms": True,
+            "prefers_email": False,
+            "job_id": "force-1",
+            "status_name": "pending",
+        }
+        before_send_time = datetime(2026, 4, 17, 20, 30, tzinfo=timezone.utc)
+
+        with patch("webapp.warren_appointments.sng_get_day_ahead_appointment_candidates", return_value=([candidate], None)), \
+             patch("webapp.warren_appointments.send_transactional_sms", return_value=(True, "sent")) as send_sms:
+            stats = process_appointment_reminders(
+                self.db,
+                {},
+                now=before_send_time,
+                brand_ids=[self.brand_id],
+                ignore_send_time=True,
+                include_disabled=True,
+            )
+
+        self.assertEqual(stats["sent"], 1)
+        send_sms.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
