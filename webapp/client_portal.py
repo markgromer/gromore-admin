@@ -6717,6 +6717,114 @@ def _site_builder_reference_style_brief(reference_url, reference_mode="vibe"):
             return "warm-traditional"
         return "bold-modern"
 
+    def _section_layout_hint(section):
+        classes = " ".join(section.get("class") or [])
+        text = f"{section.get('id') or ''} {classes}".lower()
+        if any(token in text for token in ("grid", "cards", "card-grid", "columns")):
+            return "grid"
+        if any(token in text for token in ("split", "two-col", "two-column", "columns-2")):
+            return "split"
+        items = section.find_all(["article", "li", "div"], recursive=False)
+        if len(items) >= 3:
+            return "grid"
+        return "stacked"
+
+    def _classify_reference_section(section, index):
+        heading = _clean_text(
+            (section.find(["h1", "h2", "h3"]).get_text(" ", strip=True) if section.find(["h1", "h2", "h3"]) else ""),
+            120,
+        )
+        classes = " ".join(section.get("class") or [])
+        identity = f"{section.get('id') or ''} {classes} {heading}".lower()
+        section_text = _clean_text(section.get_text(" ", strip=True), 500).lower()
+        ctas = _unique_texts(
+            (tag.get_text(" ", strip=True) for tag in section.find_all(["a", "button"])),
+            4,
+            min_length=3,
+        )
+
+        if section.find("h1") or (index == 0 and ctas):
+            return "hero"
+        if any(word in identity or word in section_text for word in ("testimonial", "reviews", "review", "what customers say", "happy clients")):
+            return "testimonials"
+        if any(word in identity or word in section_text for word in ("faq", "frequently asked", "questions")):
+            return "faq"
+        if any(word in identity or word in section_text for word in ("process", "how it works", "our process", "steps")):
+            return "process"
+        if any(word in identity or word in section_text for word in ("services", "what we do", "solutions", "service")):
+            return "services"
+        if any(word in identity or word in section_text for word in ("why choose", "why us", "trusted", "licensed", "insured", "guarantee", "proof")):
+            return "proof"
+        if any(word in identity or word in section_text for word in ("pricing", "plans", "cost", "quote options")):
+            return "pricing"
+        if any(word in identity or word in section_text for word in ("gallery", "projects", "recent work", "portfolio", "before and after")):
+            return "gallery"
+        if any(word in identity or word in section_text for word in ("about", "our team", "who we are", "company")):
+            return "about"
+        if any(word in identity or word in section_text for word in ("contact", "get in touch", "location", "call us")):
+            return "contact"
+        if ctas and len(_clean_text(section.get_text(" ", strip=True), 220)) < 180:
+            return "cta"
+        return "content"
+
+    def _extract_section_patterns(soup):
+        container = soup.find("main") or soup.body or soup
+        candidates = []
+        seen_nodes = set()
+
+        for section in container.find_all("section"):
+            candidates.append(section)
+            seen_nodes.add(id(section))
+            if len(candidates) >= 12:
+                break
+
+        if len(candidates) < 4:
+            for child in container.find_all(["div", "article"], recursive=False):
+                if id(child) in seen_nodes:
+                    continue
+                text = _clean_text(child.get_text(" ", strip=True), 320)
+                has_heading = child.find(["h1", "h2", "h3"]) is not None
+                if len(text) < 80 and not has_heading:
+                    continue
+                candidates.append(child)
+                seen_nodes.add(id(child))
+                if len(candidates) >= 12:
+                    break
+
+        patterns = []
+        for index, section in enumerate(candidates):
+            heading_tag = section.find(["h1", "h2", "h3"])
+            heading = _clean_text(heading_tag.get_text(" ", strip=True) if heading_tag else "", 120)
+            snippet_parts = []
+            for tag in section.find_all(["p", "li"], limit=4):
+                text = _clean_text(tag.get_text(" ", strip=True), 90)
+                if text:
+                    snippet_parts.append(text)
+            snippet = " ".join(snippet_parts[:2]).strip()
+            category = _classify_reference_section(section, index)
+            cta_texts = _unique_texts(
+                (tag.get_text(" ", strip=True) for tag in section.find_all(["a", "button"])),
+                3,
+                min_length=3,
+            )
+            item_count = len(section.find_all(["article", "li", "div"], recursive=False))
+            layout_hint = _section_layout_hint(section)
+            summary_source = heading or snippet or _clean_text(section.get_text(" ", strip=True), 120)
+            if not summary_source:
+                continue
+            patterns.append({
+                "category": category,
+                "heading": heading,
+                "summary": summary_source[:160],
+                "layout_hint": layout_hint,
+                "item_count": item_count,
+                "cta_texts": cta_texts,
+            })
+            if len(patterns) >= 10:
+                break
+
+        return patterns
+
     try:
         resp = requests.get(
             normalized_url,
@@ -6760,6 +6868,7 @@ def _site_builder_reference_style_brief(reference_url, reference_mode="vibe"):
     layout_style_hint = _infer_layout_style(soup, html_text)
     style_preset_hint = _infer_style_preset(color_hints)
     section_count = len(soup.find_all("section"))
+    section_patterns = _extract_section_patterns(soup)
 
     notes = []
     if nav_items:
@@ -6770,6 +6879,10 @@ def _site_builder_reference_style_brief(reference_url, reference_mode="vibe"):
         notes.append(f"CTA language repeats actions like: {', '.join(cta_texts[:3])}.")
     if section_count:
         notes.append(f"The page appears to use about {section_count} distinct section blocks.")
+    if section_patterns:
+        labels = [pattern.get("category") for pattern in section_patterns[:6] if pattern.get("category")]
+        if labels:
+            notes.append(f"Visible section sequence includes: {', '.join(labels)}.")
 
     return {
         "requested_url": raw_url,
@@ -6782,6 +6895,7 @@ def _site_builder_reference_style_brief(reference_url, reference_mode="vibe"):
         "cta_texts": cta_texts,
         "color_hints": color_hints,
         "section_count": section_count,
+        "section_patterns": section_patterns,
         "layout_style_hint": layout_style_hint,
         "style_preset_hint": style_preset_hint,
         "notes": notes,

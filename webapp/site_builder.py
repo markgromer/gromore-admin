@@ -314,6 +314,27 @@ def _normalize_reference_site_brief(raw_brief):
                 values.append(text[:160])
         normalized[key] = values[:8]
 
+    patterns = []
+    for item in raw_brief.get("section_patterns") or []:
+        if not isinstance(item, dict):
+            continue
+        pattern = {
+            "category": str(item.get("category") or "content").strip()[:60],
+            "heading": str(item.get("heading") or "").strip()[:140],
+            "summary": str(item.get("summary") or "").strip()[:180],
+            "layout_hint": str(item.get("layout_hint") or "").strip()[:60],
+            "item_count": int(item.get("item_count") or 0),
+            "cta_texts": [],
+        }
+        for cta in item.get("cta_texts") or []:
+            text = str(cta or "").strip()
+            if text:
+                pattern["cta_texts"].append(text[:80])
+        patterns.append(pattern)
+        if len(patterns) >= 10:
+            break
+    normalized["section_patterns"] = patterns
+
     try:
         normalized["section_count"] = int(raw_brief.get("section_count") or 0)
     except Exception:
@@ -432,6 +453,16 @@ def _reference_site_block(ctx):
         parts.append(f"- Reference color mood cues: {', '.join(brief['color_hints'][:4])}")
     if brief.get("section_count"):
         parts.append(f"- Approximate section count on the reference page: {brief['section_count']}")
+    if brief.get("section_patterns"):
+        parts.append("- Reference section patterns to echo in the new build:")
+        for pattern in brief.get("section_patterns")[:6]:
+            category = pattern.get("category") or "content"
+            heading = pattern.get("heading") or pattern.get("summary") or "Untitled section"
+            layout_hint = pattern.get("layout_hint") or "stacked"
+            line = f"  - {category}: {heading} [{layout_hint}]"
+            if pattern.get("cta_texts"):
+                line += f" | CTA cues: {', '.join(pattern['cta_texts'][:2])}"
+            parts.append(line)
     for note in (brief.get("notes") or [])[:3]:
         parts.append(f"- {note}")
     parts.append("- Recreate the structural feel using this business's own brand colors, tone, offers, SEO targets, and approved assets.")

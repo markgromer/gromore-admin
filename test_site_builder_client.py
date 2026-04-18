@@ -875,36 +875,88 @@ class SiteBuilderSeoIntelTests(unittest.TestCase):
             ],
         }
 
-        with patch("webapp.client_portal.pull_search_console_data", create=True) as mock_pull, \
-             patch("webapp.site_builder.generate_warren_seo_brief", return_value="Focus on drain cleaning.") as mock_warren, \
-             patch("src.api_search_console.pull_search_console_data", mock_sc_data, create=True):
-
-            # Patch the import inside the function
-            import webapp.client_portal as cp
-            original_fn = None
-
-            def fake_pull(url, month):
-                return mock_sc_data
-
-            with patch.dict("sys.modules", {}):
-                with patch("src.api_search_console.pull_search_console_data", fake_pull, create=True):
-                    # We need to patch at the point of import inside the function
-                    import importlib
-                    with patch("builtins.__import__", side_effect=lambda name, *a, **kw: (
-                        type("mod", (), {"pull_search_console_data": fake_pull})()
-                        if name == "src.api_search_console" else __builtins__.__import__(name, *a, **kw)
-                    )):
-                        pass
-
-            # Simpler approach: just patch the import path used inside the function
+        with patch("src.api_search_console.pull_search_console_data", return_value=mock_sc_data), \
+             patch("webapp.site_builder.generate_warren_seo_brief", return_value="Focus on drain cleaning."), \
+             patch("webapp.site_builder.build_brand_context", return_value={"brand_name": "Ace Plumbing"}):
             resp = self.client.post(
                 "/client/site-builder/seo-intel",
                 headers={"X-Requested-With": "XMLHttpRequest"},
             )
 
-        # The real SC pull will fail since we don't have actual credentials,
-        # so it should return 500 with an error about SC pull
-        self.assertIn(resp.status_code, [200, 500])
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["warren_brief"], "Focus on drain cleaning.")
+        self.assertEqual(data["seo_data"]["totals"]["clicks"], 150)
+        self.assertEqual(data["seo_data"]["top_queries"][0]["query"], "plumber springfield")
+
+
+class SiteBuilderReferenceExtractionTests(unittest.TestCase):
+    """Test reference-site section extraction for builder inspiration mode."""
+
+    def test_reference_style_brief_extracts_section_patterns(self):
+        from webapp.client_portal import _site_builder_reference_style_brief
+
+        html_doc = """
+        <html>
+          <head>
+            <title>Example Plumbing</title>
+            <meta name="description" content="Fast plumbing service with same-day estimates.">
+          </head>
+          <body>
+            <header>
+              <nav>
+                <a href="/">Home</a>
+                <a href="/services">Services</a>
+                <a href="/about">About</a>
+                <a href="/contact">Contact</a>
+                <a href="/quote">Get Quote</a>
+              </nav>
+            </header>
+            <main>
+              <section class="hero split-layout">
+                <h1>Fast Plumbing Help</h1>
+                <p>Emergency help and same-day service.</p>
+                <a href="/quote">Get Quote</a>
+              </section>
+              <section class="services-grid">
+                <h2>Our Services</h2>
+                <div>Drain Cleaning</div>
+                <div>Water Heater Repair</div>
+                <div>Sewer Line Replacement</div>
+              </section>
+              <section class="trust testimonials">
+                <h2>Why Customers Stay</h2>
+                <p>Real reviews from homeowners.</p>
+              </section>
+              <section class="cta-band">
+                <h2>Ready for a Same-Day Visit?</h2>
+                <a href="tel:5551234567">Call Now</a>
+              </section>
+            </main>
+          </body>
+        </html>
+        """
+
+        class _Resp:
+            status_code = 200
+            url = "https://example.com"
+            text = html_doc
+
+            def raise_for_status(self):
+                return None
+
+        with patch("requests.get", return_value=_Resp()):
+            brief = _site_builder_reference_style_brief("https://example.com", "sections")
+
+        self.assertEqual(brief["resolved_url"], "https://example.com")
+        self.assertEqual(brief["mode"], "sections")
+        self.assertTrue(brief["section_patterns"])
+        categories = [item["category"] for item in brief["section_patterns"]]
+        self.assertIn("hero", categories)
+        self.assertIn("services", categories)
+        self.assertIn("testimonials", categories)
+        self.assertIn("cta", categories)
 
 
 # ---------------------------------------------------------------------------

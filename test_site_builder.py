@@ -254,6 +254,11 @@ class PromptTests(unittest.TestCase):
                     "cta_texts": ["Get Estimate", "Call Now"],
                     "color_hints": ["#112233", "#ff6600"],
                     "section_count": 6,
+                    "section_patterns": [
+                        {"category": "hero", "heading": "Fast Service", "summary": "Fast Service", "layout_hint": "split", "cta_texts": ["Get Estimate"]},
+                        {"category": "services", "heading": "Our Services", "summary": "Our Services", "layout_hint": "grid", "cta_texts": []},
+                        {"category": "testimonials", "heading": "Why Customers Stay", "summary": "Why Customers Stay", "layout_hint": "stacked", "cta_texts": []},
+                    ],
                     "notes": ["Top navigation uses a visible CTA button."]
                 },
             },
@@ -266,6 +271,8 @@ class PromptTests(unittest.TestCase):
         self.assertIn("https://example.com", user_msg)
         self.assertIn("Match mode: layout", user_msg)
         self.assertIn("Navigation pattern: Home, Services, About, Contact", user_msg)
+        self.assertIn("Reference section patterns to echo in the new build", user_msg)
+        self.assertIn("hero: Fast Service [split] | CTA cues: Get Estimate", user_msg)
         self.assertIn("do not copy text, logos, brand names, or images", user_msg)
 
     def test_brand_context_uses_reference_style_fallbacks(self):
