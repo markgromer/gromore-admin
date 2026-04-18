@@ -22,9 +22,12 @@ from webapp.site_builder import (
     build_page_prompt,
     build_schema_markup,
     assemble_page,
+    generate_warren_seo_brief,
     PAGE_TYPES,
     _slugify,
     _parse_csv,
+    _seo_intel_block,
+    _lead_form_block,
 )
 
 
@@ -596,6 +599,295 @@ class UtilityTests(unittest.TestCase):
         self.assertEqual(_parse_csv(""), [])
         self.assertEqual(_parse_csv(None), [])
         self.assertEqual(_parse_csv("single"), ["single"])
+
+
+# ---------------------------------------------------------------------------
+# Intake, SEO intel, Warren, landing page, and lead form tests
+# ---------------------------------------------------------------------------
+
+class IntakeContextTests(unittest.TestCase):
+    """Test build_brand_context with intake overrides."""
+
+    def test_intake_overrides_brand_voice(self):
+        intake = {"brand_voice": "Authoritative and technical."}
+        ctx = build_brand_context(_BRAND, intake=intake)
+        self.assertEqual(ctx["brand_voice"], "Authoritative and technical.")
+
+    def test_intake_overrides_target_audience(self):
+        intake = {"target_audience": "Commercial property managers"}
+        ctx = build_brand_context(_BRAND, intake=intake)
+        self.assertEqual(ctx["target_audience"], "Commercial property managers")
+
+    def test_intake_adds_unique_selling_points(self):
+        intake = {"unique_selling_points": "24/7 emergency service, 50 years combined experience"}
+        ctx = build_brand_context(_BRAND, intake=intake)
+        self.assertEqual(ctx["unique_selling_points"], "24/7 emergency service, 50 years combined experience")
+
+    def test_intake_adds_competitors(self):
+        intake = {"competitors": "Joe's Plumbing, Springfield Plumbers Inc"}
+        ctx = build_brand_context(_BRAND, intake=intake)
+        self.assertEqual(ctx["competitors"], "Joe's Plumbing, Springfield Plumbers Inc")
+
+    def test_intake_adds_content_goals(self):
+        intake = {"content_goals": "Generate Leads, Rank in Google"}
+        ctx = build_brand_context(_BRAND, intake=intake)
+        self.assertEqual(ctx["content_goals"], "Generate Leads, Rank in Google")
+
+    def test_intake_includes_seo_data(self):
+        seo = {"totals": {"clicks": 100}, "top_queries": [{"query": "plumber near me"}]}
+        intake = {"seo_data": seo}
+        ctx = build_brand_context(_BRAND, intake=intake)
+        self.assertEqual(ctx["seo_data"]["totals"]["clicks"], 100)
+
+    def test_intake_includes_warren_brief(self):
+        intake = {"warren_brief": "Focus on drain cleaning keywords."}
+        ctx = build_brand_context(_BRAND, intake=intake)
+        self.assertEqual(ctx["warren_brief"], "Focus on drain cleaning keywords.")
+
+    def test_no_intake_leaves_defaults(self):
+        ctx = build_brand_context(_BRAND)
+        self.assertEqual(ctx["brand_voice"], "Friendly, honest, no-nonsense.")
+        self.assertEqual(ctx["unique_selling_points"], "")
+        self.assertEqual(ctx["seo_data"], {})
+        self.assertEqual(ctx["warren_brief"], "")
+
+    def test_intake_lead_form_fields(self):
+        intake = {
+            "lead_form_type": "wpforms",
+            "lead_form_shortcode": '[wpforms id="42"]',
+            "plugins": "WP Booking Calendar",
+        }
+        ctx = build_brand_context(_BRAND, intake=intake)
+        self.assertEqual(ctx["lead_form_type"], "wpforms")
+        self.assertIn("42", ctx["lead_form_shortcode"])
+        self.assertEqual(ctx["plugins"], "WP Booking Calendar")
+
+
+class LandingPageBlueprintTests(unittest.TestCase):
+    """Test landing page generation in blueprints."""
+
+    def test_landing_pages_added_to_blueprint(self):
+        ctx = build_brand_context(_BRAND)
+        lps = [
+            {"name": "Summer AC Special", "keyword": "ac repair springfield", "offer": "20% off"},
+            {"name": "Emergency Plumber", "keyword": "emergency plumber", "offer": "Call now"},
+        ]
+        bp = build_site_blueprint(ctx, landing_pages=lps)
+        lp_pages = [p for p in bp if p["page_type"] == "landing_page"]
+        self.assertEqual(len(lp_pages), 2)
+        slugs = {p["slug"] for p in lp_pages}
+        self.assertIn("lp/summer-ac-special", slugs)
+        self.assertIn("lp/emergency-plumber", slugs)
+
+    def test_landing_page_context_has_keyword_and_offer(self):
+        ctx = build_brand_context(_BRAND)
+        lps = [{"name": "Spring Special", "keyword": "drain cleaning deals", "offer": "10% off first visit", "audience": "Homeowners"}]
+        bp = build_site_blueprint(ctx, landing_pages=lps)
+        lp = next(p for p in bp if p["page_type"] == "landing_page")
+        self.assertEqual(lp["context"]["lp_keyword"], "drain cleaning deals")
+        self.assertEqual(lp["context"]["lp_offer"], "10% off first visit")
+        self.assertEqual(lp["context"]["lp_audience"], "Homeowners")
+
+    def test_empty_landing_page_name_skipped(self):
+        ctx = build_brand_context(_BRAND)
+        lps = [{"name": "", "keyword": "test"}, {"name": "  ", "keyword": "test2"}]
+        bp = build_site_blueprint(ctx, landing_pages=lps)
+        lp_pages = [p for p in bp if p["page_type"] == "landing_page"]
+        self.assertEqual(len(lp_pages), 0)
+
+    def test_landing_page_type_in_page_types(self):
+        self.assertIn("landing_page", PAGE_TYPES)
+        self.assertEqual(PAGE_TYPES["landing_page"]["priority"], 9)
+
+
+class PageSelectionTests(unittest.TestCase):
+    """Test page_selection filtering in blueprints."""
+
+    def test_page_selection_filters_standard_pages(self):
+        ctx = build_brand_context(_BRAND)
+        bp = build_site_blueprint(ctx, page_selection=["home", "contact"])
+        standard = [p for p in bp if p["page_type"] in ("home", "about", "services", "contact", "faq", "testimonials")]
+        types = {p["page_type"] for p in standard}
+        self.assertEqual(types, {"home", "contact"})
+
+    def test_page_selection_still_includes_service_details(self):
+        ctx = build_brand_context(_BRAND)
+        bp = build_site_blueprint(ctx, page_selection=["home", "services"])
+        detail_pages = [p for p in bp if p["page_type"] == "service_detail"]
+        self.assertGreater(len(detail_pages), 0)
+
+    def test_page_selection_filters_service_areas(self):
+        ctx = build_brand_context(_BRAND)
+        bp = build_site_blueprint(ctx, page_selection=["home", "services"])
+        area_pages = [p for p in bp if p["page_type"] == "service_area"]
+        self.assertEqual(len(area_pages), 0)
+
+    def test_no_page_selection_includes_all(self):
+        ctx = build_brand_context(_BRAND)
+        bp = build_site_blueprint(ctx, page_selection=None)
+        types = {p["page_type"] for p in bp}
+        for core in ("home", "about", "services", "contact", "faq", "testimonials"):
+            self.assertIn(core, types)
+
+
+class SeoIntelBlockTests(unittest.TestCase):
+    """Test _seo_intel_block formatting."""
+
+    def test_empty_seo_data_returns_empty(self):
+        ctx = {"seo_data": {}, "warren_brief": ""}
+        self.assertEqual(_seo_intel_block(ctx), "")
+
+    def test_top_queries_formatted(self):
+        ctx = {
+            "seo_data": {
+                "top_queries": [
+                    {"query": "plumber near me", "clicks": 50, "impressions": 500, "position": 3.2, "ctr": 10.0}
+                ]
+            },
+            "warren_brief": "",
+        }
+        block = _seo_intel_block(ctx)
+        self.assertIn("plumber near me", block)
+        self.assertIn("SEO INTELLIGENCE", block)
+        self.assertIn("TOP PERFORMING KEYWORDS", block)
+
+    def test_opportunity_queries_formatted(self):
+        ctx = {
+            "seo_data": {
+                "opportunity_queries": [
+                    {"query": "drain cleaning springfield", "impressions": 300, "position": 8.5}
+                ]
+            },
+            "warren_brief": "",
+        }
+        block = _seo_intel_block(ctx)
+        self.assertIn("drain cleaning springfield", block)
+        self.assertIn("OPPORTUNITY KEYWORDS", block)
+
+    def test_warren_brief_included(self):
+        ctx = {
+            "seo_data": {"totals": {"clicks": 100, "impressions": 1000, "ctr": 10.0, "avg_position": 5.0}},
+            "warren_brief": "Focus on drain cleaning cluster.",
+        }
+        block = _seo_intel_block(ctx)
+        self.assertIn("WARREN'S SEO STRATEGY BRIEF", block)
+        self.assertIn("Focus on drain cleaning cluster.", block)
+
+    def test_totals_formatted(self):
+        ctx = {
+            "seo_data": {"totals": {"clicks": 200, "impressions": 5000, "ctr": 4.0, "avg_position": 12.3}},
+            "warren_brief": "",
+        }
+        block = _seo_intel_block(ctx)
+        self.assertIn("200 clicks", block)
+        self.assertIn("5000 impressions", block)
+
+
+class LeadFormBlockTests(unittest.TestCase):
+    """Test _lead_form_block formatting."""
+
+    def test_no_form_returns_empty(self):
+        ctx = {"lead_form_type": "", "lead_form_shortcode": "", "plugins": ""}
+        self.assertEqual(_lead_form_block(ctx), "")
+
+    def test_wpforms_block(self):
+        ctx = {"lead_form_type": "wpforms", "lead_form_shortcode": '[wpforms id="42"]', "plugins": ""}
+        block = _lead_form_block(ctx)
+        self.assertIn("WPForms", block)
+        self.assertIn('[wpforms id="42"]', block)
+
+    def test_cf7_block(self):
+        ctx = {"lead_form_type": "cf7", "lead_form_shortcode": "", "plugins": ""}
+        block = _lead_form_block(ctx)
+        self.assertIn("Contact Form 7", block)
+
+    def test_gravity_block(self):
+        ctx = {"lead_form_type": "gravity", "lead_form_shortcode": "", "plugins": ""}
+        block = _lead_form_block(ctx)
+        self.assertIn("Gravity Forms", block)
+
+    def test_custom_form_with_shortcode(self):
+        ctx = {"lead_form_type": "custom", "lead_form_shortcode": "<div id='myform'></div>", "plugins": ""}
+        block = _lead_form_block(ctx)
+        self.assertIn("<div id='myform'></div>", block)
+
+    def test_plugins_appended(self):
+        ctx = {"lead_form_type": "wpforms", "lead_form_shortcode": "", "plugins": "WP Booking Calendar, Yoast SEO"}
+        block = _lead_form_block(ctx)
+        self.assertIn("WP Booking Calendar", block)
+        self.assertIn("Yoast SEO", block)
+
+
+class WarrenSEOBriefTests(unittest.TestCase):
+    """Test generate_warren_seo_brief."""
+
+    @patch("openai.OpenAI")
+    def test_generates_brief_from_seo_data(self, mock_openai):
+        mock_client = mock_openai.return_value
+        mock_client.chat.completions.create.return_value = _FakeChatResponse(
+            "Focus on drain cleaning keywords. Target 'plumber near me' on the home page."
+        )
+        ctx = build_brand_context(_BRAND)
+        seo_data = {
+            "totals": {"clicks": 100, "impressions": 1000, "ctr": 10.0, "avg_position": 5.0},
+            "top_queries": [{"query": "plumber near me", "clicks": 50, "impressions": 500, "position": 3.2, "ctr": 10.0}],
+            "opportunity_queries": [{"query": "drain cleaning springfield", "impressions": 300, "position": 8.5}],
+            "top_pages": [{"page": "/", "clicks": 80, "position": 4.0}],
+        }
+        brief = generate_warren_seo_brief(ctx, seo_data, "test-key")
+        self.assertIn("drain cleaning", brief)
+        # Verify API was called
+        mock_client.chat.completions.create.assert_called_once()
+        call_kwargs = mock_client.chat.completions.create.call_args
+        messages = call_kwargs.kwargs.get("messages") or call_kwargs[1].get("messages")
+        system_msg = messages[0]["content"]
+        self.assertIn("Warren", system_msg)
+
+    @patch("openai.OpenAI")
+    def test_returns_empty_on_failure(self, mock_openai):
+        mock_client = mock_openai.return_value
+        mock_client.chat.completions.create.side_effect = Exception("API error")
+        ctx = build_brand_context(_BRAND)
+        brief = generate_warren_seo_brief(ctx, {"totals": {}}, "test-key")
+        self.assertEqual(brief, "")
+
+
+class DatabaseIntakeTests(unittest.TestCase):
+    """Test intake_json storage in site_builds."""
+
+    def setUp(self):
+        self.db_file = _TEST_ROOT / f"sitebuilder-intake-{uuid.uuid4().hex}.db"
+        os.environ["DATABASE_PATH"] = str(self.db_file)
+        self.app = create_app()
+        self.app.config.update(TESTING=True, WTF_CSRF_ENABLED=False)
+
+    def tearDown(self):
+        for suffix in ("", "-wal", "-shm"):
+            path = Path(str(self.db_file) + suffix)
+            if path.exists():
+                path.unlink()
+
+    def test_create_build_with_intake(self):
+        intake = {
+            "brand_voice": "Professional",
+            "unique_selling_points": "24/7 service",
+            "lead_form_type": "wpforms",
+            "content_goals": "Generate Leads, Rank in Google",
+        }
+        with self.app.app_context():
+            brand_id = self.app.db.create_brand({"slug": f"intake-{uuid.uuid4().hex[:8]}", "display_name": "Test Co"})
+            build_id = self.app.db.create_site_build(brand_id, [{"page_type": "home"}], intake=intake)
+            build = self.app.db.get_site_build(build_id)
+        self.assertIsNotNone(build.get("intake"))
+        self.assertEqual(build["intake"]["brand_voice"], "Professional")
+        self.assertEqual(build["intake"]["lead_form_type"], "wpforms")
+
+    def test_create_build_without_intake(self):
+        with self.app.app_context():
+            brand_id = self.app.db.create_brand({"slug": f"nointake-{uuid.uuid4().hex[:8]}", "display_name": "Test Co"})
+            build_id = self.app.db.create_site_build(brand_id, [{"page_type": "home"}])
+            build = self.app.db.get_site_build(build_id)
+        self.assertEqual(build.get("intake"), {})
 
 
 if __name__ == "__main__":

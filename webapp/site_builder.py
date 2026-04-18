@@ -73,6 +73,13 @@ PAGE_TYPES = {
         "schema_types": ["WebPage", "BreadcrumbList"],
         "priority": 8,
     },
+    "landing_page": {
+        "label": "Landing Page",
+        "slug": "lp/{lp_slug}",
+        "wp_type": "page",
+        "schema_types": ["WebPage", "LocalBusiness"],
+        "priority": 9,
+    },
 }
 
 
@@ -80,9 +87,15 @@ PAGE_TYPES = {
 # Brand context builder
 # ---------------------------------------------------------------------------
 
-def build_brand_context(brand):
-    """Extract all brand fields relevant to content generation."""
-    return {
+def build_brand_context(brand, intake=None):
+    """Extract all brand fields relevant to content generation.
+    
+    intake: optional dict from the site builder intake form with extra
+    fields like unique_selling_points, competitors, content_goals,
+    lead_form_type, seo_data, warren_brief, etc.
+    """
+    intake = intake or {}
+    ctx = {
         "business_name": (brand.get("display_name") or "").strip(),
         "industry": (brand.get("industry") or "").strip(),
         "website": (brand.get("website") or "").strip(),
@@ -99,24 +112,58 @@ def build_brand_context(brand):
         "year_founded": (brand.get("year_founded") or "").strip(),
         "license_info": (brand.get("license_info") or "").strip(),
         "certifications": (brand.get("certifications") or "").strip(),
+        # Intake overrides and extras
+        "unique_selling_points": (intake.get("unique_selling_points") or "").strip(),
+        "competitors": (intake.get("competitors") or "").strip(),
+        "content_goals": (intake.get("content_goals") or "").strip(),
+        "lead_form_type": (intake.get("lead_form_type") or "").strip(),
+        "lead_form_shortcode": (intake.get("lead_form_shortcode") or "").strip(),
+        "plugins": (intake.get("plugins") or "").strip(),
+        "cta_text": (intake.get("cta_text") or "").strip(),
+        "cta_phone": (intake.get("cta_phone") or "").strip(),
     }
+    # Intake can override brand-level fields
+    for key in ("brand_voice", "target_audience", "active_offers", "tagline"):
+        if intake.get(key):
+            ctx[key] = intake[key].strip()
+    # SEO intelligence
+    ctx["seo_data"] = intake.get("seo_data") or {}
+    ctx["warren_brief"] = (intake.get("warren_brief") or "").strip()
+    return ctx
 
 
 # ---------------------------------------------------------------------------
 # Blueprint builder
 # ---------------------------------------------------------------------------
 
-def build_site_blueprint(brand_ctx, services=None, areas=None):
+def build_site_blueprint(brand_ctx, services=None, areas=None, landing_pages=None, page_selection=None):
     """
     Build a complete site blueprint from brand context.
+
+    Args:
+        brand_ctx: dict from build_brand_context
+        services: CSV string of services (overrides brand profile)
+        areas: CSV string of service areas (overrides brand profile)
+        landing_pages: list of dicts with {name, keyword, offer} for standalone landing pages
+        page_selection: list of page types to include (e.g. ['home','about','services','contact'])
+                        If None, includes all standard pages.
 
     Returns a list of page specs, each with:
         page_type, label, slug, schema_types, context (page-specific data)
     """
     pages = []
 
+    # Determine which standard pages to include
+    standard_types = ("home", "about", "services", "contact", "faq", "testimonials")
+    if page_selection:
+        selected = set(page_selection)
+    else:
+        selected = set(standard_types)
+
     # Static pages
-    for ptype in ("home", "about", "services", "contact", "faq", "testimonials"):
+    for ptype in standard_types:
+        if ptype not in selected:
+            continue
         meta = PAGE_TYPES[ptype]
         pages.append({
             "page_type": ptype,
@@ -145,6 +192,8 @@ def build_site_blueprint(brand_ctx, services=None, areas=None):
     # Service area pages
     area_list = _parse_csv(areas or brand_ctx.get("service_area") or "")
     for area in area_list:
+        if "service_area" not in selected and page_selection:
+            break
         slug = _slugify(area)
         pages.append({
             "page_type": "service_area",
@@ -154,6 +203,28 @@ def build_site_blueprint(brand_ctx, services=None, areas=None):
             "schema_types": PAGE_TYPES["service_area"]["schema_types"],
             "priority": PAGE_TYPES["service_area"]["priority"],
             "context": {"area_name": area, "area_slug": slug},
+        })
+
+    # Landing pages (standalone conversion pages)
+    for lp in (landing_pages or []):
+        name = (lp.get("name") or "").strip()
+        if not name:
+            continue
+        slug = _slugify(name)
+        pages.append({
+            "page_type": "landing_page",
+            "label": name,
+            "slug": f"lp/{slug}",
+            "wp_type": "page",
+            "schema_types": PAGE_TYPES["landing_page"]["schema_types"],
+            "priority": PAGE_TYPES["landing_page"]["priority"],
+            "context": {
+                "lp_name": name,
+                "lp_slug": slug,
+                "lp_keyword": (lp.get("keyword") or "").strip(),
+                "lp_offer": (lp.get("offer") or "").strip(),
+                "lp_audience": (lp.get("audience") or "").strip(),
+            },
         })
 
     pages.sort(key=lambda p: (p["priority"], p["label"]))
@@ -274,7 +345,116 @@ def _brand_block(ctx):
         lines.append(f"Certifications: {ctx['certifications']}")
     if ctx.get("active_offers"):
         lines.append(f"Current Offers: {ctx['active_offers']}")
+    if ctx.get("unique_selling_points"):
+        lines.append(f"Unique Selling Points: {ctx['unique_selling_points']}")
+    if ctx.get("competitors"):
+        lines.append(f"Competitors to Differentiate From: {ctx['competitors']}")
+    if ctx.get("content_goals"):
+        lines.append(f"Content Goals: {ctx['content_goals']}")
+    if ctx.get("cta_text"):
+        lines.append(f"Primary CTA: {ctx['cta_text']}")
+    if ctx.get("cta_phone"):
+        lines.append(f"CTA Phone: {ctx['cta_phone']}")
     return "\n".join(lines)
+
+
+def _seo_intel_block(ctx):
+    """Format Search Console data and Warren's SEO brief for prompt injection."""
+    parts = []
+    seo_data = ctx.get("seo_data") or {}
+
+    if seo_data.get("top_queries"):
+        top = seo_data["top_queries"][:15]
+        query_lines = []
+        for q in top:
+            query_lines.append(
+                f"  - \"{q['query']}\" (clicks: {q['clicks']}, impressions: {q['impressions']}, "
+                f"pos: {q['position']}, ctr: {q['ctr']}%)"
+            )
+        parts.append(
+            "SEARCH CONSOLE - TOP PERFORMING KEYWORDS (use these as your SEO foundation):\n"
+            + "\n".join(query_lines)
+        )
+
+    if seo_data.get("opportunity_queries"):
+        opps = seo_data["opportunity_queries"][:10]
+        opp_lines = []
+        for q in opps:
+            opp_lines.append(
+                f"  - \"{q['query']}\" (pos: {q['position']}, impressions: {q['impressions']})"
+            )
+        parts.append(
+            "SEARCH CONSOLE - OPPORTUNITY KEYWORDS (position 4-20, high impressions - target these):\n"
+            + "\n".join(opp_lines)
+        )
+
+    if seo_data.get("top_pages"):
+        pg_lines = []
+        for p in seo_data["top_pages"][:5]:
+            pg_lines.append(f"  - {p['page']} (clicks: {p['clicks']}, pos: {p['position']})")
+        parts.append(
+            "SEARCH CONSOLE - TOP PAGES:\n" + "\n".join(pg_lines)
+        )
+
+    if seo_data.get("totals"):
+        t = seo_data["totals"]
+        parts.append(
+            f"SEARCH CONSOLE - TOTALS: {t.get('clicks',0)} clicks, "
+            f"{t.get('impressions',0)} impressions, "
+            f"{t.get('ctr',0)}% CTR, avg position {t.get('avg_position',0)}"
+        )
+
+    warren = ctx.get("warren_brief") or ""
+    if warren:
+        parts.append(f"WARREN'S SEO STRATEGY BRIEF:\n{warren}")
+
+    if not parts:
+        return ""
+    return "\nSEO INTELLIGENCE (from real Search Console data - use this to inform your keyword targeting):\n" + "\n\n".join(parts) + "\n"
+
+
+def _lead_form_block(ctx):
+    """Format lead form / plugin integration instructions."""
+    form_type = ctx.get("lead_form_type") or ""
+    shortcode = ctx.get("lead_form_shortcode") or ""
+    plugins = ctx.get("plugins") or ""
+
+    if not form_type and not shortcode and not plugins:
+        return ""
+
+    parts = ["LEAD FORM & PLUGIN INTEGRATION:"]
+    if form_type == "wpforms":
+        sc = shortcode or "[wpforms id=\"FORM_ID\"]"
+        parts.append(
+            f"- Include a WPForms lead capture form on this page. "
+            f"Place the shortcode {sc} in the content where the form should appear. "
+            f"Wrap it in a clear CTA section with a compelling headline above the form."
+        )
+    elif form_type == "cf7":
+        sc = shortcode or "[contact-form-7 id=\"FORM_ID\" title=\"Contact\"]"
+        parts.append(
+            f"- Include a Contact Form 7 form. Place {sc} in the content "
+            f"where the lead form should appear."
+        )
+    elif form_type == "gravity":
+        sc = shortcode or "[gravityform id=\"FORM_ID\" title=\"true\" description=\"true\"]"
+        parts.append(
+            f"- Include a Gravity Forms form. Place {sc} in the content."
+        )
+    elif form_type == "custom" and shortcode:
+        parts.append(
+            f"- Include this custom form embed: {shortcode}"
+        )
+    elif form_type:
+        parts.append(
+            f"- Include a [LEAD_FORM_PLACEHOLDER] where the lead capture form should appear. "
+            "Wrap it in a CTA section with a compelling, benefit-driven headline."
+        )
+
+    if plugins:
+        parts.append(f"- Additional plugins/integrations to reference: {plugins}")
+
+    return "\n".join(parts) + "\n"
 
 
 def build_page_prompt(page_spec, brand_ctx):
@@ -323,9 +503,13 @@ def _system_msg():
 
 def _prompt_home(page_spec, ctx):
     brand = _brand_block(ctx)
+    seo_intel = _seo_intel_block(ctx)
+    lead_form = _lead_form_block(ctx)
     user_msg = (
         f"Write the HOME PAGE for this local service business.\n\n"
         f"BUSINESS CONTEXT:\n{brand}\n\n"
+        f"{seo_intel}"
+        f"{lead_form}"
         f"{_GLOBAL_RULES}\n"
         "CONVERSION FRAMEWORK: AIDA (Attention-Interest-Desire-Action)\n"
         "Build through a full arc from stranger to 'I should call these people.'\n\n"
@@ -359,9 +543,11 @@ def _prompt_home(page_spec, ctx):
 
 def _prompt_about(page_spec, ctx):
     brand = _brand_block(ctx)
+    seo_intel = _seo_intel_block(ctx)
     user_msg = (
         f"Write the ABOUT PAGE for this local service business.\n\n"
         f"BUSINESS CONTEXT:\n{brand}\n\n"
+        f"{seo_intel}"
         f"{_GLOBAL_RULES}\n"
         "CONVERSION FRAMEWORK: Star-Story-Solution\n"
         "The star is the founder/team. The story is why this business exists. "
@@ -391,9 +577,13 @@ def _prompt_about(page_spec, ctx):
 
 def _prompt_services(page_spec, ctx):
     brand = _brand_block(ctx)
+    seo_intel = _seo_intel_block(ctx)
+    lead_form = _lead_form_block(ctx)
     user_msg = (
         f"Write the SERVICES OVERVIEW PAGE for this local service business.\n\n"
         f"BUSINESS CONTEXT:\n{brand}\n\n"
+        f"{seo_intel}"
+        f"{lead_form}"
         f"{_GLOBAL_RULES}\n"
         "CONVERSION FRAMEWORK: One-to-One Conversation\n"
         "Write like you are sitting across the table from a homeowner explaining what you do.\n\n"
@@ -420,10 +610,14 @@ def _prompt_services(page_spec, ctx):
 
 def _prompt_service_detail(page_spec, ctx):
     brand = _brand_block(ctx)
+    seo_intel = _seo_intel_block(ctx)
+    lead_form = _lead_form_block(ctx)
     svc_name = page_spec.get("context", {}).get("service_name", "")
     user_msg = (
         f"Write a SERVICE DETAIL PAGE for: {svc_name}\n\n"
         f"BUSINESS CONTEXT:\n{brand}\n\n"
+        f"{seo_intel}"
+        f"{lead_form}"
         f"{_GLOBAL_RULES}\n"
         "CONVERSION FRAMEWORK: PAS (Problem-Agitate-Solve)\n"
         "Name the problem this service solves. Make it sting (what happens if they wait). "
@@ -459,10 +653,14 @@ def _prompt_service_detail(page_spec, ctx):
 
 def _prompt_service_area(page_spec, ctx):
     brand = _brand_block(ctx)
+    seo_intel = _seo_intel_block(ctx)
+    lead_form = _lead_form_block(ctx)
     area = page_spec.get("context", {}).get("area_name", "")
     user_msg = (
         f"Write a SERVICE AREA PAGE for: {area}\n\n"
         f"BUSINESS CONTEXT:\n{brand}\n\n"
+        f"{seo_intel}"
+        f"{lead_form}"
         f"{_GLOBAL_RULES}\n"
         "CONVERSION FRAMEWORK: BAB (Before-After-Bridge)\n"
         f"Before: the homeowner in {area} has a problem and doesn't know who to call locally. "
@@ -495,9 +693,11 @@ def _prompt_service_area(page_spec, ctx):
 
 def _prompt_contact(page_spec, ctx):
     brand = _brand_block(ctx)
+    lead_form = _lead_form_block(ctx)
     user_msg = (
         f"Write the CONTACT PAGE for this local service business.\n\n"
         f"BUSINESS CONTEXT:\n{brand}\n\n"
+        f"{lead_form}"
         f"{_GLOBAL_RULES}\n"
         "CONVERSION FRAMEWORK: One-to-One Conversation\n"
         "The reader already decided they want to reach out. Do not re-sell. "
@@ -529,9 +729,11 @@ def _prompt_contact(page_spec, ctx):
 
 def _prompt_faq(page_spec, ctx):
     brand = _brand_block(ctx)
+    seo_intel = _seo_intel_block(ctx)
     user_msg = (
         f"Write the FAQ PAGE for this local service business.\n\n"
         f"BUSINESS CONTEXT:\n{brand}\n\n"
+        f"{seo_intel}"
         f"{_GLOBAL_RULES}\n"
         "CONVERSION FRAMEWORK: FAQ_Objection_Block\n"
         "Every FAQ answer is an objection removed. The reader who finishes this page "
@@ -565,9 +767,11 @@ def _prompt_faq(page_spec, ctx):
 
 def _prompt_testimonials(page_spec, ctx):
     brand = _brand_block(ctx)
+    seo_intel = _seo_intel_block(ctx)
     user_msg = (
         f"Write the TESTIMONIALS / REVIEWS PAGE for this local service business.\n\n"
         f"BUSINESS CONTEXT:\n{brand}\n\n"
+        f"{seo_intel}"
         f"{_GLOBAL_RULES}\n"
         "CONVERSION FRAMEWORK: Proof_Wall\n"
         "Social proof is the single strongest conversion lever for local service businesses. "
@@ -609,12 +813,63 @@ def _prompt_testimonials(page_spec, ctx):
 
 def _prompt_generic(page_spec, ctx):
     brand = _brand_block(ctx)
+    seo_intel = _seo_intel_block(ctx)
+    lead_form = _lead_form_block(ctx)
     label = page_spec.get("label", "Page")
     user_msg = (
         f"Write a website page titled '{label}' for this local service business.\n\n"
         f"BUSINESS CONTEXT:\n{brand}\n\n"
+        f"{seo_intel}"
+        f"{lead_form}"
         f"{_GLOBAL_RULES}\n"
         "- Target word count: 500-800 words.\n"
+        f"{_OUTPUT_FORMAT}"
+    )
+    return _system_msg(), user_msg
+
+
+def _prompt_landing_page(page_spec, ctx):
+    brand = _brand_block(ctx)
+    seo_intel = _seo_intel_block(ctx)
+    lead_form = _lead_form_block(ctx)
+    lp_ctx = page_spec.get("context", {})
+    lp_name = lp_ctx.get("lp_name", "")
+    lp_keyword = lp_ctx.get("lp_keyword", "")
+    lp_offer = lp_ctx.get("lp_offer", "")
+    lp_audience = lp_ctx.get("lp_audience", ctx.get("target_audience", ""))
+
+    user_msg = (
+        f"Write a HIGH-CONVERTING LANDING PAGE for: {lp_name}\n\n"
+        f"BUSINESS CONTEXT:\n{brand}\n\n"
+        f"{seo_intel}"
+        f"{lead_form}"
+        f"{_GLOBAL_RULES}\n"
+        "CONVERSION FRAMEWORK: AIDA with urgency layer\n"
+        "This is a LANDING PAGE, not a standard website page. It has ONE job: convert the visitor "
+        "into a lead or customer. Every word either moves them toward the CTA or gets cut.\n\n"
+        "PAGE-SPECIFIC REQUIREMENTS:\n"
+        f"- TARGET KEYWORD: '{lp_keyword}' (weave naturally, first 100 words, H2, meta desc).\n"
+        f"- TARGET AUDIENCE: {lp_audience}\n"
+    )
+
+    if lp_offer:
+        user_msg += f"- OFFER: {lp_offer}. Lead with this. Make it the hero.\n"
+
+    user_msg += (
+        "- HERO SECTION: Big, bold value proposition. What they get, who it's for, and one clear CTA button. "
+        "No navigation distractions. No 'welcome to'. Straight to the point.\n"
+        "- PROBLEM SECTION: Name the exact pain. Make them feel seen. Be specific to the industry.\n"
+        "- SOLUTION SECTION: Show how you solve it. Process steps, not vague promises. 3-4 steps max.\n"
+        "- PROOF SECTION: Include [TESTIMONIAL_PLACEHOLDER] markers. Social proof, stats, trust badges.\n"
+        "- OBJECTION HANDLING: Address 2-3 top objections inline. 'What if it doesn't work?' "
+        "'Is it worth the cost?' 'How is this different?'\n"
+        "- CTA SECTION: Repeat the offer with urgency. Phone number prominent. Form placement "
+        "marked with [LEAD_FORM_PLACEHOLDER] if no specific form shortcode provided.\n"
+        "- NO NAVIGATION: This page should not link to other site pages except via the CTA. "
+        "No sidebar. No footer links. Single-purpose page.\n"
+        "- MOBILE FIRST: Short paragraphs. Big buttons. Scannable headings.\n"
+        "- Target word count: 600-1000 words.\n"
+        f"- Primary keyword: '{lp_keyword}' or '{ctx.get('industry', '')} {ctx.get('service_area', '').split(',')[0].strip()}'.\n"
         f"{_OUTPUT_FORMAT}"
     )
     return _system_msg(), user_msg
@@ -629,6 +884,7 @@ _PROMPT_BUILDERS = {
     "contact": _prompt_contact,
     "faq": _prompt_faq,
     "testimonials": _prompt_testimonials,
+    "landing_page": _prompt_landing_page,
 }
 
 
@@ -999,3 +1255,90 @@ def _extract_json(raw):
     except json.JSONDecodeError:
         logger.warning("Failed to parse AI response as JSON, returning empty dict")
         return {}
+
+
+# ---------------------------------------------------------------------------
+# Warren SEO brief generator
+# ---------------------------------------------------------------------------
+
+def generate_warren_seo_brief(brand_ctx, seo_data, api_key, model="gpt-4o-mini"):
+    """
+    Have Warren analyze Search Console data and produce an SEO strategy brief
+    for the site builder. Returns a plain-text brief string.
+    """
+    import openai
+
+    brand = _brand_block(brand_ctx)
+
+    # Format SC data into a readable block
+    sc_lines = []
+    if seo_data.get("totals"):
+        t = seo_data["totals"]
+        sc_lines.append(
+            f"Overall: {t.get('clicks',0)} clicks, {t.get('impressions',0)} impressions, "
+            f"{t.get('ctr',0)}% CTR, avg position {t.get('avg_position',0)}"
+        )
+
+    if seo_data.get("top_queries"):
+        sc_lines.append("\nTop performing queries:")
+        for q in seo_data["top_queries"][:20]:
+            sc_lines.append(
+                f"  - \"{q['query']}\" - clicks: {q['clicks']}, imp: {q['impressions']}, "
+                f"pos: {q['position']}, ctr: {q['ctr']}%"
+            )
+
+    if seo_data.get("opportunity_queries"):
+        sc_lines.append("\nOpportunity queries (high impressions, position 4-20):")
+        for q in seo_data["opportunity_queries"][:15]:
+            sc_lines.append(
+                f"  - \"{q['query']}\" - imp: {q['impressions']}, pos: {q['position']}"
+            )
+
+    if seo_data.get("top_pages"):
+        sc_lines.append("\nTop pages by clicks:")
+        for p in seo_data["top_pages"][:10]:
+            sc_lines.append(f"  - {p['page']} - clicks: {p['clicks']}, pos: {p['position']}")
+
+    sc_block = "\n".join(sc_lines)
+
+    system = (
+        "You are Warren, an SEO strategist for a marketing platform that builds websites "
+        "for local service businesses. You have access to real Google Search Console data. "
+        "Your job is to analyze this data and produce a concise, actionable SEO strategy brief "
+        "that will guide the AI content generator when building website pages.\n\n"
+        "Be specific. Reference actual queries from the data. Identify patterns, gaps, and opportunities. "
+        "Do NOT use em dashes. Do NOT use AI-tell words like harness, leverage, elevate, robust, seamless."
+    )
+
+    user_msg = (
+        f"Analyze this business's Search Console data and write an SEO strategy brief.\n\n"
+        f"BUSINESS:\n{brand}\n\n"
+        f"SEARCH CONSOLE DATA:\n{sc_block}\n\n"
+        "Produce a brief (300-500 words) covering:\n"
+        "1. KEYWORD CLUSTERS: Group the queries into 3-6 topic clusters. For each cluster, "
+        "identify which page type should target it (home, service detail, service area, FAQ, landing page).\n"
+        "2. QUICK WINS: Queries in position 4-15 with high impressions that could move to page 1 "
+        "with better on-page content. Name the specific queries.\n"
+        "3. CONTENT GAPS: Topics the business SHOULD rank for based on their services but currently "
+        "has no visibility on. Suggest specific page types or landing pages to create.\n"
+        "4. KEYWORD MAPPING: For each page that will be generated, suggest the primary keyword "
+        "and 2-3 secondary keywords based on the actual search data.\n"
+        "5. INTERNAL LINKING STRATEGY: How pages should link to each other to build topic authority.\n\n"
+        "Write in plain text, not JSON. Be direct and specific. Reference actual query data."
+    )
+
+    try:
+        client = openai.OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.4,
+            max_tokens=1500,
+        )
+        return (response.choices[0].message.content or "").strip()
+    except Exception as exc:
+        logger.warning("Warren SEO brief generation failed: %s", exc)
+        return ""

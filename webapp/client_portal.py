@@ -8780,6 +8780,7 @@ def client_site_builder():
     brand = db.get_brand(brand_id) or {}
     builds = db.get_site_builds(brand_id, limit=20)
     wp_ok = _wp_connected(brand)
+    gsc_connected = bool((brand.get("gsc_site_url") or "").strip())
 
     return render_template(
         "client/client_site_builder.html",
@@ -8789,6 +8790,66 @@ def client_site_builder():
         builds=builds,
         brand_services=(brand.get("primary_services") or "").strip(),
         brand_areas=(brand.get("service_area") or "").strip(),
+        brand_name=(brand.get("display_name") or "").strip(),
+        brand_industry=(brand.get("industry") or "").strip(),
+        brand_voice=(brand.get("brand_voice") or "").strip(),
+        brand_target_audience=(brand.get("target_audience") or "").strip(),
+        brand_tagline=(brand.get("tagline") or "").strip(),
+        brand_phone=(brand.get("phone") or brand.get("business_phone") or "").strip(),
+        brand_active_offers=(brand.get("active_offers") or "").strip(),
+        gsc_connected=gsc_connected,
+    )
+
+
+@client_bp.route("/site-builder/seo-intel", methods=["POST"])
+@client_login_required
+def client_site_builder_seo_intel():
+    """Pull Search Console data and generate Warren's SEO strategy brief via AJAX."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id) or {}
+
+    gsc_url = (brand.get("gsc_site_url") or "").strip()
+    if not gsc_url:
+        return jsonify(ok=False, error="Search Console not connected. Add your GSC site URL in Settings."), 400
+
+    api_key = _get_openai_api_key(brand)
+    if not api_key:
+        return jsonify(ok=False, error="OpenAI API key not configured."), 400
+
+    model = _pick_ai_model(brand, "analysis")
+
+    # Pull SC data
+    seo_data = {}
+    try:
+        from src.api_search_console import pull_search_console_data
+        from datetime import datetime, timedelta
+        today = datetime.utcnow()
+        first_of_month = today.replace(day=1)
+        last_month = (first_of_month - timedelta(days=1))
+        month_str = last_month.strftime("%Y-%m")
+        seo_data = pull_search_console_data(gsc_url, month_str) or {}
+    except Exception as exc:
+        return jsonify(ok=False, error=f"Failed to pull Search Console data: {str(exc)[:200]}"), 500
+
+    # Generate Warren brief
+    warren_brief = ""
+    try:
+        from webapp.site_builder import build_brand_context, generate_warren_seo_brief
+        brand_ctx = build_brand_context(brand)
+        warren_brief = generate_warren_seo_brief(brand_ctx, seo_data, api_key, model)
+    except Exception as exc:
+        current_app.logger.warning("Warren SEO brief failed: %s", exc)
+
+    return jsonify(
+        ok=True,
+        seo_data={
+            "totals": seo_data.get("totals", {}),
+            "top_queries": (seo_data.get("top_queries") or [])[:20],
+            "opportunity_queries": (seo_data.get("opportunity_queries") or [])[:15],
+            "top_pages": (seo_data.get("top_pages") or [])[:10],
+        },
+        warren_brief=warren_brief,
     )
 
 
@@ -8805,6 +8866,7 @@ def client_site_builder_generate():
         build_brand_context,
         build_site_blueprint,
         generate_page_content,
+        generate_warren_seo_brief,
         assemble_page,
     )
 
@@ -8817,11 +8879,80 @@ def client_site_builder_generate():
         return redirect(url_for("client.client_settings"))
 
     model = _pick_ai_model(brand, "analysis")
-    brand_ctx = build_brand_context(brand)
 
+    # ── Collect intake data ──
     services = (request.form.get("services") or "").strip() or None
     areas = (request.form.get("areas") or "").strip() or None
-    blueprint = build_site_blueprint(brand_ctx, services=services, areas=areas)
+
+    intake = {
+        "brand_voice": (request.form.get("brand_voice") or "").strip(),
+        "target_audience": (request.form.get("target_audience") or "").strip(),
+        "tagline": (request.form.get("tagline") or "").strip(),
+        "active_offers": (request.form.get("active_offers") or "").strip(),
+        "unique_selling_points": (request.form.get("unique_selling_points") or "").strip(),
+        "competitors": (request.form.get("competitors") or "").strip(),
+        "content_goals": (request.form.get("content_goals") or "").strip(),
+        "lead_form_type": (request.form.get("lead_form_type") or "").strip(),
+        "lead_form_shortcode": (request.form.get("lead_form_shortcode") or "").strip(),
+        "plugins": (request.form.get("plugins") or "").strip(),
+        "cta_text": (request.form.get("cta_text") or "").strip(),
+        "cta_phone": (request.form.get("cta_phone") or "").strip(),
+    }
+
+    # ── Parse page selection ──
+    page_selection_raw = (request.form.get("page_selection") or "").strip()
+    page_selection = [p.strip() for p in page_selection_raw.split(",") if p.strip()] or None
+
+    # ── Parse landing pages ──
+    landing_pages = []
+    lp_names = request.form.getlist("lp_name[]")
+    lp_keywords = request.form.getlist("lp_keyword[]")
+    lp_offers = request.form.getlist("lp_offer[]")
+    lp_audiences = request.form.getlist("lp_audience[]")
+    for i, name in enumerate(lp_names):
+        name = (name or "").strip()
+        if name:
+            landing_pages.append({
+                "name": name,
+                "keyword": (lp_keywords[i] if i < len(lp_keywords) else "").strip(),
+                "offer": (lp_offers[i] if i < len(lp_offers) else "").strip(),
+                "audience": (lp_audiences[i] if i < len(lp_audiences) else "").strip(),
+            })
+
+    # ── Pull Search Console data if connected ──
+    seo_data = {}
+    gsc_url = (brand.get("gsc_site_url") or "").strip()
+    if gsc_url:
+        try:
+            from src.api_search_console import pull_search_console_data
+            from datetime import datetime, timedelta
+            # Pull last full month
+            today = datetime.utcnow()
+            first_of_month = today.replace(day=1)
+            last_month = (first_of_month - timedelta(days=1))
+            month_str = last_month.strftime("%Y-%m")
+            seo_data = pull_search_console_data(gsc_url, month_str) or {}
+        except Exception as exc:
+            current_app.logger.warning("SC pull for site builder failed: %s", exc)
+
+    # ── Warren SEO brief ──
+    warren_brief = ""
+    if seo_data and seo_data.get("top_queries"):
+        try:
+            warren_brief = generate_warren_seo_brief(
+                build_brand_context(brand), seo_data, api_key, model
+            )
+        except Exception as exc:
+            current_app.logger.warning("Warren SEO brief failed: %s", exc)
+
+    intake["seo_data"] = seo_data
+    intake["warren_brief"] = warren_brief
+
+    brand_ctx = build_brand_context(brand, intake=intake)
+    blueprint = build_site_blueprint(
+        brand_ctx, services=services, areas=areas,
+        landing_pages=landing_pages, page_selection=page_selection,
+    )
 
     if not blueprint:
         msg = "Could not create a site blueprint. Check that your brand profile has services and a service area."
@@ -8830,7 +8961,11 @@ def client_site_builder_generate():
         flash(msg, "warning")
         return redirect(url_for("client.client_settings"))
 
-    build_id = db.create_site_build(brand_id, blueprint, model=model, created_by=session.get("client_user_id", 0))
+    build_id = db.create_site_build(
+        brand_id, blueprint, model=model,
+        created_by=session.get("client_user_id", 0),
+        intake=intake,
+    )
     db.update_site_build_status(build_id, "running")
 
     pages_done = 0

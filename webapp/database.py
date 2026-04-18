@@ -1930,6 +1930,27 @@ class WebDB:
                 self._safe_add_column(conn, "agency_prospects", col_name, col_def)
         conn.commit()
 
+        # ── site_builds migrations (intake data) ──
+        sb_columns = {r[1] for r in conn.execute("PRAGMA table_info(site_builds)").fetchall()}
+        new_sb_cols = [
+            ("intake_json", "TEXT DEFAULT '{}'"),
+        ]
+        for col_name, col_def in new_sb_cols:
+            if col_name not in sb_columns:
+                self._safe_add_column(conn, "site_builds", col_name, col_def)
+        conn.commit()
+
+        # ── site_pages migrations (visual editor) ──
+        sp_columns = {r[1] for r in conn.execute("PRAGMA table_info(site_pages)").fetchall()}
+        new_sp_cols = [
+            ("editor_json", "TEXT DEFAULT ''"),
+            ("page_css", "TEXT DEFAULT ''"),
+        ]
+        for col_name, col_def in new_sp_cols:
+            if col_name not in sp_columns:
+                self._safe_add_column(conn, "site_pages", col_name, col_def)
+        conn.commit()
+
         # ── Legacy migration: brands.competitors (text) -> competitors table ──
         # Older deployments stored competitor names in a free-form text field.
         # The client portal uses the structured competitors table.
@@ -5414,12 +5435,12 @@ class WebDB:
 
     # ── Site Builder ──
 
-    def create_site_build(self, brand_id, blueprint, model="gpt-4o-mini", created_by=0):
+    def create_site_build(self, brand_id, blueprint, model="gpt-4o-mini", created_by=0, intake=None):
         conn = self._conn()
         cur = conn.execute(
-            "INSERT INTO site_builds (brand_id, status, model, blueprint_json, page_count, created_by) "
-            "VALUES (?, 'pending', ?, ?, ?, ?)",
-            (brand_id, model, json.dumps(blueprint), len(blueprint), created_by),
+            "INSERT INTO site_builds (brand_id, status, model, blueprint_json, page_count, created_by, intake_json) "
+            "VALUES (?, 'pending', ?, ?, ?, ?, ?)",
+            (brand_id, model, json.dumps(blueprint), len(blueprint), created_by, json.dumps(intake or {})),
         )
         build_id = cur.lastrowid
         conn.commit()
@@ -5434,6 +5455,10 @@ class WebDB:
             return None
         item = dict(row)
         item["blueprint"] = self._safe_json_list(item.get("blueprint_json"))
+        try:
+            item["intake"] = json.loads(item.get("intake_json") or "{}")
+        except (json.JSONDecodeError, TypeError):
+            item["intake"] = {}
         return item
 
     def get_site_builds(self, brand_id, limit=20):
