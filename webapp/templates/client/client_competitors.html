@@ -3,6 +3,27 @@
 
 {% block head %}
 <style>
+    .competitor-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1.2rem;
+    }
+    .toolbar-copy {
+        max-width: 70ch;
+    }
+    .toolbar-copy p {
+        margin: .35rem 0 0;
+        color: var(--text-muted);
+    }
+    .toolbar-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .65rem;
+        align-items: center;
+    }
     .summary-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -68,17 +89,78 @@
     .comp-card:hover { box-shadow: var(--shadow-hover); }
     .comp-card-head {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
+        gap: 1rem;
         padding: 1rem 1.25rem;
         border-bottom: 1px solid var(--line);
         background: var(--surface-soft);
+    }
+    .comp-card-meta {
+        flex: 1;
+        min-width: 0;
+    }
+    .comp-card-title-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .55rem;
+        margin-bottom: .35rem;
     }
     .comp-card-head h5 {
         margin: 0;
         font-weight: 700;
         font-size: 1rem;
         color: var(--text-strong);
+    }
+    .comp-card-summary {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: .87rem;
+        line-height: 1.5;
+    }
+    .comp-card-meta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .45rem;
+        margin-top: .6rem;
+    }
+    .scan-badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: .26rem .62rem;
+        font-size: .72rem;
+        font-weight: 800;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+    }
+    .scan-badge.fresh {
+        background: #dcfce7;
+        color: #166534;
+    }
+    .scan-badge.partial {
+        background: #fef3c7;
+        color: #92400e;
+    }
+    .scan-badge.stale {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+    .scan-badge.empty {
+        background: #e2e8f0;
+        color: #334155;
+    }
+    .scan-meta-pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: .26rem .62rem;
+        font-size: .72rem;
+        font-weight: 700;
+        background: #fff;
+        color: var(--text-muted);
+        border: 1px solid var(--line);
     }
     .comp-card-head .comp-links a {
         color: var(--text-muted);
@@ -87,8 +169,35 @@
         margin-left: .6rem;
     }
     .comp-card-head .comp-links a:hover { color: var(--primary); }
+    .comp-card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: .55rem;
+        align-items: center;
+    }
     .comp-card-body {
         padding: 1rem 1.25rem;
+    }
+    .intel-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .45rem;
+        margin-bottom: 1rem;
+    }
+    .intel-pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: .28rem .6rem;
+        font-size: .72rem;
+        font-weight: 700;
+        background: #eef2ff;
+        color: #4338ca;
+    }
+    .intel-pill.missing {
+        background: #f8fafc;
+        color: #64748b;
     }
     .intel-grid {
         display: grid;
@@ -162,14 +271,64 @@
         color: var(--text-muted);
     }
     .empty-state i { font-size: 2.5rem; color: #cbd5e1; margin-bottom: .75rem; display: block; }
+    @media (max-width: 767px) {
+        .comp-card-actions {
+            width: 100%;
+            justify-content: flex-start;
+        }
+        .toolbar-actions {
+            width: 100%;
+        }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="page-title-bar">
-    <h5><i class="bi bi-binoculars"></i>Competitor Intel</h5>
-    <p>Automated reports on your competitors, refreshed weekly. Add competitors from <a href="{{ url_for('client.client_my_business') }}">My Business</a>.</p>
+<div class="page-title-bar competitor-toolbar">
+    <div class="toolbar-copy">
+        <h5><i class="bi bi-binoculars"></i>Competitor Intel</h5>
+        <p>Use this page to see who has fresh intel, who needs a rescan, and what Warren should react to next. Add or edit competitors from <a href="{{ url_for('client.client_my_business') }}">My Business</a>.</p>
+    </div>
+    <div class="toolbar-actions">
+        <a href="{{ url_for('client.client_my_business') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-sliders me-1"></i>Manage competitors
+        </a>
+        <button type="button" class="btn btn-dark btn-sm" data-warren-competitor-prompt="Use my competitor intel to tell me the biggest market gap we should attack next.">
+            <i class="bi bi-stars me-1"></i>Ask W.A.R.R.E.N.
+        </button>
+        <form method="post" action="{{ url_for('client.client_competitors_refresh_all') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-primary btn-sm">
+                <i class="bi bi-arrow-repeat me-1"></i>Scan all competitors
+            </button>
+        </form>
+    </div>
 </div>
+
+{% if competitor_page_summary.tracked %}
+<div class="summary-grid">
+    <div class="summary-card">
+        <div class="kicker">Tracked</div>
+        <div class="metric">{{ competitor_page_summary.tracked }}</div>
+        <div class="subtext">Competitors Warren can compare against</div>
+    </div>
+    <div class="summary-card">
+        <div class="kicker">Ready</div>
+        <div class="metric">{{ competitor_page_summary.fresh }}</div>
+        <div class="subtext">Full, recent scans ready for positioning calls</div>
+    </div>
+    <div class="summary-card">
+        <div class="kicker">Needs Rescan</div>
+        <div class="metric">{{ competitor_page_summary.stale }}</div>
+        <div class="subtext">Older than 7 days and should be refreshed</div>
+    </div>
+    <div class="summary-card">
+        <div class="kicker">Needs First Scan</div>
+        <div class="metric">{{ competitor_page_summary.empty }}</div>
+        <div class="subtext">Added competitors with no saved intel yet</div>
+    </div>
+</div>
+{% endif %}
 
 {% if pricing_market_summary and pricing_market_summary.billable_source_count %}
 <div class="summary-grid">
@@ -209,17 +368,32 @@
     <i class="bi bi-binoculars"></i>
     <h5>No competitors added yet</h5>
     <p>Add competitors on the <a href="{{ url_for('client.client_my_business') }}">My Business</a> page to start gathering intel.</p>
+    <a href="{{ url_for('client.client_my_business') }}" class="btn btn-primary btn-sm mt-2">
+        <i class="bi bi-plus-lg me-1"></i>Add competitors
+    </a>
 </div>
 {% endif %}
 
-{% for report in reports %}
-{% set comp = report.competitor %}
+{% for card in report_cards %}
+{% set report = card.report %}
+{% set comp = card.competitor %}
 <div class="comp-card">
     <div class="comp-card-head">
-        <div>
-            <h5>{{ comp.name }}</h5>
+        <div class="comp-card-meta">
+            <div class="comp-card-title-row">
+                <h5>{{ comp.name }}</h5>
+                <span class="scan-badge {{ card.status_tone }}">{{ card.status_label }}</span>
+            </div>
+            <p class="comp-card-summary">{{ card.status_summary }}</p>
+            <div class="comp-card-meta-row">
+                <span class="scan-meta-pill">{{ card.last_scanned_label }}</span>
+                <span class="scan-meta-pill">{{ card.available_source_count }} intel sources available</span>
+                {% if card.missing_source_count %}
+                <span class="scan-meta-pill">{{ card.missing_source_count }} still missing</span>
+                {% endif %}
+            </div>
         </div>
-        <div class="d-flex align-items-center gap-2">
+        <div class="comp-card-actions">
             <span class="comp-links">
                 {% if comp.website %}<a href="{{ comp.website }}" target="_blank" rel="noopener" title="Website"><i class="bi bi-globe"></i></a>{% endif %}
                 {% if comp.facebook_url %}<a href="{{ comp.facebook_url }}" target="_blank" rel="noopener" title="Facebook"><i class="bi bi-facebook"></i></a>{% endif %}
@@ -227,19 +401,89 @@
                 {% if comp.instagram_url %}<a href="{{ comp.instagram_url }}" target="_blank" rel="noopener" title="Instagram"><i class="bi bi-instagram"></i></a>{% endif %}
                 {% if comp.yelp_url %}<a href="{{ comp.yelp_url }}" target="_blank" rel="noopener" title="Yelp"><i class="bi bi-star"></i></a>{% endif %}
             </span>
+            <button type="button" class="btn btn-sm btn-outline-dark" data-warren-competitor-prompt="{{ card.warren_prompt }}">
+                <i class="bi bi-stars"></i> Use this intel in W.A.R.R.E.N.
+            </button>
             <form method="post" action="{{ url_for('client.client_competitor_refresh', competitor_id=comp.id) }}" style="display:inline;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-sm btn-outline-primary" title="Refresh intel">
-                    <i class="bi bi-arrow-clockwise"></i> Scan
+                    <i class="bi bi-arrow-clockwise"></i> {{ card.scan_button_label }}
                 </button>
             </form>
         </div>
     </div>
     <div class="comp-card-body">
+        <div class="intel-pills">
+            {% for item in card.available_sources %}
+            <span class="intel-pill">{{ item }}</span>
+            {% endfor %}
+            {% for item in card.missing_sources[:3] %}
+            <span class="intel-pill missing">Missing {{ item }}</span>
+            {% endfor %}
+        </div>
         {% if not report.get('google_places') and not report.get('meta_ads') and not report.get('website') and not report.get('pricing') %}
         <p class="text-muted" style="font-size:.88rem;">No intel collected yet. Click <strong>Scan</strong> to fetch data.</p>
         {% else %}
         <div class="intel-grid">
+
+            {# Research panel (AI-generated from fetched intel) #}
+            {% if report.get('research') %}
+            {% set rr = report.research %}
+            <div class="intel-panel">
+                <h6><i class="bi bi-lightbulb"></i> Warren Brief</h6>
+
+                {% if rr.positioning_summary %}
+                <div style="font-size:.86rem; color:#374151; line-height:1.5; margin-bottom:.5rem;">{{ rr.positioning_summary }}</div>
+                {% endif %}
+
+                {% if rr.messaging_angles %}
+                <div class="intel-stat"><span class="label">Angles</span><span class="value" style="font-size:.82rem; text-align:right; max-width:65%;">{{ rr.messaging_angles[:3] | join(' | ') }}</span></div>
+                {% endif %}
+
+                {% if rr.observed_services %}
+                <div class="intel-stat"><span class="label">Services</span><span class="value" style="font-size:.82rem; text-align:right; max-width:65%;">{{ rr.observed_services[:3] | join(' | ') }}</span></div>
+                {% endif %}
+
+                {% if rr.observed_offers %}
+                <div class="intel-stat"><span class="label">Offers</span><span class="value" style="font-size:.82rem; text-align:right; max-width:65%;">{{ rr.observed_offers[:3] | join(' | ') }}</span></div>
+                {% endif %}
+
+                {% if rr.observed_pricing %}
+                <div class="intel-stat"><span class="label">Pricing</span><span class="value" style="font-size:.82rem; text-align:right; max-width:65%;">{{ rr.observed_pricing[:3] | join(' | ') }}</span></div>
+                {% endif %}
+
+                {% if rr.pricing_position %}
+                <div style="font-size:.82rem; color:#4b5563; margin-top:.45rem;">{{ rr.pricing_position }}</div>
+                {% endif %}
+
+                {% if rr.pricing_strategy %}
+                <div class="ad-sample" style="margin-top:.6rem;">
+                    <div class="ad-title">Pricing Strategy</div>
+                    <div>{{ rr.pricing_strategy }}</div>
+                </div>
+                {% endif %}
+
+                {% if rr.counter_moves %}
+                <div style="margin-top:.6rem;">
+                    {% for cm in rr.counter_moves[:4] %}
+                    <div class="ad-sample" style="margin-bottom:.55rem;">
+                        {% if cm.move %}<div class="ad-title">{{ cm.move }}</div>{% endif %}
+                        {% if cm.why %}<div style="color:#4b5563;">Why: {{ cm.why }}</div>{% endif %}
+                        {% if cm.how %}<div style="color:#4b5563;">How: {{ cm.how }}</div>{% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if rr.data_gaps %}
+                <div class="intel-stale">Data gaps: {{ rr.data_gaps[:3] | join(' | ') }}</div>
+                {% endif %}
+
+                {% if report.get('research_fetched') %}
+                <div class="intel-stale">Last updated: {{ report.research_fetched[:10] }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
 
             {# Google Places panel #}
             {% if report.get('google_places') %}
@@ -340,9 +584,9 @@
                 {% endif %}
                 {% endif %}
 
-                {% if pr.items %}
+                {% if pr.get('items') %}
                 <div style="margin-top:.65rem;">
-                    {% for item in pr.items[:6] %}
+                    {% for item in pr.get('items', [])[:6] %}
                     <div class="ad-sample">
                         <div class="pricing-chip">{{ item.price_type|replace('_', ' ') }}</div>
                         <div class="ad-title">
@@ -375,69 +619,23 @@
             </div>
             {% endif %}
 
-            {# Research panel (AI-generated from fetched intel) #}
-            {% if report.get('research') %}
-            {% set rr = report.research %}
-            <div class="intel-panel">
-                <h6><i class="bi bi-lightbulb"></i> Research + Counter Moves</h6>
-
-                {% if rr.positioning_summary %}
-                <div style="font-size:.86rem; color:#374151; line-height:1.5; margin-bottom:.5rem;">{{ rr.positioning_summary }}</div>
-                {% endif %}
-
-                {% if rr.messaging_angles %}
-                <div class="intel-stat"><span class="label">Angles</span><span class="value" style="font-size:.82rem; text-align:right; max-width:65%;">{{ rr.messaging_angles[:3] | join(' | ') }}</span></div>
-                {% endif %}
-
-                {% if rr.observed_services %}
-                <div class="intel-stat"><span class="label">Services</span><span class="value" style="font-size:.82rem; text-align:right; max-width:65%;">{{ rr.observed_services[:3] | join(' | ') }}</span></div>
-                {% endif %}
-
-                {% if rr.observed_offers %}
-                <div class="intel-stat"><span class="label">Offers</span><span class="value" style="font-size:.82rem; text-align:right; max-width:65%;">{{ rr.observed_offers[:3] | join(' | ') }}</span></div>
-                {% endif %}
-
-                {% if rr.observed_pricing %}
-                <div class="intel-stat"><span class="label">Pricing</span><span class="value" style="font-size:.82rem; text-align:right; max-width:65%;">{{ rr.observed_pricing[:3] | join(' | ') }}</span></div>
-                {% endif %}
-
-                {% if rr.pricing_position %}
-                <div style="font-size:.82rem; color:#4b5563; margin-top:.45rem;">{{ rr.pricing_position }}</div>
-                {% endif %}
-
-                {% if rr.pricing_strategy %}
-                <div class="ad-sample" style="margin-top:.6rem;">
-                    <div class="ad-title">Pricing Strategy</div>
-                    <div>{{ rr.pricing_strategy }}</div>
-                </div>
-                {% endif %}
-
-                {% if rr.counter_moves %}
-                <div style="margin-top:.6rem;">
-                    {% for cm in rr.counter_moves[:6] %}
-                    <div class="ad-sample" style="margin-bottom:.55rem;">
-                        {% if cm.move %}<div class="ad-title">{{ cm.move }}</div>{% endif %}
-                        {% if cm.why %}<div style="color:#4b5563;">Why: {{ cm.why }}</div>{% endif %}
-                        {% if cm.how %}<div style="color:#4b5563;">How: {{ cm.how }}</div>{% endif %}
-                    </div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-
-                {% if rr.data_gaps %}
-                <div class="intel-stale">Data gaps: {{ rr.data_gaps[:3] | join(' | ') }}</div>
-                {% endif %}
-
-                {% if report.get('research_fetched') %}
-                <div class="intel-stale">Last updated: {{ report.research_fetched[:10] }}</div>
-                {% endif %}
-            </div>
-            {% endif %}
-
         </div>
         {% endif %}
     </div>
 </div>
 {% endfor %}
+
+<script>
+(function() {
+    document.addEventListener('click', function(event) {
+        var trigger = event.target.closest('[data-warren-competitor-prompt]');
+        if (!trigger) return;
+        event.preventDefault();
+        if (typeof window.gromorePrimeWarrenPrompt === 'function') {
+            window.gromorePrimeWarrenPrompt(trigger.getAttribute('data-warren-competitor-prompt') || '');
+        }
+    });
+})();
+</script>
 
 {% endblock %}

@@ -26,6 +26,69 @@
         line-height: 1.55;
     }
     .warren-call-body strong { color: #fff; }
+    .warren-drive {
+        background: linear-gradient(135deg, #0f172a 0%, #0f766e 55%, #14b8a6 100%);
+        border-radius: 18px;
+        padding: 1.5rem 1.6rem;
+        margin-bottom: 1.25rem;
+        color: #fff;
+        box-shadow: 0 16px 40px rgba(15, 23, 42, .16);
+    }
+    .warren-drive h5 {
+        font-size: 1.25rem;
+        font-weight: 800;
+        margin-bottom: .45rem;
+        color: #fff !important;
+    }
+    .warren-drive p {
+        margin: 0;
+        color: rgba(255,255,255,.82);
+        max-width: 70ch;
+        line-height: 1.6;
+        font-size: .95rem;
+    }
+    .warren-drive-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .7rem;
+        margin-top: 1rem;
+    }
+    .warren-drive-chip {
+        border: 1px solid rgba(255,255,255,.22);
+        background: rgba(255,255,255,.10);
+        color: #fff;
+        border-radius: 999px;
+        padding: .7rem .95rem;
+        font-size: .84rem;
+        font-weight: 700;
+        transition: transform .15s ease, background .15s ease, border-color .15s ease;
+    }
+    .warren-drive-chip:hover {
+        transform: translateY(-1px);
+        background: rgba(255,255,255,.16);
+        border-color: rgba(255,255,255,.4);
+        color: #fff;
+    }
+    .warren-call-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .6rem;
+        margin-top: 1rem;
+    }
+    .warren-call-prompt {
+        border: 1px solid rgba(255,255,255,.18);
+        background: rgba(255,255,255,.08);
+        color: #fff;
+        border-radius: 999px;
+        padding: .55rem .85rem;
+        font-size: .78rem;
+        font-weight: 700;
+    }
+    .warren-call-prompt:hover {
+        background: rgba(255,255,255,.14);
+        color: #fff;
+        border-color: rgba(255,255,255,.35);
+    }
 
     /* -- Health Meter -- */
     .perf-snapshot {
@@ -672,6 +735,21 @@
 </div>
 {% endif %}
 
+<section class="warren-drive">
+    <div class="d-flex flex-wrap justify-content-between gap-3 align-items-start">
+        <div>
+            <h5>Talk to W.A.R.R.E.N. first</h5>
+            <p>Warren should feel like the main growth operator in this product. If you are not sure what to do next, ask Warren where to focus, what is blocking scale, or which move will create the most leverage this month.</p>
+        </div>
+        <button type="button" class="btn btn-light btn-sm" data-warren-dashboard-prompt="Give me one clear move that will help me grow this month, and explain why it matters.">Open Warren</button>
+    </div>
+    <div class="warren-drive-actions">
+        <button type="button" class="warren-drive-chip" data-warren-dashboard-prompt="Where should I focus first if I want to grow this month?">Where should I focus first?</button>
+        <button type="button" class="warren-drive-chip" data-warren-dashboard-prompt="What is blocking scale right now, and what should I fix before spending more?">What is blocking scale?</button>
+        <button type="button" class="warren-drive-chip" data-warren-dashboard-prompt="Give me one move that would improve lead quality, not just lead volume.">How do I improve lead quality?</button>
+    </div>
+</section>
+
 <div id="dashLoader" class="dash-loader">
     <div class="loader-orb"></div>
     <div class="loader-title">Preparing your dashboard</div>
@@ -1075,7 +1153,7 @@ function fmtInt(v) {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfVal },
-                body: JSON.stringify({ hint: '' }),
+                body: JSON.stringify({ hint: 'Lead with growth and scale. Make Warren feel like the main operator they should talk to first.' }),
             })
             .then(function(r) { return r.json(); })
             .then(function(pData) {
@@ -1198,6 +1276,11 @@ function fmtInt(v) {
         html += '<h3>W.A.R.R.E.N.\'s Call <span>- ' + esc(month) + '</span></h3>';
         html += '<div style="font-size:.78rem;font-weight:700;color:rgba(255,255,255,.55);letter-spacing:.03em;margin-bottom:.5rem;">Weighted Analysis for Revenue, Reach, Engagement &amp; Navigation</div>';
         html += '<div class="warren-call-body">' + esc(warrenSummary) + '</div>';
+        html += '<div class="warren-call-actions">';
+        html += '<button type="button" class="warren-call-prompt" data-warren-dashboard-prompt="Tell me the one move I should make next to grow efficiently.">Ask what to do next</button>';
+        html += '<button type="button" class="warren-call-prompt" data-warren-dashboard-prompt="Should I scale right now, or is something still leaking?">Ask if it is time to scale</button>';
+        html += '<button type="button" class="warren-call-prompt" data-warren-dashboard-prompt="What is the biggest growth constraint in this account right now?">Ask what is holding growth back</button>';
+        html += '</div>';
 
         // Compact findings link (details live on Team page)
         var wb = d.warren_briefing;
@@ -1530,6 +1613,17 @@ function toggleMovesRows(platform, btn) {
                 });
         });
     }
+})();
+
+(function() {
+    document.addEventListener('click', function(event) {
+        var trigger = event.target.closest('[data-warren-dashboard-prompt]');
+        if (!trigger) return;
+        event.preventDefault();
+        if (typeof window.gromorePrimeWarrenPrompt === 'function') {
+            window.gromorePrimeWarrenPrompt(trigger.getAttribute('data-warren-dashboard-prompt') || '');
+        }
+    });
 })();
 </script>
 {% else %}

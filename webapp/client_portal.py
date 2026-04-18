@@ -2678,6 +2678,7 @@ _ENDPOINT_FEATURE_MAP = {
     "schedule_post_bulk":          "post_scheduler",
     "delete_scheduled_post":       "post_scheduler",
     "client_competitors":          "competitor_intel",
+    "client_competitors_refresh_all": "competitor_intel",
     "client_competitor_refresh":   "competitor_intel",
     "client_add_competitor":       "competitor_intel",
     "client_delete_competitor":    "competitor_intel",
@@ -5013,6 +5014,114 @@ def client_edit_competitor(competitor_id):
 
 # ── Competitor Intel ──
 
+_COMPETITOR_INTEL_LABELS = {
+    "google_places": "Google reputation",
+    "meta_ads": "Active ads",
+    "website": "Website",
+    "pricing": "Public pricing",
+    "research": "Counter moves",
+}
+
+
+def _parse_competitor_fetched_at(value):
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _build_competitor_report_card(report):
+    competitor = report.get("competitor") or {}
+    available_sources = []
+    missing_sources = []
+    fetched_times = []
+
+    for intel_type, label in _COMPETITOR_INTEL_LABELS.items():
+        payload = report.get(intel_type)
+        if payload:
+            available_sources.append(label)
+        else:
+            missing_sources.append(label)
+        fetched_at = _parse_competitor_fetched_at(report.get(f"{intel_type}_fetched"))
+        if fetched_at:
+            fetched_times.append(fetched_at)
+
+    latest_scan_at = max(fetched_times) if fetched_times else None
+    stale_before = datetime.now() - timedelta(days=7)
+    if not available_sources:
+        status_tone = "empty"
+        status_label = "Needs first scan"
+        status_summary = "No intel is saved yet. Run the first scan to pull website, pricing, ad, and review signals."
+        scan_button_label = "Run first scan"
+    elif latest_scan_at and latest_scan_at < stale_before:
+        status_tone = "stale"
+        status_label = "Needs rescan"
+        status_summary = "This intel is older than 7 days. Rescan now before using it for positioning or pricing decisions."
+        scan_button_label = "Rescan now"
+    elif missing_sources:
+        status_tone = "partial"
+        status_label = "Partially scanned"
+        status_summary = f"{len(available_sources)} of {len(_COMPETITOR_INTEL_LABELS)} intel sources are available. Rescan to fill in the missing gaps."
+        scan_button_label = "Rescan now"
+    else:
+        status_tone = "fresh"
+        status_label = "Ready"
+        status_summary = "This competitor has a full recent scan, so Warren can use it for cleaner positioning and counter-moves."
+        scan_button_label = "Rescan now"
+
+    if latest_scan_at:
+        last_scanned_label = f"Last scan {latest_scan_at.strftime('%Y-%m-%d')}"
+    else:
+        last_scanned_label = "No scan saved yet"
+
+    competitor_name = (competitor.get("name") or "this competitor").strip()
+    warren_prompt = (
+        f"Use the competitor intel for {competitor_name} to tell me how we should position ourselves, "
+        "what gap to attack, and what move matters most next."
+    )
+
+    sort_weight = {
+        "stale": 0,
+        "empty": 1,
+        "partial": 2,
+        "fresh": 3,
+    }.get(status_tone, 4)
+
+    return {
+        "competitor": competitor,
+        "report": report,
+        "available_sources": available_sources,
+        "missing_sources": missing_sources,
+        "available_source_count": len(available_sources),
+        "missing_source_count": len(missing_sources),
+        "latest_scan_at": latest_scan_at,
+        "last_scanned_label": last_scanned_label,
+        "status_tone": status_tone,
+        "status_label": status_label,
+        "status_summary": status_summary,
+        "scan_button_label": scan_button_label,
+        "warren_prompt": warren_prompt,
+        "sort_weight": sort_weight,
+    }
+
+
+def _build_competitor_page_summary(report_cards):
+    summary = {
+        "tracked": len(report_cards),
+        "fresh": 0,
+        "stale": 0,
+        "partial": 0,
+        "empty": 0,
+    }
+    for card in report_cards:
+        tone = card.get("status_tone")
+        if tone in summary:
+            summary[tone] += 1
+    return summary
+
 @client_bp.route("/competitors")
 @client_login_required
 def client_competitors():
@@ -5023,7 +5132,7 @@ def client_competitors():
         abort(404)
 
     competitors = db.get_competitors(brand_id)
-    reports = []
+    report_cards = []
     pricing_market_summary = {}
     warren_pricing_strategy = ""
     pricing_strategy_competitor = ""
@@ -5031,7 +5140,12 @@ def client_competitors():
     pricing_observations = []
     for comp in competitors:
         from webapp.competitor_intel import get_competitor_report
-        reports.append(get_competitor_report(db, brand, comp))
+        report = get_competitor_report(db, brand, comp)
+        report_cards.append(_build_competitor_report_card(report))
+
+    report_cards.sort(key=lambda card: (card.get("sort_weight", 99), (card.get("competitor") or {}).get("name", "").lower()))
+    reports = [card["report"] for card in report_cards]
+    competitor_page_summary = _build_competitor_page_summary(report_cards)
 
     if reports:
         from webapp.competitor_intel import summarize_market_pricing
@@ -5056,13 +5170,47 @@ def client_competitors():
     return render_template(
         "client_competitors.html",
         competitors=competitors,
-        reports=reports,
+        report_cards=report_cards,
         pricing_market_summary=pricing_market_summary,
         warren_pricing_strategy=warren_pricing_strategy,
         pricing_strategy_competitor=pricing_strategy_competitor,
         pricing_position=pricing_position,
         pricing_observations=pricing_observations,
+        competitor_page_summary=competitor_page_summary,
     )
+
+
+@client_bp.route("/competitors/refresh-all", methods=["POST"])
+@client_login_required
+def client_competitors_refresh_all():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    competitors = db.get_competitors(brand_id)
+    if not competitors:
+        flash("Add at least one competitor before running a scan.", "warning")
+        return redirect(url_for("client.client_competitors"))
+
+    from webapp.competitor_intel import refresh_competitor_intel
+
+    issue_names = []
+    for comp in competitors:
+        result = refresh_competitor_intel(db, brand, comp, force=True)
+        if result.get("_errors"):
+            issue_names.append(comp.get("name") or "Unknown competitor")
+
+    if issue_names:
+        flash(
+            f"Scanned {len(competitors)} competitors. Some sources need attention for: {', '.join(issue_names[:3])}.",
+            "warning",
+        )
+    else:
+        flash(f"Scanned {len(competitors)} competitors.", "success")
+    _log_agent("hawk", "Refreshed all competitor intel", brand.get("display_name") or brand.get("name") or "")
+    return redirect(url_for("client.client_competitors"))
 
 
 @client_bp.route("/competitors/<int:competitor_id>/refresh", methods=["POST"])

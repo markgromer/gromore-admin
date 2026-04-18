@@ -63,6 +63,7 @@ class ClientBasePjaxTests(unittest.TestCase):
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn("Talk to W.A.R.R.E.N.", html)
         self.assertIn("typeof window._pageLoaderMessagesForHref === 'function'", html)
         self.assertIn("loaderMessages = window._pageLoaderMessagesForHref(url);", html)
         self.assertNotIn("window.showPageLoader(messagesForHref(url));", html)

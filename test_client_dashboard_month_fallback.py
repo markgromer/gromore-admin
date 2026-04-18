@@ -99,6 +99,8 @@ class ClientDashboardMonthFallbackTests(unittest.TestCase):
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn("Talk to W.A.R.R.E.N. first", html)
+        self.assertIn("Where should I focus first?", html)
         self.assertIn("Learn the app in the right order", html)
         self.assertIn("0 of 5 done", html)
         self.assertIn("Go to Quick Launch", html)

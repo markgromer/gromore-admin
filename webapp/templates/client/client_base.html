@@ -45,6 +45,17 @@
             <span class="brand-text">{{ client_brand or 'Dashboard' }}</span>
         </div>
         <div class="nav-links">
+            <div style="padding:0 .35rem .85rem;">
+                <button
+                    type="button"
+                    class="btn btn-dark btn-sm w-100"
+                    data-warren-sidebar-prompt="What should I focus on next if I want to grow this business efficiently?"
+                    style="border-radius:12px; font-weight:700; padding:.72rem .9rem;"
+                >
+                    <i class="bi bi-stars me-1"></i>Talk to W.A.R.R.E.N.
+                </button>
+                <div style="font-size:.72rem; color:var(--text-muted); margin-top:.45rem; padding:0 .2rem; line-height:1.45;">Ask what to fix, where to focus, or when to scale.</div>
+            </div>
             {# â”€â”€ Primary: always visible â”€â”€ #}
             {% if feature_on('dashboard') %}
             <a href="{{ url_for('client.client_dashboard') }}" class="{% if request.endpoint == 'client.client_dashboard' %}active{% endif %}">
@@ -241,7 +252,7 @@
             <div class="input-group input-group-sm">
                 <button class="btn btn-outline-secondary" id="assistantAttachBtn" type="button" title="Attach image or file" {% if not assistant_enabled %}disabled{% endif %}><i class="bi bi-paperclip"></i></button>
                 <input type="file" id="assistantFileInput" accept="image/*,.pdf,.csv,.txt,.json,.xlsx,.xls,.doc,.docx" style="display:none;">
-                <textarea class="form-control" id="assistantInput" placeholder="Message W.A.R.R.E.N..." rows="1" style="resize:none; max-height:100px; overflow-y:auto;" {% if not assistant_enabled %}disabled{% endif %}></textarea>
+                <textarea class="form-control" id="assistantInput" placeholder="Ask W.A.R.R.E.N. how to grow, scale, or what to do next..." rows="1" style="resize:none; max-height:100px; overflow-y:auto;" {% if not assistant_enabled %}disabled{% endif %}></textarea>
                 <button class="btn btn-primary" id="assistantSend" type="button" {% if not assistant_enabled %}disabled{% endif %}><i class="bi bi-send-fill"></i></button>
             </div>
             <div class="text-muted text-center" style="font-size:.68rem; margin-top:4px;">Enter to send, Shift+Enter for new line</div>
@@ -752,6 +763,31 @@
                 input.focus();
             }
         }
+
+        window.gromorePrimeWarrenPrompt = function(prompt, options) {
+            options = options || {};
+            if (!input || !shell) return;
+            if (shell.classList.contains('assistant-collapsed')) {
+                shell.classList.remove('assistant-collapsed');
+                localStorage.setItem('clientAssistantCollapsed', '0');
+                document.body.classList.add('has-assistant');
+            }
+            if (typeof prompt === 'string' && prompt.trim()) {
+                input.value = prompt.trim();
+                autoResize();
+            }
+            input.focus();
+            if (options.sendNow && !input.disabled && !send.disabled) {
+                sendMessage();
+            }
+        };
+
+        document.addEventListener('click', function(event) {
+            var trigger = event.target.closest('[data-warren-sidebar-prompt]');
+            if (!trigger) return;
+            event.preventDefault();
+            window.gromorePrimeWarrenPrompt(trigger.getAttribute('data-warren-sidebar-prompt') || '');
+        });
 
         async function clearChat() {
             if (!confirm('Clear this conversation?')) return;
