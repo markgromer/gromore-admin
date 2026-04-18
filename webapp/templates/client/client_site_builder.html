@@ -248,7 +248,7 @@
     .gjs-overlay .gjs-four-color, .gjs-overlay .gjs-four-color-h:hover { color: #818cf8; }
     /* Right sidebar */
     .gjs-sidebar {
-        width: 280px; min-width: 280px; background: #1e293b; display: flex;
+        width: 300px; min-width: 300px; background: #1e293b; display: flex;
         flex-direction: column; border-left: 1px solid #334155; overflow: hidden;
     }
     .gjs-sidebar-tabs {
@@ -256,17 +256,62 @@
     }
     .gjs-sidebar-tabs button {
         flex: 1; background: none; border: none; color: #94a3b8; padding: 10px 4px;
-        font-size: .8rem; cursor: pointer; transition: color .15s, background .15s;
+        font-size: .78rem; cursor: pointer; transition: color .15s, background .15s;
+        display: flex; flex-direction: column; align-items: center; gap: 2px;
     }
+    .gjs-sidebar-tabs button i { font-size: 1rem; }
+    .gjs-sidebar-tabs button span { font-size: .65rem; }
     .gjs-sidebar-tabs button:hover { color: #e2e8f0; background: rgba(255,255,255,.04); }
     .gjs-sidebar-tabs button.active { color: #fff; background: #334155; }
     .gjs-sidebar-panel { display: none; flex: 1; overflow-y: auto; padding: 0; }
     .gjs-sidebar-panel.active { display: block; }
-    /* Block cards */
-    .gjs-overlay .gjs-blocks-c { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; }
-    .gjs-overlay .gjs-block { width: calc(50% - 3px); min-height: 50px; font-size: 11px; padding: 8px 4px; }
+    /* Block cards in sidebar */
+    .gjs-overlay .gjs-blocks-c { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; }
+    .gjs-overlay .gjs-block {
+        width: calc(50% - 3px); min-height: 56px; font-size: 11px; padding: 10px 6px;
+        background: #334155; border: 1px solid #475569; border-radius: 6px;
+        color: #e2e8f0; transition: background .15s, border-color .15s; cursor: grab;
+    }
+    .gjs-overlay .gjs-block:hover { background: #475569; border-color: #818cf8; }
+    .gjs-overlay .gjs-block svg { fill: #e2e8f0; }
+    .gjs-overlay .gjs-block-label { line-height: 1.3; }
+    .gjs-overlay .gjs-block-category .gjs-title {
+        font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+        color: #94a3b8; padding: 10px 10px 4px; background: none; border: none;
+    }
     /* Style manager */
-    .gjs-overlay .gjs-sm-sector-title { font-size: .78rem; font-weight: 600; }
+    .gjs-overlay .gjs-sm-sector-title {
+        font-size: .78rem; font-weight: 600; color: #e2e8f0; background: #334155;
+        padding: 8px 10px; border-bottom: 1px solid #475569;
+    }
+    .gjs-overlay .gjs-sm-sector .gjs-sm-properties { padding: 8px 10px; }
+    .gjs-overlay .gjs-field { background: #0f172a; border: 1px solid #475569; border-radius: 4px; color: #e2e8f0; }
+    .gjs-overlay .gjs-field input, .gjs-overlay .gjs-field select { color: #e2e8f0; }
+    .gjs-overlay .gjs-sm-label { color: #94a3b8; font-size: .72rem; }
+    .gjs-overlay .gjs-clm-tags { background: #0f172a; padding: 6px; border-radius: 4px; }
+    .gjs-overlay .gjs-clm-tag { background: #475569; color: #e2e8f0; }
+    /* Layer manager */
+    .gjs-overlay .gjs-layer { background: #1e293b; border-bottom: 1px solid #334155; }
+    .gjs-overlay .gjs-layer:hover { background: #334155; }
+    .gjs-overlay .gjs-layer-title { color: #e2e8f0; font-size: .78rem; }
+    .gjs-overlay .gjs-layer.gjs-selected .gjs-layer-title { color: #fff; }
+    /* Trait manager */
+    .gjs-overlay .gjs-trt-trait { padding: 6px 10px; }
+    .gjs-overlay .gjs-trt-trait .gjs-label { color: #94a3b8; font-size: .72rem; }
+    /* Canvas selected component highlight */
+    .gjs-overlay .gjs-toolbar { background: #6366f1 !important; border-radius: 4px 4px 0 0; }
+    .gjs-overlay .gjs-toolbar .gjs-toolbar-item { color: #fff; }
+    /* Asset manager modal dark theme */
+    .gjs-overlay .gjs-mdl-dialog { background: #1e293b; color: #e2e8f0; border-radius: 12px; }
+    .gjs-overlay .gjs-mdl-header { background: #0f172a; border-bottom: 1px solid #334155; padding: 12px 16px; }
+    .gjs-overlay .gjs-mdl-title { color: #fff; font-weight: 700; }
+    .gjs-overlay .gjs-am-assets-cont { background: #1e293b; }
+    .gjs-overlay .gjs-am-asset-image { border-radius: 6px; overflow: hidden; }
+    .gjs-overlay .gjs-am-file-uploader {
+        background: #0f172a; border: 2px dashed #475569; border-radius: 8px;
+        color: #94a3b8; padding: 20px;
+    }
+    .gjs-overlay .gjs-am-file-uploader:hover { border-color: #818cf8; color: #e2e8f0; }
 
     /* Rewrite UI */
     .rewrite-panel {
@@ -304,10 +349,10 @@
         <div id="gjsCanvas" style="flex:1; overflow:hidden;"></div>
         <div class="gjs-sidebar">
             <div class="gjs-sidebar-tabs">
-                <button class="active" data-tab="blocks" title="Blocks"><i class="bi bi-plus-square"></i></button>
-                <button data-tab="styles" title="Styles"><i class="bi bi-brush"></i></button>
-                <button data-tab="layers" title="Layers"><i class="bi bi-layers"></i></button>
-                <button data-tab="traits" title="Settings"><i class="bi bi-sliders"></i></button>
+                <button class="active" data-tab="blocks" title="Blocks"><i class="bi bi-plus-square"></i><span>Blocks</span></button>
+                <button data-tab="styles" title="Styles"><i class="bi bi-brush"></i><span>Styles</span></button>
+                <button data-tab="layers" title="Layers"><i class="bi bi-layers"></i><span>Layers</span></button>
+                <button data-tab="traits" title="Settings"><i class="bi bi-sliders"></i><span>Settings</span></button>
             </div>
             <div class="gjs-sidebar-panel active" id="gjsPanelBlocks"></div>
             <div class="gjs-sidebar-panel" id="gjsPanelStyles"></div>
@@ -566,53 +611,146 @@
                             open: true,
                             properties: [
                                 { type: 'select', property: 'display', options: [
-                                    {id:'block'}, {id:'flex'}, {id:'grid'}, {id:'inline-block'}, {id:'none'}
+                                    {id:'block'}, {id:'flex'}, {id:'grid'}, {id:'inline-block'}, {id:'inline'}, {id:'none'}
+                                ]},
+                                { type: 'select', property: 'position', options: [
+                                    {id:'static'}, {id:'relative'}, {id:'absolute'}, {id:'fixed'}, {id:'sticky'}
+                                ]},
+                                { type: 'select', property: 'float', options: [
+                                    {id:'none'}, {id:'left'}, {id:'right'}
                                 ]},
                                 { type: 'select', property: 'flex-direction', options: [
                                     {id:'row'}, {id:'row-reverse'}, {id:'column'}, {id:'column-reverse'}
                                 ]},
                                 { type: 'select', property: 'justify-content', options: [
-                                    {id:'flex-start'}, {id:'center'}, {id:'flex-end'}, {id:'space-between'}, {id:'space-around'}
+                                    {id:'flex-start'}, {id:'center'}, {id:'flex-end'}, {id:'space-between'}, {id:'space-around'}, {id:'space-evenly'}
                                 ]},
                                 { type: 'select', property: 'align-items', options: [
-                                    {id:'flex-start'}, {id:'center'}, {id:'flex-end'}, {id:'stretch'}
+                                    {id:'flex-start'}, {id:'center'}, {id:'flex-end'}, {id:'stretch'}, {id:'baseline'}
                                 ]},
-                                'flex-wrap',
+                                'flex-wrap', 'gap',
+                            ],
+                        },
+                        {
+                            name: 'Size',
+                            open: false,
+                            properties: [
+                                'width', 'min-width', 'max-width',
+                                'height', 'min-height', 'max-height',
                             ],
                         },
                         {
                             name: 'Spacing',
                             open: false,
-                            properties: ['padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
-                                        'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left'],
-                        },
-                        {
-                            name: 'Size',
-                            open: false,
-                            properties: ['width', 'min-width', 'max-width', 'height', 'min-height', 'max-height'],
+                            properties: [
+                                { property: 'padding', type: 'composite', properties: [
+                                    { property: 'padding-top', type: 'integer', units: ['px','%','em','rem'], defaults: '0' },
+                                    { property: 'padding-right', type: 'integer', units: ['px','%','em','rem'], defaults: '0' },
+                                    { property: 'padding-bottom', type: 'integer', units: ['px','%','em','rem'], defaults: '0' },
+                                    { property: 'padding-left', type: 'integer', units: ['px','%','em','rem'], defaults: '0' },
+                                ]},
+                                { property: 'margin', type: 'composite', properties: [
+                                    { property: 'margin-top', type: 'integer', units: ['px','%','em','rem','auto'], defaults: '0' },
+                                    { property: 'margin-right', type: 'integer', units: ['px','%','em','rem','auto'], defaults: '0' },
+                                    { property: 'margin-bottom', type: 'integer', units: ['px','%','em','rem','auto'], defaults: '0' },
+                                    { property: 'margin-left', type: 'integer', units: ['px','%','em','rem','auto'], defaults: '0' },
+                                ]},
+                            ],
                         },
                         {
                             name: 'Typography',
                             open: false,
                             properties: [
-                                'font-family', 'font-size', 'font-weight', 'letter-spacing', 'line-height',
-                                'color', 'text-align', 'text-decoration', 'text-transform',
+                                { property: 'font-family', type: 'select', options: [
+                                    {id:'Arial, Helvetica, sans-serif', label:'Arial'},
+                                    {id:'Georgia, serif', label:'Georgia'},
+                                    {id:'"Times New Roman", Times, serif', label:'Times'},
+                                    {id:'Verdana, Geneva, sans-serif', label:'Verdana'},
+                                    {id:'"Trebuchet MS", Helvetica, sans-serif', label:'Trebuchet'},
+                                    {id:'"Courier New", Courier, monospace', label:'Courier'},
+                                    {id:'system-ui, -apple-system, sans-serif', label:'System UI'},
+                                    {id:'inherit', label:'Inherit'},
+                                ]},
+                                { property: 'font-size', type: 'integer', units: ['px','em','rem','%','vw'], min: 0 },
+                                { property: 'font-weight', type: 'select', options: [
+                                    {id:'300', label:'Light'}, {id:'400', label:'Normal'}, {id:'500', label:'Medium'},
+                                    {id:'600', label:'Semi-Bold'}, {id:'700', label:'Bold'}, {id:'800', label:'Extra Bold'},
+                                ]},
+                                { property: 'line-height', type: 'integer', units: ['px','em',''], min: 0 },
+                                'letter-spacing',
+                                { property: 'color', type: 'color' },
+                                { property: 'text-align', type: 'radio', options: [
+                                    {id:'left', label:'L'}, {id:'center', label:'C'}, {id:'right', label:'R'}, {id:'justify', label:'J'},
+                                ]},
+                                { property: 'text-decoration', type: 'select', options: [
+                                    {id:'none'}, {id:'underline'}, {id:'line-through'}, {id:'overline'}
+                                ]},
+                                { property: 'text-transform', type: 'select', options: [
+                                    {id:'none'}, {id:'uppercase'}, {id:'lowercase'}, {id:'capitalize'}
+                                ]},
+                                { property: 'font-style', type: 'select', options: [
+                                    {id:'normal'}, {id:'italic'}
+                                ]},
                             ],
                         },
                         {
                             name: 'Background',
                             open: false,
-                            properties: ['background-color', 'background-image', 'background-repeat', 'background-position', 'background-size'],
+                            properties: [
+                                { property: 'background-color', type: 'color' },
+                                { property: 'background-image', type: 'file' },
+                                { property: 'background-repeat', type: 'select', options: [
+                                    {id:'repeat'}, {id:'no-repeat'}, {id:'repeat-x'}, {id:'repeat-y'}
+                                ]},
+                                { property: 'background-position', type: 'select', options: [
+                                    {id:'center center', label:'Center'}, {id:'top center', label:'Top'},
+                                    {id:'bottom center', label:'Bottom'}, {id:'left center', label:'Left'},
+                                    {id:'right center', label:'Right'}, {id:'top left'}, {id:'top right'},
+                                    {id:'bottom left'}, {id:'bottom right'},
+                                ]},
+                                { property: 'background-size', type: 'select', options: [
+                                    {id:'auto'}, {id:'cover'}, {id:'contain'}, {id:'100% 100%', label:'Stretch'}
+                                ]},
+                                { property: 'background-attachment', type: 'select', options: [
+                                    {id:'scroll'}, {id:'fixed', label:'Fixed (Parallax)'}
+                                ]},
+                            ],
                         },
                         {
                             name: 'Borders',
                             open: false,
-                            properties: ['border', 'border-radius', 'box-shadow'],
+                            properties: [
+                                { property: 'border-radius', type: 'integer', units: ['px','%'], min: 0 },
+                                { property: 'border', type: 'composite', properties: [
+                                    { property: 'border-width', type: 'integer', units: ['px'], min: 0, defaults: '0' },
+                                    { property: 'border-style', type: 'select', options: [
+                                        {id:'none'}, {id:'solid'}, {id:'dashed'}, {id:'dotted'}, {id:'double'}
+                                    ]},
+                                    { property: 'border-color', type: 'color' },
+                                ]},
+                                { property: 'box-shadow', type: 'stack', properties: [
+                                    { property: 'box-shadow-h', type: 'integer', units: ['px'], defaults: '0' },
+                                    { property: 'box-shadow-v', type: 'integer', units: ['px'], defaults: '0' },
+                                    { property: 'box-shadow-blur', type: 'integer', units: ['px'], min: 0, defaults: '0' },
+                                    { property: 'box-shadow-spread', type: 'integer', units: ['px'], defaults: '0' },
+                                    { property: 'box-shadow-color', type: 'color', defaults: 'rgba(0,0,0,.15)' },
+                                ]},
+                            ],
                         },
                         {
                             name: 'Extra',
                             open: false,
-                            properties: ['opacity', 'overflow', 'cursor', 'transition'],
+                            properties: [
+                                { property: 'opacity', type: 'slider', min: 0, max: 1, step: 0.05, defaults: '1' },
+                                { property: 'overflow', type: 'select', options: [
+                                    {id:'visible'}, {id:'hidden'}, {id:'auto'}, {id:'scroll'}
+                                ]},
+                                { property: 'cursor', type: 'select', options: [
+                                    {id:'auto'}, {id:'pointer'}, {id:'default'}, {id:'move'}, {id:'not-allowed'}, {id:'text'}
+                                ]},
+                                'transition', 'transform',
+                                { property: 'z-index', type: 'integer', defaults: 'auto' },
+                            ],
                         },
                     ],
                 },
@@ -686,7 +824,7 @@
                             id: 'image-block',
                             label: '<i class="bi bi-image"></i> Image',
                             category: 'Basic',
-                            content: { type: 'image' },
+                            content: '<img data-gjs-type="image" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjZTJlOGYwIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2UyZThmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTRhM2I4IiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCI+Q2xpY2sgdG8gYWRkIGltYWdlPC90ZXh0Pjwvc3ZnPg==" style="max-width:100%; height:auto; display:block;"/>',
                         },
                         {
                             id: 'text-block',
@@ -701,10 +839,22 @@
                             content: '<h2 style="font-weight:700; font-size:1.5rem;">Your Heading</h2>',
                         },
                         {
+                            id: 'link-block',
+                            label: '<i class="bi bi-link-45deg"></i> Link',
+                            category: 'Basic',
+                            content: '<a href="#" data-gjs-type="link" style="color:#6366f1; text-decoration:underline; font-weight:500;">Link text</a>',
+                        },
+                        {
                             id: 'button-block',
                             label: '<i class="bi bi-hand-index"></i> Button',
                             category: 'Basic',
                             content: '<a href="#" style="display:inline-block; background:#6366f1; color:#fff; padding:12px 28px; border-radius:8px; text-decoration:none; font-weight:600; font-size:.95rem;">Button Text</a>',
+                        },
+                        {
+                            id: 'list-block',
+                            label: '<i class="bi bi-list-ul"></i> List',
+                            category: 'Basic',
+                            content: '<ul style="padding-left:20px; line-height:1.8;"><li>First item</li><li>Second item</li><li>Third item</li></ul>',
                         },
                         {
                             id: 'divider-block',
@@ -719,6 +869,30 @@
                             content: '<div style="height:40px;"></div>',
                         },
                         {
+                            id: 'image-text',
+                            label: '<i class="bi bi-card-image"></i> Image + Text',
+                            category: 'Sections',
+                            content: '<div style="display:flex; gap:32px; padding:40px 20px; max-width:1200px; margin:0 auto; align-items:center;"><div style="flex:1;"><img data-gjs-type="image" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMzAwIiBmaWxsPSIjZTJlOGYwIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTRhM2I4IiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCI+SW1hZ2U8L3RleHQ+PC9zdmc+" style="width:100%; height:auto; border-radius:10px;"/></div><div style="flex:1;"><h3 style="font-weight:700; font-size:1.4rem; margin-bottom:12px;">Section Title</h3><p style="color:#64748b; line-height:1.7;">Describe what makes this special. Add context, details, and anything that helps the visitor understand the value.</p><a href="#" style="display:inline-block; margin-top:16px; background:#6366f1; color:#fff; padding:10px 24px; border-radius:8px; text-decoration:none; font-weight:600;">Learn More</a></div></div>',
+                        },
+                        {
+                            id: 'gallery-block',
+                            label: '<i class="bi bi-images"></i> Gallery',
+                            category: 'Sections',
+                            content: '<section style="padding:40px 20px; max-width:1200px; margin:0 auto;"><div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px;"><img data-gjs-type="image" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMjUwIiBmaWxsPSIjZTJlOGYwIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjI1MCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTRhM2I4IiBmb250LXNpemU9IjE0Ij5JbWFnZSAxPC90ZXh0Pjwvc3ZnPg==" style="width:100%; height:auto; border-radius:8px;"/><img data-gjs-type="image" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMjUwIiBmaWxsPSIjZTJlOGYwIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjI1MCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTRhM2I4IiBmb250LXNpemU9IjE0Ij5JbWFnZSAyPC90ZXh0Pjwvc3ZnPg==" style="width:100%; height:auto; border-radius:8px;"/><img data-gjs-type="image" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMjUwIiBmaWxsPSIjZTJlOGYwIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjI1MCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTRhM2I4IiBmb250LXNpemU9IjE0Ij5JbWFnZSAzPC90ZXh0Pjwvc3ZnPg==" style="width:100%; height:auto; border-radius:8px;"/></div></section>',
+                        },
+                        {
+                            id: 'pricing-block',
+                            label: '<i class="bi bi-currency-dollar"></i> Pricing',
+                            category: 'Sections',
+                            content: '<section style="padding:60px 20px; max-width:1200px; margin:0 auto;"><h2 style="text-align:center; font-weight:700; margin-bottom:40px;">Our Pricing</h2><div style="display:flex; gap:24px; justify-content:center;"><div style="flex:1; max-width:350px; border:1px solid #e2e8f0; border-radius:12px; padding:32px; text-align:center;"><h3 style="font-weight:600; margin-bottom:8px;">Basic</h3><div style="font-size:2rem; font-weight:800; color:#6366f1; margin-bottom:16px;">$99<small style="font-size:.9rem; font-weight:400; color:#64748b;">/mo</small></div><ul style="list-style:none; padding:0; color:#64748b; line-height:2;"><li>Feature one</li><li>Feature two</li><li>Feature three</li></ul><a href="#" style="display:inline-block; margin-top:20px; background:#6366f1; color:#fff; padding:10px 28px; border-radius:8px; text-decoration:none; font-weight:600;">Get Started</a></div><div style="flex:1; max-width:350px; border:2px solid #6366f1; border-radius:12px; padding:32px; text-align:center; position:relative;"><div style="position:absolute; top:-12px; left:50%; transform:translateX(-50%); background:#6366f1; color:#fff; padding:2px 16px; border-radius:20px; font-size:.75rem; font-weight:600;">Popular</div><h3 style="font-weight:600; margin-bottom:8px;">Pro</h3><div style="font-size:2rem; font-weight:800; color:#6366f1; margin-bottom:16px;">$199<small style="font-size:.9rem; font-weight:400; color:#64748b;">/mo</small></div><ul style="list-style:none; padding:0; color:#64748b; line-height:2;"><li>Everything in Basic</li><li>Priority support</li><li>Advanced features</li></ul><a href="#" style="display:inline-block; margin-top:20px; background:#6366f1; color:#fff; padding:10px 28px; border-radius:8px; text-decoration:none; font-weight:600;">Get Started</a></div></div></section>',
+                        },
+                        {
+                            id: 'banner-block',
+                            label: '<i class="bi bi-card-heading"></i> Banner',
+                            category: 'Sections',
+                            content: '<section style="background:linear-gradient(135deg, #6366f1, #8b5cf6); color:#fff; padding:80px 20px; text-align:center; background-size:cover; background-position:center;"><div style="max-width:700px; margin:0 auto;"><h2 style="font-size:2rem; font-weight:800; margin-bottom:12px;">Full-Width Banner</h2><p style="opacity:.9; font-size:1.05rem; margin-bottom:24px;">This section works great with a background image. Select it, open Styles, and set a background image.</p><a href="#" style="display:inline-block; background:rgba(255,255,255,.2); color:#fff; border:2px solid rgba(255,255,255,.5); padding:12px 32px; border-radius:8px; text-decoration:none; font-weight:600;">Take Action</a></div></section>',
+                        },
+                        {
                             id: 'video-block',
                             label: '<i class="bi bi-play-btn"></i> Video',
                             category: 'Media',
@@ -730,6 +904,12 @@
                             category: 'Media',
                             content: '<div style="max-width:100%; overflow:hidden; border-radius:12px;"><iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12" width="100%" height="350" style="border:0;" allowfullscreen="" loading="lazy"></iframe></div>',
                         },
+                        {
+                            id: 'social-links',
+                            label: '<i class="bi bi-share"></i> Social',
+                            category: 'Media',
+                            content: '<div style="display:flex; gap:12px; justify-content:center; padding:20px;"><a href="#" style="display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; background:#1e293b; color:#fff; border-radius:50%; text-decoration:none; font-size:1.1rem;">f</a><a href="#" style="display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; background:#1e293b; color:#fff; border-radius:50%; text-decoration:none; font-size:1.1rem;">in</a><a href="#" style="display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; background:#1e293b; color:#fff; border-radius:50%; text-decoration:none; font-size:1.1rem;">ig</a></div>',
+                        },
                     ],
                 },
                 assetManager: {
@@ -739,10 +919,40 @@
                     multiUpload: false,
                     autoAdd: true,
                 },
+                canvas: {
+                    styles: [
+                        'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap',
+                    ],
+                },
                 plugins: ['gjs-blocks-basic'],
                 pluginsOpts: {
                     'gjs-blocks-basic': { flexGrid: true },
                 },
+            });
+
+            // Auto-switch to Styles tab when a component is selected
+            gjsEditor.on('component:selected', () => {
+                const stylesBtn = document.querySelector('.gjs-sidebar-tabs button[data-tab="styles"]');
+                if (stylesBtn && !stylesBtn.classList.contains('active')) {
+                    stylesBtn.click();
+                }
+            });
+
+            // When no component is selected, switch back to Blocks
+            gjsEditor.on('component:deselected', () => {
+                const blocksBtn = document.querySelector('.gjs-sidebar-tabs button[data-tab="blocks"]');
+                if (blocksBtn) blocksBtn.click();
+            });
+
+            // Double-click an image to open asset manager
+            gjsEditor.on('component:dblclick', (component) => {
+                if (component.get('type') === 'image') {
+                    gjsEditor.runCommand('open-assets', {
+                        target: component,
+                        types: ['image'],
+                        accept: 'image/*',
+                    });
+                }
             });
 
             // Load saved editor state or raw content
