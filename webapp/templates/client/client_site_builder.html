@@ -237,11 +237,57 @@
         flex-shrink: 0; z-index: 10;
     }
     .gjs-toolbar .gjs-title { font-weight: 700; font-size: .95rem; }
-    .gjs-toolbar .gjs-actions { display: flex; gap: .5rem; align-items: center; }
+    .gjs-toolbar .gjs-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
     .gjs-toolbar .btn-toolbar-note {
         font-size: .72rem; color: rgba(255,255,255,.72); margin-right: .4rem;
     }
-    .gjs-editor-wrap { flex: 1; overflow: hidden; display: flex; }
+    .gjs-editor-wrap { flex: 1; overflow: hidden; display: flex; position: relative; }
+    .gjs-help-panel {
+        position: absolute; left: 20px; top: 18px; z-index: 40; width: 340px;
+        background: rgba(15, 23, 42, .96); color: #e2e8f0; border: 1px solid rgba(129, 140, 248, .28);
+        border-radius: 18px; box-shadow: 0 18px 40px rgba(15, 23, 42, .28); overflow: hidden;
+        transition: opacity .18s ease, transform .18s ease;
+    }
+    .gjs-help-panel.hidden {
+        opacity: 0; pointer-events: none; transform: translateY(-8px);
+    }
+    .gjs-help-head {
+        display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
+        padding: 1rem 1rem .75rem; background: linear-gradient(135deg, rgba(99,102,241,.24), rgba(14,165,233,.12));
+        border-bottom: 1px solid rgba(148, 163, 184, .14);
+    }
+    .gjs-help-head h5 { margin: 0 0 .2rem; font-size: .98rem; font-weight: 800; color: #fff; }
+    .gjs-help-head p { margin: 0; font-size: .8rem; color: #cbd5e1; line-height: 1.5; }
+    .gjs-help-close {
+        border: none; background: rgba(255,255,255,.08); color: #cbd5e1; width: 34px; height: 34px;
+        border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
+    }
+    .gjs-help-close:hover { background: rgba(255,255,255,.14); color: #fff; }
+    .gjs-help-body { padding: .95rem 1rem 1rem; }
+    .gjs-help-steps {
+        display: grid; gap: .65rem; margin: 0 0 1rem; padding: 0; list-style: none;
+    }
+    .gjs-help-step {
+        display: grid; grid-template-columns: 30px 1fr; gap: .7rem; align-items: start;
+    }
+    .gjs-help-step-badge {
+        width: 30px; height: 30px; border-radius: 999px; background: rgba(99,102,241,.18); color: #c7d2fe;
+        display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: .76rem;
+    }
+    .gjs-help-step strong { display: block; font-size: .82rem; color: #fff; margin-bottom: .1rem; }
+    .gjs-help-step span { display: block; font-size: .76rem; color: #cbd5e1; line-height: 1.45; }
+    .gjs-help-actions {
+        display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .8rem;
+    }
+    .gjs-help-actions .btn { border-radius: 999px; font-size: .76rem; font-weight: 700; }
+    .gjs-help-foot {
+        display: flex; justify-content: space-between; align-items: center; gap: .75rem;
+        font-size: .72rem; color: #94a3b8;
+    }
+    .gjs-help-foot button {
+        border: none; background: none; color: #c7d2fe; padding: 0; font-weight: 700;
+    }
+    .gjs-help-foot button:hover { color: #fff; }
     /* GrapesJS panel overrides for Wix-like feel */
     .gjs-overlay .gjs-cv-canvas { flex: 1; }
     .gjs-overlay .gjs-pn-panel { background: #1e293b; }
@@ -355,11 +401,54 @@
                 <button class="btn btn-outline-light" id="gjsImageAlignRight" title="Align image right"><i class="bi bi-align-end"></i></button>
                 <button class="btn btn-outline-light" id="gjsImageAlignFull" title="Make image full width"><i class="bi bi-arrows-fullscreen"></i></button>
             </div>
+            <button class="btn btn-sm btn-outline-light" id="gjsHelpBtn"><i class="bi bi-question-circle me-1"></i>Help</button>
             <button class="btn btn-sm btn-success" id="gjsSaveBtn"><i class="bi bi-check-lg me-1"></i>Save</button>
             <button class="btn btn-sm btn-outline-light" id="gjsCloseBtn"><i class="bi bi-x-lg me-1"></i>Close</button>
         </div>
     </div>
     <div class="gjs-editor-wrap" id="gjsEditorWrap">
+        <div class="gjs-help-panel hidden" id="gjsHelpPanel">
+            <div class="gjs-help-head">
+                <div>
+                    <h5>Getting Started</h5>
+                    <p>Use this as a fast visual editor. Start with sections, then refine text, images, and spacing.</p>
+                </div>
+                <button type="button" class="gjs-help-close" id="gjsHelpClose" aria-label="Close tutorial"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <div class="gjs-help-body">
+                <ol class="gjs-help-steps">
+                    <li class="gjs-help-step">
+                        <span class="gjs-help-step-badge">1</span>
+                        <div><strong>Drag blocks in first</strong><span>Open Blocks on the right and drag in ready-made sections like Hero, Features, Gallery, FAQ, and Contact.</span></div>
+                    </li>
+                    <li class="gjs-help-step">
+                        <span class="gjs-help-step-badge">2</span>
+                        <div><strong>Click text to edit it</strong><span>Most headings, paragraphs, and buttons can be clicked directly and rewritten in place.</span></div>
+                    </li>
+                    <li class="gjs-help-step">
+                        <span class="gjs-help-step-badge">3</span>
+                        <div><strong>Select an image or section</strong><span>Use <em>Image</em> to replace visuals, <em>Background</em> for section backgrounds, and the alignment buttons for quick image placement.</span></div>
+                    </li>
+                    <li class="gjs-help-step">
+                        <span class="gjs-help-step-badge">4</span>
+                        <div><strong>Use Styles for polish</strong><span>Open Styles to change spacing, colors, typography, borders, backgrounds, and layout settings.</span></div>
+                    </li>
+                    <li class="gjs-help-step">
+                        <span class="gjs-help-step-badge">5</span>
+                        <div><strong>Save often</strong><span>Save updates the page preview below. If you want this tutorial back later, click Help in the top bar.</span></div>
+                    </li>
+                </ol>
+                <div class="gjs-help-actions">
+                    <button type="button" class="btn btn-outline-light btn-sm" id="gjsHelpShowBlocks"><i class="bi bi-plus-square me-1"></i>Show Blocks</button>
+                    <button type="button" class="btn btn-outline-light btn-sm" id="gjsHelpShowStyles"><i class="bi bi-brush me-1"></i>Show Styles</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="gjsHelpStartEditing"><i class="bi bi-mouse me-1"></i>Start Editing</button>
+                </div>
+                <div class="gjs-help-foot">
+                    <span>You can hide this and reopen it any time.</span>
+                    <button type="button" id="gjsHelpHideForever">Hide on startup</button>
+                </div>
+            </div>
+        </div>
         <div id="gjsCanvas" style="flex:1; overflow:hidden;"></div>
         <div class="gjs-sidebar">
             <div class="gjs-sidebar-tabs">
@@ -475,12 +564,48 @@
 <script>
 (function(){
     const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content || '';
+    const helpStorageKey = 'gjs-editor-help-hidden-v1';
     const tabPanelMap = {
         blocks: 'gjsPanelBlocks',
         styles: 'gjsPanelStyles',
         layers: 'gjsPanelLayers',
         traits: 'gjsPanelTraits',
     };
+
+    function setToolbarNote(message) {
+        const note = document.querySelector('.btn-toolbar-note');
+        if (note) note.textContent = message;
+    }
+
+    function getStoredHelpHidden() {
+        try {
+            return window.localStorage.getItem(helpStorageKey) === '1';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function storeHelpHidden(hidden) {
+        try {
+            window.localStorage.setItem(helpStorageKey, hidden ? '1' : '0');
+        } catch (e) {}
+    }
+
+    function setHelpPanelVisible(visible, persistHidden) {
+        const panel = document.getElementById('gjsHelpPanel');
+        const btn = document.getElementById('gjsHelpBtn');
+        if (!panel) return;
+        panel.classList.toggle('hidden', !visible);
+        if (btn) {
+            btn.classList.toggle('btn-light', visible);
+            btn.classList.toggle('btn-outline-light', !visible);
+            btn.innerHTML = visible
+                ? '<i class="bi bi-question-circle-fill me-1"></i>Help'
+                : '<i class="bi bi-question-circle me-1"></i>Help';
+        }
+        if (persistHidden === true) storeHelpHidden(!visible);
+        if (persistHidden === false) storeHelpHidden(false);
+    }
 
     function setSidebarTab(tab) {
         document.querySelectorAll('.gjs-sidebar-tabs button').forEach(btn => {
@@ -757,6 +882,8 @@
             document.querySelector('.gjs-sidebar-tabs button[data-tab="blocks"]').classList.add('active');
             document.querySelectorAll('.gjs-sidebar-panel').forEach(p => p.classList.remove('active'));
             document.getElementById('gjsPanelBlocks').classList.add('active');
+            setToolbarNote('Drag blocks from the right, then click Help if you want a quick walkthrough.');
+            setHelpPanelVisible(!getStoredHelpHidden(), false);
 
             gjsEditor = grapesjs.init({
                 container: '#gjsCanvas',
@@ -1136,9 +1263,9 @@
                     stylesBtn.click();
                 }
                 if (isImageComponent(component)) {
-                    document.querySelector('.btn-toolbar-note').textContent = 'Image selected - use Image to replace or Background for sections';
+                    setToolbarNote('Image selected - use Image to replace it, alignment buttons to place it, or Styles for size and crop.');
                 } else {
-                    document.querySelector('.btn-toolbar-note').textContent = 'Select a section or image';
+                    setToolbarNote('Section selected - use Background for a section image or Styles to adjust spacing, colors, and layout.');
                 }
             });
 
@@ -1146,7 +1273,7 @@
             gjsEditor.on('component:deselected', () => {
                 const blocksBtn = document.querySelector('.gjs-sidebar-tabs button[data-tab="blocks"]');
                 if (blocksBtn) blocksBtn.click();
-                document.querySelector('.btn-toolbar-note').textContent = 'Select a section or image';
+                setToolbarNote('Drag blocks from the right, then click Help if you want a quick walkthrough.');
             });
 
             // Double-click an image to open asset manager
@@ -1250,6 +1377,16 @@
     document.getElementById('gjsImageAlignCenter')?.addEventListener('click', () => alignSelectedImage('center'));
     document.getElementById('gjsImageAlignRight')?.addEventListener('click', () => alignSelectedImage('right'));
     document.getElementById('gjsImageAlignFull')?.addEventListener('click', () => alignSelectedImage('full'));
+    document.getElementById('gjsHelpBtn')?.addEventListener('click', () => {
+        const panel = document.getElementById('gjsHelpPanel');
+        if (!panel) return;
+        setHelpPanelVisible(panel.classList.contains('hidden'), false);
+    });
+    document.getElementById('gjsHelpClose')?.addEventListener('click', () => setHelpPanelVisible(false, false));
+    document.getElementById('gjsHelpShowBlocks')?.addEventListener('click', () => setSidebarTab('blocks'));
+    document.getElementById('gjsHelpShowStyles')?.addEventListener('click', () => setSidebarTab('styles'));
+    document.getElementById('gjsHelpStartEditing')?.addEventListener('click', () => setHelpPanelVisible(false, false));
+    document.getElementById('gjsHelpHideForever')?.addEventListener('click', () => setHelpPanelVisible(false, true));
 
     // Sidebar tab switching
     document.querySelectorAll('.gjs-sidebar-tabs button').forEach(btn => {
