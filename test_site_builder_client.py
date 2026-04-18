@@ -66,6 +66,10 @@ def _login_client(client, app):
     db.update_brand_text_field(brand_id, "wp_site_url", "https://aceplumbing.com")
     db.update_brand_text_field(brand_id, "wp_username", "admin")
     db.update_brand_text_field(brand_id, "wp_app_password", "xxxx xxxx xxxx xxxx")
+    db.update_brand_text_field(brand_id, "brand_colors", "#0f172a, #f97316, #e2e8f0")
+    db.update_brand_text_field(brand_id, "primary_color", "#0f172a")
+    db.update_brand_text_field(brand_id, "accent_color", "#f97316")
+    db.update_brand_text_field(brand_id, "logo_path", "logos/test/logo.png")
 
     # Create a client user
     email = f"owner-{uuid.uuid4().hex[:6]}@aceplumbing.com"
@@ -93,6 +97,10 @@ def _login_client_no_wp(client, app):
         "primary_services": "House Cleaning",
         "service_area": "Portland",
     })
+    db.update_brand_text_field(brand_id, "brand_colors", "#14532d, #84cc16")
+    db.update_brand_text_field(brand_id, "primary_color", "#14532d")
+    db.update_brand_text_field(brand_id, "accent_color", "#84cc16")
+    db.update_brand_text_field(brand_id, "logo_path", "logos/test/logo-nowp.png")
 
     email = f"owner-{uuid.uuid4().hex[:6]}@nowp.com"
     user_id = db.create_client_user(
@@ -131,6 +139,14 @@ class SiteBuilderLandingTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"Site Builder", resp.data)
         self.assertIn(b"WordPress Connected", resp.data)
+
+    def test_landing_shows_saved_brand_kit(self):
+        _login_client(self.client, self.app)
+        resp = self.client.get("/client/site-builder")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Brand Kit Ready", resp.data)
+        self.assertIn(b"logos/test/logo.png", resp.data)
+        self.assertIn(b"#0f172a", resp.data)
 
     def test_landing_loads_without_wp(self):
         _login_client_no_wp(self.client, self.app)
@@ -314,6 +330,28 @@ class SiteBuilderReviewTests(unittest.TestCase):
         self.assertIn(b"Trust Strip", resp.data)
         self.assertIn(b"Offer Stack", resp.data)
         self.assertIn(b"Before / After", resp.data)
+
+    def test_review_page_exposes_header_footer_controls(self):
+        brand_id, _ = _login_client(self.client, self.app)
+        db = self.app.db
+        build_id = db.create_site_build(brand_id, [{"page_type": "home"}])
+        db.update_site_build_status(build_id, "completed", pages_completed=1)
+        db.save_site_page({
+            "build_id": build_id,
+            "brand_id": brand_id,
+            "page_type": "home",
+            "label": "Home",
+            "title": "Home",
+            "content": "<section><h2>Welcome</h2><p>Builder test content</p></section>",
+        })
+
+        resp = self.client.get(f"/client/site-builder/{build_id}")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"gjsSetHeader", resp.data)
+        self.assertIn(b"gjsSetFooter", resp.data)
+        self.assertIn(b"gjsToggleStickyHeader", resp.data)
+        self.assertIn(b"Header Nav", resp.data)
+        self.assertIn(b"Footer Columns", resp.data)
 
 
 # ---------------------------------------------------------------------------
@@ -768,6 +806,15 @@ class SiteBuilderIntakeWizardTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"lead_form_type", resp.data)
         self.assertIn(b"WPForms", resp.data)
+        self.assertIn(b"Quote Tool Configuration", resp.data)
+        self.assertIn(b"quote_tool_source", resp.data)
+
+    def test_landing_shows_wordpress_admin_shortcut(self):
+        _login_client(self.client, self.app)
+        resp = self.client.get("/client/site-builder")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"WordPress Admin", resp.data)
+        self.assertIn(b"https://aceplumbing.com/wp-admin/", resp.data)
 
 
 # ---------------------------------------------------------------------------
@@ -902,6 +949,14 @@ class SiteBuilderGenerateWithIntakeTests(unittest.TestCase):
                     "content_goals": "Generate Leads, Rank in Google",
                     "lead_form_type": "wpforms",
                     "lead_form_shortcode": '[wpforms id="42"]',
+                    "quote_tool_source": "wp_shortcode",
+                    "quote_tool_embed": "[sng_quote_tool]",
+                    "quote_tool_zip_mode": "verify",
+                    "quote_tool_collect_dogs": "1",
+                    "quote_tool_collect_frequency": "1",
+                    "quote_tool_collect_last_cleaned": "1",
+                    "quote_tool_phone_mode": "optional",
+                    "quote_tool_notes": "Use the quote tool in the hero section.",
                     "page_selection": "home,about,services,contact",
                     "cta_text": "Get Your Free Quote",
                     "cta_phone": "(555) 999-1234",
@@ -921,6 +976,13 @@ class SiteBuilderGenerateWithIntakeTests(unittest.TestCase):
         self.assertEqual(build["intake"]["brand_voice"], "Professional and authoritative")
         self.assertEqual(build["intake"]["lead_form_type"], "wpforms")
         self.assertEqual(build["intake"]["content_goals"], "Generate Leads, Rank in Google")
+        self.assertEqual(build["intake"]["quote_tool_source"], "wp_shortcode")
+        self.assertEqual(build["intake"]["quote_tool_embed"], "[sng_quote_tool]")
+        self.assertEqual(build["intake"]["quote_tool_zip_mode"], "verify")
+        self.assertTrue(build["intake"]["quote_tool_collect_dogs"])
+        self.assertTrue(build["intake"]["quote_tool_collect_frequency"])
+        self.assertTrue(build["intake"]["quote_tool_collect_last_cleaned"])
+        self.assertEqual(build["intake"]["quote_tool_phone_mode"], "optional")
 
     @patch("webapp.client_portal._get_openai_api_key", return_value="test-key")
     @patch("webapp.client_portal._pick_ai_model", return_value="gpt-4o-mini")

@@ -6526,6 +6526,56 @@ def _parse_hex_color(value, fallback=(255, 255, 255)):
         return fallback
 
 
+def _normalize_hex_color_text(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith("#"):
+        raw = raw[1:]
+    if len(raw) == 3 and re.fullmatch(r"[0-9a-fA-F]{3}", raw):
+        raw = "".join(ch * 2 for ch in raw)
+    if not re.fullmatch(r"[0-9a-fA-F]{6}", raw):
+        return ""
+    return f"#{raw.lower()}"
+
+
+def _site_builder_brand_palette(brand, limit=4):
+    colors = []
+    seen = set()
+
+    def add_color(value):
+        color = _normalize_hex_color_text(value)
+        if not color or color in seen:
+            return
+        seen.add(color)
+        colors.append(color)
+
+    add_color((brand or {}).get("primary_color"))
+    add_color((brand or {}).get("accent_color"))
+
+    raw = ((brand or {}).get("brand_colors") or "").strip()
+    for match in re.finditer(r"#?[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?", raw):
+        add_color(match.group(0))
+        if len(colors) >= limit:
+            break
+
+    return colors[:limit]
+
+
+def _site_builder_brand_logo_url(brand):
+    logo_path = ((brand or {}).get("logo_path") or "").strip()
+    if not logo_path:
+        return ""
+    return url_for("client.client_serve_upload", filename=logo_path)
+
+
+def _site_builder_wp_admin_url(brand):
+    site_url = ((brand or {}).get("wp_site_url") or "").strip().rstrip("/")
+    if not site_url:
+        return ""
+    return f"{site_url}/wp-admin/"
+
+
 def _suggest_creative_style(brand, prompt, ad_format):
     api_key = (brand.get("openai_api_key") or "").strip()
     if not api_key:
@@ -8901,6 +8951,9 @@ def client_site_builder():
     gsc_connected = bool(gsc_url)
     # If Google OAuth is connected but no SC property selected, show a different message
     gsc_needs_property = google_connected and not gsc_connected
+    brand_palette = _site_builder_brand_palette(brand)
+    brand_primary_color = brand_palette[0] if brand_palette else ""
+    brand_accent_color = brand_palette[1] if len(brand_palette) > 1 else brand_primary_color
 
     return render_template(
         "client/client_site_builder.html",
@@ -8917,6 +8970,14 @@ def client_site_builder():
         brand_tagline=(brand.get("tagline") or "").strip(),
         brand_phone=(brand.get("phone") or brand.get("business_phone") or "").strip(),
         brand_active_offers=(brand.get("active_offers") or "").strip(),
+        brand_logo_url=_site_builder_brand_logo_url(brand),
+        brand_logo_path=(brand.get("logo_path") or "").strip(),
+        builder_brand_colors=brand_palette,
+        builder_primary_color=brand_primary_color,
+        builder_accent_color=brand_accent_color,
+        brand_font_heading=(brand.get("font_heading") or "").strip(),
+        brand_font_body=(brand.get("font_body") or "").strip(),
+        wp_admin_url=_site_builder_wp_admin_url(brand),
         gsc_connected=gsc_connected,
         gsc_needs_property=gsc_needs_property,
     )
@@ -9028,6 +9089,14 @@ def client_site_builder_generate():
         "content_goals": (request.form.get("content_goals") or "").strip(),
         "lead_form_type": (request.form.get("lead_form_type") or "").strip(),
         "lead_form_shortcode": (request.form.get("lead_form_shortcode") or "").strip(),
+        "quote_tool_source": (request.form.get("quote_tool_source") or "").strip(),
+        "quote_tool_embed": (request.form.get("quote_tool_embed") or "").strip(),
+        "quote_tool_zip_mode": (request.form.get("quote_tool_zip_mode") or "").strip(),
+        "quote_tool_collect_dogs": bool(request.form.get("quote_tool_collect_dogs")),
+        "quote_tool_collect_frequency": bool(request.form.get("quote_tool_collect_frequency")),
+        "quote_tool_collect_last_cleaned": bool(request.form.get("quote_tool_collect_last_cleaned")),
+        "quote_tool_phone_mode": (request.form.get("quote_tool_phone_mode") or "").strip(),
+        "quote_tool_notes": (request.form.get("quote_tool_notes") or "").strip(),
         "plugins": (request.form.get("plugins") or "").strip(),
         "cta_text": (request.form.get("cta_text") or "").strip(),
         "cta_phone": (request.form.get("cta_phone") or "").strip(),
@@ -9201,6 +9270,9 @@ def client_site_builder_review(build_id):
     brand = db.get_brand(brand_id) or {}
     wp_ok = _wp_connected(brand)
     unpublished = sum(1 for p in pages if not p.get("wp_page_id"))
+    brand_palette = _site_builder_brand_palette(brand)
+    brand_primary_color = brand_palette[0] if brand_palette else ""
+    brand_accent_color = brand_palette[1] if len(brand_palette) > 1 else brand_primary_color
 
     is_ajax = (
         request.headers.get("X-Requested-With") in {"XMLHttpRequest", "PJAX"}
@@ -9216,6 +9288,13 @@ def client_site_builder_review(build_id):
         pages=pages,
         wp_connected=wp_ok,
         unpublished_count=unpublished,
+        wp_site_url=(brand.get("wp_site_url") or "").strip().rstrip("/"),
+        wp_admin_url=_site_builder_wp_admin_url(brand),
+        brand_logo_url=_site_builder_brand_logo_url(brand),
+        brand_logo_path=(brand.get("logo_path") or "").strip(),
+        builder_brand_colors=brand_palette,
+        builder_primary_color=brand_primary_color,
+        builder_accent_color=brand_accent_color,
     )
 
 

@@ -12,6 +12,8 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+_HEX_COLOR_RE = re.compile(r"#?[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?")
+
 # ---------------------------------------------------------------------------
 # Page type registry
 # ---------------------------------------------------------------------------
@@ -102,6 +104,9 @@ def build_brand_context(brand, intake=None):
     lead_form_type, seo_data, warren_brief, etc.
     """
     intake = intake or {}
+    brand_colors = _extract_brand_hex_colors(brand)
+    brand_primary = _normalize_hex_color((brand or {}).get("primary_color")) or (brand_colors[0] if brand_colors else "")
+    brand_accent = _normalize_hex_color((brand or {}).get("accent_color")) or (brand_colors[1] if len(brand_colors) > 1 else brand_primary)
     ctx = {
         "business_name": (brand.get("display_name") or "").strip(),
         "industry": (brand.get("industry") or "").strip(),
@@ -125,9 +130,19 @@ def build_brand_context(brand, intake=None):
         "content_goals": (intake.get("content_goals") or "").strip(),
         "lead_form_type": (intake.get("lead_form_type") or "").strip(),
         "lead_form_shortcode": (intake.get("lead_form_shortcode") or "").strip(),
+        "quote_tool_source": (intake.get("quote_tool_source") or "").strip(),
+        "quote_tool_embed": (intake.get("quote_tool_embed") or "").strip(),
+        "quote_tool_zip_mode": (intake.get("quote_tool_zip_mode") or "").strip(),
+        "quote_tool_collect_dogs": bool(intake.get("quote_tool_collect_dogs")),
+        "quote_tool_collect_frequency": bool(intake.get("quote_tool_collect_frequency")),
+        "quote_tool_collect_last_cleaned": bool(intake.get("quote_tool_collect_last_cleaned")),
+        "quote_tool_phone_mode": (intake.get("quote_tool_phone_mode") or "").strip(),
+        "quote_tool_notes": (intake.get("quote_tool_notes") or "").strip(),
         "plugins": (intake.get("plugins") or "").strip(),
         "cta_text": (intake.get("cta_text") or "").strip(),
         "cta_phone": (intake.get("cta_phone") or "").strip(),
+        "brand_logo_path": (brand.get("logo_path") or "").strip(),
+        "brand_colors": brand_colors,
     }
     # Intake can override brand-level fields
     for key in ("brand_voice", "target_audience", "active_offers", "tagline"):
@@ -140,14 +155,118 @@ def build_brand_context(brand, intake=None):
     ctx["color_palette"] = (intake.get("color_palette") or "").strip()
     ctx["font_pair"] = (intake.get("font_pair") or "").strip()
     ctx["layout_style"] = (intake.get("layout_style") or "").strip()
-    ctx["color_primary"] = (intake.get("color_primary") or "").strip()
-    ctx["color_accent"] = (intake.get("color_accent") or "").strip()
+    ctx["color_primary"] = (intake.get("color_primary") or brand_primary or "").strip()
+    ctx["color_accent"] = (intake.get("color_accent") or brand_accent or "").strip()
     ctx["color_dark"] = (intake.get("color_dark") or "").strip()
     ctx["color_light"] = (intake.get("color_light") or "").strip()
-    ctx["font_heading"] = (intake.get("font_heading") or "").strip()
-    ctx["font_body"] = (intake.get("font_body") or "").strip()
+    ctx["font_heading"] = (intake.get("font_heading") or (brand.get("font_heading") or "")).strip()
+    ctx["font_body"] = (intake.get("font_body") or (brand.get("font_body") or "")).strip()
     ctx["style_preset"] = (intake.get("style_preset") or "").strip()
     return ctx
+
+
+def _normalize_hex_color(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith("#"):
+        raw = raw[1:]
+    if len(raw) == 3 and re.fullmatch(r"[0-9a-fA-F]{3}", raw):
+        raw = "".join(ch * 2 for ch in raw)
+    if not re.fullmatch(r"[0-9a-fA-F]{6}", raw):
+        return ""
+    return f"#{raw.lower()}"
+
+
+def _extract_brand_hex_colors(brand):
+    colors = []
+    seen = set()
+
+    def add_color(value):
+        color = _normalize_hex_color(value)
+        if not color or color in seen:
+            return
+        seen.add(color)
+        colors.append(color)
+
+    for key in ("primary_color", "accent_color"):
+        add_color((brand or {}).get(key))
+
+    raw = ((brand or {}).get("brand_colors") or "").strip()
+    for match in _HEX_COLOR_RE.finditer(raw):
+        add_color(match.group(0))
+
+    return colors
+
+
+def _intake_flag_enabled(value):
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _quote_tool_block(ctx):
+    source = ctx.get("quote_tool_source") or ""
+    embed = ctx.get("quote_tool_embed") or ""
+    zip_mode = ctx.get("quote_tool_zip_mode") or ""
+    phone_mode = ctx.get("quote_tool_phone_mode") or ""
+    notes = ctx.get("quote_tool_notes") or ""
+    wants_dogs = _intake_flag_enabled(ctx.get("quote_tool_collect_dogs"))
+    wants_frequency = _intake_flag_enabled(ctx.get("quote_tool_collect_frequency"))
+    wants_last_cleaned = _intake_flag_enabled(ctx.get("quote_tool_collect_last_cleaned"))
+
+    if not any((source, embed, zip_mode, phone_mode, notes, wants_dogs, wants_frequency, wants_last_cleaned)):
+        return ""
+
+    parts = ["QUOTE TOOL CONFIGURATION:"]
+    if source == "warren_hosted":
+        parts.append(
+            "- Use Warren's hosted quote flow as the primary quote CTA on this page. "
+            "Design the section so the quote tool feels like the main conversion path."
+        )
+    elif source == "sng_plugin":
+        widget = embed or "[sng_quote_tool]"
+        parts.append(
+            f"- Use the Sweep and Go / CRM quote widget or plugin flow. Place {widget} where the instant quote tool should appear."
+        )
+    elif source == "wp_shortcode":
+        widget = embed or "[your_quote_tool_shortcode]"
+        parts.append(
+            f"- Use the WordPress quote tool shortcode or plugin embed {widget} in the primary quote section."
+        )
+    elif source == "external_url":
+        target = embed or "https://example.com/quote"
+        parts.append(
+            f"- Route quote CTAs to the external quote tool URL {target}. Make the call to action clearly communicate that visitors will continue into a quote flow."
+        )
+    elif embed:
+        parts.append(f"- Use this quote tool embed or reference in the page: {embed}")
+    else:
+        parts.append("- Include a clear instant-quote section or CTA on this page.")
+
+    if zip_mode == "collect":
+        parts.append("- Collect the visitor ZIP code as part of the quote flow.")
+    elif zip_mode == "verify":
+        parts.append("- Collect and verify the visitor ZIP code before moving them deeper into the quote flow. Make service-area qualification obvious in the copy.")
+
+    if wants_dogs:
+        parts.append("- The quote tool should ask for number of dogs.")
+    if wants_frequency:
+        parts.append("- The quote tool should ask for service frequency.")
+    if wants_last_cleaned:
+        parts.append("- The quote tool should optionally ask when the yard was last cleaned.")
+
+    if phone_mode == "optional":
+        parts.append("- Phone number should be optional, not required.")
+    elif phone_mode == "required":
+        parts.append("- Phone number should be required before submission.")
+    elif phone_mode == "hidden":
+        parts.append("- Do not ask for a phone number in the quote tool.")
+
+    if notes:
+        parts.append(f"- Quote-tool notes: {notes}")
+
+    return "\n".join(parts) + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -458,9 +577,10 @@ def _lead_form_block(ctx):
     form_type = ctx.get("lead_form_type") or ""
     shortcode = ctx.get("lead_form_shortcode") or ""
     plugins = ctx.get("plugins") or ""
+    quote_tool = _quote_tool_block(ctx)
 
     if not form_type and not shortcode and not plugins:
-        return ""
+        return quote_tool
 
     parts = ["LEAD FORM & PLUGIN INTEGRATION:"]
     if form_type == "wpforms":
@@ -493,6 +613,10 @@ def _lead_form_block(ctx):
 
     if plugins:
         parts.append(f"- Additional plugins/integrations to reference: {plugins}")
+
+    if quote_tool:
+        parts.append("")
+        parts.append(quote_tool.rstrip())
 
     return "\n".join(parts) + "\n"
 
@@ -573,6 +697,8 @@ def _design_block(ctx):
         parts.append(f"- Heading font: {font_h}")
     if font_b:
         parts.append(f"- Body font: {font_b}")
+    if ctx.get("brand_logo_path"):
+        parts.append("- A saved brand logo already exists. Leave visual room for the logo in hero or header treatments instead of relying on text-only branding.")
 
     parts.append(
         "- Use inline styles or CSS classes referencing these colors/fonts in the HTML. "

@@ -55,6 +55,12 @@ _BRAND = {
     "year_founded": "2008",
     "license_info": "IL Licensed #042-123456",
     "certifications": "BBB A+ Rated, EPA Lead-Safe Certified",
+    "primary_color": "#0f172a",
+    "accent_color": "#f97316",
+    "brand_colors": "#0f172a, #f97316, #e2e8f0",
+    "font_heading": "Poppins",
+    "font_body": "Source Sans Pro",
+    "logo_path": "logos/test/logo.png",
 }
 
 
@@ -662,6 +668,36 @@ class IntakeContextTests(unittest.TestCase):
         self.assertIn("42", ctx["lead_form_shortcode"])
         self.assertEqual(ctx["plugins"], "WP Booking Calendar")
 
+    def test_intake_quote_tool_fields(self):
+        intake = {
+            "quote_tool_source": "wp_shortcode",
+            "quote_tool_embed": "[sng_quote_tool]",
+            "quote_tool_zip_mode": "verify",
+            "quote_tool_collect_dogs": True,
+            "quote_tool_collect_frequency": True,
+            "quote_tool_collect_last_cleaned": True,
+            "quote_tool_phone_mode": "optional",
+            "quote_tool_notes": "Lead with pricing clarity.",
+        }
+        ctx = build_brand_context(_BRAND, intake=intake)
+        self.assertEqual(ctx["quote_tool_source"], "wp_shortcode")
+        self.assertEqual(ctx["quote_tool_embed"], "[sng_quote_tool]")
+        self.assertEqual(ctx["quote_tool_zip_mode"], "verify")
+        self.assertTrue(ctx["quote_tool_collect_dogs"])
+        self.assertTrue(ctx["quote_tool_collect_frequency"])
+        self.assertTrue(ctx["quote_tool_collect_last_cleaned"])
+        self.assertEqual(ctx["quote_tool_phone_mode"], "optional")
+        self.assertEqual(ctx["quote_tool_notes"], "Lead with pricing clarity.")
+
+    def test_brand_context_uses_saved_brand_design_defaults(self):
+        ctx = build_brand_context(_BRAND)
+        self.assertEqual(ctx["color_primary"], "#0f172a")
+        self.assertEqual(ctx["color_accent"], "#f97316")
+        self.assertEqual(ctx["font_heading"], "Poppins")
+        self.assertEqual(ctx["font_body"], "Source Sans Pro")
+        self.assertEqual(ctx["brand_logo_path"], "logos/test/logo.png")
+        self.assertEqual(ctx["brand_colors"][:2], ["#0f172a", "#f97316"])
+
 
 class LandingPageBlueprintTests(unittest.TestCase):
     """Test landing page generation in blueprints."""
@@ -816,6 +852,28 @@ class LeadFormBlockTests(unittest.TestCase):
         block = _lead_form_block(ctx)
         self.assertIn("WP Booking Calendar", block)
         self.assertIn("Yoast SEO", block)
+
+    def test_quote_tool_details_appended(self):
+        ctx = {
+            "lead_form_type": "wpforms",
+            "lead_form_shortcode": '[wpforms id="42"]',
+            "plugins": "",
+            "quote_tool_source": "wp_shortcode",
+            "quote_tool_embed": "[sng_quote_tool]",
+            "quote_tool_zip_mode": "verify",
+            "quote_tool_collect_dogs": True,
+            "quote_tool_collect_frequency": True,
+            "quote_tool_collect_last_cleaned": True,
+            "quote_tool_phone_mode": "optional",
+            "quote_tool_notes": "Keep the quote tool above the fold.",
+        }
+        block = _lead_form_block(ctx)
+        self.assertIn("QUOTE TOOL CONFIGURATION", block)
+        self.assertIn("[sng_quote_tool]", block)
+        self.assertIn("verify the visitor ZIP code", block)
+        self.assertIn("number of dogs", block)
+        self.assertIn("service frequency", block)
+        self.assertIn("Phone number should be optional", block)
 
 
 class WarrenSEOBriefTests(unittest.TestCase):
