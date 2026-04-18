@@ -242,18 +242,31 @@
     /* GrapesJS panel overrides for Wix-like feel */
     .gjs-overlay .gjs-cv-canvas { flex: 1; }
     .gjs-overlay .gjs-pn-panel { background: #1e293b; }
-    .gjs-overlay .gjs-block { min-height: auto; width: 100%; }
-    .gjs-overlay .gjs-blocks-c { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; }
-    .gjs-overlay .gjs-block { width: calc(50% - 3px); min-height: 50px; font-size: 11px; padding: 8px 4px; }
-    .gjs-overlay .gjs-sm-sector-title { font-size: .78rem; font-weight: 600; }
-    .gjs-overlay .gjs-pn-views-container { width: 280px; min-width: 280px; overflow-y: auto; }
-    .gjs-overlay .gjs-pn-views { border-bottom: 1px solid #334155; }
-    .gjs-overlay .gjs-pn-btn { color: #94a3b8; }
-    .gjs-overlay .gjs-pn-btn.gjs-pn-active { color: #fff; }
     .gjs-overlay .gjs-one-bg { background: #1e293b; }
     .gjs-overlay .gjs-two-color { color: #cbd5e1; }
     .gjs-overlay .gjs-three-bg { background: #334155; }
     .gjs-overlay .gjs-four-color, .gjs-overlay .gjs-four-color-h:hover { color: #818cf8; }
+    /* Right sidebar */
+    .gjs-sidebar {
+        width: 280px; min-width: 280px; background: #1e293b; display: flex;
+        flex-direction: column; border-left: 1px solid #334155; overflow: hidden;
+    }
+    .gjs-sidebar-tabs {
+        display: flex; border-bottom: 1px solid #334155; flex-shrink: 0;
+    }
+    .gjs-sidebar-tabs button {
+        flex: 1; background: none; border: none; color: #94a3b8; padding: 10px 4px;
+        font-size: .8rem; cursor: pointer; transition: color .15s, background .15s;
+    }
+    .gjs-sidebar-tabs button:hover { color: #e2e8f0; background: rgba(255,255,255,.04); }
+    .gjs-sidebar-tabs button.active { color: #fff; background: #334155; }
+    .gjs-sidebar-panel { display: none; flex: 1; overflow-y: auto; padding: 0; }
+    .gjs-sidebar-panel.active { display: block; }
+    /* Block cards */
+    .gjs-overlay .gjs-blocks-c { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; }
+    .gjs-overlay .gjs-block { width: calc(50% - 3px); min-height: 50px; font-size: 11px; padding: 8px 4px; }
+    /* Style manager */
+    .gjs-overlay .gjs-sm-sector-title { font-size: .78rem; font-weight: 600; }
 
     /* Rewrite UI */
     .rewrite-panel {
@@ -288,7 +301,19 @@
         </div>
     </div>
     <div class="gjs-editor-wrap" id="gjsEditorWrap">
-        {# GrapesJS will render the canvas + sidebar panels here #}
+        <div id="gjsCanvas" style="flex:1; overflow:hidden;"></div>
+        <div class="gjs-sidebar">
+            <div class="gjs-sidebar-tabs">
+                <button class="active" data-tab="blocks" title="Blocks"><i class="bi bi-plus-square"></i></button>
+                <button data-tab="styles" title="Styles"><i class="bi bi-brush"></i></button>
+                <button data-tab="layers" title="Layers"><i class="bi bi-layers"></i></button>
+                <button data-tab="traits" title="Settings"><i class="bi bi-sliders"></i></button>
+            </div>
+            <div class="gjs-sidebar-panel active" id="gjsPanelBlocks"></div>
+            <div class="gjs-sidebar-panel" id="gjsPanelStyles"></div>
+            <div class="gjs-sidebar-panel" id="gjsPanelLayers"></div>
+            <div class="gjs-sidebar-panel" id="gjsPanelTraits"></div>
+        </div>
     </div>
 </div>
 
@@ -387,10 +412,6 @@
 <link rel="stylesheet" href="https://unpkg.com/grapesjs@0.21.10/dist/css/grapes.min.css">
 <script src="https://unpkg.com/grapesjs@0.21.10/dist/grapes.min.js"></script>
 <script src="https://unpkg.com/grapesjs-blocks-basic@1.0.2/dist/index.min.js"></script>
-<script src="https://unpkg.com/grapesjs-plugin-forms@2.0.6/dist/index.min.js"></script>
-<script src="https://unpkg.com/grapesjs-component-countdown@1.0.3/dist/index.min.js"></script>
-<script src="https://unpkg.com/grapesjs-tabs@1.0.6/dist/index.min.js"></script>
-<script src="https://unpkg.com/grapesjs-custom-code@1.0.2/dist/index.min.js"></script>
 
 <script>
 (function(){
@@ -505,33 +526,40 @@
             const resp = await fetch('/client/site-builder/page/' + pageId, {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' },
             });
+            if (!resp.ok) {
+                let msg = 'Server error (' + resp.status + ')';
+                try { const d = await resp.json(); msg = d.error || msg; } catch(e) {}
+                alert(msg); closeEditor(); return;
+            }
             const data = await resp.json();
             if (!data.ok) { alert(data.error || 'Failed to load page.'); closeEditor(); return; }
 
             document.getElementById('gjsPageTitle').textContent = data.page.label || data.page.title || 'Visual Editor';
 
             if (gjsEditor) { try { gjsEditor.destroy(); } catch(e) {} }
-            const wrap = document.getElementById('gjsEditorWrap');
-            wrap.innerHTML = '';
+
+            // Clear sidebar panels from previous editor instance
+            document.getElementById('gjsPanelBlocks').innerHTML = '';
+            document.getElementById('gjsPanelStyles').innerHTML = '';
+            document.getElementById('gjsPanelLayers').innerHTML = '';
+            document.getElementById('gjsPanelTraits').innerHTML = '';
+
+            // Reset sidebar tab state
+            document.querySelectorAll('.gjs-sidebar-tabs button').forEach(b => b.classList.remove('active'));
+            document.querySelector('.gjs-sidebar-tabs button[data-tab="blocks"]').classList.add('active');
+            document.querySelectorAll('.gjs-sidebar-panel').forEach(p => p.classList.remove('active'));
+            document.getElementById('gjsPanelBlocks').classList.add('active');
 
             gjsEditor = grapesjs.init({
-                container: wrap,
+                container: '#gjsCanvas',
                 height: '100%',
                 width: 'auto',
                 fromElement: false,
                 storageManager: false,
-                // Panels: layers, blocks, styles, traits all in right sidebar
-                panels: {
-                    defaults: [
-                        {
-                            id: 'panel-devices',
-                            el: '.gjs-toolbar .gjs-actions',
-                            buttons: [],
-                        },
-                    ],
-                },
+                panels: { defaults: [] },
                 selectorManager: { componentFirst: true },
                 styleManager: {
+                    appendTo: '#gjsPanelStyles',
                     sectors: [
                         {
                             name: 'Layout',
@@ -588,6 +616,8 @@
                         },
                     ],
                 },
+                layerManager: { appendTo: '#gjsPanelLayers' },
+                traitManager: { appendTo: '#gjsPanelTraits' },
                 deviceManager: {
                     devices: [
                         { name: 'Desktop', width: '' },
@@ -595,9 +625,8 @@
                         { name: 'Mobile', width: '375px', widthMedia: '480px' },
                     ],
                 },
-                layerManager: { appendTo: '.gjs-pn-views-container' },
                 blockManager: {
-                    appendTo: '.gjs-pn-views-container',
+                    appendTo: '#gjsPanelBlocks',
                     blocks: [
                         {
                             id: 'section',
@@ -710,35 +739,11 @@
                     multiUpload: false,
                     autoAdd: true,
                 },
-                plugins: [
-                    'gjs-blocks-basic',
-                    'grapesjs-plugin-forms',
-                    'grapesjs-component-countdown',
-                    'grapesjs-tabs',
-                    'grapesjs-custom-code',
-                ],
+                plugins: ['gjs-blocks-basic'],
                 pluginsOpts: {
                     'gjs-blocks-basic': { flexGrid: true },
-                    'grapesjs-plugin-forms': {},
-                    'grapesjs-component-countdown': {},
-                    'grapesjs-tabs': {},
-                    'grapesjs-custom-code': {},
                 },
             });
-
-            // Add right sidebar panel tabs (Blocks, Styles, Layers, Traits)
-            const pn = gjsEditor.Panels;
-            pn.addPanel({
-                id: 'views',
-                el: '.gjs-pn-views',
-                buttons: [
-                    { id: 'open-blocks', className: 'bi bi-plus-square', active: true, command: 'open-blocks', attributes: { title: 'Add Blocks' } },
-                    { id: 'open-sm', className: 'bi bi-brush', command: 'open-sm', attributes: { title: 'Style Manager' } },
-                    { id: 'open-layers', className: 'bi bi-layers', command: 'open-layers', attributes: { title: 'Layers' } },
-                    { id: 'open-tm', className: 'bi bi-sliders', command: 'open-tm', attributes: { title: 'Settings' } },
-                ],
-            });
-            pn.addPanel({ id: 'views-container', el: '.gjs-pn-views-container', resizable: { maxDim: 400, minDim: 200, tc: 0, cl: 1, cr: 0, bc: 0 } });
 
             // Load saved editor state or raw content
             let editorJson = null;
@@ -816,6 +821,18 @@
     document.getElementById('gjsDeviceMobile')?.addEventListener('click', () => gjsEditor?.setDevice('Mobile'));
     document.getElementById('gjsUndo')?.addEventListener('click', () => gjsEditor?.UndoManager.undo());
     document.getElementById('gjsRedo')?.addEventListener('click', () => gjsEditor?.UndoManager.redo());
+
+    // Sidebar tab switching
+    document.querySelectorAll('.gjs-sidebar-tabs button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.gjs-sidebar-tabs button').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.gjs-sidebar-panel').forEach(p => p.classList.remove('active'));
+            btn.classList.add('active');
+            const tab = btn.getAttribute('data-tab');
+            const map = { blocks: 'gjsPanelBlocks', styles: 'gjsPanelStyles', layers: 'gjsPanelLayers', traits: 'gjsPanelTraits' };
+            document.getElementById(map[tab])?.classList.add('active');
+        });
+    });
 
     // Escape key closes editor
     document.addEventListener('keydown', e => {
