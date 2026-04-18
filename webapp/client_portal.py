@@ -6712,6 +6712,11 @@ def client_save_automations():
         "sales_bot_reply_tone",
         (request.form.get("sales_bot_reply_tone") or "").strip()[:500],
     )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_handoff_alert_phones",
+        (request.form.get("sales_bot_handoff_alert_phones") or "").strip()[:500],
+    )
     try:
         reply_delay_seconds = max(0, min(300, float(request.form.get("sales_bot_reply_delay_seconds") or 0)))
     except (ValueError, TypeError):
@@ -6756,6 +6761,11 @@ def client_save_automations():
         brand_id,
         "sales_bot_appointment_reminder_respect_client_channel",
         1 if request.form.get("sales_bot_appointment_reminder_respect_client_channel") else 0,
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_crm_event_alert_emails",
+        (request.form.get("sales_bot_crm_event_alert_emails") or "").strip()[:1000],
     )
 
     db.update_brand_number_field(brand_id, "sales_bot_transcript_export", 1 if request.form.get("sales_bot_transcript_export") else 0)
@@ -6969,6 +6979,11 @@ def client_save_leads_assistant_settings():
         brand_id,
         "sales_bot_reply_tone",
         (request.form.get("sales_bot_reply_tone") or "").strip()[:500],
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_handoff_alert_phones",
+        (request.form.get("sales_bot_handoff_alert_phones") or "").strip()[:500],
     )
     try:
         reply_delay_seconds = max(0, min(300, float(request.form.get("sales_bot_reply_delay_seconds") or 0)))
@@ -8702,6 +8717,202 @@ def client_save_wordpress():
     return redirect(url_for("client.client_settings"))
 
 
+# ── Site Builder ──
+
+def _publish_wp_page(brand, title, content, excerpt="", slug="",
+                     seo_title="", seo_description="", status="publish", parent_id=0):
+    """Publish a *page* (not post) to WordPress via REST API."""
+    import requests as req_lib
+    import base64
+
+    wp_url = brand["wp_site_url"].strip().rstrip("/")
+    wp_user = brand["wp_username"].strip()
+    wp_pass = brand["wp_app_password"].strip()
+
+    api_url = f"{wp_url}/wp-json/wp/v2/pages"
+    token = base64.b64encode(f"{wp_user}:{wp_pass}".encode()).decode()
+    headers = {
+        "Authorization": f"Basic {token}",
+        "X-GM-Auth": f"Basic {token}",
+        "User-Agent": "GroMore/1.0 (WordPress Site Builder; +https://gromore.com)",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+    page_data = {
+        "title": seo_title or title,
+        "content": content,
+        "excerpt": excerpt,
+        "status": status,
+    }
+    if slug:
+        page_data["slug"] = slug
+    if parent_id:
+        page_data["parent"] = int(parent_id)
+    meta = {}
+    if seo_title:
+        meta["_yoast_wpseo_title"] = seo_title
+    if seo_description:
+        meta["_yoast_wpseo_metadesc"] = seo_description
+    if meta:
+        page_data["meta"] = meta
+
+    try:
+        resp = req_lib.post(api_url, json=page_data, headers=headers, timeout=30)
+        if resp.status_code in (200, 201):
+            wp_page = resp.json()
+            return {
+                "ok": True,
+                "wp_page_id": wp_page.get("id", 0),
+                "wp_page_url": wp_page.get("link", ""),
+            }
+        return {"ok": False, "error": f"WordPress API error {resp.status_code}: {resp.text[:200]}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+@client_bp.route("/site-builder/generate", methods=["POST"])
+@client_login_required
+def client_site_builder_generate():
+    """Kick off an AI site build: generate blueprint, content, and schema for all pages."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id) or {}
+    is_ajax = request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+    from webapp.site_builder import (
+        build_brand_context,
+        build_site_blueprint,
+        generate_page_content,
+        assemble_page,
+    )
+
+    api_key = _get_openai_api_key(brand)
+    if not api_key:
+        msg = "OpenAI API key not configured. Add it in Settings before generating a site."
+        if is_ajax:
+            return jsonify(ok=False, error=msg), 400
+        flash(msg, "error")
+        return redirect(url_for("client.client_settings"))
+
+    model = _pick_ai_model(brand, "analysis")
+    brand_ctx = build_brand_context(brand)
+
+    services = (request.form.get("services") or "").strip() or None
+    areas = (request.form.get("areas") or "").strip() or None
+    blueprint = build_site_blueprint(brand_ctx, services=services, areas=areas)
+
+    if not blueprint:
+        msg = "Could not create a site blueprint. Check that your brand profile has services and a service area."
+        if is_ajax:
+            return jsonify(ok=False, error=msg), 400
+        flash(msg, "warning")
+        return redirect(url_for("client.client_settings"))
+
+    build_id = db.create_site_build(brand_id, blueprint, model=model, created_by=session.get("client_user_id", 0))
+    db.update_site_build_status(build_id, "running")
+
+    pages_done = 0
+    errors = []
+    for page_spec in blueprint:
+        try:
+            content = generate_page_content(page_spec, brand_ctx, api_key, model)
+            assembled = assemble_page(page_spec, brand_ctx, content)
+
+            db.save_site_page({
+                "build_id": build_id,
+                "brand_id": brand_id,
+                "page_type": page_spec["page_type"],
+                "label": page_spec["label"],
+                "slug": page_spec.get("slug", ""),
+                "title": content.get("title", ""),
+                "content": content.get("content", ""),
+                "excerpt": content.get("excerpt", ""),
+                "seo_title": content.get("seo_title", ""),
+                "seo_description": content.get("seo_description", ""),
+                "primary_keyword": content.get("primary_keyword", ""),
+                "secondary_keywords": content.get("secondary_keywords", ""),
+                "faq_items": content.get("faq_items") or [],
+                "schemas": assembled.get("schemas") or [],
+                "schema_html": assembled.get("schema_html", ""),
+                "full_html": assembled.get("full_html", ""),
+            })
+            pages_done += 1
+            db.update_site_build_status(build_id, "running", pages_completed=pages_done)
+        except Exception as exc:
+            errors.append(f"{page_spec['label']}: {exc}")
+
+    if errors:
+        db.update_site_build_status(build_id, "completed", pages_completed=pages_done,
+                                    error_message="; ".join(errors)[:500])
+    else:
+        db.update_site_build_status(build_id, "completed", pages_completed=pages_done)
+
+    if is_ajax:
+        return jsonify(
+            ok=True,
+            build_id=build_id,
+            pages_generated=pages_done,
+            errors=errors,
+        )
+    flash(f"Site build complete: {pages_done} pages generated.", "success")
+    return redirect(url_for("client.client_site_builder_review", build_id=build_id))
+
+
+@client_bp.route("/site-builder/<int:build_id>")
+@client_login_required
+def client_site_builder_review(build_id):
+    """Review generated pages before publishing to WordPress."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    build = db.get_site_build(build_id)
+    if not build or build["brand_id"] != brand_id:
+        flash("Site build not found.", "warning")
+        return redirect(url_for("client.client_settings"))
+    pages = db.get_site_pages(build_id)
+    brand = db.get_brand(brand_id) or {}
+    return jsonify(ok=True, build=build, pages=pages)
+
+
+@client_bp.route("/site-builder/<int:build_id>/publish", methods=["POST"])
+@client_login_required
+def client_site_builder_publish(build_id):
+    """Publish all generated pages to WordPress."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    build = db.get_site_build(build_id)
+    if not build or build["brand_id"] != brand_id:
+        return jsonify(ok=False, error="Build not found."), 404
+
+    brand = db.get_brand(brand_id) or {}
+    if not _wp_connected(brand):
+        return jsonify(ok=False, error="WordPress is not connected. Add credentials in Settings."), 400
+
+    pages = db.get_site_pages(build_id)
+    published = 0
+    errors = []
+    for page in pages:
+        if page.get("wp_page_id"):
+            published += 1
+            continue
+        result = _publish_wp_page(
+            brand,
+            title=page["title"],
+            content=page["full_html"] or page["content"],
+            excerpt=page.get("excerpt", ""),
+            slug=page.get("slug", ""),
+            seo_title=page.get("seo_title", ""),
+            seo_description=page.get("seo_description", ""),
+        )
+        if result.get("ok"):
+            db.update_site_page_wp(page["id"], result["wp_page_id"], result["wp_page_url"])
+            published += 1
+        else:
+            errors.append(f"{page['label']}: {result.get('error', 'Unknown error')}")
+
+    return jsonify(ok=True, published=published, total=len(pages), errors=errors)
+
+
 @client_bp.route("/settings/sng", methods=["POST"])
 @client_login_required
 def client_save_sng():
@@ -8917,6 +9128,16 @@ def client_save_lead_assistant_profile():
         brand_id,
         "sales_bot_handoff_rules",
         (request.form.get("sales_bot_handoff_rules") or "").strip()[:3000],
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_crm_event_alert_emails",
+        (request.form.get("sales_bot_crm_event_alert_emails") or "").strip()[:1000],
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_handoff_alert_phones",
+        (request.form.get("sales_bot_handoff_alert_phones") or "").strip()[:500],
     )
     db.update_brand_text_field(
         brand_id,

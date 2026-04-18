@@ -898,6 +898,170 @@ class WebDB:
         """)
 
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS site_builds (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                model TEXT DEFAULT 'gpt-4o-mini',
+                blueprint_json TEXT DEFAULT '[]',
+                page_count INTEGER DEFAULT 0,
+                pages_completed INTEGER DEFAULT 0,
+                error_message TEXT DEFAULT '',
+                created_by INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now')),
+                completed_at TEXT DEFAULT '',
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_site_builds_brand
+            ON site_builds(brand_id, status);
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS site_pages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                build_id INTEGER NOT NULL,
+                brand_id INTEGER NOT NULL,
+                page_type TEXT NOT NULL DEFAULT 'home',
+                label TEXT NOT NULL DEFAULT '',
+                slug TEXT DEFAULT '',
+                title TEXT DEFAULT '',
+                content TEXT DEFAULT '',
+                excerpt TEXT DEFAULT '',
+                seo_title TEXT DEFAULT '',
+                seo_description TEXT DEFAULT '',
+                primary_keyword TEXT DEFAULT '',
+                secondary_keywords TEXT DEFAULT '',
+                faq_items_json TEXT DEFAULT '[]',
+                schema_json TEXT DEFAULT '[]',
+                schema_html TEXT DEFAULT '',
+                full_html TEXT DEFAULT '',
+                wp_page_id INTEGER DEFAULT 0,
+                wp_page_url TEXT DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft',
+                published_at TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (build_id) REFERENCES site_builds(id) ON DELETE CASCADE,
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_site_pages_build
+            ON site_pages(build_id, page_type);
+        """)
+
+        # ── Site Builder Admin: Templates ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sb_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT 'section',
+                page_types TEXT DEFAULT '',
+                html_content TEXT DEFAULT '',
+                css_content TEXT DEFAULT '',
+                preview_image TEXT DEFAULT '',
+                description TEXT DEFAULT '',
+                sort_order INTEGER DEFAULT 0,
+                is_active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_sb_templates_category
+            ON sb_templates(category, is_active);
+        """)
+
+        # ── Site Builder Admin: Themes ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sb_themes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                primary_color TEXT DEFAULT '#2563eb',
+                secondary_color TEXT DEFAULT '#1e40af',
+                accent_color TEXT DEFAULT '#f59e0b',
+                text_color TEXT DEFAULT '#1f2937',
+                bg_color TEXT DEFAULT '#ffffff',
+                font_heading TEXT DEFAULT 'Inter',
+                font_body TEXT DEFAULT 'Inter',
+                button_style TEXT DEFAULT 'rounded',
+                layout_style TEXT DEFAULT 'modern',
+                custom_css TEXT DEFAULT '',
+                preview_image TEXT DEFAULT '',
+                is_default INTEGER DEFAULT 0,
+                is_active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+
+        # ── Site Builder Admin: Prompt Overrides ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sb_prompt_overrides (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                page_type TEXT NOT NULL,
+                section TEXT NOT NULL DEFAULT 'user_prompt',
+                content TEXT DEFAULT '',
+                is_active INTEGER DEFAULT 1,
+                notes TEXT DEFAULT '',
+                updated_by TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(page_type, section)
+            );
+        """)
+
+        # ── Site Builder Admin: Image Categories ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sb_image_categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                slug TEXT NOT NULL UNIQUE,
+                description TEXT DEFAULT '',
+                sort_order INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+
+        # ── Site Builder Admin: Image Library ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sb_images (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename TEXT NOT NULL,
+                original_name TEXT DEFAULT '',
+                file_path TEXT NOT NULL,
+                file_size INTEGER DEFAULT 0,
+                mime_type TEXT DEFAULT 'image/jpeg',
+                width INTEGER DEFAULT 0,
+                height INTEGER DEFAULT 0,
+                alt_text TEXT DEFAULT '',
+                title TEXT DEFAULT '',
+                category_id INTEGER DEFAULT NULL,
+                tags TEXT DEFAULT '',
+                industry TEXT DEFAULT '',
+                page_types TEXT DEFAULT '',
+                source TEXT DEFAULT 'upload',
+                drive_file_id TEXT DEFAULT '',
+                wp_media_id INTEGER DEFAULT 0,
+                wp_media_url TEXT DEFAULT '',
+                is_active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (category_id) REFERENCES sb_image_categories(id) ON DELETE SET NULL
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_sb_images_category
+            ON sb_images(category_id, is_active);
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_sb_images_industry
+            ON sb_images(industry, is_active);
+        """)
+
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS assessment_leads (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
@@ -1543,6 +1707,7 @@ class WebDB:
             ("sales_bot_example_language", "TEXT DEFAULT ''"),
             ("sales_bot_disallowed_language", "TEXT DEFAULT ''"),
             ("sales_bot_handoff_rules", "TEXT DEFAULT ''"),
+            ("sales_bot_handoff_alert_phones", "TEXT DEFAULT ''"),
             ("sales_bot_quo_webhook_secret", "TEXT DEFAULT ''"),
             ("sales_bot_meta_webhook_secret", "TEXT DEFAULT ''"),
             ("sales_bot_incoming_webhook_secret", "TEXT DEFAULT ''"),
@@ -1987,6 +2152,7 @@ class WebDB:
             "sales_bot_reply_tone", "sales_bot_service_menu", "sales_bot_pricing_notes",
             "sales_bot_guardrails", "sales_bot_example_language",
             "sales_bot_disallowed_language", "sales_bot_handoff_rules",
+            "sales_bot_handoff_alert_phones",
             "sales_bot_quo_webhook_secret", "sales_bot_meta_webhook_secret",
             "sales_bot_incoming_webhook_secret", "sales_bot_sng_webhook_secret", "sales_bot_lead_form_config",
             "sales_bot_objection_playbook", "sales_bot_message_templates", "sales_bot_collect_fields",
@@ -5242,6 +5408,500 @@ class WebDB:
                 "UPDATE feedback_ai_drafts SET sent_at = datetime('now'), send_error = '', updated_at = datetime('now') WHERE feedback_id = ?",
                 (feedback_id,),
             )
+        conn.commit()
+        conn.close()
+
+    # ── Site Builder ──
+
+    def create_site_build(self, brand_id, blueprint, model="gpt-4o-mini", created_by=0):
+        conn = self._conn()
+        cur = conn.execute(
+            "INSERT INTO site_builds (brand_id, status, model, blueprint_json, page_count, created_by) "
+            "VALUES (?, 'pending', ?, ?, ?, ?)",
+            (brand_id, model, json.dumps(blueprint), len(blueprint), created_by),
+        )
+        build_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return build_id
+
+    def get_site_build(self, build_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM site_builds WHERE id = ?", (build_id,)).fetchone()
+        conn.close()
+        if not row:
+            return None
+        item = dict(row)
+        item["blueprint"] = self._safe_json_list(item.get("blueprint_json"))
+        return item
+
+    def get_site_builds(self, brand_id, limit=20):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM site_builds WHERE brand_id = ? ORDER BY id DESC LIMIT ?",
+            (brand_id, limit),
+        ).fetchall()
+        conn.close()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["blueprint"] = self._safe_json_list(item.get("blueprint_json"))
+            result.append(item)
+        return result
+
+    def update_site_build_status(self, build_id, status, pages_completed=None, error_message=None):
+        conn = self._conn()
+        sets = ["status = ?"]
+        params = [status]
+        if pages_completed is not None:
+            sets.append("pages_completed = ?")
+            params.append(pages_completed)
+        if error_message is not None:
+            sets.append("error_message = ?")
+            params.append(error_message)
+        if status in ("completed", "failed"):
+            sets.append("completed_at = datetime('now')")
+        params.append(build_id)
+        conn.execute(f"UPDATE site_builds SET {', '.join(sets)} WHERE id = ?", tuple(params))
+        conn.commit()
+        conn.close()
+
+    def save_site_page(self, data):
+        conn = self._conn()
+        cur = conn.execute(
+            "INSERT INTO site_pages "
+            "(build_id, brand_id, page_type, label, slug, title, content, excerpt, "
+            "seo_title, seo_description, primary_keyword, secondary_keywords, "
+            "faq_items_json, schema_json, schema_html, full_html, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                data.get("build_id"),
+                data.get("brand_id"),
+                data.get("page_type", "home"),
+                data.get("label", ""),
+                data.get("slug", ""),
+                data.get("title", ""),
+                data.get("content", ""),
+                data.get("excerpt", ""),
+                data.get("seo_title", ""),
+                data.get("seo_description", ""),
+                data.get("primary_keyword", ""),
+                data.get("secondary_keywords", ""),
+                json.dumps(data.get("faq_items") or []),
+                json.dumps(data.get("schemas") or []),
+                data.get("schema_html", ""),
+                data.get("full_html", ""),
+                data.get("status", "draft"),
+            ),
+        )
+        page_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return page_id
+
+    def get_site_pages(self, build_id):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM site_pages WHERE build_id = ? ORDER BY id",
+            (build_id,),
+        ).fetchall()
+        conn.close()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["faq_items"] = self._safe_json_list(item.get("faq_items_json"))
+            item["schemas"] = self._safe_json_list(item.get("schema_json"))
+            result.append(item)
+        return result
+
+    def get_site_page(self, page_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM site_pages WHERE id = ?", (page_id,)).fetchone()
+        conn.close()
+        if not row:
+            return None
+        item = dict(row)
+        item["faq_items"] = self._safe_json_list(item.get("faq_items_json"))
+        item["schemas"] = self._safe_json_list(item.get("schema_json"))
+        return item
+
+    def update_site_page_wp(self, page_id, wp_page_id, wp_page_url):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE site_pages SET wp_page_id = ?, wp_page_url = ?, status = 'published', "
+            "published_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+            (wp_page_id, wp_page_url, page_id),
+        )
+        conn.commit()
+        conn.close()
+
+    # ── Site Builder Admin: Templates ──
+
+    def create_sb_template(self, data):
+        conn = self._conn()
+        cur = conn.execute(
+            "INSERT INTO sb_templates (name, category, page_types, html_content, css_content, "
+            "preview_image, description, sort_order, is_active) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                data.get("name", ""),
+                data.get("category", "section"),
+                data.get("page_types", ""),
+                data.get("html_content", ""),
+                data.get("css_content", ""),
+                data.get("preview_image", ""),
+                data.get("description", ""),
+                data.get("sort_order", 0),
+                data.get("is_active", 1),
+            ),
+        )
+        template_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return template_id
+
+    def get_sb_template(self, template_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM sb_templates WHERE id = ?", (template_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_sb_templates(self, category=None, active_only=True):
+        conn = self._conn()
+        sql = "SELECT * FROM sb_templates"
+        params = []
+        clauses = []
+        if category:
+            clauses.append("category = ?")
+            params.append(category)
+        if active_only:
+            clauses.append("is_active = 1")
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY sort_order, name"
+        rows = conn.execute(sql, params).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def update_sb_template(self, template_id, data):
+        conn = self._conn()
+        fields = []
+        params = []
+        for key in ("name", "category", "page_types", "html_content", "css_content",
+                     "preview_image", "description", "sort_order", "is_active"):
+            if key in data:
+                fields.append(f"{key} = ?")
+                params.append(data[key])
+        if not fields:
+            conn.close()
+            return
+        fields.append("updated_at = datetime('now')")
+        params.append(template_id)
+        conn.execute(f"UPDATE sb_templates SET {', '.join(fields)} WHERE id = ?", params)
+        conn.commit()
+        conn.close()
+
+    def delete_sb_template(self, template_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM sb_templates WHERE id = ?", (template_id,))
+        conn.commit()
+        conn.close()
+
+    # ── Site Builder Admin: Themes ──
+
+    def create_sb_theme(self, data):
+        conn = self._conn()
+        cur = conn.execute(
+            "INSERT INTO sb_themes (name, description, primary_color, secondary_color, "
+            "accent_color, text_color, bg_color, font_heading, font_body, button_style, "
+            "layout_style, custom_css, preview_image, is_default, is_active) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                data.get("name", ""),
+                data.get("description", ""),
+                data.get("primary_color", "#2563eb"),
+                data.get("secondary_color", "#1e40af"),
+                data.get("accent_color", "#f59e0b"),
+                data.get("text_color", "#1f2937"),
+                data.get("bg_color", "#ffffff"),
+                data.get("font_heading", "Inter"),
+                data.get("font_body", "Inter"),
+                data.get("button_style", "rounded"),
+                data.get("layout_style", "modern"),
+                data.get("custom_css", ""),
+                data.get("preview_image", ""),
+                data.get("is_default", 0),
+                data.get("is_active", 1),
+            ),
+        )
+        theme_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return theme_id
+
+    def get_sb_theme(self, theme_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM sb_themes WHERE id = ?", (theme_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_sb_themes(self, active_only=True):
+        conn = self._conn()
+        sql = "SELECT * FROM sb_themes"
+        if active_only:
+            sql += " WHERE is_active = 1"
+        sql += " ORDER BY is_default DESC, name"
+        rows = conn.execute(sql).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_sb_default_theme(self):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM sb_themes WHERE is_default = 1 AND is_active = 1 LIMIT 1"
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def update_sb_theme(self, theme_id, data):
+        conn = self._conn()
+        fields = []
+        params = []
+        for key in ("name", "description", "primary_color", "secondary_color",
+                     "accent_color", "text_color", "bg_color", "font_heading",
+                     "font_body", "button_style", "layout_style", "custom_css",
+                     "preview_image", "is_default", "is_active"):
+            if key in data:
+                fields.append(f"{key} = ?")
+                params.append(data[key])
+        if not fields:
+            conn.close()
+            return
+        fields.append("updated_at = datetime('now')")
+        params.append(theme_id)
+        # If setting as default, clear other defaults first
+        if data.get("is_default"):
+            conn.execute("UPDATE sb_themes SET is_default = 0")
+        conn.execute(f"UPDATE sb_themes SET {', '.join(fields)} WHERE id = ?", params)
+        conn.commit()
+        conn.close()
+
+    def delete_sb_theme(self, theme_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM sb_themes WHERE id = ?", (theme_id,))
+        conn.commit()
+        conn.close()
+
+    # ── Site Builder Admin: Prompt Overrides ──
+
+    def save_sb_prompt_override(self, page_type, section, content, notes="", updated_by=""):
+        conn = self._conn()
+        conn.execute(
+            "INSERT INTO sb_prompt_overrides (page_type, section, content, notes, updated_by) "
+            "VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(page_type, section) DO UPDATE SET "
+            "content = excluded.content, notes = excluded.notes, "
+            "updated_by = excluded.updated_by, updated_at = datetime('now')",
+            (page_type, section, content, notes, updated_by),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_sb_prompt_override(self, page_type, section="user_prompt"):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM sb_prompt_overrides WHERE page_type = ? AND section = ?",
+            (page_type, section),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_sb_prompt_overrides(self):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM sb_prompt_overrides ORDER BY page_type, section"
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def toggle_sb_prompt_override(self, override_id, is_active):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE sb_prompt_overrides SET is_active = ?, updated_at = datetime('now') WHERE id = ?",
+            (is_active, override_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def delete_sb_prompt_override(self, override_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM sb_prompt_overrides WHERE id = ?", (override_id,))
+        conn.commit()
+        conn.close()
+
+    # ── Site Builder Admin: Image Categories ──
+
+    def create_sb_image_category(self, name, slug, description=""):
+        conn = self._conn()
+        cur = conn.execute(
+            "INSERT INTO sb_image_categories (name, slug, description) VALUES (?, ?, ?)",
+            (name, slug, description),
+        )
+        cat_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return cat_id
+
+    def get_sb_image_categories(self):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT c.*, COUNT(i.id) as image_count "
+            "FROM sb_image_categories c "
+            "LEFT JOIN sb_images i ON i.category_id = c.id AND i.is_active = 1 "
+            "GROUP BY c.id ORDER BY c.sort_order, c.name"
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def update_sb_image_category(self, cat_id, name, slug, description=""):
+        conn = self._conn()
+        conn.execute(
+            "UPDATE sb_image_categories SET name = ?, slug = ?, description = ? WHERE id = ?",
+            (name, slug, description, cat_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def delete_sb_image_category(self, cat_id):
+        conn = self._conn()
+        # Unlink images, don't delete them
+        conn.execute("UPDATE sb_images SET category_id = NULL WHERE category_id = ?", (cat_id,))
+        conn.execute("DELETE FROM sb_image_categories WHERE id = ?", (cat_id,))
+        conn.commit()
+        conn.close()
+
+    # ── Site Builder Admin: Images ──
+
+    def create_sb_image(self, data):
+        conn = self._conn()
+        cur = conn.execute(
+            "INSERT INTO sb_images (filename, original_name, file_path, file_size, mime_type, "
+            "width, height, alt_text, title, category_id, tags, industry, page_types, "
+            "source, drive_file_id, wp_media_id, wp_media_url) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                data.get("filename", ""),
+                data.get("original_name", ""),
+                data.get("file_path", ""),
+                data.get("file_size", 0),
+                data.get("mime_type", "image/jpeg"),
+                data.get("width", 0),
+                data.get("height", 0),
+                data.get("alt_text", ""),
+                data.get("title", ""),
+                data.get("category_id"),
+                data.get("tags", ""),
+                data.get("industry", ""),
+                data.get("page_types", ""),
+                data.get("source", "upload"),
+                data.get("drive_file_id", ""),
+                data.get("wp_media_id", 0),
+                data.get("wp_media_url", ""),
+            ),
+        )
+        image_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return image_id
+
+    def get_sb_image(self, image_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM sb_images WHERE id = ?", (image_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_sb_images(self, category_id=None, industry=None, tags=None, limit=100, offset=0):
+        conn = self._conn()
+        sql = "SELECT * FROM sb_images WHERE is_active = 1"
+        params = []
+        if category_id:
+            sql += " AND category_id = ?"
+            params.append(category_id)
+        if industry:
+            sql += " AND industry = ?"
+            params.append(industry)
+        if tags:
+            # Search tags field (comma-separated) for any matching tag
+            tag_clauses = []
+            for tag in tags.split(","):
+                tag = tag.strip()
+                if tag:
+                    tag_clauses.append("tags LIKE ?")
+                    params.append(f"%{tag}%")
+            if tag_clauses:
+                sql += " AND (" + " OR ".join(tag_clauses) + ")"
+        sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        rows = conn.execute(sql, params).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def count_sb_images(self, category_id=None, industry=None):
+        conn = self._conn()
+        sql = "SELECT COUNT(*) FROM sb_images WHERE is_active = 1"
+        params = []
+        if category_id:
+            sql += " AND category_id = ?"
+            params.append(category_id)
+        if industry:
+            sql += " AND industry = ?"
+            params.append(industry)
+        count = conn.execute(sql, params).fetchone()[0]
+        conn.close()
+        return count
+
+    def update_sb_image(self, image_id, data):
+        conn = self._conn()
+        fields = []
+        params = []
+        for key in ("alt_text", "title", "category_id", "tags", "industry",
+                     "page_types", "wp_media_id", "wp_media_url", "is_active"):
+            if key in data:
+                fields.append(f"{key} = ?")
+                params.append(data[key])
+        if not fields:
+            conn.close()
+            return
+        params.append(image_id)
+        conn.execute(f"UPDATE sb_images SET {', '.join(fields)} WHERE id = ?", params)
+        conn.commit()
+        conn.close()
+
+    def delete_sb_image(self, image_id):
+        conn = self._conn()
+        conn.execute("UPDATE sb_images SET is_active = 0 WHERE id = ?", (image_id,))
+        conn.commit()
+        conn.close()
+
+    def bulk_update_sb_images(self, image_ids, data):
+        if not image_ids:
+            return
+        conn = self._conn()
+        fields = []
+        params = []
+        for key in ("category_id", "tags", "industry", "page_types"):
+            if key in data:
+                fields.append(f"{key} = ?")
+                params.append(data[key])
+        if not fields:
+            conn.close()
+            return
+        placeholders = ",".join("?" * len(image_ids))
+        params.extend(image_ids)
+        conn.execute(
+            f"UPDATE sb_images SET {', '.join(fields)} WHERE id IN ({placeholders})",
+            params,
+        )
         conn.commit()
         conn.close()
 

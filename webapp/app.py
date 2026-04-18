@@ -3314,6 +3314,414 @@ def create_app():
         flash("Consideration removed.", "info")
         return redirect(url_for("beta_dashboard"))
 
+    # ── Site Builder Admin ──
+
+    @app.route("/site-builder-admin")
+    @login_required
+    def site_builder_admin():
+        tab = request.args.get("tab", "templates")
+        templates = db.get_sb_templates(active_only=False)
+        themes = db.get_sb_themes(active_only=False)
+        overrides = db.get_sb_prompt_overrides()
+        categories = db.get_sb_image_categories()
+        images = db.get_sb_images(limit=60)
+        image_count = db.count_sb_images()
+        # Group overrides by page_type for easier template rendering
+        overrides_by_page = {}
+        for o in overrides:
+            overrides_by_page.setdefault(o["page_type"], []).append(o)
+        # Available page types from site_builder
+        page_types = [
+            "home", "about", "services", "service_detail",
+            "service_area", "contact", "faq", "testimonials",
+            "global_rules", "system_message",
+        ]
+        return render_template(
+            "site_builder_admin.html",
+            tab=tab,
+            templates=templates,
+            themes=themes,
+            overrides=overrides,
+            overrides_by_page=overrides_by_page,
+            categories=categories,
+            images=images,
+            image_count=image_count,
+            page_types=page_types,
+        )
+
+    # -- Templates CRUD --
+
+    @app.route("/site-builder-admin/templates", methods=["POST"])
+    @login_required
+    def sb_admin_template_save():
+        template_id = request.form.get("template_id")
+        data = {
+            "name": request.form.get("name", "").strip(),
+            "category": request.form.get("category", "section"),
+            "page_types": request.form.get("page_types", ""),
+            "html_content": request.form.get("html_content", ""),
+            "css_content": request.form.get("css_content", ""),
+            "description": request.form.get("description", ""),
+            "sort_order": int(request.form.get("sort_order", 0)),
+            "is_active": 1 if request.form.get("is_active") else 0,
+        }
+        if not data["name"]:
+            flash("Template name is required.", "danger")
+            return redirect(url_for("site_builder_admin", tab="templates"))
+        if template_id:
+            db.update_sb_template(int(template_id), data)
+            flash("Template updated.", "success")
+        else:
+            db.create_sb_template(data)
+            flash("Template created.", "success")
+        return redirect(url_for("site_builder_admin", tab="templates"))
+
+    @app.route("/site-builder-admin/templates/<int:tid>/delete", methods=["POST"])
+    @login_required
+    def sb_admin_template_delete(tid):
+        db.delete_sb_template(tid)
+        flash("Template deleted.", "info")
+        return redirect(url_for("site_builder_admin", tab="templates"))
+
+    @app.route("/api/site-builder-admin/templates/<int:tid>")
+    @login_required
+    def sb_admin_template_get(tid):
+        t = db.get_sb_template(tid)
+        if not t:
+            return jsonify({"error": "not found"}), 404
+        return jsonify(t)
+
+    # -- Themes CRUD --
+
+    @app.route("/site-builder-admin/themes", methods=["POST"])
+    @login_required
+    def sb_admin_theme_save():
+        theme_id = request.form.get("theme_id")
+        data = {
+            "name": request.form.get("name", "").strip(),
+            "description": request.form.get("description", ""),
+            "primary_color": request.form.get("primary_color", "#2563eb"),
+            "secondary_color": request.form.get("secondary_color", "#1e40af"),
+            "accent_color": request.form.get("accent_color", "#f59e0b"),
+            "text_color": request.form.get("text_color", "#1f2937"),
+            "bg_color": request.form.get("bg_color", "#ffffff"),
+            "font_heading": request.form.get("font_heading", "Inter"),
+            "font_body": request.form.get("font_body", "Inter"),
+            "button_style": request.form.get("button_style", "rounded"),
+            "layout_style": request.form.get("layout_style", "modern"),
+            "custom_css": request.form.get("custom_css", ""),
+            "is_default": 1 if request.form.get("is_default") else 0,
+            "is_active": 1 if request.form.get("is_active") else 0,
+        }
+        if not data["name"]:
+            flash("Theme name is required.", "danger")
+            return redirect(url_for("site_builder_admin", tab="themes"))
+        if theme_id:
+            db.update_sb_theme(int(theme_id), data)
+            flash("Theme updated.", "success")
+        else:
+            db.create_sb_theme(data)
+            flash("Theme created.", "success")
+        return redirect(url_for("site_builder_admin", tab="themes"))
+
+    @app.route("/site-builder-admin/themes/<int:tid>/delete", methods=["POST"])
+    @login_required
+    def sb_admin_theme_delete(tid):
+        db.delete_sb_theme(tid)
+        flash("Theme deleted.", "info")
+        return redirect(url_for("site_builder_admin", tab="themes"))
+
+    @app.route("/api/site-builder-admin/themes/<int:tid>")
+    @login_required
+    def sb_admin_theme_get(tid):
+        t = db.get_sb_theme(tid)
+        if not t:
+            return jsonify({"error": "not found"}), 404
+        return jsonify(t)
+
+    # -- Prompt Overrides --
+
+    @app.route("/site-builder-admin/prompts", methods=["POST"])
+    @login_required
+    def sb_admin_prompt_save():
+        page_type = request.form.get("page_type", "").strip()
+        section = request.form.get("section", "user_prompt").strip()
+        content = request.form.get("content", "")
+        notes = request.form.get("notes", "")
+        if not page_type:
+            flash("Page type is required.", "danger")
+            return redirect(url_for("site_builder_admin", tab="prompts"))
+        db.save_sb_prompt_override(page_type, section, content, notes=notes, updated_by="admin")
+        flash(f"Prompt override saved for {page_type} / {section}.", "success")
+        return redirect(url_for("site_builder_admin", tab="prompts"))
+
+    @app.route("/site-builder-admin/prompts/<int:pid>/toggle", methods=["POST"])
+    @login_required
+    def sb_admin_prompt_toggle(pid):
+        is_active = int(request.form.get("is_active", 0))
+        db.toggle_sb_prompt_override(pid, is_active)
+        flash("Prompt override toggled.", "info")
+        return redirect(url_for("site_builder_admin", tab="prompts"))
+
+    @app.route("/site-builder-admin/prompts/<int:pid>/delete", methods=["POST"])
+    @login_required
+    def sb_admin_prompt_delete(pid):
+        db.delete_sb_prompt_override(pid)
+        flash("Prompt override deleted.", "info")
+        return redirect(url_for("site_builder_admin", tab="prompts"))
+
+    # -- Image Categories --
+
+    @app.route("/site-builder-admin/image-categories", methods=["POST"])
+    @login_required
+    def sb_admin_image_category_save():
+        cat_id = request.form.get("category_id")
+        name = request.form.get("name", "").strip()
+        slug = request.form.get("slug", "").strip().lower().replace(" ", "-")
+        description = request.form.get("description", "")
+        if not name or not slug:
+            flash("Category name and slug are required.", "danger")
+            return redirect(url_for("site_builder_admin", tab="images"))
+        if cat_id:
+            db.update_sb_image_category(int(cat_id), name, slug, description)
+            flash("Category updated.", "success")
+        else:
+            db.create_sb_image_category(name, slug, description)
+            flash("Category created.", "success")
+        return redirect(url_for("site_builder_admin", tab="images"))
+
+    @app.route("/site-builder-admin/image-categories/<int:cid>/delete", methods=["POST"])
+    @login_required
+    def sb_admin_image_category_delete(cid):
+        db.delete_sb_image_category(cid)
+        flash("Category deleted. Images were unlinked, not deleted.", "info")
+        return redirect(url_for("site_builder_admin", tab="images"))
+
+    # -- Image Upload & Management --
+
+    @app.route("/site-builder-admin/images/upload", methods=["POST"])
+    @login_required
+    def sb_admin_image_upload():
+        import os
+        import uuid
+        from werkzeug.utils import secure_filename
+
+        files = request.files.getlist("images")
+        if not files:
+            flash("No files selected.", "danger")
+            return redirect(url_for("site_builder_admin", tab="images"))
+
+        allowed_ext = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
+        upload_dir = os.path.join(
+            current_app.static_folder or "static", "uploads", "sb_images"
+        )
+        os.makedirs(upload_dir, exist_ok=True)
+
+        category_id = request.form.get("category_id") or None
+        if category_id:
+            category_id = int(category_id)
+        tags = request.form.get("tags", "")
+        industry = request.form.get("industry", "")
+
+        uploaded = 0
+        for f in files:
+            if not f.filename:
+                continue
+            ext = os.path.splitext(f.filename)[1].lower()
+            if ext not in allowed_ext:
+                continue
+            # Size check (20MB)
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(0)
+            if size > 20 * 1024 * 1024:
+                continue
+            safe_name = secure_filename(f"{uuid.uuid4().hex}{ext}")
+            save_path = os.path.join(upload_dir, safe_name)
+            f.save(save_path)
+
+            # Try to get image dimensions
+            width, height = 0, 0
+            try:
+                from PIL import Image
+                img = Image.open(save_path)
+                width, height = img.size
+                img.close()
+            except Exception:
+                pass
+
+            mime_map = {
+                ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                ".png": "image/png", ".gif": "image/gif",
+                ".webp": "image/webp", ".svg": "image/svg+xml",
+            }
+            db.create_sb_image({
+                "filename": safe_name,
+                "original_name": f.filename,
+                "file_path": f"uploads/sb_images/{safe_name}",
+                "file_size": size,
+                "mime_type": mime_map.get(ext, "image/jpeg"),
+                "width": width,
+                "height": height,
+                "alt_text": os.path.splitext(f.filename)[0].replace("-", " ").replace("_", " "),
+                "title": os.path.splitext(f.filename)[0].replace("-", " ").replace("_", " "),
+                "category_id": category_id,
+                "tags": tags,
+                "industry": industry,
+                "source": "upload",
+            })
+            uploaded += 1
+
+        flash(f"{uploaded} image(s) uploaded.", "success")
+        return redirect(url_for("site_builder_admin", tab="images"))
+
+    @app.route("/site-builder-admin/images/<int:iid>/edit", methods=["POST"])
+    @login_required
+    def sb_admin_image_edit(iid):
+        data = {
+            "alt_text": request.form.get("alt_text", ""),
+            "title": request.form.get("title", ""),
+            "tags": request.form.get("tags", ""),
+            "industry": request.form.get("industry", ""),
+            "page_types": request.form.get("page_types", ""),
+        }
+        cat_id = request.form.get("category_id")
+        if cat_id:
+            data["category_id"] = int(cat_id)
+        db.update_sb_image(iid, data)
+        flash("Image updated.", "success")
+        return redirect(url_for("site_builder_admin", tab="images"))
+
+    @app.route("/site-builder-admin/images/<int:iid>/delete", methods=["POST"])
+    @login_required
+    def sb_admin_image_delete(iid):
+        db.delete_sb_image(iid)
+        flash("Image removed.", "info")
+        return redirect(url_for("site_builder_admin", tab="images"))
+
+    @app.route("/site-builder-admin/images/bulk", methods=["POST"])
+    @login_required
+    def sb_admin_image_bulk():
+        action = request.form.get("action", "")
+        image_ids = request.form.getlist("image_ids")
+        image_ids = [int(i) for i in image_ids if i.isdigit()]
+        if not image_ids:
+            flash("No images selected.", "danger")
+            return redirect(url_for("site_builder_admin", tab="images"))
+        if action == "delete":
+            for iid in image_ids:
+                db.delete_sb_image(iid)
+            flash(f"{len(image_ids)} image(s) removed.", "info")
+        elif action == "categorize":
+            cat_id = request.form.get("bulk_category_id")
+            if cat_id:
+                db.bulk_update_sb_images(image_ids, {"category_id": int(cat_id)})
+                flash(f"{len(image_ids)} image(s) categorized.", "success")
+        elif action == "tag":
+            tags = request.form.get("bulk_tags", "")
+            if tags:
+                db.bulk_update_sb_images(image_ids, {"tags": tags})
+                flash(f"{len(image_ids)} image(s) tagged.", "success")
+        return redirect(url_for("site_builder_admin", tab="images"))
+
+    @app.route("/site-builder-admin/images/wp-publish", methods=["POST"])
+    @login_required
+    def sb_admin_image_wp_publish():
+        """Publish selected images to WordPress media library."""
+        import os
+        image_ids = request.form.getlist("image_ids")
+        brand_id = request.form.get("brand_id")
+        if not image_ids or not brand_id:
+            flash("Select images and a brand to publish to.", "danger")
+            return redirect(url_for("site_builder_admin", tab="images"))
+        brand_id = int(brand_id)
+        brand = db.get_brand(brand_id)
+        if not brand:
+            flash("Brand not found.", "danger")
+            return redirect(url_for("site_builder_admin", tab="images"))
+
+        wp_url = (brand.get("website") or "").rstrip("/")
+        wp_user = brand.get("wp_username") or ""
+        wp_pass = brand.get("wp_app_password") or ""
+        if not all([wp_url, wp_user, wp_pass]):
+            flash("WordPress credentials not configured for this brand.", "danger")
+            return redirect(url_for("site_builder_admin", tab="images"))
+
+        import requests as req
+        published = 0
+        for iid in image_ids:
+            iid = int(iid)
+            img = db.get_sb_image(iid)
+            if not img or img.get("wp_media_id"):
+                continue
+            file_path = os.path.join(
+                current_app.static_folder or "static", img["file_path"]
+            )
+            if not os.path.exists(file_path):
+                continue
+            with open(file_path, "rb") as fh:
+                file_data = fh.read()
+            headers = {
+                "Content-Disposition": f'attachment; filename="{img["filename"]}"',
+                "Content-Type": img.get("mime_type", "image/jpeg"),
+            }
+            try:
+                resp = req.post(
+                    f"{wp_url}/wp-json/wp/v2/media",
+                    headers=headers,
+                    data=file_data,
+                    auth=(wp_user, wp_pass),
+                    timeout=60,
+                )
+                if resp.status_code in (200, 201):
+                    wp_data = resp.json()
+                    wp_media_id = wp_data.get("id", 0)
+                    wp_media_url = wp_data.get("source_url", "")
+                    # Set alt text via update
+                    if img.get("alt_text"):
+                        req.post(
+                            f"{wp_url}/wp-json/wp/v2/media/{wp_media_id}",
+                            json={"alt_text": img["alt_text"], "title": img.get("title", "")},
+                            auth=(wp_user, wp_pass),
+                            timeout=15,
+                        )
+                    db.update_sb_image(iid, {
+                        "wp_media_id": wp_media_id,
+                        "wp_media_url": wp_media_url,
+                    })
+                    published += 1
+            except Exception as e:
+                logger.warning("WP media upload failed for image %s: %s", iid, e)
+                continue
+
+        flash(f"{published} image(s) published to WordPress.", "success")
+        return redirect(url_for("site_builder_admin", tab="images"))
+
+    @app.route("/api/site-builder-admin/images")
+    @login_required
+    def sb_admin_images_api():
+        """JSON endpoint for image library browsing/filtering."""
+        category_id = request.args.get("category_id")
+        industry = request.args.get("industry")
+        tags = request.args.get("tags")
+        page = int(request.args.get("page", 1))
+        per_page = int(request.args.get("per_page", 40))
+        offset = (page - 1) * per_page
+        images = db.get_sb_images(
+            category_id=int(category_id) if category_id else None,
+            industry=industry,
+            tags=tags,
+            limit=per_page,
+            offset=offset,
+        )
+        total = db.count_sb_images(
+            category_id=int(category_id) if category_id else None,
+            industry=industry,
+        )
+        for img in images:
+            img["url"] = url_for("static", filename=img["file_path"])
+        return jsonify({"images": images, "total": total, "page": page, "per_page": per_page})
+
     @app.route("/setup-guide")
     @login_required
     def setup_guide():

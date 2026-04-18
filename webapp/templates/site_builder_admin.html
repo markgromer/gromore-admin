@@ -1,0 +1,895 @@
+{% extends "base.html" %}
+{% block title %}Site Builder Admin{% endblock %}
+
+{% block head %}
+<style>
+    .sb-tabs .nav-link { font-weight: 500; }
+    .sb-tabs .nav-link.active { background: #2563eb; color: #fff; }
+    .sb-tabs .nav-link:not(.active) { color: #374151; }
+    .sb-card { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); padding: 1.5rem; margin-bottom: 1.25rem; }
+    .template-card, .theme-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem; transition: box-shadow .15s; }
+    .template-card:hover, .theme-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+    .color-preview { width: 28px; height: 28px; border-radius: 6px; border: 2px solid #e5e7eb; display: inline-block; vertical-align: middle; }
+    .img-thumb { width: 100px; height: 100px; object-fit: cover; border-radius: 6px; cursor: pointer; border: 2px solid transparent; transition: border-color .15s; }
+    .img-thumb:hover, .img-thumb.selected { border-color: #2563eb; }
+    .img-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: .75rem; }
+    .prompt-editor textarea { font-family: 'Courier New', monospace; font-size: .85rem; }
+    .badge-active { background: #10b981; }
+    .badge-inactive { background: #9ca3af; }
+    .cat-pill { display: inline-block; padding: .25rem .75rem; border-radius: 20px; font-size: .8rem; background: #f3f4f6; color: #374151; margin: .15rem; cursor: pointer; }
+    .cat-pill:hover { background: #e5e7eb; }
+    .cat-pill.active { background: #2563eb; color: #fff; }
+    .font-preview { font-size: 1.1rem; font-weight: 600; }
+    .stat-mini { font-size: 2rem; font-weight: 700; color: #1a1d2e; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="top-bar">
+    <div>
+        <h4 class="mb-0"><i class="bi bi-palette"></i> Site Builder Admin</h4>
+        <small class="text-muted">Manage templates, themes, prompts, and the image library</small>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="stat-card text-center">
+            <div class="stat-mini">{{ templates|length }}</div>
+            <div class="stat-label">Templates</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card text-center">
+            <div class="stat-mini">{{ themes|length }}</div>
+            <div class="stat-label">Themes</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card text-center">
+            <div class="stat-mini">{{ overrides|length }}</div>
+            <div class="stat-label">Prompt Overrides</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card text-center">
+            <div class="stat-mini">{{ image_count }}</div>
+            <div class="stat-label">Images</div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabs -->
+<ul class="nav nav-pills sb-tabs mb-4">
+    <li class="nav-item">
+        <a class="nav-link {% if tab == 'templates' %}active{% endif %}" href="?tab=templates">
+            <i class="bi bi-code-square"></i> Templates
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if tab == 'themes' %}active{% endif %}" href="?tab=themes">
+            <i class="bi bi-brush"></i> Themes
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if tab == 'prompts' %}active{% endif %}" href="?tab=prompts">
+            <i class="bi bi-chat-text"></i> Prompts
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if tab == 'images' %}active{% endif %}" href="?tab=images">
+            <i class="bi bi-images"></i> Images
+        </a>
+    </li>
+</ul>
+
+<!-- ============= TEMPLATES TAB ============= -->
+{% if tab == 'templates' %}
+<div class="row">
+    <div class="col-lg-8">
+        <div class="sb-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">Widget / Section Templates</h5>
+                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#templateModal" onclick="clearTemplateForm()">
+                    <i class="bi bi-plus-lg"></i> New Template
+                </button>
+            </div>
+            {% if templates %}
+            <div class="row g-3">
+                {% for t in templates %}
+                <div class="col-md-6">
+                    <div class="template-card">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <strong>{{ t.name }}</strong>
+                                <span class="badge {{ 'badge-active' if t.is_active else 'badge-inactive' }} ms-1">
+                                    {{ 'Active' if t.is_active else 'Inactive' }}
+                                </span>
+                            </div>
+                            <div class="dropdown">
+                                <button class="btn btn-link btn-sm text-muted p-0" data-bs-toggle="dropdown">
+                                    <i class="bi bi-three-dots-vertical"></i>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li><a class="dropdown-item" href="#" onclick="editTemplate({{ t.id }})"><i class="bi bi-pencil me-2"></i>Edit</a></li>
+                                    <li>
+                                        <form method="POST" action="{{ url_for('sb_admin_template_delete', tid=t.id) }}" onsubmit="return confirm('Delete this template?')">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button class="dropdown-item text-danger"><i class="bi bi-trash me-2"></i>Delete</button>
+                                        </form>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="text-muted small mb-1">
+                            <span class="badge bg-secondary">{{ t.category }}</span>
+                            {% if t.page_types %}<span class="text-muted ms-1">{{ t.page_types }}</span>{% endif %}
+                        </div>
+                        {% if t.description %}
+                        <p class="text-muted small mb-0">{{ t.description[:100] }}{% if t.description|length > 100 %}...{% endif %}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted text-center py-4">No templates yet. Create your first widget template to get started.</p>
+            {% endif %}
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="sb-card">
+            <h6><i class="bi bi-info-circle"></i> Template Guide</h6>
+            <p class="text-muted small">Templates are reusable HTML/CSS sections that the site builder can inject into generated pages.</p>
+            <strong class="small">Categories:</strong>
+            <ul class="small text-muted">
+                <li><strong>Hero</strong> - Top-of-page hero sections</li>
+                <li><strong>Section</strong> - Content sections (trust strips, CTA bands)</li>
+                <li><strong>Widget</strong> - Standalone elements (pricing cards, testimonial walls)</li>
+                <li><strong>Footer</strong> - Footer variations</li>
+                <li><strong>Navigation</strong> - Header/nav patterns</li>
+            </ul>
+            <strong class="small">Page Types:</strong>
+            <p class="text-muted small mb-0">Comma-separated list of page types this template can be used on. Leave blank for all pages.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Template Modal -->
+<div class="modal fade" id="templateModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('sb_admin_template_save') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="template_id" id="tmpl_id" value="">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="tmpl_modal_title">New Template</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Name</label>
+                            <input type="text" name="name" id="tmpl_name" class="form-control" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Category</label>
+                            <select name="category" id="tmpl_category" class="form-select">
+                                <option value="hero">Hero</option>
+                                <option value="section" selected>Section</option>
+                                <option value="widget">Widget</option>
+                                <option value="footer">Footer</option>
+                                <option value="navigation">Navigation</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Sort Order</label>
+                            <input type="number" name="sort_order" id="tmpl_sort" class="form-control" value="0">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Page Types <small class="text-muted">(comma-separated, blank = all)</small></label>
+                            <input type="text" name="page_types" id="tmpl_page_types" class="form-control" placeholder="home, about, services">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Description</label>
+                            <input type="text" name="description" id="tmpl_desc" class="form-control" placeholder="What this template does">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">HTML Content</label>
+                            <textarea name="html_content" id="tmpl_html" class="form-control font-monospace" rows="10" placeholder="<section class='hero'>...</section>"></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">CSS (optional)</label>
+                            <textarea name="css_content" id="tmpl_css" class="form-control font-monospace" rows="5" placeholder=".hero { padding: 4rem 0; }"></textarea>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input type="checkbox" name="is_active" id="tmpl_active" class="form-check-input" value="1" checked>
+                                <label class="form-check-label" for="tmpl_active">Active</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Template</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ============= THEMES TAB ============= -->
+{% if tab == 'themes' %}
+<div class="row">
+    <div class="col-lg-8">
+        <div class="sb-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">Theme Presets</h5>
+                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#themeModal" onclick="clearThemeForm()">
+                    <i class="bi bi-plus-lg"></i> New Theme
+                </button>
+            </div>
+            {% if themes %}
+            <div class="row g-3">
+                {% for t in themes %}
+                <div class="col-md-6">
+                    <div class="theme-card">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <strong>{{ t.name }}</strong>
+                                {% if t.is_default %}<span class="badge bg-warning text-dark ms-1">Default</span>{% endif %}
+                                <span class="badge {{ 'badge-active' if t.is_active else 'badge-inactive' }} ms-1">
+                                    {{ 'Active' if t.is_active else 'Inactive' }}
+                                </span>
+                            </div>
+                            <div class="dropdown">
+                                <button class="btn btn-link btn-sm text-muted p-0" data-bs-toggle="dropdown">
+                                    <i class="bi bi-three-dots-vertical"></i>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li><a class="dropdown-item" href="#" onclick="editTheme({{ t.id }})"><i class="bi bi-pencil me-2"></i>Edit</a></li>
+                                    <li>
+                                        <form method="POST" action="{{ url_for('sb_admin_theme_delete', tid=t.id) }}" onsubmit="return confirm('Delete this theme?')">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button class="dropdown-item text-danger"><i class="bi bi-trash me-2"></i>Delete</button>
+                                        </form>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-1 mb-2">
+                            <span class="color-preview" style="background:{{ t.primary_color }}" title="Primary"></span>
+                            <span class="color-preview" style="background:{{ t.secondary_color }}" title="Secondary"></span>
+                            <span class="color-preview" style="background:{{ t.accent_color }}" title="Accent"></span>
+                            <span class="color-preview" style="background:{{ t.text_color }}" title="Text"></span>
+                            <span class="color-preview" style="background:{{ t.bg_color }}" title="Background"></span>
+                        </div>
+                        <div class="small text-muted">
+                            <i class="bi bi-fonts"></i> {{ t.font_heading }} / {{ t.font_body }}
+                            &middot; {{ t.layout_style }} &middot; {{ t.button_style }} buttons
+                        </div>
+                        {% if t.description %}
+                        <p class="text-muted small mt-1 mb-0">{{ t.description[:80] }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted text-center py-4">No themes yet. Create your first theme preset.</p>
+            {% endif %}
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="sb-card">
+            <h6><i class="bi bi-info-circle"></i> Theme Guide</h6>
+            <p class="text-muted small">Themes define the visual identity passed to the site builder. Colors, fonts, button styles, and layout preferences are included in the generation prompt so AI-generated pages match the brand's look.</p>
+            <strong class="small">Button Styles:</strong>
+            <ul class="small text-muted mb-2">
+                <li><strong>rounded</strong> - Soft rounded corners</li>
+                <li><strong>pill</strong> - Full pill shape</li>
+                <li><strong>square</strong> - Sharp corners</li>
+            </ul>
+            <strong class="small">Layout Styles:</strong>
+            <ul class="small text-muted mb-0">
+                <li><strong>modern</strong> - Clean, whitespace-heavy</li>
+                <li><strong>classic</strong> - Traditional, structured</li>
+                <li><strong>bold</strong> - Large type, high contrast</li>
+                <li><strong>minimal</strong> - Ultra-clean, simple</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Theme Modal -->
+<div class="modal fade" id="themeModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('sb_admin_theme_save') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="theme_id" id="theme_id" value="">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="theme_modal_title">New Theme</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label">Name</label>
+                            <input type="text" name="name" id="theme_name" class="form-control" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Layout Style</label>
+                            <select name="layout_style" id="theme_layout" class="form-select">
+                                <option value="modern">Modern</option>
+                                <option value="classic">Classic</option>
+                                <option value="bold">Bold</option>
+                                <option value="minimal">Minimal</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Description</label>
+                            <input type="text" name="description" id="theme_desc" class="form-control">
+                        </div>
+
+                        <div class="col-12"><hr class="my-1"><strong class="small text-muted">Colors</strong></div>
+                        <div class="col-md-4 col-6">
+                            <label class="form-label small">Primary</label>
+                            <div class="input-group">
+                                <input type="color" name="primary_color" id="theme_primary" class="form-control form-control-color" value="#2563eb">
+                                <input type="text" class="form-control form-control-sm" id="theme_primary_hex" value="#2563eb" onchange="document.getElementById('theme_primary').value=this.value">
+                            </div>
+                        </div>
+                        <div class="col-md-4 col-6">
+                            <label class="form-label small">Secondary</label>
+                            <div class="input-group">
+                                <input type="color" name="secondary_color" id="theme_secondary" class="form-control form-control-color" value="#1e40af">
+                                <input type="text" class="form-control form-control-sm" id="theme_secondary_hex" value="#1e40af" onchange="document.getElementById('theme_secondary').value=this.value">
+                            </div>
+                        </div>
+                        <div class="col-md-4 col-6">
+                            <label class="form-label small">Accent</label>
+                            <div class="input-group">
+                                <input type="color" name="accent_color" id="theme_accent" class="form-control form-control-color" value="#f59e0b">
+                                <input type="text" class="form-control form-control-sm" id="theme_accent_hex" value="#f59e0b" onchange="document.getElementById('theme_accent').value=this.value">
+                            </div>
+                        </div>
+                        <div class="col-md-4 col-6">
+                            <label class="form-label small">Text</label>
+                            <div class="input-group">
+                                <input type="color" name="text_color" id="theme_text" class="form-control form-control-color" value="#1f2937">
+                                <input type="text" class="form-control form-control-sm" id="theme_text_hex" value="#1f2937" onchange="document.getElementById('theme_text').value=this.value">
+                            </div>
+                        </div>
+                        <div class="col-md-4 col-6">
+                            <label class="form-label small">Background</label>
+                            <div class="input-group">
+                                <input type="color" name="bg_color" id="theme_bg" class="form-control form-control-color" value="#ffffff">
+                                <input type="text" class="form-control form-control-sm" id="theme_bg_hex" value="#ffffff" onchange="document.getElementById('theme_bg').value=this.value">
+                            </div>
+                        </div>
+
+                        <div class="col-12"><hr class="my-1"><strong class="small text-muted">Typography</strong></div>
+                        <div class="col-md-4">
+                            <label class="form-label small">Heading Font</label>
+                            <select name="font_heading" id="theme_font_h" class="form-select">
+                                <option value="Inter">Inter</option>
+                                <option value="Poppins">Poppins</option>
+                                <option value="Montserrat">Montserrat</option>
+                                <option value="Playfair Display">Playfair Display</option>
+                                <option value="Roboto">Roboto</option>
+                                <option value="Open Sans">Open Sans</option>
+                                <option value="Lato">Lato</option>
+                                <option value="Raleway">Raleway</option>
+                                <option value="Oswald">Oswald</option>
+                                <option value="Source Sans 3">Source Sans 3</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small">Body Font</label>
+                            <select name="font_body" id="theme_font_b" class="form-select">
+                                <option value="Inter">Inter</option>
+                                <option value="Poppins">Poppins</option>
+                                <option value="Roboto">Roboto</option>
+                                <option value="Open Sans">Open Sans</option>
+                                <option value="Lato">Lato</option>
+                                <option value="Source Sans 3">Source Sans 3</option>
+                                <option value="Nunito">Nunito</option>
+                                <option value="Work Sans">Work Sans</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small">Button Style</label>
+                            <select name="button_style" id="theme_btn" class="form-select">
+                                <option value="rounded">Rounded</option>
+                                <option value="pill">Pill</option>
+                                <option value="square">Square</option>
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small">Custom CSS (optional)</label>
+                            <textarea name="custom_css" id="theme_css" class="form-control font-monospace" rows="4" placeholder="/* Additional CSS overrides */"></textarea>
+                        </div>
+                        <div class="col-6">
+                            <div class="form-check">
+                                <input type="checkbox" name="is_default" id="theme_default" class="form-check-input" value="1">
+                                <label class="form-check-label" for="theme_default">Set as Default Theme</label>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="form-check">
+                                <input type="checkbox" name="is_active" id="theme_active" class="form-check-input" value="1" checked>
+                                <label class="form-check-label" for="theme_active">Active</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Theme</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ============= PROMPTS TAB ============= -->
+{% if tab == 'prompts' %}
+<div class="row">
+    <div class="col-lg-8">
+        <div class="sb-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">Prompt Overrides</h5>
+                <button class="btn btn-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#newPromptForm">
+                    <i class="bi bi-plus-lg"></i> New Override
+                </button>
+            </div>
+
+            <!-- New Prompt Form (collapsed) -->
+            <div class="collapse mb-4" id="newPromptForm">
+                <div class="border rounded p-3">
+                    <form method="POST" action="{{ url_for('sb_admin_prompt_save') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Page Type</label>
+                                <select name="page_type" class="form-select" required>
+                                    {% for pt in page_types %}
+                                    <option value="{{ pt }}">{{ pt|replace('_', ' ')|title }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Section</label>
+                                <select name="section" class="form-select">
+                                    <option value="user_prompt">User Prompt (appended)</option>
+                                    <option value="system_override">System Message Override</option>
+                                    <option value="extra_rules">Extra Rules</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Notes</label>
+                                <input type="text" name="notes" class="form-control" placeholder="Why this override exists">
+                            </div>
+                            <div class="col-12 prompt-editor">
+                                <label class="form-label">Content</label>
+                                <textarea name="content" class="form-control" rows="8" required placeholder="The content that will be injected into the prompt..."></textarea>
+                            </div>
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-primary">Save Override</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Existing Overrides -->
+            {% if overrides %}
+            {% for pt, items in overrides_by_page.items() %}
+            <div class="mb-3">
+                <h6 class="text-muted text-uppercase small mb-2">
+                    <i class="bi bi-file-earmark-text"></i> {{ pt|replace('_', ' ')|title }}
+                </h6>
+                {% for o in items %}
+                <div class="border rounded p-3 mb-2">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <span class="badge bg-primary">{{ o.section }}</span>
+                            <span class="badge {{ 'badge-active' if o.is_active else 'badge-inactive' }} ms-1">
+                                {{ 'Active' if o.is_active else 'Disabled' }}
+                            </span>
+                            {% if o.notes %}<small class="text-muted ms-2">{{ o.notes }}</small>{% endif %}
+                        </div>
+                        <div class="d-flex gap-1">
+                            <form method="POST" action="{{ url_for('sb_admin_prompt_toggle', pid=o.id) }}" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="is_active" value="{{ 0 if o.is_active else 1 }}">
+                                <button class="btn btn-outline-secondary btn-sm" title="{{ 'Disable' if o.is_active else 'Enable' }}">
+                                    <i class="bi bi-{{ 'pause' if o.is_active else 'play' }}"></i>
+                                </button>
+                            </form>
+                            <form method="POST" action="{{ url_for('sb_admin_prompt_delete', pid=o.id) }}" class="d-inline" onsubmit="return confirm('Delete this override?')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </div>
+                    </div>
+                    <pre class="bg-light p-2 rounded small mb-0" style="max-height:200px;overflow-y:auto;white-space:pre-wrap;">{{ o.content }}</pre>
+                    <small class="text-muted">Updated: {{ o.updated_at }} by {{ o.updated_by or 'system' }}</small>
+                </div>
+                {% endfor %}
+            </div>
+            {% endfor %}
+            {% else %}
+            <p class="text-muted text-center py-4">No prompt overrides. The default prompts from site_builder.py are being used.</p>
+            {% endif %}
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="sb-card">
+            <h6><i class="bi bi-info-circle"></i> Prompt Override Guide</h6>
+            <p class="text-muted small">Overrides let you customize or extend the AI prompts without changing code. They layer on top of the built-in prompts.</p>
+            <strong class="small">Sections:</strong>
+            <ul class="small text-muted mb-2">
+                <li><strong>User Prompt</strong> - Appended to the page-specific prompt. Use for extra instructions, industry-specific rules, or brand voice guidelines.</li>
+                <li><strong>System Message Override</strong> - Replaces the default system message entirely. Use with caution.</li>
+                <li><strong>Extra Rules</strong> - Appended to GLOBAL_RULES for this page type specifically.</li>
+            </ul>
+            <strong class="small">Special Page Types:</strong>
+            <ul class="small text-muted mb-0">
+                <li><strong>global_rules</strong> - Rules that apply to ALL page types</li>
+                <li><strong>system_message</strong> - Override the system persona for all pages</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ============= IMAGES TAB ============= -->
+{% if tab == 'images' %}
+<div class="row">
+    <!-- Image Upload & Categories -->
+    <div class="col-lg-4">
+        <!-- Upload -->
+        <div class="sb-card">
+            <h6><i class="bi bi-cloud-upload"></i> Upload Images</h6>
+            <form method="POST" action="{{ url_for('sb_admin_image_upload') }}" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-2">
+                    <input type="file" name="images" class="form-control" multiple accept="image/*">
+                    <small class="text-muted">JPG, PNG, GIF, WebP, SVG. Max 20MB each. Multiple files OK.</small>
+                </div>
+                <div class="mb-2">
+                    <select name="category_id" class="form-select form-select-sm">
+                        <option value="">No Category</option>
+                        {% for c in categories %}
+                        <option value="{{ c.id }}">{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col">
+                        <input type="text" name="tags" class="form-control form-control-sm" placeholder="Tags (comma-separated)">
+                    </div>
+                    <div class="col">
+                        <input type="text" name="industry" class="form-control form-control-sm" placeholder="Industry">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm w-100">Upload</button>
+            </form>
+        </div>
+
+        <!-- Categories -->
+        <div class="sb-card">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="mb-0"><i class="bi bi-folder"></i> Categories</h6>
+                <button class="btn btn-outline-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#newCatForm">
+                    <i class="bi bi-plus"></i>
+                </button>
+            </div>
+            <div class="collapse mb-2" id="newCatForm">
+                <form method="POST" action="{{ url_for('sb_admin_image_category_save') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="input-group input-group-sm mb-1">
+                        <input type="text" name="name" class="form-control" placeholder="Name" required>
+                        <input type="text" name="slug" class="form-control" placeholder="slug" required>
+                        <button class="btn btn-primary">Add</button>
+                    </div>
+                    <input type="text" name="description" class="form-control form-control-sm" placeholder="Description (optional)">
+                </form>
+            </div>
+            {% if categories %}
+            <div>
+                {% for c in categories %}
+                <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                    <div>
+                        <strong class="small">{{ c.name }}</strong>
+                        <span class="badge bg-secondary ms-1">{{ c.image_count }}</span>
+                    </div>
+                    <form method="POST" action="{{ url_for('sb_admin_image_category_delete', cid=c.id) }}" onsubmit="return confirm('Delete category? Images will be unlinked.')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn btn-link btn-sm text-danger p-0"><i class="bi bi-x-lg"></i></button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted small mb-0">No categories yet.</p>
+            {% endif %}
+        </div>
+
+        <!-- WP Publish -->
+        <div class="sb-card">
+            <h6><i class="bi bi-wordpress"></i> Publish to WordPress</h6>
+            <p class="text-muted small">Select images in the grid and publish them to a brand's WordPress media library.</p>
+            <form method="POST" action="{{ url_for('sb_admin_image_wp_publish') }}" id="wpPublishForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div id="wp_selected_ids"></div>
+                <div class="mb-2">
+                    <select name="brand_id" class="form-select form-select-sm" required>
+                        <option value="">Select Brand</option>
+                        <!-- Populated via JS or could be passed from route -->
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-outline-primary btn-sm w-100" disabled id="wpPublishBtn">
+                    Publish Selected to WP
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Image Grid -->
+    <div class="col-lg-8">
+        <div class="sb-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">Image Library <small class="text-muted">({{ image_count }} total)</small></h5>
+                <div class="d-flex gap-2">
+                    <form method="POST" action="{{ url_for('sb_admin_image_bulk') }}" id="bulkForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div id="bulk_image_ids"></div>
+                        <div class="input-group input-group-sm">
+                            <select name="action" class="form-select" style="width:auto;">
+                                <option value="">Bulk Action</option>
+                                <option value="delete">Delete Selected</option>
+                                <option value="categorize">Set Category</option>
+                                <option value="tag">Set Tags</option>
+                            </select>
+                            <select name="bulk_category_id" class="form-select" style="width:auto;">
+                                <option value="">Category</option>
+                                {% for c in categories %}
+                                <option value="{{ c.id }}">{{ c.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <input type="text" name="bulk_tags" class="form-control" placeholder="Tags" style="width:120px;">
+                            <button type="submit" class="btn btn-outline-secondary" id="bulkBtn" disabled>Apply</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            {% if images %}
+            <div class="img-grid" id="imageGrid">
+                {% for img in images %}
+                <div class="text-center position-relative">
+                    <img src="{{ url_for('static', filename=img.file_path) }}"
+                         alt="{{ img.alt_text }}"
+                         class="img-thumb"
+                         data-id="{{ img.id }}"
+                         onclick="toggleImageSelect(this)"
+                         title="{{ img.original_name }}&#10;{{ img.tags }}">
+                    {% if img.wp_media_id %}
+                    <span class="position-absolute top-0 end-0 badge bg-success" style="font-size:.6rem;" title="Published to WP">WP</span>
+                    {% endif %}
+                    <div class="small text-truncate mt-1" style="max-width:110px;">{{ img.original_name[:15] }}</div>
+                    <!-- Edit trigger -->
+                    <button class="btn btn-link btn-sm p-0" data-bs-toggle="modal" data-bs-target="#imageEditModal"
+                            onclick="editImage({{ img.id }}, '{{ img.alt_text|e }}', '{{ img.title|e }}', '{{ img.tags|e }}', '{{ img.industry|e }}', '{{ img.page_types|e }}', {{ img.category_id or 'null' }})">
+                        <i class="bi bi-pencil-square" style="font-size:.75rem;"></i>
+                    </button>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted text-center py-5">No images yet. Upload stock images to start building your library.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Image Edit Modal -->
+<div class="modal fade" id="imageEditModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" id="imageEditForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Image</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <label class="form-label small">Alt Text</label>
+                        <input type="text" name="alt_text" id="img_alt" class="form-control">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Title</label>
+                        <input type="text" name="title" id="img_title" class="form-control">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Tags (comma-separated)</label>
+                        <input type="text" name="tags" id="img_tags" class="form-control">
+                    </div>
+                    <div class="row g-2">
+                        <div class="col">
+                            <label class="form-label small">Industry</label>
+                            <input type="text" name="industry" id="img_industry" class="form-control">
+                        </div>
+                        <div class="col">
+                            <label class="form-label small">Page Types</label>
+                            <input type="text" name="page_types" id="img_page_types" class="form-control" placeholder="home, about">
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <label class="form-label small">Category</label>
+                        <select name="category_id" id="img_cat" class="form-select">
+                            <option value="">None</option>
+                            {% for c in categories %}
+                            <option value="{{ c.id }}">{{ c.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+// ── Templates ──
+function clearTemplateForm() {
+    document.getElementById('tmpl_id').value = '';
+    document.getElementById('tmpl_modal_title').textContent = 'New Template';
+    document.getElementById('tmpl_name').value = '';
+    document.getElementById('tmpl_category').value = 'section';
+    document.getElementById('tmpl_page_types').value = '';
+    document.getElementById('tmpl_desc').value = '';
+    document.getElementById('tmpl_html').value = '';
+    document.getElementById('tmpl_css').value = '';
+    document.getElementById('tmpl_sort').value = '0';
+    document.getElementById('tmpl_active').checked = true;
+}
+
+function editTemplate(id) {
+    fetch(`/api/site-builder-admin/templates/${id}`)
+        .then(r => r.json())
+        .then(t => {
+            document.getElementById('tmpl_id').value = t.id;
+            document.getElementById('tmpl_modal_title').textContent = 'Edit Template';
+            document.getElementById('tmpl_name').value = t.name;
+            document.getElementById('tmpl_category').value = t.category;
+            document.getElementById('tmpl_page_types').value = t.page_types || '';
+            document.getElementById('tmpl_desc').value = t.description || '';
+            document.getElementById('tmpl_html').value = t.html_content || '';
+            document.getElementById('tmpl_css').value = t.css_content || '';
+            document.getElementById('tmpl_sort').value = t.sort_order || 0;
+            document.getElementById('tmpl_active').checked = !!t.is_active;
+            new bootstrap.Modal(document.getElementById('templateModal')).show();
+        });
+}
+
+// ── Themes ──
+function clearThemeForm() {
+    document.getElementById('theme_id').value = '';
+    document.getElementById('theme_modal_title').textContent = 'New Theme';
+    document.getElementById('theme_name').value = '';
+    document.getElementById('theme_desc').value = '';
+    document.getElementById('theme_primary').value = '#2563eb';
+    document.getElementById('theme_primary_hex').value = '#2563eb';
+    document.getElementById('theme_secondary').value = '#1e40af';
+    document.getElementById('theme_secondary_hex').value = '#1e40af';
+    document.getElementById('theme_accent').value = '#f59e0b';
+    document.getElementById('theme_accent_hex').value = '#f59e0b';
+    document.getElementById('theme_text').value = '#1f2937';
+    document.getElementById('theme_text_hex').value = '#1f2937';
+    document.getElementById('theme_bg').value = '#ffffff';
+    document.getElementById('theme_bg_hex').value = '#ffffff';
+    document.getElementById('theme_font_h').value = 'Inter';
+    document.getElementById('theme_font_b').value = 'Inter';
+    document.getElementById('theme_btn').value = 'rounded';
+    document.getElementById('theme_layout').value = 'modern';
+    document.getElementById('theme_css').value = '';
+    document.getElementById('theme_default').checked = false;
+    document.getElementById('theme_active').checked = true;
+}
+
+function editTheme(id) {
+    fetch(`/api/site-builder-admin/themes/${id}`)
+        .then(r => r.json())
+        .then(t => {
+            document.getElementById('theme_id').value = t.id;
+            document.getElementById('theme_modal_title').textContent = 'Edit Theme';
+            document.getElementById('theme_name').value = t.name;
+            document.getElementById('theme_desc').value = t.description || '';
+            document.getElementById('theme_primary').value = t.primary_color;
+            document.getElementById('theme_primary_hex').value = t.primary_color;
+            document.getElementById('theme_secondary').value = t.secondary_color;
+            document.getElementById('theme_secondary_hex').value = t.secondary_color;
+            document.getElementById('theme_accent').value = t.accent_color;
+            document.getElementById('theme_accent_hex').value = t.accent_color;
+            document.getElementById('theme_text').value = t.text_color;
+            document.getElementById('theme_text_hex').value = t.text_color;
+            document.getElementById('theme_bg').value = t.bg_color;
+            document.getElementById('theme_bg_hex').value = t.bg_color;
+            document.getElementById('theme_font_h').value = t.font_heading;
+            document.getElementById('theme_font_b').value = t.font_body;
+            document.getElementById('theme_btn').value = t.button_style;
+            document.getElementById('theme_layout').value = t.layout_style;
+            document.getElementById('theme_css').value = t.custom_css || '';
+            document.getElementById('theme_default').checked = !!t.is_default;
+            document.getElementById('theme_active').checked = !!t.is_active;
+            new bootstrap.Modal(document.getElementById('themeModal')).show();
+        });
+}
+
+// Sync color picker with hex input
+document.querySelectorAll('input[type="color"]').forEach(picker => {
+    picker.addEventListener('input', function() {
+        const hexInput = this.parentElement.querySelector('input[type="text"]');
+        if (hexInput) hexInput.value = this.value;
+    });
+});
+
+// ── Images ──
+const selectedImages = new Set();
+
+function toggleImageSelect(el) {
+    const id = el.dataset.id;
+    if (selectedImages.has(id)) {
+        selectedImages.delete(id);
+        el.classList.remove('selected');
+    } else {
+        selectedImages.add(id);
+        el.classList.add('selected');
+    }
+    updateBulkState();
+}
+
+function updateBulkState() {
+    const count = selectedImages.size;
+    document.getElementById('bulkBtn').disabled = count === 0;
+    document.getElementById('wpPublishBtn').disabled = count === 0;
+
+    // Update hidden inputs for bulk form
+    const bulkContainer = document.getElementById('bulk_image_ids');
+    bulkContainer.innerHTML = '';
+    const wpContainer = document.getElementById('wp_selected_ids');
+    wpContainer.innerHTML = '';
+    selectedImages.forEach(id => {
+        bulkContainer.innerHTML += `<input type="hidden" name="image_ids" value="${id}">`;
+        wpContainer.innerHTML += `<input type="hidden" name="image_ids" value="${id}">`;
+    });
+}
+
+function editImage(id, alt, title, tags, industry, pageTypes, catId) {
+    document.getElementById('imageEditForm').action = `/site-builder-admin/images/${id}/edit`;
+    document.getElementById('img_alt').value = alt;
+    document.getElementById('img_title').value = title;
+    document.getElementById('img_tags').value = tags;
+    document.getElementById('img_industry').value = industry;
+    document.getElementById('img_page_types').value = pageTypes;
+    document.getElementById('img_cat').value = catId || '';
+}
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+{% endblock %}

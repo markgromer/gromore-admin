@@ -254,6 +254,12 @@ Example:
 - Commercial opportunity over $2,000
 - Anything involving refunds, cancellations, or legal risk
 - The lead asks for a manager, owner, or custom contract">{{ brand.sales_bot_handoff_rules or '' }}</textarea>
+                <label class="form-label fw-semibold mt-3">Owner Alert Emails</label>
+                <input class="form-control" type="text" name="sales_bot_crm_event_alert_emails" value="{{ brand.sales_bot_crm_event_alert_emails or '' }}" placeholder="Example: owner@company.com, manager@company.com">
+                <small class="text-muted d-block mt-2">Warren will email these contacts when a lead needs human takeover.</small>
+                <label class="form-label fw-semibold mt-3">Handoff Alert Phones</label>
+                <input class="form-control" type="text" name="sales_bot_handoff_alert_phones" value="{{ brand.sales_bot_handoff_alert_phones or '' }}" placeholder="Example: +15551234567, +15557654321">
+                <small class="text-muted d-block mt-2">When Warren triggers a human handoff, it will text these numbers and email the contacts above.</small>
             </div>
         </div>
     </div>

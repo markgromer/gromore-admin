@@ -11,12 +11,141 @@ generates contextual responses using OpenAI. Decides whether to:
 """
 import json
 import logging
+import re
 import requests
 from datetime import datetime
+
+from flask import current_app
 
 log = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "gpt-4o-mini"
+
+
+def _parse_phone_list(raw_value):
+    cleaned = []
+    seen = set()
+    for chunk in re.split(r"[,;\n]+", str(raw_value or "")):
+        phone = chunk.strip()
+        if not phone:
+            continue
+        phone = re.sub(r"[^\d+]", "", phone)
+        if not phone:
+            continue
+        if not phone.startswith("+") and phone.isdigit() and len(phone) == 10:
+            phone = "+1" + phone
+        if phone in seen:
+            continue
+        seen.add(phone)
+        cleaned.append(phone)
+    return cleaned
+
+
+def _build_owner_handoff_alert(thread, reason, channel):
+    lead_name = (thread.get("lead_name") or "Unknown lead").strip()
+    lead_phone = (thread.get("lead_phone") or "").strip()
+    lead_email = (thread.get("lead_email") or "").strip()
+    lead_summary = (thread.get("summary") or "").strip()
+    last_inbound = ""
+    for message in reversed(thread.get("_messages") or []):
+        if message.get("direction") == "inbound":
+            last_inbound = (message.get("content") or "").strip()
+            break
+
+    subject = f"W.A.R.R.E.N. handoff needed - {lead_name}"
+
+    lines = [
+        "W.A.R.R.E.N. needs you to interrupt a live lead conversation.",
+        "",
+        f"Lead: {lead_name}",
+        f"Channel: {(channel or thread.get('channel') or 'sms').upper()}",
+    ]
+    if lead_phone:
+        lines.append(f"Phone: {lead_phone}")
+    if lead_email:
+        lines.append(f"Email: {lead_email}")
+    lines.append(f"Reason: {reason}")
+    if lead_summary:
+        lines.append(f"Thread summary: {lead_summary}")
+    if last_inbound:
+        lines.extend(["", "Latest lead message:", last_inbound[:500]])
+    lines.extend(["", "Please open the inbox and take over this thread now."])
+    email_text = "\n".join(lines)
+
+    sms_bits = [
+        f"WARREN handoff needed for {lead_name}.",
+        f"Reason: {reason}.",
+    ]
+    if lead_phone:
+        sms_bits.append(f"Lead phone: {lead_phone}.")
+    sms_bits.append("Open the inbox and interrupt the conversation now.")
+    sms_text = " ".join(bit.strip() for bit in sms_bits if bit.strip())
+    return subject, email_text, sms_text[:320]
+
+
+def _notify_owner_handoff(db, brand, thread, reason, channel):
+    from webapp.email_sender import send_simple_email
+    from webapp.warren_crm_events import get_internal_alert_recipients, load_crm_event_rules
+    from webapp.warren_sender import send_transactional_sms
+
+    subject, email_text, sms_text = _build_owner_handoff_alert(thread, reason, channel)
+    email_recipients = get_internal_alert_recipients(db, brand, load_crm_event_rules(brand))
+    sms_recipients = _parse_phone_list(brand.get("sales_bot_handoff_alert_phones"))
+
+    sent_email_count = 0
+    sent_sms_count = 0
+    failed_targets = []
+
+    app_config = {}
+    try:
+        app_config = current_app.config
+    except RuntimeError:
+        app_config = {}
+
+    for email in email_recipients:
+        try:
+            send_simple_email(app_config, email, subject, email_text)
+            sent_email_count += 1
+        except Exception as exc:
+            log.warning("Owner handoff email failed for %s: %s", email, exc)
+            failed_targets.append(f"email:{email}")
+
+    for phone in sms_recipients:
+        ok, detail = send_transactional_sms(db, brand, phone, sms_text, append_opt_out_footer=False)
+        if ok:
+            sent_sms_count += 1
+        else:
+            log.warning("Owner handoff SMS failed for %s: %s", phone, detail)
+            failed_targets.append(f"sms:{phone}")
+
+    detail_bits = []
+    if sent_email_count:
+        detail_bits.append(f"email x{sent_email_count}")
+    if sent_sms_count:
+        detail_bits.append(f"sms x{sent_sms_count}")
+    if failed_targets:
+        detail_bits.append("failed: " + ", ".join(failed_targets[:4]))
+    if not detail_bits:
+        detail_bits.append("no recipients configured")
+
+    db.add_lead_event(
+        brand.get("id"),
+        thread.get("id"),
+        "owner_handoff_alert",
+        event_value=" | ".join(detail_bits),
+        metadata={
+            "reason": reason,
+            "email_count": sent_email_count,
+            "sms_count": sent_sms_count,
+            "failed_targets": failed_targets,
+        },
+    )
+
+    return {
+        "email_count": sent_email_count,
+        "sms_count": sent_sms_count,
+        "failed_targets": failed_targets,
+    }
 
 
 def _get_openai_key(db):
@@ -386,7 +515,12 @@ def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=
     if not thread:
         return None
 
+    if str(thread.get("assigned_to") or "").strip().lower() == "human":
+        log.info("Warren brain: thread %s already assigned to human, skipping auto-response", thread_id)
+        return None
+
     messages = db.get_lead_messages(thread_id)
+    thread["_messages"] = messages
 
     # Load past objections into thread context for the brain
     objection_events = db.get_lead_events(brand_id, thread_id, event_type="objection_detected")
@@ -449,7 +583,7 @@ def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=
             amount_high=response.get("quote_high") or 0,
             summary=response.get("internal_notes", ""),
             follow_up_text=reply_text,
-            sent_at=datetime.utcnow().isoformat() if should_send else "",
+            sent_at=datetime.now().isoformat() if should_send else "",
         )
         advance_stage(db, thread_id, brand_id, "quote_sent")
 
@@ -458,6 +592,8 @@ def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=
         reason = response.get("handoff_reason", "Handoff triggered")
         db.add_lead_event(brand_id, thread_id, "handoff_triggered", event_value=reason)
         db.update_lead_thread_status(thread_id, assigned_to="human")
+        thread["assigned_to"] = "human"
+        _notify_owner_handoff(db, brand, thread, reason, channel)
 
     # Auto-advance pipeline based on action
     if action in ("reply", "qualify", "nurture") and thread.get("status") == "new":

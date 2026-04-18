@@ -214,6 +214,7 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
                 "sales_bot_business_hours": "Mon-Fri 8am-5pm. After-hours emergencies should be escalated.",
                 "sales_bot_reply_tone": "Direct and helpful",
                 "sales_bot_reply_delay_seconds": "17",
+                "sales_bot_handoff_alert_phones": "+15555550124, +15555550125",
                 "sales_bot_payment_reminders_enabled": "1",
                 "sales_bot_payment_reminder_days_before": "5",
                 "sales_bot_payment_reminder_billing_day": "1",
@@ -242,6 +243,7 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertEqual(brand["sales_bot_business_hours"], "Mon-Fri 8am-5pm. After-hours emergencies should be escalated.")
         self.assertEqual(brand["sales_bot_reply_tone"], "Direct and helpful")
         self.assertEqual(brand["sales_bot_reply_delay_seconds"], 17.0)
+        self.assertEqual(brand["sales_bot_handoff_alert_phones"], "+15555550124, +15555550125")
         self.assertEqual(brand["sales_bot_payment_reminders_enabled"], 1.0)
         self.assertEqual(brand["sales_bot_payment_reminder_days_before"], 5.0)
         self.assertEqual(brand["sales_bot_payment_reminder_billing_day"], 1.0)
@@ -539,6 +541,8 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
                 "sales_bot_example_language": "Most jobs like this land between $125 and $175.",
                 "sales_bot_disallowed_language": "Do not say guaranteed lowest price.",
                 "sales_bot_handoff_rules": "Escalate angry leads and commercial jobs.",
+                "sales_bot_crm_event_alert_emails": "owner@example.com, manager@example.com",
+                "sales_bot_handoff_alert_phones": "+15555550124, +15555550125",
             },
             follow_redirects=False,
         )
@@ -556,6 +560,8 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertEqual(brand["sales_bot_example_language"], "Most jobs like this land between $125 and $175.")
         self.assertEqual(brand["sales_bot_disallowed_language"], "Do not say guaranteed lowest price.")
         self.assertEqual(brand["sales_bot_handoff_rules"], "Escalate angry leads and commercial jobs.")
+        self.assertEqual(brand["sales_bot_crm_event_alert_emails"], "owner@example.com, manager@example.com")
+        self.assertEqual(brand["sales_bot_handoff_alert_phones"], "+15555550124, +15555550125")
 
     def test_client_can_save_warren_hosted_lead_form_config(self):
         response = self.client.post(
