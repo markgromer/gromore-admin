@@ -79,6 +79,11 @@
                     </div>
                 </div>
             </div>
+            <div class="mt-3">
+                <label class="form-label fw-semibold">Search criteria</label>
+                <input type="text" class="form-control" name="search_criteria" value="{{ search_criteria|default('') }}" placeholder="Example: dog friendly properties, pet relief areas, gated communities">
+                <div class="form-text">Add a freeform qualifier to aim the search at specific property traits.</div>
+            </div>
             <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
                 <small class="text-muted">
                     {% if has_maps_api_key %}
@@ -98,7 +103,7 @@
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
             <h5 class="mb-0">Search Results</h5>
-            <small class="text-muted">{{ results|length }} prospects found for {{ location or 'your search' }}.</small>
+            <small class="text-muted">{{ results|length }} prospects found for {{ location or 'your search' }}{% if search_criteria %} using "{{ search_criteria }}"{% endif %}.</small>
         </div>
     </div>
     <div class="card-body">

@@ -799,8 +799,9 @@ def _extract_site_snapshot(website):
     return snapshot if isinstance(snapshot, dict) else {}
 
 
-def search_commercial_prospects(location, prospect_types, *, api_key="", max_results_per_type=8):
+def search_commercial_prospects(location, prospect_types, *, api_key="", max_results_per_type=8, search_criteria=""):
     location = (location or "").strip()
+    search_criteria = " ".join((search_criteria or "").strip().split())[:220]
     selected_keys = {key for key in (prospect_types or []) if key}
     if not location:
         return []
@@ -810,6 +811,8 @@ def search_commercial_prospects(location, prospect_types, *, api_key="", max_res
 
     for item in selected_types:
         query = item["query"].format(location=location)
+        if search_criteria:
+            query = f"{query} {search_criteria}".strip()
         raw_results = _search_google_places(query, api_key, max_results_per_type) if api_key else _search_duckduckgo(query, max_results_per_type)
         for raw in raw_results:
             business_name = ((raw.get("displayName") or {}).get("text") or "").strip()
@@ -840,6 +843,7 @@ def search_commercial_prospects(location, prospect_types, *, api_key="", max_res
                 "prospect_type_label": item["label"],
                 "service_area": location,
                 "source_query": query,
+                "search_criteria": search_criteria,
                 "audit_snapshot": audit_snapshot or {},
                 "site_intel": site_intel,
                 "public_intel": public_intel,

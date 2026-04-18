@@ -131,6 +131,23 @@ class ClientCommercialProspectingTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(search_mock.call_args.kwargs["api_key"], "brand-maps-key")
 
+    @patch("webapp.commercial_prospector.search_commercial_prospects")
+    def test_client_commercial_search_passes_search_criteria(self, search_mock):
+        search_mock.return_value = []
+
+        response = self.client.post(
+            "/client/commercial/search",
+            data={
+                "location": "Mesa, AZ",
+                "prospect_types": ["apartment"],
+                "max_results": "5",
+                "search_criteria": "dog friendly properties",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(search_mock.call_args.kwargs["search_criteria"], "dog friendly properties")
+
     def test_client_commercial_brief_uses_brand_service_context(self):
         with self.app.app_context():
             self.app.db.update_brand_text_field(self.brand_id, "primary_services", "Pet waste removal, waste station refill, deodorizer treatment")
@@ -1315,6 +1332,32 @@ class ClientCommercialProspectingTests(unittest.TestCase):
         self.assertEqual(email_mock.call_count, 7)
         self.assertEqual(site_intel_mock.call_count, 0)
         self.assertEqual(public_intel_mock.call_count, 0)
+
+    @patch("webapp.commercial_prospector._extract_public_emails")
+    @patch("webapp.commercial_prospector._search_google_places")
+    def test_search_commercial_prospects_appends_search_criteria(self, search_mock, email_mock):
+        search_mock.return_value = [
+            {
+                "id": "place-1",
+                "displayName": {"text": "Dogwood Apartments"},
+                "websiteUri": "https://dogwood.example.com",
+                "formattedAddress": "1 Main St, Mesa, AZ",
+            }
+        ]
+        email_mock.return_value = []
+
+        results = search_commercial_prospects(
+            "Mesa, AZ",
+            ["apartment"],
+            api_key="maps-key",
+            max_results_per_type=8,
+            search_criteria="dog friendly properties",
+        )
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["search_criteria"], "dog friendly properties")
+        self.assertIn("dog friendly properties", results[0]["source_query"])
+        self.assertIn("dog friendly properties", search_mock.call_args.args[0])
 
 
 if __name__ == "__main__":

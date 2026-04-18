@@ -2131,6 +2131,7 @@ def create_app():
             "crm/commercial_prospector.html",
             results=[],
             location="",
+            search_criteria="",
             selected_types=[item["key"] for item in COMMERCIAL_PROSPECT_TYPES[:3]],
             prospect_types=COMMERCIAL_PROSPECT_TYPES,
             sequences=sequences,
@@ -2144,6 +2145,7 @@ def create_app():
         from webapp.commercial_prospector import COMMERCIAL_PROSPECT_TYPES, search_commercial_prospects
 
         location = request.form.get("location", "").strip()
+        search_criteria = (request.form.get("search_criteria", "") or "").strip()[:220]
         selected_types = [value.strip() for value in request.form.getlist("prospect_types") if value.strip()]
         max_results = request.form.get("max_results", "8").strip()
         try:
@@ -2160,6 +2162,7 @@ def create_app():
                     selected_types,
                     api_key=maps_api_key,
                     max_results_per_type=max_results,
+                    search_criteria=search_criteria,
                 )
             except Exception as exc:
                 flash(f"Commercial search failed: {str(exc)[:160]}", "error")
@@ -2171,6 +2174,7 @@ def create_app():
             "crm/commercial_prospector.html",
             results=results,
             location=location,
+            search_criteria=search_criteria,
             selected_types=selected_types,
             prospect_types=COMMERCIAL_PROSPECT_TYPES,
             sequences=sequences,

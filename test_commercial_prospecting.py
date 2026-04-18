@@ -83,6 +83,23 @@ class CommercialProspectingTests(unittest.TestCase):
         self.assertIn(b"leasing@mesaproperty.example.com", response.data)
         self.assertIn(b"Import selected prospects", response.data)
 
+    @patch("webapp.commercial_prospector.search_commercial_prospects")
+    def test_commercial_search_passes_search_criteria(self, search_mock):
+        search_mock.return_value = []
+
+        response = self.client.post(
+            "/crm/commercial/search",
+            data={
+                "location": "Mesa, AZ",
+                "prospect_types": ["property_manager"],
+                "max_results": "5",
+                "search_criteria": "dog friendly properties",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(search_mock.call_args.kwargs["search_criteria"], "dog friendly properties")
+
     def test_commercial_import_creates_prospect_and_enrolls_in_drip(self):
         payload = {
             "business_name": "Skyline HOA Services",

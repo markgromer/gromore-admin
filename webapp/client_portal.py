@@ -353,6 +353,7 @@ def _normalize_client_commercial_payload(raw_item, *, default_service_area=""):
     primary_email = emails[0] if emails else _normalize_client_commercial_text(item.get("email"), 255).lower()
     phone = _normalize_client_commercial_text(item.get("phone") or source_details.get("phone"), 80)
     source_query = _normalize_client_commercial_text(item.get("source_query") or source_details.get("source_query"), 255)
+    search_criteria = _normalize_client_commercial_text(item.get("search_criteria") or source_details.get("search_criteria"), 220)
     address = _normalize_client_commercial_text(item.get("address") or source_details.get("address"), 255)
     maps_url = _normalize_client_commercial_text(item.get("maps_url") or source_details.get("maps_url"), 500)
     service_area = _normalize_client_commercial_text(item.get("service_area") or source_details.get("service_area") or default_service_area, 160)
@@ -365,6 +366,7 @@ def _normalize_client_commercial_payload(raw_item, *, default_service_area=""):
         "prospect_type": account_type,
         "prospect_type_label": industry,
         "source_query": source_query,
+        "search_criteria": search_criteria,
         "rating": item.get("rating") if item.get("rating") is not None else source_details.get("rating"),
         "review_count": item.get("review_count") if item.get("review_count") is not None else source_details.get("review_count") or 0,
         "maps_url": maps_url,
@@ -392,6 +394,7 @@ def _normalize_client_commercial_payload(raw_item, *, default_service_area=""):
         "stage": _normalize_client_commercial_text(item.get("stage") or item.get("status") or "new", 40).lower() or "new",
         "source": _normalize_client_commercial_text(item.get("source") or "commercial_prospecting", 80) or "commercial_prospecting",
         "summary": _normalize_client_commercial_text(item.get("summary"), 400),
+        "search_criteria": search_criteria,
         "source_details_json": json.dumps(normalized_source_details),
         "audit_snapshot_json": json.dumps(audit_snapshot if isinstance(audit_snapshot, dict) else {}),
         "qualification_answers_json": json.dumps(qualification_answers),
@@ -451,6 +454,7 @@ def _merge_client_commercial_payload(existing_payload, incoming_payload):
         "prospect_type": incoming_source_details.get("prospect_type") or existing_source_details.get("prospect_type") or incoming.get("account_type") or existing.get("account_type") or "",
         "prospect_type_label": incoming_source_details.get("prospect_type_label") or existing_source_details.get("prospect_type_label") or incoming.get("industry") or existing.get("industry") or "",
         "source_query": incoming_source_details.get("source_query") or existing_source_details.get("source_query") or "",
+        "search_criteria": incoming_source_details.get("search_criteria") or existing_source_details.get("search_criteria") or incoming.get("search_criteria") or existing.get("search_criteria") or "",
         "maps_url": incoming_source_details.get("maps_url") or existing_source_details.get("maps_url") or "",
         "rating": incoming_source_details.get("rating") if incoming_source_details.get("rating") is not None else existing_source_details.get("rating"),
         "review_count": incoming_source_details.get("review_count") if incoming_source_details.get("review_count") not in (None, "") else existing_source_details.get("review_count") or 0,
@@ -474,6 +478,7 @@ def _merge_client_commercial_payload(existing_payload, incoming_payload):
         "stage": existing.get("stage") or incoming.get("stage") or "new",
         "source": incoming.get("source") or existing.get("source") or "commercial_prospecting",
         "summary": incoming.get("summary") or existing.get("summary") or "",
+        "search_criteria": incoming.get("search_criteria") or existing.get("search_criteria") or "",
         "source_details_json": json.dumps(merged_source_details),
         "audit_snapshot_json": json.dumps(incoming_audit_snapshot or existing_audit_snapshot),
         "qualification_answers_json": json.dumps(incoming_answers or existing_answers),
@@ -9800,6 +9805,7 @@ def client_commercial_prospecting():
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
         results=[],
         location=(brand.get("service_area") or "").strip(),
+        search_criteria="",
         selected_types=[item["key"] for item in COMMERCIAL_PROSPECT_TYPES[:3]],
         prospect_types=COMMERCIAL_PROSPECT_TYPES,
         has_maps_api_key=bool(maps_api_key),
@@ -9820,6 +9826,7 @@ def client_commercial_search():
     from webapp.commercial_prospector import COMMERCIAL_PROSPECT_TYPES, search_commercial_prospects
 
     location = request.form.get("location", "").strip()
+    search_criteria = _normalize_client_commercial_text(request.form.get("search_criteria", ""), 220)
     selected_types = [value.strip() for value in request.form.getlist("prospect_types") if value.strip()]
     max_results = request.form.get("max_results", "8").strip()
     try:
@@ -9841,6 +9848,7 @@ def client_commercial_search():
                 selected_types,
                 api_key=maps_api_key,
                 max_results_per_type=max_results,
+                search_criteria=search_criteria,
             )
         except Exception as exc:
             flash(f"Commercial search failed: {str(exc)[:160]}", "error")
@@ -9853,6 +9861,7 @@ def client_commercial_search():
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
         results=results,
         location=location,
+        search_criteria=search_criteria,
         selected_types=selected_types,
         prospect_types=COMMERCIAL_PROSPECT_TYPES,
         has_maps_api_key=bool(maps_api_key),

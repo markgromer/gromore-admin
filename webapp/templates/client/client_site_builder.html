@@ -595,6 +595,7 @@
     /* ── GrapesJS Visual Editor (Wix-like) ── */
     let gjsEditor = null;
     let gjsCurrentPageId = null;
+    let pendingAssetAction = null;
 
     function isImageComponent(component) {
         return component && component.get && component.get('type') === 'image';
@@ -604,15 +605,46 @@
         return gjsEditor ? gjsEditor.getSelected() : null;
     }
 
+    function extractUploadedAssetSrcs(payload) {
+        if (!payload) return [];
+        if (Array.isArray(payload)) {
+            return payload.map(normalizeAssetSrc).filter(Boolean);
+        }
+        if (typeof payload === 'string') {
+            return [payload].filter(Boolean);
+        }
+        if (Array.isArray(payload.data)) {
+            return payload.data.map(normalizeAssetSrc).filter(Boolean);
+        }
+        if (payload.data) {
+            return [normalizeAssetSrc(payload.data)].filter(Boolean);
+        }
+        if (payload.url || payload.src) {
+            return [normalizeAssetSrc(payload)].filter(Boolean);
+        }
+        return [];
+    }
+
+    function applyAssetSelection(src, asset) {
+        if (!src || !pendingAssetAction) return false;
+        const action = pendingAssetAction;
+        pendingAssetAction = null;
+        action(src, asset);
+        gjsEditor?.AssetManager?.close();
+        return true;
+    }
+
     function openImagePicker(onSelect) {
         if (!gjsEditor) return;
         const assetManager = gjsEditor.AssetManager;
+        pendingAssetAction = typeof onSelect === 'function' ? onSelect : null;
         assetManager.open({
             types: ['image'],
             accept: 'image/*',
             select(asset, complete) {
                 const src = normalizeAssetSrc(asset);
                 if (src && typeof onSelect === 'function') onSelect(src, asset);
+                pendingAssetAction = null;
                 if (complete) assetManager.close();
             },
         });
@@ -1090,6 +1122,13 @@
                 },
             });
 
+            gjsEditor.on('asset:upload:end', (result) => {
+                const uploadedSrc = extractUploadedAssetSrcs(result)[0];
+                if (uploadedSrc) {
+                    applyAssetSelection(uploadedSrc, result);
+                }
+            });
+
             // Auto-switch to Styles tab when a component is selected
             gjsEditor.on('component:selected', (component) => {
                 const stylesBtn = document.querySelector('.gjs-sidebar-tabs button[data-tab="styles"]');
@@ -1143,6 +1182,7 @@
         document.getElementById('gjsOverlay').classList.remove('active');
         document.body.style.overflow = '';
         gjsCurrentPageId = null;
+        pendingAssetAction = null;
     }
 
     async function saveEditor() {
