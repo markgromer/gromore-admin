@@ -292,6 +292,29 @@ class SiteBuilderReviewTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"Connect WordPress First", resp.data)
 
+    def test_review_page_exposes_editor_shell_controls(self):
+        brand_id, _ = _login_client(self.client, self.app)
+        db = self.app.db
+        build_id = db.create_site_build(brand_id, [{"page_type": "home"}])
+        db.update_site_build_status(build_id, "completed", pages_completed=1)
+        db.save_site_page({
+            "build_id": build_id,
+            "brand_id": brand_id,
+            "page_type": "home",
+            "label": "Home",
+            "slug": "",
+            "title": "Home",
+            "content": "<section><h2>Welcome</h2><p>Builder test content</p></section>",
+        })
+
+        resp = self.client.get(f"/client/site-builder/{build_id}")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"gjsMoveBlockUp", resp.data)
+        self.assertIn(b"gjsPresetHero", resp.data)
+        self.assertIn(b"Trust Strip", resp.data)
+        self.assertIn(b"Offer Stack", resp.data)
+        self.assertIn(b"Before / After", resp.data)
+
 
 # ---------------------------------------------------------------------------
 # Generate Route Tests

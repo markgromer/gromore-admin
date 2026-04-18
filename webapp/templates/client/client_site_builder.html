@@ -245,6 +245,9 @@
     .gjs-toolbar .btn:disabled {
         opacity: .5; cursor: not-allowed; box-shadow: none;
     }
+    .gjs-toolbar .btn-layout-preset {
+        font-size: .7rem; font-weight: 700; letter-spacing: .02em;
+    }
     .gjs-toolbar .btn-toolbar-note {
         font-size: .72rem; color: rgba(255,255,255,.72); margin-right: .4rem;
     }
@@ -425,6 +428,12 @@
                 <button class="btn btn-outline-light" id="gjsMoveBlockDown" title="Move selected section down"><i class="bi bi-arrow-down"></i></button>
                 <button class="btn btn-outline-light" id="gjsDuplicateBlock" title="Duplicate selected section"><i class="bi bi-copy"></i></button>
                 <button class="btn btn-outline-light" id="gjsDeleteBlock" title="Remove selected section"><i class="bi bi-trash"></i></button>
+            </div>
+            <div class="btn-group btn-group-sm me-2">
+                <button class="btn btn-outline-light btn-layout-preset" id="gjsPresetCompact" title="Apply a compact section preset">Compact</button>
+                <button class="btn btn-outline-light btn-layout-preset" id="gjsPresetStandard" title="Apply a balanced section preset">Standard</button>
+                <button class="btn btn-outline-light btn-layout-preset" id="gjsPresetWide" title="Apply a wide section preset">Wide</button>
+                <button class="btn btn-outline-light btn-layout-preset" id="gjsPresetHero" title="Apply a hero section preset">Hero</button>
             </div>
             <span class="btn-toolbar-note">Select a section or image</span>
             <span class="gjs-save-status is-muted" id="gjsSaveStatus">All changes saved</span>
@@ -805,7 +814,7 @@
             return 'Media selected - use Settings for embed details, then Styles for width, spacing, and placement.';
         }
         if (component.components && component.components().length) {
-            return 'Section selected - use the arrow buttons to reorder it, Duplicate to branch it, Background for section imagery, or Styles to refine spacing and layout.';
+            return 'Section selected - use the arrow buttons to reorder it, the layout presets for fast spacing, Duplicate to branch it, or Styles for deeper refinement.';
         }
         return 'Element selected - use the section controls if you want to move the whole block, then use Styles or Settings to refine it.';
     }
@@ -877,6 +886,15 @@
         if (deleteBtn) deleteBtn.disabled = !hasStructuralTarget;
     }
 
+    function updateLayoutPresetState(component) {
+        const enabled = Boolean(getStructuralSelection(component));
+        ['gjsPresetCompact', 'gjsPresetStandard', 'gjsPresetWide', 'gjsPresetHero'].forEach((id) => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.disabled = !enabled;
+        });
+    }
+
     function updateDeviceToolbarState(deviceName) {
         setButtonActiveState('gjsDeviceDesktop', deviceName === 'Desktop');
         setButtonActiveState('gjsDeviceTablet', deviceName === 'Tablet');
@@ -897,8 +915,69 @@
         if (!panel || panel.querySelector('.gjs-block-tip')) return;
         const tip = document.createElement('div');
         tip.className = 'gjs-block-tip';
-        tip.innerHTML = '<strong>Quick start</strong><span>Drag a block into the canvas, click into text to rewrite it, and use the arrow or duplicate buttons in the top bar when you want to reorder whole sections.</span>';
+        tip.innerHTML = '<strong>Quick start</strong><span>Drag a block into the canvas, click into text to rewrite it, use the top-bar arrows to reorder sections, and tap a layout preset when spacing needs a quick cleanup.</span>';
         panel.prepend(tip);
+    }
+
+    function applyLayoutPreset(presetName) {
+        const target = getStructuralSelection(getSelectedComponent());
+        if (!target) {
+            setSaveStatus('Select a section or block before applying a layout preset.', 'warning');
+            return false;
+        }
+
+        const currentStyle = target.getStyle ? (target.getStyle() || {}) : {};
+        const currentDisplay = currentStyle.display || '';
+        const currentGap = currentStyle.gap || '';
+        const presets = {
+            compact: {
+                padding: '32px 20px',
+                'max-width': '880px',
+                margin: '0 auto',
+                width: '100%',
+                gap: currentGap || '18px',
+                'min-height': 'auto',
+            },
+            standard: {
+                padding: '56px 20px',
+                'max-width': '1120px',
+                margin: '0 auto',
+                width: '100%',
+                gap: currentGap || '24px',
+                'min-height': 'auto',
+            },
+            wide: {
+                padding: '72px 24px',
+                'max-width': '1280px',
+                margin: '0 auto',
+                width: '100%',
+                gap: currentGap || '28px',
+                'min-height': 'auto',
+            },
+            hero: {
+                padding: '96px 24px',
+                'max-width': '1280px',
+                margin: '0 auto',
+                width: '100%',
+                'min-height': '420px',
+                display: currentDisplay === 'grid' ? 'grid' : (currentDisplay || 'flex'),
+                'align-items': currentStyle['align-items'] || 'center',
+                'justify-content': currentStyle['justify-content'] || 'center',
+                gap: currentGap || '28px',
+            },
+        };
+
+        const preset = presets[presetName];
+        if (!preset) {
+            return false;
+        }
+
+        target.addStyle(preset);
+        gjsEditor.select(target);
+        setSidebarTab('styles');
+        setToolbarNote('Applied the ' + presetName + ' layout preset to the selected section. Fine-tune it in Styles if needed.');
+        setSaveStatus('Layout preset applied. Unsaved changes.', 'warning');
+        return true;
     }
 
     function moveStructuralSelection(direction) {
@@ -1176,6 +1255,7 @@
         updateDeviceToolbarState('Desktop');
         updateImageActionState(null);
         updateStructureActionState(null);
+        updateLayoutPresetState(null);
         updateSaveButtonState();
     }
 
@@ -1351,6 +1431,7 @@
             updateDeviceToolbarState('Desktop');
             updateImageActionState(null);
             updateStructureActionState(null);
+            updateLayoutPresetState(null);
 
             gjsEditor = grapesjs.init({
                 container: '#gjsCanvas',
@@ -1571,6 +1652,30 @@
                             content: '<section style="background:#1e293b; color:#fff; padding:80px 20px; text-align:center;"><div style="max-width:800px; margin:0 auto;"><h1 style="font-size:2.5rem; font-weight:800; margin-bottom:16px;">Your Hero Headline</h1><p style="font-size:1.1rem; opacity:.8; margin-bottom:24px;">Supporting text that explains your value proposition</p><a href="#" style="display:inline-block; background:#6366f1; color:#fff; padding:12px 32px; border-radius:8px; text-decoration:none; font-weight:600;">Get Started</a></div></section>',
                         },
                         {
+                            id: 'trust-strip',
+                            label: '<i class="bi bi-patch-check"></i> Trust Strip',
+                            category: 'Premium',
+                            content: '<section style="padding:28px 20px; border-top:1px solid #e2e8f0; border-bottom:1px solid #e2e8f0; background:#fff;"><div style="max-width:1200px; margin:0 auto; display:flex; flex-wrap:wrap; gap:18px; justify-content:space-between; align-items:center;"><div style="font-weight:700; color:#0f172a;">Licensed and insured</div><div style="color:#475569;">Same-day response</div><div style="color:#475569;">5-star local reputation</div><div style="color:#475569;">Financing available</div></div></section>',
+                        },
+                        {
+                            id: 'offer-stack',
+                            label: '<i class="bi bi-stack"></i> Offer Stack',
+                            category: 'Premium',
+                            content: '<section style="padding:72px 20px; background:#f8fafc;"><div style="max-width:1180px; margin:0 auto;"><div style="max-width:760px; margin-bottom:28px;"><span style="display:inline-block; padding:6px 12px; border-radius:999px; background:#dbeafe; color:#1d4ed8; font-size:.75rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase;">Featured offer</span><h2 style="margin:18px 0 12px; font-size:2.2rem; line-height:1.1; color:#0f172a; font-weight:800;">Everything a hesitant customer needs to say yes.</h2><p style="margin:0; color:#475569; font-size:1rem; line-height:1.7;">Stack urgency, reassurance, and a clean next step without making the page feel salesy.</p></div><div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:20px;"><div style="background:#fff; border:1px solid #e2e8f0; border-radius:18px; padding:26px;"><div style="font-size:.82rem; font-weight:800; color:#6366f1; text-transform:uppercase; letter-spacing:.05em; margin-bottom:10px;">Primary offer</div><h3 style="margin:0 0 10px; font-size:1.15rem; color:#0f172a; font-weight:700;">Free on-site estimate</h3><p style="margin:0; color:#475569; line-height:1.7;">Give the visitor a low-friction first step with a clear outcome.</p></div><div style="background:#fff; border:1px solid #e2e8f0; border-radius:18px; padding:26px;"><div style="font-size:.82rem; font-weight:800; color:#6366f1; text-transform:uppercase; letter-spacing:.05em; margin-bottom:10px;">Risk reducer</div><h3 style="margin:0 0 10px; font-size:1.15rem; color:#0f172a; font-weight:700;">Upfront pricing promise</h3><p style="margin:0; color:#475569; line-height:1.7;">Handle sticker-shock objections before the customer has to ask.</p></div><div style="background:#0f172a; border-radius:18px; padding:26px; color:#fff;"><div style="font-size:.82rem; font-weight:800; color:#93c5fd; text-transform:uppercase; letter-spacing:.05em; margin-bottom:10px;">Fast CTA</div><h3 style="margin:0 0 10px; font-size:1.15rem; font-weight:700;">Book today</h3><p style="margin:0 0 16px; color:#cbd5e1; line-height:1.7;">Add one clear action here for visitors who are ready now.</p><a href="#" style="display:inline-block; background:#fff; color:#0f172a; padding:12px 22px; border-radius:999px; font-weight:700; text-decoration:none;">Schedule service</a></div></div></div></section>',
+                        },
+                        {
+                            id: 'process-timeline',
+                            label: '<i class="bi bi-signpost-split"></i> Process',
+                            category: 'Premium',
+                            content: '<section style="padding:72px 20px; background:#fff;"><div style="max-width:1180px; margin:0 auto;"><div style="max-width:680px; margin-bottom:30px;"><h2 style="margin:0 0 12px; font-size:2rem; color:#0f172a; font-weight:800;">Show people exactly what happens next.</h2><p style="margin:0; color:#475569; line-height:1.7;">A simple process section lowers hesitation and makes your service feel organized.</p></div><div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:22px;"><div style="position:relative; background:#f8fafc; border-radius:18px; padding:28px;"><div style="width:42px; height:42px; border-radius:999px; background:#1d4ed8; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; margin-bottom:16px;">1</div><h3 style="margin:0 0 10px; font-size:1.1rem; color:#0f172a; font-weight:700;">Reach out</h3><p style="margin:0; color:#475569; line-height:1.7;">Phone, form, or text. Keep the intake simple and human.</p></div><div style="position:relative; background:#f8fafc; border-radius:18px; padding:28px;"><div style="width:42px; height:42px; border-radius:999px; background:#1d4ed8; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; margin-bottom:16px;">2</div><h3 style="margin:0 0 10px; font-size:1.1rem; color:#0f172a; font-weight:700;">Get the plan</h3><p style="margin:0; color:#475569; line-height:1.7;">Explain the diagnosis, timeline, and pricing with no surprises.</p></div><div style="position:relative; background:#f8fafc; border-radius:18px; padding:28px;"><div style="width:42px; height:42px; border-radius:999px; background:#1d4ed8; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; margin-bottom:16px;">3</div><h3 style="margin:0 0 10px; font-size:1.1rem; color:#0f172a; font-weight:700;">See it finished</h3><p style="margin:0; color:#475569; line-height:1.7;">Close with the result, warranty, or follow-up reassurance.</p></div></div></div></section>',
+                        },
+                        {
+                            id: 'results-metrics',
+                            label: '<i class="bi bi-bar-chart-line"></i> Results Metrics',
+                            category: 'Premium',
+                            content: '<section style="padding:64px 20px; background:linear-gradient(135deg, #0f172a, #1e3a8a); color:#fff;"><div style="max-width:1180px; margin:0 auto; display:grid; grid-template-columns:1.2fr .8fr; gap:28px; align-items:center;"><div><span style="display:inline-block; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,.12); font-size:.75rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase;">Proof section</span><h2 style="margin:18px 0 12px; font-size:2.15rem; font-weight:800; line-height:1.08;">Turn vague credibility into visible numbers.</h2><p style="margin:0; color:#cbd5e1; line-height:1.7; max-width:620px;">Use this for jobs completed, years in business, review volume, or any signal that makes trust immediate.</p></div><div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:16px;"><div style="background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); border-radius:18px; padding:22px;"><div style="font-size:2rem; font-weight:800;">1,250+</div><div style="color:#cbd5e1;">Completed jobs</div></div><div style="background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); border-radius:18px; padding:22px;"><div style="font-size:2rem; font-weight:800;">4.9/5</div><div style="color:#cbd5e1;">Average review score</div></div><div style="background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); border-radius:18px; padding:22px;"><div style="font-size:2rem; font-weight:800;">18 yrs</div><div style="color:#cbd5e1;">Local experience</div></div><div style="background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); border-radius:18px; padding:22px;"><div style="font-size:2rem; font-weight:800;">24/7</div><div style="color:#cbd5e1;">Emergency support</div></div></div></div></section>',
+                        },
+                        {
                             id: 'cta-band',
                             label: '<i class="bi bi-megaphone"></i> CTA Band',
                             category: 'Sections',
@@ -1667,6 +1772,12 @@
                             content: '<section style="padding:60px 20px; max-width:1200px; margin:0 auto;"><h2 style="text-align:center; font-weight:700; margin-bottom:40px;">Our Pricing</h2><div style="display:flex; gap:24px; justify-content:center;"><div style="flex:1; max-width:350px; border:1px solid #e2e8f0; border-radius:12px; padding:32px; text-align:center;"><h3 style="font-weight:600; margin-bottom:8px;">Basic</h3><div style="font-size:2rem; font-weight:800; color:#6366f1; margin-bottom:16px;">$99<small style="font-size:.9rem; font-weight:400; color:#64748b;">/mo</small></div><ul style="list-style:none; padding:0; color:#64748b; line-height:2;"><li>Feature one</li><li>Feature two</li><li>Feature three</li></ul><a href="#" style="display:inline-block; margin-top:20px; background:#6366f1; color:#fff; padding:10px 28px; border-radius:8px; text-decoration:none; font-weight:600;">Get Started</a></div><div style="flex:1; max-width:350px; border:2px solid #6366f1; border-radius:12px; padding:32px; text-align:center; position:relative;"><div style="position:absolute; top:-12px; left:50%; transform:translateX(-50%); background:#6366f1; color:#fff; padding:2px 16px; border-radius:20px; font-size:.75rem; font-weight:600;">Popular</div><h3 style="font-weight:600; margin-bottom:8px;">Pro</h3><div style="font-size:2rem; font-weight:800; color:#6366f1; margin-bottom:16px;">$199<small style="font-size:.9rem; font-weight:400; color:#64748b;">/mo</small></div><ul style="list-style:none; padding:0; color:#64748b; line-height:2;"><li>Everything in Basic</li><li>Priority support</li><li>Advanced features</li></ul><a href="#" style="display:inline-block; margin-top:20px; background:#6366f1; color:#fff; padding:10px 28px; border-radius:8px; text-decoration:none; font-weight:600;">Get Started</a></div></div></section>',
                         },
                         {
+                            id: 'before-after',
+                            label: '<i class="bi bi-columns"></i> Before / After',
+                            category: 'Premium',
+                            content: '<section style="padding:72px 20px; background:#fff;"><div style="max-width:1180px; margin:0 auto;"><div style="max-width:700px; margin-bottom:28px;"><h2 style="margin:0 0 12px; font-size:2rem; font-weight:800; color:#0f172a;">Show the change, not just the claim.</h2><p style="margin:0; color:#475569; line-height:1.7;">This works well for transformations, remediation jobs, redesigns, and visible outcomes.</p></div><div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:20px;"><div style="background:#f8fafc; border-radius:18px; overflow:hidden; border:1px solid #e2e8f0;"><img data-gjs-type="image" src="' + placeholderImage('Before', 1100, 720) + '" style="width:100%; height:280px; object-fit:cover; display:block;"><div style="padding:22px;"><div style="font-size:.78rem; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:#b91c1c; margin-bottom:8px;">Before</div><h3 style="margin:0 0 10px; font-size:1.15rem; color:#0f172a; font-weight:700;">The original problem</h3><p style="margin:0; color:#475569; line-height:1.7;">Describe the condition, frustration, or business risk the customer was facing.</p></div></div><div style="background:#eff6ff; border-radius:18px; overflow:hidden; border:1px solid #bfdbfe;"><img data-gjs-type="image" src="' + placeholderImage('After', 1100, 720) + '" style="width:100%; height:280px; object-fit:cover; display:block;"><div style="padding:22px;"><div style="font-size:.78rem; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:#1d4ed8; margin-bottom:8px;">After</div><h3 style="margin:0 0 10px; font-size:1.15rem; color:#0f172a; font-weight:700;">The finished result</h3><p style="margin:0; color:#475569; line-height:1.7;">Explain what changed and why the result matters to the customer.</p></div></div></div></div></section>',
+                        },
+                        {
                             id: 'banner-block',
                             label: '<i class="bi bi-card-heading"></i> Banner',
                             category: 'Sections',
@@ -1746,6 +1857,7 @@
                 }
                 updateImageActionState(component);
                 updateStructureActionState(component);
+                updateLayoutPresetState(component);
                 setToolbarNote(describeSelectedComponent(component));
             });
 
@@ -1755,6 +1867,7 @@
                 if (blocksBtn) blocksBtn.click();
                 updateImageActionState(null);
                 updateStructureActionState(null);
+                updateLayoutPresetState(null);
                 setToolbarNote('Drag blocks from the right, then click into text, buttons, or images to refine each section.');
             });
 
@@ -1812,6 +1925,7 @@
                 }
                 updateImageActionState(getSelectedComponent());
                 updateStructureActionState(getSelectedComponent());
+                updateLayoutPresetState(getSelectedComponent());
             }, 0);
         } catch (err) {
             console.error('Editor init error:', err);
@@ -1961,6 +2075,10 @@
     document.getElementById('gjsMoveBlockDown')?.addEventListener('click', () => moveStructuralSelection(1));
     document.getElementById('gjsDuplicateBlock')?.addEventListener('click', duplicateStructuralSelection);
     document.getElementById('gjsDeleteBlock')?.addEventListener('click', removeStructuralSelection);
+    document.getElementById('gjsPresetCompact')?.addEventListener('click', () => applyLayoutPreset('compact'));
+    document.getElementById('gjsPresetStandard')?.addEventListener('click', () => applyLayoutPreset('standard'));
+    document.getElementById('gjsPresetWide')?.addEventListener('click', () => applyLayoutPreset('wide'));
+    document.getElementById('gjsPresetHero')?.addEventListener('click', () => applyLayoutPreset('hero'));
     document.getElementById('gjsAddImageBtn')?.addEventListener('click', () => {
         const selected = getSelectedComponent();
         if (isImageComponent(selected)) {
