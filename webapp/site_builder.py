@@ -80,6 +80,13 @@ PAGE_TYPES = {
         "schema_types": ["WebPage", "LocalBusiness"],
         "priority": 9,
     },
+    "custom": {
+        "label": "Custom Page",
+        "slug": "{custom_slug}",
+        "wp_type": "page",
+        "schema_types": ["WebPage"],
+        "priority": 10,
+    },
 }
 
 
@@ -129,6 +136,17 @@ def build_brand_context(brand, intake=None):
     # SEO intelligence
     ctx["seo_data"] = intake.get("seo_data") or {}
     ctx["warren_brief"] = (intake.get("warren_brief") or "").strip()
+    # Design tokens
+    ctx["color_palette"] = (intake.get("color_palette") or "").strip()
+    ctx["font_pair"] = (intake.get("font_pair") or "").strip()
+    ctx["layout_style"] = (intake.get("layout_style") or "").strip()
+    ctx["color_primary"] = (intake.get("color_primary") or "").strip()
+    ctx["color_accent"] = (intake.get("color_accent") or "").strip()
+    ctx["color_dark"] = (intake.get("color_dark") or "").strip()
+    ctx["color_light"] = (intake.get("color_light") or "").strip()
+    ctx["font_heading"] = (intake.get("font_heading") or "").strip()
+    ctx["font_body"] = (intake.get("font_body") or "").strip()
+    ctx["style_preset"] = (intake.get("style_preset") or "").strip()
     return ctx
 
 
@@ -136,7 +154,7 @@ def build_brand_context(brand, intake=None):
 # Blueprint builder
 # ---------------------------------------------------------------------------
 
-def build_site_blueprint(brand_ctx, services=None, areas=None, landing_pages=None, page_selection=None):
+def build_site_blueprint(brand_ctx, services=None, areas=None, landing_pages=None, page_selection=None, custom_pages=None):
     """
     Build a complete site blueprint from brand context.
 
@@ -147,6 +165,7 @@ def build_site_blueprint(brand_ctx, services=None, areas=None, landing_pages=Non
         landing_pages: list of dicts with {name, keyword, offer} for standalone landing pages
         page_selection: list of page types to include (e.g. ['home','about','services','contact'])
                         If None, includes all standard pages.
+        custom_pages: list of dicts with {name, description, keyword} for user-defined pages
 
     Returns a list of page specs, each with:
         page_type, label, slug, schema_types, context (page-specific data)
@@ -224,6 +243,27 @@ def build_site_blueprint(brand_ctx, services=None, areas=None, landing_pages=Non
                 "lp_keyword": (lp.get("keyword") or "").strip(),
                 "lp_offer": (lp.get("offer") or "").strip(),
                 "lp_audience": (lp.get("audience") or "").strip(),
+            },
+        })
+
+    # Custom pages (user-defined)
+    for cp in (custom_pages or []):
+        name = (cp.get("name") or "").strip()
+        if not name:
+            continue
+        slug = (cp.get("slug") or "").strip() or _slugify(name)
+        pages.append({
+            "page_type": "custom",
+            "label": name,
+            "slug": slug,
+            "wp_type": "page",
+            "schema_types": PAGE_TYPES["custom"]["schema_types"],
+            "priority": PAGE_TYPES["custom"]["priority"],
+            "context": {
+                "custom_name": name,
+                "custom_slug": slug,
+                "custom_purpose": (cp.get("purpose") or cp.get("description") or "").strip(),
+                "custom_keyword": (cp.get("keyword") or "").strip(),
             },
         })
 
@@ -457,6 +497,93 @@ def _lead_form_block(ctx):
     return "\n".join(parts) + "\n"
 
 
+def _design_block(ctx):
+    """Format design tokens for injection into prompts."""
+    parts = []
+    preset = ctx.get("style_preset") or ""
+    primary = ctx.get("color_primary") or ""
+    accent = ctx.get("color_accent") or ""
+    dark = ctx.get("color_dark") or ""
+    light = ctx.get("color_light") or ""
+    font_h = ctx.get("font_heading") or ""
+    font_b = ctx.get("font_body") or ""
+    color_palette = ctx.get("color_palette") or ""
+    font_pair = ctx.get("font_pair") or ""
+    layout_style = ctx.get("layout_style") or ""
+
+    if not any([preset, primary, font_h, color_palette, font_pair, layout_style]):
+        return ""
+
+    parts.append("DESIGN GUIDELINES (apply CSS classes and inline styles to match):")
+
+    # High-level palette
+    palette_desc = {
+        "blue-professional": "Blue Professional palette: navy/royal blue primary with slate accents. Conveys trust, corporate reliability.",
+        "green-natural": "Green Natural palette: forest/sage greens with earthy neutrals. Eco-friendly, health, growth.",
+        "red-bold": "Red Bold palette: vibrant reds with dark contrasts. Urgency, energy, appetite appeal.",
+        "dark-luxury": "Dark Luxury palette: charcoal/black backgrounds, gold or cream accents, high contrast. Premium feel.",
+        "warm-earthy": "Warm Earthy palette: terracottas, warm grays, natural tones. Construction, home, organic.",
+        "clean-minimal": "Clean Minimal palette: whites, light grays, single accent color. Modern, tech, SaaS.",
+        "bright-playful": "Bright Playful palette: vibrant multi-color accents on white. Kids, creative, events.",
+    }
+    if color_palette and color_palette in palette_desc:
+        parts.append(f"- Color scheme: {palette_desc[color_palette]}")
+
+    # Font pairing
+    font_desc = {
+        "inter-system": "Inter (headings) + system sans-serif (body) - clean, fast loading",
+        "playfair-lato": "Playfair Display (headings) + Lato (body) - elegant, editorial",
+        "montserrat-opensans": "Montserrat (headings) + Open Sans (body) - modern, versatile",
+        "roboto-slab-roboto": "Roboto Slab (headings) + Roboto (body) - technical, structured",
+        "poppins-nunito": "Poppins (headings) + Nunito (body) - friendly, approachable",
+        "oswald-source": "Oswald (headings) + Source Sans Pro (body) - bold, industrial",
+    }
+    if font_pair and font_pair in font_desc:
+        parts.append(f"- Typography: {font_desc[font_pair]}")
+
+    # Layout style
+    layout_desc = {
+        "modern-sections": "Modern Sections: full-width alternating background sections, generous whitespace, centered content blocks.",
+        "classic-stacked": "Classic Stacked: traditional top-to-bottom flow, contained width, clear section dividers.",
+        "hero-driven": "Hero-Driven: large hero images/banners per section, overlaid text, visual-first layout.",
+        "card-grid": "Card Grid: content organized in card-based grids, modular sections, flexible arrangement.",
+        "sidebar-content": "Sidebar + Content: main content column with persistent sidebar for navigation/CTAs.",
+    }
+    if layout_style and layout_style in layout_desc:
+        parts.append(f"- Layout: {layout_desc[layout_style]}")
+
+    if preset:
+        presets_desc = {
+            "clean-minimal": "Clean and minimal: lots of white space, thin borders, subtle shadows, light backgrounds. Think Apple-like restraint.",
+            "bold-modern": "Bold and modern: strong color blocks, large headlines, sharp contrasts, dark sections with bright accents. High energy.",
+            "warm-traditional": "Warm and traditional: earthy tones, rounded corners, friendly feel, serif accents for headings. Approachable.",
+            "dark-premium": "Dark premium: dark backgrounds, light text, gold/silver accents, sophisticated typography. Luxury feel.",
+        }
+        parts.append(f"- Style: {presets_desc.get(preset, preset)}")
+
+    if primary:
+        parts.append(f"- Primary brand color: {primary}")
+    if accent:
+        parts.append(f"- Accent color: {accent}")
+    if dark:
+        parts.append(f"- Dark color: {dark}")
+    if light:
+        parts.append(f"- Light/background color: {light}")
+    if font_h:
+        parts.append(f"- Heading font: {font_h}")
+    if font_b:
+        parts.append(f"- Body font: {font_b}")
+
+    parts.append(
+        "- Use inline styles or CSS classes referencing these colors/fonts in the HTML. "
+        "Example: style=\"color: {primary}; font-family: '{font_h}', sans-serif;\" "
+        "Use the brand colors for CTAs, section backgrounds, and accents. "
+        "Keep the design consistent across all sections."
+    )
+
+    return "\n".join(parts) + "\n"
+
+
 def build_page_prompt(page_spec, brand_ctx):
     """
     Build a complete prompt for generating a single page's content.
@@ -505,11 +632,13 @@ def _prompt_home(page_spec, ctx):
     brand = _brand_block(ctx)
     seo_intel = _seo_intel_block(ctx)
     lead_form = _lead_form_block(ctx)
+    design = _design_block(ctx)
     user_msg = (
         f"Write the HOME PAGE for this local service business.\n\n"
         f"BUSINESS CONTEXT:\n{brand}\n\n"
         f"{seo_intel}"
         f"{lead_form}"
+        f"{design}"
         f"{_GLOBAL_RULES}\n"
         "CONVERSION FRAMEWORK: AIDA (Attention-Interest-Desire-Action)\n"
         "Build through a full arc from stranger to 'I should call these people.'\n\n"
@@ -544,10 +673,12 @@ def _prompt_home(page_spec, ctx):
 def _prompt_about(page_spec, ctx):
     brand = _brand_block(ctx)
     seo_intel = _seo_intel_block(ctx)
+    design = _design_block(ctx)
     user_msg = (
         f"Write the ABOUT PAGE for this local service business.\n\n"
         f"BUSINESS CONTEXT:\n{brand}\n\n"
         f"{seo_intel}"
+        f"{design}"
         f"{_GLOBAL_RULES}\n"
         "CONVERSION FRAMEWORK: Star-Story-Solution\n"
         "The star is the founder/team. The story is why this business exists. "
@@ -579,11 +710,13 @@ def _prompt_services(page_spec, ctx):
     brand = _brand_block(ctx)
     seo_intel = _seo_intel_block(ctx)
     lead_form = _lead_form_block(ctx)
+    design = _design_block(ctx)
     user_msg = (
         f"Write the SERVICES OVERVIEW PAGE for this local service business.\n\n"
         f"BUSINESS CONTEXT:\n{brand}\n\n"
         f"{seo_intel}"
         f"{lead_form}"
+        f"{design}"
         f"{_GLOBAL_RULES}\n"
         "CONVERSION FRAMEWORK: One-to-One Conversation\n"
         "Write like you are sitting across the table from a homeowner explaining what you do.\n\n"
@@ -612,12 +745,14 @@ def _prompt_service_detail(page_spec, ctx):
     brand = _brand_block(ctx)
     seo_intel = _seo_intel_block(ctx)
     lead_form = _lead_form_block(ctx)
+    design = _design_block(ctx)
     svc_name = page_spec.get("context", {}).get("service_name", "")
     user_msg = (
         f"Write a SERVICE DETAIL PAGE for: {svc_name}\n\n"
         f"BUSINESS CONTEXT:\n{brand}\n\n"
         f"{seo_intel}"
         f"{lead_form}"
+        f"{design}"
         f"{_GLOBAL_RULES}\n"
         "CONVERSION FRAMEWORK: PAS (Problem-Agitate-Solve)\n"
         "Name the problem this service solves. Make it sting (what happens if they wait). "
@@ -655,12 +790,14 @@ def _prompt_service_area(page_spec, ctx):
     brand = _brand_block(ctx)
     seo_intel = _seo_intel_block(ctx)
     lead_form = _lead_form_block(ctx)
+    design = _design_block(ctx)
     area = page_spec.get("context", {}).get("area_name", "")
     user_msg = (
         f"Write a SERVICE AREA PAGE for: {area}\n\n"
         f"BUSINESS CONTEXT:\n{brand}\n\n"
         f"{seo_intel}"
         f"{lead_form}"
+        f"{design}"
         f"{_GLOBAL_RULES}\n"
         "CONVERSION FRAMEWORK: BAB (Before-After-Bridge)\n"
         f"Before: the homeowner in {area} has a problem and doesn't know who to call locally. "
@@ -694,10 +831,12 @@ def _prompt_service_area(page_spec, ctx):
 def _prompt_contact(page_spec, ctx):
     brand = _brand_block(ctx)
     lead_form = _lead_form_block(ctx)
+    design = _design_block(ctx)
     user_msg = (
         f"Write the CONTACT PAGE for this local service business.\n\n"
         f"BUSINESS CONTEXT:\n{brand}\n\n"
         f"{lead_form}"
+        f"{design}"
         f"{_GLOBAL_RULES}\n"
         "CONVERSION FRAMEWORK: One-to-One Conversation\n"
         "The reader already decided they want to reach out. Do not re-sell. "
@@ -730,10 +869,12 @@ def _prompt_contact(page_spec, ctx):
 def _prompt_faq(page_spec, ctx):
     brand = _brand_block(ctx)
     seo_intel = _seo_intel_block(ctx)
+    design = _design_block(ctx)
     user_msg = (
         f"Write the FAQ PAGE for this local service business.\n\n"
         f"BUSINESS CONTEXT:\n{brand}\n\n"
         f"{seo_intel}"
+        f"{design}"
         f"{_GLOBAL_RULES}\n"
         "CONVERSION FRAMEWORK: FAQ_Objection_Block\n"
         "Every FAQ answer is an objection removed. The reader who finishes this page "
@@ -768,10 +909,12 @@ def _prompt_faq(page_spec, ctx):
 def _prompt_testimonials(page_spec, ctx):
     brand = _brand_block(ctx)
     seo_intel = _seo_intel_block(ctx)
+    design = _design_block(ctx)
     user_msg = (
         f"Write the TESTIMONIALS / REVIEWS PAGE for this local service business.\n\n"
         f"BUSINESS CONTEXT:\n{brand}\n\n"
         f"{seo_intel}"
+        f"{design}"
         f"{_GLOBAL_RULES}\n"
         "CONVERSION FRAMEWORK: Proof_Wall\n"
         "Social proof is the single strongest conversion lever for local service businesses. "
@@ -815,12 +958,14 @@ def _prompt_generic(page_spec, ctx):
     brand = _brand_block(ctx)
     seo_intel = _seo_intel_block(ctx)
     lead_form = _lead_form_block(ctx)
+    design = _design_block(ctx)
     label = page_spec.get("label", "Page")
     user_msg = (
         f"Write a website page titled '{label}' for this local service business.\n\n"
         f"BUSINESS CONTEXT:\n{brand}\n\n"
         f"{seo_intel}"
         f"{lead_form}"
+        f"{design}"
         f"{_GLOBAL_RULES}\n"
         "- Target word count: 500-800 words.\n"
         f"{_OUTPUT_FORMAT}"
@@ -832,6 +977,7 @@ def _prompt_landing_page(page_spec, ctx):
     brand = _brand_block(ctx)
     seo_intel = _seo_intel_block(ctx)
     lead_form = _lead_form_block(ctx)
+    design = _design_block(ctx)
     lp_ctx = page_spec.get("context", {})
     lp_name = lp_ctx.get("lp_name", "")
     lp_keyword = lp_ctx.get("lp_keyword", "")
@@ -843,6 +989,7 @@ def _prompt_landing_page(page_spec, ctx):
         f"BUSINESS CONTEXT:\n{brand}\n\n"
         f"{seo_intel}"
         f"{lead_form}"
+        f"{design}"
         f"{_GLOBAL_RULES}\n"
         "CONVERSION FRAMEWORK: AIDA with urgency layer\n"
         "This is a LANDING PAGE, not a standard website page. It has ONE job: convert the visitor "
@@ -875,6 +1022,43 @@ def _prompt_landing_page(page_spec, ctx):
     return _system_msg(), user_msg
 
 
+def _prompt_custom(page_spec, ctx):
+    """Prompt builder for user-defined custom pages."""
+    brand = _brand_block(ctx)
+    seo_intel = _seo_intel_block(ctx)
+    lead_form = _lead_form_block(ctx)
+    design = _design_block(ctx)
+    cp_ctx = page_spec.get("context", {})
+    cp_name = cp_ctx.get("custom_name", page_spec.get("label", "Page"))
+    cp_desc = cp_ctx.get("custom_purpose", "") or cp_ctx.get("custom_description", "")
+    cp_keyword = cp_ctx.get("custom_keyword", "")
+
+    user_msg = (
+        f"Write a website page titled '{cp_name}' for this local service business.\n\n"
+        f"BUSINESS CONTEXT:\n{brand}\n\n"
+        f"{seo_intel}"
+        f"{lead_form}"
+        f"{design}"
+        f"{_GLOBAL_RULES}\n"
+    )
+
+    if cp_desc:
+        user_msg += f"PAGE DESCRIPTION (from the business owner): {cp_desc}\n\n"
+    if cp_keyword:
+        user_msg += f"TARGET KEYWORD: {cp_keyword}\n\n"
+
+    user_msg += (
+        "PAGE-SPECIFIC REQUIREMENTS:\n"
+        f"- This is a custom page the business owner requested: '{cp_name}'.\n"
+        "- Write content that matches the intent described above.\n"
+        "- Include proper SEO structure with headings, keyword placement, and a clear CTA.\n"
+        "- Include internal links to other pages where relevant.\n"
+        "- Target word count: 500-900 words.\n"
+        f"{_OUTPUT_FORMAT}"
+    )
+    return _system_msg(), user_msg
+
+
 _PROMPT_BUILDERS = {
     "home": _prompt_home,
     "about": _prompt_about,
@@ -885,6 +1069,7 @@ _PROMPT_BUILDERS = {
     "faq": _prompt_faq,
     "testimonials": _prompt_testimonials,
     "landing_page": _prompt_landing_page,
+    "custom": _prompt_custom,
 }
 
 

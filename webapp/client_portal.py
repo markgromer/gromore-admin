@@ -8780,7 +8780,14 @@ def client_site_builder():
     brand = db.get_brand(brand_id) or {}
     builds = db.get_site_builds(brand_id, limit=20)
     wp_ok = _wp_connected(brand)
-    gsc_connected = bool((brand.get("gsc_site_url") or "").strip())
+    # GSC detection: check gsc_site_url field OR Google OAuth connection with property selected
+    gsc_url = (brand.get("gsc_site_url") or "").strip()
+    connections = db.get_brand_connections(brand_id)
+    google_conn = connections.get("google") or {}
+    google_connected = google_conn.get("status") == "connected"
+    gsc_connected = bool(gsc_url)
+    # If Google OAuth is connected but no SC property selected, show a different message
+    gsc_needs_property = google_connected and not gsc_connected
 
     return render_template(
         "client/client_site_builder.html",
@@ -8798,6 +8805,7 @@ def client_site_builder():
         brand_phone=(brand.get("phone") or brand.get("business_phone") or "").strip(),
         brand_active_offers=(brand.get("active_offers") or "").strip(),
         gsc_connected=gsc_connected,
+        gsc_needs_property=gsc_needs_property,
     )
 
 
@@ -8897,6 +8905,17 @@ def client_site_builder_generate():
         "plugins": (request.form.get("plugins") or "").strip(),
         "cta_text": (request.form.get("cta_text") or "").strip(),
         "cta_phone": (request.form.get("cta_phone") or "").strip(),
+        # Design tokens
+        "color_palette": (request.form.get("color_palette") or "").strip(),
+        "font_pair": (request.form.get("font_pair") or "").strip(),
+        "layout_style": (request.form.get("layout_style") or "").strip(),
+        "color_primary": (request.form.get("color_primary") or "").strip(),
+        "color_accent": (request.form.get("color_accent") or "").strip(),
+        "color_dark": (request.form.get("color_dark") or "").strip(),
+        "color_light": (request.form.get("color_light") or "").strip(),
+        "font_heading": (request.form.get("font_heading") or "").strip(),
+        "font_body": (request.form.get("font_body") or "").strip(),
+        "style_preset": (request.form.get("style_preset") or "").strip(),
     }
 
     # ── Parse page selection ──
@@ -8917,6 +8936,20 @@ def client_site_builder_generate():
                 "keyword": (lp_keywords[i] if i < len(lp_keywords) else "").strip(),
                 "offer": (lp_offers[i] if i < len(lp_offers) else "").strip(),
                 "audience": (lp_audiences[i] if i < len(lp_audiences) else "").strip(),
+            })
+
+    # ── Parse custom pages ──
+    custom_pages = []
+    cp_names = request.form.getlist("cp_name[]")
+    cp_slugs = request.form.getlist("cp_slug[]")
+    cp_purposes = request.form.getlist("cp_purpose[]")
+    for i, name in enumerate(cp_names):
+        name = (name or "").strip()
+        if name:
+            custom_pages.append({
+                "name": name,
+                "slug": (cp_slugs[i] if i < len(cp_slugs) else "").strip(),
+                "purpose": (cp_purposes[i] if i < len(cp_purposes) else "").strip(),
             })
 
     # ── Pull Search Console data if connected ──
@@ -8952,6 +8985,7 @@ def client_site_builder_generate():
     blueprint = build_site_blueprint(
         brand_ctx, services=services, areas=areas,
         landing_pages=landing_pages, page_selection=page_selection,
+        custom_pages=custom_pages,
     )
 
     if not blueprint:
@@ -9084,6 +9118,208 @@ def client_site_builder_publish(build_id):
             errors.append(f"{page['label']}: {result.get('error', 'Unknown error')}")
 
     return jsonify(ok=True, published=published, total=len(pages), errors=errors)
+
+
+# ── Site Builder: Save page edits (GrapesJS / manual) ──
+
+@client_bp.route("/site-builder/page/<int:page_id>/save", methods=["POST"])
+@client_login_required
+def client_site_builder_page_save(page_id):
+    """Save page content and editor state from the GrapesJS editor."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    page = db.get_site_page(page_id)
+    if not page:
+        return jsonify(ok=False, error="Page not found."), 404
+    build = db.get_site_build(page["build_id"])
+    if not build or build["brand_id"] != brand_id:
+        return jsonify(ok=False, error="Access denied."), 403
+
+    data = request.get_json(silent=True) or {}
+    update = {}
+    if "content" in data:
+        update["content"] = data["content"]
+        update["full_html"] = data["content"]
+    if "editor_json" in data:
+        update["editor_json"] = data["editor_json"] if isinstance(data["editor_json"], str) else json.dumps(data["editor_json"])
+    if "page_css" in data:
+        update["page_css"] = data["page_css"]
+    if "seo_title" in data:
+        update["seo_title"] = data["seo_title"]
+    if "seo_description" in data:
+        update["seo_description"] = data["seo_description"]
+    if "title" in data:
+        update["title"] = data["title"]
+
+    if update:
+        db.update_site_page_content(page_id, update)
+
+    return jsonify(ok=True)
+
+
+# ── Site Builder: AI Rewrite ──
+
+@client_bp.route("/site-builder/page/<int:page_id>/rewrite", methods=["POST"])
+@client_login_required
+def client_site_builder_page_rewrite(page_id):
+    """Rewrite a page's content using AI with optional user instructions."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    page = db.get_site_page(page_id)
+    if not page:
+        return jsonify(ok=False, error="Page not found."), 404
+    build = db.get_site_build(page["build_id"])
+    if not build or build["brand_id"] != brand_id:
+        return jsonify(ok=False, error="Access denied."), 403
+
+    brand = db.get_brand(brand_id) or {}
+    api_key = _get_openai_api_key(brand)
+    if not api_key:
+        return jsonify(ok=False, error="OpenAI API key not configured."), 400
+
+    model = _pick_ai_model(brand, "analysis")
+    data = request.get_json(silent=True) or {}
+    instructions = (data.get("instructions") or "").strip()
+
+    from webapp.site_builder import (
+        build_brand_context, _brand_block, _seo_intel_block,
+        _GLOBAL_RULES, _OUTPUT_FORMAT, _system_msg, _extract_json,
+    )
+
+    # Rebuild brand context from stored intake if available
+    intake = {}
+    try:
+        intake = json.loads(build.get("intake_json") or "{}")
+    except Exception:
+        pass
+    brand_ctx = build_brand_context(brand, intake=intake)
+
+    existing_content = page.get("content") or ""
+    existing_title = page.get("title") or ""
+    existing_seo_title = page.get("seo_title") or ""
+    existing_seo_desc = page.get("seo_description") or ""
+
+    brand_block = _brand_block(brand_ctx)
+    seo_intel = _seo_intel_block(brand_ctx)
+
+    user_msg = (
+        f"REWRITE the following website page content.\n\n"
+        f"BUSINESS CONTEXT:\n{brand_block}\n\n"
+        f"{seo_intel}"
+        f"PAGE TYPE: {page.get('page_type', 'generic')}\n"
+        f"PAGE LABEL: {page.get('label', '')}\n"
+        f"CURRENT TITLE: {existing_title}\n"
+        f"CURRENT SEO TITLE: {existing_seo_title}\n"
+        f"CURRENT SEO DESCRIPTION: {existing_seo_desc}\n\n"
+        f"CURRENT CONTENT:\n{existing_content}\n\n"
+    )
+
+    if instructions:
+        user_msg += (
+            f"USER REWRITE INSTRUCTIONS (follow these closely):\n{instructions}\n\n"
+        )
+    else:
+        user_msg += (
+            "REWRITE INSTRUCTIONS:\n"
+            "Improve the content quality, conversion copy, and SEO without changing the "
+            "core structure or message. Tighten the writing, strengthen CTAs, add specificity.\n\n"
+        )
+
+    user_msg += f"{_GLOBAL_RULES}\n{_OUTPUT_FORMAT}"
+
+    try:
+        import openai
+        client = openai.OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": _system_msg()},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.5,
+            response_format={"type": "json_object"},
+        )
+        raw = (response.choices[0].message.content or "{}").strip()
+        result = _extract_json(raw)
+    except Exception as exc:
+        return jsonify(ok=False, error=f"AI rewrite failed: {str(exc)[:200]}"), 500
+
+    # Save the rewritten content
+    update = {
+        "title": result.get("title") or existing_title,
+        "content": result.get("content") or existing_content,
+        "excerpt": result.get("excerpt") or page.get("excerpt", ""),
+        "seo_title": result.get("seo_title") or existing_seo_title,
+        "seo_description": result.get("seo_description") or existing_seo_desc,
+        "primary_keyword": result.get("primary_keyword") or page.get("primary_keyword", ""),
+        "secondary_keywords": result.get("secondary_keywords") or page.get("secondary_keywords", ""),
+    }
+    if result.get("faq_items"):
+        update["faq_items_json"] = json.dumps(result["faq_items"])
+    update["full_html"] = update["content"]
+    db.update_site_page_content(page_id, update)
+
+    return jsonify(ok=True, page=update)
+
+
+# ── Site Builder: Image Upload ──
+
+@client_bp.route("/site-builder/upload-image", methods=["POST"])
+@client_login_required
+def client_site_builder_upload_image():
+    """Upload an image for use in the site builder / GrapesJS editor."""
+    import os
+    import uuid
+    from werkzeug.utils import secure_filename
+
+    if "image" not in request.files:
+        # GrapesJS asset manager sends as "files[]"
+        file = request.files.get("files[]")
+        if not file:
+            return jsonify(ok=False, error="No image file provided."), 400
+    else:
+        file = request.files["image"]
+
+    if not file.filename:
+        return jsonify(ok=False, error="Empty filename."), 400
+
+    allowed_ext = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in allowed_ext:
+        return jsonify(ok=False, error=f"File type {ext} not allowed."), 400
+
+    file.seek(0, 2)
+    size = file.tell()
+    file.seek(0)
+    if size > 10 * 1024 * 1024:
+        return jsonify(ok=False, error="Image too large. Max 10MB."), 400
+
+    safe_name = secure_filename(f"{uuid.uuid4().hex}{ext}")
+    upload_dir = os.path.join(current_app.static_folder or "static", "uploads", "site_builder")
+    os.makedirs(upload_dir, exist_ok=True)
+    save_path = os.path.join(upload_dir, safe_name)
+    file.save(save_path)
+
+    img_url = url_for("static", filename=f"uploads/site_builder/{safe_name}")
+    # Return in GrapesJS asset manager expected format
+    return jsonify(ok=True, data=[img_url], url=img_url, filename=safe_name)
+
+
+# ── Site Builder: Get page JSON (for editor) ──
+
+@client_bp.route("/site-builder/page/<int:page_id>")
+@client_login_required
+def client_site_builder_page_get(page_id):
+    """Return page data as JSON for the editor."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    page = db.get_site_page(page_id)
+    if not page:
+        return jsonify(ok=False, error="Page not found."), 404
+    build = db.get_site_build(page["build_id"])
+    if not build or build["brand_id"] != brand_id:
+        return jsonify(ok=False, error="Access denied."), 403
+    return jsonify(ok=True, page=page)
 
 
 @client_bp.route("/settings/sng", methods=["POST"])

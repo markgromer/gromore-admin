@@ -5561,6 +5561,29 @@ class WebDB:
         conn.commit()
         conn.close()
 
+    def update_site_page_content(self, page_id, data):
+        """Update content, SEO fields, editor data, and/or CSS for a site page."""
+        conn = self._conn()
+        allowed = {
+            "title", "content", "excerpt", "seo_title", "seo_description",
+            "primary_keyword", "secondary_keywords", "faq_items_json",
+            "schema_json", "schema_html", "full_html", "editor_json", "page_css",
+        }
+        sets = []
+        params = []
+        for key, val in data.items():
+            if key in allowed:
+                sets.append(f"{key} = ?")
+                params.append(val)
+        if not sets:
+            conn.close()
+            return
+        sets.append("updated_at = datetime('now')")
+        params.append(page_id)
+        conn.execute(f"UPDATE site_pages SET {', '.join(sets)} WHERE id = ?", tuple(params))
+        conn.commit()
+        conn.close()
+
     # ── Site Builder Admin: Templates ──
 
     def create_sb_template(self, data):

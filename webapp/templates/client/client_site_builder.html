@@ -224,9 +224,53 @@
     .publish-badge { font-size: .72rem; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
     .publish-badge.published { background: #dcfce7; color: #166534; }
     .publish-badge.draft { background: #f1f5f9; color: #475569; }
+
+    /* GrapesJS fullscreen editor */
+    .gjs-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: #fff; z-index: 9999; display: none; flex-direction: column;
+    }
+    .gjs-overlay.active { display: flex; }
+    .gjs-toolbar {
+        background: #1e293b; color: #fff; padding: .5rem 1rem;
+        display: flex; justify-content: space-between; align-items: center;
+        flex-shrink: 0;
+    }
+    .gjs-toolbar .gjs-title { font-weight: 700; font-size: .95rem; }
+    .gjs-toolbar .gjs-actions { display: flex; gap: .5rem; }
+    .gjs-editor-wrap { flex: 1; overflow: hidden; }
+
+    /* Rewrite UI */
+    .rewrite-panel {
+        background: #f8fafc; border-top: 1px solid var(--line);
+        padding: 1rem 1.25rem;
+    }
+    .rewrite-panel textarea {
+        border-radius: 10px; font-size: .85rem; resize: vertical;
+        border: 1px solid var(--line); width: 100%; padding: .5rem .75rem;
+        min-height: 60px;
+    }
+    .rewrite-panel textarea:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
 </style>
 
 {% if mode == 'review' %}
+{# ── GrapesJS Editor Overlay ── #}
+<div class="gjs-overlay" id="gjsOverlay">
+    <div class="gjs-toolbar">
+        <div class="gjs-title"><i class="bi bi-pencil-square me-2"></i><span id="gjsPageTitle">Visual Editor</span></div>
+        <div class="gjs-actions">
+            <button class="btn btn-sm btn-outline-light" id="gjsDeviceDesktop" title="Desktop"><i class="bi bi-display"></i></button>
+            <button class="btn btn-sm btn-outline-light" id="gjsDeviceTablet" title="Tablet"><i class="bi bi-tablet"></i></button>
+            <button class="btn btn-sm btn-outline-light" id="gjsDeviceMobile" title="Mobile"><i class="bi bi-phone"></i></button>
+            <button class="btn btn-sm btn-outline-light" id="gjsUndo" title="Undo"><i class="bi bi-arrow-counterclockwise"></i></button>
+            <button class="btn btn-sm btn-outline-light" id="gjsRedo" title="Redo"><i class="bi bi-arrow-clockwise"></i></button>
+            <button class="btn btn-sm btn-success" id="gjsSaveBtn"><i class="bi bi-check-lg me-1"></i>Save</button>
+            <button class="btn btn-sm btn-outline-light" id="gjsCloseBtn"><i class="bi bi-x-lg me-1"></i>Close</button>
+        </div>
+    </div>
+    <div class="gjs-editor-wrap" id="gjsEditorWrap"></div>
+</div>
+
 {# ── REVIEW MODE ── #}
 <div class="sb-header">
     <h3><i class="bi bi-eye me-2"></i>Review Site Build #{{ build.id }}</h3>
@@ -278,6 +322,9 @@
             <span class="page-type-chip"><i class="bi bi-file-earmark"></i> {{ page.page_type }}</span>
         </div>
         <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-sm btn-outline-primary edit-visual-btn" data-page-id="{{ page.id }}" style="border-radius:8px; font-size:.78rem;" title="Open visual editor">
+                <i class="bi bi-pencil-square me-1"></i>Edit
+            </button>
             {% if page.wp_page_id %}
             <span class="publish-badge published"><i class="bi bi-check-circle-fill me-1"></i>Published</span>
             <a href="{{ page.wp_page_url }}" target="_blank" class="btn btn-sm btn-outline-primary" style="border-radius:8px; font-size:.78rem;">
@@ -295,61 +342,261 @@
             {% if page.seo_description %}<div class="seo-desc">{{ page.seo_description }}</div>{% endif %}
             {% if page.primary_keyword %}<div style="margin-top:.3rem;"><span style="font-weight:600;">Keyword:</span> {{ page.primary_keyword }}</div>{% endif %}
         </div>
-        <div class="page-preview-content">{{ page.content|safe }}</div>
+        <div class="page-preview-content" id="pageContent-{{ page.id }}">{{ page.content|safe }}</div>
+    </div>
+    {# Rewrite Panel #}
+    <div class="rewrite-panel" id="rewritePanel-{{ page.id }}" style="display:none;">
+        <div class="d-flex align-items-start gap-2">
+            <div class="flex-grow-1">
+                <textarea id="rewritePrompt-{{ page.id }}" placeholder="Tell the AI how to rewrite this page. e.g. 'Make it more urgent', 'Add a financing section', 'Focus on commercial customers'" rows="2"></textarea>
+            </div>
+            <button type="button" class="btn btn-sm btn-primary rewrite-ai-btn" data-page-id="{{ page.id }}" style="border-radius:10px; font-weight:600; white-space:nowrap;">
+                <i class="bi bi-stars me-1"></i>Rewrite
+            </button>
+        </div>
+        <div class="rewrite-status mt-1" id="rewriteStatus-{{ page.id }}" style="font-size:.8rem; color:var(--text-muted);"></div>
     </div>
 </div>
 {% endfor %}
 
 <script>
 (function(){
+    const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+    /* ── Publish All ── */
     const publishBtn = document.getElementById('publishAllBtn');
-    if (!publishBtn) return;
-
-    publishBtn.addEventListener('click', async function() {
-        if (!confirm('Publish all draft pages to WordPress?')) return;
-
-        publishBtn.disabled = true;
-        publishBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Publishing...';
-        document.getElementById('publishProgress').style.display = 'block';
-
-        const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
-        try {
-            const resp = await fetch('{{ url_for("client.client_site_builder_publish", build_id=build.id) }}', {
-                method: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRFToken': csrf,
-                },
-            });
-            const data = await resp.json();
-            document.getElementById('publishSpinner').style.display = 'none';
-            document.getElementById('publishBar').style.width = '100%';
-
-            if (data.ok) {
-                document.getElementById('publishStatus').innerHTML =
-                    '<i class="bi bi-check-circle-fill text-success me-1"></i>' +
-                    data.published + ' of ' + data.total + ' pages published.';
-                if (data.errors && data.errors.length) {
-                    document.getElementById('publishStatus').innerHTML +=
-                        '<br><small class="text-warning">' + data.errors.join('<br>') + '</small>';
+    if (publishBtn) {
+        publishBtn.addEventListener('click', async function() {
+            if (!confirm('Publish all draft pages to WordPress?')) return;
+            publishBtn.disabled = true;
+            publishBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Publishing...';
+            document.getElementById('publishProgress').style.display = 'block';
+            try {
+                const resp = await fetch('{{ url_for("client.client_site_builder_publish", build_id=build.id) }}', {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf() },
+                });
+                const data = await resp.json();
+                document.getElementById('publishSpinner').style.display = 'none';
+                document.getElementById('publishBar').style.width = '100%';
+                if (data.ok) {
+                    document.getElementById('publishStatus').innerHTML =
+                        '<i class="bi bi-check-circle-fill text-success me-1"></i>' +
+                        data.published + ' of ' + data.total + ' pages published.';
+                    if (data.errors && data.errors.length) {
+                        document.getElementById('publishStatus').innerHTML +=
+                            '<br><small class="text-warning">' + data.errors.join('<br>') + '</small>';
+                    }
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    document.getElementById('publishStatus').innerHTML =
+                        '<i class="bi bi-x-circle-fill text-danger me-1"></i>' + (data.error || 'Publishing failed.');
+                    publishBtn.disabled = false;
+                    publishBtn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i>Retry Publish';
                 }
-                setTimeout(() => location.reload(), 1500);
-            } else {
+            } catch (err) {
+                document.getElementById('publishSpinner').style.display = 'none';
                 document.getElementById('publishStatus').innerHTML =
-                    '<i class="bi bi-x-circle-fill text-danger me-1"></i>' + (data.error || 'Publishing failed.');
+                    '<i class="bi bi-x-circle-fill text-danger me-1"></i>Network error. Please try again.';
                 publishBtn.disabled = false;
                 publishBtn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i>Retry Publish';
             }
+        });
+    }
+
+    /* ── Edit Button → Toggle Rewrite Panel ── */
+    document.querySelectorAll('.edit-visual-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const pid = this.dataset.pageId;
+            const panel = document.getElementById('rewritePanel-' + pid);
+            panel.style.display = panel.style.display === 'none' ? '' : 'none';
+            // Also open GrapesJS if double-clicked or long press - but single click toggles rewrite
+        });
+    });
+
+    /* ── AI Rewrite ── */
+    document.querySelectorAll('.rewrite-ai-btn').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            const pid = this.dataset.pageId;
+            const textarea = document.getElementById('rewritePrompt-' + pid);
+            const status = document.getElementById('rewriteStatus-' + pid);
+            const instructions = textarea.value.trim();
+
+            this.disabled = true;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Rewriting...';
+            status.textContent = 'Warren is rewriting this page...';
+
+            try {
+                const resp = await fetch('/client/site-builder/page/' + pid + '/rewrite', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': csrf(),
+                    },
+                    body: JSON.stringify({ instructions }),
+                });
+                const data = await resp.json();
+                if (data.ok && data.page) {
+                    document.getElementById('pageContent-' + pid).innerHTML = data.page.content || '';
+                    status.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i>Page rewritten successfully.';
+                    textarea.value = '';
+                } else {
+                    status.innerHTML = '<i class="bi bi-x-circle-fill text-danger me-1"></i>' + (data.error || 'Rewrite failed.');
+                }
+            } catch (err) {
+                status.innerHTML = '<i class="bi bi-x-circle-fill text-danger me-1"></i>Network error.';
+            }
+            this.disabled = false;
+            this.innerHTML = '<i class="bi bi-stars me-1"></i>Rewrite';
+        });
+    });
+
+    /* ── GrapesJS Visual Editor ── */
+    let gjsEditor = null;
+    let gjsCurrentPageId = null;
+
+    async function openEditor(pageId) {
+        gjsCurrentPageId = pageId;
+        const overlay = document.getElementById('gjsOverlay');
+        overlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+
+        // Fetch page data
+        try {
+            const resp = await fetch('/client/site-builder/page/' + pageId, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            const data = await resp.json();
+            if (!data.ok) { alert(data.error || 'Failed to load page.'); closeEditor(); return; }
+
+            document.getElementById('gjsPageTitle').textContent = data.page.label || data.page.title || 'Visual Editor';
+
+            // Initialize or re-init GrapesJS
+            if (gjsEditor) gjsEditor.destroy();
+            const wrap = document.getElementById('gjsEditorWrap');
+            wrap.innerHTML = '';
+
+            gjsEditor = grapesjs.init({
+                container: wrap,
+                height: '100%',
+                width: 'auto',
+                storageManager: false,
+                panels: { defaults: [] },
+                deviceManager: {
+                    devices: [
+                        { name: 'Desktop', width: '' },
+                        { name: 'Tablet', width: '768px', widthMedia: '992px' },
+                        { name: 'Mobile', width: '375px', widthMedia: '480px' },
+                    ],
+                },
+                assetManager: {
+                    upload: '/client/site-builder/upload-image',
+                    uploadName: 'files[]',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf() },
+                    multiUpload: false,
+                    autoAdd: true,
+                },
+                plugins: ['gjs-blocks-basic'],
+                pluginsOpts: { 'gjs-blocks-basic': {} },
+            });
+
+            // Load saved editor state or raw content
+            let editorJson = null;
+            try { editorJson = data.page.editor_json ? JSON.parse(data.page.editor_json) : null; } catch(e) {}
+            if (editorJson && editorJson.components) {
+                gjsEditor.loadProjectData(editorJson);
+            } else {
+                gjsEditor.setComponents(data.page.content || '');
+            }
+            if (data.page.page_css) {
+                gjsEditor.setStyle(data.page.page_css);
+            }
         } catch (err) {
-            document.getElementById('publishSpinner').style.display = 'none';
-            document.getElementById('publishStatus').innerHTML =
-                '<i class="bi bi-x-circle-fill text-danger me-1"></i>Network error. Please try again.';
-            publishBtn.disabled = false;
-            publishBtn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i>Retry Publish';
+            alert('Failed to load page for editing.');
+            closeEditor();
+        }
+    }
+
+    function closeEditor() {
+        document.getElementById('gjsOverlay').classList.remove('active');
+        document.body.style.overflow = '';
+        gjsCurrentPageId = null;
+    }
+
+    async function saveEditor() {
+        if (!gjsEditor || !gjsCurrentPageId) return;
+        const btn = document.getElementById('gjsSaveBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+
+        const html = gjsEditor.getHtml();
+        const css = gjsEditor.getCss();
+        const projectData = gjsEditor.getProjectData();
+
+        try {
+            const resp = await fetch('/client/site-builder/page/' + gjsCurrentPageId + '/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrf(),
+                },
+                body: JSON.stringify({
+                    content: html,
+                    page_css: css,
+                    editor_json: JSON.stringify(projectData),
+                }),
+            });
+            const data = await resp.json();
+            if (data.ok) {
+                // Update the preview card too
+                const preview = document.getElementById('pageContent-' + gjsCurrentPageId);
+                if (preview) preview.innerHTML = html;
+                btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Saved!';
+                setTimeout(() => { btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save'; btn.disabled = false; }, 1500);
+            } else {
+                alert(data.error || 'Save failed.');
+                btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save';
+                btn.disabled = false;
+            }
+        } catch (err) {
+            alert('Network error saving.');
+            btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save';
+            btn.disabled = false;
+        }
+    }
+
+    // Editor toolbar events
+    document.getElementById('gjsSaveBtn')?.addEventListener('click', saveEditor);
+    document.getElementById('gjsCloseBtn')?.addEventListener('click', closeEditor);
+    document.getElementById('gjsDeviceDesktop')?.addEventListener('click', () => gjsEditor?.setDevice('Desktop'));
+    document.getElementById('gjsDeviceTablet')?.addEventListener('click', () => gjsEditor?.setDevice('Tablet'));
+    document.getElementById('gjsDeviceMobile')?.addEventListener('click', () => gjsEditor?.setDevice('Mobile'));
+    document.getElementById('gjsUndo')?.addEventListener('click', () => gjsEditor?.UndoManager.undo());
+    document.getElementById('gjsRedo')?.addEventListener('click', () => gjsEditor?.UndoManager.redo());
+
+    // Double-click edit button opens visual editor
+    document.querySelectorAll('.edit-visual-btn').forEach(btn => {
+        btn.addEventListener('dblclick', function(e) {
+            e.preventDefault();
+            openEditor(this.dataset.pageId);
+        });
+    });
+
+    // Escape key closes editor
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && document.getElementById('gjsOverlay').classList.contains('active')) {
+            closeEditor();
         }
     });
 })();
 </script>
+
+{# GrapesJS CDN - loaded only in review mode #}
+<link rel="stylesheet" href="https://unpkg.com/grapesjs@0.21.10/dist/css/grapes.min.css">
+<script src="https://unpkg.com/grapesjs@0.21.10/dist/grapes.min.js"></script>
+<script src="https://unpkg.com/grapesjs-blocks-basic@1.0.2/dist/index.min.js"></script>
 
 {% else %}
 {# ── LANDING MODE ── #}
@@ -396,9 +643,11 @@
                 <div class="step-line"></div>
                 <div class="step" data-step="3"><span class="step-num">3</span><span class="step-label">Content</span></div>
                 <div class="step-line"></div>
-                <div class="step" data-step="4"><span class="step-num">4</span><span class="step-label">Pages</span></div>
+                <div class="step" data-step="4"><span class="step-num">4</span><span class="step-label">Design</span></div>
                 <div class="step-line"></div>
-                <div class="step" data-step="5"><span class="step-num">5</span><span class="step-label">Integrations</span></div>
+                <div class="step" data-step="5"><span class="step-num">5</span><span class="step-label">Pages</span></div>
+                <div class="step-line"></div>
+                <div class="step" data-step="6"><span class="step-num">6</span><span class="step-label">Integrations</span></div>
             </div>
         </div>
 
@@ -481,6 +730,19 @@
                     </div>
                 </div>
             </div>
+            {% elif gsc_needs_property %}
+            <div class="text-center" style="padding:2rem;">
+                <i class="bi bi-google" style="font-size:2rem; opacity:.5; color:#4285f4;"></i>
+                <p style="font-size:.88rem; color:var(--text-strong); margin-top:.75rem; font-weight:600;">
+                    Google is connected, but no Search Console property is selected.
+                </p>
+                <p style="font-size:.82rem; color:var(--text-muted);">
+                    Go to Settings and select your Search Console property so Warren can pull your real keyword data.
+                </p>
+                <a href="{{ url_for('client.client_settings') }}" class="btn btn-sm btn-outline-primary" style="border-radius:10px;">
+                    <i class="bi bi-gear me-1"></i>Select SC Property in Settings
+                </a>
+            </div>
             {% else %}
             <div class="text-center" style="padding:2rem;">
                 <i class="bi bi-search" style="font-size:2rem; opacity:.3; color:var(--text-muted);"></i>
@@ -525,8 +787,56 @@
             </div>
         </div>
 
-        {# ── STEP 4: Pages & Structure ── #}
+        {# ── STEP 4: Design ── #}
         <div class="intake-panel" id="step4" style="display:none;">
+            <h5><i class="bi bi-palette2 me-2"></i>Design Direction</h5>
+            <p class="intake-desc">Set the visual direction for your site. The AI uses these tokens to shape every page's look and feel.</p>
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold" style="font-size:.85rem;">Color Palette</label>
+                    <select name="color_palette" class="form-select" style="border-radius:10px; font-size:.88rem;">
+                        <option value="">Auto (match industry)</option>
+                        <option value="blue-professional">Blue Professional - trust, corporate</option>
+                        <option value="green-natural">Green Natural - eco, health, lawn</option>
+                        <option value="red-bold">Red Bold - urgency, energy, food</option>
+                        <option value="dark-luxury">Dark Luxury - premium, high-end</option>
+                        <option value="warm-earthy">Warm Earthy - construction, home, organic</option>
+                        <option value="clean-minimal">Clean Minimal - modern, tech, SaaS</option>
+                        <option value="bright-playful">Bright Playful - kids, creative, events</option>
+                    </select>
+                    <div class="form-hint">Sets primary/accent colors, backgrounds, and button styles</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold" style="font-size:.85rem;">Font Pairing</label>
+                    <select name="font_pair" class="form-select" style="border-radius:10px; font-size:.88rem;">
+                        <option value="">Auto (match style)</option>
+                        <option value="inter-system">Inter + System - clean, fast</option>
+                        <option value="playfair-lato">Playfair Display + Lato - elegant</option>
+                        <option value="montserrat-opensans">Montserrat + Open Sans - modern</option>
+                        <option value="roboto-slab-roboto">Roboto Slab + Roboto - technical</option>
+                        <option value="poppins-nunito">Poppins + Nunito - friendly</option>
+                        <option value="oswald-source">Oswald + Source Sans - bold industrial</option>
+                    </select>
+                    <div class="form-hint">Heading + body font combination</div>
+                </div>
+                <div class="col-12">
+                    <label class="form-label fw-semibold" style="font-size:.85rem;">Layout Style</label>
+                    <div class="d-flex flex-wrap gap-2 mt-1">
+                        <label class="page-select-chip"><input type="radio" name="layout_style" value="" checked style="display:none;"> <span>Auto</span></label>
+                        <label class="page-select-chip"><input type="radio" name="layout_style" value="modern-sections" style="display:none;"> <span><i class="bi bi-columns-gap me-1"></i>Modern Sections</span></label>
+                        <label class="page-select-chip"><input type="radio" name="layout_style" value="classic-stacked" style="display:none;"> <span><i class="bi bi-layout-text-window me-1"></i>Classic Stacked</span></label>
+                        <label class="page-select-chip"><input type="radio" name="layout_style" value="hero-driven" style="display:none;"> <span><i class="bi bi-image me-1"></i>Hero-Driven</span></label>
+                        <label class="page-select-chip"><input type="radio" name="layout_style" value="card-grid" style="display:none;"> <span><i class="bi bi-grid me-1"></i>Card Grid</span></label>
+                        <label class="page-select-chip"><input type="radio" name="layout_style" value="sidebar-content" style="display:none;"> <span><i class="bi bi-layout-sidebar me-1"></i>Sidebar + Content</span></label>
+                    </div>
+                    <div class="form-hint">How content sections are structured across pages</div>
+                </div>
+            </div>
+        </div>
+
+        {# ── STEP 5: Pages & Structure ── #}
+        <div class="intake-panel" id="step5" style="display:none;">
             <h5><i class="bi bi-stack me-2"></i>Pages & Structure</h5>
             <p class="intake-desc">Choose which pages to generate. Each service and area gets its own SEO-optimized page.</p>
 
@@ -574,6 +884,20 @@
                     <div class="form-hint mb-2">Standalone conversion pages for specific offers, campaigns, or keywords</div>
                     <div id="landingPagesList"></div>
                 </div>
+
+                {# Custom Pages #}
+                <div class="col-12 mt-3">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <label class="form-label fw-semibold mb-0" style="font-size:.85rem;">
+                            <i class="bi bi-file-earmark-plus me-1"></i>Custom Pages (optional)
+                        </label>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="addCustomPageBtn" style="border-radius:8px; font-size:.78rem;">
+                            <i class="bi bi-plus me-1"></i>Add Custom Page
+                        </button>
+                    </div>
+                    <div class="form-hint mb-2">Additional pages like Careers, Gallery, Portfolio, Financing, etc.</div>
+                    <div id="customPagesList"></div>
+                </div>
             </div>
 
             {# Blueprint Preview #}
@@ -586,8 +910,8 @@
             </div>
         </div>
 
-        {# ── STEP 5: Integrations ── #}
-        <div class="intake-panel" id="step5" style="display:none;">
+        {# ── STEP 6: Integrations ── #}
+        <div class="intake-panel" id="step6" style="display:none;">
             <h5><i class="bi bi-puzzle me-2"></i>Integrations & Plugins</h5>
             <p class="intake-desc">Connect your lead forms, booking tools, and other plugins. The AI will embed them into your pages.</p>
 
@@ -677,7 +1001,7 @@
 <script>
 (function(){
     /* ── Step Navigation ── */
-    const TOTAL_STEPS = 5;
+    const TOTAL_STEPS = 6;
     let currentStep = 1;
 
     function showStep(n) {
@@ -693,15 +1017,14 @@
         document.getElementById('prevStepBtn').style.display = n > 1 ? '' : 'none';
         document.getElementById('nextStepBtn').style.display = n < TOTAL_STEPS ? '' : 'none';
         document.getElementById('generateBtn').style.display = n === TOTAL_STEPS ? '' : 'none';
-        document.getElementById('previewBlueprintBtn').style.display = n === 4 ? '' : 'none';
+        document.getElementById('previewBlueprintBtn').style.display = n === 5 ? '' : 'none';
         currentStep = n;
     }
 
     document.getElementById('nextStepBtn').addEventListener('click', () => {
         if (currentStep < TOTAL_STEPS) {
-            // Collect content goals before moving
             if (currentStep === 3) collectGoals();
-            if (currentStep === 4) collectPageSelection();
+            if (currentStep === 5) collectPageSelection();
             showStep(currentStep + 1);
         }
     });
@@ -797,6 +1120,26 @@
         card.querySelector('.lp-remove').addEventListener('click', () => card.remove());
     });
 
+    /* ── Custom Pages ── */
+    let cpCount = 0;
+    document.getElementById('addCustomPageBtn')?.addEventListener('click', function() {
+        cpCount++;
+        const card = document.createElement('div');
+        card.className = 'lp-card mb-2';
+        card.innerHTML =
+            '<div class="d-flex justify-content-between align-items-start mb-2">' +
+            '<span style="font-weight:600; font-size:.85rem;">Custom Page #' + cpCount + '</span>' +
+            '<button type="button" class="btn btn-sm btn-outline-danger cp-remove" style="border-radius:6px; font-size:.72rem; padding:2px 8px;">' +
+            '<i class="bi bi-trash"></i></button></div>' +
+            '<div class="row g-2">' +
+            '<div class="col-md-4"><input type="text" name="cp_name[]" class="form-control form-control-sm" placeholder="Page name (e.g. Careers)" style="border-radius:8px;"></div>' +
+            '<div class="col-md-3"><input type="text" name="cp_slug[]" class="form-control form-control-sm" placeholder="Slug (e.g. careers)" style="border-radius:8px;"></div>' +
+            '<div class="col-md-5"><input type="text" name="cp_purpose[]" class="form-control form-control-sm" placeholder="Purpose / what to include" style="border-radius:8px;"></div>' +
+            '</div>';
+        document.getElementById('customPagesList').appendChild(card);
+        card.querySelector('.cp-remove').addEventListener('click', () => card.remove());
+    });
+
     /* ── Lead Form Toggle ── */
     document.getElementById('leadFormType').addEventListener('change', function() {
         const show = this.value && this.value !== '';
@@ -885,7 +1228,7 @@
     }
 
     /* ── Blueprint Preview ── */
-    const TYPE_ICONS = {home:'bi-house', about:'bi-people', services:'bi-tools', service_detail:'bi-wrench', service_area:'bi-geo-alt', contact:'bi-telephone', faq:'bi-question-circle', testimonials:'bi-star', landing_page:'bi-bullseye'};
+    const TYPE_ICONS = {home:'bi-house', about:'bi-people', services:'bi-tools', service_detail:'bi-wrench', service_area:'bi-geo-alt', contact:'bi-telephone', faq:'bi-question-circle', testimonials:'bi-star', landing_page:'bi-bullseye', custom:'bi-file-earmark-plus'};
 
     document.getElementById('previewBlueprintBtn')?.addEventListener('click', function() {
         collectPageSelection();
@@ -919,6 +1262,15 @@
             if (name) {
                 const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '');
                 pages.push({type:'landing_page', label:name, slug:'/lp/' + slug});
+            }
+        });
+        // Custom pages
+        document.querySelectorAll('#customPagesList .lp-card').forEach(card => {
+            const name = card.querySelector('[name="cp_name[]"]').value.trim();
+            const slugVal = card.querySelector('[name="cp_slug[]"]').value.trim();
+            if (name) {
+                const slug = slugVal || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '');
+                pages.push({type:'custom', label:name, slug:'/' + slug});
             }
         });
 
