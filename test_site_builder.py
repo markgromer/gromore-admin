@@ -168,6 +168,120 @@ class PromptTests(unittest.TestCase):
         _, user_msg = build_page_prompt(faq, self.ctx)
         self.assertIn("faq_items MUST contain all Q&A pairs", user_msg)
 
+    def test_prompt_uses_template_library_and_overrides(self):
+        ctx = build_brand_context(
+            _BRAND,
+            intake={
+                "builder_templates": [
+                    {
+                        "name": "Primary Header",
+                        "category": "header",
+                        "page_types": "all",
+                        "html_content": "<header>{{business_name}}</header>",
+                        "description": "A compact top navigation with phone CTA.",
+                        "sort_order": 1,
+                    },
+                    {
+                        "name": "Proof Strip",
+                        "category": "social-proof",
+                        "page_types": "home,about",
+                        "html_content": "<section>Proof</section>",
+                        "description": "A social proof strip with badges and short credibility copy.",
+                        "sort_order": 2,
+                    },
+                ],
+                "builder_prompt_overrides": [
+                    {"page_type": "global", "section": "system_prompt", "content": "Always keep paragraphs under three lines."},
+                    {"page_type": "home", "section": "user_prompt", "content": "Feature the financing CTA above the fold."},
+                ],
+            },
+        )
+        home = next(p for p in build_site_blueprint(ctx) if p["page_type"] == "home")
+
+        system_msg, user_msg = build_page_prompt(home, ctx)
+
+        self.assertIn("ADDITIONAL BUILDER SYSTEM RULES", system_msg)
+        self.assertIn("Always keep paragraphs under three lines.", system_msg)
+        self.assertIn("APPROVED TEMPLATE LIBRARY", user_msg)
+        self.assertIn("Primary Header", user_msg)
+        self.assertIn("Proof Strip", user_msg)
+        self.assertIn("Feature the financing CTA above the fold.", user_msg)
+
+    def test_brand_context_uses_builder_theme_as_fallback(self):
+        ctx = build_brand_context(
+            {"display_name": "Fallback Plumbing"},
+            intake={
+                "builder_theme": {
+                    "name": "Warm Service",
+                    "primary_color": "#123456",
+                    "secondary_color": "#abcdef",
+                    "accent_color": "#ff6600",
+                    "text_color": "#111111",
+                    "bg_color": "#faf7f2",
+                    "font_heading": "Oswald",
+                    "font_body": "Lato",
+                    "button_style": "pill",
+                    "layout_style": "modern-sections",
+                }
+            },
+        )
+
+        self.assertEqual(ctx["builder_theme_name"], "Warm Service")
+        self.assertEqual(ctx["color_primary"], "#123456")
+        self.assertEqual(ctx["color_secondary"], "#abcdef")
+        self.assertEqual(ctx["color_accent"], "#ff6600")
+        self.assertEqual(ctx["color_text"], "#111111")
+        self.assertEqual(ctx["color_background"], "#faf7f2")
+        self.assertEqual(ctx["font_heading"], "Oswald")
+        self.assertEqual(ctx["font_body"], "Lato")
+        self.assertEqual(ctx["layout_style"], "modern-sections")
+
+    def test_prompt_uses_reference_site_direction(self):
+        ctx = build_brand_context(
+            _BRAND,
+            intake={
+                "reference_url": "https://example.com",
+                "reference_mode": "layout",
+                "reference_site_brief": {
+                    "resolved_url": "https://example.com",
+                    "mode": "layout",
+                    "title": "Example Home Services",
+                    "description": "A clean local-service homepage with strong social proof and a clear estimate CTA.",
+                    "layout_style_hint": "modern-sections",
+                    "style_preset_hint": "clean-minimal",
+                    "nav_items": ["Home", "Services", "About", "Contact"],
+                    "headings": ["Fast Service", "Why Choose Us", "Recent Work"],
+                    "cta_texts": ["Get Estimate", "Call Now"],
+                    "color_hints": ["#112233", "#ff6600"],
+                    "section_count": 6,
+                    "notes": ["Top navigation uses a visible CTA button."]
+                },
+            },
+        )
+        home = next(p for p in build_site_blueprint(ctx) if p["page_type"] == "home")
+
+        _, user_msg = build_page_prompt(home, ctx)
+
+        self.assertIn("REFERENCE SITE DIRECTION", user_msg)
+        self.assertIn("https://example.com", user_msg)
+        self.assertIn("Match mode: layout", user_msg)
+        self.assertIn("Navigation pattern: Home, Services, About, Contact", user_msg)
+        self.assertIn("do not copy text, logos, brand names, or images", user_msg)
+
+    def test_brand_context_uses_reference_style_fallbacks(self):
+        ctx = build_brand_context(
+            {"display_name": "Reference Plumbing"},
+            intake={
+                "reference_site_brief": {
+                    "layout_style_hint": "card-grid",
+                    "style_preset_hint": "clean-minimal",
+                }
+            },
+        )
+
+        self.assertEqual(ctx["layout_style"], "card-grid")
+        self.assertEqual(ctx["style_preset"], "clean-minimal")
+
 
 class SchemaTests(unittest.TestCase):
     """Test JSON-LD schema markup generation."""
@@ -308,6 +422,79 @@ class AssemblyTests(unittest.TestCase):
         content = {"title": "T", "seo_title": "T", "seo_description": "D", "faq_items": [], "schema_hints": {}}
         result = assemble_page(page_spec, ctx, content)
         self.assertEqual(len(result["schemas"]), 3)
+
+    def test_assemble_wraps_shared_templates_and_theme_css(self):
+        ctx = build_brand_context(
+            {
+                "display_name": "Ace Plumbing",
+                "phone": "(555) 123-4567",
+            },
+            intake={
+                "builder_theme": {
+                    "primary_color": "#123456",
+                    "accent_color": "#ff6600",
+                    "custom_css": ".site-shell { padding: 8px; }",
+                },
+                "builder_templates": [
+                    {
+                        "name": "Main Header",
+                        "category": "header",
+                        "page_types": "all",
+                        "html_content": "<header class=\"site-shell\">{{business_name}}</header>",
+                        "css_content": ".site-shell header{display:flex;}",
+                        "sort_order": 1,
+                    },
+                    {
+                        "name": "Main Footer",
+                        "category": "footer",
+                        "page_types": "all",
+                        "html_content": "<footer>{{phone}}</footer>",
+                        "sort_order": 2,
+                    },
+                ],
+            },
+        )
+        page_spec = {"page_type": "home", "slug": "", "schema_types": []}
+        content = {"title": "Home", "content": "<main><p>Body</p></main>", "faq_items": [], "schema_hints": {}}
+
+        result = assemble_page(page_spec, ctx, content)
+
+        self.assertIn("<style>", result["full_html"])
+        self.assertIn("--sb-primary: #123456;", result["full_html"])
+        self.assertIn(".site-shell { padding: 8px; }", result["full_html"])
+        self.assertIn(".site-shell header{display:flex;}", result["full_html"])
+        self.assertIn("<header class=\"site-shell\">Ace Plumbing</header>", result["full_html"])
+        self.assertIn("<main><p>Body</p></main>", result["full_html"])
+        self.assertIn("<footer>(555) 123-4567</footer>", result["full_html"])
+
+    def test_landing_page_skips_shared_templates(self):
+        ctx = build_brand_context(
+            _BRAND,
+            intake={
+                "builder_templates": [
+                    {
+                        "name": "Main Header",
+                        "category": "header",
+                        "page_types": "all",
+                        "html_content": "<header>{{business_name}}</header>",
+                    },
+                    {
+                        "name": "Main Footer",
+                        "category": "footer",
+                        "page_types": "all",
+                        "html_content": "<footer>{{phone}}</footer>",
+                    },
+                ]
+            },
+        )
+        page_spec = {"page_type": "landing_page", "slug": "lp/test", "schema_types": []}
+        content = {"title": "Offer", "content": "<main><p>Landing</p></main>", "faq_items": [], "schema_hints": {}}
+
+        result = assemble_page(page_spec, ctx, content)
+
+        self.assertNotIn("<header>", result["full_html"])
+        self.assertNotIn("<footer>", result["full_html"])
+        self.assertIn("<main><p>Landing</p></main>", result["full_html"])
 
 
 class DatabaseSiteBuilderTests(unittest.TestCase):

@@ -6576,6 +6576,218 @@ def _site_builder_wp_admin_url(brand):
     return f"{site_url}/wp-admin/"
 
 
+def _site_builder_theme_snapshot(theme):
+    if not isinstance(theme, dict):
+        return {}
+    snapshot = {}
+    for key in (
+        "id",
+        "name",
+        "description",
+        "primary_color",
+        "secondary_color",
+        "accent_color",
+        "text_color",
+        "bg_color",
+        "font_heading",
+        "font_body",
+        "button_style",
+        "layout_style",
+        "custom_css",
+        "preview_image",
+    ):
+        snapshot[key] = theme.get(key)
+    return snapshot
+
+
+def _site_builder_template_snapshots(templates):
+    snapshots = []
+    for template in templates or []:
+        if not isinstance(template, dict):
+            continue
+        if not template.get("is_active", 1):
+            continue
+        snapshots.append({
+            "id": template.get("id"),
+            "name": template.get("name") or "",
+            "category": template.get("category") or "section",
+            "page_types": template.get("page_types") or "",
+            "html_content": template.get("html_content") or "",
+            "css_content": template.get("css_content") or "",
+            "description": template.get("description") or "",
+            "sort_order": template.get("sort_order") or 0,
+        })
+    return snapshots
+
+
+def _site_builder_prompt_override_snapshots(overrides):
+    snapshots = []
+    for override in overrides or []:
+        if not isinstance(override, dict):
+            continue
+        if not override.get("is_active", 1):
+            continue
+        content = str(override.get("content") or "").strip()
+        if not content:
+            continue
+        snapshots.append({
+            "page_type": str(override.get("page_type") or "").strip(),
+            "section": str(override.get("section") or "user_prompt").strip(),
+            "content": content,
+        })
+    return snapshots
+
+
+def _site_builder_reference_mode(value):
+    mode = str(value or "").strip().lower()
+    if mode in {"layout", "sections", "vibe"}:
+        return mode
+    return "vibe"
+
+
+def _site_builder_reference_style_brief(reference_url, reference_mode="vibe"):
+    raw_url = str(reference_url or "").strip()
+    if not raw_url:
+        return {}
+
+    normalized_url = raw_url
+    if not normalized_url.startswith(("http://", "https://")):
+        normalized_url = "https://" + normalized_url
+
+    try:
+        from bs4 import BeautifulSoup
+        import requests
+    except Exception:
+        return {
+            "requested_url": raw_url,
+            "resolved_url": normalized_url,
+            "mode": _site_builder_reference_mode(reference_mode),
+            "error": "reference-site dependencies unavailable",
+        }
+
+    def _clean_text(value, limit=160):
+        text = re.sub(r"\s+", " ", html.unescape(str(value or ""))).strip()
+        return text[:limit]
+
+    def _unique_texts(values, limit, min_length=2):
+        seen = set()
+        items = []
+        for value in values:
+            text = _clean_text(value, 120)
+            key = text.lower()
+            if len(text) < min_length or key in seen:
+                continue
+            seen.add(key)
+            items.append(text)
+            if len(items) >= limit:
+                break
+        return items
+
+    def _extract_color_hints(source_html):
+        counts = {}
+        for match in re.finditer(r"#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}", source_html or ""):
+            color = match.group(0).lower()
+            if len(color) == 4:
+                color = "#" + "".join(ch * 2 for ch in color[1:])
+            if color in {"#ffffff", "#000000", "#f8fafc", "#f9fafb", "#111111"}:
+                continue
+            counts[color] = counts.get(color, 0) + 1
+        ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+        return [color for color, _ in ranked[:4]]
+
+    def _infer_layout_style(soup, source_html):
+        text = (source_html or "").lower()
+        if "sidebar" in text:
+            return "sidebar-content"
+        if text.count("card") >= 3 or text.count("grid") >= 3:
+            return "card-grid"
+        if "hero" in text or "banner" in text:
+            return "hero-driven"
+        if len(soup.find_all("section")) >= 4:
+            return "modern-sections"
+        return "classic-stacked"
+
+    def _infer_style_preset(color_hints):
+        joined = " ".join(color_hints or [])
+        if any(color.startswith("#0") or color.startswith("#1") for color in color_hints or []):
+            return "dark-premium"
+        if any(color.startswith("#f9") or color.startswith("#fa") or color.startswith("#fb") for color in color_hints or []):
+            return "clean-minimal"
+        if any(color.startswith("#d9") or color.startswith("#c2") or color.startswith("#b9") for color in color_hints or []) and "#f" in joined:
+            return "warm-traditional"
+        return "bold-modern"
+
+    try:
+        resp = requests.get(
+            normalized_url,
+            timeout=15,
+            allow_redirects=True,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; GroMoreBot/1.0)"},
+        )
+        resp.raise_for_status()
+    except Exception as exc:
+        return {
+            "requested_url": raw_url,
+            "resolved_url": normalized_url,
+            "mode": _site_builder_reference_mode(reference_mode),
+            "error": str(exc)[:200],
+        }
+
+    html_text = resp.text[:180000]
+    soup = BeautifulSoup(html_text, "html.parser")
+
+    title = _clean_text(soup.title.string if soup.title and soup.title.string else "", 200)
+    meta_description = ""
+    meta_tag = soup.find("meta", attrs={"name": re.compile(r"^description$", re.I)})
+    if meta_tag and meta_tag.get("content"):
+        meta_description = _clean_text(meta_tag.get("content"), 320)
+
+    nav_items = []
+    nav = soup.find("nav") or soup.find("header")
+    if nav:
+        nav_items = _unique_texts((link.get_text(" ", strip=True) for link in nav.find_all("a")), 6)
+
+    headings = _unique_texts((tag.get_text(" ", strip=True) for tag in soup.find_all(["h1", "h2", "h3"])), 8, min_length=4)
+    cta_candidates = []
+    for tag in soup.find_all(["a", "button"]):
+        text = _clean_text(tag.get_text(" ", strip=True), 60)
+        lowered = text.lower()
+        if any(word in lowered for word in ("quote", "estimate", "call", "book", "schedule", "start", "contact", "get ", "free")):
+            cta_candidates.append(text)
+    cta_texts = _unique_texts(cta_candidates, 5, min_length=3)
+
+    color_hints = _extract_color_hints(html_text)
+    layout_style_hint = _infer_layout_style(soup, html_text)
+    style_preset_hint = _infer_style_preset(color_hints)
+    section_count = len(soup.find_all("section"))
+
+    notes = []
+    if nav_items:
+        notes.append(f"Top navigation uses {len(nav_items)} primary items and a clear header CTA pattern.")
+    if headings:
+        notes.append(f"Section rhythm is driven by headings like: {', '.join(headings[:4])}.")
+    if cta_texts:
+        notes.append(f"CTA language repeats actions like: {', '.join(cta_texts[:3])}.")
+    if section_count:
+        notes.append(f"The page appears to use about {section_count} distinct section blocks.")
+
+    return {
+        "requested_url": raw_url,
+        "resolved_url": resp.url,
+        "mode": _site_builder_reference_mode(reference_mode),
+        "title": title,
+        "description": meta_description,
+        "nav_items": nav_items,
+        "headings": headings,
+        "cta_texts": cta_texts,
+        "color_hints": color_hints,
+        "section_count": section_count,
+        "layout_style_hint": layout_style_hint,
+        "style_preset_hint": style_preset_hint,
+        "notes": notes,
+    }
+
+
 def _suggest_creative_style(brand, prompt, ad_format):
     api_key = (brand.get("openai_api_key") or "").strip()
     if not api_key:
@@ -9111,6 +9323,8 @@ def client_site_builder_generate():
         "font_heading": (request.form.get("font_heading") or "").strip(),
         "font_body": (request.form.get("font_body") or "").strip(),
         "style_preset": (request.form.get("style_preset") or "").strip(),
+        "reference_url": (request.form.get("reference_url") or "").strip(),
+        "reference_mode": _site_builder_reference_mode(request.form.get("reference_mode")),
     }
 
     # ── Parse page selection ──
@@ -9187,6 +9401,21 @@ def client_site_builder_generate():
 
     intake["seo_data"] = seo_data
     intake["warren_brief"] = warren_brief
+    if intake.get("reference_url"):
+        try:
+            intake["reference_site_brief"] = _site_builder_reference_style_brief(
+                intake.get("reference_url"),
+                intake.get("reference_mode"),
+            )
+        except Exception as exc:
+            current_app.logger.warning("Reference site brief failed: %s", exc)
+    intake["builder_theme"] = _site_builder_theme_snapshot(db.get_sb_default_theme() or {})
+    intake["builder_templates"] = _site_builder_template_snapshots(
+        db.get_sb_templates(active_only=True)
+    )
+    intake["builder_prompt_overrides"] = _site_builder_prompt_override_snapshots(
+        db.get_sb_prompt_overrides()
+    )
 
     brand_ctx = build_brand_context(brand, intake=intake)
     blueprint = build_site_blueprint(

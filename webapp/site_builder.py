@@ -96,17 +96,33 @@ PAGE_TYPES = {
 # Brand context builder
 # ---------------------------------------------------------------------------
 
-def build_brand_context(brand, intake=None):
+def build_brand_context(brand, intake=None, builder_theme=None, builder_templates=None, prompt_overrides=None):
     """Extract all brand fields relevant to content generation.
     
     intake: optional dict from the site builder intake form with extra
     fields like unique_selling_points, competitors, content_goals,
     lead_form_type, seo_data, warren_brief, etc.
     """
-    intake = intake or {}
+    intake = dict(intake or {})
+    if builder_theme is not None and not intake.get("builder_theme"):
+        intake["builder_theme"] = builder_theme
+    if builder_templates is not None and not intake.get("builder_templates"):
+        intake["builder_templates"] = builder_templates
+    if prompt_overrides is not None and not intake.get("builder_prompt_overrides"):
+        intake["builder_prompt_overrides"] = prompt_overrides
+
+    builder_theme = _normalize_builder_theme(intake.get("builder_theme"))
+    builder_templates = _normalize_builder_templates(intake.get("builder_templates"))
+    builder_prompt_overrides = _normalize_builder_prompt_overrides(intake.get("builder_prompt_overrides"))
+    reference_site_brief = _normalize_reference_site_brief(intake.get("reference_site_brief"))
     brand_colors = _extract_brand_hex_colors(brand)
-    brand_primary = _normalize_hex_color((brand or {}).get("primary_color")) or (brand_colors[0] if brand_colors else "")
-    brand_accent = _normalize_hex_color((brand or {}).get("accent_color")) or (brand_colors[1] if len(brand_colors) > 1 else brand_primary)
+    theme_primary = _normalize_hex_color(builder_theme.get("primary_color"))
+    theme_secondary = _normalize_hex_color(builder_theme.get("secondary_color"))
+    theme_accent = _normalize_hex_color(builder_theme.get("accent_color"))
+    theme_text = _normalize_hex_color(builder_theme.get("text_color"))
+    theme_background = _normalize_hex_color(builder_theme.get("bg_color"))
+    brand_primary = _normalize_hex_color((brand or {}).get("primary_color")) or theme_primary or (brand_colors[0] if brand_colors else "")
+    brand_accent = _normalize_hex_color((brand or {}).get("accent_color")) or theme_accent or (brand_colors[1] if len(brand_colors) > 1 else brand_primary)
     ctx = {
         "business_name": (brand.get("display_name") or "").strip(),
         "industry": (brand.get("industry") or "").strip(),
@@ -143,6 +159,18 @@ def build_brand_context(brand, intake=None):
         "cta_phone": (intake.get("cta_phone") or "").strip(),
         "brand_logo_path": (brand.get("logo_path") or "").strip(),
         "brand_colors": brand_colors,
+        "builder_theme": builder_theme,
+        "builder_theme_name": (builder_theme.get("name") or "").strip(),
+        "builder_templates": builder_templates,
+        "builder_prompt_overrides": builder_prompt_overrides,
+        "reference_url": str(intake.get("reference_url") or "").strip(),
+        "reference_mode": str(intake.get("reference_mode") or reference_site_brief.get("mode") or "vibe").strip(),
+        "reference_site_brief": reference_site_brief,
+        "button_style": (builder_theme.get("button_style") or "").strip(),
+        "custom_css": (builder_theme.get("custom_css") or "").strip(),
+        "color_secondary": theme_secondary,
+        "color_text": theme_text,
+        "color_background": theme_background,
     }
     # Intake can override brand-level fields
     for key in ("brand_voice", "target_audience", "active_offers", "tagline"):
@@ -154,14 +182,18 @@ def build_brand_context(brand, intake=None):
     # Design tokens
     ctx["color_palette"] = (intake.get("color_palette") or "").strip()
     ctx["font_pair"] = (intake.get("font_pair") or "").strip()
-    ctx["layout_style"] = (intake.get("layout_style") or "").strip()
+    ctx["layout_style"] = (
+        intake.get("layout_style")
+        or reference_site_brief.get("layout_style_hint")
+        or (builder_theme.get("layout_style") or "")
+    ).strip()
     ctx["color_primary"] = (intake.get("color_primary") or brand_primary or "").strip()
     ctx["color_accent"] = (intake.get("color_accent") or brand_accent or "").strip()
     ctx["color_dark"] = (intake.get("color_dark") or "").strip()
     ctx["color_light"] = (intake.get("color_light") or "").strip()
-    ctx["font_heading"] = (intake.get("font_heading") or (brand.get("font_heading") or "")).strip()
-    ctx["font_body"] = (intake.get("font_body") or (brand.get("font_body") or "")).strip()
-    ctx["style_preset"] = (intake.get("style_preset") or "").strip()
+    ctx["font_heading"] = (intake.get("font_heading") or (brand.get("font_heading") or "") or (builder_theme.get("font_heading") or "")).strip()
+    ctx["font_body"] = (intake.get("font_body") or (brand.get("font_body") or "") or (builder_theme.get("font_body") or "")).strip()
+    ctx["style_preset"] = (intake.get("style_preset") or reference_site_brief.get("style_preset_hint") or "").strip()
     return ctx
 
 
@@ -199,10 +231,336 @@ def _extract_brand_hex_colors(brand):
     return colors
 
 
+def _normalize_builder_theme(raw_theme):
+    if not isinstance(raw_theme, dict):
+        return {}
+
+    normalized = {}
+    for key in (
+        "id",
+        "name",
+        "description",
+        "primary_color",
+        "secondary_color",
+        "accent_color",
+        "text_color",
+        "bg_color",
+        "font_heading",
+        "font_body",
+        "button_style",
+        "layout_style",
+        "custom_css",
+    ):
+        value = raw_theme.get(key)
+        normalized[key] = str(value).strip() if isinstance(value, str) else value
+    return normalized
+
+
+def _normalize_builder_templates(raw_templates):
+    normalized = []
+    for item in raw_templates or []:
+        if not isinstance(item, dict):
+            continue
+        normalized.append({
+            "id": item.get("id"),
+            "name": str(item.get("name") or "").strip(),
+            "category": str(item.get("category") or "section").strip().lower(),
+            "page_types": str(item.get("page_types") or "").strip(),
+            "html_content": str(item.get("html_content") or ""),
+            "css_content": str(item.get("css_content") or ""),
+            "description": str(item.get("description") or "").strip(),
+            "sort_order": int(item.get("sort_order") or 0),
+        })
+    normalized.sort(key=lambda item: (item.get("sort_order", 0), item.get("name", "")))
+    return normalized
+
+
+def _normalize_builder_prompt_overrides(raw_overrides):
+    normalized = {}
+    for item in raw_overrides or []:
+        if not isinstance(item, dict):
+            continue
+        page_type = str(item.get("page_type") or "").strip()
+        section = str(item.get("section") or "user_prompt").strip()
+        content = str(item.get("content") or "").strip()
+        if not page_type or not section or not content:
+            continue
+        normalized.setdefault(page_type, {})[section] = content
+    return normalized
+
+
+def _normalize_reference_site_brief(raw_brief):
+    if not isinstance(raw_brief, dict):
+        return {}
+
+    normalized = {}
+    for key in (
+        "requested_url",
+        "resolved_url",
+        "mode",
+        "title",
+        "description",
+        "layout_style_hint",
+        "style_preset_hint",
+        "error",
+    ):
+        normalized[key] = str(raw_brief.get(key) or "").strip()
+
+    for key in ("nav_items", "headings", "cta_texts", "color_hints", "notes"):
+        values = []
+        for item in raw_brief.get(key) or []:
+            text = str(item or "").strip()
+            if text:
+                values.append(text[:160])
+        normalized[key] = values[:8]
+
+    try:
+        normalized["section_count"] = int(raw_brief.get("section_count") or 0)
+    except Exception:
+        normalized["section_count"] = 0
+
+    return normalized
+
+
 def _intake_flag_enabled(value):
     if isinstance(value, bool):
         return value
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _template_matches_page_type(template, page_type):
+    targets = str(template.get("page_types") or "").strip().lower()
+    if not targets or targets in {"*", "all", "any"}:
+        return True
+    allowed = {item.strip() for item in targets.split(",") if item.strip()}
+    return page_type in allowed
+
+
+def _template_category_matches(template, *names):
+    category = str(template.get("category") or "").strip().lower()
+    name = str(template.get("name") or "").strip().lower()
+    allowed = {item.strip().lower() for item in names if item}
+    if category in allowed:
+        return True
+    return any(token in name for token in allowed)
+
+
+def _truncate_html_for_prompt(value, limit=700):
+    raw = re.sub(r"\s+", " ", str(value or "")).strip()
+    if len(raw) <= limit:
+        return raw
+    return raw[: limit - 3].rstrip() + "..."
+
+
+def _select_builder_template(templates, page_type, *categories):
+    for template in templates or []:
+        if not _template_matches_page_type(template, page_type):
+            continue
+        if _template_category_matches(template, *categories):
+            return template
+    return None
+
+
+def _builder_theme_block(ctx):
+    theme = ctx.get("builder_theme") or {}
+    if not theme:
+        return ""
+
+    parts = ["APPROVED THEME PRESET (default to this look unless the intake explicitly overrides it):"]
+    if theme.get("name"):
+        parts.append(f"- Theme preset: {theme['name']}")
+    if theme.get("description"):
+        parts.append(f"- Theme intent: {theme['description']}")
+    if theme.get("primary_color"):
+        parts.append(f"- Theme primary color: {theme['primary_color']}")
+    if theme.get("secondary_color"):
+        parts.append(f"- Theme secondary color: {theme['secondary_color']}")
+    if theme.get("accent_color"):
+        parts.append(f"- Theme accent color: {theme['accent_color']}")
+    if theme.get("text_color"):
+        parts.append(f"- Theme text color: {theme['text_color']}")
+    if theme.get("bg_color"):
+        parts.append(f"- Theme background color: {theme['bg_color']}")
+    if theme.get("font_heading"):
+        parts.append(f"- Theme heading font: {theme['font_heading']}")
+    if theme.get("font_body"):
+        parts.append(f"- Theme body font: {theme['font_body']}")
+    if theme.get("button_style"):
+        parts.append(f"- Button style: {theme['button_style']}")
+    if theme.get("layout_style"):
+        parts.append(f"- Preferred layout style: {theme['layout_style']}")
+    return "\n".join(parts) + "\n"
+
+
+def _reference_site_block(ctx):
+    brief = ctx.get("reference_site_brief") or {}
+    reference_url = ctx.get("reference_url") or brief.get("resolved_url") or brief.get("requested_url") or ""
+    if not reference_url and not brief:
+        return ""
+
+    if brief.get("error"):
+        return ""
+
+    mode = (ctx.get("reference_mode") or brief.get("mode") or "vibe").strip().lower()
+    mode_notes = {
+        "vibe": "Match the overall visual feel and section rhythm, but not the exact layout.",
+        "layout": "Stay fairly close to the reference layout structure and pacing, while keeping this brand's own identity.",
+        "sections": "Borrow the strongest section ideas and order, but rebuild them through this business's own brand system.",
+    }
+
+    parts = [
+        "REFERENCE SITE DIRECTION (inspiration only - do not copy text, logos, brand names, or images):",
+    ]
+    if reference_url:
+        parts.append(f"- Reference URL: {reference_url}")
+    parts.append(f"- Match mode: {mode}. {mode_notes.get(mode, mode_notes['vibe'])}")
+    if brief.get("title"):
+        parts.append(f"- Reference title: {brief['title']}")
+    if brief.get("description"):
+        parts.append(f"- Positioning cue: {brief['description']}")
+    if brief.get("layout_style_hint"):
+        parts.append(f"- Suggested layout style from reference: {brief['layout_style_hint']}")
+    if brief.get("style_preset_hint"):
+        parts.append(f"- Suggested style preset from reference: {brief['style_preset_hint']}")
+    if brief.get("nav_items"):
+        parts.append(f"- Navigation pattern: {', '.join(brief['nav_items'][:6])}")
+    if brief.get("headings"):
+        parts.append(f"- Heading rhythm: {', '.join(brief['headings'][:5])}")
+    if brief.get("cta_texts"):
+        parts.append(f"- CTA language cues: {', '.join(brief['cta_texts'][:4])}")
+    if brief.get("color_hints"):
+        parts.append(f"- Reference color mood cues: {', '.join(brief['color_hints'][:4])}")
+    if brief.get("section_count"):
+        parts.append(f"- Approximate section count on the reference page: {brief['section_count']}")
+    for note in (brief.get("notes") or [])[:3]:
+        parts.append(f"- {note}")
+    parts.append("- Recreate the structural feel using this business's own brand colors, tone, offers, SEO targets, and approved assets.")
+    return "\n".join(parts) + "\n"
+
+
+def _template_library_block(page_spec, ctx):
+    templates = ctx.get("builder_templates") or []
+    if not templates:
+        return ""
+
+    page_type = page_spec.get("page_type") or ""
+    matched = [
+        template for template in templates
+        if _template_matches_page_type(template, page_type)
+    ]
+    if not matched:
+        return ""
+
+    parts = ["APPROVED TEMPLATE LIBRARY:"]
+    header_template = _select_builder_template(matched, page_type, "navigation", "nav", "header")
+    footer_template = _select_builder_template(matched, page_type, "footer")
+    if header_template:
+        parts.append(f"- Shared header/navigation template: {header_template.get('name') or 'Unnamed header'}")
+    if footer_template:
+        parts.append(f"- Shared footer template: {footer_template.get('name') or 'Unnamed footer'}")
+
+    section_templates = [
+        template for template in matched
+        if template is not header_template and template is not footer_template
+    ]
+    if not section_templates:
+        return "\n".join(parts) + "\n"
+
+    parts.append("- Use these approved section patterns when they fit the page. Keep the structure and intent aligned to the template, but rewrite the copy for this business and page:")
+    for template in section_templates[:6]:
+        label = template.get("name") or "Unnamed template"
+        category = template.get("category") or "section"
+        description = template.get("description") or _truncate_html_for_prompt(template.get("html_content"), 220)
+        parts.append(f"  - {label} [{category}]: {description}")
+
+    return "\n".join(parts) + "\n"
+
+
+def _prompt_override_text(ctx, page_type, section):
+    overrides = ctx.get("builder_prompt_overrides") or {}
+    parts = []
+    for scope in ("global", "all", "*", page_type):
+        content = ((overrides.get(scope) or {}).get(section) or "").strip()
+        if content:
+            parts.append(content)
+    return "\n\n".join(parts).strip()
+
+
+def _apply_prompt_overrides(system_msg, user_msg, page_spec, ctx):
+    page_type = page_spec.get("page_type") or ""
+    system_override = _prompt_override_text(ctx, page_type, "system_prompt")
+    user_override = _prompt_override_text(ctx, page_type, "user_prompt")
+
+    if system_override:
+        system_msg = f"{system_msg}\n\nADDITIONAL BUILDER SYSTEM RULES:\n{system_override}"
+    if user_override:
+        user_msg = f"{user_msg}\n\nADDITIONAL BUILDER PAGE INSTRUCTIONS:\n{user_override}"
+    return system_msg, user_msg
+
+
+def _template_token_map(page_spec, brand_ctx, content=None):
+    page_context = page_spec.get("context") or {}
+    content = content or {}
+    return {
+        "business_name": brand_ctx.get("business_name") or "",
+        "industry": brand_ctx.get("industry") or "",
+        "service_area": brand_ctx.get("service_area") or "",
+        "phone": brand_ctx.get("phone") or brand_ctx.get("cta_phone") or "",
+        "email": brand_ctx.get("email") or "",
+        "address": brand_ctx.get("address") or "",
+        "cta_text": brand_ctx.get("cta_text") or "Contact Us",
+        "website": brand_ctx.get("website") or "",
+        "tagline": brand_ctx.get("tagline") or "",
+        "page_title": content.get("title") or page_spec.get("label") or "",
+        "page_slug": page_spec.get("slug") or "",
+        "service_name": page_context.get("service_name") or "",
+        "area_name": page_context.get("area_name") or "",
+    }
+
+
+def _render_builder_template_html(template, page_spec, brand_ctx, content=None):
+    html = str(template.get("html_content") or "")
+    if not html:
+        return ""
+
+    rendered = html
+    for key, value in _template_token_map(page_spec, brand_ctx, content).items():
+        rendered = rendered.replace(f"{{{{{key}}}}}", str(value or ""))
+    return rendered.strip()
+
+
+def _theme_style_tag(brand_ctx):
+    theme = brand_ctx.get("builder_theme") or {}
+    css_parts = []
+    variables = []
+    token_map = {
+        "--sb-primary": brand_ctx.get("color_primary") or theme.get("primary_color") or "",
+        "--sb-secondary": brand_ctx.get("color_secondary") or theme.get("secondary_color") or "",
+        "--sb-accent": brand_ctx.get("color_accent") or theme.get("accent_color") or "",
+        "--sb-text": brand_ctx.get("color_text") or theme.get("text_color") or "",
+        "--sb-bg": brand_ctx.get("color_background") or theme.get("bg_color") or "",
+    }
+    for key, value in token_map.items():
+        if value:
+            variables.append(f"  {key}: {value};")
+    if variables:
+        css_parts.append(":root {\n" + "\n".join(variables) + "\n}")
+    if theme.get("custom_css"):
+        css_parts.append(theme["custom_css"])
+    if not css_parts:
+        return ""
+    return "<style>\n" + "\n\n".join(css_parts) + "\n</style>"
+
+
+def _template_style_tag(*templates):
+    css_parts = []
+    for template in templates:
+        css = str((template or {}).get("css_content") or "").strip()
+        if css:
+            css_parts.append(css)
+    if not css_parts:
+        return ""
+    return "<style>\n" + "\n\n".join(css_parts) + "\n</style>"
 
 
 def _quote_tool_block(ctx):
@@ -627,6 +985,9 @@ def _design_block(ctx):
     preset = ctx.get("style_preset") or ""
     primary = ctx.get("color_primary") or ""
     accent = ctx.get("color_accent") or ""
+    secondary = ctx.get("color_secondary") or ""
+    text_color = ctx.get("color_text") or ""
+    background_color = ctx.get("color_background") or ""
     dark = ctx.get("color_dark") or ""
     light = ctx.get("color_light") or ""
     font_h = ctx.get("font_heading") or ""
@@ -634,11 +995,17 @@ def _design_block(ctx):
     color_palette = ctx.get("color_palette") or ""
     font_pair = ctx.get("font_pair") or ""
     layout_style = ctx.get("layout_style") or ""
+    theme_block = _builder_theme_block(ctx)
+    reference_block = _reference_site_block(ctx)
 
-    if not any([preset, primary, font_h, color_palette, font_pair, layout_style]):
+    if not any([preset, primary, secondary, text_color, background_color, font_h, color_palette, font_pair, layout_style, theme_block, reference_block]):
         return ""
 
     parts.append("DESIGN GUIDELINES (apply CSS classes and inline styles to match):")
+    if reference_block:
+        parts.append(reference_block.rstrip())
+    if theme_block:
+        parts.append(theme_block.rstrip())
 
     # High-level palette
     palette_desc = {
@@ -687,8 +1054,14 @@ def _design_block(ctx):
 
     if primary:
         parts.append(f"- Primary brand color: {primary}")
+    if secondary:
+        parts.append(f"- Secondary brand color: {secondary}")
     if accent:
         parts.append(f"- Accent color: {accent}")
+    if text_color:
+        parts.append(f"- Preferred text color: {text_color}")
+    if background_color:
+        parts.append(f"- Preferred background color: {background_color}")
     if dark:
         parts.append(f"- Dark color: {dark}")
     if light:
@@ -723,7 +1096,11 @@ def build_page_prompt(page_spec, brand_ctx):
     """
     ptype = page_spec["page_type"]
     builder = _PROMPT_BUILDERS.get(ptype, _prompt_generic)
-    return builder(page_spec, brand_ctx)
+    system_msg, user_msg = builder(page_spec, brand_ctx)
+    template_block = _template_library_block(page_spec, brand_ctx)
+    if template_block:
+        user_msg = f"{user_msg}\n\n{template_block.rstrip()}"
+    return _apply_prompt_overrides(system_msg, user_msg, page_spec, brand_ctx)
 
 
 def _system_msg():
@@ -1495,7 +1872,35 @@ def assemble_page(page_spec, brand_ctx, content):
     )
 
     body_html = content.get("content") or ""
-    full_html = f"{body_html}\n\n<!-- Schema Markup -->\n{schema_html}" if schema_html else body_html
+    page_type = page_spec.get("page_type") or ""
+    theme_style = _theme_style_tag(brand_ctx)
+    template_style = ""
+    header_html = ""
+    footer_html = ""
+    if page_type != "landing_page":
+        templates = brand_ctx.get("builder_templates") or []
+        header_template = _select_builder_template(templates, page_type, "navigation", "nav", "header")
+        footer_template = _select_builder_template(templates, page_type, "footer")
+        template_style = _template_style_tag(header_template, footer_template)
+        if header_template:
+            header_html = _render_builder_template_html(header_template, page_spec, brand_ctx, content)
+        if footer_template:
+            footer_html = _render_builder_template_html(footer_template, page_spec, brand_ctx, content)
+
+    parts = []
+    if theme_style:
+        parts.append(theme_style)
+    if template_style:
+        parts.append(template_style)
+    if header_html:
+        parts.append(header_html)
+    if body_html:
+        parts.append(body_html)
+    if footer_html:
+        parts.append(footer_html)
+    if schema_html:
+        parts.append(f"<!-- Schema Markup -->\n{schema_html}")
+    full_html = "\n\n".join(part for part in parts if part)
 
     return {
         "page_spec": page_spec,

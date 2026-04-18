@@ -786,6 +786,14 @@ class SiteBuilderIntakeWizardTests(unittest.TestCase):
         self.assertIn(b"Ace Plumbing", resp.data)
         self.assertIn(b"plumbing", resp.data)
 
+    def test_landing_shows_reference_site_controls(self):
+        _login_client(self.client, self.app)
+        resp = self.client.get("/client/site-builder")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"reference_url", resp.data)
+        self.assertIn(b"reference_mode", resp.data)
+        self.assertIn(b"Reference Website Style", resp.data)
+
     def test_landing_shows_content_goal_chips(self):
         _login_client(self.client, self.app)
         resp = self.client.get("/client/site-builder")
@@ -986,6 +994,60 @@ class SiteBuilderGenerateWithIntakeTests(unittest.TestCase):
 
     @patch("webapp.client_portal._get_openai_api_key", return_value="test-key")
     @patch("webapp.client_portal._pick_ai_model", return_value="gpt-4o-mini")
+    @patch("webapp.client_portal._site_builder_reference_style_brief")
+    def test_generate_stores_reference_site_brief(self, mock_reference_brief, mock_model, mock_key):
+        _login_client(self.client, self.app)
+        mock_reference_brief.return_value = {
+            "resolved_url": "https://example.com",
+            "mode": "layout",
+            "layout_style_hint": "modern-sections",
+            "style_preset_hint": "clean-minimal",
+            "nav_items": ["Home", "Services", "Contact"],
+        }
+
+        fake_content = {
+            "title": "Test Page",
+            "content": "<p>Generated content</p>",
+            "excerpt": "Test excerpt",
+            "seo_title": "Test SEO Title",
+            "seo_description": "Test description",
+            "primary_keyword": "test keyword",
+            "secondary_keywords": "kw1, kw2",
+            "faq_items": [],
+        }
+        fake_assembled = {
+            "schemas": [],
+            "schema_html": "",
+            "full_html": "<p>Full HTML</p>",
+        }
+
+        with patch("webapp.site_builder.generate_page_content", return_value=fake_content), \
+             patch("webapp.site_builder.assemble_page", return_value=fake_assembled):
+
+            resp = self.client.post(
+                "/client/site-builder/generate",
+                data={
+                    "services": "Drain Cleaning",
+                    "areas": "Springfield",
+                    "reference_url": "https://example.com",
+                    "reference_mode": "layout",
+                },
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["ok"])
+
+        build = self.app.db.get_site_build(data["build_id"])
+        intake = build.get("intake") or {}
+        self.assertEqual(intake["reference_url"], "https://example.com")
+        self.assertEqual(intake["reference_mode"], "layout")
+        self.assertEqual(intake["reference_site_brief"]["layout_style_hint"], "modern-sections")
+        mock_reference_brief.assert_called_once_with("https://example.com", "layout")
+
+    @patch("webapp.client_portal._get_openai_api_key", return_value="test-key")
+    @patch("webapp.client_portal._pick_ai_model", return_value="gpt-4o-mini")
     def test_generate_with_landing_pages(self, mock_model, mock_key):
         brand_id, _ = _login_client(self.client, self.app)
 
@@ -1066,6 +1128,77 @@ class SiteBuilderGenerateWithIntakeTests(unittest.TestCase):
         self.assertTrue(data["ok"])
         # home + services + contact + 1 service detail + 0 areas (filtered) = 4
         self.assertEqual(data["pages_generated"], 4)
+
+    @patch("webapp.client_portal._get_openai_api_key", return_value="test-key")
+    @patch("webapp.client_portal._pick_ai_model", return_value="gpt-4o-mini")
+    def test_generate_snapshots_builder_library_assets(self, mock_model, mock_key):
+        brand_id, _ = _login_client(self.client, self.app)
+        db = self.app.db
+
+        db.create_sb_theme({
+            "name": "Service Blue",
+            "primary_color": "#123456",
+            "secondary_color": "#345678",
+            "accent_color": "#ff6600",
+            "font_heading": "Oswald",
+            "font_body": "Lato",
+            "layout_style": "modern-sections",
+            "is_default": 1,
+            "is_active": 1,
+        })
+        db.create_sb_template({
+            "name": "Main Header",
+            "category": "header",
+            "page_types": "all",
+            "html_content": "<header>{{business_name}}</header>",
+            "description": "Shared navigation shell",
+            "sort_order": 1,
+            "is_active": 1,
+        })
+        db.save_sb_prompt_override(
+            "home",
+            "user_prompt",
+            "Lead with financing if the business offers it.",
+            updated_by="tests",
+        )
+
+        fake_content = {
+            "title": "Test Page",
+            "content": "<p>Generated content</p>",
+            "excerpt": "Test excerpt",
+            "seo_title": "Test SEO Title",
+            "seo_description": "Test description",
+            "primary_keyword": "test keyword",
+            "secondary_keywords": "kw1, kw2",
+            "faq_items": [],
+        }
+        fake_assembled = {
+            "schemas": [],
+            "schema_html": "",
+            "full_html": "<p>Full HTML</p>",
+        }
+
+        with patch("webapp.site_builder.generate_page_content", return_value=fake_content), \
+             patch("webapp.site_builder.assemble_page", return_value=fake_assembled):
+
+            resp = self.client.post(
+                "/client/site-builder/generate",
+                data={"services": "Drain Cleaning", "areas": "Springfield"},
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["ok"])
+
+        build = self.app.db.get_site_build(data["build_id"])
+        intake = build.get("intake") or {}
+        self.assertEqual(intake["builder_theme"]["name"], "Service Blue")
+        self.assertEqual(intake["builder_theme"]["primary_color"], "#123456")
+        self.assertEqual(len(intake["builder_templates"]), 1)
+        self.assertEqual(intake["builder_templates"][0]["name"], "Main Header")
+        self.assertEqual(len(intake["builder_prompt_overrides"]), 1)
+        self.assertEqual(intake["builder_prompt_overrides"][0]["page_type"], "home")
 
 
 if __name__ == "__main__":

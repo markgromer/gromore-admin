@@ -2620,6 +2620,32 @@
             <p class="intake-desc">Set the visual direction for your site. The AI uses these tokens to shape every page's look and feel.</p>
 
             <div class="row g-3">
+                <div class="col-12">
+                    <div class="sb-card mb-0" style="background:linear-gradient(135deg, rgba(99,102,241,.06), rgba(14,165,233,.08)); border-style:dashed;">
+                        <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+                            <div>
+                                <label class="form-label fw-semibold mb-1" style="font-size:.85rem;">Reference Website Style</label>
+                                <div class="form-hint" style="margin-top:0; max-width:680px;">
+                                    Paste a site you like and the builder will pull structure and vibe cues from it while keeping your own brand colors, tone, offers, and content. This is inspiration mode, not literal copying.
+                                </div>
+                            </div>
+                            <span class="page-type-chip"><i class="bi bi-magic"></i>Inspiration URL</span>
+                        </div>
+                        <div class="row g-3 mt-1">
+                            <div class="col-md-8">
+                                <input type="text" name="reference_url" class="form-control" placeholder="https://example.com" style="border-radius:10px; font-size:.88rem;">
+                            </div>
+                            <div class="col-md-4">
+                                <select name="reference_mode" class="form-select" style="border-radius:10px; font-size:.88rem;">
+                                    <option value="vibe" selected>Match vibe only</option>
+                                    <option value="layout">Match layout closely</option>
+                                    <option value="sections">Borrow section patterns</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-hint">Best use: copy the layout language, section order, CTA rhythm, and design feel. Do not expect copied copy, images, or code.</div>
+                    </div>
+                </div>
                 <div class="col-md-6">
                     <label class="form-label fw-semibold" style="font-size:.85rem;">Color Palette</label>
                     <select name="color_palette" class="form-select" style="border-radius:10px; font-size:.88rem;">
