@@ -219,6 +219,14 @@
                 <span class="nav-icon"><i class="bi bi-phone"></i></span>
                 OpenPhone / Quo
             </a>
+            <a href="#crm-sng" class="{{ 'active' if active_topic == 'crm-sng' }}">
+                <span class="nav-icon"><i class="bi bi-recycle"></i></span>
+                Sweep and Go CRM
+            </a>
+            <a href="#crm-ghl" class="{{ 'active' if active_topic == 'crm-ghl' }}">
+                <span class="nav-icon"><i class="bi bi-lightning-charge"></i></span>
+                GoHighLevel CRM
+            </a>
             <a href="#wordpress" class="{{ 'active' if active_topic == 'wordpress' }}">
                 <span class="nav-icon"><i class="bi bi-wordpress"></i></span>
                 WordPress
@@ -345,7 +353,12 @@
                     <tr>
                         <td><i class="bi bi-people me-1 text-secondary"></i> <strong>CRM (Sweep and Go)</strong></td>
                         <td>API token + org slug</td>
-                        <td>Pull client and revenue data from your CRM. Enables revenue-based reporting and ROI calculations. Currently supports Sweep and Go. Enter your API token and organization slug on the Connections page.</td>
+                        <td>Pull client and revenue data from your CRM. Enables revenue-based reporting and ROI calculations. Currently supports Sweep and Go. Enter your API token and organization slug on the Connections page. <a href="#crm-sng">Full setup guide below.</a></td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-lightning-charge me-1 text-warning"></i> <strong>CRM (GoHighLevel)</strong></td>
+                        <td>API key or PIT + location ID</td>
+                        <td>Connect your GoHighLevel sub-account so the platform can read pipeline activity and push leads into the right workflow. Add your key, location ID, and optional pipeline on the Connections page. <a href="#crm-ghl">Full setup guide below.</a></td>
                     </tr>
                 </tbody>
             </table>
@@ -800,6 +813,69 @@
             <p>Once connected, SMS can feed directly into Warren's lead qualification, quoting, and follow-up flow instead of forcing your team to bounce between tools.</p>
 
             <a href="https://www.quo.com/docs/api-reference/introduction" target="_blank" rel="noopener" class="ext-link">Quo API docs <i class="bi bi-box-arrow-up-right"></i></a>
+        </div>
+
+        <div class="help-topic" id="crm-sng">
+            <h4><i class="bi bi-recycle text-success"></i> Sweep and Go CRM</h4>
+            <p class="topic-desc">Connect Sweep and Go so the dashboard can read client, invoice, and subscription data and so Warren can react to live CRM events.</p>
+
+            <h5>What You Need</h5>
+            <ul>
+                <li>Your Sweep and Go API token</li>
+                <li>Your organization slug from the Employee Portal URL</li>
+                <li>The webhook URL shown on the Connections page if you want real-time events</li>
+            </ul>
+
+            <h5>Finding Your API Token</h5>
+            <ol>
+                <li>Log into the Sweep and Go Employee Portal</li>
+                <li>Open <strong>Settings &gt; Open API</strong></li>
+                <li>Create or copy an active token</li>
+                <li>Paste it into the Sweep and Go panel on the <a href="{{ url_for('client.client_settings') }}">Connections</a> page</li>
+            </ol>
+
+            <h5>Finding Your Organization Slug</h5>
+            <p>Your organization slug is the branded part of your portal URL. Example: if your address is <strong>https://scoop-doggy-logs-1fful.sweepandgo.com</strong>, the slug is <strong>scoop-doggy-logs-1fful</strong>.</p>
+
+            <h5>Webhook Setup</h5>
+            <ol>
+                <li>Copy the Sweep and Go webhook URL from the Connections page</li>
+                <li>Create a webhook inside Sweep and Go</li>
+                <li>Subscribe to billing and subscription events such as payment accepted, payment declined, invoice finalized, and subscription status changes</li>
+                <li>Save and then trigger a small test event if your CRM allows it</li>
+            </ol>
+
+            <div class="step-callout">
+                <strong>Why it matters:</strong> This connection unlocks revenue reporting, client sync, and Warren follow-up flows based on real billing events instead of guesses.
+            </div>
+        </div>
+
+        <div class="help-topic" id="crm-ghl">
+            <h4><i class="bi bi-lightning-charge text-warning"></i> GoHighLevel CRM</h4>
+            <p class="topic-desc">Connect a GoHighLevel sub-account so the platform can read pipeline data and push new leads into the right location.</p>
+
+            <h5>What You Need</h5>
+            <ul>
+                <li>An API key or private integration token from the target sub-account</li>
+                <li>The GoHighLevel location ID for that sub-account</li>
+                <li>An optional pipeline ID if you want leads pushed into a specific pipeline</li>
+            </ul>
+
+            <h5>Getting The Credentials</h5>
+            <ol>
+                <li>Log into GoHighLevel and switch into the correct sub-account</li>
+                <li>Open the area where your API key or private integration token is managed</li>
+                <li>Copy the token and keep it secure</li>
+                <li>Copy the location ID for the same account</li>
+                <li>Paste both values into the GoHighLevel panel on the <a href="{{ url_for('client.client_settings') }}">Connections</a> page</li>
+            </ol>
+
+            <h5>Pipeline Targeting</h5>
+            <p>If you leave the pipeline blank, the system will usually default to the first available pipeline. Add the pipeline ID when you want every pushed lead to land in a specific sales flow.</p>
+
+            <div class="warning-box">
+                <i class="bi bi-exclamation-triangle me-1"></i> <strong>Keep the token scoped correctly:</strong> If your token points at the wrong sub-account, the test may pass but the data and lead pushes will go to the wrong place.
+            </div>
         </div>
 
         <!-- WordPress -->

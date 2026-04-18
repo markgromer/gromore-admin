@@ -6522,6 +6522,27 @@ def client_settings():
     except Exception:
         chatbot_channels = set()
 
+    def _brand_has_value(field_name):
+        return bool((brand.get(field_name) or "").strip())
+
+    warren_channel_readiness = {
+        "sms": (
+            _brand_has_value("quo_api_key")
+            and _brand_has_value("quo_phone_number")
+            and _brand_has_value("sales_bot_quo_webhook_secret")
+        ),
+        "lead_forms": _brand_has_value("sales_bot_incoming_webhook_secret"),
+        "messenger": bool(meta_conn.get("status") == "connected" and _brand_has_value("facebook_page_id")),
+    }
+    warren_ready_count = sum(1 for is_ready in warren_channel_readiness.values() if is_ready)
+    warren_total_count = len(warren_channel_readiness)
+    if warren_ready_count == warren_total_count and warren_total_count:
+        warren_status_state = "ready"
+    elif warren_ready_count:
+        warren_status_state = "partial"
+    else:
+        warren_status_state = "not_configured"
+
     try:
         sng_secret = db.ensure_brand_sng_webhook_secret(brand_id)
         sng_webhook_url = f"{_external_app_url()}{url_for('webhooks.sng_webhook', brand_slug=brand['slug'], secret=sng_secret)}"
@@ -6542,8 +6563,13 @@ def client_settings():
             google_connected=(google_conn.get("status") == "connected"),
             meta_connected=(meta_conn.get("status") == "connected"),
             drive_scoped=drive_scoped,
+            chatbot_channels=chatbot_channels,
             google_conn=google_conn,
             meta_conn=meta_conn,
+            warren_channel_readiness=warren_channel_readiness,
+            warren_ready_count=warren_ready_count,
+            warren_total_count=warren_total_count,
+            warren_status_state=warren_status_state,
             sng_webhook_url=sng_webhook_url,
             sng_webhook_events=sng_webhook_events,
             brand_name=session.get("client_brand_name", brand.get("display_name", "")),

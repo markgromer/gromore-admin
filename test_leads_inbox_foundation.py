@@ -407,6 +407,29 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
             brand = self.app.db.get_brand(self.brand_id)
             self.assertTrue((brand.get("sales_bot_sng_webhook_secret") or "").strip())
 
+    def test_settings_page_shows_partial_warren_status_when_only_one_channel_is_ready(self):
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(
+                self.brand_id,
+                "sales_bot_incoming_webhook_secret",
+                "incoming-secret",
+            )
+
+        response = self.client.get("/client/settings")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"1 of 3 ready", response.data)
+
+    def test_connections_and_help_pages_include_crm_setup_guides(self):
+        response = self.client.get("/client/settings")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"#crm-sng", response.data)
+        self.assertIn(b"#crm-ghl", response.data)
+
+        help_response = self.client.get("/client/help?guide=connections")
+        self.assertEqual(help_response.status_code, 200)
+        self.assertIn(b"Sweep and Go CRM", help_response.data)
+        self.assertIn(b"GoHighLevel CRM", help_response.data)
+
     def test_automations_page_shows_appointment_reminder_reports(self):
         with self.app.app_context():
             self.app.db.record_appointment_reminder_run(

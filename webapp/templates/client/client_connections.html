@@ -67,6 +67,7 @@
     background: #ffffff;
     box-shadow: 0 20px 45px rgba(15, 23, 42, 0.07);
     overflow: hidden;
+    scroll-margin-top: 88px;
 }
 .connection-workspace-header {
     padding: 18px 22px;
@@ -76,9 +77,11 @@
 .connection-panel {
     display: none;
     padding: 22px;
+    scroll-margin-top: 104px;
 }
 .connection-panel.active {
     display: block;
+    animation: connectionPanelIn .22s ease;
 }
 .connection-panel-shell {
     border-radius: 18px;
@@ -100,12 +103,53 @@
     color: #475569;
     font-size: .84rem;
 }
+.connection-workspace-current {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: #ecfeff;
+    color: #115e59;
+    font-size: .82rem;
+    font-weight: 700;
+}
+.connection-panel-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+}
+.connection-readiness-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+.connection-readiness-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #f8fafc;
+    padding: 14px;
+}
+@keyframes connectionPanelIn {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 @media (max-width: 767px) {
     .connection-panel {
         padding: 16px;
     }
     .connection-panel-shell .card-body {
         padding: 18px;
+    }
+    .connection-workspace-header {
+        align-items: flex-start !important;
     }
 }
 </style>
@@ -126,7 +170,7 @@
 </div>
 
 <div class="connection-summary-grid">
-    <button type="button" class="connection-summary-card" data-panel-target="google">
+    <button type="button" class="connection-summary-card" data-panel-target="google" data-panel-label="Google" data-help-href="{{ url_for('client.client_help', guide='connections') }}#google-ads">
         <span class="connection-summary-icon" style="background:linear-gradient(135deg,#2563eb,#60a5fa);"><i class="bi bi-google"></i></span>
         <div class="connection-summary-label">
             <strong>Google</strong>
@@ -136,7 +180,7 @@
         <div class="connection-summary-power">Powers: reports, search data, ad account access</div>
     </button>
 
-    <button type="button" class="connection-summary-card" data-panel-target="meta">
+    <button type="button" class="connection-summary-card" data-panel-target="meta" data-panel-label="Meta" data-help-href="{{ url_for('client.client_help', guide='connections') }}#facebook-ads">
         <span class="connection-summary-icon" style="background:linear-gradient(135deg,#0369a1,#0ea5e9);"><i class="bi bi-meta"></i></span>
         <div class="connection-summary-label">
             <strong>Meta</strong>
@@ -146,7 +190,7 @@
         <div class="connection-summary-power">Powers: Meta ads, page-linked workflows</div>
     </button>
 
-    <button type="button" class="connection-summary-card" data-panel-target="drive">
+    <button type="button" class="connection-summary-card" data-panel-target="drive" data-panel-label="Drive Sync" data-help-href="{{ url_for('client.client_help', guide='connections') }}#google-drive">
         <span class="connection-summary-icon" style="background:linear-gradient(135deg,#15803d,#4ade80);"><i class="bi bi-cloud-arrow-up"></i></span>
         <div class="connection-summary-label">
             <strong>Drive Sync</strong>
@@ -156,7 +200,7 @@
         <div class="connection-summary-power">Powers: exports, sheets, file delivery</div>
     </button>
 
-    <button type="button" class="connection-summary-card" data-panel-target="sng">
+    <button type="button" class="connection-summary-card" data-panel-target="sng" data-panel-label="Sweep and Go" data-help-href="{{ url_for('client.client_help', guide='connections') }}#crm-sng">
         <span class="connection-summary-icon" style="background:linear-gradient(135deg,#059669,#10b981);"><i class="bi bi-recycle"></i></span>
         <div class="connection-summary-label">
             <strong>Sweep and Go</strong>
@@ -166,7 +210,7 @@
         <div class="connection-summary-power">Powers: client sync, revenue, inbound CRM events</div>
     </button>
 
-    <button type="button" class="connection-summary-card" data-panel-target="ghl">
+    <button type="button" class="connection-summary-card" data-panel-target="ghl" data-panel-label="GoHighLevel" data-help-href="{{ url_for('client.client_help', guide='connections') }}#crm-ghl">
         <span class="connection-summary-icon" style="background:linear-gradient(135deg,#f97316,#fb923c);"><i class="bi bi-lightning-charge-fill"></i></span>
         <div class="connection-summary-label">
             <strong>GoHighLevel</strong>
@@ -176,7 +220,7 @@
         <div class="connection-summary-power">Powers: pipeline sync, lead push</div>
     </button>
 
-    <button type="button" class="connection-summary-card" data-panel-target="wordpress">
+    <button type="button" class="connection-summary-card" data-panel-target="wordpress" data-panel-label="WordPress" data-help-href="{{ url_for('client.client_help', guide='connections') }}#wordpress">
         <span class="connection-summary-icon" style="background:linear-gradient(135deg,#0f172a,#475569);"><i class="bi bi-wordpress"></i></span>
         <div class="connection-summary-label">
             <strong>WordPress</strong>
@@ -186,7 +230,7 @@
         <div class="connection-summary-power">Powers: publishing, blog workflow</div>
     </button>
 
-    <button type="button" class="connection-summary-card" data-panel-target="ai">
+    <button type="button" class="connection-summary-card" data-panel-target="ai" data-panel-label="AI" data-help-href="{{ url_for('client.client_help', guide='connections') }}#openai">
         <span class="connection-summary-icon" style="background:linear-gradient(135deg,#4338ca,#818cf8);"><i class="bi bi-cpu"></i></span>
         <div class="connection-summary-label">
             <strong>AI</strong>
@@ -196,24 +240,28 @@
         <div class="connection-summary-power">Powers: AI chat, content, workflows</div>
     </button>
 
-    <button type="button" class="connection-summary-card" data-panel-target="warren">
+    <button type="button" class="connection-summary-card" data-panel-target="warren" data-panel-label="Warren Channels" data-help-href="{{ url_for('client.client_help', guide='warren') }}">
         <span class="connection-summary-icon" style="background:linear-gradient(135deg,#0f766e,#14b8a6);"><i class="bi bi-chat-dots"></i></span>
         <div class="connection-summary-label">
             <strong>Warren Channels</strong>
-            {% if brand.quo_api_key or brand.sales_bot_incoming_webhook_secret or brand.facebook_page_id %}<span class="badge bg-success">Configured</span>{% else %}<span class="badge bg-secondary">Not configured</span>{% endif %}
+            {% if warren_status_state == 'ready' %}<span class="badge bg-success">All {{ warren_total_count }} ready</span>{% elif warren_status_state == 'partial' %}<span class="badge bg-warning text-dark">{{ warren_ready_count }} of {{ warren_total_count }} ready</span>{% else %}<span class="badge bg-secondary">Not configured</span>{% endif %}
         </div>
         <div class="connection-summary-meta">OpenPhone, inbound webhooks, and callback URLs that let Warren receive messages and leads from outside systems.</div>
         <div class="connection-summary-power">Powers: SMS, webhooks, inbound lead intake</div>
     </button>
 </div>
 
-<div class="connection-workspace">
+<div class="connection-workspace" id="connectionWorkspace">
     <div class="connection-workspace-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div>
             <div class="fw-semibold">Connection Workspace</div>
             <div class="text-muted" style="font-size:.85rem;">Open one connection at a time so the page stays readable and focused.</div>
         </div>
-        <div class="text-muted" style="font-size:.8rem;">Your last-opened panel stays selected on reload.</div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="connection-workspace-current" id="connectionWorkspaceCurrent"><i class="bi bi-arrow-down-right-circle"></i><span>Google</span></span>
+            <a href="{{ url_for('client.client_help', guide='connections') }}#google-ads" class="btn btn-outline-secondary btn-sm" id="connectionWorkspaceHelpLink"><i class="bi bi-question-circle me-1"></i> Open guide</a>
+            <div class="text-muted" style="font-size:.8rem;">Your last-opened panel stays selected on reload.</div>
+        </div>
     </div>
     <div class="d-none px-3 pt-3" id="connectionWorkspaceFallback"></div>
 
@@ -249,6 +297,11 @@
                     <p class="text-muted mt-2 mb-0" style="font-size:.85rem;">Sign in with your Google account to connect Analytics, Search Console, and Google Ads.</p>
                 </div>
                 {% endif %}
+                <div class="connection-panel-actions">
+                    <a href="{{ url_for('client.client_help', guide='connections') }}#google-ads" class="btn btn-outline-secondary btn-sm"><i class="bi bi-question-circle me-1"></i>Google Ads guide</a>
+                    <a href="{{ url_for('client.client_help', guide='connections') }}#ga4" class="btn btn-outline-secondary btn-sm"><i class="bi bi-question-circle me-1"></i>GA4 guide</a>
+                    <a href="{{ url_for('client.client_help', guide='connections') }}#search-console" class="btn btn-outline-secondary btn-sm"><i class="bi bi-question-circle me-1"></i>Search Console guide</a>
+                </div>
             </div>
         </div>
 
@@ -308,6 +361,10 @@
                     <p class="text-muted mt-2 mb-0" style="font-size:.85rem;">Sign in with Facebook to connect your ad accounts for Facebook and Instagram.</p>
                 </div>
                 {% endif %}
+                <div class="connection-panel-actions">
+                    <a href="{{ url_for('client.client_help', guide='connections') }}#facebook-ads" class="btn btn-outline-secondary btn-sm"><i class="bi bi-question-circle me-1"></i>Meta ads guide</a>
+                    <a href="{{ url_for('client.client_help', guide='connections') }}#conversion-tracking" class="btn btn-outline-secondary btn-sm"><i class="bi bi-question-circle me-1"></i>Conversion tracking</a>
+                </div>
             </div>
         </div>
     </section>
@@ -354,6 +411,9 @@
                         {% if google_connected %}<a href="{{ url_for('client_google_oauth.connect') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat me-1"></i>Reconnect Google With Drive Access</a>{% endif %}
                     </div>
                 </form>
+                <div class="connection-panel-actions">
+                    <a href="{{ url_for('client.client_help', guide='connections') }}#google-drive" class="btn btn-outline-secondary btn-sm"><i class="bi bi-question-circle me-1"></i>Drive sync guide</a>
+                </div>
             </div>
         </div>
     </section>
@@ -434,6 +494,9 @@
                         </div>
                     </div>
                 </div>
+                <div class="connection-panel-actions">
+                    <a href="{{ url_for('client.client_help', guide='connections') }}#crm-sng" class="btn btn-outline-secondary btn-sm"><i class="bi bi-question-circle me-1"></i>Sweep and Go guide</a>
+                </div>
             </div>
         </div>
     </section>
@@ -477,6 +540,9 @@
                     </div>
                 </form>
                 <div id="ghlTestResult" class="mt-2" style="display:none;"></div>
+                <div class="connection-panel-actions">
+                    <a href="{{ url_for('client.client_help', guide='connections') }}#crm-ghl" class="btn btn-outline-secondary btn-sm"><i class="bi bi-question-circle me-1"></i>GoHighLevel guide</a>
+                </div>
             </div>
         </div>
     </section>
@@ -517,6 +583,9 @@
                     </div>
                 </form>
                 <div id="wpTestResult" class="mt-2" style="display:none;"></div>
+                <div class="connection-panel-actions">
+                    <a href="{{ url_for('client.client_help', guide='connections') }}#wordpress" class="btn btn-outline-secondary btn-sm"><i class="bi bi-question-circle me-1"></i>WordPress guide</a>
+                </div>
             </div>
         </div>
     </section>
@@ -559,6 +628,9 @@
                         <span class="text-muted" style="font-size:.85rem;">Your key is stored on this brand record and is not exposed back in full.</span>
                     </div>
                 </form>
+                <div class="connection-panel-actions">
+                    <a href="{{ url_for('client.client_help', guide='connections') }}#openai" class="btn btn-outline-secondary btn-sm"><i class="bi bi-question-circle me-1"></i>OpenAI setup guide</a>
+                </div>
             </div>
         </div>
     </section>
@@ -575,6 +647,41 @@
                 </div>
 
                 <div class="connection-panel-note mt-3">Use this panel for channel credentials, webhook URLs, and callback wiring. Use Automations for what Warren should actually send.</div>
+
+                <div class="connection-readiness-grid mt-3">
+                    <div class="connection-readiness-card">
+                        <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                            <strong style="font-size:.88rem;">SMS</strong>
+                            {% if warren_channel_readiness.sms %}<span class="badge bg-success">Ready</span>{% else %}<span class="badge bg-secondary">Needs setup</span>{% endif %}
+                        </div>
+                        <div class="text-muted" style="font-size:.8rem;">Requires your Quo API key, the sending number, and the SMS webhook secret.</div>
+                    </div>
+                    <div class="connection-readiness-card">
+                        <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                            <strong style="font-size:.88rem;">Lead webhooks</strong>
+                            {% if warren_channel_readiness.lead_forms %}<span class="badge bg-success">Ready</span>{% else %}<span class="badge bg-secondary">Needs setup</span>{% endif %}
+                        </div>
+                        <div class="text-muted" style="font-size:.8rem;">Requires the generic incoming lead webhook secret for forms, Zapier, and Make posts.</div>
+                    </div>
+                    <div class="connection-readiness-card">
+                        <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                            <strong style="font-size:.88rem;">Messenger</strong>
+                            {% if warren_channel_readiness.messenger %}<span class="badge bg-success">Ready</span>{% else %}<span class="badge bg-secondary">Needs setup</span>{% endif %}
+                        </div>
+                        <div class="text-muted" style="font-size:.8rem;">Requires a connected Meta account plus the correct Facebook page reference.</div>
+                    </div>
+                </div>
+
+                {% if chatbot_channels %}
+                <div class="mt-3 p-3" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+                    <div class="fw-semibold mb-2" style="font-size:.88rem;">Channels currently enabled in Automations</div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        {% for channel in chatbot_channels|sort %}
+                        <span class="badge rounded-pill text-bg-light border px-3 py-2">{{ channel.replace('_', ' ')|title }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
 
                 <form method="POST" action="{{ url_for('client.client_save_warren_channels_settings') }}" class="mt-3">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -680,6 +787,8 @@
                     <div class="mt-3 d-flex gap-2 flex-wrap">
                         <button class="btn btn-primary" type="submit">Save Warren Channel Settings</button>
                         <a href="{{ url_for('client.client_automations') }}" class="btn btn-outline-dark">Open Message Rules</a>
+                        <a href="{{ url_for('client.client_help', guide='connections') }}#openphone-quo" class="btn btn-outline-secondary">OpenPhone / Quo guide</a>
+                        <a href="{{ url_for('client.client_help', guide='warren') }}" class="btn btn-outline-secondary">Warren guide</a>
                     </div>
                 </form>
             </div>
@@ -687,157 +796,216 @@
     </section>
 </div>
 
+{% endblock %}
+
+{% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    var csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
-    var csrfToken = csrfTokenMeta ? csrfTokenMeta.getAttribute('content') : '';
-    var connectionButtons = Array.from(document.querySelectorAll('[data-panel-target]'));
-    var connectionPanels = Array.from(document.querySelectorAll('[data-panel]'));
-    var fallbackNotice = document.getElementById('connectionWorkspaceFallback');
-
-    connectionButtons.forEach(function(button) {
-        var panelKey = button.getAttribute('data-panel-target');
-        button.setAttribute('aria-controls', 'connection-panel-' + panelKey);
-        button.setAttribute('aria-expanded', 'false');
-    });
-
-    function showWorkspaceFallback(message) {
-        if (!fallbackNotice) return;
-        fallbackNotice.classList.remove('d-none');
-        fallbackNotice.innerHTML = '<div class="alert alert-warning mb-0" style="font-size:.84rem;">' + message + '</div>';
-    }
-
-    function activatePanel(panelKey) {
-        var hasMatch = false;
-        connectionButtons.forEach(function(button) {
-            var isActive = button.getAttribute('data-panel-target') === panelKey;
-            button.classList.toggle('active', isActive);
-            button.setAttribute('aria-expanded', isActive ? 'true' : 'false');
-        });
-        connectionPanels.forEach(function(panel) {
-            var isActive = panel.getAttribute('data-panel') === panelKey;
-            panel.classList.toggle('active', isActive);
-            if (isActive) {
-                hasMatch = true;
-            }
-        });
-        if (!hasMatch) {
-            showWorkspaceFallback('That connection panel could not be opened. Reload the page and try again.');
+(function() {
+    function initClientConnectionsPage() {
+        var workspace = document.getElementById('connectionWorkspace');
+        if (!workspace || workspace.dataset.initialized === '1') {
             return;
         }
-        if (fallbackNotice) {
-            fallbackNotice.classList.add('d-none');
-            fallbackNotice.innerHTML = '';
+        workspace.dataset.initialized = '1';
+
+        var csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
+        var csrfToken = csrfTokenMeta ? csrfTokenMeta.getAttribute('content') : '';
+        var connectionButtons = Array.from(document.querySelectorAll('[data-panel-target]'));
+        var connectionPanels = Array.from(document.querySelectorAll('[data-panel]'));
+        var fallbackNotice = document.getElementById('connectionWorkspaceFallback');
+        var currentLabel = document.getElementById('connectionWorkspaceCurrent');
+        var helpLink = document.getElementById('connectionWorkspaceHelpLink');
+
+        if (!connectionButtons.length || !connectionPanels.length) {
+            return;
         }
+
+        connectionButtons.forEach(function(button) {
+            var panelKey = button.getAttribute('data-panel-target');
+            button.setAttribute('aria-controls', 'connection-panel-' + panelKey);
+            button.setAttribute('aria-expanded', 'false');
+        });
+
+        function updateWorkspaceMeta(activeButton) {
+            if (!activeButton) {
+                return;
+            }
+            if (currentLabel) {
+                currentLabel.innerHTML = '<i class="bi bi-arrow-down-right-circle"></i><span>' + (activeButton.getAttribute('data-panel-label') || activeButton.textContent.trim()) + '</span>';
+            }
+            if (helpLink) {
+                var helpHref = activeButton.getAttribute('data-help-href') || '';
+                helpLink.href = helpHref || '{{ url_for("client.client_help", guide="connections") }}';
+                helpLink.classList.toggle('d-none', !helpHref);
+            }
+        }
+
+        function scrollWorkspaceIntoView() {
+            var targetTop = workspace.getBoundingClientRect().top + window.scrollY - 86;
+            window.scrollTo({top: Math.max(0, targetTop), behavior: 'smooth'});
+        }
+
+        function showWorkspaceFallback(message) {
+            if (!fallbackNotice) {
+                return;
+            }
+            fallbackNotice.classList.remove('d-none');
+            fallbackNotice.innerHTML = '<div class="alert alert-warning mb-0" style="font-size:.84rem;">' + message + '</div>';
+        }
+
+        function activatePanel(panelKey, options) {
+            options = options || {};
+            var hasMatch = false;
+            var activeButton = null;
+
+            connectionButtons.forEach(function(button) {
+                var isActive = button.getAttribute('data-panel-target') === panelKey;
+                button.classList.toggle('active', isActive);
+                button.setAttribute('aria-expanded', isActive ? 'true' : 'false');
+                if (isActive) {
+                    activeButton = button;
+                }
+            });
+
+            connectionPanels.forEach(function(panel) {
+                var isActive = panel.getAttribute('data-panel') === panelKey;
+                panel.classList.toggle('active', isActive);
+                if (isActive) {
+                    hasMatch = true;
+                }
+            });
+
+            if (!hasMatch) {
+                showWorkspaceFallback('That connection panel could not be opened. Reload the page and try again.');
+                return;
+            }
+
+            if (fallbackNotice) {
+                fallbackNotice.classList.add('d-none');
+                fallbackNotice.innerHTML = '';
+            }
+
+            updateWorkspaceMeta(activeButton);
+            try {
+                localStorage.setItem('clientConnectionsPanel', panelKey);
+            } catch (err) {}
+
+            if (options.scroll !== false) {
+                scrollWorkspaceIntoView();
+            }
+        }
+
+        connectionButtons.forEach(function(button) {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                activatePanel(button.getAttribute('data-panel-target'), {scroll: true});
+            });
+        });
+
+        var initialPanel = 'google';
         try {
-            localStorage.setItem('clientConnectionsPanel', panelKey);
+            initialPanel = localStorage.getItem('clientConnectionsPanel') || initialPanel;
         } catch (err) {}
-    }
+        if (!document.querySelector('[data-panel-target="' + initialPanel + '"]')) {
+            initialPanel = 'google';
+        }
+        activatePanel(initialPanel, {scroll: false});
 
-    connectionButtons.forEach(function(button) {
-        button.addEventListener('click', function(event) {
-            event.preventDefault();
-            event.stopPropagation();
-            activatePanel(button.getAttribute('data-panel-target'));
-        });
-    });
-
-    var initialPanel = 'google';
-    try {
-        initialPanel = localStorage.getItem('clientConnectionsPanel') || initialPanel;
-    } catch (err) {}
-    if (!document.querySelector('[data-panel-target="' + initialPanel + '"]')) {
-        initialPanel = 'google';
-    }
-    activatePanel(initialPanel);
-
-    var sngTestBtn = document.getElementById('sngTestBtn');
-    if (sngTestBtn) {
-        sngTestBtn.addEventListener('click', function() {
-            var rd = document.getElementById('sngTestResult');
-            sngTestBtn.disabled = true;
-            sngTestBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
-            rd.style.display = 'none';
-            fetch('/client/crm/sng/test', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                sngTestBtn.disabled = false;
-                sngTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
-                rd.innerHTML = data.ok
-                    ? '<span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i> ' + (data.message || 'Connected!') + '</span>'
-                    : '<span class="badge bg-danger rounded-pill px-3 py-2"><i class="bi bi-x-circle me-1"></i> ' + (data.error || 'Connection failed') + '</span>';
-                rd.style.display = '';
-            })
-            .catch(function() {
-                sngTestBtn.disabled = false;
-                sngTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
-                rd.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2">Network error</span>';
-                rd.style.display = '';
+        var sngTestBtn = document.getElementById('sngTestBtn');
+        if (sngTestBtn) {
+            sngTestBtn.addEventListener('click', function() {
+                var rd = document.getElementById('sngTestResult');
+                sngTestBtn.disabled = true;
+                sngTestBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
+                rd.style.display = 'none';
+                fetch('/client/crm/sng/test', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    sngTestBtn.disabled = false;
+                    sngTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
+                    rd.innerHTML = data.ok
+                        ? '<span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i> ' + (data.message || 'Connected!') + '</span>'
+                        : '<span class="badge bg-danger rounded-pill px-3 py-2"><i class="bi bi-x-circle me-1"></i> ' + (data.error || 'Connection failed') + '</span>';
+                    rd.style.display = '';
+                })
+                .catch(function() {
+                    sngTestBtn.disabled = false;
+                    sngTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
+                    rd.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2">Network error</span>';
+                    rd.style.display = '';
+                });
             });
-        });
+        }
+
+        var ghlTestBtn = document.getElementById('ghlTestBtn');
+        if (ghlTestBtn) {
+            ghlTestBtn.addEventListener('click', function() {
+                var rd = document.getElementById('ghlTestResult');
+                ghlTestBtn.disabled = true;
+                ghlTestBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
+                rd.style.display = 'none';
+                fetch('/client/crm/ghl/test', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    ghlTestBtn.disabled = false;
+                    ghlTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
+                    rd.innerHTML = data.ok
+                        ? '<span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i> ' + (data.message || 'Connected!') + '</span>'
+                        : '<span class="badge bg-danger rounded-pill px-3 py-2"><i class="bi bi-x-circle me-1"></i> ' + (data.error || 'Connection failed') + '</span>';
+                    rd.style.display = '';
+                })
+                .catch(function() {
+                    ghlTestBtn.disabled = false;
+                    ghlTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
+                    rd.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2">Network error</span>';
+                    rd.style.display = '';
+                });
+            });
+        }
+
+        var wpTestBtn = document.getElementById('wpTestBtn');
+        if (wpTestBtn) {
+            wpTestBtn.addEventListener('click', function() {
+                var rd = document.getElementById('wpTestResult');
+                wpTestBtn.disabled = true;
+                wpTestBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
+                rd.style.display = 'none';
+                fetch('/client/blog/test-connection', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    wpTestBtn.disabled = false;
+                    wpTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
+                    rd.innerHTML = data.ok
+                        ? '<span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i> ' + (data.message || 'Connected successfully!') + '</span>'
+                        : '<span class="badge bg-danger rounded-pill px-3 py-2"><i class="bi bi-x-circle me-1"></i> ' + (data.error || 'Connection failed') + '</span>';
+                    rd.style.display = '';
+                })
+                .catch(function() {
+                    wpTestBtn.disabled = false;
+                    wpTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
+                    rd.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2">Network error</span>';
+                    rd.style.display = '';
+                });
+            });
+        }
     }
 
-    var ghlTestBtn = document.getElementById('ghlTestBtn');
-    if (ghlTestBtn) {
-        ghlTestBtn.addEventListener('click', function() {
-            var rd = document.getElementById('ghlTestResult');
-            ghlTestBtn.disabled = true;
-            ghlTestBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
-            rd.style.display = 'none';
-            fetch('/client/crm/ghl/test', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                ghlTestBtn.disabled = false;
-                ghlTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
-                rd.innerHTML = data.ok
-                    ? '<span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i> ' + (data.message || 'Connected!') + '</span>'
-                    : '<span class="badge bg-danger rounded-pill px-3 py-2"><i class="bi bi-x-circle me-1"></i> ' + (data.error || 'Connection failed') + '</span>';
-                rd.style.display = '';
-            })
-            .catch(function() {
-                ghlTestBtn.disabled = false;
-                ghlTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
-                rd.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2">Network error</span>';
-                rd.style.display = '';
-            });
-        });
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initClientConnectionsPage, {once: true});
+    } else {
+        initClientConnectionsPage();
     }
-
-    var wpTestBtn = document.getElementById('wpTestBtn');
-    if (wpTestBtn) {
-        wpTestBtn.addEventListener('click', function() {
-            var rd = document.getElementById('wpTestResult');
-            wpTestBtn.disabled = true;
-            wpTestBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
-            rd.style.display = 'none';
-            fetch('/client/blog/test-connection', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                wpTestBtn.disabled = false;
-                wpTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
-                rd.innerHTML = data.ok
-                    ? '<span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i> ' + (data.message || 'Connected successfully!') + '</span>'
-                    : '<span class="badge bg-danger rounded-pill px-3 py-2"><i class="bi bi-x-circle me-1"></i> ' + (data.error || 'Connection failed') + '</span>';
-                rd.style.display = '';
-            })
-            .catch(function() {
-                wpTestBtn.disabled = false;
-                wpTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
-                rd.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2">Network error</span>';
-                rd.style.display = '';
-            });
-        });
-    }
-});
+})();
 
 function copyWebhookUrl(inputId) {
     var input = document.getElementById(inputId);
