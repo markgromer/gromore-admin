@@ -28,6 +28,9 @@
     border-color: #0f766e;
     box-shadow: 0 18px 38px rgba(15, 118, 110, 0.15);
 }
+.connection-summary-card.active .connection-summary-label strong {
+    color: #0f766e;
+}
 .connection-summary-icon {
     width: 52px;
     height: 52px;
@@ -212,8 +215,9 @@
         </div>
         <div class="text-muted" style="font-size:.8rem;">Your last-opened panel stays selected on reload.</div>
     </div>
+    <div class="d-none px-3 pt-3" id="connectionWorkspaceFallback"></div>
 
-    <section class="connection-panel" data-panel="google">
+    <section class="connection-panel" data-panel="google" id="connection-panel-google">
         <div class="connection-panel-shell card">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
@@ -263,7 +267,7 @@
         </div>
     </section>
 
-    <section class="connection-panel" data-panel="meta">
+    <section class="connection-panel" data-panel="meta" id="connection-panel-meta">
         <div class="connection-panel-shell card">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
@@ -308,7 +312,7 @@
         </div>
     </section>
 
-    <section class="connection-panel" data-panel="drive">
+    <section class="connection-panel" data-panel="drive" id="connection-panel-drive">
         <div class="connection-panel-shell card">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
@@ -354,7 +358,7 @@
         </div>
     </section>
 
-    <section class="connection-panel" data-panel="sng">
+    <section class="connection-panel" data-panel="sng" id="connection-panel-sng">
         <div class="connection-panel-shell card">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
@@ -434,7 +438,7 @@
         </div>
     </section>
 
-    <section class="connection-panel" data-panel="ghl">
+    <section class="connection-panel" data-panel="ghl" id="connection-panel-ghl">
         <div class="connection-panel-shell card">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
@@ -477,7 +481,7 @@
         </div>
     </section>
 
-    <section class="connection-panel" data-panel="wordpress">
+    <section class="connection-panel" data-panel="wordpress" id="connection-panel-wordpress">
         <div class="connection-panel-shell card">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
@@ -517,7 +521,7 @@
         </div>
     </section>
 
-    <section class="connection-panel" data-panel="ai">
+    <section class="connection-panel" data-panel="ai" id="connection-panel-ai">
         <div class="connection-panel-shell card">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
@@ -559,7 +563,7 @@
         </div>
     </section>
 
-    <section class="connection-panel" data-panel="warren">
+    <section class="connection-panel" data-panel="warren" id="connection-panel-warren">
         <div class="connection-panel-shell card">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
@@ -689,40 +693,63 @@ document.addEventListener('DOMContentLoaded', function() {
     var csrfToken = csrfTokenMeta ? csrfTokenMeta.getAttribute('content') : '';
     var connectionButtons = Array.from(document.querySelectorAll('[data-panel-target]'));
     var connectionPanels = Array.from(document.querySelectorAll('[data-panel]'));
+    var fallbackNotice = document.getElementById('connectionWorkspaceFallback');
 
-    function activatePanel(panelKey, updateHash) {
+    connectionButtons.forEach(function(button) {
+        var panelKey = button.getAttribute('data-panel-target');
+        button.setAttribute('aria-controls', 'connection-panel-' + panelKey);
+        button.setAttribute('aria-expanded', 'false');
+    });
+
+    function showWorkspaceFallback(message) {
+        if (!fallbackNotice) return;
+        fallbackNotice.classList.remove('d-none');
+        fallbackNotice.innerHTML = '<div class="alert alert-warning mb-0" style="font-size:.84rem;">' + message + '</div>';
+    }
+
+    function activatePanel(panelKey) {
+        var hasMatch = false;
         connectionButtons.forEach(function(button) {
-            button.classList.toggle('active', button.getAttribute('data-panel-target') === panelKey);
+            var isActive = button.getAttribute('data-panel-target') === panelKey;
+            button.classList.toggle('active', isActive);
+            button.setAttribute('aria-expanded', isActive ? 'true' : 'false');
         });
         connectionPanels.forEach(function(panel) {
-            panel.classList.toggle('active', panel.getAttribute('data-panel') === panelKey);
+            var isActive = panel.getAttribute('data-panel') === panelKey;
+            panel.classList.toggle('active', isActive);
+            if (isActive) {
+                hasMatch = true;
+            }
         });
+        if (!hasMatch) {
+            showWorkspaceFallback('That connection panel could not be opened. Reload the page and try again.');
+            return;
+        }
+        if (fallbackNotice) {
+            fallbackNotice.classList.add('d-none');
+            fallbackNotice.innerHTML = '';
+        }
         try {
             localStorage.setItem('clientConnectionsPanel', panelKey);
         } catch (err) {}
-        if (updateHash) {
-            window.location.hash = 'panel-' + panelKey;
-        }
     }
 
     connectionButtons.forEach(function(button) {
-        button.addEventListener('click', function() {
-            activatePanel(button.getAttribute('data-panel-target'), true);
+        button.addEventListener('click', function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            activatePanel(button.getAttribute('data-panel-target'));
         });
     });
 
     var initialPanel = 'google';
-    if (window.location.hash.indexOf('#panel-') === 0) {
-        initialPanel = window.location.hash.replace('#panel-', '') || initialPanel;
-    } else {
-        try {
-            initialPanel = localStorage.getItem('clientConnectionsPanel') || initialPanel;
-        } catch (err) {}
-    }
+    try {
+        initialPanel = localStorage.getItem('clientConnectionsPanel') || initialPanel;
+    } catch (err) {}
     if (!document.querySelector('[data-panel-target="' + initialPanel + '"]')) {
         initialPanel = 'google';
     }
-    activatePanel(initialPanel, false);
+    activatePanel(initialPanel);
 
     var sngTestBtn = document.getElementById('sngTestBtn');
     if (sngTestBtn) {

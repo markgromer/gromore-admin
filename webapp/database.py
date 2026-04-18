@@ -9,7 +9,7 @@ import json
 import re
 import secrets
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -359,6 +359,38 @@ class WebDB:
 
             CREATE INDEX IF NOT EXISTS idx_sng_webhook_events_brand_received
             ON sng_webhook_events(brand_id, received_at DESC);
+
+            CREATE TABLE IF NOT EXISTS crm_event_actions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                source_event_id TEXT NOT NULL DEFAULT '',
+                source_event_type TEXT NOT NULL DEFAULT '',
+                rule_key TEXT NOT NULL DEFAULT '',
+                action_kind TEXT NOT NULL DEFAULT 'client_message',
+                channel TEXT NOT NULL DEFAULT 'sms',
+                recipient TEXT DEFAULT '',
+                client_id TEXT DEFAULT '',
+                payment_id TEXT DEFAULT '',
+                invoice_id TEXT DEFAULT '',
+                subscription_id TEXT DEFAULT '',
+                subject TEXT DEFAULT '',
+                message_text TEXT DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'queued',
+                attempt_number INTEGER NOT NULL DEFAULT 1,
+                max_attempts INTEGER NOT NULL DEFAULT 1,
+                scheduled_for TEXT DEFAULT (datetime('now')),
+                sent_at TEXT DEFAULT '',
+                resolved_at TEXT DEFAULT '',
+                resolution_reason TEXT DEFAULT '',
+                detail TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(brand_id, source_event_id, rule_key, action_kind, channel, recipient, attempt_number),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_crm_event_actions_brand_schedule
+            ON crm_event_actions(brand_id, status, scheduled_for, created_at DESC);
 
             CREATE TABLE IF NOT EXISTS appointment_reminder_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1535,6 +1567,8 @@ class WebDB:
             ("sales_bot_appointment_reminder_template", "TEXT DEFAULT ''"),
             ("sales_bot_appointment_reminder_respect_client_channel", "INTEGER DEFAULT 1"),
             ("sales_bot_sng_webhook_secret", "TEXT DEFAULT ''"),
+            ("sales_bot_crm_event_rules", "TEXT DEFAULT '{}'"),
+            ("sales_bot_crm_event_alert_emails", "TEXT DEFAULT ''"),
             ("hiring_design", "TEXT DEFAULT '{}'"),
             # Stripe billing
             ("stripe_customer_id", "TEXT DEFAULT ''"),
@@ -1942,6 +1976,7 @@ class WebDB:
             "sales_bot_payment_reminder_channels", "sales_bot_payment_reminder_template",
             "sales_bot_appointment_reminder_send_time", "sales_bot_appointment_reminder_timezone",
             "sales_bot_appointment_reminder_channels", "sales_bot_appointment_reminder_template",
+            "sales_bot_crm_event_rules", "sales_bot_crm_event_alert_emails",
             "sales_bot_dnd_start", "sales_bot_dnd_end", "sales_bot_dnd_timezone",
             "sales_bot_sms_opt_out_footer",
             "hiring_design",
@@ -2956,6 +2991,43 @@ class WebDB:
         conn.commit()
         conn.close()
 
+    def update_sng_webhook_event(self, brand_id, external_event_id, *, status=None, detail=None, summary=None, payload=None):
+        parts = ["updated_at = datetime('now')"]
+        values = []
+
+        if status is not None:
+            parts.append("status = ?")
+            values.append(str(status or "received")[:50])
+        if detail is not None:
+            parts.append("detail = ?")
+            values.append(str(detail or "")[:1000])
+        if summary is not None:
+            summary_json = json.dumps(summary or {}, separators=(",", ":"))[:2000]
+            parts.append("summary_json = ?")
+            values.append(summary_json)
+        if payload is not None:
+            payload_json = json.dumps(payload or {}, separators=(",", ":"))[:20000]
+            parts.append("payload_json = ?")
+            values.append(payload_json)
+
+        values.extend([brand_id, str(external_event_id or "")[:255]])
+        conn = self._conn()
+        conn.execute(
+            f"UPDATE sng_webhook_events SET {', '.join(parts)} WHERE brand_id = ? AND external_event_id = ?",
+            values,
+        )
+        conn.commit()
+        conn.close()
+
+    def get_sng_webhook_event_by_external_id(self, brand_id, external_event_id):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM sng_webhook_events WHERE brand_id = ? AND external_event_id = ?",
+            (brand_id, str(external_event_id or "")[:255]),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
     def get_sng_webhook_events(self, brand_id, limit=20):
         conn = self._conn()
         rows = conn.execute(
@@ -2969,6 +3041,154 @@ class WebDB:
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
+    def queue_crm_event_action(
+        self,
+        brand_id,
+        *,
+        source_event_id,
+        source_event_type,
+        rule_key,
+        action_kind,
+        channel,
+        recipient="",
+        client_id="",
+        payment_id="",
+        invoice_id="",
+        subscription_id="",
+        subject="",
+        message_text="",
+        attempt_number=1,
+        max_attempts=1,
+        scheduled_for="",
+        detail="",
+    ):
+        conn = self._conn()
+        cur = conn.execute(
+            """
+            INSERT INTO crm_event_actions (
+                brand_id, source_event_id, source_event_type, rule_key,
+                action_kind, channel, recipient, client_id, payment_id,
+                invoice_id, subscription_id, subject, message_text,
+                attempt_number, max_attempts, scheduled_for, detail, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(brand_id, source_event_id, rule_key, action_kind, channel, recipient, attempt_number)
+            DO NOTHING
+            """,
+            (
+                brand_id,
+                str(source_event_id or "")[:255],
+                str(source_event_type or "")[:255],
+                str(rule_key or "")[:100],
+                str(action_kind or "client_message")[:50],
+                str(channel or "sms")[:50],
+                str(recipient or "")[:255],
+                str(client_id or "")[:255],
+                str(payment_id or "")[:255],
+                str(invoice_id or "")[:255],
+                str(subscription_id or "")[:255],
+                str(subject or "")[:255],
+                str(message_text or "")[:4000],
+                max(1, int(attempt_number or 1)),
+                max(1, int(max_attempts or 1)),
+                str(scheduled_for or datetime.now(UTC).isoformat())[:32],
+                str(detail or "")[:1000],
+            ),
+        )
+        conn.commit()
+        action_id = cur.lastrowid if (cur.rowcount or 0) > 0 else 0
+        conn.close()
+        return action_id
+
+    def get_crm_event_actions(self, brand_id, limit=50):
+        conn = self._conn()
+        rows = conn.execute(
+            """
+            SELECT * FROM crm_event_actions
+            WHERE brand_id = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
+            (brand_id, int(limit or 50)),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_due_crm_event_actions(self, now_iso=None, brand_id=None, limit=100):
+        now_iso = str(now_iso or datetime.now(UTC).isoformat())[:32]
+        conn = self._conn()
+        if brand_id is None:
+            rows = conn.execute(
+                """
+                SELECT * FROM crm_event_actions
+                WHERE status = 'queued' AND scheduled_for <= ?
+                ORDER BY scheduled_for ASC, id ASC
+                LIMIT ?
+                """,
+                (now_iso, int(limit or 100)),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT * FROM crm_event_actions
+                WHERE brand_id = ? AND status = 'queued' AND scheduled_for <= ?
+                ORDER BY scheduled_for ASC, id ASC
+                LIMIT ?
+                """,
+                (brand_id, now_iso, int(limit or 100)),
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def update_crm_event_action(self, action_id, **fields):
+        allowed = {
+            "status", "recipient", "subject", "message_text", "scheduled_for",
+            "sent_at", "resolved_at", "resolution_reason", "detail", "updated_at",
+        }
+        parts = ["updated_at = datetime('now')"]
+        values = []
+        for key, value in fields.items():
+            if key not in allowed:
+                continue
+            parts.append(f"{key} = ?")
+            values.append(str(value or "")[:4000] if key in {"message_text", "detail"} else str(value or "")[:255])
+        values.append(action_id)
+        conn = self._conn()
+        conn.execute(f"UPDATE crm_event_actions SET {', '.join(parts)} WHERE id = ?", values)
+        conn.commit()
+        conn.close()
+
+    def resolve_crm_event_actions(self, brand_id, rule_key, *, client_id="", payment_id="", invoice_id="", subscription_id="", reason=""):
+        clauses = ["brand_id = ?", "rule_key = ?", "status = 'queued'"]
+        values = [datetime.now(UTC).isoformat(), str(reason or "")[:255], brand_id, str(rule_key or "")[:100]]
+        identifiers = []
+        if payment_id:
+            identifiers.append(("payment_id = ?", str(payment_id)[:255]))
+        if subscription_id:
+            identifiers.append(("subscription_id = ?", str(subscription_id)[:255]))
+        if invoice_id:
+            identifiers.append(("invoice_id = ?", str(invoice_id)[:255]))
+        if client_id:
+            identifiers.append(("client_id = ?", str(client_id)[:255]))
+        if not identifiers:
+            return 0
+
+        clauses.append("(" + " OR ".join(part for part, _ in identifiers) + ")")
+        values.extend(value for _, value in identifiers)
+
+        conn = self._conn()
+        cur = conn.execute(
+            f"""
+            UPDATE crm_event_actions
+            SET status = 'resolved', resolved_at = ?, resolution_reason = ?, updated_at = datetime('now')
+            WHERE {' AND '.join(clauses)}
+            """,
+            values,
+        )
+        conn.commit()
+        count = cur.rowcount or 0
+        conn.close()
+        return count
 
     def record_appointment_reminder_run(
         self,

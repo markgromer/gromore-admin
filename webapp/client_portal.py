@@ -5988,6 +5988,8 @@ def client_settings():
 def _load_client_automation_context(db, brand_id):
     chatbot_channels = set()
     brand = db.get_brand(brand_id) or {}
+    from webapp.warren_crm_events import RULE_DEFINITIONS, load_crm_event_rules
+
     try:
         chatbot_channels = set(json.loads(brand.get("sales_bot_channels") or "[]"))
     except Exception:
@@ -6033,6 +6035,17 @@ def _load_client_automation_context(db, brand_id):
             "failed": "danger",
         }.get((event.get("status") or "").strip().lower(), "secondary")
 
+    crm_event_rules = load_crm_event_rules(brand)
+    crm_event_actions = db.get_crm_event_actions(brand_id, limit=20)
+    for action in crm_event_actions:
+        action["status_badge"] = {
+            "queued": "secondary",
+            "sent": "success",
+            "failed": "danger",
+            "resolved": "primary",
+        }.get((action.get("status") or "").strip().lower(), "secondary")
+        action["rule_label"] = RULE_DEFINITIONS.get(action.get("rule_key"), {}).get("label", (action.get("rule_key") or "").replace("_", " ").title())
+
     return {
         "brand": brand,
         "chatbot_channels": chatbot_channels,
@@ -6040,6 +6053,9 @@ def _load_client_automation_context(db, brand_id):
         "appointment_reminder_attempts": appointment_attempts,
         "billing_reminder_attempts": billing_attempts,
         "sng_webhook_events": sng_webhook_events,
+        "crm_event_rules": crm_event_rules,
+        "crm_event_actions": crm_event_actions,
+        "crm_event_rule_definitions": RULE_DEFINITIONS,
     }
 
 
@@ -6061,6 +6077,9 @@ def client_automations():
         appointment_reminder_attempts=automation_context["appointment_reminder_attempts"],
         billing_reminder_attempts=automation_context["billing_reminder_attempts"],
         sng_webhook_events=automation_context["sng_webhook_events"],
+        crm_event_rules=automation_context["crm_event_rules"],
+        crm_event_actions=automation_context["crm_event_actions"],
+        crm_event_rule_definitions=automation_context["crm_event_rule_definitions"],
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
 
@@ -6098,6 +6117,7 @@ def client_save_warren_channels_settings():
 def client_save_automations():
     db = _get_db()
     brand_id = session["client_brand_id"]
+    from webapp.warren_crm_events import serialize_crm_event_rules
 
     valid_channels = {"sms", "messenger", "lead_forms", "calls"}
     valid_payment_channels = {"email", "sms"}
@@ -6215,6 +6235,18 @@ def client_save_automations():
         brand_id,
         "sales_bot_sms_opt_out_footer",
         (request.form.get("sales_bot_sms_opt_out_footer") or "").strip()[:200],
+    )
+
+    crm_event_rules = serialize_crm_event_rules(request.form)
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_crm_event_rules",
+        json.dumps(crm_event_rules.get("rules") or {}, separators=(",", ":")),
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_crm_event_alert_emails",
+        ", ".join(crm_event_rules.get("alert_emails") or [])[:1000],
     )
 
     flash("Automations saved.", "success")

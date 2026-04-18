@@ -296,6 +296,39 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
                 "sales_bot_dnd_weekends": "1",
                 "sales_bot_dnd_timezone": "America/Los_Angeles",
                 "sales_bot_sms_opt_out_footer": "Reply STOP to opt out.",
+                "sales_bot_crm_event_alert_emails": "owner@example.com, manager@example.com",
+                "crm_rule_failed_payment_enabled": "1",
+                "crm_rule_failed_payment_channels": ["sms", "email"],
+                "crm_rule_failed_payment_delay_minutes": "0",
+                "crm_rule_failed_payment_retry_days": "2",
+                "crm_rule_failed_payment_max_attempts": "3",
+                "crm_rule_failed_payment_owner_alert": "1",
+                "crm_rule_failed_payment_respect_dnd": "1",
+                "crm_rule_failed_payment_template": "Payment issue for {client_name}",
+                "crm_rule_invoice_finalized_enabled": "1",
+                "crm_rule_invoice_finalized_channels": ["email"],
+                "crm_rule_invoice_finalized_delay_minutes": "15",
+                "crm_rule_invoice_finalized_retry_days": "0",
+                "crm_rule_invoice_finalized_max_attempts": "1",
+                "crm_rule_invoice_finalized_owner_alert": "1",
+                "crm_rule_invoice_finalized_respect_dnd": "1",
+                "crm_rule_invoice_finalized_template": "Invoice ready for {client_name}",
+                "crm_rule_subscription_canceled_enabled": "1",
+                "crm_rule_subscription_canceled_channels": ["email"],
+                "crm_rule_subscription_canceled_delay_minutes": "10",
+                "crm_rule_subscription_canceled_retry_days": "1",
+                "crm_rule_subscription_canceled_max_attempts": "2",
+                "crm_rule_subscription_canceled_owner_alert": "1",
+                "crm_rule_subscription_canceled_respect_dnd": "1",
+                "crm_rule_subscription_canceled_template": "Canceled subscription for {client_name}",
+                "crm_rule_subscription_paused_enabled": "1",
+                "crm_rule_subscription_paused_channels": ["email"],
+                "crm_rule_subscription_paused_delay_minutes": "10",
+                "crm_rule_subscription_paused_retry_days": "2",
+                "crm_rule_subscription_paused_max_attempts": "2",
+                "crm_rule_subscription_paused_owner_alert": "1",
+                "crm_rule_subscription_paused_respect_dnd": "1",
+                "crm_rule_subscription_paused_template": "Paused subscription for {client_name}",
             },
             follow_redirects=False,
         )
@@ -315,6 +348,17 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertEqual(brand["sales_bot_nurture_hot_hours"], 3.0)
         self.assertEqual(brand["sales_bot_dnd_start"], "20:30")
         self.assertEqual(brand["sales_bot_sms_opt_out_footer"], "Reply STOP to opt out.")
+        self.assertEqual(brand["sales_bot_crm_event_alert_emails"], "owner@example.com, manager@example.com")
+        crm_rules = json.loads(brand["sales_bot_crm_event_rules"])
+        self.assertTrue(crm_rules["failed_payment"]["enabled"])
+        self.assertEqual(crm_rules["failed_payment"]["channels"], ["sms", "email"])
+        self.assertEqual(crm_rules["failed_payment"]["delay_minutes"], 0)
+        self.assertEqual(crm_rules["failed_payment"]["retry_days"], 2)
+        self.assertEqual(crm_rules["failed_payment"]["max_attempts"], 3)
+        self.assertEqual(crm_rules["failed_payment"]["template"], "Payment issue for {client_name}")
+        self.assertTrue(crm_rules["invoice_finalized"]["enabled"])
+        self.assertTrue(crm_rules["subscription_canceled"]["enabled"])
+        self.assertTrue(crm_rules["subscription_paused"]["enabled"])
 
     def test_client_can_save_warren_channel_settings(self):
         response = self.client.post(
@@ -395,7 +439,9 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         response = self.client.get("/client/automations")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"CRM Event Messages", response.data)
-        self.assertIn(b"failed-payment", response.data.lower())
+        self.assertIn(b"Failed Payments", response.data)
+        self.assertIn(b"Internal alert recipients", response.data)
+        self.assertIn(b"Recent CRM action history", response.data)
 
     @patch("webapp.quo_sms.get_phone_numbers")
     def test_client_can_test_openphone_connection(self, mock_get_phone_numbers):

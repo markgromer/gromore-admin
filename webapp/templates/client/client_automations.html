@@ -525,33 +525,148 @@
     <section class="automation-section" id="crm-events">
         <div class="automation-section-header">
             <h5 class="mb-1 fw-semibold">CRM Event Messages</h5>
-            <div class="text-muted" style="font-size:.85rem;">This is where Sweep and Go-triggered actions, like failed-payment follow-up, belong.</div>
+            <div class="text-muted" style="font-size:.85rem;">Sweep and Go events can now trigger real outbound actions, retries, internal alerts, and recovery handling.</div>
         </div>
         <div class="automation-section-body">
             <div class="automation-note mb-3">
-                <strong>Foundation is live.</strong> Warren is already receiving and logging Sweep and Go webhook events. The next action layer, such as failed-payment automations and other CRM-triggered message rules, will be configured in this section.
+                <strong>How this works:</strong> when a supported Sweep and Go event arrives, Warren queues the matching client message and internal alert actions here. Payment accepted events automatically resolve queued failed-payment follow-ups, and subscription unpaused events resolve queued paused-subscription follow-ups.
             </div>
-            {% if sng_webhook_events %}
-            <div class="row g-3">
-                {% for event in sng_webhook_events %}
-                <div class="col-md-6 col-xl-4">
-                    <div class="border rounded-3 p-3 h-100" style="background:#f8fafc; border-color:#dbeafe !important;">
-                        <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
-                            <div class="fw-semibold" style="font-size:.85rem;">{{ event.event_type or 'unknown' }}</div>
-                            <span class="badge bg-{{ event.status_badge }}">{{ event.status or 'received' }}</span>
-                        </div>
-                        <div style="font-size:.83rem; color:#0f172a;">{{ event.detail or 'Webhook received.' }}</div>
-                        <div class="text-muted mt-2" style="font-size:.76rem;">{{ event.received_at }}</div>
-                        {% if event.summary.client_email or event.summary.client_phone %}
-                        <div class="text-muted mt-1" style="font-size:.76rem;">{{ event.summary.client_email or '' }}{% if event.summary.client_email and event.summary.client_phone %} - {% endif %}{{ event.summary.client_phone or '' }}</div>
-                        {% endif %}
+
+            <div class="row g-3 mb-4">
+                <div class="col-lg-6">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">Internal alert recipients</label>
+                    <textarea class="form-control" name="sales_bot_crm_event_alert_emails" rows="3" placeholder="owner@company.com, manager@company.com">{{ (crm_event_rules.alert_emails or [])|join(', ') }}</textarea>
+                    <small class="text-muted d-block mt-2">Owner alerts use these emails. If this is blank, Warren falls back to internal brand contacts and upgrade contacts.</small>
+                </div>
+                <div class="col-lg-6">
+                    <div class="automation-note h-100">
+                        <strong>Supported triggers right now:</strong><br>
+                        client:client_payment_declined<br>
+                        client:invoice_finalized<br>
+                        client:subscription_canceled<br>
+                        client:subscription_paused<br><br>
+                        <span class="text-muted">Recovery events: client:client_payment_accepted and client:subscription_unpaused.</span>
                     </div>
                 </div>
-                {% endfor %}
             </div>
-            {% else %}
-            <div class="text-muted" style="font-size:.85rem;">No CRM events have been logged for this brand yet.</div>
-            {% endif %}
+
+            {% for rule_key in ['failed_payment', 'invoice_finalized', 'subscription_canceled', 'subscription_paused'] %}
+            {% set rule = crm_event_rules.rules.get(rule_key, {}) %}
+            {% set rule_def = crm_event_rule_definitions.get(rule_key, {}) %}
+            <div class="border rounded-4 p-4 mb-3" style="background:#f8fafc; border-color:#dbeafe !important;">
+                <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                    <div>
+                        <h6 class="fw-semibold mb-1">{{ rule_def.label }}</h6>
+                        <div class="text-muted" style="font-size:.83rem;">Event trigger: {{ (rule_def.event_types|list|first) or 'unknown' }}</div>
+                        {% if rule_def.resolution_event_types %}
+                        <div class="text-muted mt-1" style="font-size:.78rem;">Stops future queued actions when: {{ rule_def.resolution_event_types|join(', ') }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="crmRule{{ rule_key }}Enabled" name="crm_rule_{{ rule_key }}_enabled" value="1" {{ 'checked' if rule.enabled }}>
+                        <label class="form-check-label fw-medium" for="crmRule{{ rule_key }}Enabled">Enable</label>
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-1">
+                    <div class="col-lg-4">
+                        <label class="form-label fw-medium" style="font-size:.82rem;">Client-facing channels</label>
+                        <div class="d-flex gap-3 flex-wrap pt-1">
+                            <label class="form-check-label d-flex align-items-center gap-2"><input class="form-check-input" type="checkbox" name="crm_rule_{{ rule_key }}_channels" value="sms" {{ 'checked' if 'sms' in rule.channels }}> <span>SMS</span></label>
+                            <label class="form-check-label d-flex align-items-center gap-2"><input class="form-check-input" type="checkbox" name="crm_rule_{{ rule_key }}_channels" value="email" {{ 'checked' if 'email' in rule.channels }}> <span>Email</span></label>
+                        </div>
+                    </div>
+                    <div class="col-md-4 col-lg-2">
+                        <label class="form-label fw-medium" style="font-size:.82rem;">Initial delay</label>
+                        <div class="input-group input-group-sm">
+                            <input type="number" class="form-control" name="crm_rule_{{ rule_key }}_delay_minutes" min="0" max="10080" step="5" value="{{ rule.delay_minutes|default(0) }}">
+                            <span class="input-group-text">min</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4 col-lg-2">
+                        <label class="form-label fw-medium" style="font-size:.82rem;">Retry every</label>
+                        <div class="input-group input-group-sm">
+                            <input type="number" class="form-control" name="crm_rule_{{ rule_key }}_retry_days" min="0" max="30" step="1" value="{{ rule.retry_days|default(0) }}">
+                            <span class="input-group-text">days</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4 col-lg-2">
+                        <label class="form-label fw-medium" style="font-size:.82rem;">Max attempts</label>
+                        <input type="number" class="form-control form-control-sm" name="crm_rule_{{ rule_key }}_max_attempts" min="1" max="10" step="1" value="{{ rule.max_attempts|default(1) }}">
+                    </div>
+                    <div class="col-lg-2 d-flex align-items-end">
+                        <div class="w-100">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" name="crm_rule_{{ rule_key }}_owner_alert" id="crmRule{{ rule_key }}OwnerAlert" value="1" {{ 'checked' if rule.owner_alert }}>
+                                <label class="form-check-label" for="crmRule{{ rule_key }}OwnerAlert">Owner alert</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="crm_rule_{{ rule_key }}_respect_dnd" id="crmRule{{ rule_key }}RespectDnd" value="1" {{ 'checked' if rule.respect_dnd }}>
+                                <label class="form-check-label" for="crmRule{{ rule_key }}RespectDnd">Respect quiet hours</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <label class="form-label fw-medium" style="font-size:.82rem;">Client message template</label>
+                    <textarea class="form-control form-control-sm" name="crm_rule_{{ rule_key }}_template" rows="4">{{ rule.template or '' }}</textarea>
+                    <small class="text-muted d-block mt-2">Available placeholders: {brand_name}, {client_name}, {client_id}, {client_email}, {client_phone}, {payment_id}, {invoice_id}, {subscription_id}, {status}, {event_type}, {attempt_number}</small>
+                </div>
+            </div>
+
+            {% endfor %}
+
+            <div class="row g-4 mt-1">
+                <div class="col-xl-7">
+                    <div class="fw-semibold mb-2">Recent CRM action history</div>
+                    {% if crm_event_actions %}
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr><th>When</th><th>Rule</th><th>Recipient</th><th>Channel</th><th>Status</th><th>Detail</th></tr>
+                            </thead>
+                            <tbody>
+                                {% for action in crm_event_actions %}
+                                <tr>
+                                    <td class="text-muted" style="font-size:.78rem;">{{ action.created_at[:16] if action.created_at else '' }}</td>
+                                    <td style="font-size:.82rem;">{{ action.rule_label }}<br><span class="text-muted">Attempt {{ action.attempt_number }}</span></td>
+                                    <td style="font-size:.82rem;">{{ action.recipient or '-' }}</td>
+                                    <td class="text-capitalize" style="font-size:.82rem;">{{ action.channel }}</td>
+                                    <td><span class="badge bg-{{ action.status_badge }}{% if action.status_badge == 'secondary' %} text-dark{% endif %}">{{ (action.status or 'queued')|title }}</span></td>
+                                    <td style="font-size:.78rem; max-width:280px;">{{ action.detail or (action.resolution_reason or '-') }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-muted" style="font-size:.85rem;">No CRM event actions have been queued yet.</div>
+                    {% endif %}
+                </div>
+                <div class="col-xl-5">
+                    <div class="fw-semibold mb-2">Recent webhook events</div>
+                    {% if sng_webhook_events %}
+                    <div class="d-grid gap-2">
+                        {% for event in sng_webhook_events %}
+                        <div class="border rounded-3 p-3" style="background:#fff; border-color:#dbeafe !important;">
+                            <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                                <div class="fw-semibold" style="font-size:.84rem;">{{ event.event_type or 'unknown' }}</div>
+                                <span class="badge bg-{{ event.status_badge }}{% if event.status_badge == 'warning' %} text-dark{% endif %}">{{ event.status or 'received' }}</span>
+                            </div>
+                            <div style="font-size:.82rem; color:#0f172a;">{{ event.detail or 'Webhook received.' }}</div>
+                            <div class="text-muted mt-2" style="font-size:.76rem;">{{ event.received_at }}</div>
+                            {% if event.summary.client_name or event.summary.client_email or event.summary.client_phone %}
+                            <div class="text-muted mt-1" style="font-size:.76rem;">{{ event.summary.client_name or '' }}{% if event.summary.client_name and (event.summary.client_email or event.summary.client_phone) %} - {% endif %}{{ event.summary.client_email or event.summary.client_phone or '' }}</div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-muted" style="font-size:.85rem;">No CRM events have been logged for this brand yet.</div>
+                    {% endif %}
+                </div>
+            </div>
         </div>
     </section>
 

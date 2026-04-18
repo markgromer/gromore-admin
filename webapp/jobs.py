@@ -378,3 +378,21 @@ def cron_warren_appointment_reminders():
         stats.get("brands", 0),
     )
     return jsonify({"ok": True, **stats})
+
+
+@jobs_bp.route("/cron/warren-crm-event-actions", methods=["POST"])
+def cron_warren_crm_event_actions():
+    """Recurring cron: process queued CRM event automations for Warren."""
+    if not _verify_cron_secret():
+        return jsonify({"error": "unauthorized"}), 401
+
+    from webapp.warren_crm_events import process_pending_crm_event_actions
+
+    stats = process_pending_crm_event_actions(current_app.db, current_app.config, limit=250)
+    logger.info(
+        "Warren CRM event actions: %d sent, %d failed, %d deferred across queued events",
+        stats.get("sent", 0),
+        stats.get("failed", 0),
+        stats.get("deferred", 0),
+    )
+    return jsonify({"ok": True, **stats})

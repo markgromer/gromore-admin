@@ -336,16 +336,20 @@ def _extract_sng_event_id(payload, raw_body):
 
 
 def _extract_sng_summary(payload, event_type):
+    client = payload.get("client") if isinstance(payload, dict) and isinstance(payload.get("client"), dict) else {}
+    payment = payload.get("payment") if isinstance(payload, dict) and isinstance(payload.get("payment"), dict) else {}
+    invoice = payload.get("invoice") if isinstance(payload, dict) and isinstance(payload.get("invoice"), dict) else {}
+    subscription = payload.get("subscription") if isinstance(payload, dict) and isinstance(payload.get("subscription"), dict) else {}
     summary = {
         "event_type": event_type,
-        "client_id": _sng_find_first(payload, "client_id", "clientid"),
-        "client_name": _sng_find_first(payload, "client_name", "clientname", "name"),
-        "client_email": _sng_find_first(payload, "client_email", "clientemail", "email"),
-        "client_phone": _sng_find_first(payload, "client_phone", "clientphone", "phone", "mobile"),
-        "payment_id": _sng_find_first(payload, "payment_id", "paymentid"),
-        "invoice_id": _sng_find_first(payload, "invoice_id", "invoiceid"),
-        "subscription_id": _sng_find_first(payload, "subscription_id", "subscriptionid"),
-        "status": _sng_find_first(payload, "status", "payment_status", "paymentstatus"),
+        "client_id": _sng_find_first(payload, "client_id", "clientid") or _stringify_webhook_value(client.get("id")),
+        "client_name": _sng_find_first(payload, "client_name", "clientname") or _stringify_webhook_value(client.get("name")) or _sng_find_first(payload, "name"),
+        "client_email": _sng_find_first(payload, "client_email", "clientemail") or _stringify_webhook_value(client.get("email")) or _sng_find_first(payload, "email"),
+        "client_phone": _sng_find_first(payload, "client_phone", "clientphone") or _stringify_webhook_value(client.get("phone") or client.get("mobile")) or _sng_find_first(payload, "phone", "mobile"),
+        "payment_id": _sng_find_first(payload, "payment_id", "paymentid") or _stringify_webhook_value(payment.get("id")),
+        "invoice_id": _sng_find_first(payload, "invoice_id", "invoiceid") or _stringify_webhook_value(invoice.get("id")),
+        "subscription_id": _sng_find_first(payload, "subscription_id", "subscriptionid") or _stringify_webhook_value(subscription.get("id")),
+        "status": _sng_find_first(payload, "status", "payment_status", "paymentstatus") or _stringify_webhook_value(payment.get("status") or invoice.get("status") or subscription.get("status")),
     }
     return {key: value for key, value in summary.items() if value}
 
@@ -438,6 +442,18 @@ def sng_webhook(brand_slug, secret):
         summary=summary,
         payload=payload,
     )
+    try:
+        from webapp.warren_crm_events import process_incoming_sng_event
+
+        process_incoming_sng_event(db, current_app.config, brand, event_id, event_type, summary, base_detail=detail)
+    except Exception as exc:
+        log.exception("SNG CRM event processing failed: brand=%s event=%s err=%s", brand.get("id"), event_id, exc)
+        db.update_sng_webhook_event(
+            brand["id"],
+            event_id,
+            status="failed",
+            detail=f"CRM event processing failed: {str(exc)[:900]}",
+        )
     return jsonify({"ok": True, "event_type": event_type, "event_id": event_id}), 200
 
 
