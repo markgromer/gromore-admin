@@ -66,7 +66,7 @@ class ClientWarrenOnboardingTests(unittest.TestCase):
         self.assertIn("2 core steps", html)
         self.assertIn("Connect your first ad channel", html)
         self.assertIn("Confirm your business basics", html)
-        self.assertIn("business J.A.R.V.I.S.", html)
+        self.assertIn("their own W.A.R.R.E.N.", html)
         self.assertIn("0 of 10 interview answers saved", html)
 
     def test_warren_help_page_includes_onboarding_replay_link(self):
@@ -83,7 +83,7 @@ class ClientWarrenOnboardingTests(unittest.TestCase):
             "/client/warren-onboarding/interview",
             data={
                 "question_key": "website",
-                "answer": "https://jarvis-example.com",
+                "answer": "https://warren-example.com",
             },
             follow_redirects=False,
         )
@@ -95,14 +95,14 @@ class ClientWarrenOnboardingTests(unittest.TestCase):
             brand = self.app.db.get_brand(self.brand_id)
             session_state = self.app.db.get_client_onboarding_session(self.brand_id, self.user_id)
 
-        self.assertEqual(brand["website"], "https://jarvis-example.com")
+        self.assertEqual(brand["website"], "https://warren-example.com")
         self.assertIsNotNone(session_state)
-        self.assertEqual(session_state["profile"]["website"], "https://jarvis-example.com")
+        self.assertEqual(session_state["profile"]["website"], "https://warren-example.com")
 
         page = self.client.get("/client/warren-onboarding")
         html = page.get_data(as_text=True)
         self.assertIn("1 of 10 interview answers saved", html)
-        self.assertIn("https://jarvis-example.com", html)
+        self.assertIn("https://warren-example.com", html)
 
     def test_dismissing_warren_onboarding_allows_dashboard_access(self):
         dismiss_response = self.client.post(

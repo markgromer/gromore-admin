@@ -2505,7 +2505,7 @@ WARREN_ONBOARDING_QUESTIONS = [
         "stage": "guidance",
         "title": "How Warren should help",
         "prompt": "What kind of help is most useful for you: exact next steps, strategic advice, checklists, warnings, accountability, or something else?",
-        "help_text": "This is where the J.A.R.V.I.S. behavior becomes personal to the owner, not generic to the app.",
+        "help_text": "This is where Warren's behavior becomes personal to the owner, not generic to the app.",
         "placeholder": "Give me one clear next step, explain why it matters, and warn me before I break something.",
         "target_field": None,
         "multiline": True,
