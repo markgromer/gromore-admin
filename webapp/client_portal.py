@@ -39,6 +39,14 @@ client_public_bp = Blueprint(
 
 log = logging.getLogger(__name__)
 
+_SITE_BUILDER_MAX_CONTENT_BYTES = 1024 * 1024
+_SITE_BUILDER_MAX_EDITOR_JSON_BYTES = 2 * 1024 * 1024
+_SITE_BUILDER_MAX_PAGE_CSS_BYTES = 256 * 1024
+_SITE_BUILDER_MAX_TITLE_LENGTH = 255
+_SITE_BUILDER_MAX_SEO_TITLE_LENGTH = 120
+_SITE_BUILDER_MAX_SEO_DESCRIPTION_LENGTH = 320
+_SITE_BUILDER_MAX_REWRITE_INSTRUCTIONS_LENGTH = 2000
+
 
 def client_login_required(view_func):
     @wraps(view_func)
@@ -126,6 +134,80 @@ def _safe_json_list(raw_value):
     except Exception:
         return []
     return list(parsed) if isinstance(parsed, list) else []
+
+
+def _normalize_site_builder_text(value, field_label, max_length=None, trim=True):
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        value = str(value)
+    normalized = value.strip() if trim else value
+    if max_length and len(normalized) > max_length:
+        raise ValueError(f"{field_label} is too long.")
+    return normalized
+
+
+def _validate_site_builder_blob_size(value, field_label, max_bytes):
+    size = len((value or "").encode("utf-8"))
+    if size > max_bytes:
+        raise ValueError(f"{field_label} is too large.")
+
+
+def _normalize_site_builder_editor_json(raw_value):
+    if raw_value in (None, ""):
+        return ""
+    if isinstance(raw_value, str):
+        try:
+            parsed = json.loads(raw_value)
+        except Exception as exc:
+            raise ValueError("Editor state is not valid JSON.") from exc
+    else:
+        parsed = raw_value
+    try:
+        normalized = json.dumps(parsed)
+    except Exception as exc:
+        raise ValueError("Editor state could not be serialized.") from exc
+    _validate_site_builder_blob_size(normalized, "Editor state", _SITE_BUILDER_MAX_EDITOR_JSON_BYTES)
+    return normalized
+
+
+def _normalize_site_builder_page_save_payload(data):
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise ValueError("Invalid page update payload.")
+
+    update = {}
+    if "content" in data:
+        content = _normalize_site_builder_text(data.get("content"), "Page content", trim=False)
+        _validate_site_builder_blob_size(content, "Page content", _SITE_BUILDER_MAX_CONTENT_BYTES)
+        update["content"] = content
+        update["full_html"] = content
+    if "editor_json" in data:
+        update["editor_json"] = _normalize_site_builder_editor_json(data.get("editor_json"))
+    if "page_css" in data:
+        page_css = _normalize_site_builder_text(data.get("page_css"), "Page CSS", trim=False)
+        _validate_site_builder_blob_size(page_css, "Page CSS", _SITE_BUILDER_MAX_PAGE_CSS_BYTES)
+        update["page_css"] = page_css
+    if "seo_title" in data:
+        update["seo_title"] = _normalize_site_builder_text(
+            data.get("seo_title"),
+            "SEO title",
+            max_length=_SITE_BUILDER_MAX_SEO_TITLE_LENGTH,
+        )
+    if "seo_description" in data:
+        update["seo_description"] = _normalize_site_builder_text(
+            data.get("seo_description"),
+            "SEO description",
+            max_length=_SITE_BUILDER_MAX_SEO_DESCRIPTION_LENGTH,
+        )
+    if "title" in data:
+        update["title"] = _normalize_site_builder_text(
+            data.get("title"),
+            "Page title",
+            max_length=_SITE_BUILDER_MAX_TITLE_LENGTH,
+        )
+    return update
 
 
 def _summarize_delivery_detail(raw_value):
@@ -9191,21 +9273,14 @@ def client_site_builder_page_save(page_id):
     if not build or build["brand_id"] != brand_id:
         return jsonify(ok=False, error="Access denied."), 403
 
-    data = request.get_json(silent=True) or {}
-    update = {}
-    if "content" in data:
-        update["content"] = data["content"]
-        update["full_html"] = data["content"]
-    if "editor_json" in data:
-        update["editor_json"] = data["editor_json"] if isinstance(data["editor_json"], str) else json.dumps(data["editor_json"])
-    if "page_css" in data:
-        update["page_css"] = data["page_css"]
-    if "seo_title" in data:
-        update["seo_title"] = data["seo_title"]
-    if "seo_description" in data:
-        update["seo_description"] = data["seo_description"]
-    if "title" in data:
-        update["title"] = data["title"]
+    data = request.get_json(silent=True)
+    if data is None and request.get_data(cache=False):
+        return jsonify(ok=False, error="Invalid JSON payload."), 400
+
+    try:
+        update = _normalize_site_builder_page_save_payload(data)
+    except ValueError as exc:
+        return jsonify(ok=False, error=str(exc)), 400
 
     if update:
         db.update_site_page_content(page_id, update)
@@ -9234,8 +9309,16 @@ def client_site_builder_page_rewrite(page_id):
         return jsonify(ok=False, error="OpenAI API key not configured."), 400
 
     model = _pick_ai_model(brand, "analysis")
-    data = request.get_json(silent=True) or {}
-    instructions = (data.get("instructions") or "").strip()
+    data = request.get_json(silent=True)
+    if data is None and request.get_data(cache=False):
+        return jsonify(ok=False, error="Invalid JSON payload."), 400
+    if data is not None and not isinstance(data, dict):
+        return jsonify(ok=False, error="Invalid rewrite payload."), 400
+    instructions = _normalize_site_builder_text(
+        (data or {}).get("instructions"),
+        "Rewrite instructions",
+        max_length=_SITE_BUILDER_MAX_REWRITE_INSTRUCTIONS_LENGTH,
+    )
 
     from webapp.site_builder import (
         build_brand_context, _brand_block, _seo_intel_block,
@@ -9297,19 +9380,42 @@ def client_site_builder_page_rewrite(page_id):
         )
         raw = (response.choices[0].message.content or "{}").strip()
         result = _extract_json(raw)
+        if not isinstance(result, dict):
+            raise ValueError("AI rewrite returned an unexpected response.")
     except Exception as exc:
         return jsonify(ok=False, error=f"AI rewrite failed: {str(exc)[:200]}"), 500
 
     # Save the rewritten content
-    update = {
-        "title": result.get("title") or existing_title,
-        "content": result.get("content") or existing_content,
-        "excerpt": result.get("excerpt") or page.get("excerpt", ""),
-        "seo_title": result.get("seo_title") or existing_seo_title,
-        "seo_description": result.get("seo_description") or existing_seo_desc,
-        "primary_keyword": result.get("primary_keyword") or page.get("primary_keyword", ""),
-        "secondary_keywords": result.get("secondary_keywords") or page.get("secondary_keywords", ""),
-    }
+    rewritten_content = _normalize_site_builder_text(
+        result.get("content") or existing_content,
+        "Page content",
+        trim=False,
+    )
+    try:
+        _validate_site_builder_blob_size(rewritten_content, "Page content", _SITE_BUILDER_MAX_CONTENT_BYTES)
+        update = {
+            "title": _normalize_site_builder_text(
+                result.get("title") or existing_title,
+                "Page title",
+                max_length=_SITE_BUILDER_MAX_TITLE_LENGTH,
+            ),
+            "content": rewritten_content,
+            "excerpt": result.get("excerpt") or page.get("excerpt", ""),
+            "seo_title": _normalize_site_builder_text(
+                result.get("seo_title") or existing_seo_title,
+                "SEO title",
+                max_length=_SITE_BUILDER_MAX_SEO_TITLE_LENGTH,
+            ),
+            "seo_description": _normalize_site_builder_text(
+                result.get("seo_description") or existing_seo_desc,
+                "SEO description",
+                max_length=_SITE_BUILDER_MAX_SEO_DESCRIPTION_LENGTH,
+            ),
+            "primary_keyword": result.get("primary_keyword") or page.get("primary_keyword", ""),
+            "secondary_keywords": result.get("secondary_keywords") or page.get("secondary_keywords", ""),
+        }
+    except ValueError as exc:
+        return jsonify(ok=False, error=str(exc)), 400
     if result.get("faq_items"):
         update["faq_items_json"] = json.dumps(result["faq_items"])
     update["full_html"] = update["content"]
@@ -9342,19 +9448,25 @@ def client_site_builder_upload_image():
     allowed_ext = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in allowed_ext:
-        return jsonify(ok=False, error=f"File type {ext} not allowed."), 400
+        return jsonify(ok=False, error=f"File type {ext} not allowed.", allowed_types=sorted(allowed_ext)), 400
 
     file.seek(0, 2)
     size = file.tell()
     file.seek(0)
     if size > 10 * 1024 * 1024:
-        return jsonify(ok=False, error="Image too large. Max 10MB."), 400
+        return jsonify(ok=False, error="Image too large. Max 10MB.", max_size_bytes=10 * 1024 * 1024), 400
 
     safe_name = secure_filename(f"{uuid.uuid4().hex}{ext}")
+    if not safe_name:
+        return jsonify(ok=False, error="Could not generate a safe filename."), 400
     upload_dir = os.path.join(current_app.static_folder or "static", "uploads", "site_builder")
     os.makedirs(upload_dir, exist_ok=True)
     save_path = os.path.join(upload_dir, safe_name)
-    file.save(save_path)
+    try:
+        file.save(save_path)
+    except Exception as exc:
+        current_app.logger.exception("site builder image upload failed")
+        return jsonify(ok=False, error=f"Image upload failed: {str(exc)[:160]}"), 500
 
     img_url = url_for("static", filename=f"uploads/site_builder/{safe_name}")
     # Return in GrapesJS asset manager expected format

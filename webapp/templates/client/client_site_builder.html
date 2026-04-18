@@ -238,8 +238,31 @@
     }
     .gjs-toolbar .gjs-title { font-weight: 700; font-size: .95rem; }
     .gjs-toolbar .gjs-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+    .gjs-toolbar .btn.is-active {
+        background: rgba(255,255,255,.18); border-color: rgba(255,255,255,.34); color: #fff;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+    }
+    .gjs-toolbar .btn:disabled {
+        opacity: .5; cursor: not-allowed; box-shadow: none;
+    }
     .gjs-toolbar .btn-toolbar-note {
         font-size: .72rem; color: rgba(255,255,255,.72); margin-right: .4rem;
+    }
+    .gjs-toolbar .gjs-save-status {
+        font-size: .72rem; padding: .2rem .55rem; border-radius: 999px;
+        border: 1px solid transparent; white-space: nowrap;
+    }
+    .gjs-toolbar .gjs-save-status.is-muted {
+        color: rgba(226,232,240,.82); background: rgba(148,163,184,.12); border-color: rgba(148,163,184,.18);
+    }
+    .gjs-toolbar .gjs-save-status.is-success {
+        color: #dcfce7; background: rgba(34,197,94,.16); border-color: rgba(134,239,172,.22);
+    }
+    .gjs-toolbar .gjs-save-status.is-warning {
+        color: #fef3c7; background: rgba(245,158,11,.18); border-color: rgba(252,211,77,.22);
+    }
+    .gjs-toolbar .gjs-save-status.is-danger {
+        color: #fecaca; background: rgba(239,68,68,.18); border-color: rgba(252,165,165,.24);
     }
     .gjs-editor-wrap { flex: 1; overflow: hidden; display: flex; position: relative; }
     .gjs-help-panel {
@@ -314,6 +337,12 @@
     .gjs-sidebar-tabs button.active { color: #fff; background: #334155; }
     .gjs-sidebar-panel { display: none; flex: 1; overflow-y: auto; padding: 0; }
     .gjs-sidebar-panel.active { display: block; }
+    .gjs-block-tip {
+        margin: 10px 10px 2px; padding: 10px 12px; border-radius: 10px;
+        background: rgba(99,102,241,.12); border: 1px solid rgba(129,140,248,.2); color: #cbd5e1;
+    }
+    .gjs-block-tip strong { display: block; font-size: .74rem; font-weight: 800; color: #fff; margin-bottom: 2px; }
+    .gjs-block-tip span { display: block; font-size: .72rem; line-height: 1.45; }
     /* Block cards in sidebar */
     .gjs-overlay .gjs-blocks-c { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; }
     .gjs-overlay .gjs-block {
@@ -322,6 +351,7 @@
         color: #e2e8f0; transition: background .15s, border-color .15s; cursor: grab;
     }
     .gjs-overlay .gjs-block:hover { background: #475569; border-color: #818cf8; }
+    .gjs-overlay .gjs-block:active { cursor: grabbing; transform: scale(.99); }
     .gjs-overlay .gjs-block svg { fill: #e2e8f0; }
     .gjs-overlay .gjs-block-label { line-height: 1.3; }
     .gjs-overlay .gjs-block-category .gjs-title {
@@ -390,7 +420,14 @@
                 <button class="btn btn-outline-light" id="gjsUndo" title="Undo"><i class="bi bi-arrow-counterclockwise"></i></button>
                 <button class="btn btn-outline-light" id="gjsRedo" title="Redo"><i class="bi bi-arrow-clockwise"></i></button>
             </div>
+            <div class="btn-group btn-group-sm me-2">
+                <button class="btn btn-outline-light" id="gjsMoveBlockUp" title="Move selected section up"><i class="bi bi-arrow-up"></i></button>
+                <button class="btn btn-outline-light" id="gjsMoveBlockDown" title="Move selected section down"><i class="bi bi-arrow-down"></i></button>
+                <button class="btn btn-outline-light" id="gjsDuplicateBlock" title="Duplicate selected section"><i class="bi bi-copy"></i></button>
+                <button class="btn btn-outline-light" id="gjsDeleteBlock" title="Remove selected section"><i class="bi bi-trash"></i></button>
+            </div>
             <span class="btn-toolbar-note">Select a section or image</span>
+            <span class="gjs-save-status is-muted" id="gjsSaveStatus">All changes saved</span>
             <div class="btn-group btn-group-sm me-2">
                 <button class="btn btn-outline-light" id="gjsAddImageBtn" title="Add image"><i class="bi bi-image me-1"></i>Image</button>
                 <button class="btn btn-outline-light" id="gjsSetBackgroundBtn" title="Set background image"><i class="bi bi-card-image me-1"></i>Background</button>
@@ -565,6 +602,10 @@
 (function(){
     const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content || '';
     const helpStorageKey = 'gjs-editor-help-hidden-v1';
+    const draftStorageKeyPrefix = 'gjs-editor-draft-v1:';
+    const autosaveDelayMs = 1800;
+    const draftPersistDelayMs = 700;
+    const maxLocalDraftBytes = 1024 * 1024 * 1.5;
     const tabPanelMap = {
         blocks: 'gjsPanelBlocks',
         styles: 'gjsPanelStyles',
@@ -575,6 +616,21 @@
     function setToolbarNote(message) {
         const note = document.querySelector('.btn-toolbar-note');
         if (note) note.textContent = message;
+    }
+
+    function setSaveStatus(message, tone) {
+        const status = document.getElementById('gjsSaveStatus');
+        if (!status) return;
+        status.textContent = message || '';
+        status.className = 'gjs-save-status';
+        status.classList.add('is-' + (tone || 'muted'));
+    }
+
+    function setButtonActiveState(buttonId, isActive) {
+        const btn = document.getElementById(buttonId);
+        if (!btn) return;
+        btn.classList.toggle('is-active', Boolean(isActive));
+        btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
     }
 
     function getStoredHelpHidden() {
@@ -721,6 +777,407 @@
     let gjsEditor = null;
     let gjsCurrentPageId = null;
     let pendingAssetAction = null;
+    let gjsSaveInFlight = null;
+    let gjsAutosaveTimer = null;
+    let gjsDraftPersistTimer = null;
+    let gjsQueuedSave = false;
+    let gjsCloseAfterSave = false;
+    let gjsHasUnsavedChanges = false;
+    let gjsIsBootstrapping = false;
+    let gjsLastSavedSignature = '';
+    let gjsDraftWarningShown = false;
+
+    function describeSelectedComponent(component) {
+        if (!component || !component.get) {
+            return 'Drag blocks from the right, then click into text, buttons, or images to edit them.';
+        }
+        const type = component.get('type');
+        if (type === 'image') {
+            return 'Image selected - replace it with Image, use the alignment buttons for layout, or open Styles for crop and sizing.';
+        }
+        if (type === 'text' || type === 'textnode') {
+            return 'Text selected - click directly into the copy to rewrite it, then use Styles for spacing and typography.';
+        }
+        if (type === 'link') {
+            return 'Link selected - edit the text inline, then open Settings or Styles to adjust the destination and appearance.';
+        }
+        if (type === 'video') {
+            return 'Media selected - use Settings for embed details, then Styles for width, spacing, and placement.';
+        }
+        if (component.components && component.components().length) {
+            return 'Section selected - use the arrow buttons to reorder it, Duplicate to branch it, Background for section imagery, or Styles to refine spacing and layout.';
+        }
+        return 'Element selected - use the section controls if you want to move the whole block, then use Styles or Settings to refine it.';
+    }
+
+    function getStructuralSelection(component) {
+        if (!component || !component.get || !gjsEditor) return null;
+        const wrapper = gjsEditor.getWrapper();
+        let current = component;
+
+        while (current) {
+            const parent = typeof current.parent === 'function' ? current.parent() : null;
+            const tagName = String(current.get('tagName') || '').toLowerCase();
+            if (!parent || current === wrapper) {
+                return current === wrapper ? null : current;
+            }
+            if (tagName === 'section' || parent === wrapper) {
+                return current;
+            }
+            current = parent;
+        }
+
+        return component;
+    }
+
+    function getStructuralSiblingState(component) {
+        const structural = getStructuralSelection(component);
+        if (!structural || typeof structural.parent !== 'function') return null;
+        const parent = structural.parent();
+        const siblings = parent?.components?.();
+        if (!siblings || typeof siblings.indexOf !== 'function') return null;
+        const index = siblings.indexOf(structural);
+        if (index < 0) return null;
+        return {
+            structural,
+            parent,
+            siblings,
+            index,
+            total: siblings.length,
+        };
+    }
+
+    function updateImageActionState(component) {
+        const imageSelected = isImageComponent(component);
+        ['gjsImageAlignLeft', 'gjsImageAlignCenter', 'gjsImageAlignRight', 'gjsImageAlignFull'].forEach((id) => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.disabled = !imageSelected;
+        });
+        const backgroundBtn = document.getElementById('gjsSetBackgroundBtn');
+        if (backgroundBtn) {
+            backgroundBtn.disabled = !component || imageSelected;
+        }
+    }
+
+    function updateStructureActionState(component) {
+        const state = getStructuralSiblingState(component);
+        const canMoveUp = Boolean(state && state.index > 0);
+        const canMoveDown = Boolean(state && state.index < state.total - 1);
+        const hasStructuralTarget = Boolean(state && state.structural);
+
+        const upBtn = document.getElementById('gjsMoveBlockUp');
+        const downBtn = document.getElementById('gjsMoveBlockDown');
+        const duplicateBtn = document.getElementById('gjsDuplicateBlock');
+        const deleteBtn = document.getElementById('gjsDeleteBlock');
+
+        if (upBtn) upBtn.disabled = !canMoveUp;
+        if (downBtn) downBtn.disabled = !canMoveDown;
+        if (duplicateBtn) duplicateBtn.disabled = !hasStructuralTarget;
+        if (deleteBtn) deleteBtn.disabled = !hasStructuralTarget;
+    }
+
+    function updateDeviceToolbarState(deviceName) {
+        setButtonActiveState('gjsDeviceDesktop', deviceName === 'Desktop');
+        setButtonActiveState('gjsDeviceTablet', deviceName === 'Tablet');
+        setButtonActiveState('gjsDeviceMobile', deviceName === 'Mobile');
+    }
+
+    function setEditorDevice(deviceName) {
+        if (!gjsEditor) return;
+        gjsEditor.setDevice(deviceName);
+        updateDeviceToolbarState(deviceName);
+        const selected = getSelectedComponent();
+        setToolbarNote(selected ? describeSelectedComponent(selected) : 'Previewing the ' + deviceName.toLowerCase() + ' layout. Drag blocks in or select a section to keep editing.');
+        setSaveStatus(deviceName + ' preview active.', 'muted');
+    }
+
+    function renderBlockPanelHint() {
+        const panel = document.getElementById('gjsPanelBlocks');
+        if (!panel || panel.querySelector('.gjs-block-tip')) return;
+        const tip = document.createElement('div');
+        tip.className = 'gjs-block-tip';
+        tip.innerHTML = '<strong>Quick start</strong><span>Drag a block into the canvas, click into text to rewrite it, and use the arrow or duplicate buttons in the top bar when you want to reorder whole sections.</span>';
+        panel.prepend(tip);
+    }
+
+    function moveStructuralSelection(direction) {
+        const state = getStructuralSiblingState(getSelectedComponent());
+        if (!state) {
+            setSaveStatus('Select a section or block before reordering.', 'warning');
+            return false;
+        }
+        const targetIndex = state.index + direction;
+        if (targetIndex < 0 || targetIndex >= state.total) {
+            setSaveStatus('That section is already at the edge of the page.', 'muted');
+            return false;
+        }
+        state.siblings.remove(state.structural);
+        state.siblings.add(state.structural, { at: targetIndex });
+        gjsEditor.select(state.structural);
+        setSidebarTab('layers');
+        setToolbarNote(direction < 0 ? 'Moved the selected section up.' : 'Moved the selected section down.');
+        setSaveStatus('Section reordered. Unsaved changes.', 'warning');
+        return true;
+    }
+
+    function duplicateStructuralSelection() {
+        const state = getStructuralSiblingState(getSelectedComponent());
+        if (!state || !state.structural || typeof state.structural.clone !== 'function') {
+            setSaveStatus('Select a section or block before duplicating.', 'warning');
+            return false;
+        }
+        const clone = state.structural.clone();
+        state.siblings.add(clone, { at: state.index + 1 });
+        gjsEditor.select(clone);
+        setSidebarTab('layers');
+        setToolbarNote('Duplicated the selected section. Edit the new copy to branch the layout.');
+        setSaveStatus('Section duplicated. Unsaved changes.', 'warning');
+        return true;
+    }
+
+    function removeStructuralSelection() {
+        const state = getStructuralSiblingState(getSelectedComponent());
+        if (!state || !state.structural) {
+            setSaveStatus('Select a section or block before removing it.', 'warning');
+            return false;
+        }
+        const nextSelection = state.siblings.at(Math.max(0, state.index - 1)) || state.parent || null;
+        state.structural.remove();
+        if (nextSelection && nextSelection !== gjsEditor.getWrapper()) {
+            gjsEditor.select(nextSelection);
+        } else {
+            gjsEditor.select();
+        }
+        setSidebarTab('layers');
+        setToolbarNote('Removed the selected section. Use Undo if you want it back.');
+        setSaveStatus('Section removed. Unsaved changes.', 'warning');
+        return true;
+    }
+
+    function clearAutosaveTimer() {
+        if (gjsAutosaveTimer) {
+            window.clearTimeout(gjsAutosaveTimer);
+            gjsAutosaveTimer = null;
+        }
+    }
+
+    function clearDraftPersistTimer() {
+        if (gjsDraftPersistTimer) {
+            window.clearTimeout(gjsDraftPersistTimer);
+            gjsDraftPersistTimer = null;
+        }
+    }
+
+    function clearEditorTimers() {
+        clearAutosaveTimer();
+        clearDraftPersistTimer();
+    }
+
+    function getDraftStorageKey(pageId) {
+        return draftStorageKeyPrefix + pageId;
+    }
+
+    function buildPayloadSignature(payload) {
+        return JSON.stringify([
+            payload?.content || '',
+            payload?.page_css || '',
+            payload?.editor_json || '',
+        ]);
+    }
+
+    function buildServerPayload(page) {
+        return {
+            content: page?.content || '',
+            page_css: page?.page_css || '',
+            editor_json: typeof page?.editor_json === 'string'
+                ? page.editor_json
+                : (page?.editor_json ? JSON.stringify(page.editor_json) : ''),
+        };
+    }
+
+    function buildEditorPayload() {
+        if (!gjsEditor) return null;
+        return {
+            content: gjsEditor.getHtml(),
+            page_css: gjsEditor.getCss(),
+            editor_json: JSON.stringify(gjsEditor.getProjectData()),
+        };
+    }
+
+    function readLocalDraft(pageId) {
+        if (!pageId) return null;
+        try {
+            const raw = window.localStorage.getItem(getDraftStorageKey(pageId));
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed === 'object' ? parsed : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function clearLocalDraft(pageId) {
+        if (!pageId) return;
+        try {
+            window.localStorage.removeItem(getDraftStorageKey(pageId));
+        } catch (e) {}
+    }
+
+    function persistLocalDraft(pageId, payload) {
+        if (!pageId || !payload) return false;
+        try {
+            const record = {
+                baseSignature: gjsLastSavedSignature,
+                payload,
+                updatedAt: new Date().toISOString(),
+            };
+            const serialized = JSON.stringify(record);
+            if (serialized.length > maxLocalDraftBytes) {
+                if (!gjsDraftWarningShown) {
+                    setSaveStatus('Draft is too large for local recovery. Save before closing.', 'warning');
+                    gjsDraftWarningShown = true;
+                }
+                return false;
+            }
+            window.localStorage.setItem(getDraftStorageKey(pageId), serialized);
+            gjsDraftWarningShown = false;
+            return true;
+        } catch (e) {
+            if (!gjsDraftWarningShown) {
+                setSaveStatus('Local draft recovery is unavailable in this browser session.', 'warning');
+                gjsDraftWarningShown = true;
+            }
+            return false;
+        }
+    }
+
+    function maybeRestoreLocalDraft(pageId, serverPayload) {
+        const draft = readLocalDraft(pageId);
+        const serverSignature = buildPayloadSignature(serverPayload);
+        if (!draft?.payload) {
+            return { payload: serverPayload, restored: false, discarded: false };
+        }
+
+        const draftPayload = {
+            content: draft.payload.content || '',
+            page_css: draft.payload.page_css || '',
+            editor_json: draft.payload.editor_json || '',
+        };
+        const draftSignature = buildPayloadSignature(draftPayload);
+        if (draftSignature === serverSignature) {
+            clearLocalDraft(pageId);
+            return { payload: serverPayload, restored: false, discarded: false };
+        }
+        if (draft.baseSignature && draft.baseSignature !== serverSignature) {
+            clearLocalDraft(pageId);
+            return { payload: serverPayload, restored: false, discarded: true };
+        }
+
+        let prompt = 'A local draft with unsaved changes is available';
+        if (draft.updatedAt) {
+            prompt += ' from ' + new Date(draft.updatedAt).toLocaleString();
+        }
+        prompt += '. Restore it?';
+
+        if (!window.confirm(prompt)) {
+            clearLocalDraft(pageId);
+            return { payload: serverPayload, restored: false, discarded: false };
+        }
+
+        return {
+            payload: draftPayload,
+            restored: true,
+            discarded: false,
+            updatedAt: draft.updatedAt || null,
+        };
+    }
+
+    function updateSaveButtonState() {
+        const btn = document.getElementById('gjsSaveBtn');
+        if (!btn) return;
+
+        if (gjsSaveInFlight) {
+            btn.disabled = true;
+            btn.classList.remove('btn-warning');
+            btn.classList.add('btn-success');
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+            return;
+        }
+
+        btn.disabled = !gjsEditor || !gjsCurrentPageId;
+        if (gjsHasUnsavedChanges) {
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-warning');
+            btn.innerHTML = '<i class="bi bi-cloud-arrow-up me-1"></i>Save';
+            return;
+        }
+
+        btn.classList.remove('btn-warning');
+        btn.classList.add('btn-success');
+        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Saved';
+    }
+
+    function scheduleAutosave() {
+        clearAutosaveTimer();
+        if (!gjsEditor || !gjsCurrentPageId || !gjsHasUnsavedChanges) return;
+        gjsAutosaveTimer = window.setTimeout(() => {
+            gjsAutosaveTimer = null;
+            saveEditor({ autosave: true });
+        }, autosaveDelayMs);
+    }
+
+    function scheduleDraftPersist() {
+        clearDraftPersistTimer();
+        if (!gjsEditor || !gjsCurrentPageId || !gjsHasUnsavedChanges) return;
+        gjsDraftPersistTimer = window.setTimeout(() => {
+            gjsDraftPersistTimer = null;
+            try {
+                persistLocalDraft(gjsCurrentPageId, buildEditorPayload());
+            } catch (e) {}
+        }, draftPersistDelayMs);
+    }
+
+    function markEditorDirty() {
+        if (!gjsEditor || gjsIsBootstrapping) return;
+        if (!gjsHasUnsavedChanges) {
+            gjsHasUnsavedChanges = true;
+            setSaveStatus('Unsaved changes.', 'warning');
+            updateSaveButtonState();
+        }
+        scheduleAutosave();
+        scheduleDraftPersist();
+    }
+
+    function destroyEditorInstance() {
+        if (!gjsEditor) return;
+        try {
+            gjsEditor.destroy();
+        } catch (e) {}
+        gjsEditor = null;
+    }
+
+    function resetEditorOverlay() {
+        clearEditorTimers();
+        destroyEditorInstance();
+        document.getElementById('gjsOverlay').classList.remove('active');
+        document.body.style.overflow = '';
+        gjsCurrentPageId = null;
+        pendingAssetAction = null;
+        gjsSaveInFlight = null;
+        gjsQueuedSave = false;
+        gjsCloseAfterSave = false;
+        gjsHasUnsavedChanges = false;
+        gjsIsBootstrapping = false;
+        gjsLastSavedSignature = '';
+        gjsDraftWarningShown = false;
+        setToolbarNote('Select a section or image');
+        setSaveStatus('All changes saved', 'muted');
+        updateDeviceToolbarState('Desktop');
+        updateImageActionState(null);
+        updateStructureActionState(null);
+        updateSaveButtonState();
+    }
 
     function isImageComponent(component) {
         return component && component.get && component.get('type') === 'image';
@@ -854,6 +1311,13 @@
         const overlay = document.getElementById('gjsOverlay');
         overlay.classList.add('active');
         document.body.style.overflow = 'hidden';
+        clearEditorTimers();
+        gjsHasUnsavedChanges = false;
+        gjsQueuedSave = false;
+        gjsCloseAfterSave = false;
+        gjsDraftWarningShown = false;
+        setSaveStatus('Loading page...', 'muted');
+        updateSaveButtonState();
 
         try {
             const resp = await fetch('/client/site-builder/page/' + pageId, {
@@ -862,14 +1326,14 @@
             if (!resp.ok) {
                 let msg = 'Server error (' + resp.status + ')';
                 try { const d = await resp.json(); msg = d.error || msg; } catch(e) {}
-                alert(msg); closeEditor(); return;
+                alert(msg); resetEditorOverlay(); return;
             }
             const data = await resp.json();
-            if (!data.ok) { alert(data.error || 'Failed to load page.'); closeEditor(); return; }
+            if (!data.ok) { alert(data.error || 'Failed to load page.'); resetEditorOverlay(); return; }
 
             document.getElementById('gjsPageTitle').textContent = data.page.label || data.page.title || 'Visual Editor';
 
-            if (gjsEditor) { try { gjsEditor.destroy(); } catch(e) {} }
+            destroyEditorInstance();
 
             // Clear sidebar panels from previous editor instance
             document.getElementById('gjsPanelBlocks').innerHTML = '';
@@ -882,8 +1346,11 @@
             document.querySelector('.gjs-sidebar-tabs button[data-tab="blocks"]').classList.add('active');
             document.querySelectorAll('.gjs-sidebar-panel').forEach(p => p.classList.remove('active'));
             document.getElementById('gjsPanelBlocks').classList.add('active');
-            setToolbarNote('Drag blocks from the right, then click Help if you want a quick walkthrough.');
+            setToolbarNote('Drag blocks from the right, then click into text, buttons, or images to refine each section.');
             setHelpPanelVisible(!getStoredHelpHidden(), false);
+            updateDeviceToolbarState('Desktop');
+            updateImageActionState(null);
+            updateStructureActionState(null);
 
             gjsEditor = grapesjs.init({
                 container: '#gjsCanvas',
@@ -1249,10 +1716,25 @@
                 },
             });
 
+            renderBlockPanelHint();
+
+            gjsEditor.on('update', () => {
+                markEditorDirty();
+            });
+
+            gjsEditor.on('asset:upload:start', () => {
+                setSaveStatus('Uploading image...', 'muted');
+            });
+
+            gjsEditor.on('asset:upload:error', () => {
+                setSaveStatus('Image upload failed. Your draft is still local.', 'danger');
+            });
+
             gjsEditor.on('asset:upload:end', (result) => {
                 const uploadedSrc = extractUploadedAssetSrcs(result)[0];
                 if (uploadedSrc) {
                     applyAssetSelection(uploadedSrc, result);
+                    setSaveStatus('Image uploaded. Unsaved changes.', 'warning');
                 }
             });
 
@@ -1262,18 +1744,23 @@
                 if (stylesBtn && !stylesBtn.classList.contains('active')) {
                     stylesBtn.click();
                 }
-                if (isImageComponent(component)) {
-                    setToolbarNote('Image selected - use Image to replace it, alignment buttons to place it, or Styles for size and crop.');
-                } else {
-                    setToolbarNote('Section selected - use Background for a section image or Styles to adjust spacing, colors, and layout.');
-                }
+                updateImageActionState(component);
+                updateStructureActionState(component);
+                setToolbarNote(describeSelectedComponent(component));
             });
 
             // When no component is selected, switch back to Blocks
             gjsEditor.on('component:deselected', () => {
                 const blocksBtn = document.querySelector('.gjs-sidebar-tabs button[data-tab="blocks"]');
                 if (blocksBtn) blocksBtn.click();
-                setToolbarNote('Drag blocks from the right, then click Help if you want a quick walkthrough.');
+                updateImageActionState(null);
+                updateStructureActionState(null);
+                setToolbarNote('Drag blocks from the right, then click into text, buttons, or images to refine each section.');
+            });
+
+            gjsEditor.on('canvas:drop', () => {
+                setToolbarNote('Block added - click into the new section to edit text, images, or spacing.');
+                setSaveStatus('Block inserted. Unsaved changes.', 'warning');
             });
 
             // Double-click an image to open asset manager
@@ -1286,82 +1773,194 @@
             });
 
             // Load saved editor state or raw content
+            const serverPayload = buildServerPayload(data.page);
+            const restoreState = maybeRestoreLocalDraft(pageId, serverPayload);
+            const payloadToLoad = restoreState.payload;
+            const serverSignature = buildPayloadSignature(serverPayload);
+
+            gjsIsBootstrapping = true;
             let editorJson = null;
-            try { editorJson = data.page.editor_json ? JSON.parse(data.page.editor_json) : null; } catch(e) {}
+            try { editorJson = payloadToLoad.editor_json ? JSON.parse(payloadToLoad.editor_json) : null; } catch(e) {}
             if (editorJson && editorJson.pages) {
                 gjsEditor.loadProjectData(editorJson);
             } else if (editorJson && editorJson.components) {
                 gjsEditor.loadProjectData(editorJson);
             } else {
-                gjsEditor.setComponents(data.page.content || '');
+                gjsEditor.setComponents(payloadToLoad.content || '');
             }
-            if (data.page.page_css) {
-                gjsEditor.setStyle(data.page.page_css);
-            }
+            gjsEditor.setStyle(payloadToLoad.page_css || '');
+            gjsLastSavedSignature = serverSignature;
+            window.setTimeout(() => {
+                gjsIsBootstrapping = false;
+                if (restoreState.restored) {
+                    gjsHasUnsavedChanges = buildPayloadSignature(payloadToLoad) !== serverSignature;
+                    updateSaveButtonState();
+                    setSaveStatus(
+                        'Restored local draft' + (restoreState.updatedAt ? ' from ' + new Date(restoreState.updatedAt).toLocaleString() : '') + '.',
+                        'warning'
+                    );
+                    scheduleAutosave();
+                    scheduleDraftPersist();
+                } else if (restoreState.discarded) {
+                    gjsHasUnsavedChanges = false;
+                    updateSaveButtonState();
+                    setSaveStatus('Ignored an older local draft because the page changed elsewhere.', 'warning');
+                } else {
+                    gjsHasUnsavedChanges = false;
+                    updateSaveButtonState();
+                    setSaveStatus('All changes saved.', 'success');
+                }
+                updateImageActionState(getSelectedComponent());
+                updateStructureActionState(getSelectedComponent());
+            }, 0);
         } catch (err) {
             console.error('Editor init error:', err);
             alert('Failed to load page for editing.');
-            closeEditor();
+            resetEditorOverlay();
         }
     }
 
-    function closeEditor() {
-        document.getElementById('gjsOverlay').classList.remove('active');
-        document.body.style.overflow = '';
-        gjsCurrentPageId = null;
-        pendingAssetAction = null;
+    async function closeEditor() {
+        if (!document.getElementById('gjsOverlay').classList.contains('active')) {
+            resetEditorOverlay();
+            return true;
+        }
+
+        if (gjsSaveInFlight) {
+            gjsCloseAfterSave = true;
+            setSaveStatus('Finishing the current save before closing...', 'warning');
+            return false;
+        }
+
+        if (gjsHasUnsavedChanges) {
+            const shouldSave = window.confirm('You have unsaved changes. Click OK to save before closing, or Cancel for more options.');
+            if (shouldSave) {
+                gjsCloseAfterSave = true;
+                await saveEditor({ closeAfterSave: true });
+                return false;
+            }
+            const shouldDiscard = window.confirm('Discard unsaved changes and close the editor?');
+            if (!shouldDiscard) {
+                return false;
+            }
+            clearLocalDraft(gjsCurrentPageId);
+        }
+
+        resetEditorOverlay();
+        return true;
     }
 
-    async function saveEditor() {
+    async function saveEditor(options) {
         if (!gjsEditor || !gjsCurrentPageId) return;
-        const btn = document.getElementById('gjsSaveBtn');
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+        const saveOptions = options || {};
+        const isAutosave = Boolean(saveOptions.autosave);
 
-        const html = gjsEditor.getHtml();
-        const css = gjsEditor.getCss();
-        const projectData = gjsEditor.getProjectData();
+        if (saveOptions.closeAfterSave) {
+            gjsCloseAfterSave = true;
+        }
+        if (gjsSaveInFlight) {
+            gjsQueuedSave = true;
+            if (!isAutosave) setSaveStatus('Save already in progress. Your latest edits will follow next.', 'warning');
+            return gjsSaveInFlight;
+        }
+        if (!gjsHasUnsavedChanges && !isAutosave) {
+            setSaveStatus('All changes are already saved.', 'success');
+            updateSaveButtonState();
+            if (gjsCloseAfterSave) {
+                resetEditorOverlay();
+            }
+            return true;
+        }
+
+        clearEditorTimers();
+        updateSaveButtonState();
+        setSaveStatus(isAutosave ? 'Autosaving changes...' : 'Saving changes...', 'muted');
+
+        let payload;
+        try {
+            payload = buildEditorPayload();
+        } catch (err) {
+            setSaveStatus('Could not prepare your edits for saving.', 'danger');
+            updateSaveButtonState();
+            return false;
+        }
+
+        const payloadSignature = buildPayloadSignature(payload);
+
+        gjsSaveInFlight = (async () => {
+            try {
+                const resp = await fetch('/client/site-builder/page/' + gjsCurrentPageId + '/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': csrf(),
+                    },
+                    body: JSON.stringify(payload),
+                });
+                const data = await resp.json();
+                if (data.ok) {
+                    const preview = document.getElementById('pageContent-' + gjsCurrentPageId);
+                    if (preview) preview.innerHTML = payload.content;
+                    gjsLastSavedSignature = payloadSignature;
+                    const latestPayload = gjsEditor ? buildEditorPayload() : null;
+                    const latestSignature = latestPayload ? buildPayloadSignature(latestPayload) : payloadSignature;
+                    if (latestSignature === payloadSignature) {
+                        gjsHasUnsavedChanges = false;
+                        clearLocalDraft(gjsCurrentPageId);
+                        setSaveStatus(isAutosave ? 'All changes saved.' : 'Saved.', 'success');
+                    } else {
+                        gjsHasUnsavedChanges = true;
+                        persistLocalDraft(gjsCurrentPageId, latestPayload);
+                        setSaveStatus('Saved, but newer edits are still pending.', 'warning');
+                    }
+                    return true;
+                }
+
+                persistLocalDraft(gjsCurrentPageId, payload);
+                setSaveStatus(data.error || 'Save failed. Changes were kept locally.', 'danger');
+                return false;
+            } catch (err) {
+                persistLocalDraft(gjsCurrentPageId, payload);
+                setSaveStatus('Network error while saving. Changes were kept locally.', 'danger');
+                return false;
+            } finally {
+                gjsSaveInFlight = null;
+                updateSaveButtonState();
+            }
+        })();
 
         try {
-            const resp = await fetch('/client/site-builder/page/' + gjsCurrentPageId + '/save', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRFToken': csrf(),
-                },
-                body: JSON.stringify({
-                    content: html,
-                    page_css: css,
-                    editor_json: JSON.stringify(projectData),
-                }),
-            });
-            const data = await resp.json();
-            if (data.ok) {
-                const preview = document.getElementById('pageContent-' + gjsCurrentPageId);
-                if (preview) preview.innerHTML = html;
-                btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Saved!';
-                setTimeout(() => { btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save'; btn.disabled = false; }, 1500);
-            } else {
-                alert(data.error || 'Save failed.');
-                btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save';
-                btn.disabled = false;
+            const ok = await gjsSaveInFlight;
+            if (gjsQueuedSave && gjsEditor && gjsCurrentPageId) {
+                gjsQueuedSave = false;
+                if (gjsHasUnsavedChanges) {
+                    return saveEditor({ autosave: true, closeAfterSave: gjsCloseAfterSave });
+                }
             }
-        } catch (err) {
-            alert('Network error saving.');
-            btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save';
-            btn.disabled = false;
+            if (ok && gjsCloseAfterSave && !gjsHasUnsavedChanges) {
+                resetEditorOverlay();
+            }
+            return ok;
+        } finally {
+            if (!gjsSaveInFlight && !gjsHasUnsavedChanges) {
+                clearEditorTimers();
+            }
         }
     }
 
     // Toolbar events
     document.getElementById('gjsSaveBtn')?.addEventListener('click', saveEditor);
     document.getElementById('gjsCloseBtn')?.addEventListener('click', closeEditor);
-    document.getElementById('gjsDeviceDesktop')?.addEventListener('click', () => gjsEditor?.setDevice('Desktop'));
-    document.getElementById('gjsDeviceTablet')?.addEventListener('click', () => gjsEditor?.setDevice('Tablet'));
-    document.getElementById('gjsDeviceMobile')?.addEventListener('click', () => gjsEditor?.setDevice('Mobile'));
+    document.getElementById('gjsDeviceDesktop')?.addEventListener('click', () => setEditorDevice('Desktop'));
+    document.getElementById('gjsDeviceTablet')?.addEventListener('click', () => setEditorDevice('Tablet'));
+    document.getElementById('gjsDeviceMobile')?.addEventListener('click', () => setEditorDevice('Mobile'));
     document.getElementById('gjsUndo')?.addEventListener('click', () => gjsEditor?.UndoManager.undo());
     document.getElementById('gjsRedo')?.addEventListener('click', () => gjsEditor?.UndoManager.redo());
+    document.getElementById('gjsMoveBlockUp')?.addEventListener('click', () => moveStructuralSelection(-1));
+    document.getElementById('gjsMoveBlockDown')?.addEventListener('click', () => moveStructuralSelection(1));
+    document.getElementById('gjsDuplicateBlock')?.addEventListener('click', duplicateStructuralSelection);
+    document.getElementById('gjsDeleteBlock')?.addEventListener('click', removeStructuralSelection);
     document.getElementById('gjsAddImageBtn')?.addEventListener('click', () => {
         const selected = getSelectedComponent();
         if (isImageComponent(selected)) {
@@ -1397,9 +1996,45 @@
 
     // Escape key closes editor
     document.addEventListener('keydown', e => {
+        const overlayActive = document.getElementById('gjsOverlay').classList.contains('active');
+        if (!overlayActive) return;
+
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+            e.preventDefault();
+            saveEditor();
+            return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+            e.preventDefault();
+            gjsEditor?.UndoManager.undo();
+            return;
+        }
+        if ((e.ctrlKey || e.metaKey) && ((e.shiftKey && e.key.toLowerCase() === 'z') || e.key.toLowerCase() === 'y')) {
+            e.preventDefault();
+            gjsEditor?.UndoManager.redo();
+            return;
+        }
         if (e.key === 'Escape' && document.getElementById('gjsOverlay').classList.contains('active')) {
             closeEditor();
         }
+    });
+
+    window.addEventListener('beforeunload', (event) => {
+        if (!gjsHasUnsavedChanges && !gjsSaveInFlight) return;
+        try {
+            if (gjsHasUnsavedChanges && gjsEditor && gjsCurrentPageId) {
+                persistLocalDraft(gjsCurrentPageId, buildEditorPayload());
+            }
+        } catch (e) {}
+        event.preventDefault();
+        event.returnValue = '';
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden || !gjsHasUnsavedChanges || !gjsEditor || !gjsCurrentPageId) return;
+        try {
+            persistLocalDraft(gjsCurrentPageId, buildEditorPayload());
+        } catch (e) {}
     });
 })();
 </script>

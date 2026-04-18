@@ -10,6 +10,7 @@ Tests for the client-facing Site Builder UI:
 import os
 import sys
 import json
+import io
 import uuid
 import unittest
 from pathlib import Path
@@ -19,6 +20,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 _TEST_ROOT = Path(__file__).resolve().parent / ".tmp-test-artifacts"
 _TEST_ROOT.mkdir(exist_ok=True)
+
+
+class _FakeChatResponse:
+    def __init__(self, content):
+        self.choices = [type("Choice", (), {"message": type("Message", (), {"content": content})()})()]
 
 
 def _make_test_app():
@@ -470,6 +476,201 @@ class SiteBuilderPublishTests(unittest.TestCase):
         self.assertEqual(data["published"], 0)
         self.assertEqual(len(data["errors"]), 1)
         self.assertIn("403 Forbidden", data["errors"][0])
+
+
+# ---------------------------------------------------------------------------
+# Page Editor Route Tests
+# ---------------------------------------------------------------------------
+
+class SiteBuilderEditorRouteTests(unittest.TestCase):
+    """Test page load/save/rewrite/upload routes used by the visual editor."""
+
+    def setUp(self):
+        self.app, self._db_file = _make_test_app()
+        self.client = self.app.test_client()
+        self.brand_id, _ = _login_client(self.client, self.app)
+        self.db = self.app.db
+        self.build_id = self.db.create_site_build(self.brand_id, [{"page_type": "home"}])
+        self.page_id = self.db.save_site_page({
+            "build_id": self.build_id,
+            "brand_id": self.brand_id,
+            "page_type": "home",
+            "label": "Home",
+            "title": "Home",
+            "content": "<p>Original</p>",
+            "seo_title": "Original SEO",
+            "seo_description": "Original description",
+        })
+
+    def tearDown(self):
+        _cleanup_db(self._db_file)
+
+    def test_page_get_returns_editor_page_json(self):
+        resp = self.client.get(f"/client/site-builder/page/{self.page_id}")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["page"]["id"], self.page_id)
+
+    def test_page_get_denies_cross_brand_access(self):
+        other_brand_id = self.db.create_brand({"display_name": "Other Biz", "slug": f"other-{uuid.uuid4().hex[:6]}"})
+        other_build_id = self.db.create_site_build(other_brand_id, [{"page_type": "home"}])
+        other_page_id = self.db.save_site_page({
+            "build_id": other_build_id,
+            "brand_id": other_brand_id,
+            "page_type": "home",
+            "label": "Other Home",
+            "title": "Other",
+            "content": "<p>Other</p>",
+        })
+
+        resp = self.client.get(f"/client/site-builder/page/{other_page_id}")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_page_save_persists_content_editor_json_and_css(self):
+        payload = {
+            "content": "<section><h1>Updated</h1></section>",
+            "page_css": ".hero{padding:24px;}",
+            "editor_json": {"pages": [{"frames": [{"component": "<div>Updated</div>"}]}]},
+            "seo_title": "Updated SEO",
+            "seo_description": "Updated description",
+            "title": "Updated Home",
+        }
+        resp = self.client.post(
+            f"/client/site-builder/page/{self.page_id}/save",
+            json=payload,
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["ok"])
+
+        page = self.db.get_site_page(self.page_id)
+        self.assertEqual(page["content"], payload["content"])
+        self.assertEqual(page["full_html"], payload["content"])
+        self.assertEqual(page["page_css"], payload["page_css"])
+        self.assertEqual(page["seo_title"], payload["seo_title"])
+        self.assertEqual(page["seo_description"], payload["seo_description"])
+        self.assertEqual(page["title"], payload["title"])
+        self.assertEqual(json.loads(page["editor_json"]), payload["editor_json"])
+
+    def test_page_save_rejects_invalid_json_payload(self):
+        resp = self.client.post(
+            f"/client/site-builder/page/{self.page_id}/save",
+            data='{"content":',
+            content_type="application/json",
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Invalid JSON", resp.get_json()["error"])
+
+    def test_page_save_rejects_invalid_editor_json_string(self):
+        resp = self.client.post(
+            f"/client/site-builder/page/{self.page_id}/save",
+            json={"editor_json": "{not valid json}"},
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Editor state", resp.get_json()["error"])
+
+    def test_page_save_rejects_oversized_content(self):
+        resp = self.client.post(
+            f"/client/site-builder/page/{self.page_id}/save",
+            json={"content": "x" * (1024 * 1024 + 1)},
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("too large", resp.get_json()["error"])
+
+    def test_page_save_denies_cross_brand_access(self):
+        other_brand_id = self.db.create_brand({"display_name": "Other Biz", "slug": f"other-save-{uuid.uuid4().hex[:6]}"})
+        other_build_id = self.db.create_site_build(other_brand_id, [{"page_type": "home"}])
+        other_page_id = self.db.save_site_page({
+            "build_id": other_build_id,
+            "brand_id": other_brand_id,
+            "page_type": "home",
+            "label": "Other Home",
+            "title": "Other",
+            "content": "<p>Other</p>",
+        })
+
+        resp = self.client.post(
+            f"/client/site-builder/page/{other_page_id}/save",
+            json={"content": "<p>Hack</p>"},
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    @patch("webapp.client_portal._get_openai_api_key", return_value="test-key")
+    @patch("webapp.client_portal._pick_ai_model", return_value="gpt-4o-mini")
+    @patch("openai.OpenAI")
+    def test_page_rewrite_updates_page_content(self, mock_openai, mock_model, mock_key):
+        mock_client = mock_openai.return_value
+        mock_client.chat.completions.create.return_value = _FakeChatResponse(json.dumps({
+            "title": "Better Home",
+            "content": "<section><h1>Better page</h1></section>",
+            "seo_title": "Better SEO",
+            "seo_description": "Better description",
+            "primary_keyword": "better plumber",
+            "secondary_keywords": "better, plumber",
+        }))
+
+        resp = self.client.post(
+            f"/client/site-builder/page/{self.page_id}/rewrite",
+            json={"instructions": "Make it more direct."},
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["page"]["title"], "Better Home")
+
+        page = self.db.get_site_page(self.page_id)
+        self.assertEqual(page["title"], "Better Home")
+        self.assertEqual(page["content"], "<section><h1>Better page</h1></section>")
+        self.assertEqual(page["seo_title"], "Better SEO")
+
+    @patch("webapp.client_portal._get_openai_api_key", return_value="test-key")
+    @patch("webapp.client_portal._pick_ai_model", return_value="gpt-4o-mini")
+    @patch("openai.OpenAI")
+    def test_page_rewrite_invalid_ai_payload_preserves_existing_content(self, mock_openai, mock_model, mock_key):
+        mock_client = mock_openai.return_value
+        mock_client.chat.completions.create.return_value = _FakeChatResponse("[]")
+
+        resp = self.client.post(
+            f"/client/site-builder/page/{self.page_id}/rewrite",
+            json={"instructions": "Make it better."},
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+        self.assertEqual(resp.status_code, 500)
+        self.assertIn("AI rewrite failed", resp.get_json()["error"])
+
+        page = self.db.get_site_page(self.page_id)
+        self.assertEqual(page["content"], "<p>Original</p>")
+        self.assertEqual(page["title"], "Home")
+
+    def test_upload_image_rejects_bad_extension(self):
+        resp = self.client.post(
+            "/client/site-builder/upload-image",
+            data={"files[]": (io.BytesIO(b"not-an-image"), "bad.exe")},
+            content_type="multipart/form-data",
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+        self.assertEqual(resp.status_code, 400)
+        body = resp.get_json()
+        self.assertFalse(body["ok"])
+        self.assertIn("allowed_types", body)
+
+    def test_upload_image_rejects_oversized_file(self):
+        resp = self.client.post(
+            "/client/site-builder/upload-image",
+            data={"files[]": (io.BytesIO(b"x" * (10 * 1024 * 1024 + 1)), "big.png")},
+            content_type="multipart/form-data",
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+        self.assertEqual(resp.status_code, 400)
+        body = resp.get_json()
+        self.assertFalse(body["ok"])
+        self.assertEqual(body["max_size_bytes"], 10 * 1024 * 1024)
 
 
 # ---------------------------------------------------------------------------
