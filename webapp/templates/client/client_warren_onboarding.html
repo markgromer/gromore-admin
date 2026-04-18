@@ -1,0 +1,597 @@
+{% extends "client/client_base.html" %}
+
+{% block title %}Warren Onboarding{% endblock %}
+
+{% block content %}
+<style>
+    .onboarding-hero {
+        position: relative;
+        overflow: hidden;
+        background: linear-gradient(135deg, #0f172a 0%, #0f766e 52%, #14b8a6 100%);
+        border-radius: 22px;
+        padding: 2rem;
+        color: #fff;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 22px 60px rgba(15, 23, 42, .18);
+    }
+    .onboarding-hero::after {
+        content: "";
+        position: absolute;
+        right: -60px;
+        top: -70px;
+        width: 240px;
+        height: 240px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(255,255,255,.22), rgba(255,255,255,0));
+        pointer-events: none;
+    }
+    .onboarding-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: .45rem;
+        padding: .35rem .7rem;
+        border-radius: 999px;
+        background: rgba(255,255,255,.14);
+        font-size: .75rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        margin-bottom: 1rem;
+    }
+    .onboarding-hero h1 {
+        font-size: clamp(2rem, 3.4vw, 3rem);
+        font-weight: 800;
+        margin-bottom: .65rem;
+        color: #fff !important;
+        max-width: 12ch;
+    }
+    .onboarding-hero p {
+        max-width: 68ch;
+        color: rgba(255,255,255,.84);
+        font-size: 1rem;
+        line-height: 1.65;
+        margin-bottom: 0;
+    }
+    .onboarding-progress-card,
+    .onboarding-panel,
+    .onboarding-step,
+    .onboarding-note {
+        background: #fff;
+        border: 1px solid #dbe4ea;
+        border-radius: 18px;
+        box-shadow: 0 10px 32px rgba(15, 23, 42, .05);
+    }
+    .onboarding-progress-card {
+        padding: 1.25rem;
+        margin-bottom: 1.25rem;
+    }
+    .progress-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        font-size: .86rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin-bottom: .75rem;
+    }
+    .progress-track {
+        width: 100%;
+        height: 12px;
+        border-radius: 999px;
+        background: #e2e8f0;
+        overflow: hidden;
+    }
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #14b8a6, #0ea5e9);
+        border-radius: 999px;
+        transition: width .25s ease;
+    }
+    .progress-subtext {
+        margin-top: .75rem;
+        color: #64748b;
+        font-size: .88rem;
+        line-height: 1.55;
+    }
+    .onboarding-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.7fr) minmax(280px, .95fr);
+        gap: 1.25rem;
+        align-items: start;
+    }
+    .onboarding-panel {
+        padding: 1.25rem;
+    }
+    .panel-title {
+        display: flex;
+        align-items: center;
+        gap: .55rem;
+        font-size: .95rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: #0f172a;
+        margin-bottom: 1rem;
+    }
+    .onboarding-steps {
+        display: grid;
+        gap: 1rem;
+    }
+    .onboarding-step {
+        padding: 1.15rem;
+    }
+    .step-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: .9rem;
+    }
+    .step-index {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        background: #ecfeff;
+        color: #0f766e;
+        flex-shrink: 0;
+    }
+    .step-index.complete {
+        background: #dcfce7;
+        color: #15803d;
+    }
+    .step-title {
+        font-size: 1.05rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: .2rem;
+    }
+    .step-desc {
+        color: #64748b;
+        line-height: 1.55;
+        font-size: .92rem;
+        margin: 0;
+    }
+    .step-status {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .4rem .7rem;
+        border-radius: 999px;
+        font-size: .74rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        background: #fff7ed;
+        color: #c2410c;
+        white-space: nowrap;
+    }
+    .step-status.complete {
+        background: #dcfce7;
+        color: #166534;
+    }
+    .step-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .65rem;
+        margin-top: .95rem;
+    }
+    .onboarding-note {
+        padding: 1rem;
+        margin-top: 1rem;
+        background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    }
+    .onboarding-note strong {
+        color: #0f172a;
+    }
+    .helper-list {
+        display: grid;
+        gap: .85rem;
+    }
+    .helper-item {
+        padding: .95rem 1rem;
+        border-radius: 16px;
+        background: linear-gradient(180deg, #f8fafc 0%, #eef6f7 100%);
+        border: 1px solid #dbe4ea;
+    }
+    .helper-item h3 {
+        font-size: .9rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: .3rem;
+    }
+    .helper-item p {
+        margin: 0;
+        color: #64748b;
+        font-size: .88rem;
+        line-height: 1.55;
+    }
+    .prompt-stack {
+        display: grid;
+        gap: .6rem;
+        margin-top: 1rem;
+    }
+    .prompt-chip {
+        width: 100%;
+        text-align: left;
+        border: 1px solid #cbd5e1;
+        background: #fff;
+        color: #0f172a;
+        border-radius: 14px;
+        padding: .8rem .9rem;
+        font-size: .88rem;
+        font-weight: 600;
+        transition: border-color .15s ease, transform .15s ease;
+    }
+    .prompt-chip:hover {
+        border-color: #0f766e;
+        transform: translateY(-1px);
+    }
+    .action-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .75rem;
+        margin-top: 1rem;
+    }
+    .status-banner {
+        margin-top: 1rem;
+        padding: .9rem 1rem;
+        border-radius: 14px;
+        font-size: .88rem;
+        font-weight: 600;
+        display: none;
+    }
+    .status-banner.show {
+        display: block;
+    }
+    .status-banner.success {
+        background: #ecfdf5;
+        color: #166534;
+        border: 1px solid #bbf7d0;
+    }
+    .status-banner.info {
+        background: #eff6ff;
+        color: #1d4ed8;
+        border: 1px solid #bfdbfe;
+    }
+    .interview-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr);
+        gap: 1.25rem;
+        margin-top: 1.25rem;
+        align-items: start;
+    }
+    .question-card,
+    .profile-card,
+    .question-list-item {
+        background: #fff;
+        border: 1px solid #dbe4ea;
+        border-radius: 18px;
+        box-shadow: 0 10px 32px rgba(15, 23, 42, .05);
+    }
+    .question-card,
+    .profile-card {
+        padding: 1.25rem;
+    }
+    .question-eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        border-radius: 999px;
+        padding: .35rem .65rem;
+        background: #ecfeff;
+        color: #0f766e;
+        font-size: .74rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        margin-bottom: .8rem;
+    }
+    .question-card h2,
+    .profile-card h2 {
+        font-size: 1.2rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: .45rem;
+    }
+    .question-helper {
+        color: #64748b;
+        font-size: .92rem;
+        line-height: 1.6;
+        margin-bottom: 1rem;
+    }
+    .question-card textarea,
+    .question-card input[type="text"] {
+        width: 100%;
+        border: 1.5px solid #cbd5e1;
+        border-radius: 14px;
+        padding: .85rem .95rem;
+        font-size: .94rem;
+        color: #0f172a;
+        background: #f8fafc;
+    }
+    .question-card textarea {
+        min-height: 150px;
+        resize: vertical;
+    }
+    .question-card textarea:focus,
+    .question-card input[type="text"]:focus {
+        outline: none;
+        border-color: #0f766e;
+        box-shadow: 0 0 0 4px rgba(15, 118, 110, .10);
+        background: #fff;
+    }
+    .question-list {
+        display: grid;
+        gap: .8rem;
+        margin-top: 1rem;
+    }
+    .question-list-item {
+        padding: .9rem 1rem;
+    }
+    .question-list-item.complete {
+        border-color: #bbf7d0;
+        background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
+    }
+    .question-list-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: .3rem;
+        font-size: .92rem;
+        font-weight: 700;
+        color: #0f172a;
+    }
+    .question-list-answer {
+        color: #64748b;
+        font-size: .88rem;
+        line-height: 1.55;
+    }
+    .question-list-state {
+        white-space: nowrap;
+        font-size: .74rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: #0f766e;
+    }
+    @media (max-width: 980px) {
+        .onboarding-grid {
+            grid-template-columns: 1fr;
+        }
+        .interview-grid {
+            grid-template-columns: 1fr;
+        }
+        .onboarding-hero {
+            padding: 1.5rem;
+        }
+    }
+</style>
+
+<section class="onboarding-hero">
+    <div class="onboarding-kicker"><i class="bi bi-stars"></i> Warren Guided Setup</div>
+    <h1>{{ 'Let Warren set the foundation' if warren_onboarding.first_run else 'Use Warren to tighten your setup' }}</h1>
+    <p>{{ warren_onboarding.primary_prompt }}</p>
+</section>
+
+<div class="onboarding-progress-card">
+    <div class="progress-label">
+        <span>{{ warren_onboarding.required_completed }} of {{ warren_onboarding.required_total }} core steps done</span>
+        <span>{{ warren_onboarding.progress_pct }}%</span>
+    </div>
+    <div class="progress-track" aria-hidden="true">
+        <div class="progress-fill" style="width: {{ warren_onboarding.progress_pct }}%;"></div>
+    </div>
+    <div class="progress-subtext">
+        {% if warren_onboarding.is_completed %}
+        Your basics are in place. Warren now has enough context to stop treating your brand like a blank account.
+        {% else %}
+        Finish the two core steps first. After that, the rest of the app has the minimum context it needs to give better answers, better missions, and less generic guidance.
+        {% endif %}
+    </div>
+    <div class="action-row">
+        <button class="btn btn-dark" type="button" id="onboardingStartBtn">Mark Warren onboarding started</button>
+        {% if warren_onboarding.is_completed or warren_onboarding.is_dismissed %}
+        <a class="btn btn-primary" href="{{ url_for('client.client_dashboard') }}">Continue to Overview</a>
+        {% else %}
+        <button class="btn btn-outline-secondary" type="button" id="onboardingDismissBtn">Continue to Overview anyway</button>
+        {% endif %}
+    </div>
+    <div class="status-banner" id="onboardingStatusBanner"></div>
+</div>
+
+<div class="onboarding-grid">
+    <section class="onboarding-panel">
+        <div class="panel-title"><i class="bi bi-signpost-split"></i> Current setup steps</div>
+        <div class="onboarding-steps">
+            {% for step in warren_onboarding.steps %}
+            <article class="onboarding-step">
+                <div class="step-top">
+                    <div class="d-flex gap-3">
+                        <div class="step-index {{ 'complete' if step.completed else '' }}">
+                            {% if step.completed %}
+                            <i class="bi bi-check-lg"></i>
+                            {% else %}
+                            {{ loop.index }}
+                            {% endif %}
+                        </div>
+                        <div>
+                            <div class="step-title">{{ step.title }}</div>
+                            <p class="step-desc">{{ step.description }}</p>
+                        </div>
+                    </div>
+                    <span class="step-status {{ 'complete' if step.completed else '' }}">
+                        {{ step.status_label }}
+                    </span>
+                </div>
+                <div class="step-actions">
+                    <a class="btn btn-sm {{ 'btn-outline-secondary' if step.completed else 'btn-primary' }}" href="{{ step.href }}">{{ step.cta_label }}</a>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+
+        <div class="onboarding-note">
+            <strong>Important:</strong> this first slice is the guided setup shell. The deeper owner interview and evolving knowledge base are next. Right now, the goal is to get new owners into one clear starting place instead of dumping them straight into the dashboard, and to start building their own business J.A.R.V.I.S. step by step.
+        </div>
+    </section>
+
+    <aside class="onboarding-panel">
+        <div class="panel-title"><i class="bi bi-robot"></i> Warren can help with</div>
+
+        <div class="helper-list">
+            <div class="helper-item">
+                <h3>Translate setup jargon</h3>
+                <p>Ask Warren what a connection, token, webhook, or account ID actually does before you wire anything live.</p>
+            </div>
+            <div class="helper-item">
+                <h3>Spot missing business context</h3>
+                <p>Warren works better when your website, service area, and primary services are filled in. That is the minimum context layer for smarter missions.</p>
+            </div>
+            <div class="helper-item">
+                <h3>Keep the next step obvious</h3>
+                <p>Use the prompt shortcuts below to kick off the assistant without losing your place in setup.</p>
+            </div>
+        </div>
+
+        {% if assistant_enabled %}
+        <div class="prompt-stack">
+            <button type="button" class="prompt-chip" data-assistant-prompt="Explain exactly what I need to connect first and why.">Explain exactly what I need to connect first and why.</button>
+            <button type="button" class="prompt-chip" data-assistant-prompt="Review my business profile and tell me what context is still missing.">Review my business profile and tell me what context is still missing.</button>
+            <button type="button" class="prompt-chip" data-assistant-prompt="Summarize the difference between Connections, Automations, and My Business for a new owner.">Summarize the difference between Connections, Automations, and My Business for a new owner.</button>
+        </div>
+        {% else %}
+        <div class="onboarding-note mt-3">
+            <strong>Assistant chat is not enabled yet.</strong> Add your OpenAI key in <a href="{{ url_for('client.client_settings') }}">Connections</a> to turn the live Warren side panel on for guided questions.
+        </div>
+        {% endif %}
+    </aside>
+</div>
+
+<div class="interview-grid" id="onboarding-profile">
+    <section class="question-card" id="question-{{ onboarding_interview.current_question_key or 'complete' }}">
+        <div class="question-eyebrow"><i class="bi bi-cpu"></i> Business J.A.R.V.I.S. Profile</div>
+        <h2>{{ onboarding_interview.completed_count }} of {{ onboarding_interview.total_count }} interview answers saved</h2>
+        <p class="question-helper">This is the owner interview layer. Warren should keep learning how this business works, how technical the owner is, and what kind of guidance actually helps. That makes future missions and advice feel tailored instead of generic.</p>
+        <div class="progress-track" aria-hidden="true">
+            <div class="progress-fill" style="width: {{ onboarding_interview.progress_pct }}%;"></div>
+        </div>
+
+        {% if onboarding_interview.current_question %}
+        <form method="post" action="{{ url_for('client.client_warren_onboarding_interview_save') }}" class="mt-4">
+            <input type="hidden" name="question_key" value="{{ onboarding_interview.current_question.key }}">
+            <h2 style="font-size:1.08rem; margin-bottom:.35rem;">{{ onboarding_interview.current_question.prompt }}</h2>
+            <p class="question-helper">{{ onboarding_interview.current_question.help_text }}</p>
+            {% if onboarding_interview.current_question.multiline %}
+            <textarea name="answer" placeholder="{{ onboarding_interview.current_question.placeholder }}">{{ onboarding_interview.current_question.answer }}</textarea>
+            {% else %}
+            <input type="text" name="answer" placeholder="{{ onboarding_interview.current_question.placeholder }}" value="{{ onboarding_interview.current_question.answer }}">
+            {% endif %}
+            <div class="action-row">
+                <button class="btn btn-primary" type="submit">Save and continue</button>
+                <button class="btn btn-outline-secondary prompt-chip" type="button" data-assistant-prompt="Help me answer this onboarding question in simple terms: {{ onboarding_interview.current_question.prompt|replace('"', '\\"') }}">Ask Warren to help with this answer</button>
+            </div>
+        </form>
+        {% else %}
+        <div class="onboarding-note mt-4">
+            <strong>Interview complete:</strong> Warren has a starter operating profile for this business. You can still restart onboarding from Help anytime if the business changes or you want Warren to learn more cleanly.
+        </div>
+        {% endif %}
+    </section>
+
+    <aside class="profile-card">
+        <div class="question-eyebrow"><i class="bi bi-journal-text"></i> Saved owner profile</div>
+        <h2>What Warren already knows</h2>
+        <div class="question-list">
+            {% for question in onboarding_interview.questions %}
+            <div class="question-list-item {{ 'complete' if question.completed else '' }}" id="question-{{ question.key }}">
+                <div class="question-list-title">
+                    <span>{{ question.title }}</span>
+                    <span class="question-list-state">{{ 'Saved' if question.completed else 'Waiting' }}</span>
+                </div>
+                <div class="question-list-answer">
+                    {{ question.answer if question.answer else question.help_text }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </aside>
+</div>
+
+<script>
+(() => {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    const statusBanner = document.getElementById('onboardingStatusBanner');
+    const startBtn = document.getElementById('onboardingStartBtn');
+    const dismissBtn = document.getElementById('onboardingDismissBtn');
+
+    const setBanner = (message, tone) => {
+        if (!statusBanner) {
+            return;
+        }
+        statusBanner.textContent = message;
+        statusBanner.className = `status-banner show ${tone}`;
+    };
+
+    const postStatus = async (action) => {
+        const response = await fetch('{{ url_for("client.client_warren_onboarding_status") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({ action }),
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.ok) {
+            throw new Error(payload.error || 'Could not update onboarding state.');
+        }
+        return payload;
+    };
+
+    if (startBtn) {
+        startBtn.addEventListener('click', async () => {
+            startBtn.disabled = true;
+            try {
+                await postStatus('start');
+                setBanner('Warren onboarding marked as started. Finish the core steps, then move into the rest of the workspace.', 'info');
+            } catch (error) {
+                setBanner(error.message, 'info');
+            } finally {
+                startBtn.disabled = false;
+            }
+        });
+    }
+
+    if (dismissBtn) {
+        dismissBtn.addEventListener('click', async () => {
+            dismissBtn.disabled = true;
+            try {
+                const payload = await postStatus('dismiss');
+                window.location.href = payload.redirect_url;
+            } catch (error) {
+                dismissBtn.disabled = false;
+                setBanner(error.message, 'info');
+            }
+        });
+    }
+
+    document.querySelectorAll('[data-assistant-prompt]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const input = document.getElementById('assistantInput');
+            if (!input) {
+                return;
+            }
+            input.value = button.getAttribute('data-assistant-prompt') || '';
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.focus();
+            setBanner('Prompt loaded into Warren. Press send when you are ready.', 'success');
+        });
+    });
+})();
+</script>
+{% endblock %}

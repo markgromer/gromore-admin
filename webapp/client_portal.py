@@ -2304,6 +2304,294 @@ def _build_getting_started_checklist(db, brand, brand_id, client_user_id):
         "progress_pct": int((completed_count / max(len(items), 1)) * 100),
     }
 
+
+def _has_brand_profile_basics(brand):
+    return bool(
+        ((brand or {}).get("website") or "").strip()
+        and ((brand or {}).get("service_area") or "").strip()
+        and ((brand or {}).get("primary_services") or "").strip()
+    )
+
+
+def _build_warren_onboarding_context(db, brand, brand_id, client_user_id):
+    progress = db.get_client_onboarding_progress(brand_id, client_user_id) if client_user_id else {}
+    has_google, has_meta = _get_ad_connection_status(db, brand)
+    has_brand_profile = _has_brand_profile_basics(brand)
+
+    try:
+        latest_dashboard_month = db.get_latest_dashboard_month(brand_id)
+    except Exception:
+        latest_dashboard_month = None
+
+    first_run = not has_google and not has_meta and not latest_dashboard_month
+    started = bool((progress.get("warren_onboarding_started") or {}).get("is_completed"))
+    dismissed = bool((progress.get("warren_onboarding_v1") or {}).get("is_dismissed"))
+    completed_override = bool((progress.get("warren_onboarding_v1") or {}).get("is_completed"))
+
+    steps = [
+        {
+            "key": "connect_accounts",
+            "title": "Connect your first ad channel",
+            "description": "Link Google or Meta so Warren can see live account context instead of working blind.",
+            "href": url_for("client.client_settings"),
+            "cta_label": "Open Connections",
+            "required": True,
+            "completed": has_google or has_meta,
+            "status_label": "Connected" if (has_google or has_meta) else "Needs attention",
+        },
+        {
+            "key": "business_profile",
+            "title": "Confirm your business basics",
+            "description": "Add your website, service area, and primary services so Warren can speak from real business context.",
+            "href": url_for("client.client_my_business"),
+            "cta_label": "Open My Business",
+            "required": True,
+            "completed": has_brand_profile,
+            "status_label": "Confirmed" if has_brand_profile else "Needs attention",
+        },
+        {
+            "key": "help_center",
+            "title": "Keep the Warren guide handy",
+            "description": "Open the Warren guide for webhook, channel, and setup references while you are getting oriented.",
+            "href": url_for("client.client_help", guide="warren"),
+            "cta_label": "Open Warren Guide",
+            "required": False,
+            "completed": bool((progress.get("help_center") or {}).get("is_completed")),
+            "status_label": "Opened" if bool((progress.get("help_center") or {}).get("is_completed")) else "Optional",
+        },
+    ]
+
+    required_total = sum(1 for step in steps if step["required"])
+    required_completed = sum(1 for step in steps if step["required"] and step["completed"])
+    ready_for_workspace = bool(completed_override or required_completed >= required_total)
+
+    return {
+        "first_run": first_run,
+        "is_started": started,
+        "is_dismissed": dismissed,
+        "is_completed": ready_for_workspace,
+        "has_dashboard_data": bool(latest_dashboard_month),
+        "steps": steps,
+        "required_total": required_total,
+        "required_completed": required_completed,
+        "progress_pct": int((required_completed / max(required_total, 1)) * 100),
+        "should_redirect": bool(first_run and not ready_for_workspace and not dismissed),
+        "primary_prompt": (
+            "I can walk you through setup, explain what each connection does, and help shape your business profile. "
+            "Start with the two core steps below, then use the Warren chat on the right if you want help in plain English."
+        ),
+    }
+
+
+def _build_warren_onboarding_chat_context(db, brand, brand_id, client_user_id):
+    onboarding = _build_warren_onboarding_context(db, brand, brand_id, client_user_id)
+    interview = _build_warren_onboarding_interview(db, brand, brand_id, client_user_id)
+    missing_steps = [step["title"] for step in onboarding["steps"] if not step["completed"] and step["required"]]
+    profile_gaps = []
+    if not ((brand or {}).get("website") or "").strip():
+        profile_gaps.append("website")
+    if not ((brand or {}).get("service_area") or "").strip():
+        profile_gaps.append("service area")
+    if not ((brand or {}).get("primary_services") or "").strip():
+        profile_gaps.append("primary services")
+    if not ((brand or {}).get("target_audience") or "").strip():
+        profile_gaps.append("target audience")
+    if not ((brand or {}).get("brand_voice") or "").strip():
+        profile_gaps.append("brand voice")
+    if not ((brand or {}).get("goals") or "").strip() or str((brand or {}).get("goals")) == "[]":
+        profile_gaps.append("goals")
+
+    return {
+        "progress_pct": onboarding["progress_pct"],
+        "required_completed": onboarding["required_completed"],
+        "required_total": onboarding["required_total"],
+        "missing_required_steps": missing_steps,
+        "profile_gaps": profile_gaps,
+        "is_first_run": onboarding["first_run"],
+        "is_completed": onboarding["is_completed"],
+        "interview_progress_pct": interview["progress_pct"],
+        "current_question": interview.get("current_question"),
+        "owner_profile": interview.get("profile"),
+        "guidance": (
+            "Walk the owner through setup in plain English, ask one question at a time, avoid jargon, "
+            "and use each answer to build a more useful operating profile for the business."
+        ),
+    }
+
+
+WARREN_ONBOARDING_QUESTIONS = [
+    {
+        "key": "website",
+        "stage": "identity",
+        "title": "Business website",
+        "prompt": "What website should Warren use as the primary source of truth for your business?",
+        "help_text": "Paste the main live website URL, even if it still needs work.",
+        "placeholder": "https://example.com",
+        "target_field": "website",
+        "multiline": False,
+    },
+    {
+        "key": "service_area",
+        "stage": "identity",
+        "title": "Service area",
+        "prompt": "What cities, neighborhoods, or radius do you actually want to serve?",
+        "help_text": "Be specific enough that Warren can avoid recommending work outside your real coverage area.",
+        "placeholder": "Phoenix, Scottsdale, Tempe",
+        "target_field": "service_area",
+        "multiline": False,
+    },
+    {
+        "key": "primary_services",
+        "stage": "offers",
+        "title": "Primary services",
+        "prompt": "What are the main services you want Warren to talk about first?",
+        "help_text": "List the services that actually drive revenue, not every possible thing you can technically do.",
+        "placeholder": "Google Ads management, landing pages, call tracking",
+        "target_field": "primary_services",
+        "multiline": True,
+    },
+    {
+        "key": "target_audience",
+        "stage": "offers",
+        "title": "Best-fit customer",
+        "prompt": "Who is your best-fit customer, and who is usually a bad fit?",
+        "help_text": "This helps Warren tailor missions, advice, and messaging to the right buyer.",
+        "placeholder": "Local service businesses doing at least 30k per month and willing to invest in growth.",
+        "target_field": "target_audience",
+        "multiline": True,
+    },
+    {
+        "key": "brand_voice",
+        "stage": "voice",
+        "title": "Brand voice",
+        "prompt": "How should Warren sound when helping you and when shaping messaging for the business?",
+        "help_text": "Examples: direct, calm, premium, blunt, warm, high-trust, expert, simple.",
+        "placeholder": "Direct, clear, premium, no fluff.",
+        "target_field": "brand_voice",
+        "multiline": True,
+    },
+    {
+        "key": "active_offers",
+        "stage": "offers",
+        "title": "Current offers",
+        "prompt": "What offers, packages, or positioning angles matter right now?",
+        "help_text": "Warren should know what you are actively selling, not just what exists in theory.",
+        "placeholder": "Free audit, first month discount, premium done-for-you management.",
+        "target_field": "active_offers",
+        "multiline": True,
+    },
+    {
+        "key": "owner_goal",
+        "stage": "goals",
+        "title": "Primary business goal",
+        "prompt": "What is the most important business outcome you want Warren helping you move right now?",
+        "help_text": "Think about the next 90 days, not a vague forever goal.",
+        "placeholder": "Get 12 qualified leads per month without wasting budget.",
+        "target_field": None,
+        "multiline": True,
+    },
+    {
+        "key": "owner_skill_level",
+        "stage": "guidance",
+        "title": "Owner skill level",
+        "prompt": "How hands-on and technical do you want Warren to assume you are?",
+        "help_text": "Examples: beginner, operator, advanced, expert. This changes how much explanation Warren gives.",
+        "placeholder": "Beginner, explain things plainly and tell me exactly what to click.",
+        "target_field": None,
+        "multiline": True,
+    },
+    {
+        "key": "guidance_preferences",
+        "stage": "guidance",
+        "title": "How Warren should help",
+        "prompt": "What kind of help is most useful for you: exact next steps, strategic advice, checklists, warnings, accountability, or something else?",
+        "help_text": "This is where the J.A.R.V.I.S. behavior becomes personal to the owner, not generic to the app.",
+        "placeholder": "Give me one clear next step, explain why it matters, and warn me before I break something.",
+        "target_field": None,
+        "multiline": True,
+    },
+    {
+        "key": "constraints",
+        "stage": "guidance",
+        "title": "Constraints and hard rules",
+        "prompt": "What should Warren avoid, protect, or respect while helping this business?",
+        "help_text": "Examples: budget ceilings, compliance concerns, tone limits, service exclusions, approval rules.",
+        "placeholder": "Do not recommend anything that needs a long dev cycle. Keep language simple and avoid aggressive claims.",
+        "target_field": None,
+        "multiline": True,
+    },
+]
+
+
+def _default_warren_onboarding_profile(brand):
+    return {
+        "website": ((brand or {}).get("website") or "").strip(),
+        "service_area": ((brand or {}).get("service_area") or "").strip(),
+        "primary_services": ((brand or {}).get("primary_services") or "").strip(),
+        "target_audience": ((brand or {}).get("target_audience") or "").strip(),
+        "brand_voice": ((brand or {}).get("brand_voice") or "").strip(),
+        "active_offers": ((brand or {}).get("active_offers") or "").strip(),
+        "owner_goal": "",
+        "owner_skill_level": "",
+        "guidance_preferences": "",
+        "constraints": "",
+    }
+
+
+def _build_warren_onboarding_interview(db, brand, brand_id, client_user_id):
+    session_state = db.get_client_onboarding_session(brand_id, client_user_id) if client_user_id else None
+    profile = _default_warren_onboarding_profile(brand)
+    if session_state and isinstance(session_state.get("profile"), dict):
+        for key, value in session_state["profile"].items():
+            if value is None:
+                continue
+            profile[str(key)] = str(value).strip()
+
+    questions = []
+    completed_count = 0
+    current_question = None
+    for question in WARREN_ONBOARDING_QUESTIONS:
+        answer = str(profile.get(question["key"]) or "").strip()
+        is_completed = bool(answer)
+        if is_completed:
+            completed_count += 1
+        question_payload = dict(question)
+        question_payload["answer"] = answer
+        question_payload["completed"] = is_completed
+        questions.append(question_payload)
+        if current_question is None and not is_completed:
+            current_question = question_payload
+
+    if current_question is None and questions:
+        current_question = questions[-1]
+
+    stage_key = (session_state or {}).get("stage_key") or (current_question or {}).get("stage") or "identity"
+    current_question_key = (session_state or {}).get("current_question_key") or (current_question or {}).get("key") or ""
+    progress_pct = int((completed_count / max(len(questions), 1)) * 100)
+
+    return {
+        "session": session_state or {},
+        "profile": profile,
+        "questions": questions,
+        "current_question": current_question,
+        "current_question_key": current_question_key,
+        "stage_key": stage_key,
+        "completed_count": completed_count,
+        "total_count": len(questions),
+        "progress_pct": progress_pct,
+        "is_complete": completed_count >= len(questions),
+    }
+
+
+def _update_warren_onboarding_brand_field(db, brand_id, question_key, answer):
+    question = next((item for item in WARREN_ONBOARDING_QUESTIONS if item["key"] == question_key), None)
+    if not question:
+        return
+    target_field = question.get("target_field")
+    if not target_field:
+        return
+    db.update_brand_text_field(brand_id, target_field, answer)
+
 # Map route function names → feature flag keys.
 # Routes not listed here are ungated (login, logout, assistant, etc.).
 _ENDPOINT_FEATURE_MAP = {
@@ -2804,6 +3092,10 @@ def client_dashboard():
     except Exception:
         latest_dashboard_month = None
     first_run = not has_google and not has_meta and not latest_dashboard_month
+    warren_onboarding = _build_warren_onboarding_context(db, brand, brand_id, session.get("client_user_id"))
+    if warren_onboarding["should_redirect"]:
+        return redirect(url_for("client.client_warren_onboarding"))
+
     onboarding = _build_getting_started_checklist(db, brand, brand_id, session.get("client_user_id"))
 
     return render_template(
@@ -2817,6 +3109,7 @@ def client_dashboard():
         async_load=True,
         first_run=first_run,
         onboarding=onboarding,
+        warren_onboarding=warren_onboarding,
         has_google=has_google,
         has_meta=has_meta,
         google_connected=google_connected,
@@ -2824,6 +3117,118 @@ def client_dashboard():
         client_name=session.get("client_name", ""),
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
+
+
+@client_bp.route("/warren-onboarding")
+@client_login_required
+def client_warren_onboarding():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        flash("Your account is not linked to an active brand.", "error")
+        return redirect(url_for("client.client_logout"))
+
+    warren_onboarding = _build_warren_onboarding_context(db, brand, brand_id, session.get("client_user_id"))
+    onboarding_interview = _build_warren_onboarding_interview(db, brand, brand_id, session.get("client_user_id"))
+    onboarding = _build_getting_started_checklist(db, brand, brand_id, session.get("client_user_id"))
+
+    return render_template(
+        "client/client_warren_onboarding.html",
+        brand=brand,
+        onboarding=onboarding,
+        warren_onboarding=warren_onboarding,
+        onboarding_interview=onboarding_interview,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+        client_name=session.get("client_name", ""),
+    )
+
+
+@client_bp.route("/warren-onboarding/status", methods=["POST"])
+@client_login_required
+def client_warren_onboarding_status():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    client_user_id = session["client_user_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"error": "Brand not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    action = (data.get("action") or "start").strip().lower()
+
+    if action == "start":
+        db.save_client_onboarding_progress(brand_id, client_user_id, "warren_onboarding_started", is_completed=True)
+    elif action == "dismiss":
+        db.save_client_onboarding_progress(brand_id, client_user_id, "warren_onboarding_v1", is_dismissed=True)
+    elif action == "restore":
+        db.save_client_onboarding_progress(brand_id, client_user_id, "warren_onboarding_v1", is_dismissed=False)
+    else:
+        return jsonify({"error": "Invalid onboarding action."}), 400
+
+    warren_onboarding = _build_warren_onboarding_context(db, brand, brand_id, client_user_id)
+    redirect_url = url_for("client.client_dashboard") if (warren_onboarding["is_completed"] or warren_onboarding["is_dismissed"]) else url_for("client.client_warren_onboarding")
+    return jsonify({"ok": True, "warren_onboarding": warren_onboarding, "redirect_url": redirect_url})
+
+
+@client_bp.route("/warren-onboarding/interview", methods=["POST"])
+@client_login_required
+def client_warren_onboarding_interview_save():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    client_user_id = session["client_user_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        flash("Brand not found.", "error")
+        return redirect(url_for("client.client_warren_onboarding"))
+
+    question_key = (request.form.get("question_key") or "").strip()
+    answer = (request.form.get("answer") or "").strip()
+    question = next((item for item in WARREN_ONBOARDING_QUESTIONS if item["key"] == question_key), None)
+    if not question:
+        flash("Unknown onboarding question.", "error")
+        return redirect(url_for("client.client_warren_onboarding"))
+    if not answer:
+        flash("Answer cannot be empty.", "warning")
+        return redirect(url_for("client.client_warren_onboarding") + f"#question-{question_key}")
+
+    current_interview = _build_warren_onboarding_interview(db, brand, brand_id, client_user_id)
+    profile = dict(current_interview.get("profile") or {})
+    profile[question_key] = answer
+
+    ordered_keys = [item["key"] for item in WARREN_ONBOARDING_QUESTIONS]
+    next_question_key = ""
+    try:
+        current_index = ordered_keys.index(question_key)
+    except ValueError:
+        current_index = -1
+    for next_key in ordered_keys[current_index + 1:]:
+        if not str(profile.get(next_key) or "").strip():
+            next_question_key = next_key
+            break
+    if not next_question_key:
+        for fallback_key in ordered_keys:
+            if not str(profile.get(fallback_key) or "").strip():
+                next_question_key = fallback_key
+                break
+
+    stage_key = question.get("stage") or "identity"
+    status = "complete" if all(str(profile.get(key) or "").strip() for key in ordered_keys) else "active"
+    db.save_client_onboarding_session(
+        brand_id,
+        client_user_id,
+        status=status,
+        stage_key=stage_key,
+        current_question_key=next_question_key,
+        profile=profile,
+        notes={"last_saved_question": question_key},
+    )
+    _update_warren_onboarding_brand_field(db, brand_id, question_key, answer)
+    db.save_client_onboarding_progress(brand_id, client_user_id, "warren_onboarding_started", is_completed=True)
+
+    flash(f"Saved: {question['title']}", "success")
+    anchor = f"#question-{next_question_key}" if next_question_key else "#onboarding-profile"
+    return redirect(url_for("client.client_warren_onboarding") + anchor)
 
 
 @client_bp.route("/dashboard/onboarding", methods=["POST"])
@@ -3556,6 +3961,8 @@ def _client_assistant_chat_handler(payload):
     if not brand:
         return jsonify({"error": "Brand not found"}), 404
 
+    onboarding_interview = _build_warren_onboarding_interview(db, brand, brand_id, session.get("client_user_id"))
+
     month = (payload.get("month") or "").strip()
     if not re.match(r"^\d{4}-\d{2}$", month):
         month = datetime.now().strftime("%Y-%m")
@@ -3567,6 +3974,11 @@ def _client_assistant_chat_handler(payload):
         "endpoint": str(payload.get("page_endpoint") or request.endpoint or ""),
         "hint": str(payload.get("page_hint") or ""),
     }
+    onboarding_mode = (
+        page_context["endpoint"] == "client.client_warren_onboarding"
+        or page_context["path"].startswith("/client/warren-onboarding")
+        or page_context["hint"] == "warren_onboarding"
+    )
 
     # Canvas screenshot from Creative Center (base64 data URI)
     canvas_image = (payload.get("canvas_image") or "").strip() or None
@@ -3657,9 +4069,13 @@ def _client_assistant_chat_handler(payload):
             "suggestions": suggestions,
             "analysis_error": analysis_error,
             "lead_intelligence": _build_warren_lead_intelligence(db, brand),
+            "onboarding_profile": onboarding_interview.get("profile"),
             "attached_text": attached_text,
             "_user_image_upload": bool(attached_image),
         }
+        if onboarding_mode:
+            context["onboarding_mode"] = True
+            context["onboarding_context"] = _build_warren_onboarding_chat_context(db, brand, brand_id, session.get("client_user_id"))
 
         from webapp.ai_assistant import DEFAULT_CHAT_SYSTEM_PROMPT
         assistant_reply = chat_with_warren(
@@ -10347,19 +10763,39 @@ def client_delete_scheduled_post(post_id):
 def client_help():
     topic = request.args.get("topic", "")
     guide = (request.args.get("guide", "connections") or "connections").strip().lower()
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id) or {}
+    warren_onboarding = _build_warren_onboarding_context(db, brand, brand_id, session.get("client_user_id"))
+    onboarding_interview = _build_warren_onboarding_interview(db, brand, brand_id, session.get("client_user_id"))
     if guide == "warren":
         return render_template(
             "client_help_warren.html",
             active_topic=topic,
             help_guide=guide,
             brand_name=session.get("client_brand_name", ""),
+            warren_onboarding=warren_onboarding,
+            onboarding_interview=onboarding_interview,
         )
     return render_template(
         "client_help.html",
         active_topic=topic,
         help_guide=guide,
         brand_name=session.get("client_brand_name", ""),
+        warren_onboarding=warren_onboarding,
+        onboarding_interview=onboarding_interview,
     )
+
+
+@client_bp.route("/warren-onboarding/restart")
+@client_login_required
+def client_warren_onboarding_restart():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    client_user_id = session["client_user_id"]
+    db.save_client_onboarding_progress(brand_id, client_user_id, "warren_onboarding_started", is_completed=True)
+    db.save_client_onboarding_progress(brand_id, client_user_id, "warren_onboarding_v1", is_dismissed=False)
+    return redirect(url_for("client.client_warren_onboarding"))
 
 
 @client_bp.route("/va")

@@ -155,6 +155,19 @@
     <div class="d-flex flex-wrap gap-2 mt-3">
         <a href="{{ url_for('client.client_help', guide='connections') }}" class="btn btn-sm {{ 'btn-light' if help_guide != 'warren' else 'btn-outline-light' }}">Core Setup Guides</a>
         <a href="{{ url_for('client.client_help', guide='warren') }}" class="btn btn-sm {{ 'btn-light' if help_guide == 'warren' else 'btn-outline-light' }}">Warren Lead Guide</a>
+        <a href="{{ url_for('client.client_warren_onboarding_restart') }}" class="btn btn-sm btn-outline-light">Redo Warren Onboarding</a>
+    </div>
+</div>
+
+<div class="help-topic">
+    <h4><i class="bi bi-stars text-primary"></i> Warren Onboarding Replay</h4>
+    <p class="topic-desc">If you want Warren to walk the business back through setup and context gathering, you can restart the guided onboarding flow at any time. This is the start of building a business-specific J.A.R.V.I.S., not a one-time setup wizard.</p>
+    <p>Current progress: {{ warren_onboarding.required_completed }} of {{ warren_onboarding.required_total }} core setup steps complete.</p>
+    <p>Business-learning progress: {{ onboarding_interview.completed_count }} of {{ onboarding_interview.total_count }} owner interview answers saved.</p>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{{ url_for('client.client_warren_onboarding_restart') }}" class="btn btn-primary btn-sm">Start Warren Onboarding Again</a>
+        <a href="{{ url_for('client.client_warren_onboarding') }}#onboarding-profile" class="btn btn-outline-secondary btn-sm">Resume Business Interview</a>
+        <a href="{{ url_for('client.client_help', guide='warren') }}#warren-owner-chat" class="btn btn-outline-secondary btn-sm">See Warren Guide</a>
     </div>
 </div>
 

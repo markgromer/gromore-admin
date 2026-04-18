@@ -1504,6 +1504,21 @@ def chat_with_warren(
     if voice_parts:
         system += "\n\nLIVE BRAND CONTEXT: " + " | ".join(voice_parts)
 
+    owner_profile = context.get("onboarding_profile") or {}
+    if owner_profile:
+        profile_parts = []
+        for key in (
+            "owner_goal",
+            "owner_skill_level",
+            "guidance_preferences",
+            "constraints",
+        ):
+            value = str(owner_profile.get(key) or "").strip()
+            if value:
+                profile_parts.append(f"{key.replace('_', ' ').title()}: {value}")
+        if profile_parts:
+            system += "\n\nOWNER OPERATING PROFILE: " + " | ".join(profile_parts)
+
     niche_benchmark_prompt = _build_niche_benchmark_prompt(brand)
     if niche_benchmark_prompt:
         system += "\n\n" + niche_benchmark_prompt
@@ -1516,6 +1531,29 @@ def chat_with_warren(
             "If evidence is missing, clearly say what data is needed before acting. "
             "Do not blame platforms or algorithm changes unless specific metrics show that pattern."
         )
+
+    if context.get("onboarding_mode"):
+        onboarding_context = context.get("onboarding_context") or {}
+        missing_required_steps = onboarding_context.get("missing_required_steps") or []
+        profile_gaps = onboarding_context.get("profile_gaps") or []
+        system += (
+            "\n\nWARREN ONBOARDING MODE ACTIVE: "
+            "You are guiding a likely non-technical owner through initial setup and business learning. "
+            "Act like an operator building their business J.A.R.V.I.S., not a generic support bot. "
+            "Your job is to make the owner feel oriented, reduce cognitive load, and learn the business in a way that improves future guidance. "
+            "Ask one focused question at a time. Use plain English. Translate jargon before using it. "
+            "If a step requires a click in the app, say exactly where to click next. "
+            "If business context is missing, explain why it matters in operational terms, not marketing jargon. "
+            "Do not dump a long questionnaire all at once. Sequence the conversation. Summarize what you learned often. "
+            "When you are missing information, ask for it directly. When the owner sounds unsure, give examples. "
+            "Prioritize setup clarity first, then business learning, then deeper recommendations."
+        )
+        if missing_required_steps:
+            system += "\n\nCURRENT REQUIRED ONBOARDING GAPS: " + ", ".join(missing_required_steps)
+        if profile_gaps:
+            system += "\n\nCURRENT BUSINESS PROFILE GAPS: " + ", ".join(profile_gaps)
+        if onboarding_context.get("guidance"):
+            system += "\n\nONBOARDING GUIDANCE: " + str(onboarding_context["guidance"])
 
     # ── Admin override prompt (highest priority) ──
     admin_system_prompt = (admin_system_prompt or "").strip()

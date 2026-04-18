@@ -514,6 +514,25 @@ class WebDB:
             CREATE INDEX IF NOT EXISTS idx_client_onboarding_progress_user
             ON client_onboarding_progress(client_user_id, brand_id, item_key);
 
+            CREATE TABLE IF NOT EXISTS client_onboarding_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                client_user_id INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                stage_key TEXT NOT NULL DEFAULT 'setup',
+                current_question_key TEXT DEFAULT '',
+                profile_json TEXT NOT NULL DEFAULT '{}',
+                notes_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(brand_id, client_user_id),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+                FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_client_onboarding_sessions_user
+            ON client_onboarding_sessions(client_user_id, brand_id, status);
+
             CREATE TABLE IF NOT EXISTS dismissed_actions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand_id INTEGER NOT NULL,
@@ -3561,6 +3580,78 @@ class WebDB:
                 updated_at = datetime('now')
             """,
             (brand_id, client_user_id, (item_key or "").strip(), 1 if completed_value else 0, 1 if dismissed_value else 0),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_client_onboarding_session(self, brand_id, client_user_id):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM client_onboarding_sessions WHERE brand_id = ? AND client_user_id = ?",
+            (brand_id, client_user_id),
+        ).fetchone()
+        conn.close()
+        if not row:
+            return None
+        payload = dict(row)
+        payload["profile"] = self._safe_json_object(payload.get("profile_json"))
+        payload["notes"] = self._safe_json_object(payload.get("notes_json"))
+        return payload
+
+    def save_client_onboarding_session(
+        self,
+        brand_id,
+        client_user_id,
+        *,
+        status=None,
+        stage_key=None,
+        current_question_key=None,
+        profile=None,
+        notes=None,
+    ):
+        existing = self.get_client_onboarding_session(brand_id, client_user_id) or {}
+        next_status = (status or existing.get("status") or "active").strip() or "active"
+        next_stage_key = (stage_key or existing.get("stage_key") or "setup").strip() or "setup"
+        if current_question_key is None:
+            next_question_key = (existing.get("current_question_key") or "").strip()
+        else:
+            next_question_key = str(current_question_key or "").strip()
+        next_profile = profile if isinstance(profile, dict) else existing.get("profile") or {}
+        next_notes = notes if isinstance(notes, dict) else existing.get("notes") or {}
+
+        conn = self._conn()
+        conn.execute(
+            """
+            INSERT INTO client_onboarding_sessions (
+                brand_id, client_user_id, status, stage_key, current_question_key,
+                profile_json, notes_json, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            ON CONFLICT(brand_id, client_user_id) DO UPDATE SET
+                status = excluded.status,
+                stage_key = excluded.stage_key,
+                current_question_key = excluded.current_question_key,
+                profile_json = excluded.profile_json,
+                notes_json = excluded.notes_json,
+                updated_at = datetime('now')
+            """,
+            (
+                brand_id,
+                client_user_id,
+                next_status,
+                next_stage_key,
+                next_question_key,
+                json.dumps(next_profile, separators=(",", ":")),
+                json.dumps(next_notes, separators=(",", ":")),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+    def reset_client_onboarding_session(self, brand_id, client_user_id):
+        conn = self._conn()
+        conn.execute(
+            "DELETE FROM client_onboarding_sessions WHERE brand_id = ? AND client_user_id = ?",
+            (brand_id, client_user_id),
         )
         conn.commit()
         conn.close()

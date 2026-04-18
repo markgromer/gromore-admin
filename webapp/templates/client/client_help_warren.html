@@ -127,10 +127,11 @@
 {% block content %}
 <div class="help-header">
     <h3><i class="bi bi-robot"></i> Warren Lead Guide</h3>
-    <p>Everything about Warren in one place: what data it uses, how to connect SMS, Messenger, and lead forms, how to train it, how the inbox and pipeline work, and how to use owner chat to understand lead quality and conversion patterns.</p>
+    <p>Everything about Warren in one place: what data it uses, how to connect SMS, Messenger, and lead forms, how to train it, how the inbox and pipeline work, and how to use owner chat to understand lead quality and conversion patterns. This is also where you can relaunch Warren onboarding and keep shaping your own business J.A.R.V.I.S.</p>
     <div class="d-flex flex-wrap gap-2 mt-3">
         <a href="{{ url_for('client.client_help', guide='connections') }}" class="btn btn-sm btn-outline-light">Core Setup Guides</a>
         <a href="{{ url_for('client.client_help', guide='warren') }}" class="btn btn-sm btn-light">Warren Lead Guide</a>
+        <a href="{{ url_for('client.client_warren_onboarding_restart') }}" class="btn btn-sm btn-outline-light">Redo Warren Onboarding</a>
     </div>
 </div>
 
@@ -165,6 +166,8 @@
             <h4><i class="bi bi-stars text-primary"></i> Warren Overview</h4>
             <p class="topic-desc">Warren is now two things at once: a lead-facing assistant that talks to prospects, and an owner-facing assistant in the main client window that can explain what is happening in the pipeline.</p>
 
+            <div class="help-callout info"><strong>Replay Warren onboarding any time:</strong> you are {{ warren_onboarding.required_completed }} of {{ warren_onboarding.required_total }} core setup steps through the current onboarding flow, and {{ onboarding_interview.completed_count }} of {{ onboarding_interview.total_count }} owner interview answers are saved. If the business changes, if the owner skipped setup the first time, or if you want Warren to re-learn the operation in a cleaner way, <a href="{{ url_for('client.client_warren_onboarding_restart') }}">start Warren onboarding again</a> or <a href="{{ url_for('client.client_warren_onboarding') }}#onboarding-profile">resume the business interview</a>.</div>
+
             <div class="help-card-grid">
                 <div class="help-mini-card">
                     <div class="label">Lead Side</div>
@@ -172,7 +175,7 @@
                 </div>
                 <div class="help-mini-card">
                     <div class="label">Owner Side</div>
-                    <p class="mb-0">The Warren chat in the main portal can answer questions about stage counts, recent lead conversations, response speed, objections, channels, and where leads are stalling.</p>
+                    <p class="mb-0">The Warren chat in the main portal can answer questions about stage counts, recent lead conversations, response speed, objections, channels, and where leads are stalling. During onboarding mode, Warren should behave more like an operator who learns the business and guides a non-technical owner step by step.</p>
                 </div>
             </div>
 
