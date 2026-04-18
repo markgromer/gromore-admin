@@ -523,7 +523,10 @@ class EndToEndRouteTests(unittest.TestCase):
         )
         build_id = gen_resp.get_json()["build_id"]
 
-        review_resp = self.client.get(f"/client/site-builder/{build_id}")
+        review_resp = self.client.get(
+            f"/client/site-builder/{build_id}",
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
         self.assertEqual(review_resp.status_code, 200)
         body = review_resp.get_json()
         self.assertTrue(body["ok"])

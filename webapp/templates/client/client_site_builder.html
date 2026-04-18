@@ -1,0 +1,519 @@
+{% extends "client/client_base.html" %}
+{% block title %}Site Builder{% endblock %}
+
+{% block content %}
+<style>
+    .sb-header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+        border-radius: 16px;
+        padding: 2rem 2.25rem;
+        margin-bottom: 1.5rem;
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+    }
+    .sb-header::before {
+        content: '';
+        position: absolute;
+        top: -30%; right: -5%;
+        width: 250px; height: 250px;
+        background: radial-gradient(circle, rgba(99,102,241,.2) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    .sb-header h3 { font-weight: 800; font-size: 1.35rem; margin-bottom: .15rem; position: relative; color: #fff !important; }
+    .sb-header p { opacity: .7; font-size: .88rem; margin: 0; position: relative; }
+
+    .sb-card {
+        background: var(--surface);
+        border-radius: 14px;
+        padding: 1.5rem;
+        margin-bottom: 1.25rem;
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow-soft);
+    }
+    .sb-card h5 { font-weight: 700; font-size: 1rem; margin-bottom: .75rem; color: var(--text-strong); }
+
+    .wp-status-badge {
+        display: inline-flex; align-items: center; gap: .4rem;
+        padding: .35rem .85rem; border-radius: 20px;
+        font-size: .82rem; font-weight: 600;
+    }
+    .wp-status-connected { background: #dcfce7; color: #166534; }
+    .wp-status-disconnected { background: #fee2e2; color: #991b1b; }
+
+    .wp-connect-card {
+        background: #fffbeb; border: 1px solid #fcd34d; border-radius: 14px;
+        padding: 1.5rem; text-align: center;
+    }
+    .wp-connect-card h5 { color: #92400e; }
+    .wp-connect-card p { font-size: .88rem; color: #78350f; margin-bottom: 1rem; }
+
+    .page-type-chip {
+        display: inline-flex; align-items: center; gap: .3rem;
+        padding: .25rem .7rem; border-radius: 8px;
+        font-size: .75rem; font-weight: 600;
+        background: #eef2ff; color: #4338ca;
+    }
+    .page-type-chip i { font-size: .7rem; }
+
+    .blueprint-preview {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: .6rem; margin-top: .75rem;
+    }
+    .blueprint-page {
+        background: var(--surface); border: 1px solid var(--line);
+        border-radius: 10px; padding: .75rem;
+        font-size: .82rem; transition: var(--transition);
+    }
+    .blueprint-page:hover { box-shadow: var(--shadow-hover); }
+    .blueprint-page .bp-type { font-size: .7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+    .blueprint-page .bp-label { font-weight: 600; color: var(--text-strong); margin-top: .15rem; }
+    .blueprint-page .bp-slug { font-size: .72rem; color: var(--text-muted); font-family: monospace; }
+
+    .build-row {
+        background: var(--surface);
+        border-radius: 12px;
+        padding: 1rem 1.25rem;
+        margin-bottom: .6rem;
+        border: 1px solid var(--line);
+        cursor: pointer;
+        transition: var(--transition);
+    }
+    .build-row:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+
+    .status-pill { font-size: .72rem; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+    .status-pending { background: #f1f5f9; color: #475569; }
+    .status-running { background: #dbeafe; color: #1e40af; }
+    .status-completed { background: #dcfce7; color: #166534; }
+    .status-failed { background: #fee2e2; color: #991b1b; }
+
+    .gen-progress {
+        margin-top: 1rem; display: none;
+    }
+    .gen-progress .progress { height: 8px; border-radius: 4px; }
+    .gen-progress .progress-bar { transition: width .3s; }
+    .gen-log {
+        font-size: .82rem; color: var(--text-muted);
+        margin-top: .5rem; max-height: 200px; overflow-y: auto;
+    }
+    .gen-log .log-entry { padding: .2rem 0; border-bottom: 1px solid var(--line); }
+
+    .services-tag-input { display: flex; flex-wrap: wrap; gap: .35rem; padding: .5rem; border: 1px solid var(--line); border-radius: 10px; min-height: 44px; align-items: center; background: var(--surface); cursor: text; }
+    .services-tag-input:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+    .services-tag { display: inline-flex; align-items: center; gap: .25rem; background: #eef2ff; color: #4338ca; padding: .2rem .6rem; border-radius: 6px; font-size: .82rem; font-weight: 500; }
+    .services-tag .tag-remove { cursor: pointer; opacity: .6; font-size: .7rem; }
+    .services-tag .tag-remove:hover { opacity: 1; }
+    .services-tag-input input { border: none; outline: none; background: none; flex: 1; min-width: 100px; font-size: .88rem; color: var(--text-strong); }
+
+    .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); }
+    .empty-state i { font-size: 2.5rem; opacity: .3; }
+
+    /* Review page */
+    .page-preview-card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        margin-bottom: 1rem;
+        overflow: hidden;
+    }
+    .page-preview-header {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--line);
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .page-preview-header h6 { font-weight: 700; margin: 0; font-size: .95rem; }
+    .page-preview-body { padding: 1.25rem; }
+    .page-preview-body .seo-meta { background: #f8f9fa; border-radius: 8px; padding: .75rem; margin-bottom: .75rem; font-size: .82rem; }
+    .page-preview-body .seo-meta .seo-title { font-weight: 600; color: #1e40af; }
+    .page-preview-body .seo-meta .seo-desc { color: #475569; margin-top: .2rem; }
+    .page-preview-body .seo-meta .seo-slug { color: #059669; font-family: monospace; font-size: .78rem; }
+    .page-preview-content { font-size: .88rem; line-height: 1.7; color: var(--text-body); max-height: 300px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 1rem; }
+    .page-preview-content h2 { font-size: 1.1rem; font-weight: 700; margin-top: 1rem; }
+    .page-preview-content h3 { font-size: .95rem; font-weight: 600; margin-top: .75rem; }
+    .publish-badge { font-size: .72rem; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+    .publish-badge.published { background: #dcfce7; color: #166534; }
+    .publish-badge.draft { background: #f1f5f9; color: #475569; }
+</style>
+
+{% if mode == 'review' %}
+{# ── REVIEW MODE ── #}
+<div class="sb-header">
+    <h3><i class="bi bi-eye me-2"></i>Review Site Build #{{ build.id }}</h3>
+    <p>{{ pages|length }} pages generated on {{ build.created_at[:16] }}</p>
+</div>
+
+{% if build.error_message %}
+<div class="alert alert-warning" style="border-radius:12px;">
+    <i class="bi bi-exclamation-triangle me-1"></i> {{ build.error_message }}
+</div>
+{% endif %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <a href="{{ url_for('client.client_site_builder') }}" class="btn btn-sm btn-outline-secondary" style="border-radius:10px;">
+        <i class="bi bi-arrow-left me-1"></i>Back to Site Builder
+    </a>
+    <div class="d-flex gap-2">
+        {% if wp_connected and unpublished_count > 0 %}
+        <button type="button" class="btn btn-sm btn-primary" id="publishAllBtn" style="border-radius:10px; font-weight:600;">
+            <i class="bi bi-cloud-upload me-1"></i>Publish {{ unpublished_count }} Page{{ 's' if unpublished_count != 1 }} to WordPress
+        </button>
+        {% elif not wp_connected %}
+        <a href="{{ url_for('client.client_settings') }}" class="btn btn-sm btn-warning" style="border-radius:10px;">
+            <i class="bi bi-plug me-1"></i>Connect WordPress First
+        </a>
+        {% else %}
+        <span class="wp-status-badge wp-status-connected"><i class="bi bi-check-circle-fill"></i> All Pages Published</span>
+        {% endif %}
+    </div>
+</div>
+
+<div id="publishProgress" style="display:none;" class="mb-3">
+    <div class="sb-card">
+        <div class="d-flex align-items-center gap-2 mb-2">
+            <div class="spinner-border spinner-border-sm text-primary" id="publishSpinner"></div>
+            <span id="publishStatus" style="font-weight:600; font-size:.88rem;">Publishing pages...</span>
+        </div>
+        <div class="progress" style="height:6px; border-radius:3px;">
+            <div class="progress-bar bg-primary" id="publishBar" style="width:0%"></div>
+        </div>
+    </div>
+</div>
+
+{% for page in pages %}
+<div class="page-preview-card" id="page-{{ page.id }}">
+    <div class="page-preview-header">
+        <div>
+            <h6>{{ page.label or page.title }}</h6>
+            <span class="page-type-chip"><i class="bi bi-file-earmark"></i> {{ page.page_type }}</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            {% if page.wp_page_id %}
+            <span class="publish-badge published"><i class="bi bi-check-circle-fill me-1"></i>Published</span>
+            <a href="{{ page.wp_page_url }}" target="_blank" class="btn btn-sm btn-outline-primary" style="border-radius:8px; font-size:.78rem;">
+                <i class="bi bi-box-arrow-up-right me-1"></i>View Live
+            </a>
+            {% else %}
+            <span class="publish-badge draft"><i class="bi bi-pencil me-1"></i>Draft</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-preview-body">
+        <div class="seo-meta">
+            {% if page.seo_title %}<div class="seo-title">{{ page.seo_title }}</div>{% endif %}
+            {% if page.slug %}<div class="seo-slug">/{{ page.slug }}</div>{% endif %}
+            {% if page.seo_description %}<div class="seo-desc">{{ page.seo_description }}</div>{% endif %}
+            {% if page.primary_keyword %}<div style="margin-top:.3rem;"><span style="font-weight:600;">Keyword:</span> {{ page.primary_keyword }}</div>{% endif %}
+        </div>
+        <div class="page-preview-content">{{ page.content|safe }}</div>
+    </div>
+</div>
+{% endfor %}
+
+<script>
+(function(){
+    const publishBtn = document.getElementById('publishAllBtn');
+    if (!publishBtn) return;
+
+    publishBtn.addEventListener('click', async function() {
+        if (!confirm('Publish all draft pages to WordPress?')) return;
+
+        publishBtn.disabled = true;
+        publishBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Publishing...';
+        document.getElementById('publishProgress').style.display = 'block';
+
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+        try {
+            const resp = await fetch('{{ url_for("client.client_site_builder_publish", build_id=build.id) }}', {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrf,
+                },
+            });
+            const data = await resp.json();
+            document.getElementById('publishSpinner').style.display = 'none';
+            document.getElementById('publishBar').style.width = '100%';
+
+            if (data.ok) {
+                document.getElementById('publishStatus').innerHTML =
+                    '<i class="bi bi-check-circle-fill text-success me-1"></i>' +
+                    data.published + ' of ' + data.total + ' pages published.';
+                if (data.errors && data.errors.length) {
+                    document.getElementById('publishStatus').innerHTML +=
+                        '<br><small class="text-warning">' + data.errors.join('<br>') + '</small>';
+                }
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                document.getElementById('publishStatus').innerHTML =
+                    '<i class="bi bi-x-circle-fill text-danger me-1"></i>' + (data.error || 'Publishing failed.');
+                publishBtn.disabled = false;
+                publishBtn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i>Retry Publish';
+            }
+        } catch (err) {
+            document.getElementById('publishSpinner').style.display = 'none';
+            document.getElementById('publishStatus').innerHTML =
+                '<i class="bi bi-x-circle-fill text-danger me-1"></i>Network error. Please try again.';
+            publishBtn.disabled = false;
+            publishBtn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i>Retry Publish';
+        }
+    });
+})();
+</script>
+
+{% else %}
+{# ── LANDING MODE ── #}
+<div class="sb-header">
+    <h3><i class="bi bi-globe2 me-2"></i>Site Builder</h3>
+    <p>Generate a complete, SEO-optimized website for your business with AI.</p>
+</div>
+
+{# WordPress Connection Status #}
+{% if wp_connected %}
+<div class="sb-card" style="border-left: 4px solid #22c55e;">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <span class="wp-status-badge wp-status-connected"><i class="bi bi-check-circle-fill"></i> WordPress Connected</span>
+            <span style="font-size:.82rem; color:var(--text-muted); margin-left:.5rem;">{{ wp_site_url }}</span>
+        </div>
+        <a href="{{ url_for('client.client_settings') }}" class="btn btn-sm btn-outline-secondary" style="border-radius:8px; font-size:.78rem;">
+            <i class="bi bi-gear me-1"></i>Settings
+        </a>
+    </div>
+</div>
+{% else %}
+<div class="wp-connect-card mb-4">
+    <i class="bi bi-wordpress" style="font-size: 2.5rem; color: #92400e; opacity:.5;"></i>
+    <h5 class="mt-2">Connect Your WordPress Site</h5>
+    <p>Site Builder needs a WordPress connection to publish pages. Add your site URL, username, and application password in Settings.</p>
+    <a href="{{ url_for('client.client_settings') }}" class="btn btn-warning btn-sm" style="border-radius:10px; font-weight:600;">
+        <i class="bi bi-plug me-1"></i>Go to Settings
+    </a>
+</div>
+{% endif %}
+
+{# Generate New Build #}
+<div class="sb-card">
+    <h5><i class="bi bi-magic me-2"></i>Generate Your Website</h5>
+    <p style="font-size:.85rem; color:var(--text-muted); margin-bottom:1rem;">
+        The AI will create pages based on your business profile, services, and service areas.
+        You can customize which services and areas to include below, or leave blank to use everything on file.
+    </p>
+
+    <form id="generateForm" method="POST" action="{{ url_for('client.client_site_builder_generate') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="row g-3 mb-3">
+            <div class="col-md-6">
+                <label class="form-label" style="font-weight:600; font-size:.85rem;">Services</label>
+                <div class="services-tag-input" id="servicesTagInput">
+                    <input type="text" placeholder="Type a service and press Enter" id="servicesInput">
+                </div>
+                <input type="hidden" name="services" id="servicesHidden" value="{{ brand_services }}">
+                <div style="font-size:.72rem; color:var(--text-muted); margin-top:.25rem;">Each service gets its own detail page.</div>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" style="font-weight:600; font-size:.85rem;">Service Areas</label>
+                <div class="services-tag-input" id="areasTagInput">
+                    <input type="text" placeholder="Type an area and press Enter" id="areasInput">
+                </div>
+                <input type="hidden" name="areas" id="areasHidden" value="{{ brand_areas }}">
+                <div style="font-size:.72rem; color:var(--text-muted); margin-top:.25rem;">Each area gets its own landing page.</div>
+            </div>
+        </div>
+
+        {# Blueprint Preview #}
+        <div id="blueprintPreview" style="display:none;">
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <span style="font-weight:600; font-size:.88rem; color:var(--text-strong);">Pages that will be generated:</span>
+                <span class="badge bg-primary" id="pageCountBadge">0</span>
+            </div>
+            <div class="blueprint-preview" id="blueprintGrid"></div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-3">
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="previewBlueprintBtn" style="border-radius:10px; font-size:.82rem;">
+                <i class="bi bi-eye me-1"></i>Preview Blueprint
+            </button>
+            <button type="submit" class="btn btn-primary" id="generateBtn" style="border-radius:12px; font-weight:700; padding:.6rem 1.5rem;">
+                <i class="bi bi-stars me-1"></i>Generate Website
+            </button>
+        </div>
+    </form>
+
+    <div class="gen-progress" id="genProgress">
+        <div class="d-flex align-items-center gap-2">
+            <div class="spinner-border spinner-border-sm text-primary"></div>
+            <span style="font-weight:600; font-size:.88rem;" id="genStatus">Generating pages...</span>
+        </div>
+        <div class="progress mt-2">
+            <div class="progress-bar bg-primary" id="genBar" style="width:0%"></div>
+        </div>
+        <div class="gen-log" id="genLog"></div>
+    </div>
+</div>
+
+{# Build History #}
+{% if builds %}
+<div class="sb-card">
+    <h5><i class="bi bi-clock-history me-2"></i>Build History</h5>
+    {% for build in builds %}
+    <a href="{{ url_for('client.client_site_builder_review', build_id=build.id) }}" class="build-row d-flex justify-content-between align-items-center text-decoration-none">
+        <div>
+            <div style="font-weight:600; font-size:.9rem; color:var(--text-strong);">Build #{{ build.id }}</div>
+            <div style="font-size:.78rem; color:var(--text-muted);">{{ build.created_at[:16] }}</div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span style="font-size:.82rem; color:var(--text-muted);">{{ build.pages_completed }}/{{ build.page_count }} pages</span>
+            <span class="status-pill status-{{ build.status }}">{{ build.status|capitalize }}</span>
+            <i class="bi bi-chevron-right" style="color:var(--text-muted);"></i>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="sb-card">
+    <div class="empty-state">
+        <i class="bi bi-globe2 d-block mb-2"></i>
+        <div style="font-weight:600; color:var(--text-strong);">No builds yet</div>
+        <div style="font-size:.85rem;">Generate your first website above to get started.</div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+(function(){
+    /* ── Tag Input ── */
+    function initTags(containerId, inputId, hiddenId, initial) {
+        const container = document.getElementById(containerId);
+        const input = document.getElementById(inputId);
+        const hidden = document.getElementById(hiddenId);
+        let tags = initial ? initial.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+        function render() {
+            container.querySelectorAll('.services-tag').forEach(el => el.remove());
+            tags.forEach((tag, i) => {
+                const el = document.createElement('span');
+                el.className = 'services-tag';
+                el.innerHTML = tag + ' <span class="tag-remove" data-idx="' + i + '">&times;</span>';
+                container.insertBefore(el, input);
+            });
+            hidden.value = tags.join(', ');
+        }
+
+        input.addEventListener('keydown', function(e) {
+            if ((e.key === 'Enter' || e.key === ',') && input.value.trim()) {
+                e.preventDefault();
+                const val = input.value.replace(/,/g, '').trim();
+                if (val && !tags.includes(val)) tags.push(val);
+                input.value = '';
+                render();
+            }
+            if (e.key === 'Backspace' && !input.value && tags.length) {
+                tags.pop();
+                render();
+            }
+        });
+
+        container.addEventListener('click', function(e) {
+            if (e.target.classList.contains('tag-remove')) {
+                tags.splice(parseInt(e.target.dataset.idx), 1);
+                render();
+            } else {
+                input.focus();
+            }
+        });
+
+        render();
+    }
+
+    initTags('servicesTagInput', 'servicesInput', 'servicesHidden', '{{ brand_services|e }}');
+    initTags('areasTagInput', 'areasInput', 'areasHidden', '{{ brand_areas|e }}');
+
+    /* ── Blueprint Preview ── */
+    const PAGE_TYPES = ['Home', 'About', 'Services', 'Contact', 'FAQ', 'Testimonials'];
+    const TYPE_ICONS = {home:'bi-house', about:'bi-people', services:'bi-tools', service_detail:'bi-wrench', service_area:'bi-geo-alt', contact:'bi-telephone', faq:'bi-question-circle', testimonials:'bi-star'};
+
+    document.getElementById('previewBlueprintBtn')?.addEventListener('click', function() {
+        const services = document.getElementById('servicesHidden').value.split(',').map(s=>s.trim()).filter(Boolean);
+        const areas = document.getElementById('areasHidden').value.split(',').map(s=>s.trim()).filter(Boolean);
+
+        let pages = [
+            {type:'home', label:'Home', slug:'/'},
+            {type:'about', label:'About', slug:'/about'},
+            {type:'services', label:'Services', slug:'/services'},
+            {type:'contact', label:'Contact', slug:'/contact'},
+            {type:'faq', label:'FAQ', slug:'/faq'},
+            {type:'testimonials', label:'Testimonials', slug:'/testimonials'},
+        ];
+        services.forEach(s => {
+            const slug = s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '');
+            pages.push({type:'service_detail', label:s, slug:'/services/' + slug});
+        });
+        areas.forEach(a => {
+            const slug = a.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '');
+            pages.push({type:'service_area', label:a, slug:'/' + slug});
+        });
+
+        const grid = document.getElementById('blueprintGrid');
+        grid.innerHTML = '';
+        pages.forEach(p => {
+            const icon = TYPE_ICONS[p.type] || 'bi-file-earmark';
+            grid.innerHTML += '<div class="blueprint-page"><div class="bp-type"><i class="bi ' + icon + ' me-1"></i>' + p.type.replace('_',' ') + '</div><div class="bp-label">' + p.label + '</div><div class="bp-slug">' + p.slug + '</div></div>';
+        });
+
+        document.getElementById('pageCountBadge').textContent = pages.length;
+        document.getElementById('blueprintPreview').style.display = 'block';
+    });
+
+    /* ── Form Submit ── */
+    const form = document.getElementById('generateForm');
+    form?.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const btn = document.getElementById('generateBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating...';
+        document.getElementById('genProgress').style.display = 'block';
+
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+        const fd = new FormData(form);
+
+        fetch(form.action, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf },
+            body: fd,
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok && data.build_id) {
+                document.getElementById('genBar').style.width = '100%';
+                document.getElementById('genStatus').innerHTML =
+                    '<i class="bi bi-check-circle-fill text-success me-1"></i>' +
+                    data.pages_generated + ' pages generated.';
+                if (data.errors && data.errors.length) {
+                    const log = document.getElementById('genLog');
+                    data.errors.forEach(err => {
+                        log.innerHTML += '<div class="log-entry text-warning"><i class="bi bi-exclamation-triangle me-1"></i>' + err + '</div>';
+                    });
+                }
+                setTimeout(() => {
+                    window.location.href = '{{ url_for("client.client_site_builder_review", build_id=0) }}'.replace('/0', '/' + data.build_id);
+                }, 1200);
+            } else {
+                document.getElementById('genStatus').innerHTML =
+                    '<i class="bi bi-x-circle-fill text-danger me-1"></i>' + (data.error || 'Generation failed.');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-stars me-1"></i>Generate Website';
+            }
+        })
+        .catch(() => {
+            document.getElementById('genStatus').innerHTML =
+                '<i class="bi bi-x-circle-fill text-danger me-1"></i>Network error. Please try again.';
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-stars me-1"></i>Generate Website';
+        });
+    });
+
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -107,19 +107,16 @@
                                     {{ 'Active' if t.is_active else 'Inactive' }}
                                 </span>
                             </div>
-                            <div class="dropdown">
-                                <button class="btn btn-link btn-sm text-muted p-0" data-bs-toggle="dropdown">
-                                    <i class="bi bi-three-dots-vertical"></i>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-outline-primary btn-sm" onclick="editTemplate({{ t.id }})" title="Edit">
+                                    <i class="bi bi-pencil"></i>
                                 </button>
-                                <ul class="dropdown-menu dropdown-menu-end">
-                                    <li><a class="dropdown-item" href="#" onclick="editTemplate({{ t.id }})"><i class="bi bi-pencil me-2"></i>Edit</a></li>
-                                    <li>
-                                        <form method="POST" action="{{ url_for('sb_admin_template_delete', tid=t.id) }}" onsubmit="return confirm('Delete this template?')">
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <button class="dropdown-item text-danger"><i class="bi bi-trash me-2"></i>Delete</button>
-                                        </form>
-                                    </li>
-                                </ul>
+                                <form method="POST" action="{{ url_for('sb_admin_template_delete', tid=t.id) }}" onsubmit="return confirm('Delete template &quot;{{ t.name }}&quot;?')" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button class="btn btn-outline-danger btn-sm" title="Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
                             </div>
                         </div>
                         <div class="text-muted small mb-1">

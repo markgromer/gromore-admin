@@ -8771,6 +8771,27 @@ def _publish_wp_page(brand, title, content, excerpt="", slug="",
         return {"ok": False, "error": str(e)[:200]}
 
 
+@client_bp.route("/site-builder")
+@client_login_required
+def client_site_builder():
+    """Site Builder landing page - shows WP status, generation form, build history."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id) or {}
+    builds = db.get_site_builds(brand_id, limit=20)
+    wp_ok = _wp_connected(brand)
+
+    return render_template(
+        "client/client_site_builder.html",
+        mode="landing",
+        wp_connected=wp_ok,
+        wp_site_url=(brand.get("wp_site_url") or "").strip().rstrip("/"),
+        builds=builds,
+        brand_services=(brand.get("primary_services") or "").strip(),
+        brand_areas=(brand.get("service_area") or "").strip(),
+    )
+
+
 @client_bp.route("/site-builder/generate", methods=["POST"])
 @client_login_required
 def client_site_builder_generate():
@@ -8868,10 +8889,27 @@ def client_site_builder_review(build_id):
     build = db.get_site_build(build_id)
     if not build or build["brand_id"] != brand_id:
         flash("Site build not found.", "warning")
-        return redirect(url_for("client.client_settings"))
+        return redirect(url_for("client.client_site_builder"))
     pages = db.get_site_pages(build_id)
     brand = db.get_brand(brand_id) or {}
-    return jsonify(ok=True, build=build, pages=pages)
+    wp_ok = _wp_connected(brand)
+    unpublished = sum(1 for p in pages if not p.get("wp_page_id"))
+
+    is_ajax = (
+        request.headers.get("X-Requested-With") in {"XMLHttpRequest", "PJAX"}
+        or request.is_json
+    )
+    if is_ajax:
+        return jsonify(ok=True, build=build, pages=pages)
+
+    return render_template(
+        "client/client_site_builder.html",
+        mode="review",
+        build=build,
+        pages=pages,
+        wp_connected=wp_ok,
+        unpublished_count=unpublished,
+    )
 
 
 @client_bp.route("/site-builder/<int:build_id>/publish", methods=["POST"])

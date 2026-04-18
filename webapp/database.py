@@ -1624,6 +1624,7 @@ class WebDB:
             ("staff",           "Staff",             "Manage team members and roles",     "all",   "business", 146),
             ("tasks",           "Tasks",             "Task management and assignment",    "all",   "business", 147),
             ("hiring",          "Hiring Hub",        "AI-powered hiring and screening",   "beta",  "business", 148),
+            ("site_builder",    "Site Builder",      "AI website generation and publishing", "all", "create",  95),
             ("connections",     "Connections",       "Platform connection settings",      "all",   "settings", 150),
             ("feedback",        "Feedback",          "Submit feedback to the team",       "all",   "settings", 160),
             ("help",            "Help",              "Help documentation and support",    "all",   "settings", 170),

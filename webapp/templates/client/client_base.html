@@ -134,6 +134,11 @@
                 <i class="bi bi-mortarboard"></i> <span class="nav-link-label">Coaching</span>
             </a>
             {% endif %}
+            {% if feature_on('site_builder') %}
+            <a href="{{ url_for('client.client_site_builder') }}" class="{% if 'site_builder' in request.endpoint|default('') %}active{% endif %}">
+                <i class="bi bi-globe2"></i> <span class="nav-link-label">Site Builder</span>
+            </a>
+            {% endif %}
             </div>
 
             {# â”€â”€ Business: collapsed â”€â”€ #}
