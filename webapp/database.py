@@ -1633,7 +1633,7 @@ class WebDB:
         for key, label, desc, level, cat, sort in DEFAULT_FLAGS:
             if key not in existing:
                 conn.execute(
-                    "INSERT INTO feature_flags (feature_key, label, description, access_level, category, sort_order) VALUES (?,?,?,?,?,?)",
+                    "INSERT OR IGNORE INTO feature_flags (feature_key, label, description, access_level, category, sort_order) VALUES (?,?,?,?,?,?)",
                     (key, label, desc, level, cat, sort),
                 )
         conn.commit()
