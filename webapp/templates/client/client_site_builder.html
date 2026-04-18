@@ -234,11 +234,26 @@
     .gjs-toolbar {
         background: #1e293b; color: #fff; padding: .5rem 1rem;
         display: flex; justify-content: space-between; align-items: center;
-        flex-shrink: 0;
+        flex-shrink: 0; z-index: 10;
     }
     .gjs-toolbar .gjs-title { font-weight: 700; font-size: .95rem; }
-    .gjs-toolbar .gjs-actions { display: flex; gap: .5rem; }
-    .gjs-editor-wrap { flex: 1; overflow: hidden; }
+    .gjs-toolbar .gjs-actions { display: flex; gap: .5rem; align-items: center; }
+    .gjs-editor-wrap { flex: 1; overflow: hidden; display: flex; }
+    /* GrapesJS panel overrides for Wix-like feel */
+    .gjs-overlay .gjs-cv-canvas { flex: 1; }
+    .gjs-overlay .gjs-pn-panel { background: #1e293b; }
+    .gjs-overlay .gjs-block { min-height: auto; width: 100%; }
+    .gjs-overlay .gjs-blocks-c { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; }
+    .gjs-overlay .gjs-block { width: calc(50% - 3px); min-height: 50px; font-size: 11px; padding: 8px 4px; }
+    .gjs-overlay .gjs-sm-sector-title { font-size: .78rem; font-weight: 600; }
+    .gjs-overlay .gjs-pn-views-container { width: 280px; min-width: 280px; overflow-y: auto; }
+    .gjs-overlay .gjs-pn-views { border-bottom: 1px solid #334155; }
+    .gjs-overlay .gjs-pn-btn { color: #94a3b8; }
+    .gjs-overlay .gjs-pn-btn.gjs-pn-active { color: #fff; }
+    .gjs-overlay .gjs-one-bg { background: #1e293b; }
+    .gjs-overlay .gjs-two-color { color: #cbd5e1; }
+    .gjs-overlay .gjs-three-bg { background: #334155; }
+    .gjs-overlay .gjs-four-color, .gjs-overlay .gjs-four-color-h:hover { color: #818cf8; }
 
     /* Rewrite UI */
     .rewrite-panel {
@@ -259,16 +274,22 @@
     <div class="gjs-toolbar">
         <div class="gjs-title"><i class="bi bi-pencil-square me-2"></i><span id="gjsPageTitle">Visual Editor</span></div>
         <div class="gjs-actions">
-            <button class="btn btn-sm btn-outline-light" id="gjsDeviceDesktop" title="Desktop"><i class="bi bi-display"></i></button>
-            <button class="btn btn-sm btn-outline-light" id="gjsDeviceTablet" title="Tablet"><i class="bi bi-tablet"></i></button>
-            <button class="btn btn-sm btn-outline-light" id="gjsDeviceMobile" title="Mobile"><i class="bi bi-phone"></i></button>
-            <button class="btn btn-sm btn-outline-light" id="gjsUndo" title="Undo"><i class="bi bi-arrow-counterclockwise"></i></button>
-            <button class="btn btn-sm btn-outline-light" id="gjsRedo" title="Redo"><i class="bi bi-arrow-clockwise"></i></button>
+            <div class="btn-group btn-group-sm me-2">
+                <button class="btn btn-outline-light" id="gjsDeviceDesktop" title="Desktop"><i class="bi bi-display"></i></button>
+                <button class="btn btn-outline-light" id="gjsDeviceTablet" title="Tablet"><i class="bi bi-tablet"></i></button>
+                <button class="btn btn-outline-light" id="gjsDeviceMobile" title="Mobile"><i class="bi bi-phone"></i></button>
+            </div>
+            <div class="btn-group btn-group-sm me-2">
+                <button class="btn btn-outline-light" id="gjsUndo" title="Undo"><i class="bi bi-arrow-counterclockwise"></i></button>
+                <button class="btn btn-outline-light" id="gjsRedo" title="Redo"><i class="bi bi-arrow-clockwise"></i></button>
+            </div>
             <button class="btn btn-sm btn-success" id="gjsSaveBtn"><i class="bi bi-check-lg me-1"></i>Save</button>
             <button class="btn btn-sm btn-outline-light" id="gjsCloseBtn"><i class="bi bi-x-lg me-1"></i>Close</button>
         </div>
     </div>
-    <div class="gjs-editor-wrap" id="gjsEditorWrap"></div>
+    <div class="gjs-editor-wrap" id="gjsEditorWrap">
+        {# GrapesJS will render the canvas + sidebar panels here #}
+    </div>
 </div>
 
 {# ── REVIEW MODE ── #}
@@ -322,8 +343,11 @@
             <span class="page-type-chip"><i class="bi bi-file-earmark"></i> {{ page.page_type }}</span>
         </div>
         <div class="d-flex align-items-center gap-2">
-            <button type="button" class="btn btn-sm btn-outline-primary edit-visual-btn" data-page-id="{{ page.id }}" style="border-radius:8px; font-size:.78rem;" title="Open visual editor">
-                <i class="bi bi-pencil-square me-1"></i>Edit
+            <button type="button" class="btn btn-sm btn-primary open-designer-btn" data-page-id="{{ page.id }}" style="border-radius:8px; font-size:.78rem; font-weight:600;">
+                <i class="bi bi-palette me-1"></i>Design
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary toggle-rewrite-btn" data-page-id="{{ page.id }}" style="border-radius:8px; font-size:.78rem;">
+                <i class="bi bi-stars me-1"></i>AI Rewrite
             </button>
             {% if page.wp_page_id %}
             <span class="publish-badge published"><i class="bi bi-check-circle-fill me-1"></i>Published</span>
@@ -358,6 +382,15 @@
     </div>
 </div>
 {% endfor %}
+
+{# GrapesJS CDN - must load before editor JS #}
+<link rel="stylesheet" href="https://unpkg.com/grapesjs@0.21.10/dist/css/grapes.min.css">
+<script src="https://unpkg.com/grapesjs@0.21.10/dist/grapes.min.js"></script>
+<script src="https://unpkg.com/grapesjs-blocks-basic@1.0.2/dist/index.min.js"></script>
+<script src="https://unpkg.com/grapesjs-plugin-forms@2.0.6/dist/index.min.js"></script>
+<script src="https://unpkg.com/grapesjs-component-countdown@1.0.3/dist/index.min.js"></script>
+<script src="https://unpkg.com/grapesjs-tabs@1.0.6/dist/index.min.js"></script>
+<script src="https://unpkg.com/grapesjs-custom-code@1.0.2/dist/index.min.js"></script>
 
 <script>
 (function(){
@@ -404,13 +437,12 @@
         });
     }
 
-    /* ── Edit Button → Toggle Rewrite Panel ── */
-    document.querySelectorAll('.edit-visual-btn').forEach(btn => {
+    /* ── Toggle Rewrite Panel ── */
+    document.querySelectorAll('.toggle-rewrite-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             const pid = this.dataset.pageId;
             const panel = document.getElementById('rewritePanel-' + pid);
             panel.style.display = panel.style.display === 'none' ? '' : 'none';
-            // Also open GrapesJS if double-clicked or long press - but single click toggles rewrite
         });
     });
 
@@ -452,9 +484,16 @@
         });
     });
 
-    /* ── GrapesJS Visual Editor ── */
+    /* ── GrapesJS Visual Editor (Wix-like) ── */
     let gjsEditor = null;
     let gjsCurrentPageId = null;
+
+    // Design button opens the visual editor
+    document.querySelectorAll('.open-designer-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            openEditor(this.dataset.pageId);
+        });
+    });
 
     async function openEditor(pageId) {
         gjsCurrentPageId = pageId;
@@ -462,7 +501,6 @@
         overlay.classList.add('active');
         document.body.style.overflow = 'hidden';
 
-        // Fetch page data
         try {
             const resp = await fetch('/client/site-builder/page/' + pageId, {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -472,8 +510,7 @@
 
             document.getElementById('gjsPageTitle').textContent = data.page.label || data.page.title || 'Visual Editor';
 
-            // Initialize or re-init GrapesJS
-            if (gjsEditor) gjsEditor.destroy();
+            if (gjsEditor) { try { gjsEditor.destroy(); } catch(e) {} }
             const wrap = document.getElementById('gjsEditorWrap');
             wrap.innerHTML = '';
 
@@ -481,13 +518,189 @@
                 container: wrap,
                 height: '100%',
                 width: 'auto',
+                fromElement: false,
                 storageManager: false,
-                panels: { defaults: [] },
+                // Panels: layers, blocks, styles, traits all in right sidebar
+                panels: {
+                    defaults: [
+                        {
+                            id: 'panel-devices',
+                            el: '.gjs-toolbar .gjs-actions',
+                            buttons: [],
+                        },
+                    ],
+                },
+                selectorManager: { componentFirst: true },
+                styleManager: {
+                    sectors: [
+                        {
+                            name: 'Layout',
+                            open: true,
+                            properties: [
+                                { type: 'select', property: 'display', options: [
+                                    {id:'block'}, {id:'flex'}, {id:'grid'}, {id:'inline-block'}, {id:'none'}
+                                ]},
+                                { type: 'select', property: 'flex-direction', options: [
+                                    {id:'row'}, {id:'row-reverse'}, {id:'column'}, {id:'column-reverse'}
+                                ]},
+                                { type: 'select', property: 'justify-content', options: [
+                                    {id:'flex-start'}, {id:'center'}, {id:'flex-end'}, {id:'space-between'}, {id:'space-around'}
+                                ]},
+                                { type: 'select', property: 'align-items', options: [
+                                    {id:'flex-start'}, {id:'center'}, {id:'flex-end'}, {id:'stretch'}
+                                ]},
+                                'flex-wrap',
+                            ],
+                        },
+                        {
+                            name: 'Spacing',
+                            open: false,
+                            properties: ['padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+                                        'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left'],
+                        },
+                        {
+                            name: 'Size',
+                            open: false,
+                            properties: ['width', 'min-width', 'max-width', 'height', 'min-height', 'max-height'],
+                        },
+                        {
+                            name: 'Typography',
+                            open: false,
+                            properties: [
+                                'font-family', 'font-size', 'font-weight', 'letter-spacing', 'line-height',
+                                'color', 'text-align', 'text-decoration', 'text-transform',
+                            ],
+                        },
+                        {
+                            name: 'Background',
+                            open: false,
+                            properties: ['background-color', 'background-image', 'background-repeat', 'background-position', 'background-size'],
+                        },
+                        {
+                            name: 'Borders',
+                            open: false,
+                            properties: ['border', 'border-radius', 'box-shadow'],
+                        },
+                        {
+                            name: 'Extra',
+                            open: false,
+                            properties: ['opacity', 'overflow', 'cursor', 'transition'],
+                        },
+                    ],
+                },
                 deviceManager: {
                     devices: [
                         { name: 'Desktop', width: '' },
                         { name: 'Tablet', width: '768px', widthMedia: '992px' },
                         { name: 'Mobile', width: '375px', widthMedia: '480px' },
+                    ],
+                },
+                layerManager: { appendTo: '.gjs-pn-views-container' },
+                blockManager: {
+                    appendTo: '.gjs-pn-views-container',
+                    blocks: [
+                        {
+                            id: 'section',
+                            label: '<i class="bi bi-columns-gap"></i> Section',
+                            category: 'Layout',
+                            content: '<section style="padding: 60px 20px; max-width: 1200px; margin: 0 auto;"><div data-gjs-type="text">Section content here</div></section>',
+                        },
+                        {
+                            id: 'two-columns',
+                            label: '<i class="bi bi-layout-split"></i> 2 Columns',
+                            category: 'Layout',
+                            content: '<div style="display:flex; gap:24px; padding:40px 20px; max-width:1200px; margin:0 auto;"><div style="flex:1;">Column 1</div><div style="flex:1;">Column 2</div></div>',
+                        },
+                        {
+                            id: 'three-columns',
+                            label: '<i class="bi bi-grid-3x1-gap"></i> 3 Columns',
+                            category: 'Layout',
+                            content: '<div style="display:flex; gap:24px; padding:40px 20px; max-width:1200px; margin:0 auto;"><div style="flex:1;">Col 1</div><div style="flex:1;">Col 2</div><div style="flex:1;">Col 3</div></div>',
+                        },
+                        {
+                            id: 'hero-section',
+                            label: '<i class="bi bi-image"></i> Hero',
+                            category: 'Sections',
+                            content: '<section style="background:#1e293b; color:#fff; padding:80px 20px; text-align:center;"><div style="max-width:800px; margin:0 auto;"><h1 style="font-size:2.5rem; font-weight:800; margin-bottom:16px;">Your Hero Headline</h1><p style="font-size:1.1rem; opacity:.8; margin-bottom:24px;">Supporting text that explains your value proposition</p><a href="#" style="display:inline-block; background:#6366f1; color:#fff; padding:12px 32px; border-radius:8px; text-decoration:none; font-weight:600;">Get Started</a></div></section>',
+                        },
+                        {
+                            id: 'cta-band',
+                            label: '<i class="bi bi-megaphone"></i> CTA Band',
+                            category: 'Sections',
+                            content: '<section style="background:#6366f1; color:#fff; padding:40px 20px; text-align:center;"><h2 style="font-size:1.5rem; font-weight:700; margin-bottom:12px;">Ready to Get Started?</h2><p style="opacity:.9; margin-bottom:20px;">Contact us today for a free estimate</p><a href="#" style="display:inline-block; background:#fff; color:#6366f1; padding:12px 32px; border-radius:8px; text-decoration:none; font-weight:600;">Call Now</a></section>',
+                        },
+                        {
+                            id: 'testimonial',
+                            label: '<i class="bi bi-chat-quote"></i> Testimonial',
+                            category: 'Sections',
+                            content: '<div style="background:#f8fafc; border-radius:12px; padding:32px; max-width:600px; margin:20px auto; text-align:center;"><div style="font-size:2rem; color:#6366f1; margin-bottom:8px;">&ldquo;</div><p style="font-size:1rem; line-height:1.7; color:#334155; font-style:italic; margin-bottom:16px;">This is an amazing testimonial from a happy customer.</p><div style="font-weight:600; color:#1e293b;">John D.</div><div style="font-size:.85rem; color:#64748b;">Homeowner</div></div>',
+                        },
+                        {
+                            id: 'features-grid',
+                            label: '<i class="bi bi-grid"></i> Features',
+                            category: 'Sections',
+                            content: '<section style="padding:60px 20px; max-width:1200px; margin:0 auto;"><h2 style="text-align:center; font-size:1.8rem; font-weight:700; margin-bottom:40px;">Why Choose Us</h2><div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:24px;"><div style="text-align:center; padding:24px;"><div style="font-size:2rem; color:#6366f1; margin-bottom:12px;">&#9733;</div><h3 style="font-weight:600; margin-bottom:8px;">Feature One</h3><p style="color:#64748b; font-size:.9rem;">Description of this feature and why it matters.</p></div><div style="text-align:center; padding:24px;"><div style="font-size:2rem; color:#6366f1; margin-bottom:12px;">&#9733;</div><h3 style="font-weight:600; margin-bottom:8px;">Feature Two</h3><p style="color:#64748b; font-size:.9rem;">Description of this feature and why it matters.</p></div><div style="text-align:center; padding:24px;"><div style="font-size:2rem; color:#6366f1; margin-bottom:12px;">&#9733;</div><h3 style="font-weight:600; margin-bottom:8px;">Feature Three</h3><p style="color:#64748b; font-size:.9rem;">Description of this feature and why it matters.</p></div></div></section>',
+                        },
+                        {
+                            id: 'faq-block',
+                            label: '<i class="bi bi-question-circle"></i> FAQ',
+                            category: 'Sections',
+                            content: '<section style="padding:60px 20px; max-width:800px; margin:0 auto;"><h2 style="text-align:center; font-weight:700; margin-bottom:32px;">Frequently Asked Questions</h2><div style="border:1px solid #e2e8f0; border-radius:8px; overflow:hidden;"><div style="padding:16px 20px; border-bottom:1px solid #e2e8f0;"><h4 style="font-weight:600; font-size:.95rem; margin:0;">What is your service area?</h4><p style="color:#64748b; margin:8px 0 0; font-size:.9rem;">We serve the greater metro area and surrounding suburbs.</p></div><div style="padding:16px 20px; border-bottom:1px solid #e2e8f0;"><h4 style="font-weight:600; font-size:.95rem; margin:0;">How do I get a quote?</h4><p style="color:#64748b; margin:8px 0 0; font-size:.9rem;">Call us or fill out the contact form for a free estimate.</p></div><div style="padding:16px 20px;"><h4 style="font-weight:600; font-size:.95rem; margin:0;">Are you licensed and insured?</h4><p style="color:#64748b; margin:8px 0 0; font-size:.9rem;">Yes, we are fully licensed, bonded, and insured.</p></div></div></section>',
+                        },
+                        {
+                            id: 'contact-block',
+                            label: '<i class="bi bi-telephone"></i> Contact',
+                            category: 'Sections',
+                            content: '<section style="padding:60px 20px; max-width:1200px; margin:0 auto;"><div style="display:flex; gap:40px;"><div style="flex:1;"><h2 style="font-weight:700; margin-bottom:16px;">Get In Touch</h2><p style="color:#64748b; margin-bottom:24px;">Ready to start your project? Reach out today.</p><p style="margin-bottom:8px;"><strong>Phone:</strong> (555) 123-4567</p><p style="margin-bottom:8px;"><strong>Email:</strong> info@example.com</p><p><strong>Hours:</strong> Mon-Fri 8am-6pm</p></div><div style="flex:1; background:#f8fafc; border-radius:12px; padding:32px;">[Your contact form shortcode here]</div></div></section>',
+                        },
+                        {
+                            id: 'image-block',
+                            label: '<i class="bi bi-image"></i> Image',
+                            category: 'Basic',
+                            content: { type: 'image' },
+                        },
+                        {
+                            id: 'text-block',
+                            label: '<i class="bi bi-fonts"></i> Text',
+                            category: 'Basic',
+                            content: '<div data-gjs-type="text" style="padding: 10px;">Insert your text here</div>',
+                        },
+                        {
+                            id: 'heading-block',
+                            label: '<i class="bi bi-type-h1"></i> Heading',
+                            category: 'Basic',
+                            content: '<h2 style="font-weight:700; font-size:1.5rem;">Your Heading</h2>',
+                        },
+                        {
+                            id: 'button-block',
+                            label: '<i class="bi bi-hand-index"></i> Button',
+                            category: 'Basic',
+                            content: '<a href="#" style="display:inline-block; background:#6366f1; color:#fff; padding:12px 28px; border-radius:8px; text-decoration:none; font-weight:600; font-size:.95rem;">Button Text</a>',
+                        },
+                        {
+                            id: 'divider-block',
+                            label: '<i class="bi bi-hr"></i> Divider',
+                            category: 'Basic',
+                            content: '<hr style="border:none; border-top:1px solid #e2e8f0; margin:24px 0;">',
+                        },
+                        {
+                            id: 'spacer-block',
+                            label: '<i class="bi bi-arrows-expand"></i> Spacer',
+                            category: 'Basic',
+                            content: '<div style="height:40px;"></div>',
+                        },
+                        {
+                            id: 'video-block',
+                            label: '<i class="bi bi-play-btn"></i> Video',
+                            category: 'Media',
+                            content: { type: 'video', style: { width: '100%', 'max-width': '800px', margin: '0 auto', display: 'block' } },
+                        },
+                        {
+                            id: 'map-block',
+                            label: '<i class="bi bi-geo-alt"></i> Map Embed',
+                            category: 'Media',
+                            content: '<div style="max-width:100%; overflow:hidden; border-radius:12px;"><iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12" width="100%" height="350" style="border:0;" allowfullscreen="" loading="lazy"></iframe></div>',
+                        },
                     ],
                 },
                 assetManager: {
@@ -497,14 +710,42 @@
                     multiUpload: false,
                     autoAdd: true,
                 },
-                plugins: ['gjs-blocks-basic'],
-                pluginsOpts: { 'gjs-blocks-basic': {} },
+                plugins: [
+                    'gjs-blocks-basic',
+                    'grapesjs-plugin-forms',
+                    'grapesjs-component-countdown',
+                    'grapesjs-tabs',
+                    'grapesjs-custom-code',
+                ],
+                pluginsOpts: {
+                    'gjs-blocks-basic': { flexGrid: true },
+                    'grapesjs-plugin-forms': {},
+                    'grapesjs-component-countdown': {},
+                    'grapesjs-tabs': {},
+                    'grapesjs-custom-code': {},
+                },
             });
+
+            // Add right sidebar panel tabs (Blocks, Styles, Layers, Traits)
+            const pn = gjsEditor.Panels;
+            pn.addPanel({
+                id: 'views',
+                el: '.gjs-pn-views',
+                buttons: [
+                    { id: 'open-blocks', className: 'bi bi-plus-square', active: true, command: 'open-blocks', attributes: { title: 'Add Blocks' } },
+                    { id: 'open-sm', className: 'bi bi-brush', command: 'open-sm', attributes: { title: 'Style Manager' } },
+                    { id: 'open-layers', className: 'bi bi-layers', command: 'open-layers', attributes: { title: 'Layers' } },
+                    { id: 'open-tm', className: 'bi bi-sliders', command: 'open-tm', attributes: { title: 'Settings' } },
+                ],
+            });
+            pn.addPanel({ id: 'views-container', el: '.gjs-pn-views-container', resizable: { maxDim: 400, minDim: 200, tc: 0, cl: 1, cr: 0, bc: 0 } });
 
             // Load saved editor state or raw content
             let editorJson = null;
             try { editorJson = data.page.editor_json ? JSON.parse(data.page.editor_json) : null; } catch(e) {}
-            if (editorJson && editorJson.components) {
+            if (editorJson && editorJson.pages) {
+                gjsEditor.loadProjectData(editorJson);
+            } else if (editorJson && editorJson.components) {
                 gjsEditor.loadProjectData(editorJson);
             } else {
                 gjsEditor.setComponents(data.page.content || '');
@@ -513,6 +754,7 @@
                 gjsEditor.setStyle(data.page.page_css);
             }
         } catch (err) {
+            console.error('Editor init error:', err);
             alert('Failed to load page for editing.');
             closeEditor();
         }
@@ -550,7 +792,6 @@
             });
             const data = await resp.json();
             if (data.ok) {
-                // Update the preview card too
                 const preview = document.getElementById('pageContent-' + gjsCurrentPageId);
                 if (preview) preview.innerHTML = html;
                 btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Saved!';
@@ -567,7 +808,7 @@
         }
     }
 
-    // Editor toolbar events
+    // Toolbar events
     document.getElementById('gjsSaveBtn')?.addEventListener('click', saveEditor);
     document.getElementById('gjsCloseBtn')?.addEventListener('click', closeEditor);
     document.getElementById('gjsDeviceDesktop')?.addEventListener('click', () => gjsEditor?.setDevice('Desktop'));
@@ -575,14 +816,6 @@
     document.getElementById('gjsDeviceMobile')?.addEventListener('click', () => gjsEditor?.setDevice('Mobile'));
     document.getElementById('gjsUndo')?.addEventListener('click', () => gjsEditor?.UndoManager.undo());
     document.getElementById('gjsRedo')?.addEventListener('click', () => gjsEditor?.UndoManager.redo());
-
-    // Double-click edit button opens visual editor
-    document.querySelectorAll('.edit-visual-btn').forEach(btn => {
-        btn.addEventListener('dblclick', function(e) {
-            e.preventDefault();
-            openEditor(this.dataset.pageId);
-        });
-    });
 
     // Escape key closes editor
     document.addEventListener('keydown', e => {
@@ -592,11 +825,6 @@
     });
 })();
 </script>
-
-{# GrapesJS CDN - loaded only in review mode #}
-<link rel="stylesheet" href="https://unpkg.com/grapesjs@0.21.10/dist/css/grapes.min.css">
-<script src="https://unpkg.com/grapesjs@0.21.10/dist/grapes.min.js"></script>
-<script src="https://unpkg.com/grapesjs-blocks-basic@1.0.2/dist/index.min.js"></script>
 
 {% else %}
 {# ── LANDING MODE ── #}

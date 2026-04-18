@@ -13,6 +13,7 @@ Setup:
 """
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials as OAuthCredentials
 from pathlib import Path
 import calendar
 
@@ -21,7 +22,7 @@ CREDENTIALS_PATH = Path(__file__).parent.parent / "config" / "google_credentials
 
 
 def _get_service(credentials_path=None):
-    """Create an authenticated Search Console API service."""
+    """Create an authenticated Search Console API service using a service account."""
     creds_path = credentials_path or CREDENTIALS_PATH
     if not Path(creds_path).exists():
         raise FileNotFoundError(
@@ -37,6 +38,19 @@ def _get_service(credentials_path=None):
     return build("searchconsole", "v1", credentials=credentials)
 
 
+def _get_service_oauth(access_token, refresh_token=None, client_id=None, client_secret=None):
+    """Create an authenticated Search Console API service using OAuth2 user tokens."""
+    creds = OAuthCredentials(
+        token=access_token,
+        refresh_token=refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=client_id,
+        client_secret=client_secret,
+        scopes=["https://www.googleapis.com/auth/webmasters.readonly"],
+    )
+    return build("searchconsole", "v1", credentials=creds)
+
+
 def _month_date_range(month_str):
     """Convert '2026-03' to start/end date strings."""
     year, month = map(int, month_str.split("-"))
@@ -46,7 +60,7 @@ def _month_date_range(month_str):
     return start_date, end_date
 
 
-def pull_search_console_data(site_url, month_str, credentials_path=None):
+def pull_search_console_data(site_url, month_str, credentials_path=None, oauth_tokens=None):
     """
     Pull Search Console data for a given site and month.
 
@@ -54,13 +68,23 @@ def pull_search_console_data(site_url, month_str, credentials_path=None):
         site_url: The site URL as registered in Search Console
                   (e.g., "https://aceplumbing.com/" or "sc-domain:aceplumbing.com")
         month_str: Month string like "2026-03"
-        credentials_path: Optional path to credentials JSON
+        credentials_path: Optional path to service account credentials JSON
+        oauth_tokens: Optional dict with {access_token, refresh_token, client_id, client_secret}
+                      for OAuth2-based auth (used when brand has Google connected via OAuth)
 
     Returns:
         Dict in the same format as parsers.parse_search_console() so it
         plugs directly into the existing analysis pipeline.
     """
-    service = _get_service(credentials_path)
+    if oauth_tokens and oauth_tokens.get("access_token"):
+        service = _get_service_oauth(
+            access_token=oauth_tokens["access_token"],
+            refresh_token=oauth_tokens.get("refresh_token"),
+            client_id=oauth_tokens.get("client_id"),
+            client_secret=oauth_tokens.get("client_secret"),
+        )
+    else:
+        service = _get_service(credentials_path)
     start_date, end_date = _month_date_range(month_str)
 
     # ── Pull query-level data ──

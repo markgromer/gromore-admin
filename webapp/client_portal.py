@@ -8836,7 +8836,20 @@ def client_site_builder_seo_intel():
         first_of_month = today.replace(day=1)
         last_month = (first_of_month - timedelta(days=1))
         month_str = last_month.strftime("%Y-%m")
-        seo_data = pull_search_console_data(gsc_url, month_str) or {}
+
+        # Try OAuth tokens first (from Google connection), fall back to service account
+        oauth_tokens = None
+        connections = db.get_brand_connections(brand_id)
+        google_conn = connections.get("google") or {}
+        if google_conn.get("access_token"):
+            oauth_tokens = {
+                "access_token": google_conn["access_token"],
+                "refresh_token": google_conn.get("refresh_token", ""),
+                "client_id": (db.get_setting("google_client_id", "") or current_app.config.get("GOOGLE_CLIENT_ID", "")).strip(),
+                "client_secret": (db.get_setting("google_client_secret", "") or current_app.config.get("GOOGLE_CLIENT_SECRET", "")).strip(),
+            }
+
+        seo_data = pull_search_console_data(gsc_url, month_str, oauth_tokens=oauth_tokens) or {}
     except Exception as exc:
         return jsonify(ok=False, error=f"Failed to pull Search Console data: {str(exc)[:200]}"), 500
 
@@ -8959,12 +8972,24 @@ def client_site_builder_generate():
         try:
             from src.api_search_console import pull_search_console_data
             from datetime import datetime, timedelta
-            # Pull last full month
             today = datetime.utcnow()
             first_of_month = today.replace(day=1)
             last_month = (first_of_month - timedelta(days=1))
             month_str = last_month.strftime("%Y-%m")
-            seo_data = pull_search_console_data(gsc_url, month_str) or {}
+
+            # Try OAuth tokens first, fall back to service account
+            oauth_tokens = None
+            connections = db.get_brand_connections(brand_id)
+            google_conn = connections.get("google") or {}
+            if google_conn.get("access_token"):
+                oauth_tokens = {
+                    "access_token": google_conn["access_token"],
+                    "refresh_token": google_conn.get("refresh_token", ""),
+                    "client_id": (db.get_setting("google_client_id", "") or current_app.config.get("GOOGLE_CLIENT_ID", "")).strip(),
+                    "client_secret": (db.get_setting("google_client_secret", "") or current_app.config.get("GOOGLE_CLIENT_SECRET", "")).strip(),
+                }
+
+            seo_data = pull_search_console_data(gsc_url, month_str, oauth_tokens=oauth_tokens) or {}
         except Exception as exc:
             current_app.logger.warning("SC pull for site builder failed: %s", exc)
 
