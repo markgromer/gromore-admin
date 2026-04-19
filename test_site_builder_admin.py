@@ -380,6 +380,18 @@ class SBAdminRouteTests(unittest.TestCase):
         themes = self.db.get_sb_themes()
         self.assertEqual(len(themes), 1)
 
+    def test_create_theme_via_route_normalizes_font_names(self):
+        resp = self.client.post("/site-builder-admin/themes", data={
+            "name": "Font Test",
+            "font_heading": "Space   Grotesk!!!",
+            "font_body": "DM Sans<script>",
+            "is_active": "1",
+        }, follow_redirects=True)
+        self.assertEqual(resp.status_code, 200)
+        theme = self.db.get_sb_themes()[0]
+        self.assertEqual(theme["font_heading"], "Space Grotesk")
+        self.assertEqual(theme["font_body"], "DM Sansscript")
+
     def test_save_prompt_override_via_route(self):
         resp = self.client.post("/site-builder-admin/prompts", data={
             "page_type": "home",

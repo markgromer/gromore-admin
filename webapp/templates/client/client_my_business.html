@@ -362,6 +362,37 @@
                         <form method="POST" action="{{ url_for('client.client_my_business') }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="section" value="branding">
+                            <datalist id="brandGoogleFonts">
+                                {% for font in google_font_choices %}
+                                <option value="{{ font }}"></option>
+                                {% endfor %}
+                            </datalist>
+                            <div class="row g-3 mb-2">
+                                <div class="col-md-6">
+                                    <div class="biz-field mb-0">
+                                        <label>
+                                            <span class="field-icon"><i class="bi bi-palette"></i></span>
+                                            Primary Color
+                                        </label>
+                                        <input type="text" name="primary_color" maxlength="20"
+                                               value="{{ brand.primary_color or '' }}"
+                                               placeholder="#2563eb">
+                                        <div class="field-help">Main CTA and headline accent color.</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="biz-field mb-0">
+                                        <label>
+                                            <span class="field-icon"><i class="bi bi-droplet"></i></span>
+                                            Accent Color
+                                        </label>
+                                        <input type="text" name="accent_color" maxlength="20"
+                                               value="{{ brand.accent_color or '' }}"
+                                               placeholder="#f59e0b">
+                                        <div class="field-help">Secondary highlights, badges, and contrast moments.</div>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="biz-field">
                                 <label>
                                     <span class="field-icon"><i class="bi bi-droplet-half"></i></span>
@@ -372,8 +403,34 @@
                                        placeholder="e.g. Primary: #2563eb (blue), Secondary: #f59e0b (gold), Dark: #1a1d2e">
                                 <div class="field-help">Used by AI when generating ad creatives. Hex codes or color names.</div>
                             </div>
+                            <div class="row g-3 mb-2">
+                                <div class="col-md-6">
+                                    <div class="biz-field mb-0">
+                                        <label>
+                                            <span class="field-icon"><i class="bi bi-type-h1"></i></span>
+                                            Heading Font
+                                        </label>
+                                        <input type="text" name="font_heading" maxlength="80" list="brandGoogleFonts"
+                                               value="{{ brand.font_heading or '' }}"
+                                               placeholder="Type any Google font family">
+                                        <div class="field-help">Used for headings in the site builder and theme defaults.</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="biz-field mb-0">
+                                        <label>
+                                            <span class="field-icon"><i class="bi bi-fonts"></i></span>
+                                            Body Font
+                                        </label>
+                                        <input type="text" name="font_body" maxlength="80" list="brandGoogleFonts"
+                                               value="{{ brand.font_body or '' }}"
+                                               placeholder="Type any Google font family">
+                                        <div class="field-help">Used for paragraph copy, lists, and supporting text.</div>
+                                    </div>
+                                </div>
+                            </div>
                             <button type="submit" class="biz-save-btn" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed);">
-                                <i class="bi bi-check2 me-1"></i> Save Colors
+                                <i class="bi bi-check2 me-1"></i> Save Brand Design
                             </button>
                         </form>
                     </div>

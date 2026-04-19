@@ -3325,6 +3325,8 @@ def create_app():
     @app.route("/site-builder-admin")
     @login_required
     def site_builder_admin():
+        from webapp.font_catalog import GOOGLE_FONT_CHOICES
+
         tab = request.args.get("tab", "templates")
         templates = db.get_sb_templates(active_only=False)
         themes = db.get_sb_themes(active_only=False)
@@ -3353,6 +3355,7 @@ def create_app():
             images=images,
             image_count=image_count,
             page_types=page_types,
+            google_font_choices=GOOGLE_FONT_CHOICES,
         )
 
     # -- Templates CRUD --
@@ -3402,6 +3405,8 @@ def create_app():
     @app.route("/site-builder-admin/themes", methods=["POST"])
     @login_required
     def sb_admin_theme_save():
+        from webapp.font_catalog import normalize_google_font_family
+
         theme_id = request.form.get("theme_id")
         data = {
             "name": request.form.get("name", "").strip(),
@@ -3411,8 +3416,8 @@ def create_app():
             "accent_color": request.form.get("accent_color", "#f59e0b"),
             "text_color": request.form.get("text_color", "#1f2937"),
             "bg_color": request.form.get("bg_color", "#ffffff"),
-            "font_heading": request.form.get("font_heading", "Inter"),
-            "font_body": request.form.get("font_body", "Inter"),
+            "font_heading": normalize_google_font_family(request.form.get("font_heading", "Inter")),
+            "font_body": normalize_google_font_family(request.form.get("font_body", "Inter")),
             "button_style": request.form.get("button_style", "rounded"),
             "layout_style": request.form.get("layout_style", "modern"),
             "custom_css": request.form.get("custom_css", ""),

@@ -179,6 +179,47 @@ class SiteBuilderLandingTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"No builds yet", resp.data)
 
+    def test_landing_shows_font_and_image_slot_controls(self):
+        _login_client(self.client, self.app)
+        resp = self.client.get("/client/site-builder")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"siteBuilderGoogleFonts", resp.data)
+        self.assertIn(b"name=\"wireframe_style\"", resp.data)
+        self.assertIn(b"hero_desktop_use_stock", resp.data)
+
+
+class BrandProfileDesignTests(unittest.TestCase):
+    def setUp(self):
+        self.app, self._db_file = _make_test_app()
+        self.client = self.app.test_client()
+
+    def tearDown(self):
+        _cleanup_db(self._db_file)
+
+    def test_branding_section_saves_font_and_color_tokens(self):
+        brand_id, _ = _login_client(self.client, self.app)
+
+        resp = self.client.post(
+            "/client/my-business",
+            data={
+                "section": "branding",
+                "brand_colors": "#112233, #ffcc00, #f8fafc",
+                "primary_color": "#112233",
+                "accent_color": "#ffcc00",
+                "font_heading": "Space   Grotesk!!!",
+                "font_body": "DM Sans<script>",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(resp.status_code, 302)
+        brand = self.app.db.get_brand(brand_id)
+        self.assertEqual(brand["brand_colors"], "#112233, #ffcc00, #f8fafc")
+        self.assertEqual(brand["primary_color"], "#112233")
+        self.assertEqual(brand["accent_color"], "#ffcc00")
+        self.assertEqual(brand["font_heading"], "Space Grotesk")
+        self.assertEqual(brand["font_body"], "DM Sansscript")
+
 
 # ---------------------------------------------------------------------------
 # Review Page Tests
@@ -1277,6 +1318,65 @@ class SiteBuilderGenerateWithIntakeTests(unittest.TestCase):
         self.assertTrue(build["intake"]["quote_tool_collect_frequency"])
         self.assertTrue(build["intake"]["quote_tool_collect_last_cleaned"])
         self.assertEqual(build["intake"]["quote_tool_phone_mode"], "optional")
+
+    @patch("webapp.client_portal._get_openai_api_key", return_value="test-key")
+    @patch("webapp.client_portal._pick_ai_model", return_value="gpt-4o-mini")
+    def test_generate_stores_design_tokens_and_image_slots(self, mock_model, mock_key):
+        brand_id, _ = _login_client(self.client, self.app)
+
+        fake_content = {
+            "title": "Test Page",
+            "content": "<p>Generated content</p>",
+            "excerpt": "Test excerpt",
+            "seo_title": "Test SEO Title",
+            "seo_description": "Test description",
+            "primary_keyword": "test keyword",
+            "secondary_keywords": "kw1, kw2",
+            "faq_items": [],
+        }
+        fake_assembled = {
+            "schemas": [],
+            "schema_html": "",
+            "full_html": "<p>Full HTML</p>",
+        }
+
+        with patch("webapp.site_builder.generate_page_content", return_value=fake_content), \
+             patch("webapp.site_builder.assemble_page", return_value=fake_assembled):
+
+            resp = self.client.post(
+                "/client/site-builder/generate",
+                data={
+                    "services": "Drain Cleaning",
+                    "areas": "Springfield",
+                    "style_preset": "modern",
+                    "wireframe_style": "conversion",
+                    "button_style": "pill",
+                    "font_heading": "Space   Grotesk!!!",
+                    "font_body": "DM Sans<script>",
+                    "hero_desktop_note": "Feature the wrapped service truck in front of a clean house.",
+                    "hero_desktop_use_stock": "1",
+                    "about_team_image": (io.BytesIO(b"<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'></svg>"), "team-shot.svg"),
+                },
+                content_type="multipart/form-data",
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertTrue(payload["ok"])
+
+        build = self.app.db.get_site_build(payload["build_id"])
+        intake = build.get("intake") or {}
+        self.assertEqual(intake["style_preset"], "modern")
+        self.assertEqual(intake["wireframe_style"], "conversion")
+        self.assertEqual(intake["button_style"], "pill")
+        self.assertEqual(intake["font_heading"], "Space Grotesk")
+        self.assertEqual(intake["font_body"], "DM Sansscript")
+        self.assertEqual(intake["image_slots"]["hero_desktop"]["mode"], "stock")
+        self.assertIn("wrapped service truck", intake["image_slots"]["hero_desktop"]["note"])
+        self.assertEqual(intake["image_slots"]["about_team"]["mode"], "upload")
+        self.assertEqual(len(intake["image_slots"]["about_team"]["assets"]), 1)
+        self.assertIn("site_builder_intake", intake["image_slots"]["about_team"]["assets"][0]["path"])
 
     @patch("webapp.client_portal._get_openai_api_key", return_value="test-key")
     @patch("webapp.client_portal._pick_ai_model", return_value="gpt-4o-mini")

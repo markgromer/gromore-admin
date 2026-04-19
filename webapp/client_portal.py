@@ -15,6 +15,7 @@ import logging
 import uuid
 from functools import wraps
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from urllib.parse import urlparse, urljoin, quote_plus
 
 from flask import (
@@ -22,6 +23,8 @@ from flask import (
     url_for, flash, session, abort, jsonify, current_app,
     make_response, send_file,
 )
+
+from webapp.font_catalog import GOOGLE_FONT_CHOICES, normalize_google_font_family
 
 client_bp = Blueprint(
     "client",
@@ -46,6 +49,65 @@ _SITE_BUILDER_MAX_TITLE_LENGTH = 255
 _SITE_BUILDER_MAX_SEO_TITLE_LENGTH = 120
 _SITE_BUILDER_MAX_SEO_DESCRIPTION_LENGTH = 320
 _SITE_BUILDER_MAX_REWRITE_INSTRUCTIONS_LENGTH = 2000
+_SITE_BUILDER_INTAKE_IMAGE_SLOTS = [
+    {
+        "key": "hero_desktop",
+        "label": "Homepage hero image - desktop",
+        "field_name": "hero_desktop_image",
+        "accept": "image/*",
+        "stock_query": "service business hero exterior truck crew",
+        "help": "The main desktop hero image. Wide crops work best.",
+    },
+    {
+        "key": "hero_mobile",
+        "label": "Homepage hero image - mobile",
+        "field_name": "hero_mobile_image",
+        "accept": "image/*",
+        "stock_query": "service business portrait mobile hero worker",
+        "help": "Optional mobile-specific hero image for tighter crops and portrait framing.",
+    },
+    {
+        "key": "about_team",
+        "label": "About / team image",
+        "field_name": "about_team_image",
+        "accept": "image/*",
+        "stock_query": "local service team portrait business owner",
+        "help": "Use a team, founder, crew, or trust-building brand image.",
+    },
+    {
+        "key": "services_overview",
+        "label": "Services overview image",
+        "field_name": "services_overview_image",
+        "accept": "image/*",
+        "stock_query": "local service work in progress tools technician",
+        "help": "Supports the services section or services page overview.",
+    },
+    {
+        "key": "proof_image",
+        "label": "Proof / before-after image",
+        "field_name": "proof_image",
+        "accept": "image/*",
+        "stock_query": "before after home service results",
+        "help": "Best for results, before/after, completed work, or proof sections.",
+    },
+    {
+        "key": "contact_location",
+        "label": "Contact / location image",
+        "field_name": "contact_location_image",
+        "accept": "image/*",
+        "stock_query": "local storefront neighborhood map service area",
+        "help": "Use for contact, location, service-area, or local trust sections.",
+    },
+    {
+        "key": "gallery_images",
+        "label": "Gallery images",
+        "field_name": "gallery_images",
+        "accept": "image/*",
+        "multiple": True,
+        "stock_query": "local service gallery completed work",
+        "help": "Optional extra images for gallery or proof grids. You can upload several.",
+    },
+]
 
 
 def client_login_required(view_func):
@@ -4992,8 +5054,16 @@ def client_my_business():
 
         elif section == "branding":
             brand_colors = request.form.get("brand_colors", "")[:200].strip()
+            primary_color = request.form.get("primary_color", "")[:20].strip()
+            accent_color = request.form.get("accent_color", "")[:20].strip()
+            font_heading = normalize_google_font_family(request.form.get("font_heading", ""))
+            font_body = normalize_google_font_family(request.form.get("font_body", ""))
             db.update_brand_text_field(brand_id, "brand_colors", brand_colors)
-            flash("Brand colors saved.", "success")
+            db.update_brand_text_field(brand_id, "primary_color", primary_color)
+            db.update_brand_text_field(brand_id, "accent_color", accent_color)
+            db.update_brand_text_field(brand_id, "font_heading", font_heading)
+            db.update_brand_text_field(brand_id, "font_body", font_body)
+            flash("Brand design settings saved.", "success")
 
         return redirect(url_for("client.client_my_business"))
 
@@ -5024,6 +5094,7 @@ def client_my_business():
         competitors=competitors,
         profile_score=profile_score,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+        google_font_choices=GOOGLE_FONT_CHOICES,
     )
 
 
@@ -6574,6 +6645,81 @@ def _site_builder_wp_admin_url(brand):
     if not site_url:
         return ""
     return f"{site_url}/wp-admin/"
+
+
+def _site_builder_stock_image_url(slot_key, industry, note=""):
+    query_bits = [industry or "local service"]
+    slot_label = slot_key.replace("_", " ").strip()
+    if slot_label:
+        query_bits.append(slot_label)
+    if note:
+        query_bits.append(note)
+    query = ",".join(
+        quote_plus(part.strip())
+        for part in query_bits
+        if str(part or "").strip()
+    )
+    return f"https://source.unsplash.com/1600x900/?{query}" if query else ""
+
+
+def _site_builder_collect_image_slots(brand_id, industry):
+    from werkzeug.utils import secure_filename
+
+    slots = {}
+    uploads_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads"))
+    target_dir = uploads_dir / "site_builder_intake" / str(brand_id)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    allowed_ext = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
+
+    for slot in _SITE_BUILDER_INTAKE_IMAGE_SLOTS:
+        key = slot["key"]
+        note = (request.form.get(f"{key}_note") or "").strip()[:240]
+        use_stock = bool(request.form.get(f"{key}_use_stock"))
+        field_name = slot["field_name"]
+
+        files = request.files.getlist(field_name) if slot.get("multiple") else [request.files.get(field_name)]
+        assets = []
+        for upload in files:
+            if not upload or not getattr(upload, "filename", ""):
+                continue
+            ext = os.path.splitext(upload.filename)[1].lower()
+            if ext not in allowed_ext:
+                continue
+            upload.seek(0, 2)
+            size = upload.tell()
+            upload.seek(0)
+            if size > 10 * 1024 * 1024:
+                continue
+            filename = secure_filename(f"{key}_{uuid.uuid4().hex}{ext}")
+            if not filename:
+                continue
+            save_path = target_dir / filename
+            upload.save(str(save_path))
+            rel_path = f"site_builder_intake/{brand_id}/{filename}"
+            assets.append({
+                "path": rel_path,
+                "url": url_for("client.client_serve_upload", filename=rel_path),
+                "original_name": upload.filename,
+            })
+
+        entry = {
+            "label": slot["label"],
+            "note": note,
+            "use_stock": use_stock,
+            "stock_query": slot.get("stock_query") or "",
+            "assets": assets,
+        }
+        if assets:
+            entry["mode"] = "upload"
+        elif use_stock:
+            entry["mode"] = "stock"
+            stock_url = _site_builder_stock_image_url(key, industry, note or slot.get("stock_query") or "")
+            if stock_url:
+                entry["stock_url"] = stock_url
+        else:
+            entry["mode"] = "empty"
+        slots[key] = entry
+    return slots
 
 
 def _site_builder_theme_snapshot(theme):
@@ -9871,6 +10017,8 @@ def client_site_builder():
         builder_accent_color=brand_accent_color,
         brand_font_heading=(brand.get("font_heading") or "").strip(),
         brand_font_body=(brand.get("font_body") or "").strip(),
+        google_font_choices=GOOGLE_FONT_CHOICES,
+        image_slots=_SITE_BUILDER_INTAKE_IMAGE_SLOTS,
         wp_admin_url=_site_builder_wp_admin_url(brand),
         gsc_connected=gsc_connected,
         gsc_needs_property=gsc_needs_property,
@@ -10005,16 +10153,22 @@ def client_site_builder_generate():
         "color_palette": (request.form.get("color_palette") or "").strip(),
         "font_pair": (request.form.get("font_pair") or "").strip(),
         "layout_style": (request.form.get("layout_style") or "").strip(),
+        "wireframe_style": (request.form.get("wireframe_style") or "").strip(),
+        "button_style": (request.form.get("button_style") or "").strip(),
         "color_primary": (request.form.get("color_primary") or "").strip(),
         "color_accent": (request.form.get("color_accent") or "").strip(),
         "color_dark": (request.form.get("color_dark") or "").strip(),
         "color_light": (request.form.get("color_light") or "").strip(),
-        "font_heading": (request.form.get("font_heading") or "").strip(),
-        "font_body": (request.form.get("font_body") or "").strip(),
+        "font_heading": normalize_google_font_family(request.form.get("font_heading") or ""),
+        "font_body": normalize_google_font_family(request.form.get("font_body") or ""),
         "style_preset": (request.form.get("style_preset") or "").strip(),
         "reference_url": (request.form.get("reference_url") or "").strip(),
         "reference_mode": _site_builder_reference_mode(request.form.get("reference_mode")),
     }
+    intake["image_slots"] = _site_builder_collect_image_slots(
+        brand_id,
+        (brand.get("industry") or request.form.get("industry") or "").strip(),
+    )
 
     # ── Parse page selection ──
     page_selection_raw = (request.form.get("page_selection") or "").strip()
@@ -10216,6 +10370,8 @@ def client_site_builder_review(build_id):
         builder_brand_colors=brand_palette,
         builder_primary_color=brand_primary_color,
         builder_accent_color=brand_accent_color,
+        google_font_choices=GOOGLE_FONT_CHOICES,
+        image_slots=_SITE_BUILDER_INTAKE_IMAGE_SLOTS,
     )
 
 

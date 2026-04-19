@@ -9,6 +9,7 @@ import json
 import logging
 import re
 from datetime import datetime
+from webapp.font_catalog import font_css_stack, google_font_stylesheet_href, normalize_google_font_family
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +219,10 @@ def build_brand_context(brand, intake=None, builder_theme=None, builder_template
         or ""
     ).strip()
     ctx["style_preset"] = (intake.get("style_preset") or reference_site_brief.get("style_preset_hint") or "").strip()
+    ctx["wireframe_style"] = (intake.get("wireframe_style") or "").strip()
+    ctx["image_slots"] = intake.get("image_slots") or {}
+    ctx["font_heading"] = normalize_google_font_family(ctx["font_heading"])
+    ctx["font_body"] = normalize_google_font_family(ctx["font_body"])
     return ctx
 
 
@@ -630,6 +635,8 @@ def _render_builder_template_html(template, page_spec, brand_ctx, content=None):
 
 def _theme_style_tag(brand_ctx):
     theme = brand_ctx.get("builder_theme") or {}
+    heading_font = normalize_google_font_family(brand_ctx.get("font_heading") or theme.get("font_heading") or "")
+    body_font = normalize_google_font_family(brand_ctx.get("font_body") or theme.get("font_body") or "")
     css_parts = []
     variables = []
     token_map = {
@@ -642,13 +649,56 @@ def _theme_style_tag(brand_ctx):
     for key, value in token_map.items():
         if value:
             variables.append(f"  {key}: {value};")
+    if heading_font:
+        variables.append(f"  --sb-font-heading: {font_css_stack(heading_font)};")
+    if body_font:
+        variables.append(f"  --sb-font-body: {font_css_stack(body_font)};")
     if variables:
         css_parts.append(":root {\n" + "\n".join(variables) + "\n}")
+    type_css = []
+    if body_font:
+        type_css.append("body { font-family: var(--sb-font-body); }")
+    if heading_font:
+        type_css.append("h1, h2, h3, h4, h5, h6, .sb-heading { font-family: var(--sb-font-heading); }")
+    if type_css:
+        css_parts.append("\n".join(type_css))
     if theme.get("custom_css"):
         css_parts.append(theme["custom_css"])
     if not css_parts:
         return ""
-    return "<style>\n" + "\n\n".join(css_parts) + "\n</style>"
+    stylesheet_href = google_font_stylesheet_href([heading_font, body_font])
+    font_link = f'<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link href="{stylesheet_href}" rel="stylesheet">\n' if stylesheet_href else ""
+    return font_link + "<style>\n" + "\n\n".join(css_parts) + "\n</style>"
+
+
+def _image_slots_block(ctx):
+    slots = ctx.get("image_slots") or {}
+    if not isinstance(slots, dict):
+        return ""
+
+    labeled = []
+    for key, slot in slots.items():
+        if not isinstance(slot, dict):
+            continue
+        assets = slot.get("assets") or []
+        use_stock = bool(slot.get("use_stock"))
+        if not assets and not use_stock:
+            continue
+        label = slot.get("label") or key.replace("_", " ").title()
+        note = str(slot.get("note") or "").strip()
+        line = f"- {label}: "
+        if assets:
+            asset_names = ", ".join(a.get("original_name") or a.get("path") or "uploaded asset" for a in assets[:4])
+            line += f"use uploaded image assets ({asset_names})"
+        elif use_stock:
+            line += "use a relevant stock image fallback"
+        if note:
+            line += f". Creative note: {note}"
+        labeled.append(line)
+
+    if not labeled:
+        return ""
+    return "IMAGE DIRECTION:\n" + "\n".join(labeled) + "\n"
 
 
 def _template_style_tag(*templates):
@@ -1189,12 +1239,15 @@ def _design_block(ctx):
     color_palette = ctx.get("color_palette") or ""
     font_pair = ctx.get("font_pair") or ""
     layout_style = ctx.get("layout_style") or ""
+    wireframe_style = ctx.get("wireframe_style") or ""
+    button_style = ctx.get("button_style") or ""
     site_vision = ctx.get("site_vision") or ""
     design_notes = ctx.get("design_notes") or ""
     theme_block = _builder_theme_block(ctx)
     reference_block = _reference_site_block(ctx)
+    image_block = _image_slots_block(ctx)
 
-    if not any([preset, primary, secondary, text_color, background_color, font_h, color_palette, font_pair, layout_style, site_vision, design_notes, theme_block, reference_block]):
+    if not any([preset, primary, secondary, text_color, background_color, font_h, color_palette, font_pair, layout_style, wireframe_style, button_style, site_vision, design_notes, theme_block, reference_block, image_block]):
         return ""
 
     parts.append("DESIGN GUIDELINES (apply CSS classes and inline styles to match):")
@@ -1278,6 +1331,8 @@ def _design_block(ctx):
         parts.append(f"- Heading font: {font_h}")
     if font_b:
         parts.append(f"- Body font: {font_b}")
+    if button_style:
+        parts.append(f"- Button treatment: {button_style}")
     if ctx.get("brand_logo_path"):
         parts.append("- A saved brand logo already exists. Leave visual room for the logo in hero or header treatments instead of relying on text-only branding.")
 
@@ -1287,6 +1342,15 @@ def _design_block(ctx):
         "Use the brand colors for CTAs, section backgrounds, and accents. "
         "Keep the design consistent across all sections."
     )
+    wireframe_desc = {
+        "conversion": "Wireframe bias: conversion-first, with rapid trust stacking and repeated CTA placements.",
+        "story": "Wireframe bias: story-driven, with more narrative progression, proof, and pacing between CTAs.",
+        "catalog": "Wireframe bias: catalog-style, with service grids, comparison cards, and browse-friendly organization.",
+    }
+    if wireframe_style and wireframe_style in wireframe_desc:
+        parts.append(f"- {wireframe_desc[wireframe_style]}")
+    if image_block:
+        parts.append(image_block.rstrip())
 
     return "\n".join(parts) + "\n"
 

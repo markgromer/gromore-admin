@@ -496,6 +496,25 @@ class AssemblyTests(unittest.TestCase):
         self.assertIn("<main><p>Body</p></main>", result["full_html"])
         self.assertIn("<footer>(555) 123-4567</footer>", result["full_html"])
 
+    def test_assemble_imports_google_fonts_when_context_sets_them(self):
+        ctx = build_brand_context(
+            {
+                "display_name": "Ace Plumbing",
+                "font_heading": "Space Grotesk",
+                "font_body": "DM Sans",
+            }
+        )
+        page_spec = {"page_type": "home", "slug": "", "schema_types": []}
+        content = {"title": "Home", "content": "<main><p>Body</p></main>", "faq_items": [], "schema_hints": {}}
+
+        result = assemble_page(page_spec, ctx, content)
+
+        self.assertIn("fonts.googleapis.com", result["full_html"])
+        self.assertIn("Space+Grotesk", result["full_html"])
+        self.assertIn("DM+Sans", result["full_html"])
+        self.assertIn("--sb-font-heading", result["full_html"])
+        self.assertIn("--sb-font-body", result["full_html"])
+
     def test_landing_page_skips_shared_templates(self):
         ctx = build_brand_context(
             _BRAND,
@@ -953,6 +972,26 @@ class IntakeContextTests(unittest.TestCase):
         self.assertEqual(ctx["font_body"], "Source Sans Pro")
         self.assertEqual(ctx["brand_logo_path"], "logos/test/logo.png")
         self.assertEqual(ctx["brand_colors"][:2], ["#0f172a", "#f97316"])
+
+    def test_intake_normalizes_fonts_and_keeps_wireframe_and_image_slots(self):
+        intake = {
+            "font_heading": "  Space   Grotesk!!! ",
+            "font_body": "DM Sans<script>",
+            "wireframe_style": "conversion",
+            "image_slots": {
+                "hero_desktop": {
+                    "label": "Hero Desktop",
+                    "use_stock": True,
+                    "note": "Show a clean service truck at the curb.",
+                    "assets": [],
+                }
+            },
+        }
+        ctx = build_brand_context(_BRAND, intake=intake)
+        self.assertEqual(ctx["font_heading"], "Space Grotesk")
+        self.assertEqual(ctx["font_body"], "DM Sansscript")
+        self.assertEqual(ctx["wireframe_style"], "conversion")
+        self.assertIn("hero_desktop", ctx["image_slots"])
 
 
 class LandingPageBlueprintTests(unittest.TestCase):

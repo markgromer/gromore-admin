@@ -372,31 +372,11 @@
                         <div class="col-12"><hr class="my-1"><strong class="small text-muted">Typography</strong></div>
                         <div class="col-md-4">
                             <label class="form-label small">Heading Font</label>
-                            <select name="font_heading" id="theme_font_h" class="form-select">
-                                <option value="Inter">Inter</option>
-                                <option value="Poppins">Poppins</option>
-                                <option value="Montserrat">Montserrat</option>
-                                <option value="Playfair Display">Playfair Display</option>
-                                <option value="Roboto">Roboto</option>
-                                <option value="Open Sans">Open Sans</option>
-                                <option value="Lato">Lato</option>
-                                <option value="Raleway">Raleway</option>
-                                <option value="Oswald">Oswald</option>
-                                <option value="Source Sans 3">Source Sans 3</option>
-                            </select>
+                            <input type="text" name="font_heading" id="theme_font_h" class="form-control" list="themeGoogleFonts" placeholder="Type any Google font family">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label small">Body Font</label>
-                            <select name="font_body" id="theme_font_b" class="form-select">
-                                <option value="Inter">Inter</option>
-                                <option value="Poppins">Poppins</option>
-                                <option value="Roboto">Roboto</option>
-                                <option value="Open Sans">Open Sans</option>
-                                <option value="Lato">Lato</option>
-                                <option value="Source Sans 3">Source Sans 3</option>
-                                <option value="Nunito">Nunito</option>
-                                <option value="Work Sans">Work Sans</option>
-                            </select>
+                            <input type="text" name="font_body" id="theme_font_b" class="form-control" list="themeGoogleFonts" placeholder="Type any Google font family">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label small">Button Style</label>
@@ -408,6 +388,11 @@
                         </div>
 
                         <div class="col-12">
+                            <datalist id="themeGoogleFonts">
+                                {% for font in google_font_choices %}
+                                <option value="{{ font }}"></option>
+                                {% endfor %}
+                            </datalist>
                             <label class="form-label small">Custom CSS (optional)</label>
                             <textarea name="custom_css" id="theme_css" class="form-control font-monospace" rows="4" placeholder="/* Additional CSS overrides */"></textarea>
                         </div>
