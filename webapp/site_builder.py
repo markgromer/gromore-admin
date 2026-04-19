@@ -637,6 +637,456 @@ def _render_builder_template_html(template, page_spec, brand_ctx, content=None):
     return rendered.strip()
 
 
+def _class_token(value, fallback="default"):
+        token = re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().lower()).strip("-")
+        return token or fallback
+
+
+def _site_shell_class_names(page_spec, brand_ctx):
+        classes = [
+                "sb-site-shell",
+                f"sb-page-{_class_token(page_spec.get('page_type'), 'page')}",
+                f"sb-preset-{_class_token(brand_ctx.get('style_preset'))}",
+                f"sb-layout-{_class_token(brand_ctx.get('layout_style'))}",
+                f"sb-wireframe-{_class_token(brand_ctx.get('wireframe_style'))}",
+                f"sb-hero-layout-{_class_token(brand_ctx.get('hero_layout'))}",
+                f"sb-button-style-{_class_token(brand_ctx.get('button_style'))}",
+        ]
+        return " ".join(classes)
+
+
+def _default_theme_css(brand_ctx):
+        return """
+.sb-site-shell {
+    color: var(--sb-text, #0f172a);
+    font-family: var(--sb-font-body, 'Source Sans 3', Arial, sans-serif);
+    line-height: 1.65;
+    width: min(100%, 1180px);
+    margin: 0 auto;
+    padding: clamp(1rem, 2vw, 1.5rem);
+}
+
+.sb-site-shell,
+.sb-site-shell *,
+.sb-site-shell *::before,
+.sb-site-shell *::after {
+    box-sizing: border-box;
+}
+
+.sb-site-shell a {
+    color: var(--sb-primary, #1d4ed8);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+}
+
+.sb-site-shell img,
+.sb-site-shell picture img {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border-radius: 22px;
+    object-fit: cover;
+}
+
+.sb-site-shell > header,
+.sb-site-shell > footer {
+    padding: 1rem 0;
+}
+
+.sb-site-shell main {
+    display: grid;
+    gap: clamp(1.25rem, 2vw, 1.75rem);
+}
+
+.sb-site-shell section,
+.sb-site-shell .sb-section,
+.sb-site-shell .sb-reference-gallery,
+.sb-site-shell .sb-intake-gallery {
+    position: relative;
+    overflow: hidden;
+    padding: clamp(1.5rem, 3vw, 2.5rem);
+    border-radius: 30px;
+    border: 1px solid rgba(148, 163, 184, .18);
+    background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.96));
+    box-shadow: 0 18px 48px rgba(15, 23, 42, .08);
+}
+
+.sb-site-shell .hero,
+.sb-site-shell .sb-hero {
+    display: grid;
+    gap: clamp(1.25rem, 3vw, 2.5rem);
+    align-items: center;
+    padding: clamp(2rem, 5vw, 4rem);
+    background: linear-gradient(135deg, rgba(255,255,255,.98), rgba(241,245,249,.92));
+}
+
+.sb-site-shell .hero-copy,
+.sb-site-shell .sb-hero-copy,
+.sb-site-shell .split-layout,
+.sb-site-shell .two-column {
+    display: grid;
+    gap: 1rem;
+}
+
+.sb-site-shell .hero-copy > :first-child,
+.sb-site-shell .sb-hero-copy > :first-child {
+    margin-top: 0;
+}
+
+.sb-site-shell .hero-copy > :last-child,
+.sb-site-shell .sb-hero-copy > :last-child {
+    margin-bottom: 0;
+}
+
+.sb-site-shell .hero h1,
+.sb-site-shell .hero h2,
+.sb-site-shell .sb-hero h1,
+.sb-site-shell .sb-hero h2,
+.sb-site-shell .sb-heading-xl {
+    font-family: var(--sb-font-heading, 'Poppins', Arial, sans-serif);
+    font-size: clamp(2.3rem, 5vw, 4.6rem);
+    line-height: .96;
+    letter-spacing: -.04em;
+    margin: 0;
+}
+
+.sb-site-shell h2,
+.sb-site-shell h3,
+.sb-site-shell h4,
+.sb-site-shell .sb-heading {
+    font-family: var(--sb-font-heading, 'Poppins', Arial, sans-serif);
+    line-height: 1.02;
+    letter-spacing: -.03em;
+    margin: 0 0 .85rem;
+}
+
+.sb-site-shell h2 {
+    font-size: clamp(1.7rem, 3vw, 2.7rem);
+}
+
+.sb-site-shell h3 {
+    font-size: clamp(1.15rem, 2vw, 1.55rem);
+}
+
+.sb-site-shell p,
+.sb-site-shell li,
+.sb-site-shell blockquote {
+    font-size: clamp(1rem, 1.2vw, 1.08rem);
+}
+
+.sb-site-shell p {
+    margin: 0;
+    color: color-mix(in srgb, var(--sb-text, #0f172a) 90%, white 10%);
+}
+
+.sb-site-shell .eyebrow,
+.sb-site-shell .section-kicker,
+.sb-site-shell .sb-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    width: fit-content;
+    margin-bottom: .85rem;
+    padding: .45rem .8rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, .06);
+    color: var(--sb-primary, #1d4ed8);
+    font-size: .82rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.sb-site-shell .button-row,
+.sb-site-shell .cta-row,
+.sb-site-shell .badge-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem;
+    align-items: center;
+}
+
+.sb-site-shell .badge-row {
+    gap: .6rem;
+}
+
+.sb-site-shell .badge-row > *,
+.sb-site-shell .trust-badges > * {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .55rem .85rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,.72);
+    border: 1px solid rgba(148, 163, 184, .16);
+    font-size: .92rem;
+    font-weight: 600;
+}
+
+.sb-site-shell .sb-button,
+.sb-site-shell .button-row a,
+.sb-site-shell .cta-row a,
+.sb-site-shell a.sb-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 52px;
+    padding: .9rem 1.35rem;
+    border-radius: 999px;
+    background: var(--sb-primary, #1d4ed8);
+    color: #fff;
+    border: 1px solid transparent;
+    box-shadow: 0 18px 36px rgba(29, 78, 216, .2);
+    text-decoration: none;
+    font-weight: 700;
+    transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+}
+
+.sb-site-shell .sb-button:hover,
+.sb-site-shell .button-row a:hover,
+.sb-site-shell .cta-row a:hover,
+.sb-site-shell a.sb-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 22px 42px rgba(29, 78, 216, .24);
+}
+
+.sb-site-shell .sb-button.secondary,
+.sb-site-shell .button-row a.secondary,
+.sb-site-shell .cta-row a.secondary {
+    background: transparent;
+    color: var(--sb-text, #0f172a);
+    border-color: rgba(148, 163, 184, .32);
+    box-shadow: none;
+}
+
+.sb-site-shell .services-grid,
+.sb-site-shell .proof-grid,
+.sb-site-shell .stats-grid,
+.sb-site-shell .card-grid,
+.sb-site-shell .offer-grid,
+.sb-site-shell .gallery-grid,
+.sb-site-shell .faq-list,
+.sb-site-shell .process-steps,
+.sb-site-shell .before-after-grid,
+.sb-site-shell .sb-reference-gallery,
+.sb-site-shell .sb-intake-gallery {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.sb-site-shell .feature-card,
+.sb-site-shell .proof-card,
+.sb-site-shell .step-card,
+.sb-site-shell .offer-card,
+.sb-site-shell .contact-card,
+.sb-site-shell .pricing-card,
+.sb-site-shell .services-grid > *,
+.sb-site-shell .proof-grid > *,
+.sb-site-shell .stats-grid > *,
+.sb-site-shell .card-grid > *,
+.sb-site-shell .offer-grid > *,
+.sb-site-shell .process-steps > *,
+.sb-site-shell .gallery-grid > *,
+.sb-site-shell .faq-list > * {
+    height: 100%;
+    padding: 1.2rem;
+    border-radius: 24px;
+    border: 1px solid rgba(148, 163, 184, .18);
+    background: rgba(255,255,255,.82);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.8);
+}
+
+.sb-site-shell .stats-grid > * {
+    text-align: center;
+}
+
+.sb-site-shell .metric,
+.sb-site-shell .stat-number {
+    display: block;
+    color: var(--sb-primary, #1d4ed8);
+    font-family: var(--sb-font-heading, 'Poppins', Arial, sans-serif);
+    font-size: clamp(1.9rem, 3vw, 3rem);
+    line-height: .95;
+    letter-spacing: -.04em;
+}
+
+.sb-site-shell .cta-band,
+.sb-site-shell .cta-panel,
+.sb-site-shell .contact-strip {
+    display: grid;
+    gap: 1rem;
+    padding: clamp(1.5rem, 4vw, 3rem);
+    border-radius: 28px;
+    background: linear-gradient(135deg, var(--sb-primary, #1d4ed8), var(--sb-accent, #f97316));
+    color: #fff;
+}
+
+.sb-site-shell .cta-band h2,
+.sb-site-shell .cta-band h3,
+.sb-site-shell .cta-panel h2,
+.sb-site-shell .cta-panel h3,
+.sb-site-shell .contact-strip h2,
+.sb-site-shell .contact-strip h3,
+.sb-site-shell .cta-band p,
+.sb-site-shell .cta-panel p,
+.sb-site-shell .contact-strip p {
+    color: inherit;
+}
+
+.sb-site-shell .cta-band .sb-button,
+.sb-site-shell .cta-panel .sb-button,
+.sb-site-shell .contact-strip .sb-button,
+.sb-site-shell .cta-band .button-row a,
+.sb-site-shell .cta-panel .button-row a,
+.sb-site-shell .contact-strip .button-row a {
+    background: #fff;
+    color: var(--sb-primary, #1d4ed8);
+}
+
+.sb-site-shell ul,
+.sb-site-shell ol {
+    margin: 0;
+    padding-left: 1.2rem;
+}
+
+.sb-site-shell .checklist,
+.sb-site-shell ul.checklist {
+    list-style: none;
+    padding-left: 0;
+    display: grid;
+    gap: .7rem;
+}
+
+.sb-site-shell .checklist li,
+.sb-site-shell ul.checklist li {
+    position: relative;
+    padding-left: 1.35rem;
+}
+
+.sb-site-shell .checklist li::before,
+.sb-site-shell ul.checklist li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: .55rem;
+    width: .62rem;
+    height: .62rem;
+    border-radius: 999px;
+    background: var(--sb-accent, #f97316);
+}
+
+.sb-site-shell blockquote {
+    margin: 0;
+    padding: 1.2rem 1.3rem;
+    border-left: 4px solid var(--sb-accent, #f97316);
+    border-radius: 20px;
+    background: rgba(255,255,255,.82);
+    font-weight: 600;
+}
+
+.sb-site-shell .sb-hero-media,
+.sb-site-shell .hero-media,
+.sb-site-shell .media-card {
+    position: relative;
+}
+
+.sb-site-shell .sb-hero-media img,
+.sb-site-shell .hero-media img,
+.sb-site-shell .media-card img,
+.sb-site-shell .hero img {
+    min-height: 300px;
+}
+
+.sb-site-shell .sb-reference-gallery,
+.sb-site-shell .sb-intake-gallery {
+    padding: clamp(1.2rem, 2vw, 1.5rem);
+}
+
+.sb-site-shell .faq-list > * + * {
+    margin-top: .75rem;
+}
+
+.sb-site-shell.sb-preset-bold-modern .hero,
+.sb-site-shell.sb-preset-dark-premium .hero,
+.sb-site-shell.sb-preset-bold-modern .sb-hero,
+.sb-site-shell.sb-preset-dark-premium .sb-hero {
+    background: linear-gradient(140deg, #0f172a 0%, #111827 58%, var(--sb-primary, #1d4ed8) 100%);
+    color: #fff;
+}
+
+.sb-site-shell.sb-preset-bold-modern .hero p,
+.sb-site-shell.sb-preset-dark-premium .hero p,
+.sb-site-shell.sb-preset-bold-modern .sb-hero p,
+.sb-site-shell.sb-preset-dark-premium .sb-hero p {
+    color: rgba(255,255,255,.88);
+}
+
+.sb-site-shell.sb-preset-warm-traditional section,
+.sb-site-shell.sb-preset-warm-traditional .sb-section {
+    background: linear-gradient(180deg, rgba(255,250,245,.98), rgba(255,244,234,.94));
+}
+
+.sb-site-shell.sb-button-style-pill .sb-button,
+.sb-site-shell.sb-button-style-pill .button-row a,
+.sb-site-shell.sb-button-style-pill .cta-row a {
+    border-radius: 999px;
+}
+
+.sb-site-shell.sb-button-style-sharp .sb-button,
+.sb-site-shell.sb-button-style-sharp .button-row a,
+.sb-site-shell.sb-button-style-sharp .cta-row a {
+    border-radius: 14px;
+}
+
+.sb-site-shell.sb-hero-layout-split-right .hero,
+.sb-site-shell.sb-hero-layout-proof-strip .hero,
+.sb-site-shell.sb-hero-layout-split-right .sb-hero,
+.sb-site-shell.sb-hero-layout-proof-strip .sb-hero {
+    align-items: center;
+}
+
+@media (min-width: 920px) {
+    .sb-site-shell .hero,
+    .sb-site-shell .sb-hero,
+    .sb-site-shell .split-layout,
+    .sb-site-shell .two-column,
+    .sb-site-shell .cta-band,
+    .sb-site-shell .cta-panel,
+    .sb-site-shell .contact-strip {
+        grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+    }
+
+    .sb-site-shell .hero-copy,
+    .sb-site-shell .sb-hero-copy {
+        align-content: center;
+    }
+}
+
+@media (max-width: 719px) {
+    .sb-site-shell {
+        padding: .75rem;
+    }
+
+    .sb-site-shell section,
+    .sb-site-shell .sb-section,
+    .sb-site-shell .hero,
+    .sb-site-shell .sb-hero {
+        border-radius: 24px;
+        padding: 1.25rem;
+    }
+
+    .sb-site-shell .sb-button,
+    .sb-site-shell .button-row a,
+    .sb-site-shell .cta-row a,
+    .sb-site-shell a.sb-button {
+        width: 100%;
+    }
+}
+""".strip()
+
+
 def _theme_style_tag(brand_ctx):
     theme = brand_ctx.get("builder_theme") or {}
     heading_font = normalize_google_font_family(brand_ctx.get("font_heading") or theme.get("font_heading") or "")
@@ -659,6 +1109,7 @@ def _theme_style_tag(brand_ctx):
         variables.append(f"  --sb-font-body: {font_css_stack(body_font)};")
     if variables:
         css_parts.append(":root {\n" + "\n".join(variables) + "\n}")
+    css_parts.append(_default_theme_css(brand_ctx))
     type_css = []
     if body_font:
         type_css.append("body { font-family: var(--sb-font-body); }")
@@ -1147,6 +1598,15 @@ _GLOBAL_RULES = (
     "- Vary section structure. Do not repeat the same layout (heading, paragraph, bullets) "
     "for every section. Use questions, short punchy lines, scenarios, and pattern interrupts.\n"
     "\n"
+    "HTML DESIGN RULES:\n"
+    "- Build the page with semantic <main> and <section> blocks, not one long stream of plain headings and paragraphs.\n"
+    "- Make the first screen feel designed, not generic: a hero block with hero-copy, hero-media, trust cues, and one clear CTA.\n"
+    "- Use modern layout hooks when relevant: hero, hero-copy, hero-media, services-grid, card-grid, feature-card, proof-grid, proof-card, stats-grid, process-steps, cta-band, faq-list, button-row, badge-row, checklist.\n"
+    "- Use 2-column or 3-column layouts where it improves scanning. Do not stack every section as a centered paragraph block.\n"
+    "- Alternate section rhythm with cards, split layouts, proof strips, image-led rows, and CTA bands. Avoid a brochure-style page that looks dated or template-generic.\n"
+    "- Every image must live inside a purposeful layout container like hero-media, feature-card, media-card, gallery-grid, or before-after-grid.\n"
+    "- Design for a premium modern service business site from this decade, not an old brochure website.\n"
+    "\n"
     "ANTI-PATTERNS (never do these):\n"
     "- Do not include 'Who This Is For' sections that list obvious audiences.\n"
     "- Do not include stats or numbers you cannot verify from the provided context.\n"
@@ -1158,7 +1618,7 @@ _GLOBAL_RULES = (
 _OUTPUT_FORMAT = (
     "\nReturn ONLY valid JSON with these exact keys:\n"
     '- "title": the page H1 title (under 70 chars)\n'
-    '- "content": full HTML body content (no doctype/head/body wrapper, no h1)\n'
+    '- "content": full HTML body content (no doctype/head/body wrapper, no h1). Use semantic <main>/<section> structure and modern class hooks where appropriate.\n'
     '- "excerpt": 1-2 sentence page summary (under 160 chars)\n'
     '- "seo_title": SEO title tag (under 70 chars, include location if local)\n'
     '- "seo_description": meta description (under 160 chars, include CTA)\n'
@@ -1536,6 +1996,8 @@ def _system_msg():
         "You are a direct-response copywriter and SEO strategist who writes website pages "
         "for local service businesses: plumbers, HVAC techs, roofers, painters, cleaners, "
         "electricians, landscapers, and similar trades.\n\n"
+        "You also think like a modern web designer. The page must feel current, sharp, and intentional, "
+        "not like an old brochure site with flat generic sections.\n\n"
         "You think like a business owner, not a marketer. You know what the plumber is thinking "
         "when he reads a landing page. You know these people are busy, skeptical of marketing, "
         "have been burned by agencies, want results not promises, and respect directness.\n\n"
@@ -2316,17 +2778,29 @@ def assemble_page(page_spec, brand_ctx, content):
         if footer_template:
             footer_html = _render_builder_template_html(footer_template, page_spec, brand_ctx, content)
 
+    content_markup = []
+    if header_html:
+        content_markup.append(header_html)
+    if body_html:
+        content_markup.append(body_html)
+    if footer_html:
+        content_markup.append(footer_html)
+
+    shell_html = ""
+    if content_markup:
+        shell_html = (
+            f'<div class="{_site_shell_class_names(page_spec, brand_ctx)}">\n'
+            + "\n\n".join(content_markup)
+            + "\n</div>"
+        )
+
     parts = []
     if theme_style:
         parts.append(theme_style)
     if template_style:
         parts.append(template_style)
-    if header_html:
-        parts.append(header_html)
-    if body_html:
-        parts.append(body_html)
-    if footer_html:
-        parts.append(footer_html)
+    if shell_html:
+        parts.append(shell_html)
     if schema_html:
         parts.append(f"<!-- Schema Markup -->\n{schema_html}")
     full_html = "\n\n".join(part for part in parts if part)

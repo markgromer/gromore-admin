@@ -164,6 +164,16 @@ class PromptTests(unittest.TestCase):
             self.assertIn("faq_items", user_msg)
             self.assertIn("schema_hints", user_msg)
 
+    def test_prompts_require_modern_html_structure_hooks(self):
+        home = next(p for p in self.blueprint if p["page_type"] == "home")
+        system_msg, user_msg = build_page_prompt(home, self.ctx)
+
+        self.assertIn("modern web designer", system_msg)
+        self.assertIn("semantic <main> and <section> blocks", user_msg)
+        self.assertIn("services-grid", user_msg)
+        self.assertIn("proof-grid", user_msg)
+        self.assertIn("Design for a premium modern service business site from this decade", user_msg)
+
     def test_faq_prompt_requires_faq_items_for_schema(self):
         faq = next(p for p in self.blueprint if p["page_type"] == "faq")
         _, user_msg = build_page_prompt(faq, self.ctx)
@@ -490,6 +500,8 @@ class AssemblyTests(unittest.TestCase):
 
         self.assertIn("<style>", result["full_html"])
         self.assertIn("--sb-primary: #123456;", result["full_html"])
+        self.assertIn(".sb-site-shell", result["full_html"])
+        self.assertIn("<div class=\"sb-site-shell", result["full_html"])
         self.assertIn(".site-shell { padding: 8px; }", result["full_html"])
         self.assertIn(".site-shell header{display:flex;}", result["full_html"])
         self.assertIn("<header class=\"site-shell\">Ace Plumbing</header>", result["full_html"])
