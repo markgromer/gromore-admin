@@ -16,6 +16,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch, MagicMock, ANY
 
+from bs4 import BeautifulSoup
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 _TEST_ROOT = Path(__file__).resolve().parent / ".tmp-test-artifacts"
@@ -352,6 +354,47 @@ class SiteBuilderReviewTests(unittest.TestCase):
         self.assertIn(b"gjsToggleStickyHeader", resp.data)
         self.assertIn(b"Header Nav", resp.data)
         self.assertIn(b"Footer Columns", resp.data)
+
+    def test_review_page_delete_form_includes_csrf_input(self):
+        brand_id, _ = _login_client(self.client, self.app)
+        db = self.app.db
+        build_id = db.create_site_build(brand_id, [{"page_type": "home"}])
+        db.update_site_build_status(build_id, "completed", pages_completed=1)
+        db.save_site_page({
+            "build_id": build_id,
+            "brand_id": brand_id,
+            "page_type": "home",
+            "label": "Home",
+            "title": "Home",
+            "content": "<p>Test</p>",
+        })
+
+        resp = self.client.get(f"/client/site-builder/{build_id}")
+        self.assertEqual(resp.status_code, 200)
+        soup = BeautifulSoup(resp.data, "html.parser")
+        delete_form = soup.find("form", action=f"/client/site-builder/{build_id}/delete")
+        self.assertIsNotNone(delete_form)
+        self.assertIsNotNone(delete_form.find("input", {"name": "csrf_token"}))
+
+    def test_review_page_exposes_expanded_font_library_and_resize_help(self):
+        brand_id, _ = _login_client(self.client, self.app)
+        db = self.app.db
+        build_id = db.create_site_build(brand_id, [{"page_type": "home"}])
+        db.update_site_build_status(build_id, "completed", pages_completed=1)
+        db.save_site_page({
+            "build_id": build_id,
+            "brand_id": brand_id,
+            "page_type": "home",
+            "label": "Home",
+            "title": "Home",
+            "content": "<section><h2>Welcome</h2><p>Builder test content</p></section>",
+        })
+
+        resp = self.client.get(f"/client/site-builder/{build_id}")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Plus Jakarta Sans", resp.data)
+        self.assertIn(b"Space Grotesk", resp.data)
+        self.assertIn(b"resize handles", resp.data)
 
 
 # ---------------------------------------------------------------------------
@@ -893,6 +936,31 @@ class SiteBuilderIntakeWizardTests(unittest.TestCase):
         self.assertIn(b"Generate Leads", resp.data)
         self.assertIn(b"Rank in Google", resp.data)
 
+    def test_landing_shows_expanded_business_and_design_fields(self):
+        _login_client(self.client, self.app)
+        resp = self.client.get("/client/site-builder")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"services_to_highlight", resp.data)
+        self.assertIn(b"service_plan_options", resp.data)
+        self.assertIn(b"service_add_ons", resp.data)
+        self.assertIn(b"priority_seo_locations", resp.data)
+        self.assertIn(b"company_story", resp.data)
+        self.assertIn(b"site_vision", resp.data)
+        self.assertIn(b"design_notes", resp.data)
+
+    def test_landing_build_history_delete_forms_include_csrf_inputs(self):
+        brand_id, _ = _login_client(self.client, self.app)
+        db = self.app.db
+        build_id = db.create_site_build(brand_id, [{"page_type": "home"}])
+        db.update_site_build_status(build_id, "completed", pages_completed=1)
+
+        resp = self.client.get("/client/site-builder")
+        self.assertEqual(resp.status_code, 200)
+        soup = BeautifulSoup(resp.data, "html.parser")
+        delete_form = soup.find("form", action=f"/client/site-builder/{build_id}/delete")
+        self.assertIsNotNone(delete_form)
+        self.assertIsNotNone(delete_form.find("input", {"name": "csrf_token"}))
+
     def test_landing_shows_page_selection_chips(self):
         _login_client(self.client, self.app)
         resp = self.client.get("/client/site-builder")
@@ -1157,6 +1225,13 @@ class SiteBuilderGenerateWithIntakeTests(unittest.TestCase):
                     "brand_voice": "Professional and authoritative",
                     "target_audience": "Commercial property managers",
                     "unique_selling_points": "24/7 emergency service",
+                    "services_to_highlight": "Drain cleaning, sewer repair, emergency plumbing",
+                    "service_plan_options": "Weekly, twice weekly, monthly, one-time",
+                    "service_add_ons": "Deodorizer, sanitizer, haul waste away",
+                    "priority_seo_locations": "Springfield, Shelbyville, Chatham",
+                    "company_story": "Family-owned team with transparent pricing.",
+                    "site_vision": "A premium but direct lead generation site.",
+                    "design_notes": "Use stronger before/after imagery and more breathing room.",
                     "competitors": "Joe's Plumbing",
                     "content_goals": "Generate Leads, Rank in Google",
                     "lead_form_type": "wpforms",
@@ -1187,6 +1262,13 @@ class SiteBuilderGenerateWithIntakeTests(unittest.TestCase):
         self.assertIsNotNone(build.get("intake"))
         self.assertEqual(build["intake"]["brand_voice"], "Professional and authoritative")
         self.assertEqual(build["intake"]["lead_form_type"], "wpforms")
+        self.assertEqual(build["intake"]["services_to_highlight"], "Drain cleaning, sewer repair, emergency plumbing")
+        self.assertEqual(build["intake"]["service_plan_options"], "Weekly, twice weekly, monthly, one-time")
+        self.assertEqual(build["intake"]["service_add_ons"], "Deodorizer, sanitizer, haul waste away")
+        self.assertEqual(build["intake"]["priority_seo_locations"], "Springfield, Shelbyville, Chatham")
+        self.assertEqual(build["intake"]["company_story"], "Family-owned team with transparent pricing.")
+        self.assertEqual(build["intake"]["site_vision"], "A premium but direct lead generation site.")
+        self.assertEqual(build["intake"]["design_notes"], "Use stronger before/after imagery and more breathing room.")
         self.assertEqual(build["intake"]["content_goals"], "Generate Leads, Rank in Google")
         self.assertEqual(build["intake"]["quote_tool_source"], "wp_shortcode")
         self.assertEqual(build["intake"]["quote_tool_embed"], "[sng_quote_tool]")

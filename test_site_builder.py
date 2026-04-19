@@ -28,6 +28,7 @@ from webapp.site_builder import (
     _parse_csv,
     _seo_intel_block,
     _lead_form_block,
+    _design_block,
 )
 
 
@@ -875,6 +876,25 @@ class IntakeContextTests(unittest.TestCase):
         ctx = build_brand_context(_BRAND, intake=intake)
         self.assertEqual(ctx["content_goals"], "Generate Leads, Rank in Google")
 
+    def test_intake_adds_expanded_service_and_design_fields(self):
+        intake = {
+            "services_to_highlight": "Drain cleaning, sewer repair, emergency plumbing",
+            "service_plan_options": "Weekly, twice weekly, monthly, one-time",
+            "service_add_ons": "Deodorizer, sanitizer, haul waste away",
+            "priority_seo_locations": "Springfield, Shelbyville, Chatham",
+            "company_story": "Family-owned with transparent pricing.",
+            "site_vision": "A premium but direct lead generation site.",
+            "design_notes": "Use stronger before/after imagery and more breathing room.",
+        }
+        ctx = build_brand_context(_BRAND, intake=intake)
+        self.assertEqual(ctx["services_to_highlight"], "Drain cleaning, sewer repair, emergency plumbing")
+        self.assertEqual(ctx["service_plan_options"], "Weekly, twice weekly, monthly, one-time")
+        self.assertEqual(ctx["service_add_ons"], "Deodorizer, sanitizer, haul waste away")
+        self.assertEqual(ctx["priority_seo_locations"], "Springfield, Shelbyville, Chatham")
+        self.assertEqual(ctx["company_story"], "Family-owned with transparent pricing.")
+        self.assertEqual(ctx["site_vision"], "A premium but direct lead generation site.")
+        self.assertEqual(ctx["design_notes"], "Use stronger before/after imagery and more breathing room.")
+
     def test_intake_includes_seo_data(self):
         seo = {"totals": {"clicks": 100}, "top_queries": [{"query": "plumber near me"}]}
         intake = {"seo_data": seo}
@@ -1054,6 +1074,16 @@ class SeoIntelBlockTests(unittest.TestCase):
         self.assertIn("200 clicks", block)
         self.assertIn("5000 impressions", block)
 
+    def test_priority_locations_formatted_without_search_console_data(self):
+        ctx = {
+            "seo_data": {},
+            "warren_brief": "",
+            "priority_seo_locations": "Springfield, Shelbyville, Chatham",
+        }
+        block = _seo_intel_block(ctx)
+        self.assertIn("PRIORITY GEO TARGETS", block)
+        self.assertIn("Springfield, Shelbyville, Chatham", block)
+
 
 class LeadFormBlockTests(unittest.TestCase):
     """Test _lead_form_block formatting."""
@@ -1110,6 +1140,23 @@ class LeadFormBlockTests(unittest.TestCase):
         self.assertIn("number of dogs", block)
         self.assertIn("service frequency", block)
         self.assertIn("Phone number should be optional", block)
+
+
+class DesignBlockTests(unittest.TestCase):
+    """Test _design_block formatting."""
+
+    def test_design_block_includes_site_vision_and_notes(self):
+        ctx = {
+            "site_vision": "A premium but direct lead generation site.",
+            "design_notes": "Use stronger before/after imagery and more breathing room.",
+            "font_pair": "plusjakarta-inter",
+        }
+        block = _design_block(ctx)
+        self.assertIn("Desired site vision", block)
+        self.assertIn("A premium but direct lead generation site.", block)
+        self.assertIn("Extra design notes", block)
+        self.assertIn("Use stronger before/after imagery and more breathing room.", block)
+        self.assertIn("Plus Jakarta Sans", block)
 
 
 class WarrenSEOBriefTests(unittest.TestCase):

@@ -142,6 +142,12 @@ def build_brand_context(brand, intake=None, builder_theme=None, builder_template
         "certifications": (brand.get("certifications") or "").strip(),
         # Intake overrides and extras
         "unique_selling_points": (intake.get("unique_selling_points") or "").strip(),
+        "services_to_highlight": (intake.get("services_to_highlight") or "").strip(),
+        "service_plan_options": (intake.get("service_plan_options") or "").strip(),
+        "service_add_ons": (intake.get("service_add_ons") or "").strip(),
+        "company_story": (intake.get("company_story") or "").strip(),
+        "site_vision": (intake.get("site_vision") or "").strip(),
+        "design_notes": (intake.get("design_notes") or "").strip(),
         "competitors": (intake.get("competitors") or "").strip(),
         "content_goals": (intake.get("content_goals") or "").strip(),
         "lead_form_type": (intake.get("lead_form_type") or "").strip(),
@@ -184,6 +190,7 @@ def build_brand_context(brand, intake=None, builder_theme=None, builder_template
     # SEO intelligence
     ctx["seo_data"] = intake.get("seo_data") or {}
     ctx["warren_brief"] = (intake.get("warren_brief") or "").strip()
+    ctx["priority_seo_locations"] = (intake.get("priority_seo_locations") or "").strip()
     # Design tokens
     ctx["color_palette"] = (intake.get("color_palette") or "").strip()
     ctx["font_pair"] = (intake.get("font_pair") or "").strip()
@@ -1034,6 +1041,16 @@ def _brand_block(ctx):
         lines.append(f"Current Offers: {ctx['active_offers']}")
     if ctx.get("unique_selling_points"):
         lines.append(f"Unique Selling Points: {ctx['unique_selling_points']}")
+    if ctx.get("services_to_highlight"):
+        lines.append(f"Services to Highlight: {ctx['services_to_highlight']}")
+    if ctx.get("service_plan_options"):
+        lines.append(f"Service Plan / Frequency Options: {ctx['service_plan_options']}")
+    if ctx.get("service_add_ons"):
+        lines.append(f"Service Add-Ons / Upsells: {ctx['service_add_ons']}")
+    if ctx.get("company_story"):
+        lines.append(f"Company Story: {ctx['company_story']}")
+    if ctx.get("site_vision"):
+        lines.append(f"Site Vision: {ctx['site_vision']}")
     if ctx.get("competitors"):
         lines.append(f"Competitors to Differentiate From: {ctx['competitors']}")
     if ctx.get("content_goals"):
@@ -1049,6 +1066,13 @@ def _seo_intel_block(ctx):
     """Format Search Console data and Warren's SEO brief for prompt injection."""
     parts = []
     seo_data = ctx.get("seo_data") or {}
+    priority_locations = ctx.get("priority_seo_locations") or ""
+
+    if priority_locations:
+        parts.append(
+            "PRIORITY GEO TARGETS (treat these as must-cover locations in headings, service areas, and internal linking):\n"
+            f"  - {priority_locations}"
+        )
 
     if seo_data.get("top_queries"):
         top = seo_data["top_queries"][:15]
@@ -1165,10 +1189,12 @@ def _design_block(ctx):
     color_palette = ctx.get("color_palette") or ""
     font_pair = ctx.get("font_pair") or ""
     layout_style = ctx.get("layout_style") or ""
+    site_vision = ctx.get("site_vision") or ""
+    design_notes = ctx.get("design_notes") or ""
     theme_block = _builder_theme_block(ctx)
     reference_block = _reference_site_block(ctx)
 
-    if not any([preset, primary, secondary, text_color, background_color, font_h, color_palette, font_pair, layout_style, theme_block, reference_block]):
+    if not any([preset, primary, secondary, text_color, background_color, font_h, color_palette, font_pair, layout_style, site_vision, design_notes, theme_block, reference_block]):
         return ""
 
     parts.append("DESIGN GUIDELINES (apply CSS classes and inline styles to match):")
@@ -1198,6 +1224,13 @@ def _design_block(ctx):
         "roboto-slab-roboto": "Roboto Slab (headings) + Roboto (body) - technical, structured",
         "poppins-nunito": "Poppins (headings) + Nunito (body) - friendly, approachable",
         "oswald-source": "Oswald (headings) + Source Sans Pro (body) - bold, industrial",
+        "plusjakarta-inter": "Plus Jakarta Sans (headings) + Inter (body) - crisp, premium, modern service brand",
+        "spacegrotesk-inter": "Space Grotesk (headings) + Inter (body) - assertive, modern, slightly editorial",
+        "manrope-dmsans": "Manrope (headings) + DM Sans (body) - polished, contemporary, conversion-focused",
+        "archivo-worksans": "Archivo (headings) + Work Sans (body) - sturdy, practical, operational",
+        "bebas-mulish": "Bebas Neue (headings) + Mulish (body) - bold headlines with clean supporting copy",
+        "raleway-lora": "Raleway (headings) + Lora (body) - refined, trustworthy, slightly upscale",
+        "librebaskerville-source": "Libre Baskerville (headings) + Source Sans 3 (body) - classic authority with readable body copy",
     }
     if font_pair and font_pair in font_desc:
         parts.append(f"- Typography: {font_desc[font_pair]}")
@@ -1221,6 +1254,11 @@ def _design_block(ctx):
             "dark-premium": "Dark premium: dark backgrounds, light text, gold/silver accents, sophisticated typography. Luxury feel.",
         }
         parts.append(f"- Style: {presets_desc.get(preset, preset)}")
+
+    if site_vision:
+        parts.append(f"- Desired site vision: {site_vision}")
+    if design_notes:
+        parts.append(f"- Extra design notes: {design_notes}")
 
     if primary:
         parts.append(f"- Primary brand color: {primary}")

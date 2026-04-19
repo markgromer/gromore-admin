@@ -426,6 +426,20 @@
     /* Canvas selected component highlight */
     .gjs-overlay .gjs-toolbar { background: #6366f1 !important; border-radius: 4px 4px 0 0; }
     .gjs-overlay .gjs-toolbar .gjs-toolbar-item { color: #fff; }
+    .gjs-overlay .gjs-resizer {
+        width: 13px !important;
+        height: 13px !important;
+        border-radius: 999px;
+        background: #ffffff !important;
+        border: 2px solid #6366f1 !important;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, .18);
+    }
+    .gjs-overlay .gjs-resizer-tc,
+    .gjs-overlay .gjs-resizer-bc,
+    .gjs-overlay .gjs-resizer-cr,
+    .gjs-overlay .gjs-resizer-cl {
+        background: #c7d2fe !important;
+    }
     /* Asset manager modal dark theme */
     .gjs-overlay .gjs-mdl-dialog { background: #1e293b; color: #e2e8f0; border-radius: 12px; }
     .gjs-overlay .gjs-mdl-header { background: #0f172a; border-bottom: 1px solid #334155; padding: 12px 16px; }
@@ -521,7 +535,7 @@
                     </li>
                     <li class="gjs-help-step">
                         <span class="gjs-help-step-badge">3</span>
-                        <div><strong>Select an image or section</strong><span>Use <em>Image</em> to replace visuals, <em>Background</em> for section backgrounds, and the alignment buttons for quick image placement.</span></div>
+                        <div><strong>Select an image or section</strong><span>Click once to select it, then drag the resize handles right on the canvas. Use <em>Image</em> to replace visuals, <em>Background</em> for section backgrounds, and the alignment buttons for quick placement.</span></div>
                     </li>
                     <li class="gjs-help-step">
                         <span class="gjs-help-step-badge">4</span>
@@ -602,6 +616,7 @@
     </a>
     <div class="d-flex gap-2">
         <form method="POST" action="{{ url_for('client.client_site_builder_delete', build_id=build.id) }}" onsubmit="return confirm('Delete this build and remove any published WordPress pages tied to it?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-sm btn-outline-danger" style="border-radius:10px;">
                 <i class="bi bi-trash me-1"></i>Delete Build
             </button>
@@ -707,6 +722,42 @@
     const builderPrimaryColor = {{ (builder_primary_color or '#6366f1')|tojson }};
     const builderAccentColor = {{ (builder_accent_color or '#0f172a')|tojson }};
     const builderLogoUrl = {{ (brand_logo_url or '')|tojson }};
+    const gjsFontFamilyOptions = [
+        { id: 'inherit', label: 'Inherit / keep existing' },
+        { id: '"Inter", system-ui, sans-serif', label: 'Inter' },
+        { id: '"Plus Jakarta Sans", "Inter", sans-serif', label: 'Plus Jakarta Sans' },
+        { id: '"Space Grotesk", "Inter", sans-serif', label: 'Space Grotesk' },
+        { id: '"Manrope", sans-serif', label: 'Manrope' },
+        { id: '"DM Sans", sans-serif', label: 'DM Sans' },
+        { id: '"Archivo", sans-serif', label: 'Archivo' },
+        { id: '"Work Sans", sans-serif', label: 'Work Sans' },
+        { id: '"Poppins", sans-serif', label: 'Poppins' },
+        { id: '"Montserrat", sans-serif', label: 'Montserrat' },
+        { id: '"Open Sans", sans-serif', label: 'Open Sans' },
+        { id: '"Lato", sans-serif', label: 'Lato' },
+        { id: '"Nunito", sans-serif', label: 'Nunito' },
+        { id: '"Roboto", sans-serif', label: 'Roboto' },
+        { id: '"Source Sans 3", "Source Sans Pro", sans-serif', label: 'Source Sans' },
+        { id: '"Mulish", sans-serif', label: 'Mulish' },
+        { id: '"Raleway", sans-serif', label: 'Raleway' },
+        { id: '"Oswald", sans-serif', label: 'Oswald' },
+        { id: '"Bebas Neue", sans-serif', label: 'Bebas Neue' },
+        { id: '"Playfair Display", serif', label: 'Playfair Display' },
+        { id: '"Libre Baskerville", serif', label: 'Libre Baskerville' },
+        { id: '"Lora", serif', label: 'Lora' },
+        { id: '"Roboto Slab", serif', label: 'Roboto Slab' },
+        { id: 'Arial, Helvetica, sans-serif', label: 'Arial' },
+        { id: 'Georgia, serif', label: 'Georgia' },
+        { id: '"Times New Roman", Times, serif', label: 'Times New Roman' },
+        { id: 'Verdana, Geneva, sans-serif', label: 'Verdana' },
+        { id: '"Trebuchet MS", Helvetica, sans-serif', label: 'Trebuchet MS' },
+        { id: '"Courier New", Courier, monospace', label: 'Courier New' },
+        { id: 'system-ui, -apple-system, sans-serif', label: 'System UI' },
+    ];
+    const gjsGoogleFontStyles = [
+        'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;700&family=Archivo:wght@500;600;700&family=Work+Sans:wght@400;500;600;700&display=swap',
+        'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Mulish:wght@400;500;600;700&family=Raleway:wght@400;500;600;700;800&family=Lora:wght@400;500;600;700&family=Libre+Baskerville:wght@400;700&family=Source+Sans+3:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700;800&family=Lato:wght@400;700&family=Montserrat:wght@400;500;600;700;800&family=Open+Sans:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Roboto+Slab:wght@400;500;700&family=Poppins:wght@400;500;600;700;800&family=Nunito:wght@400;500;600;700;800&family=Oswald:wght@400;500;600;700&display=swap',
+    ];
 
     function setToolbarNote(message) {
         const note = document.querySelector('.btn-toolbar-note');
@@ -884,11 +935,11 @@
 
     function describeSelectedComponent(component) {
         if (!component || !component.get) {
-            return 'Drag blocks from the right, then click into text, buttons, or images to edit them.';
+            return 'Drag blocks from the right, then click a section or image to reveal resize handles and edit visually.';
         }
         const type = component.get('type');
         if (type === 'image') {
-            return 'Image selected - replace it with Image, use the alignment buttons for layout, or open Styles for crop and sizing.';
+            return 'Image selected - drag the canvas handles to resize it, replace it with Image, or use alignment buttons for quick layout changes.';
         }
         if (type === 'text' || type === 'textnode') {
             return 'Text selected - click directly into the copy to rewrite it, then use Styles for spacing and typography.';
@@ -900,7 +951,7 @@
             return 'Media selected - use Settings for embed details, then Styles for width, spacing, and placement.';
         }
         if (component.components && component.components().length) {
-            return 'Section selected - use the arrow buttons to reorder it, the layout presets for fast spacing, Duplicate to branch it, or Styles for deeper refinement.';
+            return 'Section selected - drag the canvas handles to resize the container, use the arrows to reorder it, or open Styles for deeper spacing and layout control.';
         }
         return 'Element selected - use the section controls if you want to move the whole block, then use Styles or Settings to refine it.';
     }
@@ -1483,6 +1534,47 @@
         return component && component.get && component.get('type') === 'image';
     }
 
+    function isResizableStructure(component) {
+        if (!component || !component.get) return false;
+        const type = String(component.get('type') || '').toLowerCase();
+        const tagName = String(component.get('tagName') || '').toLowerCase();
+        if (['text', 'textnode', 'link', 'video'].includes(type)) return false;
+        return ['section', 'div', 'header', 'footer', 'main', 'article', 'aside'].includes(tagName);
+    }
+
+    function getResizableConfig(component) {
+        if (isImageComponent(component)) {
+            return { tl: 1, tc: 1, tr: 1, cl: 1, cr: 1, bl: 1, bc: 1, br: 1, minDim: 48 };
+        }
+        if (isResizableStructure(component)) {
+            return { tl: 1, tc: 1, tr: 1, cl: 1, cr: 1, bl: 1, bc: 1, br: 1, minDim: 72 };
+        }
+        return null;
+    }
+
+    function applyResizableBehavior(component) {
+        if (!component || !component.set) return;
+        const config = getResizableConfig(component);
+        if (!config) return;
+        const signature = JSON.stringify(config);
+        if (component.__sbResizableSignature === signature) return;
+        component.__sbResizableSignature = signature;
+        component.set('resizable', config);
+    }
+
+    function walkEditorComponentTree(component, visitor) {
+        if (!component || typeof visitor !== 'function') return;
+        visitor(component);
+        const children = component.components ? component.components() : null;
+        if (!children || typeof children.forEach !== 'function') return;
+        children.forEach((child) => walkEditorComponentTree(child, visitor));
+    }
+
+    function enableResizableForEditor(component) {
+        const root = component || (gjsEditor ? gjsEditor.getWrapper() : null);
+        walkEditorComponentTree(root, applyResizableBehavior);
+    }
+
     function getSelectedComponent() {
         return gjsEditor ? gjsEditor.getSelected() : null;
     }
@@ -1552,6 +1644,7 @@
         });
         const inserted = Array.isArray(component) ? component[0] : component;
         if (inserted) {
+            applyResizableBehavior(inserted);
             gjsEditor.select(inserted);
             setSidebarTab('styles');
         }
@@ -1646,7 +1739,7 @@
             document.querySelector('.gjs-sidebar-tabs button[data-tab="blocks"]').classList.add('active');
             document.querySelectorAll('.gjs-sidebar-panel').forEach(p => p.classList.remove('active'));
             document.getElementById('gjsPanelBlocks').classList.add('active');
-            setToolbarNote('Drag blocks from the right, then click into text, buttons, or images to refine each section.');
+            setToolbarNote('Drag blocks from the right, then click a section or image to reveal resize handles and refine each section.');
             setHelpPanelVisible(!getStoredHelpHidden(), false);
             updateDeviceToolbarState('Desktop');
             updateImageActionState(null);
@@ -1729,16 +1822,7 @@
                             name: 'Typography',
                             open: false,
                             properties: [
-                                { property: 'font-family', type: 'select', options: [
-                                    {id:'Arial, Helvetica, sans-serif', label:'Arial'},
-                                    {id:'Georgia, serif', label:'Georgia'},
-                                    {id:'"Times New Roman", Times, serif', label:'Times'},
-                                    {id:'Verdana, Geneva, sans-serif', label:'Verdana'},
-                                    {id:'"Trebuchet MS", Helvetica, sans-serif', label:'Trebuchet'},
-                                    {id:'"Courier New", Courier, monospace', label:'Courier'},
-                                    {id:'system-ui, -apple-system, sans-serif', label:'System UI'},
-                                    {id:'inherit', label:'Inherit'},
-                                ]},
+                                { property: 'font-family', type: 'select', options: gjsFontFamilyOptions },
                                 { property: 'font-size', type: 'integer', units: ['px','em','rem','%','vw'], min: 0 },
                                 { property: 'font-weight', type: 'select', options: [
                                     {id:'300', label:'Light'}, {id:'400', label:'Normal'}, {id:'500', label:'Medium'},
@@ -2052,9 +2136,7 @@
                     autoAdd: true,
                 },
                 canvas: {
-                    styles: [
-                        'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap',
-                    ],
+                    styles: gjsGoogleFontStyles,
                 },
                 plugins: ['gjs-blocks-basic'],
                 pluginsOpts: {
@@ -2063,9 +2145,14 @@
             });
 
             renderBlockPanelHint();
+            enableResizableForEditor();
 
             gjsEditor.on('update', () => {
                 markEditorDirty();
+            });
+
+            gjsEditor.on('component:add', (component) => {
+                enableResizableForEditor(component);
             });
 
             gjsEditor.on('asset:upload:start', () => {
@@ -2086,6 +2173,7 @@
 
             // Auto-switch to Styles tab when a component is selected
             gjsEditor.on('component:selected', (component) => {
+                applyResizableBehavior(component);
                 const stylesBtn = document.querySelector('.gjs-sidebar-tabs button[data-tab="styles"]');
                 if (stylesBtn && !stylesBtn.classList.contains('active')) {
                     stylesBtn.click();
@@ -2105,10 +2193,11 @@
                 updateStructureActionState(null);
                 updateLayoutPresetState(null);
                 updateHeaderFooterActionState(null);
-                setToolbarNote('Drag blocks from the right, then click into text, buttons, or images to refine each section.');
+                setToolbarNote('Drag blocks from the right, then click a section or image to reveal resize handles and refine each section.');
             });
 
             gjsEditor.on('canvas:drop', () => {
+                enableResizableForEditor();
                 setToolbarNote('Block added - click into the new section to edit text, images, or spacing.');
                 setSaveStatus('Block inserted. Unsaved changes.', 'warning');
             });
@@ -2138,6 +2227,7 @@
             } else {
                 gjsEditor.setComponents(payloadToLoad.content || '');
             }
+            enableResizableForEditor();
             gjsEditor.setStyle(payloadToLoad.page_css || '');
             gjsLastSavedSignature = serverSignature;
             window.setTimeout(() => {
@@ -2524,12 +2614,32 @@
                     <div class="form-hint">The AI uses these to differentiate your copy from competitors</div>
                 </div>
                 <div class="col-md-6">
+                    <label class="form-label fw-semibold" style="font-size:.85rem;">Services to Highlight</label>
+                    <textarea name="services_to_highlight" class="form-control" rows="2" placeholder="e.g. Weekly yard cleanup, emergency plumbing, drain clearing, premium recurring plans" style="border-radius:10px; font-size:.88rem;"></textarea>
+                    <div class="form-hint">Tell Warren which offers deserve the strongest placement on the site.</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold" style="font-size:.85rem;">Plan / Frequency Options</label>
+                    <input type="text" name="service_plan_options" class="form-control" placeholder="e.g. Weekly, twice weekly, bi-weekly, monthly, one-time" style="border-radius:10px; font-size:.88rem;">
+                    <div class="form-hint">Useful for recurring services, maintenance plans, and package pages.</div>
+                </div>
+                <div class="col-12">
+                    <label class="form-label fw-semibold" style="font-size:.85rem;">Add-Ons / Upsells</label>
+                    <input type="text" name="service_add_ons" class="form-control" placeholder="e.g. Deodorizer, sanitizer, haul waste away, camera inspection, emergency dispatch" style="border-radius:10px; font-size:.88rem;">
+                    <div class="form-hint">These can become pricing bullets, comparison tables, FAQ answers, and CTA supporting points.</div>
+                </div>
+                <div class="col-md-6">
                     <label class="form-label fw-semibold" style="font-size:.85rem;">Current Offers / Promotions</label>
                     <input type="text" name="active_offers" class="form-control" value="{{ brand_active_offers|e }}" placeholder="e.g. $50 off first service, free inspection" style="border-radius:10px; font-size:.88rem;">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-semibold" style="font-size:.85rem;">Competitors (to differentiate from)</label>
                     <input type="text" name="competitors" class="form-control" placeholder="e.g. Roto-Rooter, Mr. Rooter, local competitors" style="border-radius:10px; font-size:.88rem;">
+                </div>
+                <div class="col-12">
+                    <label class="form-label fw-semibold" style="font-size:.85rem;">Company Story / Credibility Notes</label>
+                    <textarea name="company_story" class="form-control" rows="3" placeholder="e.g. Family-owned since 2009, started after years in commercial plumbing, known locally for transparent pricing and reliable crews." style="border-radius:10px; font-size:.88rem;"></textarea>
+                    <div class="form-hint">Use this for origin story, credibility, values, why customers trust you, and what should show up on About or hero proof sections.</div>
                 </div>
             </div>
         </div>
@@ -2587,6 +2697,14 @@
                 </a>
             </div>
             {% endif %}
+
+            <div class="row g-3 mt-1">
+                <div class="col-12">
+                    <label class="form-label fw-semibold" style="font-size:.85rem;">Priority SEO Locations</label>
+                    <textarea name="priority_seo_locations" class="form-control" rows="2" placeholder="e.g. North Scottsdale, Paradise Valley, Tempe, Mesa, downtown Phoenix" style="border-radius:10px; font-size:.88rem;"></textarea>
+                    <div class="form-hint">List the cities, neighborhoods, ZIPs, or service pockets Warren should prioritize in headings, service-area pages, and internal links.</div>
+                </div>
+            </div>
         </div>
 
         {# ── STEP 3: Content Goals ── #}
@@ -2615,6 +2733,11 @@
                 <div class="col-md-6">
                     <label class="form-label fw-semibold" style="font-size:.85rem;">CTA Phone Number</label>
                     <input type="text" name="cta_phone" class="form-control" value="{{ brand_phone|e }}" placeholder="(555) 123-4567" style="border-radius:10px; font-size:.88rem;">
+                </div>
+                <div class="col-12">
+                    <label class="form-label fw-semibold" style="font-size:.85rem;">How Do You Envision the Site?</label>
+                    <textarea name="site_vision" class="form-control" rows="3" placeholder="Describe the kind of site you want: simple and premium, aggressive lead-gen, editorial and trust-heavy, neighborhood focused, quote-first, etc." style="border-radius:10px; font-size:.88rem;"></textarea>
+                    <div class="form-hint">This steers the overall tone, section order, conversion pacing, and how direct the copy should feel.</div>
                 </div>
             </div>
         </div>
@@ -2670,6 +2793,13 @@
                     <select name="font_pair" class="form-select" style="border-radius:10px; font-size:.88rem;">
                         <option value="">Auto (match style)</option>
                         <option value="inter-system">Inter + System - clean, fast</option>
+                        <option value="plusjakarta-inter">Plus Jakarta Sans + Inter - premium modern</option>
+                        <option value="spacegrotesk-inter">Space Grotesk + Inter - bold modern</option>
+                        <option value="manrope-dmsans">Manrope + DM Sans - polished conversion</option>
+                        <option value="archivo-worksans">Archivo + Work Sans - sturdy service brand</option>
+                        <option value="bebas-mulish">Bebas Neue + Mulish - bold headline contrast</option>
+                        <option value="raleway-lora">Raleway + Lora - refined trust</option>
+                        <option value="librebaskerville-source">Libre Baskerville + Source Sans - classic authority</option>
                         <option value="playfair-lato">Playfair Display + Lato - elegant</option>
                         <option value="montserrat-opensans">Montserrat + Open Sans - modern</option>
                         <option value="roboto-slab-roboto">Roboto Slab + Roboto - technical</option>
@@ -2689,6 +2819,11 @@
                         <label class="page-select-chip"><input type="radio" name="layout_style" value="sidebar-content" style="display:none;"> <span><i class="bi bi-layout-sidebar me-1"></i>Sidebar + Content</span></label>
                     </div>
                     <div class="form-hint">How content sections are structured across pages</div>
+                </div>
+                <div class="col-12">
+                    <label class="form-label fw-semibold" style="font-size:.85rem;">Describe Your Design Preferences</label>
+                    <textarea name="design_notes" class="form-control" rows="3" placeholder="e.g. Less generic, more premium, larger before/after imagery, cleaner headers, darker hero, softer corners, more whitespace, stronger quote CTA." style="border-radius:10px; font-size:.88rem;"></textarea>
+                    <div class="form-hint">Add anything specific about visual direction, density, section style, imagery treatment, or what you want the builder to avoid.</div>
                 </div>
             </div>
         </div>
@@ -2927,6 +3062,7 @@
             </div>
         </a>
         <form method="POST" action="{{ url_for('client.client_site_builder_delete', build_id=build.id) }}" onsubmit="return confirm('Delete build #{{ build.id }} and remove any published WordPress pages tied to it?');" style="display:flex; align-items:center;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-sm btn-outline-danger" style="border-radius:12px; min-width:42px;">
                 <i class="bi bi-trash"></i>
             </button>
