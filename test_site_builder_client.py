@@ -185,6 +185,8 @@ class SiteBuilderLandingTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"siteBuilderGoogleFonts", resp.data)
         self.assertIn(b"name=\"wireframe_style\"", resp.data)
+        self.assertIn(b"name=\"hero_layout\"", resp.data)
+        self.assertIn(b"name=\"services_widget_layout\"", resp.data)
         self.assertIn(b"hero_desktop_use_stock", resp.data)
         self.assertIn(b"wireframe-preview", resp.data)
 
@@ -1351,6 +1353,10 @@ class SiteBuilderGenerateWithIntakeTests(unittest.TestCase):
                     "areas": "Springfield",
                     "style_preset": "modern",
                     "wireframe_style": "conversion",
+                    "hero_layout": "split-right",
+                    "services_widget_layout": "image-cards",
+                    "proof_widget_layout": "before-after-grid",
+                    "cta_widget_layout": "split-form",
                     "button_style": "pill",
                     "font_heading": "Space   Grotesk!!!",
                     "font_body": "DM Sans<script>",
@@ -1370,6 +1376,10 @@ class SiteBuilderGenerateWithIntakeTests(unittest.TestCase):
         intake = build.get("intake") or {}
         self.assertEqual(intake["style_preset"], "modern")
         self.assertEqual(intake["wireframe_style"], "conversion")
+        self.assertEqual(intake["hero_layout"], "split-right")
+        self.assertEqual(intake["services_widget_layout"], "image-cards")
+        self.assertEqual(intake["proof_widget_layout"], "before-after-grid")
+        self.assertEqual(intake["cta_widget_layout"], "split-form")
         self.assertEqual(intake["button_style"], "pill")
         self.assertEqual(intake["font_heading"], "Space Grotesk")
         self.assertEqual(intake["font_body"], "DM Sansscript")

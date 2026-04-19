@@ -592,11 +592,13 @@ class AssemblyTests(unittest.TestCase):
             },
         )
         page_spec = {"page_type": "home", "slug": "", "schema_types": []}
-        content = {"title": "Home", "content": "<main><p>Plain copy only</p></main>", "faq_items": [], "schema_hints": {}}
+        content = {"title": "Home", "content": "<main><section class=\"hero\"><div class=\"hero-copy\"><h1>Plain copy only</h1></div></section></main>", "faq_items": [], "schema_hints": {}}
 
         result = assemble_page(page_spec, ctx, content)
 
+        self.assertIn("<section class=\"hero\">", result["body_html"])
         self.assertIn("sb-intake-image-hero", result["body_html"])
+        self.assertIn("sb-hero-media", result["body_html"])
         self.assertIn("https://example.com/hero-stock.jpg", result["body_html"])
         self.assertIn("https://example.com/team-upload.jpg", result["full_html"])
         self.assertNotIn("https://example.com/reference-hero.jpg", result["full_html"])
@@ -1232,6 +1234,26 @@ class DesignBlockTests(unittest.TestCase):
         self.assertIn("Extra design notes", block)
         self.assertIn("Use stronger before/after imagery and more breathing room.", block)
         self.assertIn("Plus Jakarta Sans", block)
+
+    def test_design_block_includes_hero_and_widget_layout_choices(self):
+        ctx = {
+            "hero_layout": "split-right",
+            "services_widget_layout": "image-cards",
+            "proof_widget_layout": "before-after-grid",
+            "cta_widget_layout": "split-form",
+            "image_slots": {
+                "hero_desktop": {
+                    "assets": [{"url": "https://example.com/hero.jpg"}],
+                    "stock_url": "",
+                }
+            },
+        }
+        block = _design_block(ctx)
+        self.assertIn("copy on the left, primary image on the right", block)
+        self.assertIn("visual service cards", block)
+        self.assertIn("visual before/after or result gallery grid", block)
+        self.assertIn("form or booking block beside it", block)
+        self.assertIn("selected hero image must be integrated inside the hero section", block)
 
 
 class WarrenSEOBriefTests(unittest.TestCase):

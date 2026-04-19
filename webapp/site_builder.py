@@ -220,6 +220,10 @@ def build_brand_context(brand, intake=None, builder_theme=None, builder_template
     ).strip()
     ctx["style_preset"] = (intake.get("style_preset") or reference_site_brief.get("style_preset_hint") or "").strip()
     ctx["wireframe_style"] = (intake.get("wireframe_style") or "").strip()
+    ctx["hero_layout"] = (intake.get("hero_layout") or reference_site_brief.get("hero_layout_hint") or "").strip()
+    ctx["services_widget_layout"] = (intake.get("services_widget_layout") or "").strip()
+    ctx["proof_widget_layout"] = (intake.get("proof_widget_layout") or "").strip()
+    ctx["cta_widget_layout"] = (intake.get("cta_widget_layout") or "").strip()
     ctx["image_slots"] = intake.get("image_slots") or {}
     ctx["font_heading"] = normalize_google_font_family(ctx["font_heading"])
     ctx["font_body"] = normalize_google_font_family(ctx["font_body"])
@@ -752,22 +756,18 @@ def _inject_reference_images(body_html, page_spec, brand_ctx):
     html = str(body_html or "").strip()
     if not html:
         return html
-    if re.search(r"<(img|picture)\b", html, re.I) or "background-image" in html.lower():
-        return html
 
     assets = _reference_image_assets_for_page(page_spec, brand_ctx)
     if not assets:
         return html
 
+    existing_sources = set(re.findall(r'src=["\']([^"\']+)["\']', html, re.I))
+    assets = [asset for asset in assets if asset.get("asset_url") not in existing_sources]
+    if not assets:
+        return html
+
     hero_asset = assets[0]
-    hero_html = (
-        '<figure class="sb-reference-image sb-reference-image-hero" '
-        'style="margin:0 0 2rem;">'
-        f'<img src="{hero_asset["asset_url"]}" alt="{hero_asset.get("alt") or "Reference-inspired stock image"}" '
-        'loading="lazy" referrerpolicy="no-referrer" '
-        'style="display:block;width:100%;max-height:560px;object-fit:cover;border-radius:24px;box-shadow:0 24px 60px rgba(15,23,42,.16);">'
-        '</figure>'
-    )
+    html = _inject_hero_image_into_layout(html, hero_asset, "sb-reference-image", "sb-reference-image-hero")
 
     gallery_html = ""
     if len(assets) > 1:
@@ -787,7 +787,30 @@ def _inject_reference_images(body_html, page_spec, brand_ctx):
             + '</section>'
         )
 
-    return "\n".join(part for part in (hero_html, html, gallery_html) if part)
+    return "\n".join(part for part in (html, gallery_html) if part)
+
+
+def _inject_hero_image_into_layout(html, asset, css_class, hero_class):
+    markup = (
+        f'<div class="{css_class} {hero_class} sb-hero-media" '
+        'style="margin:0 0 1.5rem;">'
+        f'<img src="{asset["asset_url"]}" alt="{asset.get("alt") or "Hero image"}" '
+        'loading="lazy" referrerpolicy="no-referrer" '
+        'style="display:block;width:100%;max-height:560px;object-fit:cover;border-radius:24px;box-shadow:0 24px 60px rgba(15,23,42,.16);">'
+        '</div>'
+    )
+    patterns = [
+        re.compile(r"<(section|header)\b[^>]*(?:class|id)=[\"'][^\"']*(hero|banner|masthead|intro)[^\"']*[\"'][^>]*>", re.I),
+        re.compile(r"<section\b[^>]*>", re.I),
+        re.compile(r"<header\b[^>]*>", re.I),
+        re.compile(r"<main\b[^>]*>", re.I),
+        re.compile(r"<body\b[^>]*>", re.I),
+    ]
+    for pattern in patterns:
+        match = pattern.search(html)
+        if match:
+            return html[:match.end()] + "\n" + markup + "\n" + html[match.end():]
+    return markup + "\n" + html
 
 
 def _intake_image_assets_for_page(page_spec, brand_ctx):
@@ -853,14 +876,7 @@ def _inject_intake_images(body_html, page_spec, brand_ctx):
         return html
 
     hero_asset = assets[0]
-    hero_html = (
-        '<figure class="sb-intake-image sb-intake-image-hero" '
-        'style="margin:0 0 2rem;">'
-        f'<img src="{hero_asset["asset_url"]}" alt="{hero_asset.get("alt") or "Brand image"}" '
-        'loading="lazy" '
-        'style="display:block;width:100%;max-height:560px;object-fit:cover;border-radius:24px;box-shadow:0 24px 60px rgba(15,23,42,.16);">'
-        '</figure>'
-    )
+    html = _inject_hero_image_into_layout(html, hero_asset, "sb-intake-image", "sb-intake-image-hero")
 
     gallery_html = ""
     if len(assets) > 1:
@@ -880,12 +896,13 @@ def _inject_intake_images(body_html, page_spec, brand_ctx):
             + '</section>'
         )
 
-    return "\n".join(part for part in (hero_html, html, gallery_html) if part)
+    return "\n".join(part for part in (html, gallery_html) if part)
 
 
 def _inject_builder_images(body_html, page_spec, brand_ctx):
-    html = _inject_intake_images(body_html, page_spec, brand_ctx)
-    return _inject_reference_images(html, page_spec, brand_ctx)
+    if _intake_image_assets_for_page(page_spec, brand_ctx):
+        return _inject_intake_images(body_html, page_spec, brand_ctx)
+    return _inject_reference_images(body_html, page_spec, brand_ctx)
 
 
 def _quote_tool_block(ctx):
@@ -1338,6 +1355,10 @@ def _design_block(ctx):
     font_pair = ctx.get("font_pair") or ""
     layout_style = ctx.get("layout_style") or ""
     wireframe_style = ctx.get("wireframe_style") or ""
+    hero_layout = ctx.get("hero_layout") or ""
+    services_widget_layout = ctx.get("services_widget_layout") or ""
+    proof_widget_layout = ctx.get("proof_widget_layout") or ""
+    cta_widget_layout = ctx.get("cta_widget_layout") or ""
     button_style = ctx.get("button_style") or ""
     site_vision = ctx.get("site_vision") or ""
     design_notes = ctx.get("design_notes") or ""
@@ -1345,7 +1366,7 @@ def _design_block(ctx):
     reference_block = _reference_site_block(ctx)
     image_block = _image_slots_block(ctx)
 
-    if not any([preset, primary, secondary, text_color, background_color, font_h, color_palette, font_pair, layout_style, wireframe_style, button_style, site_vision, design_notes, theme_block, reference_block, image_block]):
+    if not any([preset, primary, secondary, text_color, background_color, font_h, color_palette, font_pair, layout_style, wireframe_style, hero_layout, services_widget_layout, proof_widget_layout, cta_widget_layout, button_style, site_vision, design_notes, theme_block, reference_block, image_block]):
         return ""
 
     parts.append("DESIGN GUIDELINES (apply CSS classes and inline styles to match):")
@@ -1396,6 +1417,39 @@ def _design_block(ctx):
     }
     if layout_style and layout_style in layout_desc:
         parts.append(f"- Layout: {layout_desc[layout_style]}")
+
+    hero_layout_desc = {
+        "split-right": "Hero layout: copy on the left, primary image on the right, with the selected hero image embedded directly inside the hero section.",
+        "full-bleed": "Hero layout: full-bleed visual hero with text layered over or alongside the selected hero image as the dominant first-screen visual.",
+        "stacked-center": "Hero layout: centered headline and CTA stack with the selected hero image integrated beneath or behind the hero copy, not in a separate section.",
+        "proof-strip": "Hero layout: hero copy paired with a strong image and an immediate proof strip of badges, review cues, or metrics in the first screen.",
+    }
+    if hero_layout and hero_layout in hero_layout_desc:
+        parts.append(f"- {hero_layout_desc[hero_layout]}")
+
+    widget_layout_desc = {
+        "services_widget_layout": {
+            "icon-cards": "Services widget layout: icon-led service cards in a clean grid.",
+            "image-cards": "Services widget layout: visual service cards with image thumbnails and short benefit copy.",
+            "alternating-rows": "Services widget layout: alternating service rows with copy paired to supporting imagery or proof.",
+        },
+        "proof_widget_layout": {
+            "testimonial-stack": "Proof widget layout: stacked testimonial or review cards with compact trust signals.",
+            "badge-metrics": "Proof widget layout: badges, metrics, guarantees, and trust bars grouped in a proof-heavy strip.",
+            "before-after-grid": "Proof widget layout: visual before/after or result gallery grid used as the main proof section.",
+        },
+        "cta_widget_layout": {
+            "inline-band": "CTA widget layout: a clean inline CTA band between major sections.",
+            "split-form": "CTA widget layout: copy and trust cues on one side with a form or booking block beside it.",
+            "phone-strip": "CTA widget layout: phone-first CTA strip with bold contact emphasis and a simplified secondary action.",
+        },
+    }
+    if services_widget_layout and services_widget_layout in widget_layout_desc["services_widget_layout"]:
+        parts.append(f"- {widget_layout_desc['services_widget_layout'][services_widget_layout]}")
+    if proof_widget_layout and proof_widget_layout in widget_layout_desc["proof_widget_layout"]:
+        parts.append(f"- {widget_layout_desc['proof_widget_layout'][proof_widget_layout]}")
+    if cta_widget_layout and cta_widget_layout in widget_layout_desc["cta_widget_layout"]:
+        parts.append(f"- {widget_layout_desc['cta_widget_layout'][cta_widget_layout]}")
 
     if preset:
         presets_desc = {
@@ -1449,6 +1503,10 @@ def _design_block(ctx):
         parts.append(f"- {wireframe_desc[wireframe_style]}")
     if image_block:
         parts.append(image_block.rstrip())
+    image_slots = ctx.get("image_slots") or {}
+    hero_slot = image_slots.get("hero_desktop") or image_slots.get("hero_mobile") or {}
+    if isinstance(hero_slot, dict) and (hero_slot.get("assets") or hero_slot.get("stock_url")):
+        parts.append("- The selected hero image must be integrated inside the hero section itself as the primary visual. Do not place it in its own standalone section above or below the hero.")
 
     return "\n".join(parts) + "\n"
 
@@ -1519,6 +1577,7 @@ def _prompt_home(page_spec, ctx):
         "- HERO: Open with a value proposition that names who you serve and what they get. "
         "Not 'Welcome to...'. Not a generic tagline. A specific promise. "
         "Example pattern: '[Outcome] for [audience] in [area]'.\n"
+        "- HERO EXECUTION: If a hero image is provided in the builder context, the hero HTML must include that image in the hero itself as the main visual element, not as a separate section before or after the hero.\n"
         "- SERVICES OVERVIEW: Brief descriptions of 3-6 core services. Each service gets "
         "a benefit-first sentence, not a feature description. Link to detail pages with "
         "[LINK:/services/slug].\n"

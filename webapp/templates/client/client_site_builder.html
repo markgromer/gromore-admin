@@ -208,6 +208,58 @@
         opacity: .84;
         margin-top: .25rem;
     }
+    .layout-widget-card {
+        display: block;
+        border-radius: 16px;
+        overflow: hidden;
+    }
+    .layout-widget-card-body {
+        display: block;
+        padding: 0;
+    }
+    .layout-widget-preview {
+        height: 120px;
+        padding: 12px;
+        background: linear-gradient(180deg, #fafafc 0%, #f1f5f9 100%);
+        border-bottom: 1px solid rgba(148, 163, 184, .18);
+        display: grid;
+        gap: 8px;
+    }
+    .layout-widget-copy {
+        display: block;
+        padding: .9rem 1rem 1rem;
+    }
+    .layout-widget-copy small {
+        display: block;
+        font-size: .76rem;
+        line-height: 1.42;
+        opacity: .84;
+        margin-top: .25rem;
+    }
+    .preview-shell {
+        display: grid;
+        gap: 8px;
+        height: 100%;
+    }
+    .preview-columns-2 {
+        grid-template-columns: 1.1fr .9fr;
+    }
+    .preview-columns-3 {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    .preview-block {
+        border-radius: 10px;
+        background: rgba(255,255,255,.96);
+        border: 1px solid rgba(148, 163, 184, .22);
+        min-height: 18px;
+    }
+    .preview-block.tall { min-height: 50px; }
+    .preview-block.medium { min-height: 34px; }
+    .preview-block.short { min-height: 18px; }
+    .preview-block.hero-art {
+        background: linear-gradient(135deg, rgba(99,102,241,.18), rgba(14,165,233,.18));
+        min-height: 54px;
+    }
 
     /* Landing page cards */
     .lp-card {
@@ -2984,6 +3036,256 @@
                                     </span>
                                 </span>
                             </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="sb-card mb-0" style="background:rgba(15,23,42,.02); border-style:dashed;">
+                        <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap mb-2">
+                            <div>
+                                <label class="form-label fw-semibold mb-1" style="font-size:.85rem;">Hero Wireframe</label>
+                                <div class="form-hint" style="margin-top:0; max-width:720px;">Pick how the first screen should be composed. If you uploaded a hero image, Warren will use it in this hero pattern instead of dropping it into its own section.</div>
+                            </div>
+                            <span class="page-type-chip"><i class="bi bi-image"></i>First-screen layout</span>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-md-3">
+                                <label class="page-select-chip layout-widget-card d-block h-100" style="padding:0;">
+                                    <input type="radio" name="hero_layout" value="split-right" checked style="display:none;">
+                                    <span class="layout-widget-card-body">
+                                        <span class="layout-widget-preview">
+                                            <span class="preview-shell preview-columns-2">
+                                                <span class="preview-block tall"></span>
+                                                <span class="preview-block hero-art"></span>
+                                            </span>
+                                            <span class="preview-block short"></span>
+                                        </span>
+                                        <span class="layout-widget-copy">
+                                            <strong>Split Right</strong>
+                                            <small>Copy and CTA on the left, hero image anchored on the right.</small>
+                                        </span>
+                                    </span>
+                                </label>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="page-select-chip layout-widget-card d-block h-100" style="padding:0;">
+                                    <input type="radio" name="hero_layout" value="full-bleed" style="display:none;">
+                                    <span class="layout-widget-card-body">
+                                        <span class="layout-widget-preview">
+                                            <span class="preview-block hero-art tall"></span>
+                                            <span class="preview-block medium"></span>
+                                        </span>
+                                        <span class="layout-widget-copy">
+                                            <strong>Full Bleed</strong>
+                                            <small>Image-led hero with the copy layered over or sitting tight against the visual.</small>
+                                        </span>
+                                    </span>
+                                </label>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="page-select-chip layout-widget-card d-block h-100" style="padding:0;">
+                                    <input type="radio" name="hero_layout" value="stacked-center" style="display:none;">
+                                    <span class="layout-widget-card-body">
+                                        <span class="layout-widget-preview">
+                                            <span class="preview-block medium"></span>
+                                            <span class="preview-block hero-art tall"></span>
+                                        </span>
+                                        <span class="layout-widget-copy">
+                                            <strong>Stacked Center</strong>
+                                            <small>Centered headline stack with the hero visual integrated directly beneath.</small>
+                                        </span>
+                                    </span>
+                                </label>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="page-select-chip layout-widget-card d-block h-100" style="padding:0;">
+                                    <input type="radio" name="hero_layout" value="proof-strip" style="display:none;">
+                                    <span class="layout-widget-card-body">
+                                        <span class="layout-widget-preview">
+                                            <span class="preview-shell preview-columns-2">
+                                                <span class="preview-block hero-art tall"></span>
+                                                <span class="preview-block medium"></span>
+                                            </span>
+                                            <span class="preview-shell preview-columns-3">
+                                                <span class="preview-block short"></span>
+                                                <span class="preview-block short"></span>
+                                                <span class="preview-block short"></span>
+                                            </span>
+                                        </span>
+                                        <span class="layout-widget-copy">
+                                            <strong>Proof Strip</strong>
+                                            <small>Hero visual plus an immediate band of metrics, badges, or review proof below.</small>
+                                        </span>
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="sb-card mb-0" style="background:rgba(15,23,42,.02); border-style:dashed;">
+                        <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap mb-2">
+                            <div>
+                                <label class="form-label fw-semibold mb-1" style="font-size:.85rem;">Widget Wireframes</label>
+                                <div class="form-hint" style="margin-top:0; max-width:720px;">Dial in how the key sections should be built. These choices steer the first draft layout, not just the styling.</div>
+                            </div>
+                            <span class="page-type-chip"><i class="bi bi-grid-3x3-gap"></i>Section patterns</span>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label fw-semibold" style="font-size:.82rem;">Services Section</label>
+                                <div class="row g-2">
+                                    <div class="col-md-4">
+                                        <label class="page-select-chip layout-widget-card d-block h-100" style="padding:0;">
+                                            <input type="radio" name="services_widget_layout" value="icon-cards" checked style="display:none;">
+                                            <span class="layout-widget-card-body">
+                                                <span class="layout-widget-preview">
+                                                    <span class="preview-shell preview-columns-3">
+                                                        <span class="preview-block medium"></span>
+                                                        <span class="preview-block medium"></span>
+                                                        <span class="preview-block medium"></span>
+                                                    </span>
+                                                    <span class="preview-block short"></span>
+                                                </span>
+                                                <span class="layout-widget-copy"><strong>Icon Cards</strong><small>Simple service cards with icons, benefits, and short blurbs.</small></span>
+                                            </span>
+                                        </label>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="page-select-chip layout-widget-card d-block h-100" style="padding:0;">
+                                            <input type="radio" name="services_widget_layout" value="image-cards" style="display:none;">
+                                            <span class="layout-widget-card-body">
+                                                <span class="layout-widget-preview">
+                                                    <span class="preview-shell preview-columns-3">
+                                                        <span class="preview-block hero-art medium"></span>
+                                                        <span class="preview-block hero-art medium"></span>
+                                                        <span class="preview-block hero-art medium"></span>
+                                                    </span>
+                                                    <span class="preview-block short"></span>
+                                                </span>
+                                                <span class="layout-widget-copy"><strong>Image Cards</strong><small>More visual cards with thumbnails or treatment imagery for each service.</small></span>
+                                            </span>
+                                        </label>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="page-select-chip layout-widget-card d-block h-100" style="padding:0;">
+                                            <input type="radio" name="services_widget_layout" value="alternating-rows" style="display:none;">
+                                            <span class="layout-widget-card-body">
+                                                <span class="layout-widget-preview">
+                                                    <span class="preview-shell preview-columns-2">
+                                                        <span class="preview-block medium"></span>
+                                                        <span class="preview-block hero-art medium"></span>
+                                                    </span>
+                                                    <span class="preview-shell preview-columns-2">
+                                                        <span class="preview-block hero-art medium"></span>
+                                                        <span class="preview-block medium"></span>
+                                                    </span>
+                                                </span>
+                                                <span class="layout-widget-copy"><strong>Alternating Rows</strong><small>Deeper service rows that alternate copy and visual support down the page.</small></span>
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold" style="font-size:.82rem;">Proof / Testimonials Section</label>
+                                <div class="row g-2">
+                                    <div class="col-md-4">
+                                        <label class="page-select-chip layout-widget-card d-block h-100" style="padding:0;">
+                                            <input type="radio" name="proof_widget_layout" value="testimonial-stack" checked style="display:none;">
+                                            <span class="layout-widget-card-body">
+                                                <span class="layout-widget-preview">
+                                                    <span class="preview-block medium"></span>
+                                                    <span class="preview-block medium"></span>
+                                                    <span class="preview-block medium"></span>
+                                                </span>
+                                                <span class="layout-widget-copy"><strong>Testimonial Stack</strong><small>Multiple testimonial or review cards stacked with direct trust messaging.</small></span>
+                                            </span>
+                                        </label>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="page-select-chip layout-widget-card d-block h-100" style="padding:0;">
+                                            <input type="radio" name="proof_widget_layout" value="badge-metrics" style="display:none;">
+                                            <span class="layout-widget-card-body">
+                                                <span class="layout-widget-preview">
+                                                    <span class="preview-shell preview-columns-3">
+                                                        <span class="preview-block short"></span>
+                                                        <span class="preview-block short"></span>
+                                                        <span class="preview-block short"></span>
+                                                    </span>
+                                                    <span class="preview-block medium"></span>
+                                                </span>
+                                                <span class="layout-widget-copy"><strong>Badges + Metrics</strong><small>Guarantees, years, reviews, and trust bars grouped into a dense proof strip.</small></span>
+                                            </span>
+                                        </label>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="page-select-chip layout-widget-card d-block h-100" style="padding:0;">
+                                            <input type="radio" name="proof_widget_layout" value="before-after-grid" style="display:none;">
+                                            <span class="layout-widget-card-body">
+                                                <span class="layout-widget-preview">
+                                                    <span class="preview-shell preview-columns-2">
+                                                        <span class="preview-block hero-art medium"></span>
+                                                        <span class="preview-block hero-art medium"></span>
+                                                    </span>
+                                                    <span class="preview-shell preview-columns-2">
+                                                        <span class="preview-block hero-art medium"></span>
+                                                        <span class="preview-block hero-art medium"></span>
+                                                    </span>
+                                                </span>
+                                                <span class="layout-widget-copy"><strong>Before/After Grid</strong><small>Use result visuals or portfolio-style proof as the lead trust section.</small></span>
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold" style="font-size:.82rem;">CTA Section</label>
+                                <div class="row g-2">
+                                    <div class="col-md-4">
+                                        <label class="page-select-chip layout-widget-card d-block h-100" style="padding:0;">
+                                            <input type="radio" name="cta_widget_layout" value="inline-band" checked style="display:none;">
+                                            <span class="layout-widget-card-body">
+                                                <span class="layout-widget-preview">
+                                                    <span class="preview-block medium"></span>
+                                                    <span class="preview-block short"></span>
+                                                </span>
+                                                <span class="layout-widget-copy"><strong>Inline Band</strong><small>A clean CTA strip between major sections with one strong next step.</small></span>
+                                            </span>
+                                        </label>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="page-select-chip layout-widget-card d-block h-100" style="padding:0;">
+                                            <input type="radio" name="cta_widget_layout" value="split-form" style="display:none;">
+                                            <span class="layout-widget-card-body">
+                                                <span class="layout-widget-preview">
+                                                    <span class="preview-shell preview-columns-2">
+                                                        <span class="preview-block medium"></span>
+                                                        <span class="preview-block tall"></span>
+                                                    </span>
+                                                </span>
+                                                <span class="layout-widget-copy"><strong>Split Form</strong><small>Copy, trust, and urgency on one side with a form or booking module beside it.</small></span>
+                                            </span>
+                                        </label>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="page-select-chip layout-widget-card d-block h-100" style="padding:0;">
+                                            <input type="radio" name="cta_widget_layout" value="phone-strip" style="display:none;">
+                                            <span class="layout-widget-card-body">
+                                                <span class="layout-widget-preview">
+                                                    <span class="preview-block short"></span>
+                                                    <span class="preview-shell preview-columns-3">
+                                                        <span class="preview-block short"></span>
+                                                        <span class="preview-block medium"></span>
+                                                        <span class="preview-block short"></span>
+                                                    </span>
+                                                </span>
+                                                <span class="layout-widget-copy"><strong>Phone Strip</strong><small>Phone-first CTA with strong contact emphasis and a lighter secondary action.</small></span>
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
