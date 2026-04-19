@@ -7,6 +7,7 @@ Tests for the Site Builder Admin panel:
 import os
 import sys
 import json
+import io
 import uuid
 import unittest
 from pathlib import Path
@@ -324,6 +325,12 @@ class SBAdminRouteTests(unittest.TestCase):
             if path.exists():
                 path.unlink()
 
+        upload_dir = Path(self.app.static_folder) / "uploads" / "sb_images"
+        if upload_dir.exists():
+            for path in upload_dir.iterdir():
+                if path.is_file() and path.name.endswith(".svg") and path.name != ".gitkeep":
+                    path.unlink()
+
     def test_admin_dashboard_loads(self):
         resp = self.client.get("/site-builder-admin")
         self.assertEqual(resp.status_code, 200)
@@ -404,6 +411,28 @@ class SBAdminRouteTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         cats = self.db.get_sb_image_categories()
         self.assertEqual(len(cats), 1)
+
+    def test_admin_image_upload_route_saves_file_and_record(self):
+        payload = {
+            "images": (io.BytesIO(b"<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'></svg>"), "hero-test.svg"),
+            "tags": "hero, homepage",
+            "industry": "plumbing",
+        }
+
+        resp = self.client.post(
+            "/site-builder-admin/images/upload",
+            data=payload,
+            content_type="multipart/form-data",
+            follow_redirects=True,
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        images = self.db.get_sb_images()
+        self.assertEqual(len(images), 1)
+        self.assertEqual(images[0]["original_name"], "hero-test.svg")
+        self.assertEqual(images[0]["industry"], "plumbing")
+        saved_file = Path(self.app.static_folder) / images[0]["file_path"]
+        self.assertTrue(saved_file.exists())
 
     def test_images_api_endpoint(self):
         self.db.create_sb_image({"filename": "a.jpg", "file_path": "uploads/a.jpg"})

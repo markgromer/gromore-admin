@@ -9,6 +9,7 @@ import json
 import base64
 import hashlib
 import hmac
+import logging
 import secrets
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -16,7 +17,7 @@ from functools import wraps
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    flash, session, jsonify, send_file, abort
+    flash, session, jsonify, send_file, abort, current_app
 )
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -32,6 +33,7 @@ from webapp.hiring import hiring_bp
 from webapp.warren_webhooks import webhooks_bp
 
 BASE_DIR = Path(__file__).parent.parent
+logger = logging.getLogger(__name__)
 
 
 def _base64_url_decode(value):
