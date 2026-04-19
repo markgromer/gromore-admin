@@ -15,7 +15,7 @@ import logging
 import uuid
 from functools import wraps
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin, quote_plus
 
 from flask import (
     Blueprint, render_template, request, redirect,
@@ -6645,7 +6645,331 @@ def _site_builder_reference_mode(value):
     return "vibe"
 
 
-def _site_builder_reference_style_brief(reference_url, reference_mode="vibe"):
+def _merge_reference_texts(primary, secondary, limit=8, item_limit=180):
+    merged = []
+    seen = set()
+    for value in list(primary or []) + list(secondary or []):
+        text = re.sub(r"\s+", " ", str(value or "")).strip()
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(text[:item_limit])
+        if len(merged) >= limit:
+            break
+    return merged
+
+
+def _merge_reference_section_patterns(primary, secondary, limit=10):
+    merged = []
+    seen = set()
+    for item in list(primary or []) + list(secondary or []):
+        if not isinstance(item, dict):
+            continue
+        category = str(item.get("category") or "content").strip()[:60]
+        heading = str(item.get("heading") or "").strip()[:140]
+        summary = str(item.get("summary") or "").strip()[:180]
+        layout_hint = str(item.get("layout_hint") or "stacked").strip()[:60]
+        cta_texts = []
+        for cta in item.get("cta_texts") or []:
+            text = re.sub(r"\s+", " ", str(cta or "")).strip()
+            if text:
+                cta_texts.append(text[:80])
+        try:
+            item_count = int(item.get("item_count") or 0)
+        except Exception:
+            item_count = 0
+        key = (category.lower(), (heading or summary).lower(), layout_hint.lower())
+        if key in seen or not (heading or summary):
+            continue
+        seen.add(key)
+        merged.append({
+            "category": category,
+            "heading": heading,
+            "summary": summary,
+            "layout_hint": layout_hint,
+            "item_count": item_count,
+            "cta_texts": cta_texts[:3],
+        })
+        if len(merged) >= limit:
+            break
+    return merged
+
+
+def _extract_rendered_reference_design(reference_url):
+    target_url = str(reference_url or "").strip()
+    if not target_url:
+        return {}
+
+    try:
+        import base64
+        import importlib
+
+        sync_playwright = importlib.import_module("playwright.sync_api").sync_playwright
+    except Exception:
+        return {}
+
+    extractor_js = r"""
+() => {
+  const clean = (value, limit = 160) => String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
+  const visible = (el) => {
+    if (!el) return false;
+    const style = window.getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || '1') > 0 && rect.width >= 140 && rect.height >= 70;
+  };
+  const unique = (values, limit = 6) => {
+    const seen = new Set();
+    const items = [];
+    for (const raw of values || []) {
+      const text = clean(raw, 120);
+      const key = text.toLowerCase();
+      if (!text || seen.has(key)) continue;
+      seen.add(key);
+      items.push(text);
+      if (items.length >= limit) break;
+    }
+    return items;
+  };
+  const inferCategory = (node, index) => {
+    const heading = clean(node.querySelector('h1,h2,h3')?.innerText || '', 120).toLowerCase();
+    const identity = clean(`${node.id || ''} ${node.className || ''} ${heading}`, 240).toLowerCase();
+    const text = clean(node.innerText || '', 360).toLowerCase();
+    const ctas = unique(Array.from(node.querySelectorAll('a,button')).map((el) => el.innerText), 3);
+    if (node.querySelector('h1') || (index === 0 && ctas.length)) return 'hero';
+    if (/(testimonial|review|what customers say|happy clients)/.test(identity + ' ' + text)) return 'testimonials';
+    if (/(services|solutions|what we do|service)/.test(identity + ' ' + text)) return 'services';
+    if (/(faq|frequently asked|questions)/.test(identity + ' ' + text)) return 'faq';
+    if (/(about|our team|who we are|company)/.test(identity + ' ' + text)) return 'about';
+    if (/(contact|get in touch|location|call us)/.test(identity + ' ' + text)) return 'contact';
+    if (/(gallery|projects|portfolio|recent work|before and after)/.test(identity + ' ' + text)) return 'gallery';
+    if (/(pricing|plans|cost|quote)/.test(identity + ' ' + text)) return 'pricing';
+    if (ctas.length && text.length < 220) return 'cta';
+    return 'content';
+  };
+  const inferLayout = (node) => {
+    const style = window.getComputedStyle(node);
+    const rect = node.getBoundingClientRect();
+    const children = Array.from(node.children || []).filter(visible);
+    const wideChildren = children.filter((child) => child.getBoundingClientRect().width >= rect.width * 0.28);
+    if ((style.backgroundImage || 'none') !== 'none') return 'immersive';
+    if ((style.display || '').includes('grid')) return 'grid';
+    if ((style.display || '').includes('flex') && !String(style.flexDirection || '').includes('column') && wideChildren.length >= 2) return 'split';
+    if (wideChildren.length >= 3) return 'grid';
+    if (wideChildren.length >= 2) return 'split';
+    return 'stacked';
+  };
+  const candidates = [];
+  const seen = new Set();
+  ['main section', 'main > div', 'main article', 'header', '[class*="hero"]'].forEach((selector) => {
+    document.querySelectorAll(selector).forEach((node) => {
+      if (!visible(node) || seen.has(node)) return;
+      seen.add(node);
+      candidates.push(node);
+    });
+  });
+  const filtered = candidates.slice(0, 12);
+  const sectionPatterns = filtered.map((node, index) => {
+    const style = window.getComputedStyle(node);
+    const heading = clean(node.querySelector('h1,h2,h3')?.innerText || '', 120);
+    const text = clean(node.innerText || '', 180);
+    const ctas = unique(Array.from(node.querySelectorAll('a,button')).map((el) => el.innerText), 3);
+    const directItems = Array.from(node.children || []).filter(visible).length;
+    return {
+      category: inferCategory(node, index),
+      heading,
+      summary: heading || text,
+      layout_hint: inferLayout(node),
+      item_count: directItems,
+      cta_texts: ctas,
+      background: clean(style.backgroundColor || '', 40),
+      text_align: clean(style.textAlign || '', 20),
+      has_background_image: (style.backgroundImage || 'none') !== 'none',
+      image_count: node.querySelectorAll('img,picture').length,
+      padding_y: Math.round((parseFloat(style.paddingTop || '0') + parseFloat(style.paddingBottom || '0')) || 0),
+    };
+  }).filter((item) => item.summary);
+  const colorHints = unique(
+    filtered.flatMap((node) => {
+      const style = window.getComputedStyle(node);
+      return [style.backgroundColor, style.color, style.borderColor];
+    }).filter((value) => value && value !== 'rgba(0, 0, 0, 0)' && value !== 'rgb(0, 0, 0)' && value !== 'rgb(255, 255, 255)'),
+    6,
+  );
+  const buttons = Array.from(document.querySelectorAll('a,button')).filter((node) => visible(node) && clean(node.innerText || '', 40));
+  const primaryButton = buttons[0] || null;
+  const buttonStyle = primaryButton ? (() => {
+    const style = window.getComputedStyle(primaryButton);
+    const radius = parseFloat(style.borderRadius || '0') || 0;
+    const fill = (style.backgroundColor || '').includes('rgba(0, 0, 0, 0)') ? 'outline' : 'solid';
+    if (radius >= 20) return `${fill} pill`;
+    if (radius >= 8) return `${fill} rounded`;
+    return `${fill} square`;
+  })() : '';
+  const hero = sectionPatterns.find((item) => item.category === 'hero') || sectionPatterns[0] || null;
+  const headingFont = clean(window.getComputedStyle(document.querySelector('h1,h2') || document.body).fontFamily || '', 80);
+  const bodyFont = clean(window.getComputedStyle(document.body).fontFamily || '', 80);
+  return {
+    resolved_url: window.location.href,
+    section_count: sectionPatterns.length,
+    section_patterns: sectionPatterns,
+    color_hints: colorHints,
+    heading_font_hint: headingFont,
+    body_font_hint: bodyFont,
+    button_style_hint: buttonStyle,
+    hero_layout_hint: hero ? hero.layout_hint : '',
+    has_immersive_hero: !!(hero && hero.has_background_image),
+    has_multiple_grids: sectionPatterns.filter((item) => item.layout_hint === 'grid').length >= 2,
+  };
+}
+"""
+
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            context = browser.new_context(viewport={"width": 1440, "height": 1800}, device_scale_factor=1)
+            page = context.new_page()
+            page.goto(target_url, wait_until="domcontentloaded", timeout=25000)
+            try:
+                page.wait_for_load_state("networkidle", timeout=7000)
+            except Exception:
+                pass
+            rendered = page.evaluate(extractor_js) or {}
+            try:
+                shot = page.screenshot(type="jpeg", quality=45, full_page=False)
+            except Exception:
+                shot = b""
+            browser.close()
+    except Exception:
+        return {}
+
+    if not isinstance(rendered, dict):
+        return {}
+
+    section_patterns = _merge_reference_section_patterns([], rendered.get("section_patterns") or [], limit=10)
+    color_hints = _merge_reference_texts([], rendered.get("color_hints") or [], limit=6, item_limit=60)
+    layout_style_hint = "classic-stacked"
+    if rendered.get("has_immersive_hero"):
+        layout_style_hint = "hero-driven"
+    elif rendered.get("has_multiple_grids"):
+        layout_style_hint = "card-grid"
+    elif len(section_patterns) >= 4:
+        layout_style_hint = "modern-sections"
+
+    style_preset_hint = "bold-modern"
+    joined_colors = " ".join(color_hints).lower()
+    if any(token.startswith("rgb(0") or token.startswith("rgb(1") for token in color_hints):
+        style_preset_hint = "dark-premium"
+    elif any(token.startswith("rgb(24") or token.startswith("rgb(25") for token in color_hints):
+        style_preset_hint = "dark-premium"
+    elif "245" in joined_colors or "250" in joined_colors:
+        style_preset_hint = "clean-minimal"
+
+    design_traits = []
+    hero_pattern = next((item for item in section_patterns if item.get("category") == "hero"), None)
+    if hero_pattern:
+        if hero_pattern.get("layout_hint") == "immersive":
+            design_traits.append("Hero is image-led with overlaid copy instead of a plain text block.")
+        elif hero_pattern.get("layout_hint") == "split":
+            design_traits.append("Hero uses a split layout with copy paired beside media instead of stacked content.")
+    if any(item.get("layout_hint") == "grid" for item in section_patterns):
+        design_traits.append("Mid-page sections rely on card or grid groupings to keep services and proof scannable.")
+    if any(item.get("padding_y", 0) >= 120 for item in rendered.get("section_patterns") or []):
+        design_traits.append("Sections breathe with generous vertical spacing rather than tight stacked bands.")
+    button_style_hint = str(rendered.get("button_style_hint") or "").strip()
+    if button_style_hint:
+        design_traits.append(f"Primary CTAs read as {button_style_hint} buttons.")
+
+    result = {
+        "resolved_url": str(rendered.get("resolved_url") or target_url).strip(),
+        "section_count": int(rendered.get("section_count") or len(section_patterns) or 0),
+        "section_patterns": section_patterns,
+        "color_hints": color_hints,
+        "layout_style_hint": layout_style_hint,
+        "style_preset_hint": style_preset_hint,
+        "design_traits": _merge_reference_texts([], design_traits, limit=6),
+        "heading_font_hint": str(rendered.get("heading_font_hint") or "").strip()[:80],
+        "body_font_hint": str(rendered.get("body_font_hint") or "").strip()[:80],
+        "button_style_hint": button_style_hint[:60],
+        "hero_layout_hint": str(rendered.get("hero_layout_hint") or "").strip()[:60],
+    }
+    if shot:
+        data_url = "data:image/jpeg;base64," + base64.b64encode(shot).decode("ascii")
+        if len(data_url) <= 1_800_000:
+            result["screenshot_data_url"] = data_url
+    return result
+
+
+def _reference_design_vision_summary(brand, rendered_reference):
+    rendered = rendered_reference if isinstance(rendered_reference, dict) else {}
+    screenshot_data_url = str(rendered.get("screenshot_data_url") or "").strip()
+    if not screenshot_data_url:
+        return []
+
+    api_key = _get_openai_api_key(brand or {})
+    if not api_key:
+        return []
+
+    try:
+        import requests as req
+    except Exception:
+        return []
+
+    model = _pick_ai_model(brand or {}, "analysis") or "gpt-4o-mini"
+    payload = {
+        "model": model,
+        "temperature": 0.2,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You analyze website screenshots for layout and styling cues. Return valid JSON only. Do not use em dashes.",
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Analyze this website screenshot and return JSON with a single key `notes` containing 3 to 5 short strings. "
+                            "Focus on layout composition, spacing, hero treatment, card density, contrast, and CTA styling. "
+                            "Only mention traits that would help rebuild the design language, not the copy."
+                        ),
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": screenshot_data_url, "detail": "low"},
+                    },
+                ],
+            },
+        ],
+    }
+
+    try:
+        response = req.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=60,
+        )
+        if response.status_code >= 400:
+            return []
+        body = response.json() if hasattr(response, "json") else {}
+        content = ((((body or {}).get("choices") or [{}])[0].get("message") or {}).get("content") or "")
+        parsed = _extract_json_object_from_ai_text(content)
+    except Exception:
+        return []
+
+    notes = []
+    for item in (parsed.get("notes") or parsed.get("design_notes") or []):
+        text = re.sub(r"\s+", " ", str(item or "")).strip()
+        if text:
+            notes.append(text[:180])
+    return _merge_reference_texts([], notes, limit=5)
+
+
+def _site_builder_reference_style_brief(reference_url, reference_mode="vibe", industry="", business_name="", brand=None):
     raw_url = str(reference_url or "").strip()
     if not raw_url:
         return {}
@@ -6825,6 +7149,171 @@ def _site_builder_reference_style_brief(reference_url, reference_mode="vibe"):
 
         return patterns
 
+    def _industry_image_queries(industry_name):
+        text = str(industry_name or "").strip().lower()
+        base = {
+            "hero": "local service business team helping a homeowner",
+            "services": "home service technician working on site",
+            "about": "service business team portrait",
+            "gallery": "completed home service project",
+            "testimonials": "happy homeowner with service technician",
+            "contact": "service truck parked outside a home",
+            "cta": "homeowner calling a local service company",
+        }
+        if "plumb" in text:
+            return {
+                "hero": "plumber service van in driveway",
+                "services": "plumber repairing sink or drain",
+                "about": "plumbing team in uniform",
+                "gallery": "clean plumbing repair installation",
+                "testimonials": "happy homeowner with plumber",
+                "contact": "plumber at front door ready to help",
+                "cta": "plumber answering emergency service call",
+            }
+        if "hvac" in text or text in {"ac", "heating"}:
+            return {
+                "hero": "hvac technician at residential unit",
+                "services": "hvac technician servicing air conditioner",
+                "about": "hvac service team in branded uniforms",
+                "gallery": "clean hvac install in home",
+                "testimonials": "happy family with hvac technician",
+                "contact": "hvac van outside suburban home",
+                "cta": "homeowner scheduling hvac repair",
+            }
+        if "roof" in text:
+            return {
+                "hero": "roofing crew on residential roof",
+                "services": "roofer inspecting shingles",
+                "about": "roofing team with equipment",
+                "gallery": "completed roof replacement exterior",
+                "testimonials": "happy homeowner after roof repair",
+                "contact": "roofing truck and crew onsite",
+                "cta": "homeowner meeting roofing contractor",
+            }
+        if "landscap" in text or "lawn" in text:
+            return {
+                "hero": "landscaping crew at front yard",
+                "services": "landscaper trimming and planting",
+                "about": "landscaping team with equipment trailer",
+                "gallery": "finished landscaped backyard",
+                "testimonials": "happy homeowner in landscaped yard",
+                "contact": "landscaping truck outside home",
+                "cta": "homeowner planning yard project",
+            }
+        if "clean" in text or "janitor" in text:
+            return {
+                "hero": "professional cleaning team in modern home",
+                "services": "cleaner working in kitchen",
+                "about": "cleaning crew portrait",
+                "gallery": "freshly cleaned living room",
+                "testimonials": "happy homeowner after house cleaning",
+                "contact": "cleaning team arriving for appointment",
+                "cta": "customer booking cleaning service",
+            }
+        if "electric" in text:
+            return {
+                "hero": "electrician at residential panel",
+                "services": "electrician installing fixture",
+                "about": "electrician team portrait",
+                "gallery": "modern lighting installation",
+                "testimonials": "happy homeowner with electrician",
+                "contact": "electric service van outside house",
+                "cta": "electrician responding to service call",
+            }
+        return base
+
+    def _classify_reference_image(img, index):
+        section = img.find_parent(["section", "article", "header", "div"])
+        section_role = _classify_reference_section(section, index) if section else "gallery"
+        src = " ".join(
+            str(img.get(attr) or "")
+            for attr in ("src", "data-src", "data-lazy-src", "class", "id")
+        ).lower()
+        alt = _clean_text(img.get("alt") or img.get("title") or "", 160).lower()
+        text = f"{src} {alt}".strip()
+        if any(token in text for token in ("logo", "icon", "avatar", "badge", "favicon", "sprite")):
+            return ""
+        if section_role == "hero" or index == 0 or any(token in text for token in ("hero", "banner", "header")):
+            return "hero"
+        if "team" in text or "staff" in text or section_role == "about":
+            return "about"
+        if section_role == "testimonials" or any(token in text for token in ("testimonial", "review", "customer")):
+            return "testimonials"
+        if section_role == "services" or any(token in text for token in ("service", "repair", "install", "project")):
+            return "services"
+        if section_role == "contact" or any(token in text for token in ("contact", "truck", "van", "location")):
+            return "contact"
+        if section_role == "cta":
+            return "cta"
+        return "gallery"
+
+    def _stock_query_for_image(role, alt_text, industry_name, business_label):
+        queries = _industry_image_queries(industry_name)
+        descriptor = _clean_text(alt_text or "", 90).lower()
+        for token in re.split(r"[^a-z0-9]+", str(business_label or "").lower()):
+            if len(token) >= 3:
+                descriptor = re.sub(rf"\b{re.escape(token)}\b", " ", descriptor)
+        descriptor = re.sub(r"\s+", " ", descriptor).strip(" ,.-")
+        if len(descriptor.split()) >= 3 and not any(token in descriptor for token in ("logo", "icon", "banner")):
+            return descriptor
+        return queries.get(role) or queries["hero"]
+
+    def _stock_image_url(query, role, index):
+        size = "1600x900" if role in {"hero", "services", "about", "contact", "cta"} else "1200x900"
+        return f"https://source.unsplash.com/featured/{size}/?{quote_plus(query)}&sig={index + 1}"
+
+    def _extract_reference_image_assets(soup, base_url):
+        container = soup.find("main") or soup.body or soup
+        assets = []
+        seen = set()
+        for index, img in enumerate(container.find_all("img", limit=18)):
+            src = (
+                img.get("src")
+                or img.get("data-src")
+                or img.get("data-lazy-src")
+                or ((img.get("srcset") or "").split(",")[0].strip().split(" ")[0] if img.get("srcset") else "")
+            )
+            if not src:
+                continue
+            src = str(src).strip()
+            if not src or src.startswith("data:"):
+                continue
+            role = _classify_reference_image(img, index)
+            if not role:
+                continue
+            alt_text = _clean_text(img.get("alt") or img.get("title") or "", 140) or f"{role.title()} image"
+            query = _stock_query_for_image(role, alt_text, industry, business_name)
+            dedupe_key = (role, query.lower())
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            assets.append({
+                "role": role,
+                "alt": alt_text,
+                "reference_url": urljoin(base_url, src),
+                "asset_url": _stock_image_url(query, role, len(assets)),
+                "query": query[:120],
+            })
+            if len(assets) >= 6:
+                break
+
+        if assets:
+            return assets
+
+        fallback_roles = ("hero", "services", "about")
+        queries = _industry_image_queries(industry)
+        fallback = []
+        for index, role in enumerate(fallback_roles):
+            query = queries.get(role) or queries["hero"]
+            fallback.append({
+                "role": role,
+                "alt": f"{role.title()} stock image",
+                "reference_url": "",
+                "asset_url": _stock_image_url(query, role, index),
+                "query": query[:120],
+            })
+        return fallback
+
     try:
         resp = requests.get(
             normalized_url,
@@ -6869,6 +7358,19 @@ def _site_builder_reference_style_brief(reference_url, reference_mode="vibe"):
     style_preset_hint = _infer_style_preset(color_hints)
     section_count = len(soup.find_all("section"))
     section_patterns = _extract_section_patterns(soup)
+    image_assets = _extract_reference_image_assets(soup, resp.url or normalized_url)
+    rendered_reference = _extract_rendered_reference_design(resp.url or normalized_url)
+    color_hints = _merge_reference_texts(color_hints, rendered_reference.get("color_hints") or [], limit=6, item_limit=60)
+    section_patterns = _merge_reference_section_patterns(section_patterns, rendered_reference.get("section_patterns") or [], limit=10)
+    section_count = max(section_count, int(rendered_reference.get("section_count") or 0))
+    layout_style_hint = str(rendered_reference.get("layout_style_hint") or layout_style_hint).strip()
+    style_preset_hint = str(rendered_reference.get("style_preset_hint") or "").strip() or _infer_style_preset(color_hints)
+    design_traits = _merge_reference_texts([], rendered_reference.get("design_traits") or [], limit=6)
+    vision_notes = _reference_design_vision_summary(brand, rendered_reference)
+    heading_font_hint = str(rendered_reference.get("heading_font_hint") or "").strip()
+    body_font_hint = str(rendered_reference.get("body_font_hint") or "").strip()
+    button_style_hint = str(rendered_reference.get("button_style_hint") or "").strip()
+    hero_layout_hint = str(rendered_reference.get("hero_layout_hint") or "").strip()
 
     notes = []
     if nav_items:
@@ -6883,10 +7385,27 @@ def _site_builder_reference_style_brief(reference_url, reference_mode="vibe"):
         labels = [pattern.get("category") for pattern in section_patterns[:6] if pattern.get("category")]
         if labels:
             notes.append(f"Visible section sequence includes: {', '.join(labels)}.")
+    if image_assets:
+        image_roles = [asset.get("role") for asset in image_assets[:4] if asset.get("role")]
+        if image_roles:
+            notes.append(f"Visual rhythm uses {', '.join(image_roles)} imagery, recreated with stock replacements for this build.")
+    if button_style_hint:
+        notes.append(f"Primary CTA styling reads as {button_style_hint} buttons in the rendered page.")
+    if hero_layout_hint:
+        notes.append(f"Hero treatment feels {hero_layout_hint} in the rendered layout.")
+    notes.extend(design_traits[:2])
+    notes.extend(vision_notes[:2])
+    resolved_url = str(rendered_reference.get("resolved_url") or resp.url or normalized_url).strip()
+    try:
+        parsed_resolved = urlparse(resolved_url)
+        if parsed_resolved.scheme and parsed_resolved.netloc and (parsed_resolved.path or "") == "/" and not parsed_resolved.query and not parsed_resolved.fragment:
+            resolved_url = f"{parsed_resolved.scheme}://{parsed_resolved.netloc}"
+    except Exception:
+        pass
 
     return {
         "requested_url": raw_url,
-        "resolved_url": resp.url,
+        "resolved_url": resolved_url,
         "mode": _site_builder_reference_mode(reference_mode),
         "title": title,
         "description": meta_description,
@@ -6896,8 +7415,15 @@ def _site_builder_reference_style_brief(reference_url, reference_mode="vibe"):
         "color_hints": color_hints,
         "section_count": section_count,
         "section_patterns": section_patterns,
+        "image_assets": image_assets,
         "layout_style_hint": layout_style_hint,
         "style_preset_hint": style_preset_hint,
+        "design_traits": design_traits,
+        "vision_notes": vision_notes,
+        "heading_font_hint": heading_font_hint,
+        "body_font_hint": body_font_hint,
+        "button_style_hint": button_style_hint,
+        "hero_layout_hint": hero_layout_hint,
         "notes": notes,
     }
 
@@ -8470,6 +8996,48 @@ def _wp_connected(brand):
     )
 
 
+def _wp_auth_headers(brand, user_agent):
+    import base64
+
+    wp_user = (brand.get("wp_username") or "").strip()
+    wp_pass = (brand.get("wp_app_password") or "").strip()
+    token = base64.b64encode(f"{wp_user}:{wp_pass}".encode()).decode()
+    return {
+        "Authorization": f"Basic {token}",
+        "X-GM-Auth": f"Basic {token}",
+        "User-Agent": user_agent,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+
+def _delete_wp_page(brand, wp_page_id, force=True):
+    """Delete a published site-builder page from WordPress."""
+    import requests as req_lib
+
+    try:
+        page_id = int(wp_page_id or 0)
+    except (TypeError, ValueError):
+        page_id = 0
+    if not page_id:
+        return {"ok": True, "deleted": False}
+
+    wp_url = (brand.get("wp_site_url") or "").strip().rstrip("/")
+    api_url = f"{wp_url}/wp-json/wp/v2/pages/{page_id}"
+    headers = _wp_auth_headers(brand, "GroMore/1.0 (WordPress Site Builder Delete; +https://gromore.com)")
+    params = {"force": "true"} if force else None
+
+    try:
+        resp = req_lib.delete(api_url, headers=headers, params=params, timeout=30)
+        if resp.status_code in (200, 202, 204):
+            return {"ok": True, "deleted": True}
+        if resp.status_code in (404, 410):
+            return {"ok": True, "deleted": False}
+        return {"ok": False, "error": f"WordPress API error {resp.status_code}: {resp.text[:200]}"}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:200]}
+
+
 def _publish_to_wp(brand, title, content, excerpt="", slug="",
                     seo_title="", seo_description="", categories="",
                     tags="", featured_image_url="", status="publish"):
@@ -9520,6 +10088,9 @@ def client_site_builder_generate():
             intake["reference_site_brief"] = _site_builder_reference_style_brief(
                 intake.get("reference_url"),
                 intake.get("reference_mode"),
+                brand.get("industry"),
+                brand.get("display_name"),
+                brand=brand,
             )
         except Exception as exc:
             current_app.logger.warning("Reference site brief failed: %s", exc)
@@ -9566,7 +10137,7 @@ def client_site_builder_generate():
                 "label": page_spec["label"],
                 "slug": page_spec.get("slug", ""),
                 "title": content.get("title", ""),
-                "content": content.get("content", ""),
+                "content": assembled.get("body_html") or content.get("content", ""),
                 "excerpt": content.get("excerpt", ""),
                 "seo_title": content.get("seo_title", ""),
                 "seo_description": content.get("seo_description", ""),
@@ -9639,6 +10210,65 @@ def client_site_builder_review(build_id):
         builder_primary_color=brand_primary_color,
         builder_accent_color=brand_accent_color,
     )
+
+
+@client_bp.route("/site-builder/<int:build_id>/delete", methods=["POST"])
+@client_login_required
+def client_site_builder_delete(build_id):
+    """Delete a site build and its published WordPress pages."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    wants_json = request.is_json or request.headers.get("X-Requested-With") in {"XMLHttpRequest", "PJAX"}
+
+    build = db.get_site_build(build_id)
+    if not build or build["brand_id"] != brand_id:
+        if wants_json:
+            return jsonify(ok=False, error="Build not found."), 404
+        flash("Site build not found.", "warning")
+        return redirect(url_for("client.client_site_builder"))
+
+    brand = db.get_brand(brand_id) or {}
+    pages = db.get_site_pages(build_id)
+    published_pages = [page for page in pages if int(page.get("wp_page_id") or 0)]
+
+    if published_pages and not _wp_connected(brand):
+        msg = "Reconnect WordPress before deleting this build so the published pages can be removed from WordPress too."
+        if wants_json:
+            return jsonify(ok=False, error=msg), 400
+        flash(msg, "error")
+        return redirect(url_for("client.client_site_builder_review", build_id=build_id))
+
+    deleted_wp_pages = 0
+    errors = []
+    for page in published_pages:
+        result = _delete_wp_page(brand, page.get("wp_page_id"))
+        if result.get("ok"):
+            if result.get("deleted"):
+                deleted_wp_pages += 1
+            continue
+        errors.append(f"{page.get('label') or page.get('title') or 'Page'}: {result.get('error', 'WordPress delete failed')}")
+
+    if errors:
+        if wants_json:
+            return jsonify(ok=False, error="Failed to delete one or more WordPress pages.", errors=errors), 502
+        flash(errors[0], "error")
+        return redirect(url_for("client.client_site_builder_review", build_id=build_id))
+
+    deleted = db.delete_site_build(build_id, brand_id=brand_id)
+    if not deleted:
+        if wants_json:
+            return jsonify(ok=False, error="Build not found."), 404
+        flash("Site build not found.", "warning")
+        return redirect(url_for("client.client_site_builder"))
+
+    message = f"Deleted build #{build_id}."
+    if deleted_wp_pages:
+        message += f" Removed {deleted_wp_pages} WordPress page(s)."
+
+    if wants_json:
+        return jsonify(ok=True, deleted_build_id=build_id, deleted_wordpress_pages=deleted_wp_pages)
+    flash(message, "success")
+    return redirect(url_for("client.client_site_builder"))
 
 
 @client_bp.route("/site-builder/<int:build_id>/publish", methods=["POST"])

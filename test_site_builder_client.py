@@ -14,7 +14,7 @@ import io
 import uuid
 import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -540,6 +540,98 @@ class SiteBuilderPublishTests(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Delete Route Tests
+# ---------------------------------------------------------------------------
+
+class SiteBuilderDeleteTests(unittest.TestCase):
+    """Test deleting stored site-builder drafts and synced WordPress pages."""
+
+    def setUp(self):
+        self.app, self._db_file = _make_test_app()
+        self.client = self.app.test_client()
+
+    def tearDown(self):
+        _cleanup_db(self._db_file)
+
+    def test_delete_unpublished_build_removes_local_records(self):
+        brand_id, _ = _login_client(self.client, self.app)
+        db = self.app.db
+        build_id = db.create_site_build(brand_id, [{"page_type": "home"}])
+        db.save_site_page({
+            "build_id": build_id,
+            "brand_id": brand_id,
+            "page_type": "home",
+            "label": "Home",
+            "title": "Home",
+            "content": "<p>Draft</p>",
+        })
+
+        resp = self.client.post(
+            f"/client/site-builder/{build_id}/delete",
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["ok"])
+        self.assertIsNone(db.get_site_build(build_id))
+        self.assertEqual(db.get_site_pages(build_id), [])
+
+    @patch("webapp.client_portal._delete_wp_page")
+    def test_delete_build_removes_wordpress_pages_first(self, mock_delete_wp_page):
+        mock_delete_wp_page.return_value = {"ok": True, "deleted": True}
+
+        brand_id, _ = _login_client(self.client, self.app)
+        db = self.app.db
+        build_id = db.create_site_build(brand_id, [{"page_type": "about"}])
+        page_id = db.save_site_page({
+            "build_id": build_id,
+            "brand_id": brand_id,
+            "page_type": "about",
+            "label": "About",
+            "title": "About",
+            "content": "<p>Published</p>",
+        })
+        db.update_site_page_wp(page_id, 77, "https://aceplumbing.com/about/")
+
+        resp = self.client.post(
+            f"/client/site-builder/{build_id}/delete",
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["deleted_wordpress_pages"], 1)
+        mock_delete_wp_page.assert_called_once()
+        self.assertIsNone(db.get_site_build(build_id))
+
+    def test_delete_published_build_requires_wordpress_connection(self):
+        brand_id, _ = _login_client_no_wp(self.client, self.app)
+        db = self.app.db
+        build_id = db.create_site_build(brand_id, [{"page_type": "about"}])
+        page_id = db.save_site_page({
+            "build_id": build_id,
+            "brand_id": brand_id,
+            "page_type": "about",
+            "label": "About",
+            "title": "About",
+            "content": "<p>Published</p>",
+        })
+        db.update_site_page_wp(page_id, 88, "https://example.com/about/")
+
+        resp = self.client.post(
+            f"/client/site-builder/{build_id}/delete",
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+
+        self.assertEqual(resp.status_code, 400)
+        data = resp.get_json()
+        self.assertFalse(data["ok"])
+        self.assertIn("Reconnect WordPress", data["error"])
+
+
+# ---------------------------------------------------------------------------
 # Page Editor Route Tests
 # ---------------------------------------------------------------------------
 
@@ -917,6 +1009,7 @@ class SiteBuilderReferenceExtractionTests(unittest.TestCase):
               <section class="hero split-layout">
                 <h1>Fast Plumbing Help</h1>
                 <p>Emergency help and same-day service.</p>
+                                <img src="/images/hero-plumber.jpg" alt="Plumber service van in driveway">
                 <a href="/quote">Get Quote</a>
               </section>
               <section class="services-grid">
@@ -924,6 +1017,7 @@ class SiteBuilderReferenceExtractionTests(unittest.TestCase):
                 <div>Drain Cleaning</div>
                 <div>Water Heater Repair</div>
                 <div>Sewer Line Replacement</div>
+                                <img src="https://example.com/images/sink-repair.jpg" alt="Technician repairing kitchen sink">
               </section>
               <section class="trust testimonials">
                 <h2>Why Customers Stay</h2>
@@ -957,6 +1051,64 @@ class SiteBuilderReferenceExtractionTests(unittest.TestCase):
         self.assertIn("services", categories)
         self.assertIn("testimonials", categories)
         self.assertIn("cta", categories)
+        self.assertTrue(brief["image_assets"])
+        roles = [item["role"] for item in brief["image_assets"]]
+        self.assertIn("hero", roles)
+        self.assertIn("services", roles)
+        self.assertTrue(all(item["asset_url"].startswith("https://source.unsplash.com/") for item in brief["image_assets"]))
+
+    def test_reference_style_brief_merges_rendered_and_vision_design_cues(self):
+        from webapp.client_portal import _site_builder_reference_style_brief
+
+        html_doc = """
+        <html>
+          <head><title>Example Plumbing</title></head>
+          <body>
+            <main>
+              <section><h1>Fast Plumbing Help</h1><a href="/quote">Get Quote</a></section>
+            </main>
+          </body>
+        </html>
+        """
+
+        class _Resp:
+            status_code = 200
+            url = "https://example.com"
+            text = html_doc
+
+            def raise_for_status(self):
+                return None
+
+        rendered = {
+            "resolved_url": "https://example.com/home",
+            "section_count": 5,
+            "layout_style_hint": "hero-driven",
+            "style_preset_hint": "dark-premium",
+            "heading_font_hint": "Oswald, sans-serif",
+            "body_font_hint": "Lato, sans-serif",
+            "button_style_hint": "solid pill",
+            "hero_layout_hint": "immersive",
+            "color_hints": ["rgb(17, 24, 39)"],
+            "design_traits": ["Hero is image-led with overlaid copy instead of a plain text block."],
+            "section_patterns": [
+                {"category": "hero", "heading": "Fast Plumbing Help", "summary": "Fast Plumbing Help", "layout_hint": "immersive", "item_count": 2, "cta_texts": ["Get Quote"]},
+                {"category": "services", "heading": "Our Services", "summary": "Our Services", "layout_hint": "grid", "item_count": 3, "cta_texts": []},
+            ],
+        }
+
+        with patch("requests.get", return_value=_Resp()), \
+             patch("webapp.client_portal._extract_rendered_reference_design", return_value=rendered), \
+             patch("webapp.client_portal._reference_design_vision_summary", return_value=["The screenshot uses wide spacing and strong contrast in the hero."]):
+            brief = _site_builder_reference_style_brief("https://example.com", "layout")
+
+        self.assertEqual(brief["resolved_url"], "https://example.com/home")
+        self.assertEqual(brief["layout_style_hint"], "hero-driven")
+        self.assertEqual(brief["style_preset_hint"], "dark-premium")
+        self.assertEqual(brief["heading_font_hint"], "Oswald, sans-serif")
+        self.assertEqual(brief["button_style_hint"], "solid pill")
+        self.assertTrue(brief["design_traits"])
+        self.assertTrue(brief["vision_notes"])
+        self.assertIn("services", [item["category"] for item in brief["section_patterns"]])
 
 
 # ---------------------------------------------------------------------------
@@ -1096,7 +1248,7 @@ class SiteBuilderGenerateWithIntakeTests(unittest.TestCase):
         self.assertEqual(intake["reference_url"], "https://example.com")
         self.assertEqual(intake["reference_mode"], "layout")
         self.assertEqual(intake["reference_site_brief"]["layout_style_hint"], "modern-sections")
-        mock_reference_brief.assert_called_once_with("https://example.com", "layout")
+        mock_reference_brief.assert_called_once_with("https://example.com", "layout", "plumbing", "Ace Plumbing", brand=ANY)
 
     @patch("webapp.client_portal._get_openai_api_key", return_value="test-key")
     @patch("webapp.client_portal._pick_ai_model", return_value="gpt-4o-mini")

@@ -166,7 +166,12 @@ def build_brand_context(brand, intake=None, builder_theme=None, builder_template
         "reference_url": str(intake.get("reference_url") or "").strip(),
         "reference_mode": str(intake.get("reference_mode") or reference_site_brief.get("mode") or "vibe").strip(),
         "reference_site_brief": reference_site_brief,
-        "button_style": (builder_theme.get("button_style") or "").strip(),
+        "button_style": (
+            intake.get("button_style")
+            or (builder_theme.get("button_style") or "")
+            or reference_site_brief.get("button_style_hint")
+            or ""
+        ).strip(),
         "custom_css": (builder_theme.get("custom_css") or "").strip(),
         "color_secondary": theme_secondary,
         "color_text": theme_text,
@@ -191,8 +196,20 @@ def build_brand_context(brand, intake=None, builder_theme=None, builder_template
     ctx["color_accent"] = (intake.get("color_accent") or brand_accent or "").strip()
     ctx["color_dark"] = (intake.get("color_dark") or "").strip()
     ctx["color_light"] = (intake.get("color_light") or "").strip()
-    ctx["font_heading"] = (intake.get("font_heading") or (brand.get("font_heading") or "") or (builder_theme.get("font_heading") or "")).strip()
-    ctx["font_body"] = (intake.get("font_body") or (brand.get("font_body") or "") or (builder_theme.get("font_body") or "")).strip()
+    ctx["font_heading"] = (
+        intake.get("font_heading")
+        or (brand.get("font_heading") or "")
+        or (builder_theme.get("font_heading") or "")
+        or reference_site_brief.get("heading_font_hint")
+        or ""
+    ).strip()
+    ctx["font_body"] = (
+        intake.get("font_body")
+        or (brand.get("font_body") or "")
+        or (builder_theme.get("font_body") or "")
+        or reference_site_brief.get("body_font_hint")
+        or ""
+    ).strip()
     ctx["style_preset"] = (intake.get("style_preset") or reference_site_brief.get("style_preset_hint") or "").strip()
     return ctx
 
@@ -302,11 +319,15 @@ def _normalize_reference_site_brief(raw_brief):
         "description",
         "layout_style_hint",
         "style_preset_hint",
+        "heading_font_hint",
+        "body_font_hint",
+        "button_style_hint",
+        "hero_layout_hint",
         "error",
     ):
         normalized[key] = str(raw_brief.get(key) or "").strip()
 
-    for key in ("nav_items", "headings", "cta_texts", "color_hints", "notes"):
+    for key in ("nav_items", "headings", "cta_texts", "color_hints", "notes", "design_traits", "vision_notes"):
         values = []
         for item in raw_brief.get(key) or []:
             text = str(item or "").strip()
@@ -334,6 +355,23 @@ def _normalize_reference_site_brief(raw_brief):
         if len(patterns) >= 10:
             break
     normalized["section_patterns"] = patterns
+
+    image_assets = []
+    for item in raw_brief.get("image_assets") or []:
+        if not isinstance(item, dict):
+            continue
+        asset = {
+            "role": str(item.get("role") or "gallery").strip()[:40],
+            "alt": str(item.get("alt") or "").strip()[:160],
+            "asset_url": str(item.get("asset_url") or "").strip()[:300],
+            "reference_url": str(item.get("reference_url") or "").strip()[:300],
+            "query": str(item.get("query") or "").strip()[:140],
+        }
+        if asset["asset_url"]:
+            image_assets.append(asset)
+        if len(image_assets) >= 8:
+            break
+    normalized["image_assets"] = image_assets
 
     try:
         normalized["section_count"] = int(raw_brief.get("section_count") or 0)
@@ -451,6 +489,14 @@ def _reference_site_block(ctx):
         parts.append(f"- CTA language cues: {', '.join(brief['cta_texts'][:4])}")
     if brief.get("color_hints"):
         parts.append(f"- Reference color mood cues: {', '.join(brief['color_hints'][:4])}")
+    if brief.get("heading_font_hint"):
+        parts.append(f"- Heading font vibe from the rendered page: {brief['heading_font_hint']}")
+    if brief.get("body_font_hint"):
+        parts.append(f"- Body font vibe from the rendered page: {brief['body_font_hint']}")
+    if brief.get("button_style_hint"):
+        parts.append(f"- Button treatment cue: {brief['button_style_hint']}")
+    if brief.get("hero_layout_hint"):
+        parts.append(f"- Hero composition cue: {brief['hero_layout_hint']}")
     if brief.get("section_count"):
         parts.append(f"- Approximate section count on the reference page: {brief['section_count']}")
     if brief.get("section_patterns"):
@@ -463,6 +509,21 @@ def _reference_site_block(ctx):
             if pattern.get("cta_texts"):
                 line += f" | CTA cues: {', '.join(pattern['cta_texts'][:2])}"
             parts.append(line)
+    if brief.get("image_assets"):
+        parts.append("- Approved replacement imagery to use instead of copying the source site's images:")
+        for asset in brief.get("image_assets")[:4]:
+            role = asset.get("role") or "gallery"
+            alt = asset.get("alt") or "Reference-inspired stock image"
+            query = asset.get("query") or alt
+            parts.append(f"  - {role}: {alt} | use {asset.get('asset_url')} | stock query: {query}")
+    if brief.get("design_traits"):
+        parts.append("- Rendered design traits to preserve:")
+        for trait in brief.get("design_traits")[:4]:
+            parts.append(f"  - {trait}")
+    if brief.get("vision_notes"):
+        parts.append("- Screenshot-level composition cues:")
+        for note in brief.get("vision_notes")[:4]:
+            parts.append(f"  - {note}")
     for note in (brief.get("notes") or [])[:3]:
         parts.append(f"- {note}")
     parts.append("- Recreate the structural feel using this business's own brand colors, tone, offers, SEO targets, and approved assets.")
@@ -592,6 +653,84 @@ def _template_style_tag(*templates):
     if not css_parts:
         return ""
     return "<style>\n" + "\n\n".join(css_parts) + "\n</style>"
+
+
+def _reference_image_assets_for_page(page_spec, brand_ctx):
+    brief = brand_ctx.get("reference_site_brief") or {}
+    assets = [asset for asset in (brief.get("image_assets") or []) if asset.get("asset_url")]
+    if not assets:
+        return []
+
+    page_type = page_spec.get("page_type") or ""
+    preferred_roles = {
+        "home": ("hero", "services", "testimonials", "gallery", "cta"),
+        "landing_page": ("hero", "cta", "services", "gallery"),
+        "about": ("about", "hero", "gallery", "testimonials"),
+        "services": ("services", "hero", "gallery", "cta"),
+        "service_detail": ("services", "gallery", "hero", "cta"),
+        "service_area": ("hero", "services", "gallery", "cta"),
+        "testimonials": ("testimonials", "gallery", "hero"),
+        "contact": ("contact", "hero", "cta"),
+        "faq": ("hero", "services", "gallery"),
+        "custom": ("hero", "services", "gallery"),
+    }.get(page_type, ("hero", "services", "gallery", "about", "cta"))
+
+    ordered = []
+    seen = set()
+    for role in preferred_roles:
+        for asset in assets:
+            key = asset.get("asset_url")
+            if asset.get("role") == role and key and key not in seen:
+                ordered.append(asset)
+                seen.add(key)
+    for asset in assets:
+        key = asset.get("asset_url")
+        if key and key not in seen:
+            ordered.append(asset)
+            seen.add(key)
+    return ordered[:3]
+
+
+def _inject_reference_images(body_html, page_spec, brand_ctx):
+    html = str(body_html or "").strip()
+    if not html:
+        return html
+    if re.search(r"<(img|picture)\b", html, re.I) or "background-image" in html.lower():
+        return html
+
+    assets = _reference_image_assets_for_page(page_spec, brand_ctx)
+    if not assets:
+        return html
+
+    hero_asset = assets[0]
+    hero_html = (
+        '<figure class="sb-reference-image sb-reference-image-hero" '
+        'style="margin:0 0 2rem;">'
+        f'<img src="{hero_asset["asset_url"]}" alt="{hero_asset.get("alt") or "Reference-inspired stock image"}" '
+        'loading="lazy" referrerpolicy="no-referrer" '
+        'style="display:block;width:100%;max-height:560px;object-fit:cover;border-radius:24px;box-shadow:0 24px 60px rgba(15,23,42,.16);">'
+        '</figure>'
+    )
+
+    gallery_html = ""
+    if len(assets) > 1:
+        cards = []
+        for asset in assets[1:3]:
+            cards.append(
+                '<figure class="sb-reference-image-card" style="margin:0;">'
+                f'<img src="{asset["asset_url"]}" alt="{asset.get("alt") or "Reference-inspired stock image"}" '
+                'loading="lazy" referrerpolicy="no-referrer" '
+                'style="display:block;width:100%;height:260px;object-fit:cover;border-radius:18px;box-shadow:0 18px 40px rgba(15,23,42,.12);">'
+                '</figure>'
+            )
+        gallery_html = (
+            '<section class="sb-reference-gallery" '
+            'style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin:2rem 0;">'
+            + "".join(cards)
+            + '</section>'
+        )
+
+    return "\n".join(part for part in (hero_html, html, gallery_html) if part)
 
 
 def _quote_tool_block(ctx):
@@ -1902,7 +2041,7 @@ def assemble_page(page_spec, brand_ctx, content):
         for s in schemas
     )
 
-    body_html = content.get("content") or ""
+    body_html = _inject_reference_images(content.get("content") or "", page_spec, brand_ctx)
     page_type = page_spec.get("page_type") or ""
     theme_style = _theme_style_tag(brand_ctx)
     template_style = ""
@@ -1936,6 +2075,7 @@ def assemble_page(page_spec, brand_ctx, content):
     return {
         "page_spec": page_spec,
         "content": content,
+        "body_html": body_html,
         "schemas": schemas,
         "schema_html": schema_html,
         "full_html": full_html,

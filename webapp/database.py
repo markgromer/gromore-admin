@@ -5480,6 +5480,20 @@ class WebDB:
             result.append(item)
         return result
 
+    def delete_site_build(self, build_id, brand_id=None):
+        conn = self._conn()
+        if brand_id is None:
+            cur = conn.execute("DELETE FROM site_builds WHERE id = ?", (build_id,))
+        else:
+            cur = conn.execute(
+                "DELETE FROM site_builds WHERE id = ? AND brand_id = ?",
+                (build_id, brand_id),
+            )
+        conn.commit()
+        deleted = cur.rowcount or 0
+        conn.close()
+        return deleted > 0
+
     def update_site_build_status(self, build_id, status, pages_completed=None, error_message=None):
         conn = self._conn()
         sets = ["status = ?"]

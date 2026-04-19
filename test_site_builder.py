@@ -249,6 +249,10 @@ class PromptTests(unittest.TestCase):
                     "description": "A clean local-service homepage with strong social proof and a clear estimate CTA.",
                     "layout_style_hint": "modern-sections",
                     "style_preset_hint": "clean-minimal",
+                    "heading_font_hint": "Oswald, sans-serif",
+                    "body_font_hint": "Lato, sans-serif",
+                    "button_style_hint": "solid pill",
+                    "hero_layout_hint": "split",
                     "nav_items": ["Home", "Services", "About", "Contact"],
                     "headings": ["Fast Service", "Why Choose Us", "Recent Work"],
                     "cta_texts": ["Get Estimate", "Call Now"],
@@ -258,6 +262,17 @@ class PromptTests(unittest.TestCase):
                         {"category": "hero", "heading": "Fast Service", "summary": "Fast Service", "layout_hint": "split", "cta_texts": ["Get Estimate"]},
                         {"category": "services", "heading": "Our Services", "summary": "Our Services", "layout_hint": "grid", "cta_texts": []},
                         {"category": "testimonials", "heading": "Why Customers Stay", "summary": "Why Customers Stay", "layout_hint": "stacked", "cta_texts": []},
+                    ],
+                    "image_assets": [
+                        {"role": "hero", "alt": "Plumber service van in driveway", "asset_url": "https://source.unsplash.com/featured/1600x900/?plumber&sig=1", "query": "plumber service van in driveway"},
+                        {"role": "services", "alt": "Plumber repairing sink", "asset_url": "https://source.unsplash.com/featured/1600x900/?sink-repair&sig=2", "query": "plumber repairing sink"},
+                    ],
+                    "design_traits": [
+                        "Hero uses a split layout with copy paired beside media instead of stacked content.",
+                        "Mid-page sections rely on card or grid groupings to keep services and proof scannable.",
+                    ],
+                    "vision_notes": [
+                        "The page uses generous spacing between section bands so cards do not feel crowded.",
                     ],
                     "notes": ["Top navigation uses a visible CTA button."]
                 },
@@ -273,6 +288,12 @@ class PromptTests(unittest.TestCase):
         self.assertIn("Navigation pattern: Home, Services, About, Contact", user_msg)
         self.assertIn("Reference section patterns to echo in the new build", user_msg)
         self.assertIn("hero: Fast Service [split] | CTA cues: Get Estimate", user_msg)
+        self.assertIn("Approved replacement imagery to use instead of copying the source site's images", user_msg)
+        self.assertIn("https://source.unsplash.com/featured/1600x900/?plumber&sig=1", user_msg)
+        self.assertIn("Heading font vibe from the rendered page: Oswald, sans-serif", user_msg)
+        self.assertIn("Button treatment cue: solid pill", user_msg)
+        self.assertIn("Rendered design traits to preserve", user_msg)
+        self.assertIn("Screenshot-level composition cues", user_msg)
         self.assertIn("do not copy text, logos, brand names, or images", user_msg)
 
     def test_brand_context_uses_reference_style_fallbacks(self):
@@ -502,6 +523,27 @@ class AssemblyTests(unittest.TestCase):
         self.assertNotIn("<header>", result["full_html"])
         self.assertNotIn("<footer>", result["full_html"])
         self.assertIn("<main><p>Landing</p></main>", result["full_html"])
+
+    def test_assemble_injects_reference_images_when_content_has_none(self):
+        ctx = build_brand_context(
+            _BRAND,
+            intake={
+                "reference_site_brief": {
+                    "image_assets": [
+                        {"role": "hero", "alt": "Plumber service van in driveway", "asset_url": "https://source.unsplash.com/featured/1600x900/?plumber&sig=1"},
+                        {"role": "services", "alt": "Plumber repairing kitchen sink", "asset_url": "https://source.unsplash.com/featured/1600x900/?sink-repair&sig=2"},
+                    ]
+                }
+            },
+        )
+        page_spec = {"page_type": "home", "slug": "", "schema_types": []}
+        content = {"title": "Home", "content": "<main><p>Plain copy only</p></main>", "faq_items": [], "schema_hints": {}}
+
+        result = assemble_page(page_spec, ctx, content)
+
+        self.assertIn("sb-reference-image-hero", result["body_html"])
+        self.assertIn("https://source.unsplash.com/featured/1600x900/?plumber&sig=1", result["body_html"])
+        self.assertIn("https://source.unsplash.com/featured/1600x900/?sink-repair&sig=2", result["full_html"])
 
 
 class DatabaseSiteBuilderTests(unittest.TestCase):
