@@ -565,6 +565,42 @@ class AssemblyTests(unittest.TestCase):
         self.assertIn("https://source.unsplash.com/featured/1600x900/?plumber&sig=1", result["body_html"])
         self.assertIn("https://source.unsplash.com/featured/1600x900/?sink-repair&sig=2", result["full_html"])
 
+    def test_assemble_injects_intake_images_ahead_of_reference_images(self):
+        ctx = build_brand_context(
+            _BRAND,
+            intake={
+                "image_slots": {
+                    "hero_desktop": {
+                        "label": "Homepage hero image - desktop",
+                        "note": "Use the branded truck parked at the curb.",
+                        "use_stock": True,
+                        "stock_url": "https://example.com/hero-stock.jpg",
+                        "assets": [],
+                    },
+                    "about_team": {
+                        "label": "About / team image",
+                        "note": "Show the owner with the crew.",
+                        "use_stock": False,
+                        "assets": [{"url": "https://example.com/team-upload.jpg", "original_name": "team.jpg"}],
+                    },
+                },
+                "reference_site_brief": {
+                    "image_assets": [
+                        {"role": "hero", "alt": "Reference hero", "asset_url": "https://example.com/reference-hero.jpg"},
+                    ]
+                },
+            },
+        )
+        page_spec = {"page_type": "home", "slug": "", "schema_types": []}
+        content = {"title": "Home", "content": "<main><p>Plain copy only</p></main>", "faq_items": [], "schema_hints": {}}
+
+        result = assemble_page(page_spec, ctx, content)
+
+        self.assertIn("sb-intake-image-hero", result["body_html"])
+        self.assertIn("https://example.com/hero-stock.jpg", result["body_html"])
+        self.assertIn("https://example.com/team-upload.jpg", result["full_html"])
+        self.assertNotIn("https://example.com/reference-hero.jpg", result["full_html"])
+
 
 class DatabaseSiteBuilderTests(unittest.TestCase):
     """Test database operations for site builds and pages."""

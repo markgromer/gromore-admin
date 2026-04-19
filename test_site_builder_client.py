@@ -186,6 +186,7 @@ class SiteBuilderLandingTests(unittest.TestCase):
         self.assertIn(b"siteBuilderGoogleFonts", resp.data)
         self.assertIn(b"name=\"wireframe_style\"", resp.data)
         self.assertIn(b"hero_desktop_use_stock", resp.data)
+        self.assertIn(b"wireframe-preview", resp.data)
 
 
 class BrandProfileDesignTests(unittest.TestCase):

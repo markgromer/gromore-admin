@@ -790,6 +790,104 @@ def _inject_reference_images(body_html, page_spec, brand_ctx):
     return "\n".join(part for part in (hero_html, html, gallery_html) if part)
 
 
+def _intake_image_assets_for_page(page_spec, brand_ctx):
+    slots = brand_ctx.get("image_slots") or {}
+    if not isinstance(slots, dict):
+        return []
+
+    page_type = page_spec.get("page_type") or ""
+    preferred_slots = {
+        "home": ("hero_desktop", "hero_mobile", "services_overview", "proof_image", "about_team", "gallery_images", "contact_location"),
+        "landing_page": ("hero_desktop", "hero_mobile", "proof_image", "about_team", "gallery_images"),
+        "about": ("about_team", "gallery_images", "proof_image", "hero_desktop"),
+        "services": ("services_overview", "proof_image", "gallery_images", "hero_desktop"),
+        "service_detail": ("services_overview", "proof_image", "gallery_images", "hero_desktop"),
+        "service_area": ("contact_location", "hero_desktop", "gallery_images"),
+        "contact": ("contact_location", "hero_desktop", "gallery_images"),
+        "testimonials": ("proof_image", "gallery_images", "hero_desktop"),
+        "faq": ("hero_desktop", "services_overview", "gallery_images"),
+        "custom": ("hero_desktop", "gallery_images", "proof_image", "about_team"),
+    }.get(page_type, ("hero_desktop", "gallery_images", "proof_image", "about_team"))
+
+    assets = []
+    seen = set()
+    for slot_key in preferred_slots:
+        slot = slots.get(slot_key) or {}
+        if not isinstance(slot, dict):
+            continue
+        label = slot.get("label") or slot_key.replace("_", " ").title()
+        note = str(slot.get("note") or "").strip()
+        slot_assets = slot.get("assets") or []
+        for asset in slot_assets:
+            url = str(asset.get("url") or "").strip()
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            assets.append({
+                "asset_url": url,
+                "alt": note or label,
+                "role": slot_key,
+                "source": "upload",
+            })
+        stock_url = str(slot.get("stock_url") or "").strip()
+        if stock_url and stock_url not in seen:
+            seen.add(stock_url)
+            assets.append({
+                "asset_url": stock_url,
+                "alt": note or label,
+                "role": slot_key,
+                "source": "stock",
+            })
+    return assets
+
+
+def _inject_intake_images(body_html, page_spec, brand_ctx):
+    html = str(body_html or "").strip()
+    assets = _intake_image_assets_for_page(page_spec, brand_ctx)
+    if not assets:
+        return html
+
+    existing_sources = set(re.findall(r'src=["\']([^"\']+)["\']', html, re.I))
+    assets = [asset for asset in assets if asset.get("asset_url") not in existing_sources]
+    if not assets:
+        return html
+
+    hero_asset = assets[0]
+    hero_html = (
+        '<figure class="sb-intake-image sb-intake-image-hero" '
+        'style="margin:0 0 2rem;">'
+        f'<img src="{hero_asset["asset_url"]}" alt="{hero_asset.get("alt") or "Brand image"}" '
+        'loading="lazy" '
+        'style="display:block;width:100%;max-height:560px;object-fit:cover;border-radius:24px;box-shadow:0 24px 60px rgba(15,23,42,.16);">'
+        '</figure>'
+    )
+
+    gallery_html = ""
+    if len(assets) > 1:
+        cards = []
+        for asset in assets[1:4]:
+            cards.append(
+                '<figure class="sb-intake-image-card" style="margin:0;">'
+                f'<img src="{asset["asset_url"]}" alt="{asset.get("alt") or "Brand image"}" '
+                'loading="lazy" '
+                'style="display:block;width:100%;height:260px;object-fit:cover;border-radius:18px;box-shadow:0 18px 40px rgba(15,23,42,.12);">'
+                '</figure>'
+            )
+        gallery_html = (
+            '<section class="sb-intake-gallery" '
+            'style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin:2rem 0;">'
+            + "".join(cards)
+            + '</section>'
+        )
+
+    return "\n".join(part for part in (hero_html, html, gallery_html) if part)
+
+
+def _inject_builder_images(body_html, page_spec, brand_ctx):
+    html = _inject_intake_images(body_html, page_spec, brand_ctx)
+    return _inject_reference_images(html, page_spec, brand_ctx)
+
+
 def _quote_tool_block(ctx):
     source = ctx.get("quote_tool_source") or ""
     embed = ctx.get("quote_tool_embed") or ""
@@ -2143,7 +2241,7 @@ def assemble_page(page_spec, brand_ctx, content):
         for s in schemas
     )
 
-    body_html = _inject_reference_images(content.get("content") or "", page_spec, brand_ctx)
+    body_html = _inject_builder_images(content.get("content") or "", page_spec, brand_ctx)
     page_type = page_spec.get("page_type") or ""
     theme_style = _theme_style_tag(brand_ctx)
     template_style = ""

@@ -161,6 +161,53 @@
         background: #eef2ff; border-color: #818cf8;
     }
     .page-select-chip:has(input:checked) span { color: #4338ca; font-weight: 600; }
+    .wireframe-card {
+        display: block;
+        border-radius: 16px;
+        overflow: hidden;
+    }
+    .wireframe-card-body {
+        display: block;
+        padding: 0;
+    }
+    .wireframe-preview {
+        height: 132px;
+        padding: 14px;
+        background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+        border-bottom: 1px solid rgba(129, 140, 248, .18);
+        display: grid;
+        gap: 8px;
+    }
+    .wireframe-row {
+        display: grid;
+        gap: 8px;
+    }
+    .wireframe-row.two-col {
+        grid-template-columns: 1.2fr .8fr;
+    }
+    .wireframe-row.three-col {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    .wireframe-block {
+        border-radius: 10px;
+        background: rgba(255,255,255,.96);
+        border: 1px solid rgba(148, 163, 184, .22);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.7);
+    }
+    .wireframe-block.hero { min-height: 38px; }
+    .wireframe-block.tall { min-height: 54px; }
+    .wireframe-block.medium { min-height: 34px; }
+    .wireframe-block.short { min-height: 18px; }
+    .wireframe-labels {
+        padding: .95rem 1rem 1rem;
+    }
+    .wireframe-copy {
+        display: block;
+        font-size: .78rem;
+        line-height: 1.45;
+        opacity: .84;
+        margin-top: .25rem;
+    }
 
     /* Landing page cards */
     .lp-card {
@@ -2871,29 +2918,70 @@
                     <label class="form-label fw-semibold" style="font-size:.85rem;">Wireframe Direction</label>
                     <div class="row g-2">
                         <div class="col-md-4">
-                            <label class="page-select-chip d-block h-100" style="padding:0;">
+                            <label class="page-select-chip wireframe-card d-block h-100" style="padding:0;">
                                 <input type="radio" name="wireframe_style" value="conversion" checked style="display:none;">
-                                <span style="display:block; padding:.95rem 1rem;">
-                                    <strong class="d-block mb-1">Conversion First</strong>
-                                    <span style="font-size:.78rem; opacity:.82;">Hero, proof, offer stack, FAQ, hard CTA repetition.</span>
+                                <span class="wireframe-card-body">
+                                    <span class="wireframe-preview">
+                                        <span class="wireframe-block hero"></span>
+                                        <span class="wireframe-row two-col">
+                                            <span class="wireframe-block tall"></span>
+                                            <span class="wireframe-block tall"></span>
+                                        </span>
+                                        <span class="wireframe-row three-col">
+                                            <span class="wireframe-block medium"></span>
+                                            <span class="wireframe-block medium"></span>
+                                            <span class="wireframe-block medium"></span>
+                                        </span>
+                                        <span class="wireframe-block short"></span>
+                                    </span>
+                                    <span class="wireframe-labels">
+                                        <strong class="d-block mb-1">Conversion First</strong>
+                                        <span class="wireframe-copy">Big hero, immediate trust proof, stacked offer sections, repeated CTA breaks, shorter path to contact.</span>
+                                    </span>
                                 </span>
                             </label>
                         </div>
                         <div class="col-md-4">
-                            <label class="page-select-chip d-block h-100" style="padding:0;">
+                            <label class="page-select-chip wireframe-card d-block h-100" style="padding:0;">
                                 <input type="radio" name="wireframe_style" value="story" style="display:none;">
-                                <span style="display:block; padding:.95rem 1rem;">
-                                    <strong class="d-block mb-1">Story Driven</strong>
-                                    <span style="font-size:.78rem; opacity:.82;">Narrative flow, richer transitions, more About and trust sections.</span>
+                                <span class="wireframe-card-body">
+                                    <span class="wireframe-preview">
+                                        <span class="wireframe-block hero"></span>
+                                        <span class="wireframe-block medium"></span>
+                                        <span class="wireframe-row two-col">
+                                            <span class="wireframe-block tall"></span>
+                                            <span class="wireframe-block medium"></span>
+                                        </span>
+                                        <span class="wireframe-block medium"></span>
+                                    </span>
+                                    <span class="wireframe-labels">
+                                        <strong class="d-block mb-1">Story Driven</strong>
+                                        <span class="wireframe-copy">Narrative intro, founder or team section early, smoother transitions, deeper trust sections before the ask.</span>
+                                    </span>
                                 </span>
                             </label>
                         </div>
                         <div class="col-md-4">
-                            <label class="page-select-chip d-block h-100" style="padding:0;">
+                            <label class="page-select-chip wireframe-card d-block h-100" style="padding:0;">
                                 <input type="radio" name="wireframe_style" value="catalog" style="display:none;">
-                                <span style="display:block; padding:.95rem 1rem;">
-                                    <strong class="d-block mb-1">Catalog Grid</strong>
-                                    <span style="font-size:.78rem; opacity:.82;">More service cards, comparison layouts, and browse-friendly sections.</span>
+                                <span class="wireframe-card-body">
+                                    <span class="wireframe-preview">
+                                        <span class="wireframe-block hero"></span>
+                                        <span class="wireframe-row three-col">
+                                            <span class="wireframe-block tall"></span>
+                                            <span class="wireframe-block tall"></span>
+                                            <span class="wireframe-block tall"></span>
+                                        </span>
+                                        <span class="wireframe-row three-col">
+                                            <span class="wireframe-block medium"></span>
+                                            <span class="wireframe-block medium"></span>
+                                            <span class="wireframe-block medium"></span>
+                                        </span>
+                                    </span>
+                                    <span class="wireframe-labels">
+                                        <strong class="d-block mb-1">Catalog Grid</strong>
+                                        <span class="wireframe-copy">More browseable service cards, modular comparison blocks, gallery-heavy sections, and scanning-friendly structure.</span>
+                                    </span>
                                 </span>
                             </label>
                         </div>
