@@ -3193,6 +3193,8 @@ def api_logout():
 
 
 def _serialize_heatmap_scan(scan, include_results=False):
+    from webapp.heatmap import summarize_competitor_landscape
+
     if not scan:
         return None
     payload = dict(scan)
@@ -3201,6 +3203,7 @@ def _serialize_heatmap_scan(scan, include_results=False):
             payload["results"] = json.loads(payload.get("results_json") or "[]")
         except Exception:
             payload["results"] = []
+        payload["competitor_summary"] = summarize_competitor_landscape(payload["results"])
     return payload
 
 
@@ -9009,9 +9012,27 @@ def client_heatmap_scan():
     if place_id:
         place_verification = verify_place_id(api_key, place_id)
 
+    alternate_names = []
+    verified_name = ((place_verification or {}).get("name") or "").strip()
+    if verified_name and verified_name.lower() != business_name.lower().strip():
+        alternate_names.append(verified_name)
+    if not business_name and verified_name:
+        business_name = verified_name
+
+    listing_names = [business_name, *alternate_names]
+    keyword_brand_query = False
+    kw_lower = keyword.lower().strip()
+    for listing_name in listing_names:
+        normalized_listing_name = (listing_name or "").lower().strip()
+        if normalized_listing_name and (kw_lower == normalized_listing_name or kw_lower in normalized_listing_name or normalized_listing_name in kw_lower):
+            keyword_brand_query = True
+            break
+
     try:
         results, debug_info = scan_grid(api_key, keyword, business_name, grid_points,
-                                        place_id=place_id, search_radius_m=search_radius)
+                                        place_id=place_id, search_radius_m=search_radius,
+                                        alternate_names=alternate_names,
+                                        brand_query=keyword_brand_query)
     except Exception as exc:
         import traceback
         traceback.print_exc()
@@ -9036,7 +9057,6 @@ def client_heatmap_scan():
 
     # Detect if keyword looks like the business name (common user mistake)
     keyword_warning = None
-    kw_lower = keyword.lower().strip()
     bn_lower = business_name.lower().strip()
     if bn_lower and (kw_lower == bn_lower or kw_lower in bn_lower or bn_lower in kw_lower):
         keyword_warning = (
@@ -9059,8 +9079,11 @@ def client_heatmap_scan():
         else:
             debug_info["keyword_warning"] = near_me_note
 
+    from webapp.heatmap import summarize_competitor_landscape
+
     ranked = [r for r in results if r["rank"] > 0]
     avg_rank = round(sum(r["rank"] for r in ranked) / len(ranked), 1) if ranked else 0
+    competitor_summary = summarize_competitor_landscape(results)
 
     import json as _json
     scan_id = db.save_heatmap_scan(brand_id, keyword, grid_size, radius, scan_center_lat, scan_center_lng,
@@ -9068,6 +9091,7 @@ def client_heatmap_scan():
 
     return jsonify(ok=True, results=results, avg_rank=avg_rank,
                    found=len(ranked), total=len(results),
+                   competitor_summary=competitor_summary,
                    scan_id=scan_id,
                    center_lat=scan_center_lat, center_lng=scan_center_lng,
                    debug=debug_info)
@@ -9186,12 +9210,7 @@ def client_heatmap_view_scan(scan_id):
     scan = db.get_heatmap_scan(scan_id)
     if not scan or scan["brand_id"] != session["client_brand_id"]:
         return jsonify(ok=False, error="Scan not found"), 404
-    import json as _json
-    try:
-        scan["results"] = _json.loads(scan.get("results_json") or "[]")
-    except Exception:
-        scan["results"] = []
-    return jsonify(ok=True, scan=scan)
+    return jsonify(ok=True, scan=_serialize_heatmap_scan(scan, include_results=True))
 
 
 @client_bp.route("/heatmap/scan/<int:scan_id>", methods=["DELETE"])

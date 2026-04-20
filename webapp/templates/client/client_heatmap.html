@@ -12,6 +12,7 @@
     }
     .heatmap-cell {
         aspect-ratio: 1;
+        border: none;
         border-radius: 8px;
         display: flex;
         align-items: center;
@@ -19,7 +20,7 @@
         font-weight: 700;
         font-size: 1.1rem;
         color: #fff;
-        cursor: default;
+        cursor: pointer;
         transition: transform .15s;
         position: relative;
         min-width: 0;
@@ -35,6 +36,9 @@
     .heatmap-cell.rank-center {
         border: 3px solid #4f46e5;
         box-shadow: 0 0 0 2px #fff;
+    }
+    .heatmap-cell.selected {
+        box-shadow: 0 0 0 3px rgba(15, 23, 42, .18), inset 0 -1px 0 rgba(255,255,255,.16);
     }
 
     .legend-item {
@@ -134,6 +138,82 @@
 
     #scanStateNote.is-fresh {
         color: #2563eb !important;
+    }
+
+    .competitor-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .competitor-row {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        padding: 12px;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        background: #f8fafc;
+    }
+
+    .competitor-rank {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 44px;
+        height: 36px;
+        padding: 0 10px;
+        border-radius: 999px;
+        background: rgba(99,102,241,.12);
+        color: #4338ca;
+        font-size: .8rem;
+        font-weight: 800;
+    }
+
+    .competitor-copy {
+        min-width: 0;
+    }
+
+    .competitor-copy strong {
+        display: block;
+        font-size: .9rem;
+        color: #0f172a;
+    }
+
+    .competitor-copy span,
+    .competitor-meta span {
+        display: block;
+        font-size: .78rem;
+        color: #64748b;
+    }
+
+    .competitor-meta {
+        text-align: right;
+    }
+
+    .target-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(34,197,94,.14);
+        color: #166534;
+        font-size: .76rem;
+        font-weight: 800;
+    }
+
+    @media (max-width: 767.98px) {
+        .competitor-row {
+            grid-template-columns: auto minmax(0, 1fr);
+        }
+
+        .competitor-meta,
+        .target-badge {
+            grid-column: 2;
+            text-align: left;
+        }
     }
 </style>
 {% endblock %}
@@ -470,6 +550,40 @@
                 </div>
             </div>
         </div>
+
+        <div class="row g-3">
+            <div class="col-xl-6">
+                <div class="card h-100" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
+                    <div class="card-body p-3 p-md-4">
+                        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                            <div>
+                                <h6 class="mb-1">Selected grid point</h6>
+                                <small class="text-muted">Click any cell to inspect the local competitor pack returned there.</small>
+                            </div>
+                        </div>
+                        <div id="selectedCellMeta" class="d-flex flex-wrap gap-2 mb-3"></div>
+                        <div id="selectedCellCompetitors" class="competitor-list">
+                            <div class="text-muted" style="font-size:.88rem;">Run a scan to inspect competitor results.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-6">
+                <div class="card h-100" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
+                    <div class="card-body p-3 p-md-4">
+                        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                            <div>
+                                <h6 class="mb-1">Competitor leaderboard</h6>
+                                <small class="text-muted">The businesses that show up most often across this scan grid.</small>
+                            </div>
+                        </div>
+                        <div id="competitorLeaderboard" class="competitor-list">
+                            <div class="text-muted" style="font-size:.88rem;">Run a scan to build the leaderboard.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="col-lg-4 mb-4">
@@ -550,7 +664,9 @@ var scanCenterMarker = null;
 var currentRadiusMiles = {% if active_scan %}{{ active_scan.radius_miles or 5 }}{% else %}5{% endif %};
 var currentGridSize = {% if active_scan %}{{ active_scan.grid_size or 5 }}{% else %}5{% endif %};
 var currentResults = {% if active_scan and active_scan.results %}{{ active_scan.results | tojson }}{% else %}[]{% endif %};
+var currentCompetitorSummary = {% if active_scan and active_scan.competitor_summary %}{{ active_scan.competitor_summary | tojson }}{% else %}[]{% endif %};
 var currentKeyword = {% if active_scan %}{{ active_scan.keyword|tojson }}{% else %}''{% endif %};
+var selectedCellIndex = -1;
 
 var MILES_TO_KM = 1.60934;
 var KM_PER_DEG_LAT = 111.32;
@@ -954,18 +1070,90 @@ function renderGrid(results, gridSize, keyword, radiusMiles, centerPoint) {
     grid.innerHTML = '';
 
     var centerIndex = centerPoint ? findClosestCellIndex(results, centerPoint.lat, centerPoint.lng) : -1;
+    if (selectedCellIndex < 0 || selectedCellIndex >= results.length) {
+        selectedCellIndex = centerIndex >= 0 ? centerIndex : 0;
+    }
     results.forEach(function(cell, index) {
-        var div = document.createElement('div');
-        div.className = 'heatmap-cell';
-        if (cell.rank >= 1 && cell.rank <= 3) div.className += ' rank-top';
-        else if (cell.rank >= 4 && cell.rank <= 10) div.className += ' rank-mid';
-        else if (cell.rank > 10) div.className += ' rank-low';
-        else div.className += ' rank-none';
-        if (index === centerIndex) div.className += ' rank-center';
-        div.textContent = cell.rank > 0 ? cell.rank : '-';
-        div.title = 'Rank ' + (cell.rank > 0 ? cell.rank : 'Not found') + ' at (' + cell.lat.toFixed(4) + ', ' + cell.lng.toFixed(4) + ')';
-        grid.appendChild(div);
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'heatmap-cell';
+        if (cell.rank >= 1 && cell.rank <= 3) button.className += ' rank-top';
+        else if (cell.rank >= 4 && cell.rank <= 10) button.className += ' rank-mid';
+        else if (cell.rank > 10) button.className += ' rank-low';
+        else button.className += ' rank-none';
+        if (index === centerIndex) button.className += ' rank-center';
+        if (index === selectedCellIndex) button.className += ' selected';
+        button.textContent = cell.rank > 0 ? cell.rank : '-';
+        button.title = 'Rank ' + (cell.rank > 0 ? cell.rank : 'Not found') + ' at (' + cell.lat.toFixed(4) + ', ' + cell.lng.toFixed(4) + ')';
+        button.addEventListener('click', function() {
+            selectedCellIndex = index;
+            renderGrid(currentResults, currentGridSize, currentKeyword, currentRadiusMiles, {lat: centerLat, lng: centerLng});
+            renderCompetitorInsights();
+        });
+        grid.appendChild(button);
     });
+}
+
+function renderCompetitorInsights() {
+    var selectedMeta = document.getElementById('selectedCellMeta');
+    var selectedCompetitors = document.getElementById('selectedCellCompetitors');
+    var leaderboard = document.getElementById('competitorLeaderboard');
+    if (!selectedMeta || !selectedCompetitors || !leaderboard) return;
+
+    if (!currentResults.length) {
+        selectedMeta.innerHTML = '';
+        selectedCompetitors.innerHTML = '<div class="text-muted" style="font-size:.88rem;">Run a scan to inspect competitor results.</div>';
+        leaderboard.innerHTML = '<div class="text-muted" style="font-size:.88rem;">Run a scan to build the leaderboard.</div>';
+        return;
+    }
+
+    if (selectedCellIndex < 0 || selectedCellIndex >= currentResults.length) {
+        selectedCellIndex = findClosestCellIndex(currentResults, centerLat, centerLng);
+        if (selectedCellIndex < 0) selectedCellIndex = 0;
+    }
+
+    var cell = currentResults[selectedCellIndex] || null;
+    if (!cell) return;
+
+    selectedMeta.innerHTML =
+        '<span class="stat-pill" style="background:#dcfce7; color:#166534;">Your rank: ' + (cell.rank > 0 ? '#' + cell.rank : 'Not found') + '</span>' +
+        '<span class="stat-pill" style="background:#eef2ff; color:#3730a3;">Cell: Row ' + (cell.row + 1) + ', Col ' + (cell.col + 1) + '</span>' +
+        '<span class="stat-pill" style="background:#eff6ff; color:#1d4ed8;">Coords: ' + formatCoordinates(cell.lat, cell.lng) + '</span>';
+
+    if (cell.competitors && cell.competitors.length) {
+        selectedCompetitors.innerHTML = cell.competitors.map(function(competitor) {
+            return '<div class="competitor-row">' +
+                '<div class="competitor-rank">#' + competitor.rank + '</div>' +
+                '<div class="competitor-copy">' +
+                    '<strong>' + escapeHtml(competitor.name || 'Unknown business') + '</strong>' +
+                    '<span>' + escapeHtml(competitor.address || 'Address unavailable') + '</span>' +
+                '</div>' +
+                (competitor.is_target
+                    ? '<span class="target-badge">You</span>'
+                    : '<div class="competitor-meta"><span>' + (competitor.place_id ? escapeHtml(competitor.place_id.slice(0, 22)) + '...' : 'No Place ID') + '</span></div>') +
+                '</div>';
+        }).join('');
+    } else {
+        selectedCompetitors.innerHTML = '<div class="text-muted" style="font-size:.88rem;">No Google competitors were returned for this point.</div>';
+    }
+
+    if (currentCompetitorSummary && currentCompetitorSummary.length) {
+        leaderboard.innerHTML = currentCompetitorSummary.map(function(competitor) {
+            return '<div class="competitor-row">' +
+                '<div class="competitor-rank">#' + competitor.best_rank + '</div>' +
+                '<div class="competitor-copy">' +
+                    '<strong>' + escapeHtml(competitor.name || 'Unknown business') + '</strong>' +
+                    '<span>' + escapeHtml(competitor.address || 'Address unavailable') + '</span>' +
+                '</div>' +
+                '<div class="competitor-meta">' +
+                    '<span>' + competitor.grid_share + '/' + currentResults.length + ' cells</span>' +
+                    '<span>Avg #' + competitor.avg_rank + '</span>' +
+                '</div>' +
+                '</div>';
+        }).join('');
+    } else {
+        leaderboard.innerHTML = '<div class="text-muted" style="font-size:.88rem;">No recurring competitors to show yet.</div>';
+    }
 }
 
 function renderStats(avgRank, found, total, results) {
@@ -1018,6 +1206,11 @@ function showDebug(debugInfo) {
         diagnosticsHtml += apiRow('New Text Search', diagnostics.new_api);
         diagnosticsHtml += apiRow('Legacy Text Search', diagnostics.legacy_api);
         diagnosticsHtml += apiRow('Nearby Search', diagnostics.nearby_api);
+        if (diagnostics.find_place && diagnostics.find_place.attempts) {
+            diagnostics.find_place.attempts.forEach(function(attempt) {
+                diagnosticsHtml += apiRow('Find Place (' + (attempt.mode || 'fallback') + ')', attempt);
+            });
+        }
         el.innerHTML += diagnosticsHtml;
     }
 
@@ -1133,6 +1326,8 @@ function hydrateScan(scan, options) {
     currentGridSize = parseInt(scan.grid_size || currentGridSize || 5, 10);
     currentRadiusMiles = parseFloat(scan.radius_miles || currentRadiusMiles || 5);
     currentResults = Array.isArray(scan.results) ? scan.results : [];
+    currentCompetitorSummary = Array.isArray(scan.competitor_summary) ? scan.competitor_summary : [];
+    selectedCellIndex = -1;
 
     ensureSelectOption('gridSelect', currentGridSize, currentGridSize + ' x ' + currentGridSize + ' (legacy)');
     ensureSelectOption('radiusSelect', currentRadiusMiles, currentRadiusMiles + ' mi');
@@ -1143,6 +1338,7 @@ function hydrateScan(scan, options) {
     setScanCenter(scan.center_lat, scan.center_lng, {pan: !options || options.pan !== false, markDirty: false});
     renderGrid(currentResults, currentGridSize, currentKeyword, currentRadiusMiles, {lat: centerLat, lng: centerLng});
     renderStats(scan.avg_rank || 0, currentResults.filter(function(result) { return result.rank > 0; }).length, currentResults.length, currentResults);
+    renderCompetitorInsights();
     plotMapMarkers(currentResults, {fitBounds: !options || options.fitBounds !== false});
     markResultsFresh(currentKeyword);
 }
@@ -1204,6 +1400,7 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
         markResultsFresh('');
     }
+    renderCompetitorInsights();
 
     loadMapsApi();
 
@@ -1438,9 +1635,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     currentKeyword = keyword;
                     currentResults = data.results || [];
+                    currentCompetitorSummary = data.competitor_summary || [];
+                    selectedCellIndex = -1;
                     setScanCenter(data.center_lat, data.center_lng, {pan: false, markDirty: false});
                     renderGrid(currentResults, currentGridSize, currentKeyword, currentRadiusMiles, {lat: centerLat, lng: centerLng});
                     renderStats(data.avg_rank, data.found, data.total, currentResults);
+                    renderCompetitorInsights();
                     if (data.debug) showDebug(data.debug);
                     plotMapMarkers(currentResults, {fitBounds: true});
                     markResultsFresh(currentKeyword);

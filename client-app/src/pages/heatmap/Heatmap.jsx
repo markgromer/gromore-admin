@@ -142,8 +142,10 @@ export default function Heatmap() {
   const [gridSize, setGridSize] = useState(5)
   const [center, setCenter] = useState(null)
   const [results, setResults] = useState([])
+  const [competitorSummary, setCompetitorSummary] = useState([])
   const [avgRank, setAvgRank] = useState(0)
   const [debugInfo, setDebugInfo] = useState(null)
+  const [selectedCellIndex, setSelectedCellIndex] = useState(-1)
   const [scanDirty, setScanDirty] = useState(false)
   const [scanBusy, setScanBusy] = useState(false)
   const [saveLocationBusy, setSaveLocationBusy] = useState(false)
@@ -184,6 +186,7 @@ export default function Heatmap() {
   const gridPointCount = gridSize * gridSize
   const apiCallEstimate = gridPointCount * 3
   const centerCellIndex = center ? closestCellIndex(results, center.lat, center.lng) : -1
+  const selectedCell = selectedCellIndex >= 0 ? results[selectedCellIndex] : null
 
   const hydrateState = (payload) => {
     const nextBrand = payload.brand
@@ -200,8 +203,10 @@ export default function Heatmap() {
       lng: active?.center_lng || nextBrand.business_lng || 0,
     })
     setResults(active?.results || [])
+    setCompetitorSummary(active?.competitor_summary || [])
     setAvgRank(active?.avg_rank || 0)
     setActiveScanId(active?.id || null)
+    setSelectedCellIndex(-1)
     setDebugInfo(null)
     setScanDirty(false)
     setPlaceSearchQuery(nextBrand.display_name || '')
@@ -211,6 +216,20 @@ export default function Heatmap() {
     setPlaceMessage('')
     setApiTestLines([])
   }
+
+  useEffect(() => {
+    if (!results.length) {
+      setSelectedCellIndex(-1)
+      return
+    }
+
+    if (selectedCellIndex >= 0 && selectedCellIndex < results.length) {
+      return
+    }
+
+    const fallbackIndex = centerCellIndex >= 0 ? centerCellIndex : 0
+    setSelectedCellIndex(fallbackIndex)
+  }, [centerCellIndex, results, selectedCellIndex])
 
   const loadHeatmap = async () => {
     setPageError('')
@@ -481,7 +500,9 @@ export default function Heatmap() {
       }
 
       setResults(data.results || [])
+      setCompetitorSummary(data.competitor_summary || [])
       setAvgRank(data.avg_rank || 0)
+      setSelectedCellIndex(-1)
       setDebugInfo(data.debug || null)
       setActiveScanId(data.scan_id)
       setScanDirty(false)
@@ -506,7 +527,9 @@ export default function Heatmap() {
       setGridSize(scan.grid_size || 5)
       setCenter({ lat: scan.center_lat, lng: scan.center_lng })
       setResults(scan.results || [])
+      setCompetitorSummary(scan.competitor_summary || [])
       setAvgRank(scan.avg_rank || 0)
+      setSelectedCellIndex(-1)
       setDebugInfo(null)
       setScanDirty(false)
     } catch (error) {
@@ -528,7 +551,9 @@ export default function Heatmap() {
         } else {
           setActiveScanId(null)
           setResults([])
+          setCompetitorSummary([])
           setAvgRank(0)
+          setSelectedCellIndex(-1)
           setDebugInfo(null)
         }
       }
@@ -545,7 +570,9 @@ export default function Heatmap() {
       setHistory([])
       setActiveScanId(null)
       setResults([])
+      setCompetitorSummary([])
       setAvgRank(0)
+      setSelectedCellIndex(-1)
       setDebugInfo(null)
     } catch (error) {
       setPageError(error.message || 'Failed to clear scan history.')
@@ -808,15 +835,18 @@ export default function Heatmap() {
                         else if (cell.rank > 10) classes.push(styles.lowRank)
                         else classes.push(styles.noRank)
                         if (index === centerCellIndex) classes.push(styles.centerCell)
+                        if (index === selectedCellIndex) classes.push(styles.selectedCell)
 
                         return (
-                          <div
+                          <button
                             key={`${cell.row}-${cell.col}`}
+                            type="button"
                             className={classes.join(' ')}
                             title={`Rank ${cell.rank > 0 ? cell.rank : 'Not found'} at ${formatCoords(cell.lat, cell.lng)}`}
+                            onClick={() => setSelectedCellIndex(index)}
                           >
                             {cell.rank > 0 ? cell.rank : '-'}
-                          </div>
+                          </button>
                         )
                       })}
                     </div>
@@ -832,6 +862,65 @@ export default function Heatmap() {
                   <div className={styles.emptyState}>No scan yet. Set the term, move the center, and run the heatmap.</div>
                 )}
               </Card>
+            )}
+
+            {hasLocation && results.length > 0 && (
+              <div className={styles.competitorPanels}>
+                <Card>
+                  <CardHeader
+                    title="Selected grid point"
+                    subtitle={selectedCell ? `${formatCoords(selectedCell.lat, selectedCell.lng)} | ${selectedCell.competitors?.length || 0} competitors returned` : 'Pick a cell to inspect the local pack.'}
+                  />
+                  {selectedCell ? (
+                    <>
+                      <div className={styles.statsRow}>
+                        <span className={styles.statPill}>Your rank: {selectedCell.rank > 0 ? `#${selectedCell.rank}` : 'Not found'}</span>
+                        <span className={styles.statPill}>Cell: Row {selectedCell.row + 1}, Col {selectedCell.col + 1}</span>
+                      </div>
+                      <div className={styles.competitorList}>
+                        {(selectedCell.competitors || []).length ? selectedCell.competitors.map((competitor) => (
+                          <div key={`${selectedCell.row}-${selectedCell.col}-${competitor.rank}-${competitor.place_id || competitor.name}`} className={styles.competitorRow}>
+                            <div className={styles.competitorRank}>#{competitor.rank}</div>
+                            <div className={styles.competitorCopy}>
+                              <strong>{competitor.name || 'Unknown business'}</strong>
+                              <span>{competitor.address || 'Address unavailable'}</span>
+                            </div>
+                            {competitor.is_target && <span className={styles.targetBadge}>You</span>}
+                          </div>
+                        )) : <div className={styles.emptyState}>No Google competitors were returned for this point.</div>}
+                      </div>
+                    </>
+                  ) : (
+                    <div className={styles.emptyState}>Pick a grid cell to inspect the competitor stack.</div>
+                  )}
+                </Card>
+
+                <Card>
+                  <CardHeader
+                    title="Competitor leaderboard"
+                    subtitle={competitorSummary.length ? 'Most visible businesses across the current scan.' : 'Run a scan to build the leaderboard.'}
+                  />
+                  {competitorSummary.length ? (
+                    <div className={styles.competitorList}>
+                      {competitorSummary.map((competitor) => (
+                        <div key={competitor.place_id || competitor.name} className={styles.competitorRow}>
+                          <div className={styles.competitorRank}>#{competitor.best_rank}</div>
+                          <div className={styles.competitorCopy}>
+                            <strong>{competitor.name}</strong>
+                            <span>{competitor.address || 'Address unavailable'}</span>
+                          </div>
+                          <div className={styles.competitorMeta}>
+                            <span>{competitor.grid_share}/{results.length} cells</span>
+                            <span>Avg #{competitor.avg_rank}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className={styles.emptyState}>No recurring competitors to show yet.</div>
+                  )}
+                </Card>
+              </div>
             )}
 
             {(debugInfo || apiTestLines.length > 0) && (

@@ -143,12 +143,47 @@ def verify_place_id(api_key, place_id):
     except Exception as exc:
         return {"error": str(exc)}
 
-def _search_places(api_key, keyword, lat, lng, radius_m=2000):
+
+def _find_place_candidates(api_key, query, lat=None, lng=None, use_bias=True):
+    """Use Find Place From Text for exact listing lookup fallbacks."""
+    params = {
+        "input": query,
+        "inputtype": "textquery",
+        "fields": "place_id,name,formatted_address",
+        "key": api_key,
+    }
+    if use_bias and lat is not None and lng is not None and (lat != 0 or lng != 0):
+        params["locationbias"] = f"circle:50000@{lat},{lng}"
+
+    resp = requests.get(
+        "https://maps.googleapis.com/maps/api/place/findplacefromtext/json",
+        params=params,
+        timeout=15,
+    )
+    data = resp.json()
+    candidates = []
+    if data.get("status") == "OK":
+        for candidate in data.get("candidates", []):
+            candidates.append({
+                "displayName": {"text": candidate.get("name", "")},
+                "id": candidate.get("place_id", ""),
+                "formattedAddress": candidate.get("formatted_address", ""),
+            })
+    return candidates, {
+        "status": resp.status_code,
+        "gstatus": data.get("status", ""),
+        "error_message": data.get("error_message", ""),
+        "count": len(candidates),
+        "query": query,
+        "biased": bool(use_bias and lat is not None and lng is not None and (lat != 0 or lng != 0)),
+    }
+
+def _search_places(api_key, keyword, lat, lng, radius_m=2000, brand_query=False, fallback_queries=None):
     """Query Google Places APIs for a keyword near a point.
     Tries all available APIs and merges results (de-duplicated by place_id).
     This is critical because SABs often appear in Legacy/Nearby but not New API.
     Returns (places_list, diag_dict)."""
-    diag = {"new_api": None, "legacy_api": None, "nearby_api": None}
+    diag = {"new_api": None, "legacy_api": None, "nearby_api": None, "find_place": None}
     all_places = []
     seen_ids = set()
 
@@ -250,6 +285,36 @@ def _search_places(api_key, keyword, lat, lng, radius_m=2000):
         diag["nearby_api"] = {"error": str(exc)}
         log.warning("Nearby Search error at (%.4f, %.4f): %s", lat, lng, exc)
 
+    if not all_places and brand_query:
+        attempted = []
+        queries = []
+        for query in [keyword, *(fallback_queries or [])]:
+            normalized = " ".join((query or "").strip().split())
+            if normalized and normalized.lower() not in {item.lower() for item in queries}:
+                queries.append(normalized)
+
+        for fallback_query in queries:
+            try:
+                candidates, attempt = _find_place_candidates(api_key, fallback_query, lat=lat, lng=lng, use_bias=True)
+                attempt["mode"] = "biased"
+                attempted.append(attempt)
+                _add_places(candidates)
+                if candidates:
+                    break
+                candidates, attempt = _find_place_candidates(api_key, fallback_query, lat=lat, lng=lng, use_bias=False)
+                attempt["mode"] = "global"
+                attempted.append(attempt)
+                _add_places(candidates)
+                if candidates:
+                    break
+            except Exception as exc:
+                attempted.append({"query": fallback_query, "error": str(exc)})
+
+        diag["find_place"] = {
+            "attempts": attempted,
+            "count": len(all_places),
+        }
+
     return all_places, diag
 
 
@@ -258,45 +323,154 @@ def _tokenize(name):
     return set(re.findall(r'[a-z0-9]+', (name or "").lower()))
 
 
-def _match_business(places, business_name, place_id=None):
+def _normalize_place_id(value):
+    """Normalize Google Place IDs so resource paths and raw IDs compare cleanly."""
+    normalized = (value or "").strip()
+    if not normalized:
+        return ""
+    if "/" in normalized:
+        normalized = normalized.rsplit("/", 1)[-1]
+    return normalized
+
+
+def _matches_candidate_name(place_name, candidate_names):
+    """Return True when a place name looks like one of the target listing names."""
+    pname = (place_name or "").lower().strip()
+    if not pname:
+        return False
+
+    stop_words = {'the', 'and', 'of', 'in', 'at', 'for', 'a', 'an', 'llc', 'inc', 'co'}
+    ptokens = _tokenize(pname) - stop_words
+    for name in candidate_names or []:
+        cleaned_name = " ".join((name or "").strip().split()).lower()
+        if not cleaned_name:
+            continue
+        if cleaned_name in pname or pname in cleaned_name:
+            return True
+        ntokens = _tokenize(cleaned_name) - stop_words
+        if len(ntokens) >= 2:
+            overlap = ntokens & ptokens
+            if len(overlap) >= 2 and len(overlap) >= len(ntokens) * 0.5:
+                return True
+        elif len(ntokens) == 1:
+            core = list(ntokens)[0]
+            if len(core) >= 3 and any(core in token for token in ptokens):
+                return True
+    return False
+
+
+def _extract_competitors(places, place_id=None, candidate_names=None, limit=10):
+    """Build a Local Falcon-style ranked pack for one grid point."""
+    normalized_target_id = _normalize_place_id(place_id)
+    competitors = []
+    for index, place in enumerate(places[:max(limit, 1)], 1):
+        place_name = (place.get("displayName", {}).get("text", "") or "").strip()
+        normalized_place_id = _normalize_place_id(place.get("id", ""))
+        competitors.append({
+            "rank": index,
+            "name": place_name,
+            "place_id": normalized_place_id,
+            "address": (place.get("formattedAddress", "") or "").strip(),
+            "is_target": bool(
+                (normalized_target_id and normalized_place_id == normalized_target_id) or
+                _matches_candidate_name(place_name, candidate_names)
+            ),
+        })
+    return competitors
+
+
+def summarize_competitor_landscape(results):
+    """Aggregate competitors across the full grid for leaderboard views."""
+    summary = {}
+    for cell in results or []:
+        for competitor in cell.get("competitors") or []:
+            if competitor.get("is_target"):
+                continue
+            key = competitor.get("place_id") or (competitor.get("name") or "").lower().strip()
+            if not key:
+                continue
+            entry = summary.setdefault(key, {
+                "place_id": competitor.get("place_id", ""),
+                "name": competitor.get("name", "Unknown business"),
+                "address": competitor.get("address", ""),
+                "appearances": 0,
+                "best_rank": 999,
+                "rank_total": 0,
+            })
+            entry["appearances"] += 1
+            entry["rank_total"] += int(competitor.get("rank") or 0)
+            entry["best_rank"] = min(entry["best_rank"], int(competitor.get("rank") or 999))
+            if not entry.get("address") and competitor.get("address"):
+                entry["address"] = competitor["address"]
+
+    leaderboard = []
+    for entry in summary.values():
+        appearances = max(entry.pop("appearances"), 1)
+        rank_total = entry.pop("rank_total")
+        entry["avg_rank"] = round(rank_total / appearances, 1)
+        entry["grid_share"] = appearances
+        leaderboard.append(entry)
+
+    leaderboard.sort(key=lambda item: (-item["grid_share"], item["avg_rank"], item["best_rank"], item["name"].lower()))
+    return leaderboard[:12]
+
+
+def _match_business(places, business_name, place_id=None, alternate_names=None):
     """Find the rank (1-based) of a business in Places results.
     Matches by place_id first, then exact substring, then word overlap,
     then fuzzy single-word match."""
-    bname = (business_name or "").lower().strip()
-    btokens = _tokenize(business_name)
     stop_words = {'the', 'and', 'of', 'in', 'at', 'for', 'a', 'an', 'llc', 'inc', 'co'}
-    btokens_clean = btokens - stop_words
+    target_place_id = _normalize_place_id(place_id)
+
+    candidate_names = []
+    seen_names = set()
+    for name in [business_name, *(alternate_names or [])]:
+        cleaned_name = " ".join((name or "").strip().split())
+        if not cleaned_name:
+            continue
+        key = cleaned_name.lower()
+        if key in seen_names:
+            continue
+        seen_names.add(key)
+        candidate_names.append({
+            "name": key,
+            "tokens": _tokenize(cleaned_name) - stop_words,
+        })
 
     for i, p in enumerate(places, 1):
-        pid = p.get("id", "")
+        pid = _normalize_place_id(p.get("id", ""))
         pname = (p.get("displayName", {}).get("text", "") or "").lower().strip()
+        ptokens = _tokenize(pname) - stop_words
 
         # Exact place_id match
-        if place_id and pid == place_id:
+        if target_place_id and pid == target_place_id:
             return i
 
-        # Substring match (either direction)
-        if bname and (bname in pname or pname in bname):
-            return i
+        for candidate in candidate_names:
+            bname = candidate["name"]
+            btokens_clean = candidate["tokens"]
 
-        # Word overlap match: if 2+ significant words match, count it
-        ptokens = _tokenize(pname) - stop_words
-        if len(btokens_clean) >= 2:
-            overlap = btokens_clean & ptokens
-            if len(overlap) >= 2 and len(overlap) >= len(btokens_clean) * 0.5:
+            # Substring match (either direction)
+            if bname and (bname in pname or pname in bname):
                 return i
 
-        # Single-word or short name: check if the core word appears in the result
-        if len(btokens_clean) == 1:
-            core = list(btokens_clean)[0]
-            if len(core) >= 3 and any(core in pt for pt in ptokens):
-                return i
+            # Word overlap match: if 2+ significant words match, count it
+            if len(btokens_clean) >= 2:
+                overlap = btokens_clean & ptokens
+                if len(overlap) >= 2 and len(overlap) >= len(btokens_clean) * 0.5:
+                    return i
+
+            # Single-word or short name: check if the core word appears in the result
+            if len(btokens_clean) == 1:
+                core = list(btokens_clean)[0]
+                if len(core) >= 3 and any(core in pt for pt in ptokens):
+                    return i
 
     return 0  # not found
 
 
 def scan_grid(api_key, keyword, business_name, grid_points,
-              place_id=None, search_radius_m=2000):
+              place_id=None, search_radius_m=2000, alternate_names=None, brand_query=False):
     """Run a full grid scan. Returns list of point dicts with 'rank' added.
     Queries the center point first for reliable diagnostics."""
     grid_size = int(math.sqrt(len(grid_points))) if grid_points else 0
@@ -314,24 +488,30 @@ def scan_grid(api_key, keyword, business_name, grid_points,
     results = [None] * len(grid_points)
     debug_sample = None
     errors = 0
+    candidate_names = [business_name, *(alternate_names or [])]
     for seq, (idx, pt) in enumerate(ordered):
         # Rate limit: delay between grid points (3 API calls per point)
         if seq > 0:
             time.sleep(0.5)
         try:
             places, api_diag = _search_places(api_key, keyword, pt["lat"], pt["lng"],
-                                              radius_m=search_radius_m)
+                                              radius_m=search_radius_m,
+                                              brand_query=brand_query,
+                                              fallback_queries=candidate_names)
         except Exception as exc:
             log.warning("scan_grid: API error at point %d (%.4f, %.4f): %s",
                         idx, pt["lat"], pt["lng"], exc)
             places, api_diag = [], {"error": str(exc)}
             errors += 1
-        rank = _match_business(places, business_name, place_id)
+        rank = _match_business(places, business_name, place_id, alternate_names=alternate_names)
+        competitors = _extract_competitors(places, place_id=place_id, candidate_names=candidate_names)
         # Capture center point's results for diagnostics (first in our ordering)
         if seq == 0:
             debug_sample = {
                 "business_name_used": business_name,
                 "place_id_used": place_id,
+                "alternate_names_used": alternate_names or [],
+                "brand_query": brand_query,
                 "search_radius_m": search_radius_m,
                 "places_returned": len(places),
                 "debug_point": f"center ({pt['lat']:.4f}, {pt['lng']:.4f})",
@@ -354,6 +534,7 @@ def scan_grid(api_key, keyword, business_name, grid_points,
             "lat": pt["lat"],
             "lng": pt["lng"],
             "rank": rank,
+            "competitors": competitors,
         }
     if errors:
         if debug_sample is None:

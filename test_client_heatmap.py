@@ -2,7 +2,9 @@ import os
 import unittest
 import uuid
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+
+from webapp.heatmap import _match_business, _search_places, summarize_competitor_landscape
 
 _TEST_ROOT = Path(__file__).resolve().parent / ".tmp-test-artifacts"
 _TEST_ROOT.mkdir(exist_ok=True)
@@ -73,7 +75,7 @@ class ClientHeatmapTests(unittest.TestCase):
                 3,
                 33.5001,
                 -112.1999,
-                '[{"row": 0, "col": 0, "lat": 33.5001, "lng": -112.1999, "rank": 2}]',
+                '[{"row": 0, "col": 0, "lat": 33.5001, "lng": -112.1999, "rank": 2, "competitors": [{"rank": 1, "name": "Rival Plumbing", "place_id": "rival-1", "address": "123 Main St", "is_target": false}]}]',
                 2,
             )
 
@@ -86,8 +88,10 @@ class ClientHeatmapTests(unittest.TestCase):
         self.assertEqual(payload["active_scan"]["keyword"], "plumber")
         self.assertEqual(payload["active_scan"]["results"][0]["rank"], 2)
         self.assertEqual(payload["scans"][0]["center_lat"], 33.5001)
+        self.assertEqual(payload["active_scan"]["competitor_summary"][0]["name"], "Rival Plumbing")
 
     @patch("webapp.heatmap.scan_grid")
+    @patch("webapp.heatmap.verify_place_id")
     @patch("webapp.heatmap.calc_search_radius_m")
     @patch("webapp.heatmap.generate_grid")
     @patch("webapp.heatmap.clean_keyword")
@@ -96,12 +100,27 @@ class ClientHeatmapTests(unittest.TestCase):
         mock_clean_keyword,
         mock_generate_grid,
         mock_calc_search_radius_m,
+        mock_verify_place_id,
         mock_scan_grid,
     ):
         mock_clean_keyword.return_value = ("plumber", False)
         mock_generate_grid.return_value = [{"row": 0, "col": 0, "lat": 33.5001, "lng": -112.1999}]
         mock_calc_search_radius_m.return_value = 5000
-        mock_scan_grid.return_value = ([{"row": 0, "col": 0, "lat": 33.5001, "lng": -112.1999, "rank": 2}], {})
+        mock_verify_place_id.return_value = {"name": "Heatmap Test Brand Phoenix"}
+        mock_scan_grid.return_value = ([{
+            "row": 0,
+            "col": 0,
+            "lat": 33.5001,
+            "lng": -112.1999,
+            "rank": 2,
+            "competitors": [
+                {"rank": 1, "name": "Rival Plumbing", "place_id": "rival-1", "address": "123 Main St", "is_target": False},
+                {"rank": 2, "name": "Heatmap Test Brand Phoenix", "place_id": "place-123", "address": "456 Oak Ave", "is_target": True},
+            ],
+        }], {})
+
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "google_place_id", "place-123")
 
         response = self.client.post(
             "/client/heatmap/scan",
@@ -121,6 +140,8 @@ class ClientHeatmapTests(unittest.TestCase):
         self.assertEqual(payload["center_lng"], -112.1999)
         self.assertIsInstance(payload["scan_id"], int)
         mock_generate_grid.assert_called_once_with(33.5001, -112.1999, 3.0, 5)
+        self.assertEqual(mock_scan_grid.call_args.kwargs["alternate_names"], ["Heatmap Test Brand Phoenix"])
+        self.assertEqual(payload["competitor_summary"][0]["name"], "Rival Plumbing")
 
         with self.app.app_context():
             saved_scan = self.app.db.get_heatmap_scan(payload["scan_id"])
@@ -145,6 +166,130 @@ class ClientHeatmapTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(payload["ok"])
         self.assertIn("invalid", payload["error"].lower())
+
+    def test_match_business_normalizes_place_ids(self):
+        places = [{"id": "places/place-123", "displayName": {"text": "Different Listing Name"}}]
+
+        rank = _match_business(places, "Heatmap Test Brand", place_id="place-123")
+
+        self.assertEqual(rank, 1)
+
+    def test_match_business_accepts_verified_listing_alias(self):
+        places = [{"id": "place-123", "displayName": {"text": "Heatmap Test Brand Phoenix"}}]
+
+        rank = _match_business(
+            places,
+            "Heatmap Test Brand",
+            alternate_names=["Heatmap Test Brand Phoenix"],
+        )
+
+        self.assertEqual(rank, 1)
+
+    def test_competitor_summary_aggregates_grid_results(self):
+        summary = summarize_competitor_landscape([
+            {
+                "row": 0,
+                "col": 0,
+                "rank": 3,
+                "competitors": [
+                    {"rank": 1, "name": "Rival Plumbing", "place_id": "rival-1", "address": "123 Main St", "is_target": False},
+                    {"rank": 2, "name": "Heatmap Test Brand", "place_id": "place-123", "address": "456 Oak Ave", "is_target": True},
+                ],
+            },
+            {
+                "row": 0,
+                "col": 1,
+                "rank": 0,
+                "competitors": [
+                    {"rank": 2, "name": "Rival Plumbing", "place_id": "rival-1", "address": "123 Main St", "is_target": False},
+                    {"rank": 3, "name": "Second Rival", "place_id": "rival-2", "address": "789 Elm St", "is_target": False},
+                ],
+            },
+        ])
+
+        self.assertEqual(summary[0]["name"], "Rival Plumbing")
+        self.assertEqual(summary[0]["grid_share"], 2)
+        self.assertEqual(summary[0]["best_rank"], 1)
+        self.assertEqual(summary[0]["avg_rank"], 1.5)
+
+    @patch("webapp.heatmap.requests.get")
+    @patch("webapp.heatmap.requests.post")
+    def test_search_places_uses_find_place_fallback_for_brand_queries(self, mock_post, mock_get):
+        new_resp = Mock(status_code=200, text='{}')
+        new_resp.json.return_value = {"places": []}
+        mock_post.return_value = new_resp
+
+        legacy_resp = Mock(status_code=200)
+        legacy_resp.raise_for_status.return_value = None
+        legacy_resp.json.return_value = {"status": "ZERO_RESULTS", "results": []}
+
+        nearby_resp = Mock(status_code=200)
+        nearby_resp.raise_for_status.return_value = None
+        nearby_resp.json.return_value = {"status": "ZERO_RESULTS", "results": []}
+
+        find_place_resp = Mock(status_code=200)
+        find_place_resp.json.return_value = {
+            "status": "OK",
+            "candidates": [
+                {
+                    "place_id": "place-123",
+                    "name": "Heatmap Test Brand Phoenix",
+                    "formatted_address": "456 Oak Ave",
+                }
+            ],
+        }
+
+        mock_get.side_effect = [legacy_resp, nearby_resp, find_place_resp]
+
+        places, diag = _search_places(
+            "maps-key",
+            "Heatmap Test Brand Phoenix",
+            33.4484,
+            -112.0740,
+            radius_m=5000,
+            brand_query=True,
+            fallback_queries=["Heatmap Test Brand Phoenix"],
+        )
+
+        self.assertEqual(len(places), 1)
+        self.assertEqual(places[0]["id"], "place-123")
+        self.assertEqual(diag["find_place"]["count"], 1)
+
+    @patch("webapp.heatmap.scan_grid")
+    @patch("webapp.heatmap.verify_place_id")
+    @patch("webapp.heatmap.calc_search_radius_m")
+    @patch("webapp.heatmap.generate_grid")
+    @patch("webapp.heatmap.clean_keyword")
+    def test_heatmap_scan_marks_brand_queries_for_fallback(
+        self,
+        mock_clean_keyword,
+        mock_generate_grid,
+        mock_calc_search_radius_m,
+        mock_verify_place_id,
+        mock_scan_grid,
+    ):
+        mock_clean_keyword.return_value = ("Heatmap Test Brand Phoenix", False)
+        mock_generate_grid.return_value = [{"row": 0, "col": 0, "lat": 33.5001, "lng": -112.1999}]
+        mock_calc_search_radius_m.return_value = 5000
+        mock_verify_place_id.return_value = {"name": "Heatmap Test Brand Phoenix"}
+        mock_scan_grid.return_value = ([{"row": 0, "col": 0, "lat": 33.5001, "lng": -112.1999, "rank": 1, "competitors": []}], {})
+
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "google_place_id", "place-123")
+
+        response = self.client.post(
+            "/client/heatmap/scan",
+            json={
+                "keyword": "Heatmap Test Brand Phoenix",
+                "radius_miles": 3,
+                "grid_size": 5,
+                "center_lat": 33.5001,
+                "center_lng": -112.1999,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(mock_scan_grid.call_args.kwargs["brand_query"])
 
 
 if __name__ == "__main__":
