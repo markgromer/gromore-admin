@@ -2,6 +2,8 @@
 
 This is the cleanest way to hand reusable design assets to the builder.
 
+For the practical, current-system guide to building full site kits, themes, page shells, and template bundles, use [SITE_BUILDER_KIT_PLAYBOOK.md](SITE_BUILDER_KIT_PLAYBOOK.md) alongside this spec. This file is the asset handoff format. The playbook explains how those assets map into the live Warren kit system.
+
 ## What to provide first
 
 Priority order:

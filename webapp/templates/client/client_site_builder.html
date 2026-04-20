@@ -3361,6 +3361,10 @@
                             </div>
                             <span class="page-type-chip"><i class="bi bi-images"></i>Slot-based imagery</span>
                         </div>
+                        <label class="form-check mb-3" style="font-size:.84rem; color:var(--text-muted);">
+                            <input class="form-check-input" type="checkbox" name="image_slots_use_stock_all" value="1">
+                            <span class="form-check-label">Use stock fallbacks for all empty image slots while testing</span>
+                        </label>
                         <div class="row g-3">
                             {% for slot in image_slots %}
                             <div class="col-md-6">

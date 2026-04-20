@@ -201,17 +201,18 @@ class SBSiteTemplatesDBTests(unittest.TestCase):
         first = self.db.seed_default_site_builder_kits()
         second = self.db.seed_default_site_builder_kits()
 
-        self.assertEqual(first["kits"], 4)
-        self.assertEqual(first["themes_created"], 4)
-        self.assertEqual(first["site_templates_created"], 4)
+        self.assertEqual(first["kits"], 5)
+        self.assertEqual(first["themes_created"], 5)
+        self.assertEqual(first["site_templates_created"], 5)
         self.assertGreaterEqual(first["templates_created"], 20)
         self.assertEqual(second["themes_created"], 0)
         self.assertEqual(second["site_templates_created"], 0)
-        self.assertEqual(second["kits"], 4)
+        self.assertEqual(second["kits"], 5)
 
         site_templates = self.db.get_sb_site_templates(active_only=False)
-        self.assertEqual(len(site_templates), 4)
+        self.assertEqual(len(site_templates), 5)
         self.assertTrue(any(item["is_default"] for item in site_templates))
+        self.assertTrue(any(item["slug"] == "authority-local-operator" for item in site_templates))
         page_shells = self.db.get_sb_templates(category="page_shell", active_only=False)
         self.assertGreaterEqual(len(page_shells), 32)
 
@@ -413,12 +414,25 @@ class SBAdminRouteTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"Site Builder Admin", resp.data)
 
+    def test_admin_dashboard_auto_seeds_production_kits_when_missing(self):
+        self.assertEqual(len(self.db.get_sb_site_templates(active_only=False)), 0)
+
+        resp = self.client.get("/site-builder-admin")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Lead Engine", resp.data)
+        self.assertIn(b"Authority Local Operator", resp.data)
+        self.assertEqual(len(self.db.get_sb_site_templates(active_only=False)), 5)
+
     def test_admin_tabs(self):
         for tab in ("templates", "site-templates", "themes", "prompts", "images"):
             resp = self.client.get(f"/site-builder-admin?tab={tab}")
             self.assertEqual(resp.status_code, 200)
 
     def test_create_template_via_route(self):
+        self.client.get("/site-builder-admin")
+        before_count = len(self.db.get_sb_templates(active_only=False))
+
         resp = self.client.post("/site-builder-admin/templates", data={
             "name": "Test Hero",
             "category": "hero",
@@ -426,9 +440,9 @@ class SBAdminRouteTests(unittest.TestCase):
             "is_active": "1",
         }, follow_redirects=True)
         self.assertEqual(resp.status_code, 200)
-        templates = self.db.get_sb_templates()
-        self.assertEqual(len(templates), 1)
-        self.assertEqual(templates[0]["name"], "Test Hero")
+        templates = self.db.get_sb_templates(active_only=False)
+        self.assertEqual(len(templates), before_count + 1)
+        self.assertTrue(any(template["name"] == "Test Hero" for template in templates))
 
     def test_delete_template_via_route(self):
         tid = self.db.create_sb_template({"name": "Del"})
@@ -448,16 +462,22 @@ class SBAdminRouteTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 404)
 
     def test_create_theme_via_route(self):
+        self.client.get("/site-builder-admin")
+        before_count = len(self.db.get_sb_themes(active_only=False))
+
         resp = self.client.post("/site-builder-admin/themes", data={
             "name": "Dark Mode",
             "primary_color": "#000000",
             "is_active": "1",
         }, follow_redirects=True)
         self.assertEqual(resp.status_code, 200)
-        themes = self.db.get_sb_themes()
-        self.assertEqual(len(themes), 1)
+        themes = self.db.get_sb_themes(active_only=False)
+        self.assertEqual(len(themes), before_count + 1)
+        self.assertTrue(any(theme["name"] == "Dark Mode" for theme in themes))
 
     def test_create_theme_via_route_normalizes_font_names(self):
+        self.client.get("/site-builder-admin")
+
         resp = self.client.post("/site-builder-admin/themes", data={
             "name": "Font Test",
             "font_heading": "Space   Grotesk!!!",
@@ -465,7 +485,7 @@ class SBAdminRouteTests(unittest.TestCase):
             "is_active": "1",
         }, follow_redirects=True)
         self.assertEqual(resp.status_code, 200)
-        theme = self.db.get_sb_themes()[0]
+        theme = next(theme for theme in self.db.get_sb_themes(active_only=False) if theme["name"] == "Font Test")
         self.assertEqual(theme["font_heading"], "Space Grotesk")
         self.assertEqual(theme["font_body"], "DM Sansscript")
 
@@ -510,7 +530,8 @@ class SBAdminRouteTests(unittest.TestCase):
         resp = self.client.post("/site-builder-admin/site-templates/install-defaults", follow_redirects=True)
         self.assertEqual(resp.status_code, 200)
         site_templates = self.db.get_sb_site_templates(active_only=False)
-        self.assertEqual(len(site_templates), 4)
+        self.assertEqual(len(site_templates), 5)
+        self.assertTrue(any(item["slug"] == "authority-local-operator" for item in site_templates))
         self.assertIn(b"Installed production site kits", resp.data)
         page_shells = self.db.get_sb_templates(category="page_shell", active_only=False)
         self.assertGreaterEqual(len(page_shells), 32)
@@ -612,13 +633,16 @@ class SBAdminRouteTests(unittest.TestCase):
         self.assertEqual(len(imgs), 2)
 
     def test_empty_template_name_rejected(self):
+        self.client.get("/site-builder-admin")
+        before_count = len(self.db.get_sb_templates(active_only=False))
+
         resp = self.client.post("/site-builder-admin/templates", data={
             "name": "",
             "category": "hero",
         }, follow_redirects=True)
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"required", resp.data)
-        self.assertEqual(len(self.db.get_sb_templates(active_only=False)), 0)
+        self.assertEqual(len(self.db.get_sb_templates(active_only=False)), before_count)
 
     def test_requires_login(self):
         # Logout

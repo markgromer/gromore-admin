@@ -3327,6 +3327,7 @@ def create_app():
     def site_builder_admin():
         from webapp.font_catalog import GOOGLE_FONT_CHOICES
 
+        db.ensure_default_site_builder_kits()
         tab = request.args.get("tab", "templates")
         templates = db.get_sb_templates(active_only=False)
         themes = db.get_sb_themes(active_only=False)

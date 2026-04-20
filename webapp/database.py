@@ -5919,6 +5919,17 @@ class WebDB:
             conn.close()
         return counts
 
+    def ensure_default_site_builder_kits(self):
+        existing = self.get_sb_site_templates(active_only=False)
+        if existing:
+            return {
+                "seeded": False,
+                "kits": len(existing),
+            }
+        result = self.seed_default_site_builder_kits()
+        result["seeded"] = True
+        return result
+
     # ── Site Builder Admin: Full Site Templates ──
 
     def _decorate_sb_site_template(self, item):

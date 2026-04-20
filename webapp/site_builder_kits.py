@@ -730,6 +730,254 @@ def _service_atlas_shell(page_type, kit_slug, kit_name):
     }
 
 
+def _authority_local_operator_shell(page_type, kit_slug, kit_name):
+    meta = _page_type_support(page_type)
+    html = _clean(
+        f"""
+        <div class="sb-kit-shell sb-kit-shell--{kit_slug} sb-kit-shell--authority-local-operator sb-kit-shell--{page_type}">
+            <section class="sb-kit-shell__hero-shell">
+                <div class="sb-kit-shell__copy">
+                    <p class="sb-kit-shell__eyebrow">{meta['eyebrow']}</p>
+                    <h1>{meta['title']}</h1>
+                    <p class="sb-kit-shell__summary">{meta['subtitle']}</p>
+                    <div class="sb-kit-shell__trust-strip">
+                        <span>Fast quotes</span>
+                        <span>No contracts</span>
+                        <span>Local reliability</span>
+                    </div>
+                    <div class="sb-kit-shell__actions">
+                        <a href="#contact">{_token('cta_text')}</a>
+                        <a class="sb-kit-shell__phone" href="tel:{_token('phone')}">{_token('phone')}</a>
+                    </div>
+                </div>
+                <aside class="sb-kit-shell__ops-rail">
+                    <p class="sb-kit-shell__rail-label">Operator notes</p>
+                    <strong>Make the next step frictionless.</strong>
+                    <p>{meta['focus']}</p>
+                    <div class="sb-kit-shell__ops-grid">
+                        <div>
+                            <span>Service area</span>
+                            <strong>{_token('service_area')}</strong>
+                        </div>
+                        <div>
+                            <span>Brand posture</span>
+                            <strong>Authority and speed</strong>
+                        </div>
+                        <div>
+                            <span>Primary path</span>
+                            <strong>Quote or call now</strong>
+                        </div>
+                        <div>
+                            <span>Proof cue</span>
+                            <strong>Reviews before the ask</strong>
+                        </div>
+                    </div>
+                </aside>
+            </section>
+            <section class="sb-kit-shell__proof-band">
+                <div>
+                    <span>Built for owner-operators</span>
+                    <strong>Keep the page sharp, direct, and visibly local.</strong>
+                </div>
+                <p>Front-load trust, move fast into the offer, and keep the quote path visible without making the page feel cheap or spammy.</p>
+            </section>
+            <div class="sb-kit-shell__frame">{_token('page_content')}</div>
+            <section class="sb-kit-shell__close">
+                <div>
+                    <span>Ready to move?</span>
+                    <strong>Give visitors the easiest next step on the page.</strong>
+                </div>
+                <p>Use the main CTA, the phone option, or the quote tool without making people hunt for the path.</p>
+            </section>
+        </div>
+        """
+    )
+    css = _clean(
+        f"""
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator {{
+            display: grid;
+            gap: 1.15rem;
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__hero-shell {{
+            display: grid;
+            grid-template-columns: minmax(0, 1.25fr) minmax(320px, .95fr);
+            gap: 1rem;
+            align-items: stretch;
+            padding: clamp(1.2rem, 2.8vw, 1.95rem);
+            border-radius: 28px;
+            background:
+                radial-gradient(circle at top right, rgba(255, 183, 3, 0.18) 0%, rgba(255,255,255,0) 38%),
+                linear-gradient(145deg, rgba(11, 31, 58, 0.98), rgba(17, 37, 66, 0.96));
+            color: #fff;
+            overflow: hidden;
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__copy {{
+            display: grid;
+            gap: .95rem;
+            align-content: center;
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__eyebrow {{
+            margin: 0;
+            width: fit-content;
+            padding: .45rem .82rem;
+            border-radius: 999px;
+            background: rgba(255,255,255,.08);
+            text-transform: uppercase;
+            letter-spacing: .16em;
+            font-size: .72rem;
+            color: #ffb703;
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator h1 {{
+            margin: 0;
+            max-width: 10ch;
+            font-size: clamp(2.2rem, 5vw, 4.4rem);
+            line-height: .92;
+            letter-spacing: -.05em;
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__summary {{
+            margin: 0;
+            max-width: 40rem;
+            color: rgba(255,255,255,.82);
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__trust-strip {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: .65rem;
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__trust-strip span {{
+            display: inline-flex;
+            align-items: center;
+            min-height: 40px;
+            padding: 0 .9rem;
+            border-radius: 999px;
+            background: rgba(255,255,255,.09);
+            border: 1px solid rgba(255,255,255,.08);
+            color: rgba(255,255,255,.92);
+            font-size: .9rem;
+            font-weight: 600;
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__actions {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: .8rem;
+            margin-top: .2rem;
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__actions a {{
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 46px;
+            padding: 0 1.05rem;
+            border-radius: 999px;
+            text-decoration: none;
+            background: #ffb703;
+            color: #0b1f3a;
+            font-weight: 800;
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__phone {{
+            background: rgba(255,255,255,.08);
+            border: 1px solid rgba(255,255,255,.1);
+            color: #fff;
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__ops-rail {{
+            display: grid;
+            gap: .8rem;
+            padding: 1rem;
+            border-radius: 22px;
+            background: linear-gradient(180deg, rgba(255,255,255,.94), rgba(244,248,252,.88));
+            color: #102038;
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__rail-label {{
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: .16em;
+            font-size: .7rem;
+            color: rgba(16, 32, 56, .58);
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__ops-grid {{
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: .7rem;
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__ops-grid div {{
+            padding: .85rem;
+            border-radius: 18px;
+            background: rgba(255,255,255,.9);
+            border: 1px solid rgba(11, 31, 58, .08);
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__ops-grid span {{
+            display: block;
+            margin-bottom: .2rem;
+            text-transform: uppercase;
+            letter-spacing: .14em;
+            font-size: .68rem;
+            color: rgba(16, 32, 56, .55);
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__proof-band {{
+            display: grid;
+            grid-template-columns: minmax(220px, .9fr) minmax(0, 1.1fr);
+            gap: 1rem;
+            padding: 1rem 1.1rem;
+            border-radius: 22px;
+            background: linear-gradient(135deg, rgba(46, 139, 87, 0.14), rgba(255, 183, 3, 0.18));
+            border: 1px solid rgba(46, 139, 87, 0.1);
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__proof-band span {{
+            display: block;
+            margin-bottom: .3rem;
+            text-transform: uppercase;
+            letter-spacing: .16em;
+            font-size: .7rem;
+            color: rgba(11, 31, 58, .58);
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__frame {{
+            border-radius: 26px;
+            padding: clamp(1.1rem, 2.3vw, 1.7rem);
+            background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.9));
+            border: 1px solid rgba(11, 31, 58, .08);
+            box-shadow: 0 22px 44px rgba(11, 31, 58, .08);
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__close {{
+            display: grid;
+            grid-template-columns: minmax(240px, .85fr) minmax(0, 1.15fr);
+            gap: 1rem;
+            padding: 1.05rem 1.15rem;
+            border-radius: 22px;
+            background: linear-gradient(135deg, rgba(11, 31, 58, 0.08), rgba(46, 139, 87, 0.12));
+        }}
+        .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__close span {{
+            display: block;
+            margin-bottom: .3rem;
+            text-transform: uppercase;
+            letter-spacing: .16em;
+            font-size: .7rem;
+            color: rgba(11, 31, 58, .58);
+        }}
+        @media (max-width: 860px) {{
+            .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__hero-shell,
+            .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__proof-band,
+            .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__close,
+            .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator .sb-kit-shell__ops-grid {{
+                grid-template-columns: 1fr;
+            }}
+            .sb-kit-shell--{kit_slug}.sb-kit-shell--authority-local-operator h1 {{
+                max-width: none;
+            }}
+        }}
+        """
+    )
+    return {
+        "name": f"{kit_name} - {meta['label']} Shell",
+        "category": "page_shell",
+        "page_types": page_type,
+        "html_content": html,
+        "css_content": css,
+        "description": f"Fast-response authority shell for the {meta['label'].lower()} page. Uses a high-contrast split hero, operational trust rail, proof band, and a frictionless CTA close.",
+        "sort_order": 20,
+        "is_active": 1,
+    }
+
+
 def _kit_definition(name, slug, description, prompt_notes, theme, nav_desc, footer_desc, shell_builder, modifier, sort_order, is_default=False):
     templates = [
         _nav_template(slug, name, nav_desc, modifier),
@@ -859,5 +1107,31 @@ def get_production_site_kit_definitions():
             shell_builder=_service_atlas_shell,
             modifier="grid",
             sort_order=40,
+        ),
+        _kit_definition(
+            name="Authority Local Operator",
+            slug="authority-local-operator",
+            description="High-converting local-service kit built for fast quotes, strong trust, and a visibly operational local brand posture.",
+            prompt_notes="Keep the tone direct, confident, and local. Front-load reviews and reliability, keep CTAs visible in the first two sections, require FAQ support on service pages, and make the quote path feel immediate without becoming spammy.",
+            theme={
+                "name": "Authority Core",
+                "description": "High-trust, fast-conversion local service theme with sharp contrast, bold CTA rhythm, and clean operational polish.",
+                "primary_color": "#0B1F3A",
+                "secondary_color": "#2E8B57",
+                "accent_color": "#FFB703",
+                "text_color": "#1A1A1A",
+                "bg_color": "#FFFFFF",
+                "font_heading": "Inter",
+                "font_body": "Inter",
+                "button_style": "rounded",
+                "layout_style": "hero-driven",
+                "is_default": 0,
+                "is_active": 1,
+            },
+            nav_desc="Sharp sticky navigation with the brand left-aligned, operational trust in the layout, and an always-visible quote-first CTA.",
+            footer_desc="Three-column local-operator footer that reinforces services, service areas, phone-first contact, and one final quote action.",
+            shell_builder=_authority_local_operator_shell,
+            modifier="operator",
+            sort_order=50,
         ),
     ]

@@ -208,6 +208,7 @@ class SiteBuilderLandingTests(unittest.TestCase):
         self.assertIn(b"name=\"wireframe_style\"", resp.data)
         self.assertIn(b"name=\"hero_layout\"", resp.data)
         self.assertIn(b"name=\"services_widget_layout\"", resp.data)
+        self.assertIn(b"image_slots_use_stock_all", resp.data)
         self.assertIn(b"hero_desktop_use_stock", resp.data)
         self.assertIn(b"wireframe-preview", resp.data)
 
@@ -979,6 +980,17 @@ class SiteBuilderIntakeWizardTests(unittest.TestCase):
         self.assertIn(b"Business", resp.data)
         self.assertIn(b"SEO Intel", resp.data)
 
+    def test_landing_auto_seeds_production_kits_when_missing(self):
+        _login_client(self.client, self.app)
+        self.assertEqual(len(self.app.db.get_sb_site_templates(active_only=False)), 0)
+
+        resp = self.client.get("/client/site-builder")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Lead Engine", resp.data)
+        self.assertIn(b"Authority Local Operator", resp.data)
+        self.assertEqual(len(self.app.db.get_sb_site_templates(active_only=False)), 5)
+
     def test_landing_shows_brand_fields_prefilled(self):
         _login_client(self.client, self.app)
         resp = self.client.get("/client/site-builder")
@@ -1409,6 +1421,51 @@ class SiteBuilderGenerateWithIntakeTests(unittest.TestCase):
         self.assertEqual(intake["image_slots"]["about_team"]["mode"], "upload")
         self.assertEqual(len(intake["image_slots"]["about_team"]["assets"]), 1)
         self.assertIn("site_builder_intake", intake["image_slots"]["about_team"]["assets"][0]["path"])
+
+    @patch("webapp.client_portal._get_openai_api_key", return_value="test-key")
+    @patch("webapp.client_portal._pick_ai_model", return_value="gpt-4o-mini")
+    def test_generate_can_use_stock_for_all_empty_image_slots(self, mock_model, mock_key):
+        _login_client(self.client, self.app)
+
+        fake_content = {
+            "title": "Test Page",
+            "content": "<p>Generated content</p>",
+            "excerpt": "Test excerpt",
+            "seo_title": "Test SEO Title",
+            "seo_description": "Test description",
+            "primary_keyword": "test keyword",
+            "secondary_keywords": "kw1, kw2",
+            "faq_items": [],
+        }
+        fake_assembled = {
+            "schemas": [],
+            "schema_html": "",
+            "full_html": "<p>Full HTML</p>",
+        }
+
+        with patch("webapp.site_builder.generate_page_content", return_value=fake_content), \
+             patch("webapp.site_builder.assemble_page", return_value=fake_assembled):
+
+            resp = self.client.post(
+                "/client/site-builder/generate",
+                data={
+                    "services": "Pet Waste Removal",
+                    "areas": "Springfield",
+                    "image_slots_use_stock_all": "1",
+                },
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertTrue(payload["ok"])
+
+        build = self.app.db.get_site_build(payload["build_id"])
+        intake = build.get("intake") or {}
+        self.assertEqual(intake["image_slots"]["hero_desktop"]["mode"], "stock")
+        self.assertEqual(intake["image_slots"]["services_overview"]["mode"], "stock")
+        self.assertEqual(intake["image_slots"]["contact_location"]["mode"], "stock")
+        self.assertIn("source.unsplash.com", intake["image_slots"]["hero_desktop"]["stock_url"])
 
     @patch("webapp.client_portal._get_openai_api_key", return_value="test-key")
     @patch("webapp.client_portal._pick_ai_model", return_value="gpt-4o-mini")

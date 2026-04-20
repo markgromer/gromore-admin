@@ -717,12 +717,41 @@ def _site_shell_class_names(page_spec, brand_ctx):
 def _default_theme_css(brand_ctx):
         return """
 .sb-site-shell {
+    position: relative;
+    isolation: isolate;
     color: var(--sb-text, #0f172a);
     font-family: var(--sb-font-body, 'Source Sans 3', Arial, sans-serif);
     line-height: 1.65;
-    width: min(100%, 1180px);
+    width: min(100%, 1320px);
     margin: 0 auto;
-    padding: clamp(1rem, 2vw, 1.5rem);
+    padding: clamp(1rem, 2vw, 1.5rem) clamp(1rem, 3vw, 2.1rem) clamp(3rem, 7vw, 5.5rem);
+}
+
+.sb-site-shell::before,
+.sb-site-shell::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    border-radius: 999px;
+    pointer-events: none;
+    filter: blur(18px);
+    opacity: .8;
+}
+
+.sb-site-shell::before {
+    width: min(46vw, 560px);
+    height: min(46vw, 560px);
+    top: -6rem;
+    right: -6rem;
+    background: radial-gradient(circle, color-mix(in srgb, var(--sb-primary, #1d4ed8) 16%, white 84%) 0%, rgba(255,255,255,0) 72%);
+}
+
+.sb-site-shell::after {
+    width: min(34vw, 420px);
+    height: min(34vw, 420px);
+    left: -4rem;
+    top: 24%;
+    background: radial-gradient(circle, color-mix(in srgb, var(--sb-accent, #f97316) 18%, white 82%) 0%, rgba(255,255,255,0) 72%);
 }
 
 .sb-site-shell,
@@ -744,48 +773,151 @@ def _default_theme_css(brand_ctx):
     width: 100%;
     max-width: 100%;
     height: auto;
-    border-radius: 22px;
+    border-radius: 24px;
     object-fit: cover;
 }
 
 .sb-site-shell > header,
 .sb-site-shell > footer {
-    padding: 1rem 0;
+    position: relative;
+    z-index: 2;
+}
+
+.sb-site-shell > header {
+    margin-bottom: clamp(.8rem, 2vw, 1.25rem);
+}
+
+.sb-site-shell > footer {
+    margin-top: clamp(2rem, 5vw, 4rem);
 }
 
 .sb-site-shell main {
     display: grid;
-    gap: clamp(1.25rem, 2vw, 1.75rem);
+    gap: clamp(2.8rem, 6vw, 5rem);
 }
 
-.sb-site-shell section,
+.sb-site-shell main > section,
 .sb-site-shell .sb-section,
+.sb-site-shell .hero,
+.sb-site-shell .sb-hero,
+.sb-site-shell .section-shell,
+.sb-site-shell .split-band,
+.sb-site-shell .editorial-panel,
+.sb-site-shell .surface-card,
+.sb-site-shell .spotlight-card,
+.sb-site-shell .media-stack,
+.sb-site-shell .data-rail,
+.sb-site-shell .proof-marquee,
 .sb-site-shell .sb-reference-gallery,
 .sb-site-shell .sb-intake-gallery {
     position: relative;
+}
+
+.sb-site-shell main > section,
+.sb-site-shell .sb-section {
+    display: grid;
+    gap: clamp(.95rem, 2vw, 1.35rem);
+    padding-block: clamp(1.25rem, 3vw, 2.5rem);
+}
+
+.sb-site-shell main > section + section,
+.sb-site-shell .sb-section + .sb-section {
+    border-top: 1px solid rgba(148, 163, 184, .16);
+}
+
+.sb-site-shell .section-shell,
+.sb-site-shell .split-band,
+.sb-site-shell .editorial-panel,
+.sb-site-shell .surface-card,
+.sb-site-shell .spotlight-card,
+.sb-site-shell .media-stack,
+.sb-site-shell .data-rail,
+.sb-site-shell .sb-reference-gallery,
+.sb-site-shell .sb-intake-gallery {
     overflow: hidden;
-    padding: clamp(1.5rem, 3vw, 2.5rem);
+    padding: clamp(1.35rem, 3vw, 2.4rem);
     border-radius: 30px;
     border: 1px solid rgba(148, 163, 184, .18);
-    background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.96));
-    box-shadow: 0 18px 48px rgba(15, 23, 42, .08);
+    background: linear-gradient(180deg, rgba(255,255,255,.92), rgba(248,250,252,.8));
+    box-shadow: 0 24px 70px rgba(15, 23, 42, .08);
+    backdrop-filter: blur(16px);
+}
+
+.sb-site-shell .surface-dark,
+.sb-site-shell .section-shell--dark,
+.sb-site-shell .editorial-panel--dark {
+    background: linear-gradient(145deg, #0f172a 0%, #111827 55%, color-mix(in srgb, var(--sb-primary, #1d4ed8) 35%, #111827 65%) 100%);
+    color: #fff;
+    border-color: rgba(255,255,255,.08);
+    box-shadow: 0 28px 90px rgba(15, 23, 42, .26);
+}
+
+.sb-site-shell .surface-dark h2,
+.sb-site-shell .surface-dark h3,
+.sb-site-shell .surface-dark h4,
+.sb-site-shell .surface-dark p,
+.sb-site-shell .section-shell--dark h2,
+.sb-site-shell .section-shell--dark h3,
+.sb-site-shell .section-shell--dark h4,
+.sb-site-shell .section-shell--dark p,
+.sb-site-shell .editorial-panel--dark h2,
+.sb-site-shell .editorial-panel--dark h3,
+.sb-site-shell .editorial-panel--dark h4,
+.sb-site-shell .editorial-panel--dark p {
+    color: inherit;
+}
+
+.sb-site-shell .surface-accent,
+.sb-site-shell .section-shell--accent {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--sb-primary, #1d4ed8) 10%, white 90%), color-mix(in srgb, var(--sb-accent, #f97316) 15%, white 85%));
 }
 
 .sb-site-shell .hero,
-.sb-site-shell .sb-hero {
+.sb-site-shell .sb-hero,
+.sb-site-shell .hero-shell {
     display: grid;
-    gap: clamp(1.25rem, 3vw, 2.5rem);
+    gap: clamp(1.35rem, 3vw, 2.6rem);
     align-items: center;
-    padding: clamp(2rem, 5vw, 4rem);
-    background: linear-gradient(135deg, rgba(255,255,255,.98), rgba(241,245,249,.92));
+    padding: clamp(1.8rem, 5vw, 4rem);
+    min-height: clamp(420px, 72vh, 700px);
+    border-radius: 34px;
+    border: 1px solid rgba(148, 163, 184, .16);
+    background:
+        radial-gradient(circle at top right, color-mix(in srgb, var(--sb-accent, #f97316) 22%, white 78%) 0%, rgba(255,255,255,0) 36%),
+        radial-gradient(circle at 14% 18%, color-mix(in srgb, var(--sb-primary, #1d4ed8) 18%, white 82%) 0%, rgba(255,255,255,0) 40%),
+        linear-gradient(145deg, rgba(255,255,255,.96), rgba(241,245,249,.8));
+    box-shadow: 0 32px 90px rgba(15, 23, 42, .14);
+    overflow: hidden;
+}
+
+.sb-site-shell .hero::before,
+.sb-site-shell .sb-hero::before,
+.sb-site-shell .hero-shell::before {
+    content: "";
+    position: absolute;
+    inset: auto -6% -28% auto;
+    width: min(40vw, 460px);
+    aspect-ratio: 1;
+    border-radius: 999px;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--sb-primary, #1d4ed8) 28%, white 72%), rgba(255,255,255,0));
+    opacity: .55;
 }
 
 .sb-site-shell .hero-copy,
 .sb-site-shell .sb-hero-copy,
 .sb-site-shell .split-layout,
-.sb-site-shell .two-column {
+.sb-site-shell .two-column,
+.sb-site-shell .feature-split,
+.sb-site-shell .editorial-split {
     display: grid;
     gap: 1rem;
+}
+
+.sb-site-shell .hero-copy,
+.sb-site-shell .sb-hero-copy {
+    position: relative;
+    z-index: 1;
+    max-width: 46rem;
 }
 
 .sb-site-shell .hero-copy > :first-child,
@@ -804,10 +936,11 @@ def _default_theme_css(brand_ctx):
 .sb-site-shell .sb-hero h2,
 .sb-site-shell .sb-heading-xl {
     font-family: var(--sb-font-heading, 'Poppins', Arial, sans-serif);
-    font-size: clamp(2.3rem, 5vw, 4.6rem);
-    line-height: .96;
-    letter-spacing: -.04em;
+    font-size: clamp(2.8rem, 7vw, 6rem);
+    line-height: .9;
+    letter-spacing: -.055em;
     margin: 0;
+    max-width: 14ch;
 }
 
 .sb-site-shell h2,
@@ -815,17 +948,17 @@ def _default_theme_css(brand_ctx):
 .sb-site-shell h4,
 .sb-site-shell .sb-heading {
     font-family: var(--sb-font-heading, 'Poppins', Arial, sans-serif);
-    line-height: 1.02;
-    letter-spacing: -.03em;
+    line-height: .98;
+    letter-spacing: -.04em;
     margin: 0 0 .85rem;
 }
 
 .sb-site-shell h2 {
-    font-size: clamp(1.7rem, 3vw, 2.7rem);
+    font-size: clamp(1.9rem, 3.5vw, 3.4rem);
 }
 
 .sb-site-shell h3 {
-    font-size: clamp(1.15rem, 2vw, 1.55rem);
+    font-size: clamp(1.2rem, 2.2vw, 1.75rem);
 }
 
 .sb-site-shell p,
@@ -836,49 +969,57 @@ def _default_theme_css(brand_ctx):
 
 .sb-site-shell p {
     margin: 0;
-    color: color-mix(in srgb, var(--sb-text, #0f172a) 90%, white 10%);
+    max-width: 68ch;
+    color: color-mix(in srgb, var(--sb-text, #0f172a) 92%, white 8%);
 }
 
 .sb-site-shell .eyebrow,
 .sb-site-shell .section-kicker,
-.sb-site-shell .sb-eyebrow {
+.sb-site-shell .sb-eyebrow,
+.sb-site-shell .floating-badge {
     display: inline-flex;
     align-items: center;
     gap: .5rem;
     width: fit-content;
     margin-bottom: .85rem;
-    padding: .45rem .8rem;
+    padding: .5rem .9rem;
     border-radius: 999px;
-    background: rgba(15, 23, 42, .06);
+    background: rgba(255, 255, 255, .68);
     color: var(--sb-primary, #1d4ed8);
-    font-size: .82rem;
+    border: 1px solid rgba(148, 163, 184, .18);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, .08);
+    font-size: .8rem;
     font-weight: 700;
-    letter-spacing: .08em;
+    letter-spacing: .09em;
     text-transform: uppercase;
 }
 
 .sb-site-shell .button-row,
 .sb-site-shell .cta-row,
-.sb-site-shell .badge-row {
+.sb-site-shell .badge-row,
+.sb-site-shell .proof-marquee {
     display: flex;
     flex-wrap: wrap;
     gap: .75rem;
     align-items: center;
 }
 
-.sb-site-shell .badge-row {
-    gap: .6rem;
+.sb-site-shell .proof-marquee {
+    gap: .9rem;
 }
 
 .sb-site-shell .badge-row > *,
-.sb-site-shell .trust-badges > * {
+.sb-site-shell .trust-badges > *,
+.sb-site-shell .proof-marquee > * {
     display: inline-flex;
     align-items: center;
     gap: .45rem;
-    padding: .55rem .85rem;
+    min-height: 42px;
+    padding: .6rem .95rem;
     border-radius: 999px;
-    background: rgba(255,255,255,.72);
+    background: rgba(255,255,255,.74);
     border: 1px solid rgba(148, 163, 184, .16);
+    backdrop-filter: blur(14px);
     font-size: .92rem;
     font-weight: 600;
 }
@@ -890,32 +1031,34 @@ def _default_theme_css(brand_ctx):
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 52px;
-    padding: .9rem 1.35rem;
+    min-height: 54px;
+    padding: .95rem 1.4rem;
     border-radius: 999px;
-    background: var(--sb-primary, #1d4ed8);
+    background: linear-gradient(135deg, var(--sb-primary, #1d4ed8), color-mix(in srgb, var(--sb-accent, #f97316) 56%, var(--sb-primary, #1d4ed8) 44%));
     color: #fff;
     border: 1px solid transparent;
-    box-shadow: 0 18px 36px rgba(29, 78, 216, .2);
+    box-shadow: 0 20px 46px rgba(29, 78, 216, .24);
     text-decoration: none;
-    font-weight: 700;
-    transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+    font-weight: 800;
+    letter-spacing: -.01em;
+    transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
 }
 
 .sb-site-shell .sb-button:hover,
 .sb-site-shell .button-row a:hover,
 .sb-site-shell .cta-row a:hover,
 .sb-site-shell a.sb-button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 22px 42px rgba(29, 78, 216, .24);
+    transform: translateY(-2px);
+    box-shadow: 0 26px 58px rgba(29, 78, 216, .28);
+    filter: saturate(1.05);
 }
 
 .sb-site-shell .sb-button.secondary,
 .sb-site-shell .button-row a.secondary,
 .sb-site-shell .cta-row a.secondary {
-    background: transparent;
+    background: rgba(255,255,255,.74);
     color: var(--sb-text, #0f172a);
-    border-color: rgba(148, 163, 184, .32);
+    border-color: rgba(148, 163, 184, .28);
     box-shadow: none;
 }
 
@@ -928,6 +1071,8 @@ def _default_theme_css(brand_ctx):
 .sb-site-shell .faq-list,
 .sb-site-shell .process-steps,
 .sb-site-shell .before-after-grid,
+.sb-site-shell .media-stack,
+.sb-site-shell .data-rail,
 .sb-site-shell .sb-reference-gallery,
 .sb-site-shell .sb-intake-gallery {
     display: grid;
@@ -941,6 +1086,8 @@ def _default_theme_css(brand_ctx):
 .sb-site-shell .offer-card,
 .sb-site-shell .contact-card,
 .sb-site-shell .pricing-card,
+.sb-site-shell .stat-card,
+.sb-site-shell .spotlight-card,
 .sb-site-shell .services-grid > *,
 .sb-site-shell .proof-grid > *,
 .sb-site-shell .stats-grid > *,
@@ -948,17 +1095,27 @@ def _default_theme_css(brand_ctx):
 .sb-site-shell .offer-grid > *,
 .sb-site-shell .process-steps > *,
 .sb-site-shell .gallery-grid > *,
-.sb-site-shell .faq-list > * {
+.sb-site-shell .faq-list > *,
+.sb-site-shell .data-rail > * {
     height: 100%;
-    padding: 1.2rem;
+    padding: 1.25rem;
     border-radius: 24px;
     border: 1px solid rgba(148, 163, 184, .18);
-    background: rgba(255,255,255,.82);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.8);
+    background: linear-gradient(180deg, rgba(255,255,255,.9), rgba(248,250,252,.82));
+    box-shadow: 0 16px 40px rgba(15, 23, 42, .07);
 }
 
-.sb-site-shell .stats-grid > * {
-    text-align: center;
+.sb-site-shell .feature-card,
+.sb-site-shell .proof-card,
+.sb-site-shell .spotlight-card,
+.sb-site-shell .stat-card {
+    display: grid;
+    gap: .75rem;
+}
+
+.sb-site-shell .stats-grid > *,
+.sb-site-shell .stat-card {
+    text-align: left;
 }
 
 .sb-site-shell .metric,
@@ -966,9 +1123,9 @@ def _default_theme_css(brand_ctx):
     display: block;
     color: var(--sb-primary, #1d4ed8);
     font-family: var(--sb-font-heading, 'Poppins', Arial, sans-serif);
-    font-size: clamp(1.9rem, 3vw, 3rem);
-    line-height: .95;
-    letter-spacing: -.04em;
+    font-size: clamp(2rem, 4vw, 3.8rem);
+    line-height: .9;
+    letter-spacing: -.06em;
 }
 
 .sb-site-shell .cta-band,
@@ -976,10 +1133,27 @@ def _default_theme_css(brand_ctx):
 .sb-site-shell .contact-strip {
     display: grid;
     gap: 1rem;
-    padding: clamp(1.5rem, 4vw, 3rem);
-    border-radius: 28px;
-    background: linear-gradient(135deg, var(--sb-primary, #1d4ed8), var(--sb-accent, #f97316));
+    padding: clamp(1.6rem, 4vw, 3.2rem);
+    border-radius: 30px;
+    border: 1px solid rgba(255,255,255,.08);
+    background:
+        linear-gradient(135deg, color-mix(in srgb, var(--sb-primary, #1d4ed8) 74%, #08111f 26%), color-mix(in srgb, var(--sb-accent, #f97316) 38%, var(--sb-primary, #1d4ed8) 62%)),
+        #0f172a;
     color: #fff;
+    box-shadow: 0 28px 84px rgba(15, 23, 42, .26);
+    overflow: hidden;
+}
+
+.sb-site-shell .cta-band::before,
+.sb-site-shell .cta-panel::before,
+.sb-site-shell .contact-strip::before {
+    content: "";
+    position: absolute;
+    inset: auto -5rem -5rem auto;
+    width: 18rem;
+    height: 18rem;
+    border-radius: 999px;
+    background: radial-gradient(circle, rgba(255,255,255,.18) 0%, rgba(255,255,255,0) 72%);
 }
 
 .sb-site-shell .cta-band h2,
@@ -1002,6 +1176,7 @@ def _default_theme_css(brand_ctx):
 .sb-site-shell .contact-strip .button-row a {
     background: #fff;
     color: var(--sb-primary, #1d4ed8);
+    box-shadow: none;
 }
 
 .sb-site-shell ul,
@@ -1038,24 +1213,39 @@ def _default_theme_css(brand_ctx):
 
 .sb-site-shell blockquote {
     margin: 0;
-    padding: 1.2rem 1.3rem;
+    padding: 1.35rem 1.45rem;
     border-left: 4px solid var(--sb-accent, #f97316);
     border-radius: 20px;
-    background: rgba(255,255,255,.82);
+    background: rgba(255,255,255,.84);
+    box-shadow: 0 14px 34px rgba(15, 23, 42, .06);
     font-weight: 600;
 }
 
 .sb-site-shell .sb-hero-media,
 .sb-site-shell .hero-media,
-.sb-site-shell .media-card {
+.sb-site-shell .media-card,
+.sb-site-shell .visual-panel {
     position: relative;
+    display: grid;
+    align-content: stretch;
+}
+
+.sb-site-shell .sb-hero-media,
+.sb-site-shell .hero-media,
+.sb-site-shell .visual-panel {
+    min-height: 100%;
 }
 
 .sb-site-shell .sb-hero-media img,
 .sb-site-shell .hero-media img,
 .sb-site-shell .media-card img,
+.sb-site-shell .visual-panel img,
 .sb-site-shell .hero img {
-    min-height: 300px;
+    width: 100%;
+    height: 100%;
+    min-height: 360px;
+    border-radius: 28px;
+    box-shadow: 0 26px 70px rgba(15, 23, 42, .16);
 }
 
 .sb-site-shell .sb-reference-gallery,
@@ -1070,20 +1260,30 @@ def _default_theme_css(brand_ctx):
 .sb-site-shell.sb-preset-bold-modern .hero,
 .sb-site-shell.sb-preset-dark-premium .hero,
 .sb-site-shell.sb-preset-bold-modern .sb-hero,
-.sb-site-shell.sb-preset-dark-premium .sb-hero {
-    background: linear-gradient(140deg, #0f172a 0%, #111827 58%, var(--sb-primary, #1d4ed8) 100%);
+.sb-site-shell.sb-preset-dark-premium .sb-hero,
+.sb-site-shell.sb-preset-bold-modern .hero-shell,
+.sb-site-shell.sb-preset-dark-premium .hero-shell {
+    background:
+        radial-gradient(circle at top right, rgba(255,255,255,.12) 0%, rgba(255,255,255,0) 34%),
+        linear-gradient(140deg, #0f172a 0%, #111827 58%, var(--sb-primary, #1d4ed8) 100%);
     color: #fff;
 }
 
 .sb-site-shell.sb-preset-bold-modern .hero p,
 .sb-site-shell.sb-preset-dark-premium .hero p,
 .sb-site-shell.sb-preset-bold-modern .sb-hero p,
-.sb-site-shell.sb-preset-dark-premium .sb-hero p {
+.sb-site-shell.sb-preset-dark-premium .sb-hero p,
+.sb-site-shell.sb-preset-bold-modern .hero-shell p,
+.sb-site-shell.sb-preset-dark-premium .hero-shell p {
     color: rgba(255,255,255,.88);
 }
 
-.sb-site-shell.sb-preset-warm-traditional section,
-.sb-site-shell.sb-preset-warm-traditional .sb-section {
+.sb-site-shell.sb-preset-warm-traditional .section-shell,
+.sb-site-shell.sb-preset-warm-traditional .surface-card,
+.sb-site-shell.sb-preset-warm-traditional .editorial-panel,
+.sb-site-shell.sb-preset-warm-traditional .spotlight-card,
+.sb-site-shell.sb-preset-warm-traditional .feature-card,
+.sb-site-shell.sb-preset-warm-traditional .proof-card {
     background: linear-gradient(180deg, rgba(255,250,245,.98), rgba(255,244,234,.94));
 }
 
@@ -1102,38 +1302,59 @@ def _default_theme_css(brand_ctx):
 .sb-site-shell.sb-hero-layout-split-right .hero,
 .sb-site-shell.sb-hero-layout-proof-strip .hero,
 .sb-site-shell.sb-hero-layout-split-right .sb-hero,
-.sb-site-shell.sb-hero-layout-proof-strip .sb-hero {
+.sb-site-shell.sb-hero-layout-proof-strip .sb-hero,
+.sb-site-shell.sb-hero-layout-split-right .hero-shell,
+.sb-site-shell.sb-hero-layout-proof-strip .hero-shell {
     align-items: center;
 }
 
 @media (min-width: 920px) {
     .sb-site-shell .hero,
     .sb-site-shell .sb-hero,
+    .sb-site-shell .hero-shell,
     .sb-site-shell .split-layout,
     .sb-site-shell .two-column,
+    .sb-site-shell .feature-split,
+    .sb-site-shell .editorial-split,
+    .sb-site-shell .split-band,
     .sb-site-shell .cta-band,
     .sb-site-shell .cta-panel,
     .sb-site-shell .contact-strip {
-        grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+        grid-template-columns: minmax(0, 1.05fr) minmax(300px, .95fr);
     }
 
     .sb-site-shell .hero-copy,
     .sb-site-shell .sb-hero-copy {
         align-content: center;
     }
+
+    .sb-site-shell .proof-marquee,
+    .sb-site-shell .data-rail {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        display: grid;
+    }
 }
 
 @media (max-width: 719px) {
     .sb-site-shell {
-        padding: .75rem;
+        padding: .75rem .75rem 2.5rem;
     }
 
-    .sb-site-shell section,
-    .sb-site-shell .sb-section,
     .sb-site-shell .hero,
-    .sb-site-shell .sb-hero {
+    .sb-site-shell .sb-hero,
+    .sb-site-shell .hero-shell,
+    .sb-site-shell .section-shell,
+    .sb-site-shell .split-band,
+    .sb-site-shell .editorial-panel,
+    .sb-site-shell .surface-card,
+    .sb-site-shell .spotlight-card,
+    .sb-site-shell .media-stack,
+    .sb-site-shell .data-rail,
+    .sb-site-shell .cta-band,
+    .sb-site-shell .cta-panel,
+    .sb-site-shell .contact-strip {
         border-radius: 24px;
-        padding: 1.25rem;
+        padding: 1.2rem;
     }
 
     .sb-site-shell .sb-button,
@@ -1141,6 +1362,14 @@ def _default_theme_css(brand_ctx):
     .sb-site-shell .cta-row a,
     .sb-site-shell a.sb-button {
         width: 100%;
+    }
+
+    .sb-site-shell .hero h1,
+    .sb-site-shell .hero h2,
+    .sb-site-shell .sb-hero h1,
+    .sb-site-shell .sb-hero h2,
+    .sb-site-shell .sb-heading-xl {
+        max-width: none;
     }
 }
 """.strip()
@@ -1659,10 +1888,13 @@ _GLOBAL_RULES = (
     "\n"
     "HTML DESIGN RULES:\n"
     "- Build the page with semantic <main> and <section> blocks, not one long stream of plain headings and paragraphs.\n"
+    "- This should feel like a flagship, component-driven React marketing site translated into lean HTML, not a generic brochure theme.\n"
     "- Make the first screen feel designed, not generic: a hero block with hero-copy, hero-media, trust cues, and one clear CTA.\n"
-    "- Use modern layout hooks when relevant: hero, hero-copy, hero-media, services-grid, card-grid, feature-card, proof-grid, proof-card, stats-grid, process-steps, cta-band, faq-list, button-row, badge-row, checklist.\n"
+    "- Favor asymmetric composition, layered surfaces, contrast shifts, and strong visual hierarchy over identical stacked cards.\n"
+    "- Use modern layout hooks when relevant: hero, hero-copy, hero-media, hero-shell, section-shell, split-band, editorial-panel, spotlight-card, stat-card, data-rail, media-stack, proof-marquee, services-grid, card-grid, feature-card, proof-grid, proof-card, stats-grid, process-steps, cta-band, faq-list, button-row, badge-row, checklist.\n"
     "- Use 2-column or 3-column layouts where it improves scanning. Do not stack every section as a centered paragraph block.\n"
-    "- Alternate section rhythm with cards, split layouts, proof strips, image-led rows, and CTA bands. Avoid a brochure-style page that looks dated or template-generic.\n"
+    "- Alternate section rhythm with split layouts, proof strips, image-led rows, editorial panels, data rails, and CTA bands. Avoid a brochure-style page that looks dated or template-generic.\n"
+    "- Default to fewer, stronger sections. Each section should have a distinct visual job and a noticeably different density or composition.\n"
     "- Every image must live inside a purposeful layout container like hero-media, feature-card, media-card, gallery-grid, or before-after-grid.\n"
     "- Design for a premium modern service business site from this decade, not an old brochure website.\n"
     "\n"
@@ -1672,6 +1904,9 @@ _GLOBAL_RULES = (
     "- Do not write feature lists without benefits. Every feature needs a 'which means...' follow-up.\n"
     "- Do not use the same sentence structure for every bullet point.\n"
     "- Do not make every paragraph the same length. Vary rhythm.\n"
+    "- Do not wrap every section in the same rounded white card treatment. Visual repetition kills the page.\n"
+    "- Do not center everything. Use directional layouts, anchored media, and sections with different visual weight.\n"
+    "- Do not make every section look like it came from the same WordPress template block.\n"
 )
 
 _OUTPUT_FORMAT = (
@@ -1889,6 +2124,8 @@ def _design_block(ctx):
         return ""
 
     parts.append("DESIGN GUIDELINES (apply CSS classes and inline styles to match):")
+    parts.append("- Quality bar: flagship-level, product-grade, component-driven site design that feels like a modern React build, but rendered as fast static HTML.")
+    parts.append("- Avoid generic brochure patterns, repetitive white cards, centered-everything layouts, or interchangeable sections.")
     if reference_block:
         parts.append(reference_block.rstrip())
     if theme_block:
@@ -2057,6 +2294,8 @@ def _system_msg():
         "electricians, landscapers, and similar trades.\n\n"
         "You also think like a modern web designer. The page must feel current, sharp, and intentional, "
         "not like an old brochure site with flat generic sections.\n\n"
+        "You think like a product designer and art director as well. Build pages that feel flagship, premium, "
+        "component-driven, and visually decisive, similar to a high-end React marketing site, while still using fast static HTML.\n\n"
         "You think like a business owner, not a marketer. You know what the plumber is thinking "
         "when he reads a landing page. You know these people are busy, skeptical of marketing, "
         "have been burned by agencies, want results not promises, and respect directness.\n\n"

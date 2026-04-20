@@ -169,9 +169,14 @@ class PromptTests(unittest.TestCase):
         system_msg, user_msg = build_page_prompt(home, self.ctx)
 
         self.assertIn("modern web designer", system_msg)
+        self.assertIn("product designer and art director", system_msg)
         self.assertIn("semantic <main> and <section> blocks", user_msg)
+        self.assertIn("flagship, component-driven React marketing site", user_msg)
         self.assertIn("services-grid", user_msg)
         self.assertIn("proof-grid", user_msg)
+        self.assertIn("section-shell", user_msg)
+        self.assertIn("spotlight-card", user_msg)
+        self.assertIn("Do not wrap every section in the same rounded white card treatment", user_msg)
         self.assertIn("Design for a premium modern service business site from this decade", user_msg)
 
     def test_faq_prompt_requires_faq_items_for_schema(self):

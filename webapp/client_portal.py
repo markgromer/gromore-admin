@@ -6670,11 +6670,12 @@ def _site_builder_collect_image_slots(brand_id, industry):
     target_dir = uploads_dir / "site_builder_intake" / str(brand_id)
     target_dir.mkdir(parents=True, exist_ok=True)
     allowed_ext = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
+    use_stock_for_all = bool(request.form.get("image_slots_use_stock_all"))
 
     for slot in _SITE_BUILDER_INTAKE_IMAGE_SLOTS:
         key = slot["key"]
         note = (request.form.get(f"{key}_note") or "").strip()[:240]
-        use_stock = bool(request.form.get(f"{key}_use_stock"))
+        use_stock = bool(request.form.get(f"{key}_use_stock")) or use_stock_for_all
         field_name = slot["field_name"]
 
         files = request.files.getlist(field_name) if slot.get("multiple") else [request.files.get(field_name)]
@@ -10002,6 +10003,7 @@ def _publish_wp_page(brand, title, content, excerpt="", slug="",
 def client_site_builder():
     """Site Builder landing page - shows WP status, generation form, build history."""
     db = _get_db()
+    db.ensure_default_site_builder_kits()
     brand_id = session["client_brand_id"]
     brand = db.get_brand(brand_id) or {}
     builds = db.get_site_builds(brand_id, limit=20)
