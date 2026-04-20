@@ -5779,6 +5779,146 @@ class WebDB:
         conn.commit()
         conn.close()
 
+    def _upsert_sb_theme_by_name(self, conn, data):
+        name = str(data.get("name") or "").strip()
+        row = conn.execute("SELECT id FROM sb_themes WHERE name = ? LIMIT 1", (name,)).fetchone()
+        if data.get("is_default"):
+            conn.execute("UPDATE sb_themes SET is_default = 0")
+
+        params = (
+            name,
+            data.get("description", ""),
+            data.get("primary_color", "#2563eb"),
+            data.get("secondary_color", "#1e40af"),
+            data.get("accent_color", "#f59e0b"),
+            data.get("text_color", "#1f2937"),
+            data.get("bg_color", "#ffffff"),
+            data.get("font_heading", "Inter"),
+            data.get("font_body", "Inter"),
+            data.get("button_style", "rounded"),
+            data.get("layout_style", "modern"),
+            data.get("custom_css", ""),
+            data.get("preview_image", ""),
+            data.get("is_default", 0),
+            data.get("is_active", 1),
+        )
+        if row:
+            conn.execute(
+                "UPDATE sb_themes SET name = ?, description = ?, primary_color = ?, secondary_color = ?, "
+                "accent_color = ?, text_color = ?, bg_color = ?, font_heading = ?, font_body = ?, "
+                "button_style = ?, layout_style = ?, custom_css = ?, preview_image = ?, is_default = ?, "
+                "is_active = ?, updated_at = datetime('now') WHERE id = ?",
+                params + (row["id"],),
+            )
+            return row["id"], False
+
+        cur = conn.execute(
+            "INSERT INTO sb_themes (name, description, primary_color, secondary_color, accent_color, text_color, "
+            "bg_color, font_heading, font_body, button_style, layout_style, custom_css, preview_image, is_default, is_active) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params,
+        )
+        return cur.lastrowid, True
+
+    def _upsert_sb_template_by_name(self, conn, data):
+        name = str(data.get("name") or "").strip()
+        row = conn.execute("SELECT id FROM sb_templates WHERE name = ? LIMIT 1", (name,)).fetchone()
+        params = (
+            name,
+            data.get("category", "section"),
+            data.get("page_types", ""),
+            data.get("html_content", ""),
+            data.get("css_content", ""),
+            data.get("preview_image", ""),
+            data.get("description", ""),
+            data.get("sort_order", 0),
+            data.get("is_active", 1),
+        )
+        if row:
+            conn.execute(
+                "UPDATE sb_templates SET name = ?, category = ?, page_types = ?, html_content = ?, css_content = ?, "
+                "preview_image = ?, description = ?, sort_order = ?, is_active = ?, updated_at = datetime('now') WHERE id = ?",
+                params + (row["id"],),
+            )
+            return row["id"], False
+
+        cur = conn.execute(
+            "INSERT INTO sb_templates (name, category, page_types, html_content, css_content, preview_image, description, sort_order, is_active) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params,
+        )
+        return cur.lastrowid, True
+
+    def _upsert_sb_site_template_by_slug(self, conn, data):
+        slug = str(data.get("slug") or "").strip()
+        row = conn.execute("SELECT id FROM sb_site_templates WHERE slug = ? LIMIT 1", (slug,)).fetchone()
+        if data.get("is_default"):
+            conn.execute("UPDATE sb_site_templates SET is_default = 0")
+
+        params = (
+            data.get("name", ""),
+            slug,
+            data.get("description", ""),
+            data.get("preview_image", ""),
+            int(data.get("theme_id") or 0),
+            json.dumps(list(data.get("template_ids") or [])),
+            data.get("prompt_notes", ""),
+            data.get("sort_order", 0),
+            data.get("is_default", 0),
+            data.get("is_active", 1),
+        )
+        if row:
+            conn.execute(
+                "UPDATE sb_site_templates SET name = ?, slug = ?, description = ?, preview_image = ?, theme_id = ?, "
+                "template_ids_json = ?, prompt_notes = ?, sort_order = ?, is_default = ?, is_active = ?, "
+                "updated_at = datetime('now') WHERE id = ?",
+                params + (row["id"],),
+            )
+            return row["id"], False
+
+        cur = conn.execute(
+            "INSERT INTO sb_site_templates (name, slug, description, preview_image, theme_id, template_ids_json, prompt_notes, sort_order, is_default, is_active) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params,
+        )
+        return cur.lastrowid, True
+
+    def seed_default_site_builder_kits(self):
+        from webapp.site_builder_kits import get_production_site_kit_definitions
+
+        conn = self._conn()
+        counts = {
+            "themes_created": 0,
+            "themes_updated": 0,
+            "templates_created": 0,
+            "templates_updated": 0,
+            "site_templates_created": 0,
+            "site_templates_updated": 0,
+            "kits": 0,
+        }
+        try:
+            for kit in get_production_site_kit_definitions():
+                theme_id, theme_created = self._upsert_sb_theme_by_name(conn, kit.get("theme") or {})
+                counts["themes_created" if theme_created else "themes_updated"] += 1
+
+                template_ids = []
+                for template in kit.get("templates") or []:
+                    template_id, template_created = self._upsert_sb_template_by_name(conn, template)
+                    template_ids.append(template_id)
+                    counts["templates_created" if template_created else "templates_updated"] += 1
+
+                site_template = dict(kit.get("site_template") or {})
+                site_template["theme_id"] = theme_id
+                site_template["template_ids"] = template_ids
+                _, site_template_created = self._upsert_sb_site_template_by_slug(conn, site_template)
+                counts["site_templates_created" if site_template_created else "site_templates_updated"] += 1
+                counts["kits"] += 1
+
+            conn.commit()
+        finally:
+            conn.close()
+        return counts
+
     # ── Site Builder Admin: Full Site Templates ──
 
     def _decorate_sb_site_template(self, item):

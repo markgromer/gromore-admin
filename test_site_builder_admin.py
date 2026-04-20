@@ -197,6 +197,24 @@ class SBSiteTemplatesDBTests(unittest.TestCase):
         self.db.delete_sb_site_template(stid)
         self.assertIsNone(self.db.get_sb_site_template(stid))
 
+    def test_seed_default_site_builder_kits_is_idempotent(self):
+        first = self.db.seed_default_site_builder_kits()
+        second = self.db.seed_default_site_builder_kits()
+
+        self.assertEqual(first["kits"], 4)
+        self.assertEqual(first["themes_created"], 4)
+        self.assertEqual(first["site_templates_created"], 4)
+        self.assertGreaterEqual(first["templates_created"], 20)
+        self.assertEqual(second["themes_created"], 0)
+        self.assertEqual(second["site_templates_created"], 0)
+        self.assertEqual(second["kits"], 4)
+
+        site_templates = self.db.get_sb_site_templates(active_only=False)
+        self.assertEqual(len(site_templates), 4)
+        self.assertTrue(any(item["is_default"] for item in site_templates))
+        page_shells = self.db.get_sb_templates(category="page_shell", active_only=False)
+        self.assertGreaterEqual(len(page_shells), 32)
+
 
 class SBPromptOverridesDBTests(unittest.TestCase):
     """Test sb_prompt_overrides CRUD."""
@@ -487,6 +505,15 @@ class SBAdminRouteTests(unittest.TestCase):
         resp = self.client.post(f"/site-builder-admin/site-templates/{stid}/delete", follow_redirects=True)
         self.assertEqual(resp.status_code, 200)
         self.assertIsNone(self.db.get_sb_site_template(stid))
+
+    def test_install_default_site_kits_via_route(self):
+        resp = self.client.post("/site-builder-admin/site-templates/install-defaults", follow_redirects=True)
+        self.assertEqual(resp.status_code, 200)
+        site_templates = self.db.get_sb_site_templates(active_only=False)
+        self.assertEqual(len(site_templates), 4)
+        self.assertIn(b"Installed production site kits", resp.data)
+        page_shells = self.db.get_sb_templates(category="page_shell", active_only=False)
+        self.assertGreaterEqual(len(page_shells), 32)
 
     def test_save_prompt_override_via_route(self):
         resp = self.client.post("/site-builder-admin/prompts", data={

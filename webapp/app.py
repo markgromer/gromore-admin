@@ -3491,6 +3491,17 @@ def create_app():
             flash("Site template created.", "success")
         return redirect(url_for("site_builder_admin", tab="site-templates"))
 
+    @app.route("/site-builder-admin/site-templates/install-defaults", methods=["POST"])
+    @login_required
+    def sb_admin_site_template_install_defaults():
+        result = db.seed_default_site_builder_kits()
+        flash(
+            "Installed production site kits: "
+            f"{result['site_templates_created']} created, {result['site_templates_updated']} refreshed.",
+            "success",
+        )
+        return redirect(url_for("site_builder_admin", tab="site-templates"))
+
     @app.route("/site-builder-admin/site-templates/<int:tid>/delete", methods=["POST"])
     @login_required
     def sb_admin_site_template_delete(tid):

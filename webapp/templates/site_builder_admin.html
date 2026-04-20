@@ -232,10 +232,19 @@
         <div class="sb-card">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h5 class="mb-0">Full Site Templates</h5>
-                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#siteTemplateModal" onclick="clearSiteTemplateForm()">
-                    <i class="bi bi-plus-lg"></i> New Site Template
-                </button>
+                <div class="d-flex gap-2">
+                    <form method="POST" action="{{ url_for('sb_admin_site_template_install_defaults') }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn btn-outline-secondary btn-sm" type="submit">
+                            <i class="bi bi-stars"></i> Install Production Kits
+                        </button>
+                    </form>
+                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#siteTemplateModal" onclick="clearSiteTemplateForm()">
+                        <i class="bi bi-plus-lg"></i> New Site Template
+                    </button>
+                </div>
             </div>
+            <p class="text-muted small mt-n1">Use the install action to load four curated Warren-first kits you can refine in admin instead of building every shell from scratch.</p>
             {% if site_templates %}
             <div class="row g-3">
                 {% for st in site_templates %}
