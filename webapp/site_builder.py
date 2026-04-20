@@ -9,7 +9,12 @@ import json
 import logging
 import re
 from datetime import datetime
-from webapp.font_catalog import font_css_stack, google_font_stylesheet_href, normalize_google_font_family
+from webapp.font_catalog import (
+    SITE_BUILDER_FONT_PAIR_CHOICES,
+    font_css_stack,
+    google_font_stylesheet_href,
+    normalize_google_font_family,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +192,18 @@ def build_brand_context(brand, intake=None, builder_theme=None, builder_template
         "color_text": theme_text,
         "color_background": theme_background,
     }
+    for intake_key, ctx_key in (
+        ("business_name", "business_name"),
+        ("industry", "industry"),
+        ("website", "website"),
+        ("service_area", "service_area"),
+        ("primary_services", "primary_services"),
+        ("phone", "phone"),
+        ("email", "email"),
+        ("address", "address"),
+    ):
+        if intake.get(intake_key):
+            ctx[ctx_key] = str(intake.get(intake_key) or "").strip()
     # Intake can override brand-level fields
     for key in ("brand_voice", "target_audience", "active_offers", "tagline"):
         if intake.get(key):
@@ -2146,19 +2163,9 @@ def _design_block(ctx):
 
     # Font pairing
     font_desc = {
-        "inter-system": "Inter (headings) + system sans-serif (body) - clean, fast loading",
-        "playfair-lato": "Playfair Display (headings) + Lato (body) - elegant, editorial",
-        "montserrat-opensans": "Montserrat (headings) + Open Sans (body) - modern, versatile",
-        "roboto-slab-roboto": "Roboto Slab (headings) + Roboto (body) - technical, structured",
-        "poppins-nunito": "Poppins (headings) + Nunito (body) - friendly, approachable",
-        "oswald-source": "Oswald (headings) + Source Sans Pro (body) - bold, industrial",
-        "plusjakarta-inter": "Plus Jakarta Sans (headings) + Inter (body) - crisp, premium, modern service brand",
-        "spacegrotesk-inter": "Space Grotesk (headings) + Inter (body) - assertive, modern, slightly editorial",
-        "manrope-dmsans": "Manrope (headings) + DM Sans (body) - polished, contemporary, conversion-focused",
-        "archivo-worksans": "Archivo (headings) + Work Sans (body) - sturdy, practical, operational",
-        "bebas-mulish": "Bebas Neue (headings) + Mulish (body) - bold headlines with clean supporting copy",
-        "raleway-lora": "Raleway (headings) + Lora (body) - refined, trustworthy, slightly upscale",
-        "librebaskerville-source": "Libre Baskerville (headings) + Source Sans 3 (body) - classic authority with readable body copy",
+        option["value"]: option["prompt"]
+        for option in SITE_BUILDER_FONT_PAIR_CHOICES
+        if option.get("value") and option.get("prompt")
     }
     if font_pair and font_pair in font_desc:
         parts.append(f"- Typography: {font_desc[font_pair]}")

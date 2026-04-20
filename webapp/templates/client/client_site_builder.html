@@ -1,7 +1,32 @@
-{% extends "client/client_base.html" %}
-{% block title %}Site Builder{% endblock %}
+{% extends layout_template|default("client/client_base.html") %}
+{% block title %}{% if builder_mode == 'admin' %}Site Builder Workbench{% else %}Site Builder{% endif %}{% endblock %}
+
+{% set builder_home_url = builder_home_url if builder_home_url is defined else url_for('client.client_site_builder') %}
+{% set builder_generate_url = builder_generate_url if builder_generate_url is defined else url_for('client.client_site_builder_generate') %}
+{% set builder_settings_url = builder_settings_url if builder_settings_url is defined else url_for('client.client_settings') %}
+{% set builder_review_endpoint = builder_review_endpoint if builder_review_endpoint is defined else 'client.client_site_builder_review' %}
+{% set builder_delete_endpoint = builder_delete_endpoint if builder_delete_endpoint is defined else 'client.client_site_builder_delete' %}
+{% set builder_publish_endpoint = builder_publish_endpoint if builder_publish_endpoint is defined else 'client.client_site_builder_publish' %}
+{% set builder_page_get_endpoint = builder_page_get_endpoint if builder_page_get_endpoint is defined else 'client.client_site_builder_page_get' %}
+{% set builder_page_save_endpoint = builder_page_save_endpoint if builder_page_save_endpoint is defined else 'client.client_site_builder_page_save' %}
+{% set builder_page_rewrite_endpoint = builder_page_rewrite_endpoint if builder_page_rewrite_endpoint is defined else 'client.client_site_builder_page_rewrite' %}
+{% set builder_upload_image_url = builder_upload_image_url if builder_upload_image_url is defined else url_for('client.client_site_builder_upload_image') %}
+{% set builder_seo_intel_url = builder_seo_intel_url if builder_seo_intel_url is defined else url_for('client.client_site_builder_seo_intel') %}
+{% set builder_brand_picker_url = builder_brand_picker_url if builder_brand_picker_url is defined else '' %}
+{% set brand_fields_locked = brand_fields_locked if brand_fields_locked is defined else true %}
+{% set show_runtime_wp_fields = show_runtime_wp_fields if show_runtime_wp_fields is defined else false %}
+{% set selected_brand_id = selected_brand_id if selected_brand_id is defined else 0 %}
+{% set available_brands = available_brands if available_brands is defined else [] %}
+{% set font_pair_choices = font_pair_choices if font_pair_choices is defined else [] %}
+{% set font_groups = font_groups if font_groups is defined else [] %}
+{% set font_preview_stylesheets = font_preview_stylesheets if font_preview_stylesheets is defined else [] %}
+{% set editor_font_family_options = editor_font_family_options if editor_font_family_options is defined else [] %}
+{% set font_family_count = google_font_choices|length if google_font_choices is defined else 0 %}
 
 {% block content %}
+{% for stylesheet_href in font_preview_stylesheets %}
+<link rel="stylesheet" href="{{ stylesheet_href }}">
+{% endfor %}
 <style>
     .sb-header {
         background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
@@ -60,26 +85,167 @@
         display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
         gap: .6rem; margin-top: .75rem;
     }
+    .blueprint-shell {
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, .16);
+        background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.94));
+        padding: 1rem;
+        box-shadow: 0 18px 30px rgba(15, 23, 42, .05);
+    }
+    .blueprint-summary-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: .65rem;
+        margin-bottom: .9rem;
+    }
+    .blueprint-summary-card {
+        border-radius: 14px;
+        border: 1px solid rgba(148, 163, 184, .16);
+        background: rgba(255,255,255,.8);
+        padding: .8rem .85rem;
+    }
+    .blueprint-summary-value {
+        font-size: 1rem;
+        font-weight: 800;
+        color: #0f172a;
+        line-height: 1;
+        margin-bottom: .22rem;
+    }
+    .blueprint-summary-label {
+        font-size: .7rem;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: #64748b;
+    }
     .blueprint-page {
         background: var(--surface); border: 1px solid var(--line);
-        border-radius: 10px; padding: .75rem;
+        border-radius: 14px; padding: .8rem;
         font-size: .82rem; transition: var(--transition);
     }
-    .blueprint-page:hover { box-shadow: var(--shadow-hover); }
-    .blueprint-page .bp-type { font-size: .7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+    .blueprint-page:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+    .blueprint-page .bp-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: .5rem;
+        margin-bottom: .45rem;
+    }
+    .blueprint-page .bp-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(37,99,235,.10);
+        color: #1d4ed8;
+        font-size: .9rem;
+        flex: 0 0 auto;
+    }
+    .blueprint-page .bp-type {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+        font-size: .65rem;
+        font-weight: 800;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: .06em;
+    }
     .blueprint-page .bp-label { font-weight: 600; color: var(--text-strong); margin-top: .15rem; }
-    .blueprint-page .bp-slug { font-size: .72rem; color: var(--text-muted); font-family: monospace; }
+    .blueprint-page .bp-slug {
+        font-size: .72rem;
+        color: var(--text-muted);
+        font-family: monospace;
+        padding-top: .45rem;
+        margin-top: .45rem;
+        border-top: 1px solid rgba(148, 163, 184, .15);
+    }
+    .blueprint-page.bp-core { border-color: rgba(59,130,246,.18); }
+    .blueprint-page.bp-service { border-color: rgba(14,165,233,.20); }
+    .blueprint-page.bp-local { border-color: rgba(16,185,129,.20); }
+    .blueprint-page.bp-growth { border-color: rgba(249,115,22,.22); }
+    .blueprint-page.bp-core .bp-icon { background: rgba(37,99,235,.10); color: #1d4ed8; }
+    .blueprint-page.bp-service .bp-icon { background: rgba(14,165,233,.10); color: #0369a1; }
+    .blueprint-page.bp-local .bp-icon { background: rgba(16,185,129,.10); color: #047857; }
+    .blueprint-page.bp-growth .bp-icon { background: rgba(249,115,22,.10); color: #c2410c; }
 
     .build-row {
         background: var(--surface);
-        border-radius: 12px;
+        border-radius: 16px;
         padding: 1rem 1.25rem;
-        margin-bottom: .6rem;
-        border: 1px solid var(--line);
+        border: 1px solid rgba(148, 163, 184, .16);
         cursor: pointer;
         transition: var(--transition);
+        min-height: 100%;
     }
-    .build-row:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+    .build-row:hover { box-shadow: 0 18px 30px rgba(15, 23, 42, .08); transform: translateY(-1px); }
+    .history-list {
+        display: grid;
+        gap: .75rem;
+    }
+    .history-overview-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: .7rem;
+        margin-bottom: .95rem;
+    }
+    .history-overview-card {
+        border-radius: 14px;
+        border: 1px solid rgba(148, 163, 184, .16);
+        background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(248,250,252,.9));
+        padding: .9rem;
+    }
+    .history-overview-value {
+        font-size: 1rem;
+        font-weight: 800;
+        color: #0f172a;
+        line-height: 1;
+        margin-bottom: .22rem;
+    }
+    .history-overview-label {
+        font-size: .7rem;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: #64748b;
+    }
+    .history-row-shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: .65rem;
+        align-items: stretch;
+    }
+    .build-row-title {
+        font-weight: 800;
+        font-size: .96rem;
+        color: #0f172a;
+        margin-bottom: .3rem;
+    }
+    .build-row-copy {
+        font-size: .78rem;
+        line-height: 1.5;
+        color: #64748b;
+        margin-bottom: .6rem;
+    }
+    .build-meta-strip {
+        display: flex;
+        gap: .45rem;
+        flex-wrap: wrap;
+    }
+    .build-meta-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        padding: .35rem .65rem;
+        border-radius: 999px;
+        background: rgba(15,23,42,.04);
+        border: 1px solid rgba(148,163,184,.16);
+        font-size: .72rem;
+        font-weight: 700;
+        color: #475569;
+    }
 
     .status-pill { font-size: .72rem; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
     .status-pending { background: #f1f5f9; color: #475569; }
@@ -89,12 +255,54 @@
 
     .gen-progress {
         margin-top: 1rem; display: none;
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, .16);
+        background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.94));
+        padding: 1rem;
+        box-shadow: 0 18px 30px rgba(15, 23, 42, .05);
     }
     .gen-progress .progress { height: 8px; border-radius: 4px; }
     .gen-progress .progress-bar { transition: width .3s; }
+    .gen-stage-strip {
+        display: flex;
+        gap: .5rem;
+        flex-wrap: wrap;
+        margin-bottom: .75rem;
+    }
+    .gen-stage-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .32rem;
+        padding: .35rem .68rem;
+        border-radius: 999px;
+        background: rgba(37,99,235,.08);
+        border: 1px solid rgba(37,99,235,.14);
+        font-size: .71rem;
+        font-weight: 800;
+        color: #1d4ed8;
+        transition: var(--transition);
+    }
+    .gen-stage-chip.is-active {
+        background: rgba(37,99,235,.14);
+        border-color: rgba(37,99,235,.28);
+        color: #1e3a8a;
+        box-shadow: inset 0 0 0 1px rgba(37,99,235,.10);
+    }
+    .gen-stage-chip.is-done {
+        background: rgba(22,163,74,.10);
+        border-color: rgba(22,163,74,.22);
+        color: #166534;
+    }
+    .gen-stage-chip.is-error {
+        background: rgba(220,38,38,.10);
+        border-color: rgba(220,38,38,.22);
+        color: #991b1b;
+    }
     .gen-log {
         font-size: .82rem; color: var(--text-muted);
-        margin-top: .5rem; max-height: 200px; overflow-y: auto;
+        margin-top: .75rem; max-height: 200px; overflow-y: auto;
+        border-top: 1px solid rgba(148, 163, 184, .18);
+        padding-top: .6rem;
     }
     .gen-log .log-entry { padding: .2rem 0; border-bottom: 1px solid var(--line); }
 
@@ -108,29 +316,355 @@
     .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); }
     .empty-state i { font-size: 2.5rem; opacity: .3; }
 
+    @media (max-width: 991.98px) {
+        .blueprint-summary-strip,
+        .history-overview-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+    @media (max-width: 767.98px) {
+        .history-row-shell {
+            grid-template-columns: 1fr;
+        }
+        .blueprint-summary-strip,
+        .history-overview-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
     /* Intake Wizard */
-    .intake-steps { margin-bottom: 1.5rem; }
-    .step-indicator { display: flex; align-items: center; justify-content: center; gap: 0; }
+    .builder-wizard-shell {
+        display: grid;
+        gap: 1.2rem;
+    }
+    .wizard-status-shell {
+        border-radius: 20px;
+        border: 1px solid rgba(148, 163, 184, .18);
+        background:
+            linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.96)),
+            radial-gradient(circle at top right, rgba(59,130,246,.10), transparent 35%);
+        padding: 1.2rem;
+        box-shadow: 0 22px 40px rgba(15, 23, 42, .05);
+    }
+    .wizard-status-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-bottom: 1rem;
+    }
+    .wizard-status-copy h6 {
+        margin: 0;
+        font-size: 1.02rem;
+        font-weight: 800;
+        color: #0f172a;
+    }
+    .wizard-status-copy p {
+        margin: .28rem 0 0;
+        font-size: .82rem;
+        line-height: 1.55;
+        color: #475569;
+        max-width: 760px;
+    }
+    .wizard-eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        margin-bottom: .45rem;
+        font-size: .7rem;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: #0369a1;
+    }
+    .wizard-progress-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .45rem .85rem;
+        border-radius: 999px;
+        border: 1px solid rgba(59,130,246,.18);
+        background: rgba(59,130,246,.08);
+        font-size: .74rem;
+        font-weight: 800;
+        color: #1d4ed8;
+        white-space: nowrap;
+    }
+    .wizard-progress-bar {
+        position: relative;
+        height: 10px;
+        border-radius: 999px;
+        background: rgba(226, 232, 240, .9);
+        overflow: hidden;
+        margin-top: 1rem;
+    }
+    .wizard-progress-fill {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 16.67%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #2563eb, #0ea5e9);
+        transition: width .22s ease;
+    }
+    .wizard-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: .8rem;
+        margin-top: 1rem;
+    }
+    .wizard-summary-card {
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, .16);
+        background: rgba(255,255,255,.9);
+        padding: .85rem .9rem;
+        min-height: 106px;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.7);
+    }
+    .wizard-summary-card span {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        font-size: .68rem;
+        font-weight: 800;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        color: #64748b;
+        margin-bottom: .45rem;
+    }
+    .wizard-summary-card strong {
+        display: block;
+        font-size: .86rem;
+        line-height: 1.38;
+        color: #0f172a;
+        font-weight: 800;
+        margin-bottom: .3rem;
+    }
+    .wizard-summary-card p {
+        margin: 0;
+        font-size: .74rem;
+        line-height: 1.5;
+        color: #64748b;
+    }
+    .intake-steps {
+        margin-bottom: 0;
+        padding: 1rem;
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, .16);
+        background: linear-gradient(180deg, rgba(248,250,252,.96), rgba(255,255,255,.98));
+    }
+    .step-indicator {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: .65rem;
+        align-items: stretch;
+    }
     .step-indicator .step {
-        display: flex; flex-direction: column; align-items: center; gap: .15rem;
-        cursor: default; min-width: 60px;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: .25rem;
+        min-height: 104px;
+        padding: .9rem;
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, .16);
+        background: rgba(255,255,255,.92);
+        cursor: pointer;
+        transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+    .step-indicator .step:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 24px rgba(15, 23, 42, .06);
+    }
+    .step-indicator .step-kicker {
+        font-size: .64rem;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: #94a3b8;
     }
     .step-indicator .step-num {
-        width: 30px; height: 30px; border-radius: 50%;
+        width: 36px; height: 36px; border-radius: 12px;
         display: flex; align-items: center; justify-content: center;
-        font-size: .78rem; font-weight: 700;
-        background: #e2e8f0; color: #64748b; transition: all .2s;
+        font-size: .8rem; font-weight: 800;
+        background: #e2e8f0; color: #475569; transition: all .2s;
     }
-    .step-indicator .step-label { font-size: .7rem; color: var(--text-muted); font-weight: 500; }
-    .step-indicator .step.active .step-num { background: var(--primary); color: #fff; box-shadow: 0 0 0 3px rgba(99,102,241,.2); }
-    .step-indicator .step.active .step-label { color: var(--primary); font-weight: 600; }
+    .step-indicator .step-label {
+        font-size: .83rem;
+        color: #0f172a;
+        font-weight: 800;
+    }
+    .step-indicator .step-meta {
+        font-size: .73rem;
+        line-height: 1.45;
+        color: #64748b;
+    }
+    .step-indicator .step.active {
+        border-color: rgba(37, 99, 235, .28);
+        background: linear-gradient(180deg, rgba(239,246,255,.96), rgba(255,255,255,.98));
+        box-shadow: 0 16px 28px rgba(37, 99, 235, .08);
+    }
+    .step-indicator .step.active .step-num { background: var(--primary); color: #fff; box-shadow: 0 0 0 4px rgba(99,102,241,.12); }
+    .step-indicator .step.active .step-kicker,
+    .step-indicator .step.active .step-meta { color: #2563eb; }
+    .step-indicator .step.done {
+        border-color: rgba(34,197,94,.22);
+        background: linear-gradient(180deg, rgba(240,253,244,.96), rgba(255,255,255,.98));
+    }
     .step-indicator .step.done .step-num { background: #22c55e; color: #fff; }
-    .step-indicator .step.done .step-label { color: #16a34a; }
-    .step-line { width: 40px; height: 2px; background: #e2e8f0; margin: 0 .25rem; margin-bottom: 14px; }
+    .step-indicator .step.done .step-kicker,
+    .step-indicator .step.done .step-meta { color: #16a34a; }
+    .step-line { display: none; }
 
-    .intake-panel h5 { font-weight: 700; font-size: 1rem; margin-bottom: .25rem; color: var(--text-strong); }
-    .intake-desc { font-size: .85rem; color: var(--text-muted); margin-bottom: 1.25rem; }
-    .form-hint { font-size: .72rem; color: var(--text-muted); margin-top: .2rem; }
+    #generateForm .form-control,
+    #generateForm .form-select {
+        border: 1px solid rgba(148, 163, 184, .26);
+        background: rgba(255,255,255,.98);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.85);
+        min-height: 46px;
+    }
+    #generateForm textarea.form-control {
+        min-height: auto;
+    }
+    #generateForm .form-control:focus,
+    #generateForm .form-select:focus,
+    #generateForm textarea.form-control:focus {
+        border-color: rgba(37, 99, 235, .38);
+        box-shadow: 0 0 0 4px rgba(37, 99, 235, .08);
+    }
+
+    .intake-panel {
+        border-radius: 20px;
+        border: 1px solid rgba(148, 163, 184, .16);
+        background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.95));
+        padding: 1.25rem;
+        box-shadow: 0 18px 32px rgba(15, 23, 42, .04);
+    }
+    .intake-panel h5 { font-weight: 800; font-size: 1.08rem; margin-bottom: .25rem; color: #0f172a; }
+    .intake-desc { font-size: .85rem; color: #475569; margin-bottom: 1.15rem; line-height: 1.58; max-width: 880px; }
+    .form-hint { font-size: .72rem; color: #64748b; margin-top: .28rem; line-height: 1.5; }
+    .intake-subsection {
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, .16);
+        background: rgba(255,255,255,.86);
+        padding: 1rem;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.75);
+    }
+    .intake-subsection + .intake-subsection {
+        margin-top: .15rem;
+    }
+    .intake-subsection-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: .85rem;
+        flex-wrap: wrap;
+        margin-bottom: .9rem;
+    }
+    .intake-subsection-title {
+        margin: 0;
+        font-size: .9rem;
+        font-weight: 800;
+        color: #0f172a;
+    }
+    .intake-subsection-copy {
+        margin: .2rem 0 0;
+        font-size: .76rem;
+        line-height: 1.5;
+        color: #64748b;
+        max-width: 720px;
+    }
+    .intake-subsection-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: .32rem;
+        padding: .35rem .7rem;
+        border-radius: 999px;
+        background: rgba(15, 23, 42, .04);
+        border: 1px solid rgba(148, 163, 184, .16);
+        font-size: .68rem;
+        font-weight: 800;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        color: #475569;
+    }
+    .input-cluster-note {
+        border-radius: 14px;
+        border: 1px dashed rgba(148, 163, 184, .3);
+        background: linear-gradient(180deg, rgba(248,250,252,.9), rgba(255,255,255,.96));
+        padding: .85rem .95rem;
+        font-size: .76rem;
+        line-height: 1.55;
+        color: #64748b;
+    }
+    .stack-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: .75rem;
+        flex-wrap: wrap;
+        margin-bottom: .7rem;
+    }
+    .quote-tool-shell {
+        border: 1px solid rgba(148, 163, 184, .16);
+        border-radius: 18px;
+        padding: 1rem;
+        background: linear-gradient(180deg, rgba(248,250,252,.9), rgba(255,255,255,.98));
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.75);
+    }
+
+    .goal-chip,
+    .page-select-chip {
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.7);
+    }
+    .goal-chip:hover,
+    .page-select-chip:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 24px rgba(15, 23, 42, .05);
+    }
+
+    .wizard-footer-bar {
+        position: sticky;
+        bottom: 1rem;
+        z-index: 4;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-top: 1.2rem;
+        padding: 1rem 1.1rem;
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, .18);
+        background: rgba(255,255,255,.92);
+        backdrop-filter: blur(14px);
+        box-shadow: 0 24px 48px rgba(15, 23, 42, .10);
+    }
+    .wizard-footer-meta {
+        min-width: 240px;
+    }
+    .wizard-footer-step {
+        font-size: .78rem;
+        font-weight: 800;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        color: #2563eb;
+        margin-bottom: .2rem;
+    }
+    .wizard-footer-copy {
+        font-size: .8rem;
+        line-height: 1.5;
+        color: #475569;
+        max-width: 560px;
+    }
+    .wizard-footer-actions {
+        display: flex;
+        align-items: center;
+        gap: .65rem;
+        flex-wrap: wrap;
+        margin-left: auto;
+    }
 
     /* Goal chips */
     .goal-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
@@ -341,31 +875,490 @@
         font-size: .68rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em;
     }
 
-    /* Review page */
-    .page-preview-card {
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: 14px;
-        margin-bottom: 1rem;
+    .builder-command-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: .85rem;
+        margin-bottom: 1.2rem;
+    }
+    .builder-command-card {
+        position: relative;
         overflow: hidden;
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, .18);
+        background:
+            linear-gradient(140deg, rgba(15, 23, 42, .03), rgba(255,255,255,.92)),
+            radial-gradient(circle at top right, rgba(14, 165, 233, .12), transparent 42%);
+        padding: 1rem 1rem .95rem;
+        box-shadow: 0 18px 36px rgba(15, 23, 42, .06);
+    }
+    .builder-command-label {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        font-size: .7rem;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: #0f766e;
+        margin-bottom: .65rem;
+    }
+    .builder-command-value {
+        font-size: 1.55rem;
+        line-height: 1;
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: .35rem;
+    }
+    .builder-command-copy {
+        font-size: .78rem;
+        line-height: 1.5;
+        color: #475569;
+        margin: 0;
+    }
+
+    .design-system-shell {
+        border-radius: 18px;
+        border: 1px solid rgba(15, 23, 42, .08);
+        background: linear-gradient(180deg, rgba(248,250,252,.96), rgba(255,255,255,.98));
+        box-shadow: 0 22px 46px rgba(15, 23, 42, .05);
+        padding: 1.2rem;
+    }
+    .design-system-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-bottom: 1rem;
+    }
+    .design-system-header h6 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 800;
+        color: #0f172a;
+    }
+    .design-system-header p {
+        margin: .2rem 0 0;
+        max-width: 740px;
+        font-size: .82rem;
+        line-height: 1.55;
+        color: #475569;
+    }
+    .design-system-badges {
+        display: flex;
+        gap: .5rem;
+        flex-wrap: wrap;
+    }
+    .design-system-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .42rem .8rem;
+        border-radius: 999px;
+        background: rgba(15, 23, 42, .04);
+        border: 1px solid rgba(148, 163, 184, .18);
+        font-size: .72rem;
+        font-weight: 700;
+        color: #334155;
+    }
+    .design-system-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr);
+        gap: 1rem;
+        align-items: start;
+    }
+    .design-system-panel {
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, .18);
+        background: rgba(255,255,255,.92);
+        padding: 1rem;
+    }
+    .design-system-panel h6 {
+        margin: 0 0 .25rem;
+        font-size: .86rem;
+        font-weight: 800;
+        color: #0f172a;
+        letter-spacing: .01em;
+    }
+    .design-system-panel p {
+        margin: 0;
+        font-size: .76rem;
+        line-height: 1.5;
+        color: #64748b;
+    }
+    .font-control-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .9rem;
+        margin-top: .95rem;
+    }
+    .font-input-shell {
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, .18);
+        background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.96));
+        padding: .95rem;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.7);
+    }
+    .font-input-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: .5rem;
+        margin-bottom: .55rem;
+    }
+    .font-role-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        border-radius: 999px;
+        padding: .3rem .65rem;
+        font-size: .68rem;
+        font-weight: 800;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        background: rgba(37, 99, 235, .08);
+        color: #1d4ed8;
+    }
+    .font-sample-note {
+        font-size: .72rem;
+        color: #64748b;
+        margin-bottom: .55rem;
+    }
+    .font-input-shell input,
+    .font-input-shell select {
+        border-radius: 12px;
+        font-size: .88rem;
+    }
+    .font-library-grid {
+        display: grid;
+        gap: .85rem;
+        margin-top: .95rem;
+    }
+    .font-group-card {
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, .16);
+        background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.92));
+        padding: .95rem;
+    }
+    .font-group-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: .75rem;
+        margin-bottom: .75rem;
+    }
+    .font-group-title {
+        font-size: .84rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: .15rem;
+    }
+    .font-group-description {
+        font-size: .75rem;
+        line-height: 1.5;
+        color: #64748b;
+        margin: 0;
+    }
+    .font-chip-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .75rem;
+    }
+    .font-chip {
+        border-radius: 14px;
+        border: 1px solid rgba(148, 163, 184, .18);
+        background: rgba(255,255,255,.96);
+        padding: .8rem;
+        display: flex;
+        flex-direction: column;
+        gap: .55rem;
+        min-height: 146px;
+    }
+    .font-chip-label {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: .65rem;
+    }
+    .font-chip-label strong {
+        font-size: .86rem;
+        color: #0f172a;
+    }
+    .font-chip-label span {
+        font-size: .68rem;
+        font-weight: 700;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        color: #94a3b8;
+    }
+    .font-chip-preview {
+        font-size: 1.08rem;
+        line-height: 1.22;
+        color: #0f172a;
+    }
+    .font-chip-caption {
+        font-size: .72rem;
+        line-height: 1.55;
+        color: #64748b;
+        margin: 0;
+    }
+    .font-chip-actions {
+        display: flex;
+        gap: .45rem;
+        flex-wrap: wrap;
+        margin-top: auto;
+    }
+    .font-chip-actions .btn {
+        border-radius: 999px;
+        font-size: .72rem;
+        font-weight: 700;
+        padding: .3rem .65rem;
+    }
+
+    @media (max-width: 991.98px) {
+        .wizard-summary-grid,
+        .builder-command-strip,
+        .step-indicator,
+        .design-system-grid,
+        .font-control-grid,
+        .font-chip-grid {
+            grid-template-columns: 1fr;
+        }
+        .wizard-footer-bar {
+            bottom: .25rem;
+        }
+    }
+
+    /* Review page */
+    .review-command-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: .85rem;
+        margin-bottom: 1rem;
+    }
+    .review-command-card {
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, .18);
+        background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.94));
+        padding: 1rem;
+        box-shadow: 0 18px 36px rgba(15, 23, 42, .05);
+    }
+    .review-command-label {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        font-size: .7rem;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: #0f766e;
+        margin-bottom: .55rem;
+    }
+    .review-command-value {
+        font-size: 1.5rem;
+        line-height: 1;
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: .3rem;
+    }
+    .review-command-copy {
+        font-size: .78rem;
+        line-height: 1.5;
+        color: #475569;
+        margin: 0;
+    }
+    .review-layout-grid {
+        display: grid;
+        grid-template-columns: minmax(240px, .72fr) minmax(0, 1.28fr);
+        gap: 1rem;
+        align-items: start;
+    }
+    .review-sidebar {
+        display: grid;
+        gap: 1rem;
+        position: sticky;
+        top: 1rem;
+    }
+    .review-panel {
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, .18);
+        background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.94));
+        padding: 1rem;
+        box-shadow: 0 18px 36px rgba(15, 23, 42, .05);
+    }
+    .review-panel h6 {
+        margin: 0 0 .2rem;
+        font-size: .92rem;
+        font-weight: 800;
+        color: #0f172a;
+    }
+    .review-panel p {
+        margin: 0;
+        font-size: .78rem;
+        line-height: 1.5;
+        color: #64748b;
+    }
+    .page-nav-list {
+        display: grid;
+        gap: .65rem;
+        margin-top: .85rem;
+    }
+    .page-nav-link {
+        display: block;
+        text-decoration: none;
+        border-radius: 14px;
+        border: 1px solid rgba(148, 163, 184, .18);
+        background: rgba(255,255,255,.9);
+        padding: .85rem .9rem;
+        transition: var(--transition);
+    }
+    .page-nav-link:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 24px rgba(15, 23, 42, .06);
+    }
+    .page-nav-title {
+        font-size: .84rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: .3rem;
+    }
+    .page-nav-meta {
+        display: flex;
+        gap: .45rem;
+        flex-wrap: wrap;
+    }
+    .page-nav-pill,
+    .page-meta-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .28rem;
+        padding: .3rem .58rem;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, .18);
+        background: rgba(15,23,42,.04);
+        font-size: .7rem;
+        font-weight: 700;
+        color: #475569;
+    }
+    .review-pages-stack {
+        display: grid;
+        gap: 1rem;
+    }
+    .page-preview-card {
+        background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.94));
+        border: 1px solid rgba(148, 163, 184, .18);
+        border-radius: 18px;
+        overflow: hidden;
+        box-shadow: 0 18px 36px rgba(15, 23, 42, .05);
     }
     .page-preview-header {
         padding: 1rem 1.25rem;
-        border-bottom: 1px solid var(--line);
-        display: flex; justify-content: space-between; align-items: center;
+        border-bottom: 1px solid rgba(148, 163, 184, .16);
+        display: flex; justify-content: space-between; align-items: flex-start;
+        gap: 1rem; flex-wrap: wrap;
     }
     .page-preview-header h6 { font-weight: 700; margin: 0; font-size: .95rem; }
+    .page-preview-meta {
+        display: flex;
+        gap: .5rem;
+        flex-wrap: wrap;
+        margin-top: .55rem;
+    }
+    .page-preview-actions {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
     .page-preview-body { padding: 1.25rem; }
-    .page-preview-body .seo-meta { background: #f8f9fa; border-radius: 8px; padding: .75rem; margin-bottom: .75rem; font-size: .82rem; }
+    .page-preview-body .seo-meta {
+        background: linear-gradient(180deg, rgba(255,255,255,.94), rgba(248,250,252,.92));
+        border-radius: 14px;
+        border: 1px solid rgba(148, 163, 184, .16);
+        padding: .9rem;
+        margin-bottom: .8rem;
+        font-size: .82rem;
+    }
     .page-preview-body .seo-meta .seo-title { font-weight: 600; color: #1e40af; }
     .page-preview-body .seo-meta .seo-desc { color: #475569; margin-top: .2rem; }
     .page-preview-body .seo-meta .seo-slug { color: #059669; font-family: monospace; font-size: .78rem; }
-    .page-preview-content { font-size: .88rem; line-height: 1.7; color: var(--text-body); max-height: 300px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 1rem; }
+    .page-preview-content {
+        font-size: .88rem; line-height: 1.7; color: var(--text-body); max-height: 300px; overflow-y: auto;
+        border: 1px solid rgba(148, 163, 184, .16); border-radius: 14px; padding: 1rem; background: rgba(255,255,255,.88);
+    }
     .page-preview-content h2 { font-size: 1.1rem; font-weight: 700; margin-top: 1rem; }
     .page-preview-content h3 { font-size: .95rem; font-weight: 600; margin-top: .75rem; }
     .publish-badge { font-size: .72rem; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
     .publish-badge.published { background: #dcfce7; color: #166534; }
     .publish-badge.draft { background: #f1f5f9; color: #475569; }
+    .publish-progress-shell {
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, .16);
+        background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.94));
+        padding: 1rem;
+        box-shadow: 0 18px 30px rgba(15, 23, 42, .05);
+    }
+    .publish-stage-strip {
+        display: flex;
+        gap: .5rem;
+        flex-wrap: wrap;
+        margin-top: .7rem;
+    }
+    .publish-stage-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        padding: .34rem .66rem;
+        border-radius: 999px;
+        background: rgba(37,99,235,.08);
+        border: 1px solid rgba(37,99,235,.14);
+        font-size: .71rem;
+        font-weight: 800;
+        color: #1d4ed8;
+        transition: var(--transition);
+    }
+    .publish-stage-chip.is-active {
+        background: rgba(37,99,235,.14);
+        border-color: rgba(37,99,235,.28);
+        color: #1e3a8a;
+    }
+    .publish-stage-chip.is-done {
+        background: rgba(22,163,74,.10);
+        border-color: rgba(22,163,74,.22);
+        color: #166534;
+    }
+    .publish-stage-chip.is-error {
+        background: rgba(220,38,38,.10);
+        border-color: rgba(220,38,38,.22);
+        color: #991b1b;
+    }
+    .publish-log {
+        margin-top: .8rem;
+        border-top: 1px solid rgba(148, 163, 184, .18);
+        padding-top: .65rem;
+        font-size: .8rem;
+        color: #64748b;
+    }
+    .publish-log .log-entry {
+        padding: .2rem 0;
+        border-bottom: 1px solid rgba(148, 163, 184, .12);
+    }
+    .rewrite-panel {
+        border-top: 1px solid rgba(148, 163, 184, .14);
+        background: rgba(248,250,252,.8);
+    }
+    .rewrite-status { min-height: 1.2rem; }
+    @media (max-width: 991.98px) {
+        .review-command-strip,
+        .review-layout-grid {
+            grid-template-columns: 1fr;
+        }
+        .review-sidebar {
+            position: static;
+        }
+    }
 
     /* GrapesJS fullscreen editor */
     .gjs-overlay {
@@ -673,9 +1666,40 @@
 </div>
 
 {# ── REVIEW MODE ── #}
+{% set review_stats = namespace(published=0, draft=0) %}
+{% for page in pages %}
+    {% if page.wp_page_id %}
+        {% set review_stats.published = review_stats.published + 1 %}
+    {% else %}
+        {% set review_stats.draft = review_stats.draft + 1 %}
+    {% endif %}
+{% endfor %}
 <div class="sb-header">
     <h3><i class="bi bi-eye me-2"></i>Review Site Build #{{ build.id }}</h3>
     <p>{{ pages|length }} pages generated on {{ build.created_at[:16] }}</p>
+</div>
+
+<div class="review-command-strip">
+    <div class="review-command-card">
+        <div class="review-command-label"><i class="bi bi-collection"></i>Review Command Center</div>
+        <div class="review-command-value">{{ pages|length }}</div>
+        <p class="review-command-copy">Generated pages in this build, ready for review, rewrite, or visual editing.</p>
+    </div>
+    <div class="review-command-card">
+        <div class="review-command-label"><i class="bi bi-cloud-check"></i>Published Live</div>
+        <div class="review-command-value">{{ review_stats.published }}</div>
+        <p class="review-command-copy">Pages already pushed into WordPress and available to customers.</p>
+    </div>
+    <div class="review-command-card">
+        <div class="review-command-label"><i class="bi bi-pencil-square"></i>Draft Queue</div>
+        <div class="review-command-value">{{ review_stats.draft }}</div>
+        <p class="review-command-copy">Pages still waiting for final edits, approvals, or publish actions.</p>
+    </div>
+    <div class="review-command-card">
+        <div class="review-command-label"><i class="bi bi-cpu"></i>Build Engine</div>
+        <div class="review-command-value">{{ build.model or 'gpt-4o-mini' }}</div>
+        <p class="review-command-copy">Latest generation model recorded for this version of the site.</p>
+    </div>
 </div>
 
 {% if build.error_message %}
@@ -710,11 +1734,11 @@
 {% endif %}
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <a href="{{ url_for('client.client_site_builder') }}" class="btn btn-sm btn-outline-secondary" style="border-radius:10px;">
+    <a href="{{ builder_home_url }}" class="btn btn-sm btn-outline-secondary" style="border-radius:10px;">
         <i class="bi bi-arrow-left me-1"></i>Back to Site Builder
     </a>
     <div class="d-flex gap-2">
-        <form method="POST" action="{{ url_for('client.client_site_builder_delete', build_id=build.id) }}" onsubmit="return confirm('Delete this build and remove any published WordPress pages tied to it?');">
+        <form method="POST" action="{{ url_for(builder_delete_endpoint, build_id=build.id) }}" onsubmit="return confirm('Delete this build and remove any published WordPress pages tied to it?');">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-sm btn-outline-danger" style="border-radius:10px;">
                 <i class="bi bi-trash me-1"></i>Delete Build
@@ -730,8 +1754,8 @@
             <i class="bi bi-cloud-upload me-1"></i>Publish {{ unpublished_count }} Page{{ 's' if unpublished_count != 1 }} to WordPress
         </button>
         {% elif not wp_connected %}
-        <a href="{{ url_for('client.client_settings') }}" class="btn btn-sm btn-warning" style="border-radius:10px;">
-            <i class="bi bi-plug me-1"></i>Connect WordPress First
+        <a href="{{ builder_settings_url or (builder_home_url ~ '#adminWpCredentials') }}" class="btn btn-sm btn-warning" style="border-radius:10px;">
+            <i class="bi bi-plug me-1"></i>{% if builder_mode == 'admin' %}Add WordPress Credentials{% else %}Connect WordPress First{% endif %}
         </a>
         {% else %}
         <span class="wp-status-badge wp-status-connected"><i class="bi bi-check-circle-fill"></i> All Pages Published</span>
@@ -739,65 +1763,111 @@
     </div>
 </div>
 
-<div id="publishProgress" style="display:none;" class="mb-3">
-    <div class="sb-card">
-        <div class="d-flex align-items-center gap-2 mb-2">
-            <div class="spinner-border spinner-border-sm text-primary" id="publishSpinner"></div>
-            <span id="publishStatus" style="font-weight:600; font-size:.88rem;">Publishing pages...</span>
-        </div>
-        <div class="progress" style="height:6px; border-radius:3px;">
-            <div class="progress-bar bg-primary" id="publishBar" style="width:0%"></div>
-        </div>
-    </div>
-</div>
-
-{% for page in pages %}
-<div class="page-preview-card" id="page-{{ page.id }}">
-    <div class="page-preview-header">
-        <div>
-            <h6>{{ page.label or page.title }}</h6>
-            <span class="page-type-chip"><i class="bi bi-file-earmark"></i> {{ page.page_type }}</span>
-        </div>
-        <div class="d-flex align-items-center gap-2">
-            <button type="button" class="btn btn-sm btn-primary open-designer-btn" data-page-id="{{ page.id }}" style="border-radius:8px; font-size:.78rem; font-weight:600;">
-                <i class="bi bi-palette me-1"></i>Design
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-secondary toggle-rewrite-btn" data-page-id="{{ page.id }}" style="border-radius:8px; font-size:.78rem;">
-                <i class="bi bi-stars me-1"></i>AI Rewrite
-            </button>
-            {% if page.wp_page_id %}
-            <span class="publish-badge published"><i class="bi bi-check-circle-fill me-1"></i>Published</span>
-            <a href="{{ page.wp_page_url }}" target="_blank" class="btn btn-sm btn-outline-primary" style="border-radius:8px; font-size:.78rem;">
-                <i class="bi bi-box-arrow-up-right me-1"></i>View Live
-            </a>
-            {% else %}
-            <span class="publish-badge draft"><i class="bi bi-pencil me-1"></i>Draft</span>
-            {% endif %}
-        </div>
-    </div>
-    <div class="page-preview-body">
-        <div class="seo-meta">
-            {% if page.seo_title %}<div class="seo-title">{{ page.seo_title }}</div>{% endif %}
-            {% if page.slug %}<div class="seo-slug">/{{ page.slug }}</div>{% endif %}
-            {% if page.seo_description %}<div class="seo-desc">{{ page.seo_description }}</div>{% endif %}
-            {% if page.primary_keyword %}<div style="margin-top:.3rem;"><span style="font-weight:600;">Keyword:</span> {{ page.primary_keyword }}</div>{% endif %}
-        </div>
-        <div class="page-preview-content" id="pageContent-{{ page.id }}">{{ page.content|safe }}</div>
-    </div>
-    {# Rewrite Panel #}
-    <div class="rewrite-panel" id="rewritePanel-{{ page.id }}" style="display:none;">
-        <div class="d-flex align-items-start gap-2">
-            <div class="flex-grow-1">
-                <textarea id="rewritePrompt-{{ page.id }}" placeholder="Tell the AI how to rewrite this page. e.g. 'Make it more urgent', 'Add a financing section', 'Focus on commercial customers'" rows="2"></textarea>
+<div class="review-layout-grid">
+    <aside class="review-sidebar">
+        <div class="review-panel">
+            <h6>Page Navigator</h6>
+            <p>Jump between generated pages, check draft status, and move directly into the right review target.</p>
+            <div class="page-nav-list">
+                {% for page in pages %}
+                <a class="page-nav-link" href="#page-{{ page.id }}">
+                    <div class="page-nav-title">{{ page.label or page.title }}</div>
+                    <div class="page-nav-meta">
+                        <span class="page-nav-pill">{{ page.page_type }}</span>
+                        {% if page.wp_page_id %}
+                        <span class="page-nav-pill">Published</span>
+                        {% else %}
+                        <span class="page-nav-pill">Draft</span>
+                        {% endif %}
+                    </div>
+                </a>
+                {% endfor %}
             </div>
-            <button type="button" class="btn btn-sm btn-primary rewrite-ai-btn" data-page-id="{{ page.id }}" style="border-radius:10px; font-weight:600; white-space:nowrap;">
-                <i class="bi bi-stars me-1"></i>Rewrite
-            </button>
         </div>
-        <div class="rewrite-status mt-1" id="rewriteStatus-{{ page.id }}" style="font-size:.8rem; color:var(--text-muted);"></div>
+        <div class="review-panel">
+            <h6>Operator Notes</h6>
+            <p>Use Design for layout work, AI Rewrite for message adjustments, and publish only after the draft queue is clean.</p>
+        </div>
+    </aside>
+
+    <div>
+        <div id="publishProgress" style="display:none;" class="mb-3">
+            <div class="publish-progress-shell">
+                <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+                    <div>
+                        <div class="tiny-label mb-1">Publish Pipeline</div>
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <div class="spinner-border spinner-border-sm text-primary" id="publishSpinner"></div>
+                            <span id="publishStatus" style="font-weight:700; font-size:.9rem; color:var(--text-strong);">Preparing WordPress publish request...</span>
+                        </div>
+                    </div>
+                    <div class="publish-stage-strip" aria-hidden="true">
+                        <span class="publish-stage-chip" data-publish-stage="prepare">Prepare</span>
+                        <span class="publish-stage-chip" data-publish-stage="push">Push</span>
+                        <span class="publish-stage-chip" data-publish-stage="verify">Verify</span>
+                    </div>
+                </div>
+                <div class="progress" style="height:6px; border-radius:3px;">
+                    <div class="progress-bar bg-primary" id="publishBar" style="width:0%"></div>
+                </div>
+                <div class="publish-log" id="publishLog"></div>
+            </div>
+        </div>
+
+        <div class="review-pages-stack">
+        {% for page in pages %}
+        <div class="page-preview-card" id="page-{{ page.id }}">
+            <div class="page-preview-header">
+                <div>
+                    <h6>{{ page.label or page.title }}</h6>
+                    <div class="page-preview-meta">
+                        <span class="page-type-chip"><i class="bi bi-file-earmark"></i> {{ page.page_type }}</span>
+                        {% if page.slug %}<span class="page-meta-pill">/{{ page.slug }}</span>{% endif %}
+                        {% if page.primary_keyword %}<span class="page-meta-pill">{{ page.primary_keyword }}</span>{% endif %}
+                    </div>
+                </div>
+                <div class="page-preview-actions">
+                    <button type="button" class="btn btn-sm btn-primary open-designer-btn" data-page-id="{{ page.id }}" style="border-radius:8px; font-size:.78rem; font-weight:600;">
+                        <i class="bi bi-palette me-1"></i>Design
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary toggle-rewrite-btn" data-page-id="{{ page.id }}" style="border-radius:8px; font-size:.78rem;">
+                        <i class="bi bi-stars me-1"></i>AI Rewrite
+                    </button>
+                    {% if page.wp_page_id %}
+                    <span class="publish-badge published"><i class="bi bi-check-circle-fill me-1"></i>Published</span>
+                    <a href="{{ page.wp_page_url }}" target="_blank" class="btn btn-sm btn-outline-primary" style="border-radius:8px; font-size:.78rem;">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>View Live
+                    </a>
+                    {% else %}
+                    <span class="publish-badge draft"><i class="bi bi-pencil me-1"></i>Draft</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="page-preview-body">
+                <div class="seo-meta">
+                    {% if page.seo_title %}<div class="seo-title">{{ page.seo_title }}</div>{% endif %}
+                    {% if page.seo_description %}<div class="seo-desc">{{ page.seo_description }}</div>{% endif %}
+                    {% if page.primary_keyword %}<div style="margin-top:.3rem;"><span style="font-weight:600;">Keyword:</span> {{ page.primary_keyword }}</div>{% endif %}
+                </div>
+                <div class="page-preview-content" id="pageContent-{{ page.id }}">{{ page.content|safe }}</div>
+            </div>
+            {# Rewrite Panel #}
+            <div class="rewrite-panel" id="rewritePanel-{{ page.id }}" style="display:none;">
+                <div class="d-flex align-items-start gap-2">
+                    <div class="flex-grow-1">
+                        <textarea id="rewritePrompt-{{ page.id }}" placeholder="Tell the AI how to rewrite this page. e.g. 'Make it more urgent', 'Add a financing section', 'Focus on commercial customers'" rows="2"></textarea>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-primary rewrite-ai-btn" data-page-id="{{ page.id }}" style="border-radius:10px; font-weight:600; white-space:nowrap;">
+                        <i class="bi bi-stars me-1"></i>Rewrite
+                    </button>
+                </div>
+                <div class="rewrite-status mt-1" id="rewriteStatus-{{ page.id }}"></div>
+            </div>
+        </div>
+        {% endfor %}
+        </div>
     </div>
 </div>
-{% endfor %}
 
 {# GrapesJS CDN - must load before editor JS #}
 <link rel="stylesheet" href="https://unpkg.com/grapesjs@0.21.10/dist/css/grapes.min.css">
@@ -821,30 +1891,13 @@
     const builderPrimaryColor = {{ (builder_primary_color or '#6366f1')|tojson }};
     const builderAccentColor = {{ (builder_accent_color or '#0f172a')|tojson }};
     const builderLogoUrl = {{ (brand_logo_url or '')|tojson }};
+    const builderPageGetUrlTemplate = {{ url_for(builder_page_get_endpoint, page_id=0)|tojson }};
+    const builderPageSaveUrlTemplate = {{ url_for(builder_page_save_endpoint, page_id=0)|tojson }};
+    const builderPageRewriteUrlTemplate = {{ url_for(builder_page_rewrite_endpoint, page_id=0)|tojson }};
+    const builderUploadImageUrl = {{ builder_upload_image_url|tojson }};
+    const withRouteId = (template, id) => template.replace('/0/', '/' + id + '/').replace(/\/0$/, '/' + id);
     const gjsFontFamilyOptions = [
         { id: 'inherit', label: 'Inherit / keep existing' },
-        { id: '"Inter", system-ui, sans-serif', label: 'Inter' },
-        { id: '"Plus Jakarta Sans", "Inter", sans-serif', label: 'Plus Jakarta Sans' },
-        { id: '"Space Grotesk", "Inter", sans-serif', label: 'Space Grotesk' },
-        { id: '"Manrope", sans-serif', label: 'Manrope' },
-        { id: '"DM Sans", sans-serif', label: 'DM Sans' },
-        { id: '"Archivo", sans-serif', label: 'Archivo' },
-        { id: '"Work Sans", sans-serif', label: 'Work Sans' },
-        { id: '"Poppins", sans-serif', label: 'Poppins' },
-        { id: '"Montserrat", sans-serif', label: 'Montserrat' },
-        { id: '"Open Sans", sans-serif', label: 'Open Sans' },
-        { id: '"Lato", sans-serif', label: 'Lato' },
-        { id: '"Nunito", sans-serif', label: 'Nunito' },
-        { id: '"Roboto", sans-serif', label: 'Roboto' },
-        { id: '"Source Sans 3", "Source Sans Pro", sans-serif', label: 'Source Sans' },
-        { id: '"Mulish", sans-serif', label: 'Mulish' },
-        { id: '"Raleway", sans-serif', label: 'Raleway' },
-        { id: '"Oswald", sans-serif', label: 'Oswald' },
-        { id: '"Bebas Neue", sans-serif', label: 'Bebas Neue' },
-        { id: '"Playfair Display", serif', label: 'Playfair Display' },
-        { id: '"Libre Baskerville", serif', label: 'Libre Baskerville' },
-        { id: '"Lora", serif', label: 'Lora' },
-        { id: '"Roboto Slab", serif', label: 'Roboto Slab' },
         { id: 'Arial, Helvetica, sans-serif', label: 'Arial' },
         { id: 'Georgia, serif', label: 'Georgia' },
         { id: '"Times New Roman", Times, serif', label: 'Times New Roman' },
@@ -852,11 +1905,11 @@
         { id: '"Trebuchet MS", Helvetica, sans-serif', label: 'Trebuchet MS' },
         { id: '"Courier New", Courier, monospace', label: 'Courier New' },
         { id: 'system-ui, -apple-system, sans-serif', label: 'System UI' },
+        {% for option in editor_font_family_options %}
+        { id: {{ option.id|tojson }}, label: {{ option.label|tojson }} },
+        {% endfor %}
     ];
-    const gjsGoogleFontStyles = [
-        'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;700&family=Archivo:wght@500;600;700&family=Work+Sans:wght@400;500;600;700&display=swap',
-        'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Mulish:wght@400;500;600;700&family=Raleway:wght@400;500;600;700;800&family=Lora:wght@400;500;600;700&family=Libre+Baskerville:wght@400;700&family=Source+Sans+3:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700;800&family=Lato:wght@400;700&family=Montserrat:wght@400;500;600;700;800&family=Open+Sans:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Roboto+Slab:wght@400;500;700&family=Poppins:wght@400;500;600;700;800&family=Nunito:wght@400;500;600;700;800&family=Oswald:wght@400;500;600;700&display=swap',
-    ];
+    const gjsGoogleFontStyles = {{ font_preview_stylesheets|tojson }};
 
     function setToolbarNote(message) {
         const note = document.querySelector('.btn-toolbar-note');
@@ -930,6 +1983,81 @@
         return '';
     }
 
+    const publishProgress = document.getElementById('publishProgress');
+    const publishSpinner = document.getElementById('publishSpinner');
+    const publishBar = document.getElementById('publishBar');
+    const publishStatus = document.getElementById('publishStatus');
+    const publishLog = document.getElementById('publishLog');
+    const publishStageChips = Array.from(document.querySelectorAll('.publish-stage-chip'));
+    const publishStageOrder = ['prepare', 'push', 'verify'];
+    let publishStageTimers = [];
+    let currentPublishStage = 'prepare';
+
+    function clearPublishStageTimers() {
+        publishStageTimers.forEach(window.clearTimeout);
+        publishStageTimers = [];
+    }
+
+    function setPublishStage(stageKey, terminalState) {
+        const stageIndex = publishStageOrder.indexOf(stageKey);
+        currentPublishStage = stageKey;
+        publishStageChips.forEach((chip, index) => {
+            chip.classList.remove('is-active', 'is-done', 'is-error');
+            if (terminalState === 'done') {
+                chip.classList.add('is-done');
+                return;
+            }
+            if (terminalState === 'error') {
+                if (index < stageIndex) chip.classList.add('is-done');
+                else if (index === stageIndex) chip.classList.add('is-error');
+                return;
+            }
+            if (index < stageIndex) chip.classList.add('is-done');
+            else if (index === stageIndex) chip.classList.add('is-active');
+        });
+    }
+
+    function queuePublishStage(stageKey, delay, progressPercent, statusText) {
+        const timer = window.setTimeout(() => {
+            setPublishStage(stageKey);
+            if (publishBar && typeof progressPercent === 'number') {
+                publishBar.style.width = progressPercent + '%';
+            }
+            if (publishStatus && statusText) {
+                publishStatus.textContent = statusText;
+            }
+        }, delay);
+        publishStageTimers.push(timer);
+    }
+
+    function resetPublishLog() {
+        if (publishLog) publishLog.replaceChildren();
+    }
+
+    function appendPublishLog(message, toneClass, iconClass, iconToneClass) {
+        if (!publishLog) return;
+        const entry = document.createElement('div');
+        entry.className = 'log-entry' + (toneClass ? ' ' + toneClass : '');
+        const icon = document.createElement('i');
+        icon.className = 'bi ' + (iconClass || 'bi-cloud-upload') + ' me-1';
+        if (iconToneClass) icon.classList.add(iconToneClass);
+        entry.appendChild(icon);
+        entry.appendChild(document.createTextNode(message));
+        publishLog.appendChild(entry);
+    }
+
+    function setRewriteStatus(statusEl, message, tone, iconClass) {
+        if (!statusEl) return;
+        statusEl.className = 'rewrite-status mt-1' + (tone ? ' text-' + tone : '');
+        statusEl.replaceChildren();
+        if (message) {
+            const icon = document.createElement('i');
+            icon.className = 'bi ' + (iconClass || 'bi-info-circle') + ' me-1';
+            statusEl.appendChild(icon);
+            statusEl.appendChild(document.createTextNode(message));
+        }
+    }
+
     /* ── Publish All ── */
     const publishBtn = document.getElementById('publishAllBtn');
     if (publishBtn) {
@@ -937,34 +2065,53 @@
             if (!confirm('Publish all draft pages to WordPress?')) return;
             publishBtn.disabled = true;
             publishBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Publishing...';
-            document.getElementById('publishProgress').style.display = 'block';
+            publishProgress.style.display = 'block';
+            clearPublishStageTimers();
+            setPublishStage('prepare');
+            publishSpinner.style.display = '';
+            publishBar.classList.remove('bg-danger');
+            publishBar.classList.add('bg-primary');
+            publishBar.style.width = '16%';
+            publishStatus.textContent = 'Preparing WordPress publish request...';
+            resetPublishLog();
+            appendPublishLog('Draft queue locked. Warren is preparing the publish batch.', '', 'bi-cloud-upload', 'text-primary');
+            queuePublishStage('push', 350, 54, 'Pushing pages into WordPress...');
+            queuePublishStage('verify', 1200, 82, 'Verifying results and collecting published URLs...');
             try {
-                const resp = await fetch('{{ url_for("client.client_site_builder_publish", build_id=build.id) }}', {
+                const resp = await fetch('{{ url_for(builder_publish_endpoint, build_id=build.id) }}', {
                     method: 'POST',
                     headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf() },
                 });
                 const data = await resp.json();
-                document.getElementById('publishSpinner').style.display = 'none';
-                document.getElementById('publishBar').style.width = '100%';
+                clearPublishStageTimers();
+                publishSpinner.style.display = 'none';
+                publishBar.style.width = '100%';
                 if (data.ok) {
-                    document.getElementById('publishStatus').innerHTML =
-                        '<i class="bi bi-check-circle-fill text-success me-1"></i>' +
-                        data.published + ' of ' + data.total + ' pages published.';
+                    setPublishStage('verify', 'done');
+                    publishStatus.textContent = data.published + ' of ' + data.total + ' pages published.';
+                    appendPublishLog('Publish completed. Refreshing the review workspace now.', '', 'bi-check-circle-fill', 'text-success');
                     if (data.errors && data.errors.length) {
-                        document.getElementById('publishStatus').innerHTML +=
-                            '<br><small class="text-warning">' + data.errors.join('<br>') + '</small>';
+                        data.errors.forEach(err => appendPublishLog(err, 'text-warning', 'bi-exclamation-triangle'));
                     }
                     setTimeout(() => location.reload(), 1500);
                 } else {
-                    document.getElementById('publishStatus').innerHTML =
-                        '<i class="bi bi-x-circle-fill text-danger me-1"></i>' + (data.error || 'Publishing failed.');
+                    setPublishStage(currentPublishStage || 'push', 'error');
+                    publishBar.classList.remove('bg-primary');
+                    publishBar.classList.add('bg-danger');
+                    publishStatus.textContent = data.error || 'Publishing failed.';
+                    appendPublishLog('The publish batch stopped before verification. Review WordPress credentials or page content and try again.', 'text-danger', 'bi-shield-exclamation');
                     publishBtn.disabled = false;
                     publishBtn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i>Retry Publish';
                 }
             } catch (err) {
-                document.getElementById('publishSpinner').style.display = 'none';
-                document.getElementById('publishStatus').innerHTML =
-                    '<i class="bi bi-x-circle-fill text-danger me-1"></i>Network error. Please try again.';
+                clearPublishStageTimers();
+                setPublishStage(currentPublishStage || 'push', 'error');
+                publishSpinner.style.display = 'none';
+                publishBar.classList.remove('bg-primary');
+                publishBar.classList.add('bg-danger');
+                publishBar.style.width = '100%';
+                publishStatus.textContent = 'Network error. Please try again.';
+                appendPublishLog('The publish request did not complete. Check the connection and rerun the batch.', 'text-danger', 'bi-wifi-off');
                 publishBtn.disabled = false;
                 publishBtn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i>Retry Publish';
             }
@@ -990,10 +2137,10 @@
 
             this.disabled = true;
             this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Rewriting...';
-            status.textContent = 'Warren is rewriting this page...';
+            setRewriteStatus(status, 'Warren is rewriting this page...', 'muted', 'bi-stars');
 
             try {
-                const resp = await fetch('/client/site-builder/page/' + pid + '/rewrite', {
+                const resp = await fetch(withRouteId(builderPageRewriteUrlTemplate, pid), {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1005,13 +2152,13 @@
                 const data = await resp.json();
                 if (data.ok && data.page) {
                     document.getElementById('pageContent-' + pid).innerHTML = data.page.content || '';
-                    status.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i>Page rewritten successfully.';
+                    setRewriteStatus(status, 'Page rewritten successfully.', 'success', 'bi-check-circle-fill');
                     textarea.value = '';
                 } else {
-                    status.innerHTML = '<i class="bi bi-x-circle-fill text-danger me-1"></i>' + (data.error || 'Rewrite failed.');
+                    setRewriteStatus(status, data.error || 'Rewrite failed.', 'danger', 'bi-x-circle-fill');
                 }
             } catch (err) {
-                status.innerHTML = '<i class="bi bi-x-circle-fill text-danger me-1"></i>Network error.';
+                setRewriteStatus(status, 'Network error.', 'danger', 'bi-x-circle-fill');
             }
             this.disabled = false;
             this.innerHTML = '<i class="bi bi-stars me-1"></i>Rewrite';
@@ -1812,7 +2959,7 @@
         updateSaveButtonState();
 
         try {
-            const resp = await fetch('/client/site-builder/page/' + pageId, {
+            const resp = await fetch(withRouteId(builderPageGetUrlTemplate, pageId), {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' },
             });
             if (!resp.ok) {
@@ -2228,7 +3375,7 @@
                     ],
                 },
                 assetManager: {
-                    upload: '/client/site-builder/upload-image',
+                    upload: builderUploadImageUrl,
                     uploadName: 'files[]',
                     headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf() },
                     multiUpload: false,
@@ -2430,7 +3577,7 @@
 
         gjsSaveInFlight = (async () => {
             try {
-                const resp = await fetch('/client/site-builder/page/' + gjsCurrentPageId + '/save', {
+                const resp = await fetch(withRouteId(builderPageSaveUrlTemplate, gjsCurrentPageId), {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -2591,7 +3738,30 @@
 {# ── LANDING MODE ── #}
 <div class="sb-header">
     <h3><i class="bi bi-globe2 me-2"></i>Site Builder</h3>
-    <p>Generate a complete, SEO-optimized website for your business with AI, powered by real search data and Warren's strategy.</p>
+    <p>{% if builder_mode == 'admin' %}Generate sites for any brand from admin. Start from a blank intake or load an existing brand, add WordPress credentials, and run the full Warren build flow.{% else %}Generate a complete, SEO-optimized website for your business with AI, powered by real search data and Warren's strategy.{% endif %}</p>
+</div>
+
+<div class="builder-command-strip">
+    <div class="builder-command-card">
+        <div class="builder-command-label"><i class="bi bi-type"></i>Typography Library</div>
+        <div class="builder-command-value">{{ font_family_count }}</div>
+        <p class="builder-command-copy">Google font families are now available in the intake and carried into the review editor.</p>
+    </div>
+    <div class="builder-command-card">
+        <div class="builder-command-label"><i class="bi bi-grid-1x2"></i>Pairing Presets</div>
+        <div class="builder-command-value">{{ font_pair_choices|length }}</div>
+        <p class="builder-command-copy">Curated heading and body combinations give faster direction when you want premium typography without manual hunting.</p>
+    </div>
+    <div class="builder-command-card">
+        <div class="builder-command-label"><i class="bi bi-brush"></i>Template Systems</div>
+        <div class="builder-command-value">{{ site_templates|length }}</div>
+        <p class="builder-command-copy">Site kits and layout systems can be mixed with the typography controls instead of forcing one default look.</p>
+    </div>
+    <div class="builder-command-card">
+        <div class="builder-command-label"><i class="bi bi-diagram-3"></i>{% if builder_mode == 'admin' %}Brand Workspaces{% else %}Build History{% endif %}</div>
+        <div class="builder-command-value">{% if builder_mode == 'admin' %}{{ available_brands|length }}{% else %}{{ builds|length }}{% endif %}</div>
+        <p class="builder-command-copy">{% if builder_mode == 'admin' %}Load an existing brand or open a clean workspace without dropping into a separate beta-grade admin flow.{% else %}Existing builds stay in one workspace so generation, review, and publishing feel like one system.{% endif %}</p>
+    </div>
 </div>
 
 {% if brand_logo_url or builder_brand_colors %}
@@ -2633,117 +3803,249 @@
                 <i class="bi bi-box-arrow-up-right me-1"></i>WordPress Admin
             </a>
             {% endif %}
-            <a href="{{ url_for('client.client_settings') }}" class="btn btn-sm btn-outline-secondary" style="border-radius:8px; font-size:.78rem;">
+            {% if builder_settings_url %}
+            <a href="{{ builder_settings_url }}" class="btn btn-sm btn-outline-secondary" style="border-radius:8px; font-size:.78rem;">
                 <i class="bi bi-gear me-1"></i>Settings
             </a>
+            {% endif %}
         </div>
     </div>
 </div>
 {% else %}
 <div class="wp-connect-card mb-4">
     <i class="bi bi-wordpress" style="font-size: 2.5rem; color: #92400e; opacity:.5;"></i>
-    <h5 class="mt-2">Connect Your WordPress Site</h5>
-    <p>Site Builder needs a WordPress connection to publish pages. Add your site URL, username, and application password in Settings.</p>
-    <a href="{{ url_for('client.client_settings') }}" class="btn btn-warning btn-sm" style="border-radius:10px; font-weight:600;">
+    <h5 class="mt-2">{% if builder_mode == 'admin' %}Add WordPress Credentials{% else %}Connect Your WordPress Site{% endif %}</h5>
+    <p>{% if builder_mode == 'admin' %}Enter the site URL, WordPress username, and application password in the intake below. Those credentials will be saved to the selected brand, or to the new brand created from this intake.{% else %}Site Builder needs a WordPress connection to publish pages. Add your site URL, username, and application password in Settings.{% endif %}</p>
+    {% if builder_settings_url %}
+    <a href="{{ builder_settings_url }}" class="btn btn-warning btn-sm" style="border-radius:10px; font-weight:600;">
         <i class="bi bi-plug me-1"></i>Go to Settings
     </a>
+    {% endif %}
 </div>
 {% endif %}
 
 {# ── Multi-Step Intake Wizard ── #}
 <div class="sb-card">
-    <form id="generateForm" method="POST" action="{{ url_for('client.client_site_builder_generate') }}" enctype="multipart/form-data">
+    <form id="generateForm" method="POST" action="{{ builder_generate_url }}" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="brand_id" value="{{ selected_brand_id or '' }}">
         <datalist id="siteBuilderGoogleFonts">
             {% for font in google_font_choices %}
             <option value="{{ font }}"></option>
             {% endfor %}
         </datalist>
 
+        <div class="builder-wizard-shell">
+            <div class="wizard-status-shell">
+                <div class="wizard-status-header">
+                    <div class="wizard-status-copy">
+                        <div class="wizard-eyebrow"><i class="bi bi-command"></i>Build Command Center</div>
+                        <h6 id="wizardStepHeading">Step 1 - Business</h6>
+                        <p id="wizardStepSubcopy">Confirm the brand, offer, and destination details that Warren will use to shape copy, layout, and publishing targets.</p>
+                    </div>
+                    <div class="wizard-progress-pill" id="wizardProgressPill"><i class="bi bi-activity"></i>16% complete</div>
+                </div>
+                <div class="wizard-progress-bar" aria-hidden="true">
+                    <div class="wizard-progress-fill" id="wizardProgressFill"></div>
+                </div>
+                <div class="wizard-summary-grid">
+                    <div class="wizard-summary-card">
+                        <span><i class="bi bi-building"></i>Business</span>
+                        <strong id="wizardSummaryBusiness">Waiting for brand details</strong>
+                        <p>Business identity, offer, and credibility notes.</p>
+                    </div>
+                    <div class="wizard-summary-card">
+                        <span><i class="bi bi-search"></i>SEO</span>
+                        <strong id="wizardSummarySeo">Search data not pulled yet</strong>
+                        <p>Real keyword signal and location priority.</p>
+                    </div>
+                    <div class="wizard-summary-card">
+                        <span><i class="bi bi-bullseye"></i>Conversion</span>
+                        <strong id="wizardSummaryGoals">Lead generation default</strong>
+                        <p>Primary goals and site-level conversion behavior.</p>
+                    </div>
+                    <div class="wizard-summary-card">
+                        <span><i class="bi bi-palette2"></i>Design</span>
+                        <strong id="wizardSummaryDesign">Modern system, auto palette</strong>
+                        <p>Typography, palette, and layout direction.</p>
+                    </div>
+                    <div class="wizard-summary-card">
+                        <span><i class="bi bi-stack"></i>Pages</span>
+                        <strong id="wizardSummaryPages">6 standard pages selected</strong>
+                        <p>Core pages, service pages, area pages, and extras.</p>
+                    </div>
+                </div>
+            </div>
+
         {# Step Indicator #}
-        <div class="intake-steps mb-4">
+        <div class="intake-steps">
             <div class="step-indicator">
-                <div class="step active" data-step="1"><span class="step-num">1</span><span class="step-label">Business</span></div>
+                <div class="step active" data-step="1"><span class="step-kicker">Step 01</span><span class="step-num">1</span><span class="step-label">Business</span><span class="step-meta">Brand profile, trust, and destination setup.</span></div>
                 <div class="step-line"></div>
-                <div class="step" data-step="2"><span class="step-num">2</span><span class="step-label">SEO Intel</span></div>
+                <div class="step" data-step="2"><span class="step-kicker">Step 02</span><span class="step-num">2</span><span class="step-label">SEO Intel</span><span class="step-meta">Keyword signal and local targeting input.</span></div>
                 <div class="step-line"></div>
-                <div class="step" data-step="3"><span class="step-num">3</span><span class="step-label">Content</span></div>
+                <div class="step" data-step="3"><span class="step-kicker">Step 03</span><span class="step-num">3</span><span class="step-label">Content</span><span class="step-meta">Goals, CTA direction, and site vision.</span></div>
                 <div class="step-line"></div>
-                <div class="step" data-step="4"><span class="step-num">4</span><span class="step-label">Design</span></div>
+                <div class="step" data-step="4"><span class="step-kicker">Step 04</span><span class="step-num">4</span><span class="step-label">Design</span><span class="step-meta">Template, typography, wireframes, and assets.</span></div>
                 <div class="step-line"></div>
-                <div class="step" data-step="5"><span class="step-num">5</span><span class="step-label">Pages</span></div>
+                <div class="step" data-step="5"><span class="step-kicker">Step 05</span><span class="step-num">5</span><span class="step-label">Pages</span><span class="step-meta">Structure, service pages, and custom routes.</span></div>
                 <div class="step-line"></div>
-                <div class="step" data-step="6"><span class="step-num">6</span><span class="step-label">Integrations</span></div>
+                <div class="step" data-step="6"><span class="step-kicker">Step 06</span><span class="step-num">6</span><span class="step-label">Integrations</span><span class="step-meta">Forms, quote tools, and embedded workflows.</span></div>
             </div>
         </div>
 
         {# ── STEP 1: Business Profile ── #}
         <div class="intake-panel" id="step1">
             <h5><i class="bi bi-building me-2"></i>Your Business</h5>
-            <p class="intake-desc">Confirm your business details. These feed directly into your website copy and SEO.</p>
+            <p class="intake-desc">{% if builder_mode == 'admin' %}Choose a saved brand or fill this out as a fresh intake. These details drive the build context, copy, and WordPress destination.{% else %}Confirm your business details. These feed directly into your website copy and SEO.{% endif %}</p>
 
             <div class="row g-3">
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Business Name</label>
-                    <input type="text" class="form-control" value="{{ brand_name|e }}" disabled style="border-radius:10px; font-size:.88rem;">
-                    <div class="form-hint">From your brand profile</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Industry</label>
-                    <input type="text" class="form-control" value="{{ brand_industry|e }}" disabled style="border-radius:10px; font-size:.88rem;">
-                </div>
-                <div class="col-md-12">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Tagline / Headline</label>
-                    <input type="text" name="tagline" class="form-control" value="{{ brand_tagline|e }}" placeholder="Your go-to tagline or headline" style="border-radius:10px; font-size:.88rem;">
-                    <div class="form-hint">Used in hero sections and meta descriptions</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Target Audience</label>
-                    <input type="text" name="target_audience" class="form-control" value="{{ brand_target_audience|e }}" placeholder="e.g. Homeowners in suburban Phoenix, commercial property managers" style="border-radius:10px; font-size:.88rem;">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Brand Voice / Tone</label>
-                    <select name="brand_voice" class="form-select" style="border-radius:10px; font-size:.88rem;">
-                        <option value="">Use profile default</option>
-                        <option value="professional and trustworthy" {% if brand_voice == 'professional and trustworthy' %}selected{% endif %}>Professional, Trustworthy</option>
-                        <option value="friendly and approachable" {% if brand_voice == 'friendly and approachable' %}selected{% endif %}>Friendly, Approachable</option>
-                        <option value="direct and no-nonsense" {% if brand_voice == 'direct and no-nonsense' %}selected{% endif %}>Direct, No-Nonsense</option>
-                        <option value="warm and community-focused" {% if brand_voice == 'warm and community-focused' %}selected{% endif %}>Warm, Community-Focused</option>
-                        <option value="expert and authoritative" {% if brand_voice == 'expert and authoritative' %}selected{% endif %}>Expert, Authoritative</option>
-                    </select>
-                </div>
                 <div class="col-12">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">What Makes You Different? (Unique Selling Points)</label>
-                    <textarea name="unique_selling_points" class="form-control" rows="2" placeholder="e.g. Same-day service, 20+ years experience, family-owned, free estimates, licensed and insured" style="border-radius:10px; font-size:.88rem;"></textarea>
-                    <div class="form-hint">The AI uses these to differentiate your copy from competitors</div>
+                    <div class="intake-subsection">
+                        <div class="intake-subsection-header">
+                            <div>
+                                <h6 class="intake-subsection-title">Brand Identity</h6>
+                                <p class="intake-subsection-copy">Lock the core identity first so Warren has a stable name, market, tone, and positioning anchor before it starts making layout and copy decisions.</p>
+                            </div>
+                            <span class="intake-subsection-badge"><i class="bi bi-building"></i>Core profile</span>
+                        </div>
+                        <div class="row g-3">
+                            {% if builder_mode == 'admin' %}
+                            <div class="col-12">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Brand Workspace</label>
+                                <select id="adminBrandPicker" class="form-select" style="border-radius:10px; font-size:.88rem;">
+                                    <option value="">New brand / blank intake</option>
+                                    {% for available_brand in available_brands %}
+                                    <option value="{{ available_brand.id }}" {% if selected_brand_id and available_brand.id == selected_brand_id %}selected{% endif %}>{{ available_brand.display_name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-hint">Select an existing brand to prefill the intake, or leave this on a blank workspace to create a new one from the form.</div>
+                            </div>
+                            {% endif %}
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Business Name</label>
+                                {% if brand_fields_locked %}
+                                <input type="text" class="form-control" value="{{ brand_name|e }}" disabled style="border-radius:10px; font-size:.88rem;">
+                                <div class="form-hint">From your brand profile</div>
+                                {% else %}
+                                <input type="text" name="business_name" class="form-control" value="{{ brand_name|e }}" placeholder="e.g. Ace Plumbing" style="border-radius:10px; font-size:.88rem;">
+                                <div class="form-hint">Saved to the selected brand, or used to create a new one.</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Industry</label>
+                                {% if brand_fields_locked %}
+                                <input type="text" class="form-control" value="{{ brand_industry|e }}" disabled style="border-radius:10px; font-size:.88rem;">
+                                {% else %}
+                                <input type="text" name="industry" class="form-control" value="{{ brand_industry|e }}" placeholder="e.g. plumbing, pet waste removal, roofing" style="border-radius:10px; font-size:.88rem;">
+                                {% endif %}
+                            </div>
+                            <div class="col-md-12">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Tagline / Headline</label>
+                                <input type="text" name="tagline" class="form-control" value="{{ brand_tagline|e }}" placeholder="Your go-to tagline or headline" style="border-radius:10px; font-size:.88rem;">
+                                <div class="form-hint">Used in hero sections and meta descriptions.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Target Audience</label>
+                                <input type="text" name="target_audience" class="form-control" value="{{ brand_target_audience|e }}" placeholder="e.g. Homeowners in suburban Phoenix, commercial property managers" style="border-radius:10px; font-size:.88rem;">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Brand Voice / Tone</label>
+                                <select name="brand_voice" class="form-select" style="border-radius:10px; font-size:.88rem;">
+                                    <option value="">Use profile default</option>
+                                    <option value="professional and trustworthy" {% if brand_voice == 'professional and trustworthy' %}selected{% endif %}>Professional, Trustworthy</option>
+                                    <option value="friendly and approachable" {% if brand_voice == 'friendly and approachable' %}selected{% endif %}>Friendly, Approachable</option>
+                                    <option value="direct and no-nonsense" {% if brand_voice == 'direct and no-nonsense' %}selected{% endif %}>Direct, No-Nonsense</option>
+                                    <option value="warm and community-focused" {% if brand_voice == 'warm and community-focused' %}selected{% endif %}>Warm, Community-Focused</option>
+                                    <option value="expert and authoritative" {% if brand_voice == 'expert and authoritative' %}selected{% endif %}>Expert, Authoritative</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Services to Highlight</label>
-                    <textarea name="services_to_highlight" class="form-control" rows="2" placeholder="e.g. Weekly yard cleanup, emergency plumbing, drain clearing, premium recurring plans" style="border-radius:10px; font-size:.88rem;"></textarea>
-                    <div class="form-hint">Tell Warren which offers deserve the strongest placement on the site.</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Plan / Frequency Options</label>
-                    <input type="text" name="service_plan_options" class="form-control" placeholder="e.g. Weekly, twice weekly, bi-weekly, monthly, one-time" style="border-radius:10px; font-size:.88rem;">
-                    <div class="form-hint">Useful for recurring services, maintenance plans, and package pages.</div>
-                </div>
+
+                {% if show_runtime_wp_fields %}
                 <div class="col-12">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Add-Ons / Upsells</label>
-                    <input type="text" name="service_add_ons" class="form-control" placeholder="e.g. Deodorizer, sanitizer, haul waste away, camera inspection, emergency dispatch" style="border-radius:10px; font-size:.88rem;">
-                    <div class="form-hint">These can become pricing bullets, comparison tables, FAQ answers, and CTA supporting points.</div>
+                    <div class="intake-subsection">
+                        <div class="intake-subsection-header">
+                            <div>
+                                <h6 class="intake-subsection-title">Publishing Destination</h6>
+                                <p class="intake-subsection-copy">These fields tell the workbench where the finished build will live and which credentials should be used when publishing to WordPress.</p>
+                            </div>
+                            <span class="intake-subsection-badge"><i class="bi bi-wordpress"></i>Runtime publishing</span>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Website</label>
+                                <input type="text" name="website" class="form-control" value="{{ brand_website|e }}" placeholder="https://example.com" style="border-radius:10px; font-size:.88rem;">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Business Phone</label>
+                                <input type="text" name="phone" class="form-control" value="{{ brand_phone|e }}" placeholder="(555) 123-4567" style="border-radius:10px; font-size:.88rem;">
+                            </div>
+                            <div class="col-md-5" id="adminWpCredentials">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">WordPress Site URL</label>
+                                <input type="text" name="wp_site_url" class="form-control" value="{{ wp_site_url|e }}" placeholder="https://example.com" style="border-radius:10px; font-size:.88rem;">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">WP Username</label>
+                                <input type="text" name="wp_username" class="form-control" value="{{ brand_wp_username|default('', true)|e }}" placeholder="admin" style="border-radius:10px; font-size:.88rem;">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Application Password</label>
+                                <input type="password" name="wp_app_password" class="form-control" value="" placeholder="xxxx xxxx xxxx xxxx" autocomplete="new-password" style="border-radius:10px; font-size:.88rem;">
+                                <div class="form-hint">Leave blank to keep the saved application password on an existing brand.</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Current Offers / Promotions</label>
-                    <input type="text" name="active_offers" class="form-control" value="{{ brand_active_offers|e }}" placeholder="e.g. $50 off first service, free inspection" style="border-radius:10px; font-size:.88rem;">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Competitors (to differentiate from)</label>
-                    <input type="text" name="competitors" class="form-control" placeholder="e.g. Roto-Rooter, Mr. Rooter, local competitors" style="border-radius:10px; font-size:.88rem;">
-                </div>
+                {% endif %}
+
                 <div class="col-12">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Company Story / Credibility Notes</label>
-                    <textarea name="company_story" class="form-control" rows="3" placeholder="e.g. Family-owned since 2009, started after years in commercial plumbing, known locally for transparent pricing and reliable crews." style="border-radius:10px; font-size:.88rem;"></textarea>
-                    <div class="form-hint">Use this for origin story, credibility, values, why customers trust you, and what should show up on About or hero proof sections.</div>
+                    <div class="intake-subsection">
+                        <div class="intake-subsection-header">
+                            <div>
+                                <h6 class="intake-subsection-title">Offer, Proof, and Differentiation</h6>
+                                <p class="intake-subsection-copy">Feed Warren the real reasons customers buy: the offer mix, recurring plan language, competitors to beat, and the trust story that should show up across the site.</p>
+                            </div>
+                            <span class="intake-subsection-badge"><i class="bi bi-bullseye"></i>Conversion inputs</span>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">What Makes You Different? (Unique Selling Points)</label>
+                                <textarea name="unique_selling_points" class="form-control" rows="2" placeholder="e.g. Same-day service, 20+ years experience, family-owned, free estimates, licensed and insured" style="border-radius:10px; font-size:.88rem;"></textarea>
+                                <div class="form-hint">The AI uses these to differentiate your copy from competitors.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Services to Highlight</label>
+                                <textarea name="services_to_highlight" class="form-control" rows="2" placeholder="e.g. Weekly yard cleanup, emergency plumbing, drain clearing, premium recurring plans" style="border-radius:10px; font-size:.88rem;"></textarea>
+                                <div class="form-hint">Tell Warren which offers deserve the strongest placement on the site.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Plan / Frequency Options</label>
+                                <input type="text" name="service_plan_options" class="form-control" placeholder="e.g. Weekly, twice weekly, bi-weekly, monthly, one-time" style="border-radius:10px; font-size:.88rem;">
+                                <div class="form-hint">Useful for recurring services, maintenance plans, and package pages.</div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Add-Ons / Upsells</label>
+                                <input type="text" name="service_add_ons" class="form-control" placeholder="e.g. Deodorizer, sanitizer, haul waste away, camera inspection, emergency dispatch" style="border-radius:10px; font-size:.88rem;">
+                                <div class="form-hint">These can become pricing bullets, comparison tables, FAQ answers, and CTA supporting points.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Current Offers / Promotions</label>
+                                <input type="text" name="active_offers" class="form-control" value="{{ brand_active_offers|e }}" placeholder="e.g. $50 off first service, free inspection" style="border-radius:10px; font-size:.88rem;">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Competitors (to differentiate from)</label>
+                                <input type="text" name="competitors" class="form-control" placeholder="e.g. Roto-Rooter, Mr. Rooter, local competitors" style="border-radius:10px; font-size:.88rem;">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Company Story / Credibility Notes</label>
+                                <textarea name="company_story" class="form-control" rows="3" placeholder="e.g. Family-owned since 2009, started after years in commercial plumbing, known locally for transparent pricing and reliable crews." style="border-radius:10px; font-size:.88rem;"></textarea>
+                                <div class="form-hint">Use this for origin story, credibility, values, why customers trust you, and what should show up on About or hero proof sections.</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2753,60 +4055,88 @@
             <h5><i class="bi bi-graph-up-arrow me-2"></i>SEO Intelligence</h5>
             <p class="intake-desc">Warren pulls your real Google Search Console data to build an SEO strategy that guides every page.</p>
 
-            {% if gsc_connected %}
-            <div id="seoIntelPanel">
-                <button type="button" class="btn btn-primary btn-sm" id="pullSeoBtn" style="border-radius:10px; font-weight:600;">
-                    <i class="bi bi-robot me-1"></i>Ask Warren to Analyze Your Search Data
-                </button>
-                <div id="seoLoading" style="display:none;" class="mt-3">
-                    <div class="d-flex align-items-center gap-2">
-                        <div class="spinner-border spinner-border-sm text-primary"></div>
-                        <span style="font-size:.88rem; color:var(--text-muted);">Warren is analyzing your Search Console data...</span>
-                    </div>
-                </div>
-                <div id="seoResults" style="display:none;" class="mt-3">
-                    <div class="seo-intel-card mb-3" id="seoTotals"></div>
-                    <div class="seo-intel-card mb-3" id="seoTopQueries" style="display:none;"></div>
-                    <div class="seo-intel-card mb-3" id="seoOpportunities" style="display:none;"></div>
-                    <div class="warren-brief-card" id="warrenBrief" style="display:none;">
-                        <div class="warren-brief-header">
-                            <i class="bi bi-robot me-1"></i> Warren's SEO Strategy
-                        </div>
-                        <div class="warren-brief-body" id="warrenBriefText"></div>
-                    </div>
-                </div>
-            </div>
-            {% elif gsc_needs_property %}
-            <div class="text-center" style="padding:2rem;">
-                <i class="bi bi-google" style="font-size:2rem; opacity:.5; color:#4285f4;"></i>
-                <p style="font-size:.88rem; color:var(--text-strong); margin-top:.75rem; font-weight:600;">
-                    Google is connected, but no Search Console property is selected.
-                </p>
-                <p style="font-size:.82rem; color:var(--text-muted);">
-                    Go to Settings and select your Search Console property so Warren can pull your real keyword data.
-                </p>
-                <a href="{{ url_for('client.client_settings') }}" class="btn btn-sm btn-outline-primary" style="border-radius:10px;">
-                    <i class="bi bi-gear me-1"></i>Select SC Property in Settings
-                </a>
-            </div>
-            {% else %}
-            <div class="text-center" style="padding:2rem;">
-                <i class="bi bi-search" style="font-size:2rem; opacity:.3; color:var(--text-muted);"></i>
-                <p style="font-size:.88rem; color:var(--text-muted); margin-top:.75rem;">
-                    Search Console is not connected. The AI will still generate great content, but connecting GSC
-                    lets Warren target real keywords your customers are already searching for.
-                </p>
-                <a href="{{ url_for('client.client_settings') }}" class="btn btn-sm btn-outline-primary" style="border-radius:10px;">
-                    <i class="bi bi-plug me-1"></i>Connect in Settings
-                </a>
-            </div>
-            {% endif %}
-
-            <div class="row g-3 mt-1">
+            <div class="row g-3">
                 <div class="col-12">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Priority SEO Locations</label>
-                    <textarea name="priority_seo_locations" class="form-control" rows="2" placeholder="e.g. North Scottsdale, Paradise Valley, Tempe, Mesa, downtown Phoenix" style="border-radius:10px; font-size:.88rem;"></textarea>
-                    <div class="form-hint">List the cities, neighborhoods, ZIPs, or service pockets Warren should prioritize in headings, service-area pages, and internal links.</div>
+                    <div class="intake-subsection">
+                        <div class="intake-subsection-header">
+                            <div>
+                                <h6 class="intake-subsection-title">Search Signal Status</h6>
+                                <p class="intake-subsection-copy">This is where Warren either pulls real query data from Search Console or falls back to manual direction. A connected property gives the strongest page strategy.</p>
+                            </div>
+                            <span class="intake-subsection-badge"><i class="bi bi-search"></i>Keyword signal</span>
+                        </div>
+
+                        {% if gsc_connected %}
+                        <div id="seoIntelPanel">
+                            <div class="stack-actions">
+                                <div class="input-cluster-note" style="flex:1 1 360px; margin:0;">Your Search Console property is connected. Pull the data here and Warren will build the site around real clicks, impressions, positions, and quick-win query themes.</div>
+                                <button type="button" class="btn btn-primary btn-sm" id="pullSeoBtn" style="border-radius:10px; font-weight:600;">
+                                    <i class="bi bi-robot me-1"></i>Ask Warren to Analyze Your Search Data
+                                </button>
+                            </div>
+                            <div id="seoLoading" style="display:none;" class="mt-3">
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="spinner-border spinner-border-sm text-primary"></div>
+                                    <span style="font-size:.88rem; color:var(--text-muted);">Warren is analyzing your Search Console data...</span>
+                                </div>
+                            </div>
+                            <div id="seoResults" style="display:none;" class="mt-3">
+                                <div class="seo-intel-card mb-3" id="seoTotals"></div>
+                                <div class="seo-intel-card mb-3" id="seoTopQueries" style="display:none;"></div>
+                                <div class="seo-intel-card mb-3" id="seoOpportunities" style="display:none;"></div>
+                                <div class="warren-brief-card" id="warrenBrief" style="display:none;">
+                                    <div class="warren-brief-header">
+                                        <i class="bi bi-robot me-1"></i> Warren's SEO Strategy
+                                    </div>
+                                    <div class="warren-brief-body" id="warrenBriefText"></div>
+                                </div>
+                            </div>
+                        </div>
+                        {% elif gsc_needs_property %}
+                        <div class="text-center" style="padding:2rem;">
+                            <i class="bi bi-google" style="font-size:2rem; opacity:.5; color:#4285f4;"></i>
+                            <p style="font-size:.88rem; color:var(--text-strong); margin-top:.75rem; font-weight:600;">
+                                Google is connected, but no Search Console property is selected.
+                            </p>
+                            <p style="font-size:.82rem; color:var(--text-muted);">
+                                Go to Settings and select your Search Console property so Warren can pull your real keyword data.
+                            </p>
+                            {% if builder_settings_url %}
+                            <a href="{{ builder_settings_url }}" class="btn btn-sm btn-outline-primary" style="border-radius:10px;">
+                                <i class="bi bi-gear me-1"></i>Select SC Property in Settings
+                            </a>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <div class="text-center" style="padding:2rem;">
+                            <i class="bi bi-search" style="font-size:2rem; opacity:.3; color:var(--text-muted);"></i>
+                            <p style="font-size:.88rem; color:var(--text-muted); margin-top:.75rem;">
+                                Search Console is not connected. The AI will still generate strong content, but connecting GSC lets Warren target real keywords your customers are already searching for.
+                            </p>
+                            {% if builder_settings_url %}
+                            <a href="{{ builder_settings_url }}" class="btn btn-sm btn-outline-primary" style="border-radius:10px;">
+                                <i class="bi bi-plug me-1"></i>Connect in Settings
+                            </a>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="intake-subsection">
+                        <div class="intake-subsection-header">
+                            <div>
+                                <h6 class="intake-subsection-title">Local Targeting Plan</h6>
+                                <p class="intake-subsection-copy">Use this to override or sharpen the geographic focus. It helps Warren prioritize service pockets, neighborhood phrasing, and internal-link emphasis even when GSC is missing or incomplete.</p>
+                            </div>
+                            <span class="intake-subsection-badge"><i class="bi bi-geo-alt"></i>Geo strategy</span>
+                        </div>
+                        <label class="form-label fw-semibold" style="font-size:.85rem;">Priority SEO Locations</label>
+                        <textarea name="priority_seo_locations" class="form-control" rows="2" placeholder="e.g. North Scottsdale, Paradise Valley, Tempe, Mesa, downtown Phoenix" style="border-radius:10px; font-size:.88rem;"></textarea>
+                        <div class="form-hint">List the cities, neighborhoods, ZIPs, or service pockets Warren should prioritize in headings, service-area pages, and internal links.</div>
+                        <div class="input-cluster-note mt-3">Best use: specify the locations that actually matter commercially, not every city on the map. That keeps page focus, heading relevance, and internal links tighter.</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2818,30 +4148,52 @@
 
             <div class="row g-3">
                 <div class="col-12">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Content Goals</label>
-                    <div class="goal-chips">
-                        <label class="goal-chip"><input type="checkbox" name="goal_leads" value="1" checked> <span><i class="bi bi-telephone-inbound me-1"></i>Generate Leads</span></label>
-                        <label class="goal-chip"><input type="checkbox" name="goal_seo" value="1" checked> <span><i class="bi bi-google me-1"></i>Rank in Google</span></label>
-                        <label class="goal-chip"><input type="checkbox" name="goal_trust" value="1"> <span><i class="bi bi-shield-check me-1"></i>Build Trust</span></label>
-                        <label class="goal-chip"><input type="checkbox" name="goal_booking" value="1"> <span><i class="bi bi-calendar-check me-1"></i>Online Booking</span></label>
-                        <label class="goal-chip"><input type="checkbox" name="goal_info" value="1"> <span><i class="bi bi-info-circle me-1"></i>Inform Visitors</span></label>
-                        <label class="goal-chip"><input type="checkbox" name="goal_brand" value="1"> <span><i class="bi bi-palette me-1"></i>Brand Awareness</span></label>
+                    <div class="intake-subsection">
+                        <div class="intake-subsection-header">
+                            <div>
+                                <h6 class="intake-subsection-title">Business Objectives</h6>
+                                <p class="intake-subsection-copy">Pick the jobs this site needs to do. Warren uses these priorities to decide whether the build should feel more direct-response, more trust-heavy, more educational, or more booking-oriented.</p>
+                            </div>
+                            <span class="intake-subsection-badge"><i class="bi bi-bullseye"></i>Goal stack</span>
+                        </div>
+                        <label class="form-label fw-semibold" style="font-size:.85rem;">Content Goals</label>
+                        <div class="goal-chips">
+                            <label class="goal-chip"><input type="checkbox" name="goal_leads" value="1" checked> <span><i class="bi bi-telephone-inbound me-1"></i>Generate Leads</span></label>
+                            <label class="goal-chip"><input type="checkbox" name="goal_seo" value="1" checked> <span><i class="bi bi-google me-1"></i>Rank in Google</span></label>
+                            <label class="goal-chip"><input type="checkbox" name="goal_trust" value="1"> <span><i class="bi bi-shield-check me-1"></i>Build Trust</span></label>
+                            <label class="goal-chip"><input type="checkbox" name="goal_booking" value="1"> <span><i class="bi bi-calendar-check me-1"></i>Online Booking</span></label>
+                            <label class="goal-chip"><input type="checkbox" name="goal_info" value="1"> <span><i class="bi bi-info-circle me-1"></i>Inform Visitors</span></label>
+                            <label class="goal-chip"><input type="checkbox" name="goal_brand" value="1"> <span><i class="bi bi-palette me-1"></i>Brand Awareness</span></label>
+                        </div>
+                        <input type="hidden" name="content_goals" id="contentGoalsHidden">
+                        <div class="input-cluster-note mt-3">Pick the two or three outcomes that matter most. If everything is the goal, the site tone gets muddy and the CTA path gets weaker.</div>
                     </div>
-                    <input type="hidden" name="content_goals" id="contentGoalsHidden">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Primary Call-to-Action Text</label>
-                    <input type="text" name="cta_text" class="form-control" placeholder="e.g. Get Your Free Estimate" style="border-radius:10px; font-size:.88rem;">
-                    <div class="form-hint">The main action you want visitors to take</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">CTA Phone Number</label>
-                    <input type="text" name="cta_phone" class="form-control" value="{{ brand_phone|e }}" placeholder="(555) 123-4567" style="border-radius:10px; font-size:.88rem;">
                 </div>
                 <div class="col-12">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">How Do You Envision the Site?</label>
-                    <textarea name="site_vision" class="form-control" rows="3" placeholder="Describe the kind of site you want: simple and premium, aggressive lead-gen, editorial and trust-heavy, neighborhood focused, quote-first, etc." style="border-radius:10px; font-size:.88rem;"></textarea>
-                    <div class="form-hint">This steers the overall tone, section order, conversion pacing, and how direct the copy should feel.</div>
+                    <div class="intake-subsection">
+                        <div class="intake-subsection-header">
+                            <div>
+                                <h6 class="intake-subsection-title">Conversion Direction</h6>
+                                <p class="intake-subsection-copy">Define the action Warren should emphasize and the overall personality of the site. This is the difference between a generic brochure and a page system with a clear commercial agenda.</p>
+                            </div>
+                            <span class="intake-subsection-badge"><i class="bi bi-lightning-charge"></i>CTA strategy</span>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Primary Call-to-Action Text</label>
+                                <input type="text" name="cta_text" class="form-control" placeholder="e.g. Get Your Free Estimate" style="border-radius:10px; font-size:.88rem;">
+                                <div class="form-hint">The main action you want visitors to take.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">CTA Phone Number</label>
+                                <input type="text" name="cta_phone" class="form-control" value="{{ brand_phone|e }}" placeholder="(555) 123-4567" style="border-radius:10px; font-size:.88rem;">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">How Do You Envision the Site?</label>
+                                <textarea name="site_vision" class="form-control" rows="3" placeholder="Describe the kind of site you want: simple and premium, aggressive lead-gen, editorial and trust-heavy, neighborhood focused, quote-first, etc." style="border-radius:10px; font-size:.88rem;"></textarea>
+                                <div class="form-hint">This steers the overall tone, section order, conversion pacing, and how direct the copy should feel.</div>
+                            </div>
+                        </div>
                 </div>
             </div>
         </div>
@@ -2958,49 +4310,109 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Color Palette</label>
-                    <select name="color_palette" class="form-select" style="border-radius:10px; font-size:.88rem;">
-                        <option value="">Auto (match industry)</option>
-                        <option value="blue-professional">Blue Professional - trust, corporate</option>
-                        <option value="green-natural">Green Natural - eco, health, lawn</option>
-                        <option value="red-bold">Red Bold - urgency, energy, food</option>
-                        <option value="dark-luxury">Dark Luxury - premium, high-end</option>
-                        <option value="warm-earthy">Warm Earthy - construction, home, organic</option>
-                        <option value="clean-minimal">Clean Minimal - modern, tech, SaaS</option>
-                        <option value="bright-playful">Bright Playful - kids, creative, events</option>
-                    </select>
-                    <div class="form-hint">Sets primary/accent colors, backgrounds, and button styles</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Font Pairing Shortcut</label>
-                    <select name="font_pair" class="form-select" style="border-radius:10px; font-size:.88rem;">
-                        <option value="">Auto (match style)</option>
-                        <option value="inter-system">Inter + System - clean, fast</option>
-                        <option value="plusjakarta-inter">Plus Jakarta Sans + Inter - premium modern</option>
-                        <option value="spacegrotesk-inter">Space Grotesk + Inter - bold modern</option>
-                        <option value="manrope-dmsans">Manrope + DM Sans - polished conversion</option>
-                        <option value="archivo-worksans">Archivo + Work Sans - sturdy service brand</option>
-                        <option value="bebas-mulish">Bebas Neue + Mulish - bold headline contrast</option>
-                        <option value="raleway-lora">Raleway + Lora - refined trust</option>
-                        <option value="librebaskerville-source">Libre Baskerville + Source Sans - classic authority</option>
-                        <option value="playfair-lato">Playfair Display + Lato - elegant</option>
-                        <option value="montserrat-opensans">Montserrat + Open Sans - modern</option>
-                        <option value="roboto-slab-roboto">Roboto Slab + Roboto - technical</option>
-                        <option value="poppins-nunito">Poppins + Nunito - friendly</option>
-                        <option value="oswald-source">Oswald + Source Sans - bold industrial</option>
-                    </select>
-                    <div class="form-hint">Quick preset. You can still type any Google font family below.</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Heading Font</label>
-                    <input type="text" name="font_heading" class="form-control" list="siteBuilderGoogleFonts" value="{{ brand_font_heading|e }}" placeholder="Type any Google font family" style="border-radius:10px; font-size:.88rem;">
-                    <div class="form-hint">Full Google Fonts support. Start typing to search or paste the exact family name.</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Body Font</label>
-                    <input type="text" name="font_body" class="form-control" list="siteBuilderGoogleFonts" value="{{ brand_font_body|e }}" placeholder="Type any Google font family" style="border-radius:10px; font-size:.88rem;">
-                    <div class="form-hint">Defaults to your saved brand font if you leave it alone.</div>
+                <div class="col-12">
+                    <div class="design-system-shell">
+                        <div class="design-system-header">
+                            <div>
+                                <h6>Typography System</h6>
+                                <p>Pick a palette, load a pairing preset, or apply individual fonts from grouped libraries. This is meant to feel like a design workspace, not a beta intake field dump.</p>
+                            </div>
+                            <div class="design-system-badges">
+                                <span class="design-system-badge"><i class="bi bi-type"></i>{{ font_family_count }} Google fonts</span>
+                                <span class="design-system-badge"><i class="bi bi-layers"></i>{{ font_pair_choices|length }} curated pairings</span>
+                                <span class="design-system-badge"><i class="bi bi-stars"></i>Preview-driven selection</span>
+                            </div>
+                        </div>
+                        <div class="design-system-grid">
+                            <div class="design-system-panel">
+                                <h6>Font Library</h6>
+                                <p>Grouped by role so you can move faster: executive sans systems, bolder operator faces, editorial serifs, and stronger display options.</p>
+                                <div class="font-library-grid">
+                                    {% for group in font_groups %}
+                                    <div class="font-group-card">
+                                        <div class="font-group-header">
+                                            <div>
+                                                <div class="font-group-title">{{ group.label }}</div>
+                                                <p class="font-group-description">{{ group.description }}</p>
+                                            </div>
+                                            <span class="design-system-badge">{{ group.fonts|length }} picks</span>
+                                        </div>
+                                        <div class="font-chip-grid">
+                                            {% for font in group.fonts %}
+                                            <div class="font-chip">
+                                                <div class="font-chip-label">
+                                                    <strong>{{ font }}</strong>
+                                                    <span>{{ group.label }}</span>
+                                                </div>
+                                                <div class="font-chip-preview" style="font-family: '{{ font|e }}', sans-serif;">Build a sharper service brand with more deliberate type.</div>
+                                                <p class="font-chip-caption">Use this as a heading or body font instantly, then fine-tune with the fields on the right.</p>
+                                                <div class="font-chip-actions">
+                                                    <button type="button" class="btn btn-outline-primary btn-sm font-apply-btn" data-target="font_heading" data-font-family="{{ font|e }}">Set heading</button>
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm font-apply-btn" data-target="font_body" data-font-family="{{ font|e }}">Set body</button>
+                                                </div>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="design-system-panel">
+                                <h6>Design Controls</h6>
+                                <p>Use a pairing preset for direction, then override heading or body fonts directly if you want a more custom mix.</p>
+                                <div class="font-control-grid">
+                                    <div class="font-input-shell">
+                                        <div class="font-input-meta">
+                                            <label class="form-label fw-semibold mb-0" style="font-size:.82rem;">Color Palette</label>
+                                            <span class="font-role-pill"><i class="bi bi-palette"></i>Brand system</span>
+                                        </div>
+                                        <div class="font-sample-note">Sets the primary/accent colors, section contrast, and button treatment.</div>
+                                        <select name="color_palette" class="form-select">
+                                            <option value="">Auto (match industry)</option>
+                                            <option value="blue-professional">Blue Professional - trust, corporate</option>
+                                            <option value="green-natural">Green Natural - eco, health, lawn</option>
+                                            <option value="red-bold">Red Bold - urgency, energy, food</option>
+                                            <option value="dark-luxury">Dark Luxury - premium, high-end</option>
+                                            <option value="warm-earthy">Warm Earthy - construction, home, organic</option>
+                                            <option value="clean-minimal">Clean Minimal - modern, tech, SaaS</option>
+                                            <option value="bright-playful">Bright Playful - kids, creative, events</option>
+                                        </select>
+                                    </div>
+                                    <div class="font-input-shell">
+                                        <div class="font-input-meta">
+                                            <label class="form-label fw-semibold mb-0" style="font-size:.82rem;">Font Pairing Shortcut</label>
+                                            <span class="font-role-pill"><i class="bi bi-link-45deg"></i>Preset</span>
+                                        </div>
+                                        <div class="font-sample-note">Curated combinations for faster direction. You can still override the individual fields below.</div>
+                                        <select name="font_pair" class="form-select font-pair-select">
+                                            <option value="">Auto (match style)</option>
+                                            {% for option in font_pair_choices %}
+                                            <option value="{{ option.value }}">{{ option.label }} - {{ option.description }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="font-input-shell">
+                                        <div class="font-input-meta">
+                                            <label class="form-label fw-semibold mb-0" style="font-size:.82rem;">Heading Font</label>
+                                            <span class="font-role-pill"><i class="bi bi-type-h1"></i>Display</span>
+                                        </div>
+                                        <div class="font-sample-note" id="headingFontPreview" style="font-family: '{{ brand_font_heading|default('Inter', true)|e }}', sans-serif;">Sharp, trust-building headlines start here.</div>
+                                        <input type="text" id="siteBuilderHeadingFont" name="font_heading" class="form-control" list="siteBuilderGoogleFonts" value="{{ brand_font_heading|e }}" placeholder="Type any Google font family">
+                                        <div class="form-hint">Search the full library, paste an exact family name, or use the quick-apply buttons from the grouped library.</div>
+                                    </div>
+                                    <div class="font-input-shell">
+                                        <div class="font-input-meta">
+                                            <label class="form-label fw-semibold mb-0" style="font-size:.82rem;">Body Font</label>
+                                            <span class="font-role-pill"><i class="bi bi-body-text"></i>Reading</span>
+                                        </div>
+                                        <div class="font-sample-note" id="bodyFontPreview" style="font-family: '{{ brand_font_body|default('Inter', true)|e }}', sans-serif;">Readable body copy keeps the whole site feeling more finished.</div>
+                                        <input type="text" id="siteBuilderBodyFont" name="font_body" class="form-control" list="siteBuilderGoogleFonts" value="{{ brand_font_body|e }}" placeholder="Type any Google font family">
+                                        <div class="form-hint">Defaults to your saved brand font when present, but you can swap to any Google family in the workspace.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="col-12">
                     <label class="form-label fw-semibold" style="font-size:.85rem;">Layout Style</label>
@@ -3400,71 +4812,113 @@
 
             <div class="row g-3">
                 <div class="col-12">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Standard Pages</label>
-                    <div class="page-select-grid">
-                        <label class="page-select-chip"><input type="checkbox" name="page_type_home" value="1" checked> <span><i class="bi bi-house me-1"></i>Home</span></label>
-                        <label class="page-select-chip"><input type="checkbox" name="page_type_about" value="1" checked> <span><i class="bi bi-people me-1"></i>About</span></label>
-                        <label class="page-select-chip"><input type="checkbox" name="page_type_services" value="1" checked> <span><i class="bi bi-tools me-1"></i>Services</span></label>
-                        <label class="page-select-chip"><input type="checkbox" name="page_type_contact" value="1" checked> <span><i class="bi bi-telephone me-1"></i>Contact</span></label>
-                        <label class="page-select-chip"><input type="checkbox" name="page_type_faq" value="1" checked> <span><i class="bi bi-question-circle me-1"></i>FAQ</span></label>
-                        <label class="page-select-chip"><input type="checkbox" name="page_type_testimonials" value="1" checked> <span><i class="bi bi-star me-1"></i>Testimonials</span></label>
+                    <div class="intake-subsection">
+                        <div class="intake-subsection-header">
+                            <div>
+                                <h6 class="intake-subsection-title">Core Sitemap</h6>
+                                <p class="intake-subsection-copy">Set the baseline site structure first, then expand into service and area coverage so the first build has the right breadth without unnecessary sprawl.</p>
+                            </div>
+                            <span class="intake-subsection-badge"><i class="bi bi-diagram-3"></i>Default coverage</span>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Standard Pages</label>
+                                <div class="page-select-grid">
+                                    <label class="page-select-chip"><input type="checkbox" name="page_type_home" value="1" checked> <span><i class="bi bi-house me-1"></i>Home</span></label>
+                                    <label class="page-select-chip"><input type="checkbox" name="page_type_about" value="1" checked> <span><i class="bi bi-people me-1"></i>About</span></label>
+                                    <label class="page-select-chip"><input type="checkbox" name="page_type_services" value="1" checked> <span><i class="bi bi-tools me-1"></i>Services</span></label>
+                                    <label class="page-select-chip"><input type="checkbox" name="page_type_contact" value="1" checked> <span><i class="bi bi-telephone me-1"></i>Contact</span></label>
+                                    <label class="page-select-chip"><input type="checkbox" name="page_type_faq" value="1" checked> <span><i class="bi bi-question-circle me-1"></i>FAQ</span></label>
+                                    <label class="page-select-chip"><input type="checkbox" name="page_type_testimonials" value="1" checked> <span><i class="bi bi-star me-1"></i>Testimonials</span></label>
+                                </div>
+                                <input type="hidden" name="page_selection" id="pageSelectionHidden">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Services</label>
+                                <div class="services-tag-input" id="servicesTagInput">
+                                    <input type="text" placeholder="Type a service and press Enter" id="servicesInput">
+                                </div>
+                                <input type="hidden" name="services" id="servicesHidden" value="{{ brand_services|e }}">
+                                <div class="form-hint">Each service gets its own detail page.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Service Areas</label>
+                                <div class="services-tag-input" id="areasTagInput">
+                                    <input type="text" placeholder="Type an area and press Enter" id="areasInput">
+                                </div>
+                                <input type="hidden" name="areas" id="areasHidden" value="{{ brand_areas|e }}">
+                                <div class="form-hint">Each area gets its own landing page.</div>
+                            </div>
+                        </div>
                     </div>
-                    <input type="hidden" name="page_selection" id="pageSelectionHidden">
                 </div>
 
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Services</label>
-                    <div class="services-tag-input" id="servicesTagInput">
-                        <input type="text" placeholder="Type a service and press Enter" id="servicesInput">
+                <div class="col-12">
+                    <div class="intake-subsection">
+                        <div class="intake-subsection-header">
+                            <div>
+                                <h6 class="intake-subsection-title">Campaign and Expansion Pages</h6>
+                                <p class="intake-subsection-copy">Add the extra pages that support paid traffic, niche offers, recruiting, portfolios, or any non-standard journey you want the builder to include.</p>
+                            </div>
+                            <span class="intake-subsection-badge"><i class="bi bi-bullseye"></i>Optional expansion</span>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <div class="stack-actions">
+                                    <label class="form-label fw-semibold mb-0" style="font-size:.85rem;"><i class="bi bi-bullseye me-1"></i>Landing Pages</label>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="addLandingPageBtn" style="border-radius:8px; font-size:.78rem;">
+                                        <i class="bi bi-plus me-1"></i>Add Landing Page
+                                    </button>
+                                </div>
+                                <div class="form-hint mb-2">Standalone conversion pages for specific offers, campaigns, or keywords.</div>
+                                <div id="landingPagesList"></div>
+                            </div>
+                            <div class="col-12">
+                                <div class="stack-actions">
+                                    <label class="form-label fw-semibold mb-0" style="font-size:.85rem;"><i class="bi bi-file-earmark-plus me-1"></i>Custom Pages</label>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="addCustomPageBtn" style="border-radius:8px; font-size:.78rem;">
+                                        <i class="bi bi-plus me-1"></i>Add Custom Page
+                                    </button>
+                                </div>
+                                <div class="form-hint mb-2">Additional pages like Careers, Gallery, Portfolio, Financing, and other one-off routes.</div>
+                                <div id="customPagesList"></div>
+                            </div>
+                        </div>
                     </div>
-                    <input type="hidden" name="services" id="servicesHidden" value="{{ brand_services|e }}">
-                    <div class="form-hint">Each service gets its own detail page</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Service Areas</label>
-                    <div class="services-tag-input" id="areasTagInput">
-                        <input type="text" placeholder="Type an area and press Enter" id="areasInput">
-                    </div>
-                    <input type="hidden" name="areas" id="areasHidden" value="{{ brand_areas|e }}">
-                    <div class="form-hint">Each area gets its own landing page</div>
-                </div>
-
-                {# Landing Pages Section #}
-                <div class="col-12 mt-3">
-                    <div class="d-flex align-items-center justify-content-between mb-2">
-                        <label class="form-label fw-semibold mb-0" style="font-size:.85rem;">
-                            <i class="bi bi-bullseye me-1"></i>Landing Pages (optional)
-                        </label>
-                        <button type="button" class="btn btn-sm btn-outline-primary" id="addLandingPageBtn" style="border-radius:8px; font-size:.78rem;">
-                            <i class="bi bi-plus me-1"></i>Add Landing Page
-                        </button>
-                    </div>
-                    <div class="form-hint mb-2">Standalone conversion pages for specific offers, campaigns, or keywords</div>
-                    <div id="landingPagesList"></div>
-                </div>
-
-                {# Custom Pages #}
-                <div class="col-12 mt-3">
-                    <div class="d-flex align-items-center justify-content-between mb-2">
-                        <label class="form-label fw-semibold mb-0" style="font-size:.85rem;">
-                            <i class="bi bi-file-earmark-plus me-1"></i>Custom Pages (optional)
-                        </label>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" id="addCustomPageBtn" style="border-radius:8px; font-size:.78rem;">
-                            <i class="bi bi-plus me-1"></i>Add Custom Page
-                        </button>
-                    </div>
-                    <div class="form-hint mb-2">Additional pages like Careers, Gallery, Portfolio, Financing, etc.</div>
-                    <div id="customPagesList"></div>
                 </div>
             </div>
 
             {# Blueprint Preview #}
             <div id="blueprintPreview" class="mt-3" style="display:none;">
-                <div class="d-flex align-items-center gap-2 mb-2">
-                    <span style="font-weight:600; font-size:.88rem; color:var(--text-strong);">Pages that will be generated:</span>
-                    <span class="badge bg-primary" id="pageCountBadge">0</span>
+                <div class="blueprint-shell">
+                    <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap mb-3">
+                        <div>
+                            <div class="tiny-label mb-1">Blueprint Preview</div>
+                            <div style="font-weight:700; font-size:.96rem; color:var(--text-strong);">Pages that will be generated</div>
+                            <div class="form-hint mb-0">Review the working page system before Warren starts drafting the site.</div>
+                        </div>
+                        <span class="build-meta-pill"><span id="pageCountBadge">0</span> planned pages</span>
+                    </div>
+                    <div class="blueprint-summary-strip" id="blueprintSummaryStrip">
+                        <div class="blueprint-summary-card">
+                            <div class="blueprint-summary-value" id="blueprintCoreCount">0</div>
+                            <div class="blueprint-summary-label">Core pages</div>
+                        </div>
+                        <div class="blueprint-summary-card">
+                            <div class="blueprint-summary-value" id="blueprintServiceCount">0</div>
+                            <div class="blueprint-summary-label">Service depth</div>
+                        </div>
+                        <div class="blueprint-summary-card">
+                            <div class="blueprint-summary-value" id="blueprintLocalCount">0</div>
+                            <div class="blueprint-summary-label">Local pages</div>
+                        </div>
+                        <div class="blueprint-summary-card">
+                            <div class="blueprint-summary-value" id="blueprintGrowthCount">0</div>
+                            <div class="blueprint-summary-label">Campaign pages</div>
+                        </div>
+                    </div>
+                    <div class="blueprint-preview" id="blueprintGrid"></div>
                 </div>
-                <div class="blueprint-preview" id="blueprintGrid"></div>
             </div>
         </div>
 
@@ -3474,116 +4928,147 @@
             <p class="intake-desc">Connect your lead forms, booking tools, and other plugins. The AI will embed them into your pages.</p>
 
             <div class="row g-3">
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Lead Capture Form</label>
-                    <select name="lead_form_type" class="form-select" id="leadFormType" style="border-radius:10px; font-size:.88rem;">
-                        <option value="">No form (use placeholders)</option>
-                        <option value="wpforms">WPForms</option>
-                        <option value="cf7">Contact Form 7</option>
-                        <option value="gravity">Gravity Forms</option>
-                        <option value="custom">Custom Shortcode / Embed</option>
-                    </select>
-                </div>
-                <div class="col-md-6" id="shortcodeField" style="display:none;">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Form Shortcode</label>
-                    <input type="text" name="lead_form_shortcode" class="form-control" placeholder='e.g. [wpforms id="123"]' style="border-radius:10px; font-size:.88rem;">
-                    <div class="form-hint">Paste your form's shortcode or embed code</div>
-                </div>
                 <div class="col-12">
-                    <div style="border:1px solid var(--line); border-radius:14px; padding:1rem; background:rgba(15, 23, 42, .02);">
-                        <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap mb-2">
+                    <div class="intake-subsection">
+                        <div class="intake-subsection-header">
                             <div>
-                                <label class="form-label fw-semibold mb-1" style="font-size:.85rem;">Quote Tool Configuration</label>
-                                <div class="form-hint">Use this when you want the builder to shape copy, CTA placement, and embed instructions around an instant-quote flow.</div>
+                                <h6 class="intake-subsection-title">Lead Capture Setup</h6>
+                                <p class="intake-subsection-copy">Choose the form system Warren should reference so the generated CTAs and section layouts are built around the right conversion endpoint.</p>
                             </div>
-                            <span class="badge text-bg-light" style="border:1px solid var(--line);">Prompt + layout guidance</span>
+                            <span class="intake-subsection-badge"><i class="bi bi-ui-checks-grid"></i>Primary capture</span>
                         </div>
                         <div class="row g-3">
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold" style="font-size:.85rem;">Quote Tool Source</label>
-                                <select name="quote_tool_source" class="form-select" id="quoteToolSource" style="border-radius:10px; font-size:.88rem;">
-                                    <option value="">No quote tool</option>
-                                    <option value="warren_hosted">Warren hosted quote flow</option>
-                                    <option value="sng_plugin">Sweep and Go / CRM plugin</option>
-                                    <option value="wp_shortcode">WordPress shortcode or plugin embed</option>
-                                    <option value="external_url">External quote URL</option>
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Lead Capture Form</label>
+                                <select name="lead_form_type" class="form-select" id="leadFormType" style="border-radius:10px; font-size:.88rem;">
+                                    <option value="">No form (use placeholders)</option>
+                                    <option value="wpforms">WPForms</option>
+                                    <option value="cf7">Contact Form 7</option>
+                                    <option value="gravity">Gravity Forms</option>
+                                    <option value="custom">Custom Shortcode / Embed</option>
                                 </select>
                             </div>
-                            <div class="col-md-6" id="quoteToolEmbedWrap" style="display:none;">
-                                <label class="form-label fw-semibold" id="quoteToolEmbedLabel" style="font-size:.85rem;">Shortcode / Embed Reference</label>
-                                <input type="text" name="quote_tool_embed" id="quoteToolEmbedInput" class="form-control" placeholder='e.g. [sng_quote_tool]' style="border-radius:10px; font-size:.88rem;">
-                                <div class="form-hint">Paste the shortcode, embed reference, widget ID, or quote URL the builder should center in the page.</div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold" style="font-size:.85rem;">ZIP Code Step</label>
-                                <select name="quote_tool_zip_mode" class="form-select" style="border-radius:10px; font-size:.88rem;">
-                                    <option value="">No ZIP step</option>
-                                    <option value="collect">Collect ZIP code</option>
-                                    <option value="verify">Verify ZIP is inside service area</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold" style="font-size:.85rem;">Phone Collection</label>
-                                <select name="quote_tool_phone_mode" class="form-select" style="border-radius:10px; font-size:.88rem;">
-                                    <option value="">Leave unspecified</option>
-                                    <option value="hidden">Do not ask for phone</option>
-                                    <option value="optional">Phone is optional</option>
-                                    <option value="required">Phone is required</option>
-                                </select>
+                            <div class="col-md-6" id="shortcodeField" style="display:none;">
+                                <label class="form-label fw-semibold" style="font-size:.85rem;">Form Shortcode</label>
+                                <input type="text" name="lead_form_shortcode" class="form-control" placeholder='e.g. [wpforms id="123"]' style="border-radius:10px; font-size:.88rem;">
+                                <div class="form-hint">Paste your form's shortcode or embed code.</div>
                             </div>
                             <div class="col-12">
-                                <div class="row g-2">
-                                    <div class="col-md-4">
-                                        <label class="form-check" style="border:1px solid var(--line); border-radius:12px; padding:.75rem .85rem; display:flex; gap:.55rem; align-items:flex-start;">
-                                            <input class="form-check-input mt-1" type="checkbox" name="quote_tool_collect_dogs" value="1">
-                                            <span>
-                                                <span class="d-block fw-semibold" style="font-size:.84rem; color:var(--text-strong);">Collect dog count</span>
-                                                <span class="form-hint">Ask how many dogs are on the plan.</span>
-                                            </span>
-                                        </label>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-check" style="border:1px solid var(--line); border-radius:12px; padding:.75rem .85rem; display:flex; gap:.55rem; align-items:flex-start;">
-                                            <input class="form-check-input mt-1" type="checkbox" name="quote_tool_collect_frequency" value="1">
-                                            <span>
-                                                <span class="d-block fw-semibold" style="font-size:.84rem; color:var(--text-strong);">Collect frequency</span>
-                                                <span class="form-hint">Weekly, twice weekly, one-time cleanup, and similar choices.</span>
-                                            </span>
-                                        </label>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-check" style="border:1px solid var(--line); border-radius:12px; padding:.75rem .85rem; display:flex; gap:.55rem; align-items:flex-start;">
-                                            <input class="form-check-input mt-1" type="checkbox" name="quote_tool_collect_last_cleaned" value="1">
-                                            <span>
-                                                <span class="d-block fw-semibold" style="font-size:.84rem; color:var(--text-strong);">Ask last cleaned date</span>
-                                                <span class="form-hint">Useful when you want the question to stay optional in the quote flow.</span>
-                                            </span>
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <label class="form-label fw-semibold" style="font-size:.85rem;">Quote Tool Notes</label>
-                                <textarea name="quote_tool_notes" class="form-control" rows="2" placeholder="e.g. Put the quote tool in the hero, keep copy focused on pet-waste pricing, and send footer CTA buttons into the same flow." style="border-radius:10px; font-size:.88rem;"></textarea>
-                                <div class="form-hint">These settings currently guide the generated layout and embed instructions. They do not yet change the standalone Warren public-form fields by themselves.</div>
+                                <div class="input-cluster-note">Keep this aligned with the form that actually closes the lead. Warren will use it to shape CTA wording, embed hints, and where forms appear across key sections.</div>
                             </div>
                         </div>
                     </div>
                 </div>
                 <div class="col-12">
-                    <label class="form-label fw-semibold" style="font-size:.85rem;">Other Plugins / Integrations</label>
-                    <textarea name="plugins" class="form-control" rows="2" placeholder="e.g. Google Maps embed, booking calendar shortcode, chat widget, review widget shortcode" style="border-radius:10px; font-size:.88rem;"></textarea>
-                    <div class="form-hint">Any shortcodes, embeds, or plugin references the AI should include in your pages</div>
+                    <div class="intake-subsection">
+                        <div class="intake-subsection-header">
+                            <div>
+                                <h6 class="intake-subsection-title">Quote Workflow</h6>
+                                <p class="intake-subsection-copy">Use this when the site needs an instant-quote path. These settings shape layout emphasis, supporting copy, and what the builder should assume the quote funnel collects.</p>
+                            </div>
+                            <span class="intake-subsection-badge"><i class="bi bi-lightning-charge"></i>Prompt + layout</span>
+                        </div>
+                        <div class="quote-tool-shell">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold" style="font-size:.85rem;">Quote Tool Source</label>
+                                    <select name="quote_tool_source" class="form-select" id="quoteToolSource" style="border-radius:10px; font-size:.88rem;">
+                                        <option value="">No quote tool</option>
+                                        <option value="warren_hosted">Warren hosted quote flow</option>
+                                        <option value="sng_plugin">Sweep and Go / CRM plugin</option>
+                                        <option value="wp_shortcode">WordPress shortcode or plugin embed</option>
+                                        <option value="external_url">External quote URL</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6" id="quoteToolEmbedWrap" style="display:none;">
+                                    <label class="form-label fw-semibold" id="quoteToolEmbedLabel" style="font-size:.85rem;">Shortcode / Embed Reference</label>
+                                    <input type="text" name="quote_tool_embed" id="quoteToolEmbedInput" class="form-control" placeholder='e.g. [sng_quote_tool]' style="border-radius:10px; font-size:.88rem;">
+                                    <div class="form-hint">Paste the shortcode, embed reference, widget ID, or quote URL the builder should center in the page.</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold" style="font-size:.85rem;">ZIP Code Step</label>
+                                    <select name="quote_tool_zip_mode" class="form-select" style="border-radius:10px; font-size:.88rem;">
+                                        <option value="">No ZIP step</option>
+                                        <option value="collect">Collect ZIP code</option>
+                                        <option value="verify">Verify ZIP is inside service area</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold" style="font-size:.85rem;">Phone Collection</label>
+                                    <select name="quote_tool_phone_mode" class="form-select" style="border-radius:10px; font-size:.88rem;">
+                                        <option value="">Leave unspecified</option>
+                                        <option value="hidden">Do not ask for phone</option>
+                                        <option value="optional">Phone is optional</option>
+                                        <option value="required">Phone is required</option>
+                                    </select>
+                                </div>
+                                <div class="col-12">
+                                    <div class="row g-2">
+                                        <div class="col-md-4">
+                                            <label class="form-check" style="border:1px solid var(--line); border-radius:12px; padding:.75rem .85rem; display:flex; gap:.55rem; align-items:flex-start;">
+                                                <input class="form-check-input mt-1" type="checkbox" name="quote_tool_collect_dogs" value="1">
+                                                <span>
+                                                    <span class="d-block fw-semibold" style="font-size:.84rem; color:var(--text-strong);">Collect dog count</span>
+                                                    <span class="form-hint">Ask how many dogs are on the plan.</span>
+                                                </span>
+                                            </label>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-check" style="border:1px solid var(--line); border-radius:12px; padding:.75rem .85rem; display:flex; gap:.55rem; align-items:flex-start;">
+                                                <input class="form-check-input mt-1" type="checkbox" name="quote_tool_collect_frequency" value="1">
+                                                <span>
+                                                    <span class="d-block fw-semibold" style="font-size:.84rem; color:var(--text-strong);">Collect frequency</span>
+                                                    <span class="form-hint">Weekly, twice weekly, one-time cleanup, and similar choices.</span>
+                                                </span>
+                                            </label>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-check" style="border:1px solid var(--line); border-radius:12px; padding:.75rem .85rem; display:flex; gap:.55rem; align-items:flex-start;">
+                                                <input class="form-check-input mt-1" type="checkbox" name="quote_tool_collect_last_cleaned" value="1">
+                                                <span>
+                                                    <span class="d-block fw-semibold" style="font-size:.84rem; color:var(--text-strong);">Ask last cleaned date</span>
+                                                    <span class="form-hint">Useful when you want the question to stay optional in the quote flow.</span>
+                                                </span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label fw-semibold" style="font-size:.85rem;">Quote Tool Notes</label>
+                                    <textarea name="quote_tool_notes" class="form-control" rows="2" placeholder="e.g. Put the quote tool in the hero, keep copy focused on pet-waste pricing, and send footer CTA buttons into the same flow." style="border-radius:10px; font-size:.88rem;"></textarea>
+                                    <div class="form-hint">These settings currently guide the generated layout and embed instructions. They do not yet change the standalone Warren public-form fields by themselves.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="intake-subsection">
+                        <div class="intake-subsection-header">
+                            <div>
+                                <h6 class="intake-subsection-title">Other Plugins and Embeds</h6>
+                                <p class="intake-subsection-copy">List anything else the builder should account for, from chat widgets and maps to booking embeds and review modules.</p>
+                            </div>
+                            <span class="intake-subsection-badge"><i class="bi bi-plug"></i>Supporting integrations</span>
+                        </div>
+                        <label class="form-label fw-semibold" style="font-size:.85rem;">Other Plugins / Integrations</label>
+                        <textarea name="plugins" class="form-control" rows="2" placeholder="e.g. Google Maps embed, booking calendar shortcode, chat widget, review widget shortcode" style="border-radius:10px; font-size:.88rem;"></textarea>
+                        <div class="form-hint">Any shortcodes, embeds, or plugin references the AI should include in your pages.</div>
+                    </div>
                 </div>
             </div>
         </div>
 
         {# ── Navigation Buttons ── #}
-        <div class="d-flex justify-content-between align-items-center mt-4">
-            <button type="button" class="btn btn-outline-secondary" id="prevStepBtn" style="display:none; border-radius:10px; font-size:.88rem;">
-                <i class="bi bi-arrow-left me-1"></i>Back
-            </button>
-            <div class="ms-auto d-flex gap-2">
+        <div class="wizard-footer-bar">
+            <div class="wizard-footer-meta">
+                <div class="wizard-footer-step" id="wizardFooterStep">Step 1 of 6</div>
+                <div class="wizard-footer-copy" id="wizardFooterCopy">Business details drive the initial copy direction, SEO positioning, and where the build will publish.</div>
+            </div>
+            <div class="wizard-footer-actions">
+                <button type="button" class="btn btn-outline-secondary" id="prevStepBtn" style="display:none; border-radius:10px; font-size:.88rem;">
+                    <i class="bi bi-arrow-left me-1"></i>Back
+                </button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="previewBlueprintBtn" style="display:none; border-radius:10px; font-size:.82rem;">
                     <i class="bi bi-eye me-1"></i>Preview Blueprint
                 </button>
@@ -3595,14 +5080,25 @@
                 </button>
             </div>
         </div>
+        </div>
     </form>
 
-    <div class="gen-progress" id="genProgress">
-        <div class="d-flex align-items-center gap-2">
-            <div class="spinner-border spinner-border-sm text-primary"></div>
-            <span style="font-weight:600; font-size:.88rem;" id="genStatus">Generating pages...</span>
+    <div class="gen-progress" id="genProgress" aria-live="polite">
+        <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+            <div>
+                <div class="tiny-label mb-1">Generation Pipeline</div>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="spinner-border spinner-border-sm text-primary"></div>
+                    <span style="font-weight:700; font-size:.9rem; color:var(--text-strong);" id="genStatus">Initializing generation workflow...</span>
+                </div>
+            </div>
+            <div class="gen-stage-strip" aria-hidden="true">
+                <span class="gen-stage-chip" data-stage="lock">Intake locked</span>
+                <span class="gen-stage-chip" data-stage="blueprint">Blueprint composing</span>
+                <span class="gen-stage-chip" data-stage="pages">Pages generating</span>
+            </div>
         </div>
-        <div class="progress mt-2">
+        <div class="progress mt-3">
             <div class="progress-bar bg-primary" id="genBar" style="width:0%"></div>
         </div>
         <div class="gen-log" id="genLog"></div>
@@ -3611,22 +5107,63 @@
 
 {# Build History #}
 {% if builds %}
+{% set build_stats = namespace(published=0, active=0, completed=0, total_pages=0, latest_model='') %}
+{% for build in builds %}
+    {% if build.published_url %}{% set build_stats.published = build_stats.published + 1 %}{% endif %}
+    {% if build.status == 'completed' %}{% set build_stats.completed = build_stats.completed + 1 %}{% endif %}
+    {% if build.status in ['pending', 'running'] %}{% set build_stats.active = build_stats.active + 1 %}{% endif %}
+    {% set build_stats.total_pages = build_stats.total_pages + (build.page_count or 0) %}
+    {% if loop.first %}{% set build_stats.latest_model = build.model or '' %}{% endif %}
+{% endfor %}
 <div class="sb-card">
-    <h5><i class="bi bi-clock-history me-2"></i>Build History</h5>
+    <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap mb-3">
+        <div>
+            <h5 class="mb-1"><i class="bi bi-clock-history me-2"></i>Build History</h5>
+            <p class="text-muted small mb-0">Recent drafts, generation runs, and review-ready site versions.</p>
+        </div>
+        <span class="build-meta-pill">{{ builds|length }} builds tracked</span>
+    </div>
+    <div class="history-overview-grid">
+        <div class="history-overview-card">
+            <div class="history-overview-value">{{ builds|length }}</div>
+            <div class="history-overview-label">Total builds</div>
+        </div>
+        <div class="history-overview-card">
+            <div class="history-overview-value">{{ build_stats.published }}</div>
+            <div class="history-overview-label">Published live</div>
+        </div>
+        <div class="history-overview-card">
+            <div class="history-overview-value">{{ build_stats.total_pages }}</div>
+            <div class="history-overview-label">Pages generated</div>
+        </div>
+        <div class="history-overview-card">
+            <div class="history-overview-value">{{ build_stats.latest_model or 'gpt-4o-mini' }}</div>
+            <div class="history-overview-label">Latest engine</div>
+        </div>
+    </div>
+    <div class="history-list">
     {% for build in builds %}
-    <div class="d-flex align-items-stretch gap-2">
-        <a href="{{ url_for('client.client_site_builder_review', build_id=build.id) }}" class="build-row d-flex justify-content-between align-items-center text-decoration-none flex-grow-1">
-            <div>
-                <div style="font-weight:600; font-size:.9rem; color:var(--text-strong);">Build #{{ build.id }}</div>
-                <div style="font-size:.78rem; color:var(--text-muted);">{{ build.created_at[:16] }}</div>
-            </div>
-            <div class="d-flex align-items-center gap-2">
-                <span style="font-size:.82rem; color:var(--text-muted);">{{ build.pages_completed }}/{{ build.page_count }} pages</span>
-                <span class="status-pill status-{{ build.status }}">{{ build.status|capitalize }}</span>
+    <div class="history-row-shell">
+        <a href="{{ url_for(builder_review_endpoint, build_id=build.id) }}" class="build-row text-decoration-none flex-grow-1">
+            <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+                <div>
+                    <div class="build-row-title">Build #{{ build.id }}</div>
+                    <div class="build-row-copy">Created {{ build.created_at[:16] }}. Review the current draft, page completion progress, and publish state from one place.</div>
+                </div>
                 <i class="bi bi-chevron-right" style="color:var(--text-muted);"></i>
             </div>
+            <div class="build-meta-strip">
+                <span class="build-meta-pill">{{ build.pages_completed }}/{{ build.page_count }} pages</span>
+                <span class="status-pill status-{{ build.status }}">{{ build.status|capitalize }}</span>
+                <span class="build-meta-pill">{{ build.blueprint|length }} planned</span>
+                {% if build.published_url %}
+                <span class="build-meta-pill">Published</span>
+                {% else %}
+                <span class="build-meta-pill">Draft</span>
+                {% endif %}
+            </div>
         </a>
-        <form method="POST" action="{{ url_for('client.client_site_builder_delete', build_id=build.id) }}" onsubmit="return confirm('Delete build #{{ build.id }} and remove any published WordPress pages tied to it?');" style="display:flex; align-items:center;">
+        <form method="POST" action="{{ url_for(builder_delete_endpoint, build_id=build.id) }}" onsubmit="return confirm('Delete build #{{ build.id }} and remove any published WordPress pages tied to it?');" style="display:flex; align-items:center;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-sm btn-outline-danger" style="border-radius:12px; min-width:42px;">
                 <i class="bi bi-trash"></i>
@@ -3634,22 +5171,232 @@
         </form>
     </div>
     {% endfor %}
+    </div>
 </div>
 {% else %}
 <div class="sb-card">
     <div class="empty-state">
         <i class="bi bi-globe2 d-block mb-2"></i>
         <div style="font-weight:600; color:var(--text-strong);">No builds yet</div>
-        <div style="font-size:.85rem;">Fill out the intake above and generate your first website.</div>
+        <div style="font-size:.85rem;">Fill out the intake above and generate your first website. Finished drafts and publish-ready versions will collect here.</div>
     </div>
 </div>
 {% endif %}
 
 <script>
 (function(){
+    const builderReviewUrlTemplate = {{ url_for(builder_review_endpoint, build_id=0)|tojson }};
+    const builderBrandPickerUrl = {{ builder_brand_picker_url|tojson }};
+    const builderDefaultBrandName = {{ (brand_name or '')|tojson }};
+    const builderDefaultIndustry = {{ (brand_industry or '')|tojson }};
+    const builderHasGsc = {{ (gsc_connected if gsc_connected is defined else false)|tojson }};
+    const builderNeedsGscProperty = {{ (gsc_needs_property if gsc_needs_property is defined else false)|tojson }};
+    const form = document.getElementById('generateForm');
+    const genProgress = document.getElementById('genProgress');
+    const genBar = document.getElementById('genBar');
+    const genStatus = document.getElementById('genStatus');
+    const genLog = document.getElementById('genLog');
+    const genStageChips = Array.from(document.querySelectorAll('.gen-stage-chip'));
+    const GEN_STAGE_ORDER = ['lock', 'blueprint', 'pages'];
+    const blueprintSummaryTargets = {
+        core: document.getElementById('blueprintCoreCount'),
+        service: document.getElementById('blueprintServiceCount'),
+        local: document.getElementById('blueprintLocalCount'),
+        growth: document.getElementById('blueprintGrowthCount'),
+    };
+    let currentGenerationStage = 'lock';
+    let generationStageTimers = [];
+
+    function clearGenerationStageTimers() {
+        generationStageTimers.forEach(window.clearTimeout);
+        generationStageTimers = [];
+    }
+
+    function renderGenerationStage(stageKey, terminalState) {
+        const stageIndex = GEN_STAGE_ORDER.indexOf(stageKey);
+        currentGenerationStage = stageKey;
+        genStageChips.forEach((chip, index) => {
+            chip.classList.remove('is-active', 'is-done', 'is-error');
+            if (terminalState === 'done') {
+                chip.classList.add('is-done');
+                return;
+            }
+            if (terminalState === 'error') {
+                if (index < stageIndex) chip.classList.add('is-done');
+                else if (index === stageIndex) chip.classList.add('is-error');
+                return;
+            }
+            if (index < stageIndex) chip.classList.add('is-done');
+            else if (index === stageIndex) chip.classList.add('is-active');
+        });
+    }
+
+    function queueGenerationStage(stageKey, delay, progressPercent, statusText) {
+        const timer = window.setTimeout(() => {
+            renderGenerationStage(stageKey);
+            if (typeof progressPercent === 'number') {
+                genBar.style.width = progressPercent + '%';
+            }
+            if (statusText) {
+                genStatus.textContent = statusText;
+            }
+        }, delay);
+        generationStageTimers.push(timer);
+    }
+
+    function resetGenerationLog() {
+        if (genLog) {
+            genLog.replaceChildren();
+        }
+    }
+
+    function appendGenerationLog(message, toneClass, iconClass, iconToneClass) {
+        if (!genLog) return;
+        const entry = document.createElement('div');
+        entry.className = 'log-entry' + (toneClass ? ' ' + toneClass : '');
+
+        const icon = document.createElement('i');
+        icon.className = 'bi ' + (iconClass || 'bi-stars') + ' me-1';
+        if (iconToneClass) {
+            icon.classList.add(iconToneClass);
+        }
+
+        entry.appendChild(icon);
+        entry.appendChild(document.createTextNode(message));
+        genLog.appendChild(entry);
+    }
+
     /* ── Step Navigation ── */
     const TOTAL_STEPS = 6;
     let currentStep = 1;
+    const STEP_DETAILS = {
+        1: {
+            heading: 'Step 1 - Business',
+            subcopy: 'Confirm the brand, offer, and destination details that Warren will use to shape copy, layout, and publishing targets.',
+            footer: 'Business details drive the initial copy direction, SEO positioning, and where the build will publish.',
+        },
+        2: {
+            heading: 'Step 2 - SEO Intelligence',
+            subcopy: 'Bring in real search signal and location priorities so the site structure is aligned to demand, not guesses.',
+            footer: 'Search data and local targeting give Warren a stronger keyword map for service pages and internal links.',
+        },
+        3: {
+            heading: 'Step 3 - Content and Goals',
+            subcopy: 'Define the job of the website: lead generation, trust building, booking flow, or a more educational path.',
+            footer: 'Goals and CTA language change the tone, pacing, and how aggressively the builder pushes visitors to act.',
+        },
+        4: {
+            heading: 'Step 4 - Design Direction',
+            subcopy: 'Choose the structural system, typography, wireframe rhythm, and image treatment that should define the first draft.',
+            footer: 'This is where the build stops feeling generic and starts following a specific visual and structural system.',
+        },
+        5: {
+            heading: 'Step 5 - Pages and Structure',
+            subcopy: 'Decide what gets generated by default and where to expand into service, area, landing, or custom page coverage.',
+            footer: 'Page selection controls the scope of the whole build, including extra SEO routes and campaign pages.',
+        },
+        6: {
+            heading: 'Step 6 - Integrations',
+            subcopy: 'Map forms, quote tools, and embed references so the generated pages are ready for real conversion workflows.',
+            footer: 'Forms and quote-flow instructions tell Warren what the conversion infrastructure should look like inside the final pages.',
+        },
+    };
+
+    function setWizardStepMeta(n) {
+        const detail = STEP_DETAILS[n] || STEP_DETAILS[1];
+        const percent = Math.round((n / TOTAL_STEPS) * 100);
+        const heading = document.getElementById('wizardStepHeading');
+        const subcopy = document.getElementById('wizardStepSubcopy');
+        const pill = document.getElementById('wizardProgressPill');
+        const fill = document.getElementById('wizardProgressFill');
+        const footerStep = document.getElementById('wizardFooterStep');
+        const footerCopy = document.getElementById('wizardFooterCopy');
+        if (heading) heading.textContent = detail.heading;
+        if (subcopy) subcopy.textContent = detail.subcopy;
+        if (pill) pill.innerHTML = '<i class="bi bi-activity"></i>' + percent + '% complete';
+        if (fill) fill.style.width = percent + '%';
+        if (footerStep) footerStep.textContent = 'Step ' + n + ' of ' + TOTAL_STEPS;
+        if (footerCopy) footerCopy.textContent = detail.footer;
+    }
+
+    function readCsvCount(value) {
+        return String(value || '')
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean)
+            .length;
+    }
+
+    function formatCount(count, singular, plural) {
+        return count + ' ' + (count === 1 ? singular : plural);
+    }
+
+    function updateWizardSummaries() {
+        const selectedBrandText = document.getElementById('adminBrandPicker')?.selectedOptions?.[0]?.textContent?.trim() || '';
+        const businessName = (document.querySelector('input[name="business_name"]')?.value || builderDefaultBrandName || '').trim();
+        const industry = (document.querySelector('input[name="industry"]')?.value || builderDefaultIndustry || '').trim();
+        const priorityLocations = (document.querySelector('textarea[name="priority_seo_locations"]')?.value || '').trim();
+        const seoResultsVisible = document.getElementById('seoResults')?.style.display !== 'none';
+        const seoBriefLoaded = Boolean(document.getElementById('warrenBriefText')?.textContent?.trim());
+        const checkedGoals = Array.from(document.querySelectorAll('.goal-chips input:checked')).map((input) => input.parentElement.textContent.replace(/\s+/g, ' ').trim());
+        const ctaText = (document.querySelector('input[name="cta_text"]')?.value || '').trim();
+        const siteVision = (document.querySelector('textarea[name="site_vision"]')?.value || '').trim();
+        const stylePreset = document.querySelector('input[name="style_preset"]:checked')?.value || 'modern';
+        const colorPalette = document.querySelector('select[name="color_palette"]')?.value || 'auto';
+        const fontPairLabel = document.querySelector('select[name="font_pair"]')?.selectedOptions?.[0]?.textContent?.trim() || 'Auto';
+        const standardPages = document.querySelectorAll('.page-select-grid input:checked').length;
+        const serviceCount = readCsvCount(document.getElementById('servicesHidden')?.value || '');
+        const areaCount = readCsvCount(document.getElementById('areasHidden')?.value || '');
+        const landingCount = document.querySelectorAll('#landingPagesList .lp-card').length;
+        const customCount = document.querySelectorAll('#customPagesList .lp-card').length;
+
+        const businessSummary = document.getElementById('wizardSummaryBusiness');
+        const seoSummary = document.getElementById('wizardSummarySeo');
+        const goalsSummary = document.getElementById('wizardSummaryGoals');
+        const designSummary = document.getElementById('wizardSummaryDesign');
+        const pagesSummary = document.getElementById('wizardSummaryPages');
+
+        if (businessSummary) {
+            const primary = businessName || (selectedBrandText && selectedBrandText !== 'New brand / blank intake' ? selectedBrandText : 'Waiting for brand details');
+            businessSummary.textContent = industry ? (primary + ' - ' + industry) : primary;
+        }
+        if (seoSummary) {
+            if (seoResultsVisible || seoBriefLoaded) {
+                seoSummary.textContent = priorityLocations ? 'SEO brief loaded + geo focus' : 'SEO brief loaded';
+            } else if (builderHasGsc) {
+                seoSummary.textContent = priorityLocations ? 'GSC connected + local focus' : 'GSC connected';
+            } else if (builderNeedsGscProperty) {
+                seoSummary.textContent = 'Google connected, SC property missing';
+            } else if (priorityLocations) {
+                seoSummary.textContent = 'Manual location targeting set';
+            } else {
+                seoSummary.textContent = 'Search data not pulled yet';
+            }
+        }
+        if (goalsSummary) {
+            const goalsText = checkedGoals.length ? checkedGoals.slice(0, 2).join(' + ') : 'Lead generation default';
+            if (ctaText) {
+                goalsSummary.textContent = goalsText + ' - ' + ctaText;
+            } else if (siteVision) {
+                goalsSummary.textContent = goalsText + ' - vision defined';
+            } else {
+                goalsSummary.textContent = goalsText;
+            }
+        }
+        if (designSummary) {
+            const paletteLabel = colorPalette === 'auto' ? 'auto palette' : colorPalette.replace(/-/g, ' ');
+            const pairLabel = fontPairLabel.replace(/^Auto \(match style\)$/i, 'auto pairing');
+            designSummary.textContent = stylePreset + ' system, ' + paletteLabel + ', ' + pairLabel;
+        }
+        if (pagesSummary) {
+            const parts = [formatCount(standardPages, 'core page', 'core pages')];
+            if (serviceCount) parts.push(formatCount(serviceCount, 'service page', 'service pages'));
+            if (areaCount) parts.push(formatCount(areaCount, 'area page', 'area pages'));
+            if (landingCount) parts.push(formatCount(landingCount, 'landing page', 'landing pages'));
+            if (customCount) parts.push(formatCount(customCount, 'custom page', 'custom pages'));
+            pagesSummary.textContent = parts.join(', ');
+        }
+    }
 
     function showStep(n) {
         for (let i = 1; i <= TOTAL_STEPS; i++) {
@@ -3665,8 +5412,17 @@
         document.getElementById('nextStepBtn').style.display = n < TOTAL_STEPS ? '' : 'none';
         document.getElementById('generateBtn').style.display = n === TOTAL_STEPS ? '' : 'none';
         document.getElementById('previewBlueprintBtn').style.display = n === 5 ? '' : 'none';
+        setWizardStepMeta(n);
         currentStep = n;
     }
+
+    document.querySelectorAll('.step-indicator .step').forEach((el) => {
+        el.addEventListener('click', () => {
+            if (currentStep === 3) collectGoals();
+            if (currentStep === 5) collectPageSelection();
+            showStep(parseInt(el.dataset.step, 10));
+        });
+    });
 
     document.getElementById('nextStepBtn').addEventListener('click', () => {
         if (currentStep < TOTAL_STEPS) {
@@ -3687,6 +5443,7 @@
             goals.push(label);
         });
         document.getElementById('contentGoalsHidden').value = goals.join(', ');
+        updateWizardSummaries();
     }
 
     /* ── Page Selection Collector ── */
@@ -3697,6 +5454,7 @@
             types.push(t);
         });
         document.getElementById('pageSelectionHidden').value = types.join(',');
+        updateWizardSummaries();
     }
 
     /* ── Tag Input ── */
@@ -3715,6 +5473,7 @@
                 container.insertBefore(el, input);
             });
             hidden.value = tags.join(', ');
+            updateWizardSummaries();
         }
 
         input.addEventListener('keydown', function(e) {
@@ -3746,6 +5505,63 @@
     initTags('servicesTagInput', 'servicesInput', 'servicesHidden', '{{ brand_services|e }}');
     initTags('areasTagInput', 'areasInput', 'areasHidden', '{{ brand_areas|e }}');
 
+    document.getElementById('adminBrandPicker')?.addEventListener('change', function() {
+        updateWizardSummaries();
+        if (!builderBrandPickerUrl) return;
+        if (!this.value) {
+            window.location.href = builderBrandPickerUrl;
+            return;
+        }
+        window.location.href = builderBrandPickerUrl + '?brand_id=' + encodeURIComponent(this.value);
+    });
+
+    const fontPairMap = Object.fromEntries(({{ font_pair_choices|tojson }}).map((choice) => {
+        const parts = String(choice.label || '').split(' + ').map((part) => part.trim());
+        return [choice.value, {
+            heading: parts[0] || '',
+            body: parts[1] === 'System' ? '' : (parts[1] || ''),
+        }];
+    }));
+
+    function updateFontPreview(inputId, previewId, fallbackText) {
+        const input = document.getElementById(inputId);
+        const preview = document.getElementById(previewId);
+        if (!input || !preview) return;
+        const family = (input.value || '').trim() || 'Inter';
+        preview.style.fontFamily = '"' + family.replace(/"/g, '') + '", sans-serif';
+        preview.textContent = fallbackText;
+    }
+
+    function applyFontSelection(targetName, family) {
+        const input = document.querySelector('[name="' + targetName + '"]');
+        if (!input || !family) return;
+        input.value = family;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    document.querySelectorAll('.font-apply-btn').forEach((button) => {
+        button.addEventListener('click', () => {
+            applyFontSelection(button.dataset.target, button.dataset.fontFamily || '');
+        });
+    });
+
+    document.getElementById('siteBuilderHeadingFont')?.addEventListener('input', () => {
+        updateFontPreview('siteBuilderHeadingFont', 'headingFontPreview', 'Sharp, trust-building headlines start here.');
+    });
+    document.getElementById('siteBuilderBodyFont')?.addEventListener('input', () => {
+        updateFontPreview('siteBuilderBodyFont', 'bodyFontPreview', 'Readable body copy keeps the whole site feeling more finished.');
+    });
+    updateFontPreview('siteBuilderHeadingFont', 'headingFontPreview', 'Sharp, trust-building headlines start here.');
+    updateFontPreview('siteBuilderBodyFont', 'bodyFontPreview', 'Readable body copy keeps the whole site feeling more finished.');
+
+    document.querySelector('select[name="font_pair"]')?.addEventListener('change', function() {
+        const pair = fontPairMap[this.value] || null;
+        if (!pair) return;
+        if (pair.heading) applyFontSelection('font_heading', pair.heading);
+        if (pair.body) applyFontSelection('font_body', pair.body);
+    });
+
     /* ── Landing Pages ── */
     let lpCount = 0;
     document.getElementById('addLandingPageBtn').addEventListener('click', function() {
@@ -3764,7 +5580,11 @@
             '<div class="col-md-3"><input type="text" name="lp_audience[]" class="form-control form-control-sm" placeholder="Audience" style="border-radius:8px;"></div>' +
             '</div>';
         document.getElementById('landingPagesList').appendChild(card);
-        card.querySelector('.lp-remove').addEventListener('click', () => card.remove());
+        updateWizardSummaries();
+        card.querySelector('.lp-remove').addEventListener('click', () => {
+            card.remove();
+            updateWizardSummaries();
+        });
     });
 
     /* ── Custom Pages ── */
@@ -3784,8 +5604,17 @@
             '<div class="col-md-5"><input type="text" name="cp_purpose[]" class="form-control form-control-sm" placeholder="Purpose / what to include" style="border-radius:8px;"></div>' +
             '</div>';
         document.getElementById('customPagesList').appendChild(card);
-        card.querySelector('.cp-remove').addEventListener('click', () => card.remove());
+        updateWizardSummaries();
+        card.querySelector('.cp-remove').addEventListener('click', () => {
+            card.remove();
+            updateWizardSummaries();
+        });
     });
+
+    form?.addEventListener('input', updateWizardSummaries);
+    form?.addEventListener('change', updateWizardSummaries);
+    updateWizardSummaries();
+    setWizardStepMeta(1);
 
     /* ── Lead Form Toggle ── */
     const leadFormType = document.getElementById('leadFormType');
@@ -3835,7 +5664,7 @@
 
             const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
             try {
-                const resp = await fetch('{{ url_for("client.client_site_builder_seo_intel") }}', {
+                const resp = await fetch({{ builder_seo_intel_url|tojson }}, {
                     method: 'POST',
                     headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf },
                 });
@@ -3846,6 +5675,7 @@
                     document.getElementById('seoResults').style.display = '';
                     seoPullBtn.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>Data Loaded';
                     seoPullBtn.classList.replace('btn-primary', 'btn-success');
+                    updateWizardSummaries();
 
                     // Totals
                     const t = data.seo_data.totals || {};
@@ -3908,6 +5738,18 @@
 
     /* ── Blueprint Preview ── */
     const TYPE_ICONS = {home:'bi-house', about:'bi-people', services:'bi-tools', service_detail:'bi-wrench', service_area:'bi-geo-alt', contact:'bi-telephone', faq:'bi-question-circle', testimonials:'bi-star', landing_page:'bi-bullseye', custom:'bi-file-earmark-plus'};
+    const TYPE_GROUPS = {home:'core', about:'core', services:'core', contact:'core', faq:'core', testimonials:'core', service_detail:'service', service_area:'local', landing_page:'growth', custom:'growth'};
+
+    function updateBlueprintSummary(pages) {
+        const counts = {core: 0, service: 0, local: 0, growth: 0};
+        pages.forEach(page => {
+            const group = TYPE_GROUPS[page.type] || 'growth';
+            counts[group] += 1;
+        });
+        Object.entries(blueprintSummaryTargets).forEach(([group, target]) => {
+            if (target) target.textContent = counts[group] || 0;
+        });
+    }
 
     document.getElementById('previewBlueprintBtn')?.addEventListener('click', function() {
         collectPageSelection();
@@ -3954,18 +5796,49 @@
         });
 
         const grid = document.getElementById('blueprintGrid');
-        grid.innerHTML = '';
+        grid.replaceChildren();
         pages.forEach(p => {
             const icon = TYPE_ICONS[p.type] || 'bi-file-earmark';
-            grid.innerHTML += '<div class="blueprint-page"><div class="bp-type"><i class="bi ' + icon + ' me-1"></i>' + p.type.replace('_',' ') + '</div><div class="bp-label">' + p.label + '</div><div class="bp-slug">' + p.slug + '</div></div>';
+            const group = TYPE_GROUPS[p.type] || 'growth';
+            const card = document.createElement('div');
+            card.className = 'blueprint-page bp-' + group;
+
+            const head = document.createElement('div');
+            head.className = 'bp-head';
+
+            const type = document.createElement('div');
+            type.className = 'bp-type';
+            type.textContent = p.type.replace('_', ' ');
+
+            const iconWrap = document.createElement('span');
+            iconWrap.className = 'bp-icon';
+            const iconEl = document.createElement('i');
+            iconEl.className = 'bi ' + icon;
+            iconWrap.appendChild(iconEl);
+
+            head.appendChild(type);
+            head.appendChild(iconWrap);
+
+            const label = document.createElement('div');
+            label.className = 'bp-label';
+            label.textContent = p.label;
+
+            const slug = document.createElement('div');
+            slug.className = 'bp-slug';
+            slug.textContent = p.slug;
+
+            card.appendChild(head);
+            card.appendChild(label);
+            card.appendChild(slug);
+            grid.appendChild(card);
         });
 
+        updateBlueprintSummary(pages);
         document.getElementById('pageCountBadge').textContent = pages.length;
         document.getElementById('blueprintPreview').style.display = 'block';
     });
 
     /* ── Form Submit ── */
-    const form = document.getElementById('generateForm');
     form?.addEventListener('submit', function(e) {
         e.preventDefault();
         collectGoals();
@@ -3974,7 +5847,17 @@
         const btn = document.getElementById('generateBtn');
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating...';
-        document.getElementById('genProgress').style.display = 'block';
+        genProgress.style.display = 'block';
+        clearGenerationStageTimers();
+        renderGenerationStage('lock');
+        genBar.classList.remove('bg-danger');
+        genBar.classList.add('bg-primary');
+        genBar.style.width = '18%';
+        genStatus.textContent = 'Submitting intake and preparing blueprint...';
+        resetGenerationLog();
+        appendGenerationLog('Intake locked. Warren is preparing the page blueprint and content system.', '', 'bi-stars', 'text-primary');
+        queueGenerationStage('blueprint', 350, 46, 'Composing blueprint and selecting page structure...');
+        queueGenerationStage('pages', 1200, 78, 'Generating page drafts and packaging the review workspace...');
 
         const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
         const fd = new FormData(form);
@@ -3987,29 +5870,39 @@
         .then(r => r.json())
         .then(data => {
             if (data.ok && data.build_id) {
-                document.getElementById('genBar').style.width = '100%';
-                document.getElementById('genStatus').innerHTML =
-                    '<i class="bi bi-check-circle-fill text-success me-1"></i>' +
-                    data.pages_generated + ' pages generated.';
+                clearGenerationStageTimers();
+                renderGenerationStage('pages', 'done');
+                genBar.style.width = '100%';
+                genStatus.textContent = data.pages_generated + ' pages generated. Opening review workspace...';
+                appendGenerationLog('Blueprint assembled. Opening the review workspace now.', '', 'bi-diagram-3', 'text-primary');
                 if (data.errors && data.errors.length) {
-                    const log = document.getElementById('genLog');
                     data.errors.forEach(err => {
-                        log.innerHTML += '<div class="log-entry text-warning"><i class="bi bi-exclamation-triangle me-1"></i>' + err + '</div>';
+                        appendGenerationLog(err, 'text-warning', 'bi-exclamation-triangle');
                     });
                 }
                 setTimeout(() => {
-                    window.location.href = '{{ url_for("client.client_site_builder_review", build_id=0) }}'.replace('/0', '/' + data.build_id);
+                    window.location.href = builderReviewUrlTemplate.replace('/0', '/' + data.build_id);
                 }, 1200);
             } else {
-                document.getElementById('genStatus').innerHTML =
-                    '<i class="bi bi-x-circle-fill text-danger me-1"></i>' + (data.error || 'Generation failed.');
+                clearGenerationStageTimers();
+                renderGenerationStage(currentGenerationStage || 'blueprint', 'error');
+                genBar.classList.remove('bg-primary');
+                genBar.classList.add('bg-danger');
+                genBar.style.width = '100%';
+                genStatus.textContent = data.error || 'Generation failed.';
+                appendGenerationLog('The build stopped before review. Adjust the intake and try again.', 'text-danger', 'bi-shield-exclamation');
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-stars me-1"></i>Generate Website';
             }
         })
         .catch(() => {
-            document.getElementById('genStatus').innerHTML =
-                '<i class="bi bi-x-circle-fill text-danger me-1"></i>Network error. Please try again.';
+            clearGenerationStageTimers();
+            renderGenerationStage(currentGenerationStage || 'blueprint', 'error');
+            genBar.classList.remove('bg-primary');
+            genBar.classList.add('bg-danger');
+            genBar.style.width = '100%';
+            genStatus.textContent = 'Network error. Please try again.';
+            appendGenerationLog('The request did not complete. Check the connection and rerun the build.', 'text-danger', 'bi-wifi-off');
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-stars me-1"></i>Generate Website';
         });

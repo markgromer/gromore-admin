@@ -424,6 +424,117 @@ class SBAdminRouteTests(unittest.TestCase):
         self.assertIn(b"Authority Local Operator", resp.data)
         self.assertEqual(len(self.db.get_sb_site_templates(active_only=False)), 5)
 
+    def test_admin_generate_workbench_loads(self):
+        brand_id = self.db.create_brand({
+            "display_name": "Workbench Brand",
+            "slug": "workbench-brand",
+            "industry": "plumbing",
+            "website": "https://workbench.example",
+            "service_area": "Phoenix",
+            "primary_services": "Drain cleaning",
+        })
+        self.db.update_brand_text_field(brand_id, "wp_username", "existing-admin")
+
+        resp = self.client.get("/site-builder-admin/generate")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Build Command Center", resp.data)
+        self.assertIn(b"New brand / blank intake", resp.data)
+        self.assertIn(b"Brand Identity", resp.data)
+        self.assertIn(b"blueprintCoreCount", resp.data)
+        self.assertIn(b"Generation Pipeline", resp.data)
+        self.assertIn(b"name=\"business_name\"", resp.data)
+        self.assertIn(b"name=\"wp_app_password\"", resp.data)
+        self.assertIn(b"Typography System", resp.data)
+        self.assertIn(b"Workbench Brand", resp.data)
+
+    @patch("webapp.app.client_portal_module._get_openai_api_key", return_value="test-key")
+    @patch("webapp.app.client_portal_module._pick_ai_model", return_value="gpt-4o-mini")
+    def test_admin_generate_creates_brand_and_build_from_blank_intake(self, mock_model, mock_key):
+        fake_content = {
+            "title": "Home",
+            "content": "<p>Generated content</p>",
+            "excerpt": "Short excerpt",
+            "seo_title": "Generated Home",
+            "seo_description": "Generated description",
+            "primary_keyword": "pet waste removal",
+            "secondary_keywords": "yard cleanup",
+            "faq_items": [],
+        }
+        fake_assembled = {
+            "body_html": "<section>Generated body</section>",
+            "schemas": [],
+            "schema_html": "",
+            "full_html": "<html><body>Generated page</body></html>",
+        }
+
+        with patch("webapp.site_builder.build_brand_context") as mock_ctx, \
+             patch("webapp.site_builder.build_site_blueprint") as mock_bp, \
+             patch("webapp.site_builder.generate_page_content", return_value=fake_content), \
+             patch("webapp.site_builder.assemble_page", return_value=fake_assembled):
+
+            mock_ctx.return_value = {"business_name": "Fresh Brand"}
+            mock_bp.return_value = [
+                {"page_type": "home", "label": "Home", "slug": "", "schema_types": []},
+            ]
+
+            resp = self.client.post(
+                "/site-builder-admin/generate",
+                data={
+                    "business_name": "Fresh Brand",
+                    "industry": "pet_waste_removal",
+                    "website": "https://freshbrand.example",
+                    "wp_site_url": "https://freshbrand.example",
+                    "wp_username": "wp-admin",
+                    "wp_app_password": "xxxx xxxx xxxx xxxx",
+                    "services": "Weekly cleanup",
+                    "areas": "Mesa",
+                },
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["pages_generated"], 1)
+
+        brand = self.db.get_brand_by_slug("fresh-brand")
+        self.assertIsNotNone(brand)
+        self.assertEqual(brand["display_name"], "Fresh Brand")
+        self.assertEqual(brand["wp_site_url"], "https://freshbrand.example")
+        self.assertEqual(brand["wp_username"], "wp-admin")
+
+        build = self.db.get_site_build(payload["build_id"])
+        self.assertEqual(build["brand_id"], brand["id"])
+
+    def test_admin_review_route_loads_generated_build(self):
+        brand_id = self.db.create_brand({
+            "display_name": "Review Brand",
+            "slug": "review-brand",
+            "industry": "roofing",
+            "service_area": "Austin",
+            "primary_services": "Roof repair",
+        })
+        self.db.update_brand_text_field(brand_id, "wp_site_url", "https://reviewbrand.example")
+        self.db.update_brand_text_field(brand_id, "wp_username", "review-admin")
+        self.db.update_brand_text_field(brand_id, "wp_app_password", "xxxx xxxx xxxx xxxx")
+        build_id = self.db.create_site_build(brand_id, [{"page_type": "home"}], model="gpt-4o-mini")
+        self.db.update_site_build_status(build_id, "completed", pages_completed=1)
+        self.db.save_site_page({
+            "build_id": build_id,
+            "brand_id": brand_id,
+            "page_type": "home",
+            "label": "Home",
+            "title": "Review Brand Home",
+            "content": "<p>Review content</p>",
+        })
+
+        resp = self.client.get(f"/site-builder-admin/builds/{build_id}")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Review Site Build", resp.data)
+        self.assertIn(b"Home", resp.data)
+
     def test_admin_tabs(self):
         for tab in ("templates", "site-templates", "themes", "prompts", "images"):
             resp = self.client.get(f"/site-builder-admin?tab={tab}")

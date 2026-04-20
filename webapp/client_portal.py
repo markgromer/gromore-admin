@@ -24,7 +24,14 @@ from flask import (
     make_response, send_file,
 )
 
-from webapp.font_catalog import GOOGLE_FONT_CHOICES, normalize_google_font_family
+from webapp.font_catalog import (
+    GOOGLE_FONT_CHOICES,
+    SITE_BUILDER_FONT_GROUPS,
+    SITE_BUILDER_FONT_PAIR_CHOICES,
+    build_editor_font_family_options,
+    build_site_builder_font_preview_stylesheets,
+    normalize_google_font_family,
+)
 
 client_bp = Blueprint(
     "client",
@@ -108,6 +115,9 @@ _SITE_BUILDER_INTAKE_IMAGE_SLOTS = [
         "help": "Optional extra images for gallery or proof grids. You can upload several.",
     },
 ]
+
+SITE_BUILDER_EDITOR_FONT_OPTIONS = build_editor_font_family_options()
+SITE_BUILDER_FONT_PREVIEW_STYLESHEETS = build_site_builder_font_preview_stylesheets()
 
 
 def client_login_required(view_func):
@@ -10024,7 +10034,25 @@ def client_site_builder():
 
     return render_template(
         "client/client_site_builder.html",
+        layout_template="client/client_base.html",
+        builder_mode="client",
         mode="landing",
+        brand_fields_locked=True,
+        show_runtime_wp_fields=False,
+        builder_home_url=url_for("client.client_site_builder"),
+        builder_generate_url=url_for("client.client_site_builder_generate"),
+        builder_settings_url=url_for("client.client_settings"),
+        builder_review_endpoint="client.client_site_builder_review",
+        builder_delete_endpoint="client.client_site_builder_delete",
+        builder_publish_endpoint="client.client_site_builder_publish",
+        builder_page_get_endpoint="client.client_site_builder_page_get",
+        builder_page_save_endpoint="client.client_site_builder_page_save",
+        builder_page_rewrite_endpoint="client.client_site_builder_page_rewrite",
+        builder_upload_image_url=url_for("client.client_site_builder_upload_image"),
+        builder_seo_intel_url=url_for("client.client_site_builder_seo_intel"),
+        builder_brand_picker_url="",
+        available_brands=[],
+        selected_brand_id=brand_id,
         wp_connected=wp_ok,
         wp_site_url=(brand.get("wp_site_url") or "").strip().rstrip("/"),
         builds=builds,
@@ -10032,10 +10060,12 @@ def client_site_builder():
         brand_areas=(brand.get("service_area") or "").strip(),
         brand_name=(brand.get("display_name") or "").strip(),
         brand_industry=(brand.get("industry") or "").strip(),
+        brand_website=(brand.get("website") or "").strip(),
         brand_voice=(brand.get("brand_voice") or "").strip(),
         brand_target_audience=(brand.get("target_audience") or "").strip(),
         brand_tagline=(brand.get("tagline") or "").strip(),
         brand_phone=(brand.get("phone") or brand.get("business_phone") or "").strip(),
+        brand_wp_username=(brand.get("wp_username") or "").strip(),
         brand_active_offers=(brand.get("active_offers") or "").strip(),
         brand_logo_url=_site_builder_brand_logo_url(brand),
         brand_logo_path=(brand.get("logo_path") or "").strip(),
@@ -10045,6 +10075,10 @@ def client_site_builder():
         brand_font_heading=(brand.get("font_heading") or "").strip(),
         brand_font_body=(brand.get("font_body") or "").strip(),
         google_font_choices=GOOGLE_FONT_CHOICES,
+        font_pair_choices=SITE_BUILDER_FONT_PAIR_CHOICES,
+        font_groups=SITE_BUILDER_FONT_GROUPS,
+        font_preview_stylesheets=SITE_BUILDER_FONT_PREVIEW_STYLESHEETS,
+        editor_font_family_options=SITE_BUILDER_EDITOR_FONT_OPTIONS,
         image_slots=_SITE_BUILDER_INTAKE_IMAGE_SLOTS,
         site_templates=site_templates,
         default_site_template_id=(default_site_template or {}).get("id") or 0,
@@ -10151,6 +10185,12 @@ def client_site_builder_generate():
     areas = (request.form.get("areas") or "").strip() or None
 
     intake = {
+        "business_name": (request.form.get("business_name") or "").strip(),
+        "industry": (request.form.get("industry") or "").strip(),
+        "website": (request.form.get("website") or "").strip(),
+        "phone": (request.form.get("phone") or "").strip(),
+        "email": (request.form.get("email") or "").strip(),
+        "address": (request.form.get("address") or "").strip(),
         "brand_voice": (request.form.get("brand_voice") or "").strip(),
         "target_audience": (request.form.get("target_audience") or "").strip(),
         "tagline": (request.form.get("tagline") or "").strip(),
@@ -10200,7 +10240,7 @@ def client_site_builder_generate():
     }
     intake["image_slots"] = _site_builder_collect_image_slots(
         brand_id,
-        (brand.get("industry") or request.form.get("industry") or "").strip(),
+        (intake.get("industry") or brand.get("industry") or request.form.get("industry") or "").strip(),
     )
 
     # ── Parse page selection ──
@@ -10282,8 +10322,8 @@ def client_site_builder_generate():
             intake["reference_site_brief"] = _site_builder_reference_style_brief(
                 intake.get("reference_url"),
                 intake.get("reference_mode"),
-                brand.get("industry"),
-                brand.get("display_name"),
+                intake.get("industry") or brand.get("industry"),
+                intake.get("business_name") or brand.get("display_name"),
                 brand=brand,
             )
         except Exception as exc:
@@ -10418,7 +10458,25 @@ def client_site_builder_review(build_id):
 
     return render_template(
         "client/client_site_builder.html",
+        layout_template="client/client_base.html",
+        builder_mode="client",
         mode="review",
+        brand_fields_locked=True,
+        show_runtime_wp_fields=False,
+        builder_home_url=url_for("client.client_site_builder"),
+        builder_generate_url=url_for("client.client_site_builder_generate"),
+        builder_settings_url=url_for("client.client_settings"),
+        builder_review_endpoint="client.client_site_builder_review",
+        builder_delete_endpoint="client.client_site_builder_delete",
+        builder_publish_endpoint="client.client_site_builder_publish",
+        builder_page_get_endpoint="client.client_site_builder_page_get",
+        builder_page_save_endpoint="client.client_site_builder_page_save",
+        builder_page_rewrite_endpoint="client.client_site_builder_page_rewrite",
+        builder_upload_image_url=url_for("client.client_site_builder_upload_image"),
+        builder_seo_intel_url=url_for("client.client_site_builder_seo_intel"),
+        builder_brand_picker_url="",
+        available_brands=[],
+        selected_brand_id=brand_id,
         build=build,
         pages=pages,
         wp_connected=wp_ok,
@@ -10427,10 +10485,17 @@ def client_site_builder_review(build_id):
         wp_admin_url=_site_builder_wp_admin_url(brand),
         brand_logo_url=_site_builder_brand_logo_url(brand),
         brand_logo_path=(brand.get("logo_path") or "").strip(),
+        brand_website=(brand.get("website") or "").strip(),
+        brand_phone=(brand.get("phone") or brand.get("business_phone") or "").strip(),
+        brand_wp_username=(brand.get("wp_username") or "").strip(),
         builder_brand_colors=brand_palette,
         builder_primary_color=brand_primary_color,
         builder_accent_color=brand_accent_color,
         google_font_choices=GOOGLE_FONT_CHOICES,
+        font_pair_choices=SITE_BUILDER_FONT_PAIR_CHOICES,
+        font_groups=SITE_BUILDER_FONT_GROUPS,
+        font_preview_stylesheets=SITE_BUILDER_FONT_PREVIEW_STYLESHEETS,
+        editor_font_family_options=SITE_BUILDER_EDITOR_FONT_OPTIONS,
         image_slots=_SITE_BUILDER_INTAKE_IMAGE_SLOTS,
     )
 

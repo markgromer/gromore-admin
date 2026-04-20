@@ -204,7 +204,15 @@ class SiteBuilderLandingTests(unittest.TestCase):
         _login_client(self.client, self.app)
         resp = self.client.get("/client/site-builder")
         self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Build Command Center", resp.data)
+        self.assertIn(b"wizardProgressFill", resp.data)
+        self.assertIn(b"Brand Identity", resp.data)
+        self.assertIn(b"Lead Capture Setup", resp.data)
+        self.assertIn(b"blueprintCoreCount", resp.data)
+        self.assertIn(b"Generation Pipeline", resp.data)
         self.assertIn(b"siteBuilderGoogleFonts", resp.data)
+        self.assertIn(b"Typography System", resp.data)
+        self.assertIn(b"Instrument Serif", resp.data)
         self.assertIn(b"name=\"wireframe_style\"", resp.data)
         self.assertIn(b"name=\"hero_layout\"", resp.data)
         self.assertIn(b"name=\"services_widget_layout\"", resp.data)
@@ -281,6 +289,8 @@ class SiteBuilderReviewTests(unittest.TestCase):
         resp = self.client.get(f"/client/site-builder/{build_id}")
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"Review Site Build", resp.data)
+        self.assertIn(b"Review Command Center", resp.data)
+        self.assertIn(b"Page Navigator", resp.data)
         self.assertIn(b"Home", resp.data)
         self.assertIn(b"plumber springfield", resp.data)
 
@@ -357,6 +367,7 @@ class SiteBuilderReviewTests(unittest.TestCase):
         resp = self.client.get(f"/client/site-builder/{build_id}")
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"Publish", resp.data)
+        self.assertIn(b"Publish Pipeline", resp.data)
 
     def test_review_shows_connect_wp_when_not_connected(self):
         brand_id, _ = _login_client_no_wp(self.client, self.app)
@@ -1017,6 +1028,8 @@ class SiteBuilderIntakeWizardTests(unittest.TestCase):
         _login_client(self.client, self.app)
         resp = self.client.get("/client/site-builder")
         self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Search Signal Status", resp.data)
+        self.assertIn(b"Business Objectives", resp.data)
         self.assertIn(b"services_to_highlight", resp.data)
         self.assertIn(b"service_plan_options", resp.data)
         self.assertIn(b"service_add_ons", resp.data)
@@ -1051,7 +1064,7 @@ class SiteBuilderIntakeWizardTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"lead_form_type", resp.data)
         self.assertIn(b"WPForms", resp.data)
-        self.assertIn(b"Quote Tool Configuration", resp.data)
+        self.assertIn(b"Quote Workflow", resp.data)
         self.assertIn(b"quote_tool_source", resp.data)
 
     def test_landing_shows_wordpress_admin_shortcut(self):

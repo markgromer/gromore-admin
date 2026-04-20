@@ -28,6 +28,7 @@ from webapp.oauth_meta import meta_bp
 from webapp.client_oauth_google import client_google_bp
 from webapp.client_oauth_meta import client_meta_bp
 from webapp.jobs import jobs_bp
+from webapp import client_portal as client_portal_module
 from webapp.client_portal import client_bp, client_public_bp
 from webapp.hiring import hiring_bp
 from webapp.warren_webhooks import webhooks_bp
@@ -3361,6 +3362,562 @@ def create_app():
             google_font_choices=GOOGLE_FONT_CHOICES,
         )
 
+    @app.route("/site-builder-admin/generate")
+    @login_required
+    def site_builder_admin_generate():
+        db.ensure_default_site_builder_kits()
+        brand_id = int(request.args.get("brand_id") or 0)
+        brand = db.get_brand(brand_id) if brand_id else {}
+        if brand_id and not brand:
+            flash("Selected brand was not found.", "warning")
+            return redirect(url_for("site_builder_admin_generate"))
+        return _render_admin_site_builder(mode="landing", brand=brand)
+
+    @app.route("/site-builder-admin/generate", methods=["POST"])
+    @login_required
+    def site_builder_admin_generate_post():
+        is_ajax = request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+        try:
+            brand, brand_id = _site_builder_admin_upsert_brand(request.form)
+        except ValueError as exc:
+            if is_ajax:
+                return jsonify(ok=False, error=str(exc)), 400
+            flash(str(exc), "error")
+            return redirect(url_for("site_builder_admin_generate"))
+
+        from webapp.site_builder import (
+            build_brand_context,
+            build_site_blueprint,
+            generate_page_content,
+            assemble_page,
+        )
+
+        api_key = client_portal_module._get_openai_api_key(brand)
+        if not api_key:
+            msg = "OpenAI API key not configured. Add it in Settings before generating a site."
+            if is_ajax:
+                return jsonify(ok=False, error=msg), 400
+            flash(msg, "error")
+            return redirect(url_for("site_builder_admin_generate", brand_id=brand_id))
+
+        model = client_portal_module._pick_ai_model(brand, "analysis")
+        services = (request.form.get("services") or "").strip() or None
+        areas = (request.form.get("areas") or "").strip() or None
+
+        intake = {
+            "business_name": (request.form.get("business_name") or "").strip(),
+            "industry": (request.form.get("industry") or "").strip(),
+            "website": (request.form.get("website") or "").strip(),
+            "phone": (request.form.get("phone") or "").strip(),
+            "email": (request.form.get("email") or "").strip(),
+            "address": (request.form.get("address") or "").strip(),
+            "brand_voice": (request.form.get("brand_voice") or "").strip(),
+            "target_audience": (request.form.get("target_audience") or "").strip(),
+            "tagline": (request.form.get("tagline") or "").strip(),
+            "active_offers": (request.form.get("active_offers") or "").strip(),
+            "unique_selling_points": (request.form.get("unique_selling_points") or "").strip(),
+            "services_to_highlight": (request.form.get("services_to_highlight") or "").strip(),
+            "service_plan_options": (request.form.get("service_plan_options") or "").strip(),
+            "service_add_ons": (request.form.get("service_add_ons") or "").strip(),
+            "priority_seo_locations": (request.form.get("priority_seo_locations") or "").strip(),
+            "company_story": (request.form.get("company_story") or "").strip(),
+            "site_vision": (request.form.get("site_vision") or "").strip(),
+            "design_notes": (request.form.get("design_notes") or "").strip(),
+            "competitors": (request.form.get("competitors") or "").strip(),
+            "content_goals": (request.form.get("content_goals") or "").strip(),
+            "lead_form_type": (request.form.get("lead_form_type") or "").strip(),
+            "lead_form_shortcode": (request.form.get("lead_form_shortcode") or "").strip(),
+            "quote_tool_source": (request.form.get("quote_tool_source") or "").strip(),
+            "quote_tool_embed": (request.form.get("quote_tool_embed") or "").strip(),
+            "quote_tool_zip_mode": (request.form.get("quote_tool_zip_mode") or "").strip(),
+            "quote_tool_collect_dogs": bool(request.form.get("quote_tool_collect_dogs")),
+            "quote_tool_collect_frequency": bool(request.form.get("quote_tool_collect_frequency")),
+            "quote_tool_collect_last_cleaned": bool(request.form.get("quote_tool_collect_last_cleaned")),
+            "quote_tool_phone_mode": (request.form.get("quote_tool_phone_mode") or "").strip(),
+            "quote_tool_notes": (request.form.get("quote_tool_notes") or "").strip(),
+            "plugins": (request.form.get("plugins") or "").strip(),
+            "cta_text": (request.form.get("cta_text") or "").strip(),
+            "cta_phone": (request.form.get("cta_phone") or "").strip(),
+            "color_palette": (request.form.get("color_palette") or "").strip(),
+            "font_pair": (request.form.get("font_pair") or "").strip(),
+            "layout_style": (request.form.get("layout_style") or "").strip(),
+            "wireframe_style": (request.form.get("wireframe_style") or "").strip(),
+            "hero_layout": (request.form.get("hero_layout") or "").strip(),
+            "services_widget_layout": (request.form.get("services_widget_layout") or "").strip(),
+            "proof_widget_layout": (request.form.get("proof_widget_layout") or "").strip(),
+            "cta_widget_layout": (request.form.get("cta_widget_layout") or "").strip(),
+            "button_style": (request.form.get("button_style") or "").strip(),
+            "color_primary": (request.form.get("color_primary") or "").strip(),
+            "color_accent": (request.form.get("color_accent") or "").strip(),
+            "color_dark": (request.form.get("color_dark") or "").strip(),
+            "color_light": (request.form.get("color_light") or "").strip(),
+            "font_heading": client_portal_module.normalize_google_font_family(request.form.get("font_heading") or ""),
+            "font_body": client_portal_module.normalize_google_font_family(request.form.get("font_body") or ""),
+            "style_preset": (request.form.get("style_preset") or "").strip(),
+            "reference_url": (request.form.get("reference_url") or "").strip(),
+            "reference_mode": client_portal_module._site_builder_reference_mode(request.form.get("reference_mode")),
+        }
+        intake["image_slots"] = client_portal_module._site_builder_collect_image_slots(
+            brand_id,
+            (intake.get("industry") or brand.get("industry") or "").strip(),
+        )
+
+        page_selection_raw = (request.form.get("page_selection") or "").strip()
+        page_selection = [page.strip() for page in page_selection_raw.split(",") if page.strip()] or None
+
+        landing_pages = []
+        lp_names = request.form.getlist("lp_name[]")
+        lp_keywords = request.form.getlist("lp_keyword[]")
+        lp_offers = request.form.getlist("lp_offer[]")
+        lp_audiences = request.form.getlist("lp_audience[]")
+        for index, name in enumerate(lp_names):
+            cleaned_name = (name or "").strip()
+            if not cleaned_name:
+                continue
+            landing_pages.append({
+                "name": cleaned_name,
+                "keyword": (lp_keywords[index] if index < len(lp_keywords) else "").strip(),
+                "offer": (lp_offers[index] if index < len(lp_offers) else "").strip(),
+                "audience": (lp_audiences[index] if index < len(lp_audiences) else "").strip(),
+            })
+
+        custom_pages = []
+        cp_names = request.form.getlist("cp_name[]")
+        cp_slugs = request.form.getlist("cp_slug[]")
+        cp_purposes = request.form.getlist("cp_purpose[]")
+        for index, name in enumerate(cp_names):
+            cleaned_name = (name or "").strip()
+            if not cleaned_name:
+                continue
+            custom_pages.append({
+                "name": cleaned_name,
+                "slug": (cp_slugs[index] if index < len(cp_slugs) else "").strip(),
+                "purpose": (cp_purposes[index] if index < len(cp_purposes) else "").strip(),
+            })
+
+        if intake.get("reference_url"):
+            try:
+                intake["reference_site_brief"] = client_portal_module._site_builder_reference_style_brief(
+                    intake.get("reference_url"),
+                    intake.get("reference_mode"),
+                    intake.get("industry") or brand.get("industry"),
+                    intake.get("business_name") or brand.get("display_name"),
+                    brand=brand,
+                )
+            except Exception as exc:
+                current_app.logger.warning("Reference site brief failed: %s", exc)
+
+        selected_site_template = None
+        selected_site_template_id = int(request.form.get("site_template_id") or 0)
+        if selected_site_template_id:
+            selected_site_template = db.get_sb_site_template(selected_site_template_id)
+        if not selected_site_template:
+            selected_site_template = db.get_sb_default_site_template()
+
+        if selected_site_template:
+            site_theme = db.get_sb_theme(selected_site_template.get("theme_id")) if int(selected_site_template.get("theme_id") or 0) else {}
+            active_templates = []
+            template_lookup = {
+                int(item.get("id") or 0): item
+                for item in db.get_sb_templates(active_only=True)
+                if int(item.get("id") or 0)
+            }
+            for template_id in selected_site_template.get("template_ids") or []:
+                template = template_lookup.get(int(template_id or 0))
+                if template:
+                    active_templates.append(template)
+            intake["builder_site_template"] = client_portal_module._site_builder_site_template_snapshot(
+                selected_site_template,
+                theme=site_theme,
+                templates=active_templates,
+            )
+            intake["builder_theme"] = client_portal_module._site_builder_theme_snapshot(site_theme or {})
+            intake["builder_templates"] = client_portal_module._site_builder_template_snapshots(active_templates)
+        else:
+            intake["builder_theme"] = client_portal_module._site_builder_theme_snapshot(db.get_sb_default_theme() or {})
+            intake["builder_templates"] = client_portal_module._site_builder_template_snapshots(
+                db.get_sb_templates(active_only=True)
+            )
+        intake["builder_prompt_overrides"] = client_portal_module._site_builder_prompt_override_snapshots(
+            db.get_sb_prompt_overrides()
+        )
+
+        brand_ctx = build_brand_context(brand, intake=intake)
+        blueprint = build_site_blueprint(
+            brand_ctx,
+            services=services,
+            areas=areas,
+            landing_pages=landing_pages,
+            page_selection=page_selection,
+            custom_pages=custom_pages,
+        )
+
+        if not blueprint:
+            msg = "Could not create a site blueprint. Add at least one service and one service area before generating."
+            if is_ajax:
+                return jsonify(ok=False, error=msg), 400
+            flash(msg, "warning")
+            return redirect(url_for("site_builder_admin_generate", brand_id=brand_id))
+
+        build_id = db.create_site_build(
+            brand_id,
+            blueprint,
+            model=model,
+            created_by=session.get("user_id", 0),
+            intake=intake,
+        )
+        db.update_site_build_status(build_id, "running")
+
+        pages_done = 0
+        errors = []
+        for page_spec in blueprint:
+            try:
+                content = generate_page_content(page_spec, brand_ctx, api_key, model)
+                assembled = assemble_page(page_spec, brand_ctx, content)
+                db.save_site_page({
+                    "build_id": build_id,
+                    "brand_id": brand_id,
+                    "page_type": page_spec["page_type"],
+                    "label": page_spec["label"],
+                    "slug": page_spec.get("slug", ""),
+                    "title": content.get("title", ""),
+                    "content": assembled.get("body_html") or content.get("content", ""),
+                    "excerpt": content.get("excerpt", ""),
+                    "seo_title": content.get("seo_title", ""),
+                    "seo_description": content.get("seo_description", ""),
+                    "primary_keyword": content.get("primary_keyword", ""),
+                    "secondary_keywords": content.get("secondary_keywords", ""),
+                    "faq_items": content.get("faq_items") or [],
+                    "schemas": assembled.get("schemas") or [],
+                    "schema_html": assembled.get("schema_html", ""),
+                    "full_html": assembled.get("full_html", ""),
+                })
+                pages_done += 1
+                db.update_site_build_status(build_id, "running", pages_completed=pages_done)
+            except Exception as exc:
+                errors.append(f"{page_spec['label']}: {exc}")
+
+        if errors:
+            db.update_site_build_status(
+                build_id,
+                "completed",
+                pages_completed=pages_done,
+                error_message="; ".join(errors)[:500],
+            )
+        else:
+            db.update_site_build_status(build_id, "completed", pages_completed=pages_done)
+
+        if is_ajax:
+            return jsonify(ok=True, build_id=build_id, pages_generated=pages_done, errors=errors)
+        flash(f"Site build complete: {pages_done} pages generated.", "success")
+        return redirect(url_for("site_builder_admin_review", build_id=build_id))
+
+    @app.route("/site-builder-admin/builds/<int:build_id>")
+    @login_required
+    def site_builder_admin_review(build_id):
+        build = db.get_site_build(build_id)
+        if not build:
+            flash("Site build not found.", "warning")
+            return redirect(url_for("site_builder_admin_generate"))
+
+        brand = db.get_brand(build.get("brand_id")) or {}
+        pages = db.get_site_pages(build_id)
+        is_ajax = request.headers.get("X-Requested-With") in {"XMLHttpRequest", "PJAX"} or request.is_json
+        if is_ajax:
+            return jsonify(ok=True, build=build, pages=pages)
+        return _render_admin_site_builder(mode="review", brand=brand, build=build, pages=pages)
+
+    @app.route("/site-builder-admin/builds/<int:build_id>/delete", methods=["POST"])
+    @login_required
+    def site_builder_admin_delete(build_id):
+        wants_json = request.is_json or request.headers.get("X-Requested-With") in {"XMLHttpRequest", "PJAX"}
+        build = db.get_site_build(build_id)
+        if not build:
+            if wants_json:
+                return jsonify(ok=False, error="Build not found."), 404
+            flash("Site build not found.", "warning")
+            return redirect(url_for("site_builder_admin_generate"))
+
+        brand = db.get_brand(build.get("brand_id")) or {}
+        pages = db.get_site_pages(build_id)
+        published_pages = [page for page in pages if int(page.get("wp_page_id") or 0)]
+
+        if published_pages and not client_portal_module._wp_connected(brand):
+            msg = "Reconnect WordPress before deleting this build so the published pages can be removed too."
+            if wants_json:
+                return jsonify(ok=False, error=msg), 400
+            flash(msg, "error")
+            return redirect(url_for("site_builder_admin_review", build_id=build_id))
+
+        errors = []
+        deleted_wp_pages = 0
+        for page in published_pages:
+            result = client_portal_module._delete_wp_page(brand, page.get("wp_page_id"))
+            if result.get("ok"):
+                if result.get("deleted"):
+                    deleted_wp_pages += 1
+                continue
+            errors.append(f"{page.get('label') or page.get('title') or 'Page'}: {result.get('error', 'WordPress delete failed')}")
+
+        if errors:
+            if wants_json:
+                return jsonify(ok=False, error="Failed to delete one or more WordPress pages.", errors=errors), 502
+            flash(errors[0], "error")
+            return redirect(url_for("site_builder_admin_review", build_id=build_id))
+
+        db.delete_site_build(build_id, brand_id=build.get("brand_id"))
+
+        if wants_json:
+            return jsonify(ok=True, deleted_build_id=build_id, deleted_wordpress_pages=deleted_wp_pages)
+        flash(f"Deleted build #{build_id}.", "success")
+        return redirect(url_for("site_builder_admin_generate", brand_id=build.get("brand_id") or 0))
+
+    @app.route("/site-builder-admin/builds/<int:build_id>/publish", methods=["POST"])
+    @login_required
+    def site_builder_admin_publish(build_id):
+        build = db.get_site_build(build_id)
+        if not build:
+            return jsonify(ok=False, error="Build not found."), 404
+
+        brand = db.get_brand(build.get("brand_id")) or {}
+        if not client_portal_module._wp_connected(brand):
+            return jsonify(ok=False, error="WordPress is not connected. Add credentials in the intake and regenerate or reconnect the brand."), 400
+
+        pages = db.get_site_pages(build_id)
+        published = 0
+        errors = []
+        for page in pages:
+            if page.get("wp_page_id"):
+                published += 1
+                continue
+            result = client_portal_module._publish_wp_page(
+                brand,
+                title=page["title"],
+                content=page["full_html"] or page["content"],
+                excerpt=page.get("excerpt", ""),
+                slug=page.get("slug", ""),
+                seo_title=page.get("seo_title", ""),
+                seo_description=page.get("seo_description", ""),
+            )
+            if result.get("ok"):
+                db.update_site_page_wp(page["id"], result["wp_page_id"], result["wp_page_url"])
+                published += 1
+            else:
+                errors.append(f"{page['label']}: {result.get('error', 'Unknown error')}")
+
+        return jsonify(ok=True, published=published, total=len(pages), errors=errors)
+
+    @app.route("/site-builder-admin/pages/<int:page_id>")
+    @login_required
+    def site_builder_admin_page_get(page_id):
+        page = db.get_site_page(page_id)
+        if not page:
+            return jsonify(ok=False, error="Page not found."), 404
+        build = db.get_site_build(page.get("build_id"))
+        if not build:
+            return jsonify(ok=False, error="Build not found."), 404
+        return jsonify(ok=True, page=page)
+
+    @app.route("/site-builder-admin/pages/<int:page_id>/save", methods=["POST"])
+    @login_required
+    def site_builder_admin_page_save(page_id):
+        page = db.get_site_page(page_id)
+        if not page:
+            return jsonify(ok=False, error="Page not found."), 404
+        build = db.get_site_build(page.get("build_id"))
+        if not build:
+            return jsonify(ok=False, error="Build not found."), 404
+
+        data = request.get_json(silent=True)
+        if data is None and request.get_data(cache=False):
+            return jsonify(ok=False, error="Invalid JSON payload."), 400
+
+        try:
+            update = client_portal_module._normalize_site_builder_page_save_payload(data)
+        except ValueError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+
+        if update:
+            db.update_site_page_content(page_id, update)
+
+        return jsonify(ok=True)
+
+    @app.route("/site-builder-admin/pages/<int:page_id>/rewrite", methods=["POST"])
+    @login_required
+    def site_builder_admin_page_rewrite(page_id):
+        page = db.get_site_page(page_id)
+        if not page:
+            return jsonify(ok=False, error="Page not found."), 404
+        build = db.get_site_build(page.get("build_id"))
+        if not build:
+            return jsonify(ok=False, error="Build not found."), 404
+
+        brand = db.get_brand(build.get("brand_id")) or {}
+        api_key = client_portal_module._get_openai_api_key(brand)
+        if not api_key:
+            return jsonify(ok=False, error="OpenAI API key not configured."), 400
+
+        model = client_portal_module._pick_ai_model(brand, "analysis")
+        data = request.get_json(silent=True)
+        if data is None and request.get_data(cache=False):
+            return jsonify(ok=False, error="Invalid JSON payload."), 400
+        if data is not None and not isinstance(data, dict):
+            return jsonify(ok=False, error="Invalid rewrite payload."), 400
+
+        instructions = client_portal_module._normalize_site_builder_text(
+            (data or {}).get("instructions"),
+            "Rewrite instructions",
+            max_length=client_portal_module._SITE_BUILDER_MAX_REWRITE_INSTRUCTIONS_LENGTH,
+        )
+
+        from webapp.site_builder import (
+            build_brand_context,
+            _brand_block,
+            _seo_intel_block,
+            _GLOBAL_RULES,
+            _OUTPUT_FORMAT,
+            _system_msg,
+            _extract_json,
+        )
+
+        intake = {}
+        try:
+            intake = json.loads(build.get("intake_json") or "{}")
+        except Exception:
+            intake = {}
+        brand_ctx = build_brand_context(brand, intake=intake)
+
+        existing_content = page.get("content") or ""
+        existing_title = page.get("title") or ""
+        existing_seo_title = page.get("seo_title") or ""
+        existing_seo_desc = page.get("seo_description") or ""
+
+        user_msg = (
+            f"REWRITE the following website page content.\n\n"
+            f"BUSINESS CONTEXT:\n{_brand_block(brand_ctx)}\n\n"
+            f"{_seo_intel_block(brand_ctx)}"
+            f"PAGE TYPE: {page.get('page_type', 'generic')}\n"
+            f"PAGE LABEL: {page.get('label', '')}\n"
+            f"CURRENT TITLE: {existing_title}\n"
+            f"CURRENT SEO TITLE: {existing_seo_title}\n"
+            f"CURRENT SEO DESCRIPTION: {existing_seo_desc}\n\n"
+            f"CURRENT CONTENT:\n{existing_content}\n\n"
+        )
+        if instructions:
+            user_msg += f"USER REWRITE INSTRUCTIONS (follow these closely):\n{instructions}\n\n"
+        else:
+            user_msg += (
+                "REWRITE INSTRUCTIONS:\n"
+                "Improve the content quality, conversion copy, and SEO without changing the core structure or message. "
+                "Tighten the writing, strengthen CTAs, add specificity.\n\n"
+            )
+        user_msg += f"{_GLOBAL_RULES}\n{_OUTPUT_FORMAT}"
+
+        try:
+            import openai
+
+            client = openai.OpenAI(api_key=api_key)
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": _system_msg()},
+                    {"role": "user", "content": user_msg},
+                ],
+                temperature=0.5,
+                response_format={"type": "json_object"},
+            )
+            raw = (response.choices[0].message.content or "{}").strip()
+            result = _extract_json(raw)
+            if not isinstance(result, dict):
+                raise ValueError("AI rewrite returned an unexpected response.")
+        except Exception as exc:
+            return jsonify(ok=False, error=f"AI rewrite failed: {str(exc)[:200]}"), 500
+
+        rewritten_content = client_portal_module._normalize_site_builder_text(
+            result.get("content") or existing_content,
+            "Page content",
+            trim=False,
+        )
+        try:
+            client_portal_module._validate_site_builder_blob_size(
+                rewritten_content,
+                "Page content",
+                client_portal_module._SITE_BUILDER_MAX_CONTENT_BYTES,
+            )
+            update = {
+                "title": client_portal_module._normalize_site_builder_text(
+                    result.get("title") or existing_title,
+                    "Page title",
+                    max_length=client_portal_module._SITE_BUILDER_MAX_TITLE_LENGTH,
+                ),
+                "content": rewritten_content,
+                "excerpt": result.get("excerpt") or page.get("excerpt", ""),
+                "seo_title": client_portal_module._normalize_site_builder_text(
+                    result.get("seo_title") or existing_seo_title,
+                    "SEO title",
+                    max_length=client_portal_module._SITE_BUILDER_MAX_SEO_TITLE_LENGTH,
+                ),
+                "seo_description": client_portal_module._normalize_site_builder_text(
+                    result.get("seo_description") or existing_seo_desc,
+                    "SEO description",
+                    max_length=client_portal_module._SITE_BUILDER_MAX_SEO_DESCRIPTION_LENGTH,
+                ),
+                "primary_keyword": result.get("primary_keyword") or page.get("primary_keyword", ""),
+                "secondary_keywords": result.get("secondary_keywords") or page.get("secondary_keywords", ""),
+            }
+        except ValueError as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+
+        if result.get("faq_items"):
+            update["faq_items_json"] = json.dumps(result["faq_items"])
+        update["full_html"] = update["content"]
+        db.update_site_page_content(page_id, update)
+        return jsonify(ok=True, page=update)
+
+    @app.route("/site-builder-admin/upload-image", methods=["POST"])
+    @login_required
+    def site_builder_admin_upload_image():
+        import uuid as uuid_lib
+        from werkzeug.utils import secure_filename
+
+        if "image" not in request.files:
+            file = request.files.get("files[]")
+            if not file:
+                return jsonify(ok=False, error="No image file provided."), 400
+        else:
+            file = request.files["image"]
+
+        if not file.filename:
+            return jsonify(ok=False, error="Empty filename."), 400
+
+        allowed_ext = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext not in allowed_ext:
+            return jsonify(ok=False, error=f"File type {ext} not allowed.", allowed_types=sorted(allowed_ext)), 400
+
+        file.seek(0, 2)
+        size = file.tell()
+        file.seek(0)
+        if size > 10 * 1024 * 1024:
+            return jsonify(ok=False, error="Image too large. Max 10MB.", max_size_bytes=10 * 1024 * 1024), 400
+
+        safe_name = secure_filename(f"{uuid_lib.uuid4().hex}{ext}")
+        if not safe_name:
+            return jsonify(ok=False, error="Could not generate a safe filename."), 400
+
+        upload_dir = os.path.join(current_app.static_folder or "static", "uploads", "site_builder")
+        os.makedirs(upload_dir, exist_ok=True)
+        save_path = os.path.join(upload_dir, safe_name)
+        try:
+            file.save(save_path)
+        except Exception as exc:
+            current_app.logger.exception("site builder image upload failed")
+            return jsonify(ok=False, error=f"Image upload failed: {str(exc)[:160]}"), 500
+
+        img_url = url_for("static", filename=f"uploads/site_builder/{safe_name}")
+        return jsonify(ok=True, data=[img_url], url=img_url, filename=safe_name)
+
     # -- Templates CRUD --
 
     @app.route("/site-builder-admin/templates", methods=["POST"])
@@ -3948,6 +4505,142 @@ def create_app():
             ("saas", "SaaS"),
             ("other", "Other"),
         ]
+
+    def _site_builder_admin_unique_slug(name):
+        from webapp.site_builder import _slugify
+
+        base = _slugify(name or "site-builder-brand") or "site-builder-brand"
+        slug = base
+        suffix = 2
+        while db.get_brand_by_slug(slug):
+            slug = f"{base}-{suffix}"
+            suffix += 1
+        return slug
+
+    def _site_builder_admin_upsert_brand(form):
+        selected_brand_id = int(form.get("brand_id") or 0)
+        business_name = (form.get("business_name") or "").strip()
+        industry = (form.get("industry") or "").strip() or "other"
+        website = (form.get("website") or "").strip()
+        service_area = (form.get("areas") or form.get("service_area") or "").strip()
+        primary_services = (form.get("services") or form.get("primary_services") or "").strip()
+
+        if selected_brand_id:
+            brand = db.get_brand(selected_brand_id)
+            if not brand:
+                raise ValueError("Selected brand was not found.")
+            db.update_brand(selected_brand_id, {
+                "display_name": business_name or brand.get("display_name") or "Untitled Brand",
+                "slug": (brand.get("slug") or _site_builder_admin_unique_slug(business_name or "brand")).strip(),
+                "industry": industry or brand.get("industry") or "other",
+                "monthly_budget": brand.get("monthly_budget") or 0,
+                "website": website or brand.get("website") or "",
+                "service_area": service_area or brand.get("service_area") or "",
+                "primary_services": primary_services or brand.get("primary_services") or "",
+                "goals": brand.get("goals") or [],
+            })
+            brand_id = selected_brand_id
+        else:
+            if not business_name:
+                raise ValueError("Business name is required.")
+            brand_id = db.create_brand({
+                "display_name": business_name,
+                "slug": _site_builder_admin_unique_slug(business_name),
+                "industry": industry,
+                "website": website,
+                "service_area": service_area,
+                "primary_services": primary_services,
+                "goals": [],
+            })
+
+        wp_site_url = (form.get("wp_site_url") or "").strip().rstrip("/")
+        wp_username = (form.get("wp_username") or "").strip()
+        wp_app_password = (form.get("wp_app_password") or "").strip()
+        if wp_site_url or not selected_brand_id:
+            db.update_brand_text_field(brand_id, "wp_site_url", wp_site_url)
+        if wp_username or not selected_brand_id:
+            db.update_brand_text_field(brand_id, "wp_username", wp_username)
+        if wp_app_password:
+            db.update_brand_text_field(brand_id, "wp_app_password", wp_app_password)
+
+        for field in ("brand_voice", "target_audience", "active_offers"):
+            value = (form.get(field) or "").strip()
+            if value:
+                db.update_brand_text_field(brand_id, field, value)
+
+        return db.get_brand(brand_id) or {}, brand_id
+
+    def _render_admin_site_builder(mode="landing", brand=None, build=None, pages=None):
+        brand = brand or {}
+        brand_id = int(brand.get("id") or 0)
+        brand_palette = client_portal_module._site_builder_brand_palette(brand)
+        brand_primary_color = brand_palette[0] if brand_palette else ""
+        brand_accent_color = brand_palette[1] if len(brand_palette) > 1 else brand_primary_color
+        wp_ok = client_portal_module._wp_connected(brand)
+        builds = db.get_site_builds(brand_id, limit=20) if brand_id and mode == "landing" else []
+        site_templates = db.get_sb_site_templates(active_only=True)
+        default_site_template = db.get_sb_default_site_template() or (site_templates[0] if site_templates else None)
+        unpublished = 0
+        if pages:
+            unpublished = sum(1 for page in pages if not page.get("wp_page_id"))
+
+        return render_template(
+            "client/client_site_builder.html",
+            layout_template="base.html",
+            builder_mode="admin",
+            mode=mode,
+            brand_fields_locked=False,
+            show_runtime_wp_fields=True,
+            builder_home_url=url_for("site_builder_admin_generate", brand_id=brand_id) if brand_id else url_for("site_builder_admin_generate"),
+            builder_generate_url=url_for("site_builder_admin_generate_post"),
+            builder_settings_url="",
+            builder_review_endpoint="site_builder_admin_review",
+            builder_delete_endpoint="site_builder_admin_delete",
+            builder_publish_endpoint="site_builder_admin_publish",
+            builder_page_get_endpoint="site_builder_admin_page_get",
+            builder_page_save_endpoint="site_builder_admin_page_save",
+            builder_page_rewrite_endpoint="site_builder_admin_page_rewrite",
+            builder_upload_image_url=url_for("site_builder_admin_upload_image"),
+            builder_seo_intel_url="",
+            builder_brand_picker_url=url_for("site_builder_admin_generate"),
+            available_brands=db.get_all_brands(),
+            selected_brand_id=brand_id,
+            wp_connected=wp_ok,
+            wp_site_url=(brand.get("wp_site_url") or "").strip().rstrip("/"),
+            builds=builds,
+            build=build,
+            pages=pages or [],
+            unpublished_count=unpublished,
+            brand_services=(brand.get("primary_services") or "").strip(),
+            brand_areas=(brand.get("service_area") or "").strip(),
+            brand_name=(brand.get("display_name") or "").strip(),
+            brand_industry=(brand.get("industry") or "").strip(),
+            brand_website=(brand.get("website") or "").strip(),
+            brand_voice=(brand.get("brand_voice") or "").strip(),
+            brand_target_audience=(brand.get("target_audience") or "").strip(),
+            brand_tagline=(brand.get("tagline") or "").strip(),
+            brand_phone=(brand.get("phone") or brand.get("business_phone") or "").strip(),
+            brand_wp_username=(brand.get("wp_username") or "").strip(),
+            brand_active_offers=(brand.get("active_offers") or "").strip(),
+            brand_logo_url=client_portal_module._site_builder_brand_logo_url(brand),
+            brand_logo_path=(brand.get("logo_path") or "").strip(),
+            builder_brand_colors=brand_palette,
+            builder_primary_color=brand_primary_color,
+            builder_accent_color=brand_accent_color,
+            brand_font_heading=(brand.get("font_heading") or "").strip(),
+            brand_font_body=(brand.get("font_body") or "").strip(),
+            google_font_choices=client_portal_module.GOOGLE_FONT_CHOICES,
+            font_pair_choices=client_portal_module.SITE_BUILDER_FONT_PAIR_CHOICES,
+            font_groups=client_portal_module.SITE_BUILDER_FONT_GROUPS,
+            font_preview_stylesheets=client_portal_module.SITE_BUILDER_FONT_PREVIEW_STYLESHEETS,
+            editor_font_family_options=client_portal_module.SITE_BUILDER_EDITOR_FONT_OPTIONS,
+            image_slots=client_portal_module._SITE_BUILDER_INTAKE_IMAGE_SLOTS,
+            site_templates=site_templates,
+            default_site_template_id=(default_site_template or {}).get("id") or 0,
+            wp_admin_url=client_portal_module._site_builder_wp_admin_url(brand),
+            gsc_connected=False,
+            gsc_needs_property=False,
+        )
 
     return app
 
