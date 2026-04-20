@@ -2852,6 +2852,54 @@
             <p class="intake-desc">Set the visual direction for your site. Choose the overall feel, wireframe rhythm, and image treatment before Warren builds the pages.</p>
 
             <div class="row g-3">
+                {% if site_templates %}
+                <div class="col-12">
+                    <div class="sb-card mb-0" style="background:linear-gradient(135deg, rgba(15,23,42,.03), rgba(59,130,246,.08)); border-style:dashed;">
+                        <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap mb-2">
+                            <div>
+                                <label class="form-label fw-semibold mb-1" style="font-size:.85rem;">Full Site Template</label>
+                                <div class="form-hint" style="margin-top:0; max-width:760px;">
+                                    Choose a curated site kit first. Warren will use this template's theme, approved sections, and page shells as the foundation before applying your brand copy, offers, and assets.
+                                </div>
+                            </div>
+                            <span class="page-type-chip"><i class="bi bi-window-stack"></i>Template kit</span>
+                        </div>
+                        <div class="row g-2">
+                            {% for site_template in site_templates %}
+                            <div class="col-lg-4 col-md-6">
+                                <label class="page-select-chip d-block h-100" style="padding:0; overflow:hidden;">
+                                    <input type="radio" name="site_template_id" value="{{ site_template.id }}" {% if site_template.id == default_site_template_id or (not default_site_template_id and loop.first) %}checked{% endif %} style="display:none;">
+                                    <span style="display:block; padding:0;">
+                                        {% if site_template.preview_image %}
+                                        <span style="display:block; height:120px; background:url('{{ site_template.preview_image }}') center/cover no-repeat; border-bottom:1px solid rgba(129,140,248,.18);"></span>
+                                        {% else %}
+                                        <span style="display:grid; place-items:center; height:120px; background:linear-gradient(135deg, rgba(15,23,42,.05), rgba(99,102,241,.14)); border-bottom:1px solid rgba(129,140,248,.18); color:#475569; font-size:1.6rem;">
+                                            <i class="bi bi-easel2"></i>
+                                        </span>
+                                        {% endif %}
+                                        <span style="display:block; padding:.9rem 1rem;">
+                                            <span class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                                                <strong style="color:var(--text-strong);">{{ site_template.name }}</strong>
+                                                {% if site_template.is_default %}<span class="badge bg-warning text-dark">Recommended</span>{% endif %}
+                                            </span>
+                                            {% if site_template.theme_name %}
+                                            <span class="d-block" style="font-size:.72rem; opacity:.72; margin-bottom:.2rem;">Theme: {{ site_template.theme_name }}</span>
+                                            {% endif %}
+                                            {% if site_template.description %}
+                                            <span class="d-block" style="font-size:.78rem; opacity:.86; line-height:1.45;">{{ site_template.description }}</span>
+                                            {% else %}
+                                            <span class="d-block" style="font-size:.78rem; opacity:.78; line-height:1.45;">Curated theme, page structure, and approved sections for a faster first draft.</span>
+                                            {% endif %}
+                                            <span class="d-block" style="font-size:.72rem; opacity:.72; margin-top:.55rem;">{{ site_template.template_count }} approved template{{ '' if site_template.template_count == 1 else 's' }}</span>
+                                        </span>
+                                    </span>
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
                 <div class="col-12">
                     <div class="sb-card mb-0" style="background:linear-gradient(135deg, rgba(99,102,241,.06), rgba(14,165,233,.08)); border-style:dashed;">
                         <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">

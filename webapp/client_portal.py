@@ -6766,6 +6766,29 @@ def _site_builder_template_snapshots(templates):
     return snapshots
 
 
+def _site_builder_site_template_snapshot(site_template, theme=None, templates=None):
+    if not isinstance(site_template, dict):
+        return {}
+    snapshot = {
+        "id": site_template.get("id"),
+        "name": site_template.get("name") or "",
+        "slug": site_template.get("slug") or "",
+        "description": site_template.get("description") or "",
+        "preview_image": site_template.get("preview_image") or "",
+        "prompt_notes": site_template.get("prompt_notes") or "",
+        "theme_id": site_template.get("theme_id") or 0,
+        "theme_name": site_template.get("theme_name") or "",
+        "template_ids": list(site_template.get("template_ids") or []),
+        "template_count": int(site_template.get("template_count") or len(site_template.get("template_ids") or [])),
+    }
+    if isinstance(theme, dict) and theme:
+        snapshot["theme_name"] = theme.get("name") or snapshot.get("theme_name") or ""
+        snapshot["builder_theme"] = _site_builder_theme_snapshot(theme)
+    if templates:
+        snapshot["builder_templates"] = _site_builder_template_snapshots(templates)
+    return snapshot
+
+
 def _site_builder_prompt_override_snapshots(overrides):
     snapshots = []
     for override in overrides or []:
@@ -9994,6 +10017,8 @@ def client_site_builder():
     brand_palette = _site_builder_brand_palette(brand)
     brand_primary_color = brand_palette[0] if brand_palette else ""
     brand_accent_color = brand_palette[1] if len(brand_palette) > 1 else brand_primary_color
+    site_templates = db.get_sb_site_templates(active_only=True)
+    default_site_template = db.get_sb_default_site_template() or (site_templates[0] if site_templates else None)
 
     return render_template(
         "client/client_site_builder.html",
@@ -10019,6 +10044,8 @@ def client_site_builder():
         brand_font_body=(brand.get("font_body") or "").strip(),
         google_font_choices=GOOGLE_FONT_CHOICES,
         image_slots=_SITE_BUILDER_INTAKE_IMAGE_SLOTS,
+        site_templates=site_templates,
+        default_site_template_id=(default_site_template or {}).get("id") or 0,
         wp_admin_url=_site_builder_wp_admin_url(brand),
         gsc_connected=gsc_connected,
         gsc_needs_property=gsc_needs_property,
@@ -10259,10 +10286,37 @@ def client_site_builder_generate():
             )
         except Exception as exc:
             current_app.logger.warning("Reference site brief failed: %s", exc)
-    intake["builder_theme"] = _site_builder_theme_snapshot(db.get_sb_default_theme() or {})
-    intake["builder_templates"] = _site_builder_template_snapshots(
-        db.get_sb_templates(active_only=True)
-    )
+    selected_site_template = None
+    selected_site_template_id = int(request.form.get("site_template_id") or 0)
+    if selected_site_template_id:
+        selected_site_template = db.get_sb_site_template(selected_site_template_id)
+    if not selected_site_template:
+        selected_site_template = db.get_sb_default_site_template()
+
+    if selected_site_template:
+        site_theme = db.get_sb_theme(selected_site_template.get("theme_id")) if int(selected_site_template.get("theme_id") or 0) else {}
+        active_templates = []
+        template_lookup = {
+            int(item.get("id") or 0): item
+            for item in db.get_sb_templates(active_only=True)
+            if int(item.get("id") or 0)
+        }
+        for template_id in selected_site_template.get("template_ids") or []:
+            template = template_lookup.get(int(template_id or 0))
+            if template:
+                active_templates.append(template)
+        intake["builder_site_template"] = _site_builder_site_template_snapshot(
+            selected_site_template,
+            theme=site_theme,
+            templates=active_templates,
+        )
+        intake["builder_theme"] = _site_builder_theme_snapshot(site_theme or {})
+        intake["builder_templates"] = _site_builder_template_snapshots(active_templates)
+    else:
+        intake["builder_theme"] = _site_builder_theme_snapshot(db.get_sb_default_theme() or {})
+        intake["builder_templates"] = _site_builder_template_snapshots(
+            db.get_sb_templates(active_only=True)
+        )
     intake["builder_prompt_overrides"] = _site_builder_prompt_override_snapshots(
         db.get_sb_prompt_overrides()
     )

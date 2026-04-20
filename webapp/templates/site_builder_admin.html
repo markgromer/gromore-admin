@@ -28,7 +28,7 @@
 <div class="top-bar">
     <div>
         <h4 class="mb-0"><i class="bi bi-palette"></i> Site Builder Admin</h4>
-        <small class="text-muted">Manage templates, themes, prompts, and the image library</small>
+        <small class="text-muted">Manage templates, site kits, themes, prompts, and the image library</small>
     </div>
 </div>
 
@@ -65,6 +65,11 @@
     <li class="nav-item">
         <a class="nav-link {% if tab == 'templates' %}active{% endif %}" href="?tab=templates">
             <i class="bi bi-code-square"></i> Templates
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if tab == 'site-templates' %}active{% endif %}" href="?tab=site-templates">
+            <i class="bi bi-window-stack"></i> Site Templates
         </a>
     </li>
     <li class="nav-item">
@@ -146,6 +151,7 @@
                 <li><strong>Widget</strong> - Standalone elements (pricing cards, testimonial walls)</li>
                 <li><strong>Footer</strong> - Footer variations</li>
                 <li><strong>Navigation</strong> - Header/nav patterns</li>
+                <li><strong>Page Shell</strong> - A full page scaffold with a <code>{% raw %}{{page_content}}{% endraw %}</code> slot Warren fills for that page type</li>
             </ul>
             <strong class="small">Page Types:</strong>
             <p class="text-muted small mb-0">Comma-separated list of page types this template can be used on. Leave blank for all pages.</p>
@@ -178,6 +184,7 @@
                                 <option value="widget">Widget</option>
                                 <option value="footer">Footer</option>
                                 <option value="navigation">Navigation</option>
+                                <option value="page_shell">Page Shell</option>
                             </select>
                         </div>
                         <div class="col-md-3">
@@ -211,6 +218,153 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-primary">Save Template</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ============= SITE TEMPLATES TAB ============= -->
+{% if tab == 'site-templates' %}
+<div class="row">
+    <div class="col-lg-8">
+        <div class="sb-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">Full Site Templates</h5>
+                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#siteTemplateModal" onclick="clearSiteTemplateForm()">
+                    <i class="bi bi-plus-lg"></i> New Site Template
+                </button>
+            </div>
+            {% if site_templates %}
+            <div class="row g-3">
+                {% for st in site_templates %}
+                <div class="col-md-6">
+                    <div class="template-card">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <strong>{{ st.name }}</strong>
+                                {% if st.is_default %}<span class="badge bg-warning text-dark ms-1">Default</span>{% endif %}
+                                <span class="badge {{ 'badge-active' if st.is_active else 'badge-inactive' }} ms-1">
+                                    {{ 'Active' if st.is_active else 'Inactive' }}
+                                </span>
+                            </div>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-outline-primary btn-sm" onclick="editSiteTemplate({{ st.id }})" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <form method="POST" action="{{ url_for('sb_admin_site_template_delete', tid=st.id) }}" onsubmit="return confirm('Delete site template &quot;{{ st.name }}&quot;?')" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button class="btn btn-outline-danger btn-sm" title="Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="text-muted small mb-1">
+                            <span class="badge bg-secondary">{{ st.slug }}</span>
+                            {% if st.theme_name %}<span class="text-muted ms-1">Theme: {{ st.theme_name }}</span>{% endif %}
+                        </div>
+                        <div class="text-muted small mb-1">{{ st.template_count }} template{{ '' if st.template_count == 1 else 's' }} linked</div>
+                        {% if st.description %}
+                        <p class="text-muted small mb-0">{{ st.description[:120] }}{% if st.description|length > 120 %}...{% endif %}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted text-center py-4">No site templates yet. Create a kit that groups a theme with the exact templates Warren should fill for a brand.</p>
+            {% endif %}
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="sb-card">
+            <h6><i class="bi bi-diagram-3"></i> Site Template Guide</h6>
+            <p class="text-muted small">A full site template is a kit that combines one theme with a curated set of builder templates. Brands choose one kit during intake, and Warren uses that kit instead of the global defaults.</p>
+            <ul class="small text-muted mb-0">
+                <li>Attach one theme preset for colors, fonts, and overall styling.</li>
+                <li>Attach only the templates that belong in this site kit.</li>
+                <li>Use <strong>page shell</strong> templates when you want Warren to fill a deterministic layout instead of inventing a fresh structure.</li>
+                <li>Keep prompt notes short and specific so they meaningfully steer generation.</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="siteTemplateModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('sb_admin_site_template_save') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="site_template_id" id="site_tmpl_id" value="">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="site_tmpl_modal_title">New Site Template</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Name</label>
+                            <input type="text" name="name" id="site_tmpl_name" class="form-control" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Slug</label>
+                            <input type="text" name="slug" id="site_tmpl_slug" class="form-control" placeholder="service-blue-premium">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Sort</label>
+                            <input type="number" name="sort_order" id="site_tmpl_sort" class="form-control" value="0">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Description</label>
+                            <input type="text" name="description" id="site_tmpl_desc" class="form-control" placeholder="What this site template is for and how it should feel.">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Theme</label>
+                            <select name="theme_id" id="site_tmpl_theme" class="form-select">
+                                <option value="0">No linked theme</option>
+                                {% for theme in themes %}
+                                <option value="{{ theme.id }}">{{ theme.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Prompt Notes</label>
+                            <input type="text" name="prompt_notes" id="site_tmpl_notes" class="form-control" placeholder="Use the page shell exactly. Keep proof above the first CTA.">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Included Templates</label>
+                            <div class="border rounded p-3" style="max-height:280px; overflow:auto;">
+                                {% for template in templates %}
+                                <label class="d-flex align-items-start gap-2 py-1">
+                                    <input type="checkbox" name="template_ids" value="{{ template.id }}" class="site-template-template-check mt-1">
+                                    <span>
+                                        <strong>{{ template.name }}</strong>
+                                        <span class="badge bg-secondary ms-1">{{ template.category }}</span>
+                                        <div class="text-muted small">{{ template.description or 'No description yet.' }}</div>
+                                    </span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input type="checkbox" name="is_default" id="site_tmpl_default" class="form-check-input" value="1">
+                                <label class="form-check-label" for="site_tmpl_default">Default site template</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input type="checkbox" name="is_active" id="site_tmpl_active" class="form-check-input" value="1" checked>
+                                <label class="form-check-label" for="site_tmpl_active">Active</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Site Template</button>
                 </div>
             </form>
         </div>
@@ -820,6 +974,44 @@ function editTheme(id) {
             document.getElementById('theme_default').checked = !!t.is_default;
             document.getElementById('theme_active').checked = !!t.is_active;
             new bootstrap.Modal(document.getElementById('themeModal')).show();
+        });
+}
+
+// ── Site Templates ──
+function clearSiteTemplateForm() {
+    document.getElementById('site_tmpl_id').value = '';
+    document.getElementById('site_tmpl_modal_title').textContent = 'New Site Template';
+    document.getElementById('site_tmpl_name').value = '';
+    document.getElementById('site_tmpl_slug').value = '';
+    document.getElementById('site_tmpl_desc').value = '';
+    document.getElementById('site_tmpl_theme').value = '0';
+    document.getElementById('site_tmpl_notes').value = '';
+    document.getElementById('site_tmpl_sort').value = '0';
+    document.getElementById('site_tmpl_default').checked = false;
+    document.getElementById('site_tmpl_active').checked = true;
+    document.querySelectorAll('.site-template-template-check').forEach(el => { el.checked = false; });
+}
+
+function editSiteTemplate(id) {
+    fetch(`/api/site-builder-admin/site-templates/${id}`)
+        .then(r => r.json())
+        .then(t => {
+            clearSiteTemplateForm();
+            document.getElementById('site_tmpl_id').value = t.id;
+            document.getElementById('site_tmpl_modal_title').textContent = 'Edit Site Template';
+            document.getElementById('site_tmpl_name').value = t.name || '';
+            document.getElementById('site_tmpl_slug').value = t.slug || '';
+            document.getElementById('site_tmpl_desc').value = t.description || '';
+            document.getElementById('site_tmpl_theme').value = String(t.theme_id || 0);
+            document.getElementById('site_tmpl_notes').value = t.prompt_notes || '';
+            document.getElementById('site_tmpl_sort').value = t.sort_order || 0;
+            document.getElementById('site_tmpl_default').checked = !!t.is_default;
+            document.getElementById('site_tmpl_active').checked = !!t.is_active;
+            const selected = new Set((t.template_ids || []).map(String));
+            document.querySelectorAll('.site-template-template-check').forEach(el => {
+                el.checked = selected.has(el.value);
+            });
+            new bootstrap.Modal(document.getElementById('siteTemplateModal')).show();
         });
 }
 

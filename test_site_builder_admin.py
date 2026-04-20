@@ -1,8 +1,8 @@
 """
 Tests for the Site Builder Admin panel:
-- Database CRUD for sb_templates, sb_themes, sb_prompt_overrides,
+- Database CRUD for sb_templates, sb_themes, sb_site_templates, sb_prompt_overrides,
   sb_image_categories, sb_images
-- Admin routes (templates, themes, prompts, images, bulk, WP publish)
+- Admin routes (templates, themes, site templates, prompts, images, bulk, WP publish)
 """
 import os
 import sys
@@ -137,6 +137,65 @@ class SBThemesDBTests(unittest.TestCase):
         tid = self.db.create_sb_theme({"name": "Gone"})
         self.db.delete_sb_theme(tid)
         self.assertIsNone(self.db.get_sb_theme(tid))
+
+
+class SBSiteTemplatesDBTests(unittest.TestCase):
+    """Test sb_site_templates CRUD."""
+
+    def setUp(self):
+        self.db, self._db_path = _make_db()
+
+    def tearDown(self):
+        _cleanup_db(self._db_path)
+
+    def test_create_and_get_site_template(self):
+        theme_id = self.db.create_sb_theme({"name": "Warm Pro"})
+        header_id = self.db.create_sb_template({"name": "Main Header", "category": "navigation"})
+        shell_id = self.db.create_sb_template({"name": "Home Shell", "category": "page_shell"})
+
+        stid = self.db.create_sb_site_template({
+            "name": "Service Blue",
+            "slug": "service-blue",
+            "description": "A high-trust local service kit.",
+            "theme_id": theme_id,
+            "template_ids": [header_id, shell_id],
+            "prompt_notes": "Use the page shell exactly.",
+            "is_default": 1,
+        })
+
+        site_template = self.db.get_sb_site_template(stid)
+        self.assertEqual(site_template["name"], "Service Blue")
+        self.assertEqual(site_template["theme_id"], theme_id)
+        self.assertEqual(site_template["theme_name"], "Warm Pro")
+        self.assertEqual(site_template["template_ids"], [header_id, shell_id])
+        self.assertEqual(site_template["template_count"], 2)
+        self.assertEqual(site_template["is_default"], 1)
+
+    def test_default_site_template_mechanics(self):
+        first_id = self.db.create_sb_site_template({
+            "name": "First",
+            "slug": "first",
+            "is_default": 1,
+        })
+        second_id = self.db.create_sb_site_template({
+            "name": "Second",
+            "slug": "second",
+            "is_default": 1,
+        })
+
+        default = self.db.get_sb_default_site_template()
+        self.assertEqual(default["name"], "Second")
+        self.assertEqual(self.db.get_sb_site_template(first_id)["is_default"], 0)
+
+        self.db.update_sb_site_template(first_id, {"is_default": 1})
+        default = self.db.get_sb_default_site_template()
+        self.assertEqual(default["name"], "First")
+        self.assertEqual(self.db.get_sb_site_template(second_id)["is_default"], 0)
+
+    def test_delete_site_template(self):
+        stid = self.db.create_sb_site_template({"name": "Gone", "slug": "gone"})
+        self.db.delete_sb_site_template(stid)
+        self.assertIsNone(self.db.get_sb_site_template(stid))
 
 
 class SBPromptOverridesDBTests(unittest.TestCase):
@@ -337,7 +396,7 @@ class SBAdminRouteTests(unittest.TestCase):
         self.assertIn(b"Site Builder Admin", resp.data)
 
     def test_admin_tabs(self):
-        for tab in ("templates", "themes", "prompts", "images"):
+        for tab in ("templates", "site-templates", "themes", "prompts", "images"):
             resp = self.client.get(f"/site-builder-admin?tab={tab}")
             self.assertEqual(resp.status_code, 200)
 
@@ -391,6 +450,43 @@ class SBAdminRouteTests(unittest.TestCase):
         theme = self.db.get_sb_themes()[0]
         self.assertEqual(theme["font_heading"], "Space Grotesk")
         self.assertEqual(theme["font_body"], "DM Sansscript")
+
+    def test_create_site_template_via_route(self):
+        theme_id = self.db.create_sb_theme({"name": "Warm Pro"})
+        header_id = self.db.create_sb_template({"name": "Header", "category": "navigation"})
+        shell_id = self.db.create_sb_template({"name": "Shell", "category": "page_shell"})
+
+        resp = self.client.post("/site-builder-admin/site-templates", data={
+            "name": "Premium Service",
+            "slug": "premium-service",
+            "description": "Premium local-service template kit",
+            "theme_id": str(theme_id),
+            "template_ids": [str(header_id), str(shell_id)],
+            "prompt_notes": "Use the shell exactly.",
+            "sort_order": "3",
+            "is_default": "1",
+            "is_active": "1",
+        }, follow_redirects=True)
+
+        self.assertEqual(resp.status_code, 200)
+        site_templates = self.db.get_sb_site_templates(active_only=False)
+        self.assertEqual(len(site_templates), 1)
+        self.assertEqual(site_templates[0]["name"], "Premium Service")
+        self.assertEqual(site_templates[0]["template_ids"], [header_id, shell_id])
+        self.assertEqual(site_templates[0]["theme_name"], "Warm Pro")
+
+    def test_site_template_api_get(self):
+        stid = self.db.create_sb_site_template({"name": "API Kit", "slug": "api-kit"})
+        resp = self.client.get(f"/api/site-builder-admin/site-templates/{stid}")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertEqual(data["name"], "API Kit")
+
+    def test_delete_site_template_via_route(self):
+        stid = self.db.create_sb_site_template({"name": "Delete Me", "slug": "delete-me"})
+        resp = self.client.post(f"/site-builder-admin/site-templates/{stid}/delete", follow_redirects=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(self.db.get_sb_site_template(stid))
 
     def test_save_prompt_override_via_route(self):
         resp = self.client.post("/site-builder-admin/prompts", data={

@@ -998,6 +998,25 @@ class WebDB:
             );
         """)
 
+        # ── Site Builder Admin: Full Site Templates ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sb_site_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                slug TEXT NOT NULL UNIQUE,
+                description TEXT DEFAULT '',
+                preview_image TEXT DEFAULT '',
+                theme_id INTEGER DEFAULT 0,
+                template_ids_json TEXT DEFAULT '[]',
+                prompt_notes TEXT DEFAULT '',
+                sort_order INTEGER DEFAULT 0,
+                is_default INTEGER DEFAULT 0,
+                is_active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+
         # ── Site Builder Admin: Prompt Overrides ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS sb_prompt_overrides (
@@ -5757,6 +5776,101 @@ class WebDB:
     def delete_sb_theme(self, theme_id):
         conn = self._conn()
         conn.execute("DELETE FROM sb_themes WHERE id = ?", (theme_id,))
+        conn.commit()
+        conn.close()
+
+    # ── Site Builder Admin: Full Site Templates ──
+
+    def _decorate_sb_site_template(self, item):
+        item = dict(item or {})
+        item["template_ids"] = self._safe_json_list(item.get("template_ids_json"))
+        item["template_count"] = len(item["template_ids"])
+        theme_id = int(item.get("theme_id") or 0)
+        item["theme"] = self.get_sb_theme(theme_id) if theme_id else None
+        item["theme_name"] = (item.get("theme") or {}).get("name") or ""
+        return item
+
+    def create_sb_site_template(self, data):
+        conn = self._conn()
+        if data.get("is_default"):
+            conn.execute("UPDATE sb_site_templates SET is_default = 0")
+        cur = conn.execute(
+            "INSERT INTO sb_site_templates (name, slug, description, preview_image, theme_id, "
+            "template_ids_json, prompt_notes, sort_order, is_default, is_active) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                data.get("name", ""),
+                data.get("slug", ""),
+                data.get("description", ""),
+                data.get("preview_image", ""),
+                int(data.get("theme_id") or 0),
+                json.dumps(list(data.get("template_ids") or [])),
+                data.get("prompt_notes", ""),
+                data.get("sort_order", 0),
+                data.get("is_default", 0),
+                data.get("is_active", 1),
+            ),
+        )
+        site_template_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return site_template_id
+
+    def get_sb_site_template(self, site_template_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM sb_site_templates WHERE id = ?", (site_template_id,)).fetchone()
+        conn.close()
+        return self._decorate_sb_site_template(row) if row else None
+
+    def get_sb_site_templates(self, active_only=True):
+        conn = self._conn()
+        sql = "SELECT * FROM sb_site_templates"
+        if active_only:
+            sql += " WHERE is_active = 1"
+        sql += " ORDER BY is_default DESC, sort_order, name"
+        rows = conn.execute(sql).fetchall()
+        conn.close()
+        return [self._decorate_sb_site_template(row) for row in rows]
+
+    def get_sb_default_site_template(self):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM sb_site_templates WHERE is_default = 1 AND is_active = 1 LIMIT 1"
+        ).fetchone()
+        conn.close()
+        return self._decorate_sb_site_template(row) if row else None
+
+    def update_sb_site_template(self, site_template_id, data):
+        conn = self._conn()
+        fields = []
+        params = []
+        for key in (
+            "name", "slug", "description", "preview_image", "theme_id",
+            "prompt_notes", "sort_order", "is_default", "is_active",
+        ):
+            if key in data:
+                value = data[key]
+                if key == "theme_id":
+                    value = int(value or 0)
+                fields.append(f"{key} = ?")
+                params.append(value)
+        if "template_ids" in data:
+            fields.append("template_ids_json = ?")
+            params.append(json.dumps(list(data.get("template_ids") or [])))
+        if not fields:
+            conn.close()
+            return
+        fields.append("updated_at = datetime('now')")
+        params.append(site_template_id)
+        if data.get("is_default"):
+            conn.execute("UPDATE sb_site_templates SET is_default = 0")
+        conn.execute(f"UPDATE sb_site_templates SET {', '.join(fields)} WHERE id = ?", params)
+        conn.commit()
+        conn.close()
+
+    def delete_sb_site_template(self, site_template_id):
+        conn = self._conn()
+        conn.execute("DELETE FROM sb_site_templates WHERE id = ?", (site_template_id,))
         conn.commit()
         conn.close()
 

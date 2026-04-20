@@ -179,6 +179,27 @@ class SiteBuilderLandingTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"No builds yet", resp.data)
 
+    def test_landing_shows_site_template_choices(self):
+        _login_client(self.client, self.app)
+        db = self.app.db
+        theme_id = db.create_sb_theme({"name": "Warm Service", "is_active": 1})
+        shell_id = db.create_sb_template({"name": "Lead Gen Shell", "category": "page_shell", "is_active": 1})
+        db.create_sb_site_template({
+            "name": "Premium Service Kit",
+            "slug": "premium-service-kit",
+            "description": "Built for higher-ticket local service brands.",
+            "theme_id": theme_id,
+            "template_ids": [shell_id],
+            "is_default": 1,
+            "is_active": 1,
+        })
+
+        resp = self.client.get("/client/site-builder")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Full Site Template", resp.data)
+        self.assertIn(b"Premium Service Kit", resp.data)
+
     def test_landing_shows_font_and_image_slot_controls(self):
         _login_client(self.client, self.app)
         resp = self.client.get("/client/site-builder")
@@ -1596,6 +1617,93 @@ class SiteBuilderGenerateWithIntakeTests(unittest.TestCase):
         self.assertEqual(intake["builder_templates"][0]["name"], "Main Header")
         self.assertEqual(len(intake["builder_prompt_overrides"]), 1)
         self.assertEqual(intake["builder_prompt_overrides"][0]["page_type"], "home")
+
+    @patch("webapp.client_portal._get_openai_api_key", return_value="test-key")
+    @patch("webapp.client_portal._pick_ai_model", return_value="gpt-4o-mini")
+    def test_generate_uses_selected_site_template_snapshot(self, mock_model, mock_key):
+        brand_id, _ = _login_client(self.client, self.app)
+        db = self.app.db
+
+        db.create_sb_theme({
+            "name": "Legacy Default",
+            "primary_color": "#111111",
+            "is_default": 1,
+            "is_active": 1,
+        })
+        db.create_sb_template({
+            "name": "Legacy Template",
+            "category": "section",
+            "html_content": "<section>Legacy</section>",
+            "is_active": 1,
+        })
+
+        selected_theme_id = db.create_sb_theme({
+            "name": "Template Theme",
+            "primary_color": "#2468ac",
+            "accent_color": "#ff6a00",
+            "font_heading": "Oswald",
+            "font_body": "Lato",
+            "is_active": 1,
+        })
+        selected_template_id = db.create_sb_template({
+            "name": "Template Shell",
+            "category": "page_shell",
+            "page_types": "all",
+            "html_content": "<div class='shell'>{{page_content}}</div>",
+            "description": "Deterministic page shell",
+            "is_active": 1,
+        })
+        site_template_id = db.create_sb_site_template({
+            "name": "Chosen Kit",
+            "slug": "chosen-kit",
+            "description": "Use the deterministic page shell.",
+            "theme_id": selected_theme_id,
+            "template_ids": [selected_template_id],
+            "prompt_notes": "Keep proof high on the page.",
+            "is_default": 1,
+            "is_active": 1,
+        })
+
+        fake_content = {
+            "title": "Test Page",
+            "content": "<p>Generated content</p>",
+            "excerpt": "Test excerpt",
+            "seo_title": "Test SEO Title",
+            "seo_description": "Test description",
+            "primary_keyword": "test keyword",
+            "secondary_keywords": "kw1, kw2",
+            "faq_items": [],
+        }
+        fake_assembled = {
+            "schemas": [],
+            "schema_html": "",
+            "full_html": "<p>Full HTML</p>",
+        }
+
+        with patch("webapp.site_builder.generate_page_content", return_value=fake_content), \
+             patch("webapp.site_builder.assemble_page", return_value=fake_assembled):
+
+            resp = self.client.post(
+                "/client/site-builder/generate",
+                data={
+                    "services": "Drain Cleaning",
+                    "areas": "Springfield",
+                    "site_template_id": str(site_template_id),
+                },
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["ok"])
+
+        build = self.app.db.get_site_build(data["build_id"])
+        intake = build.get("intake") or {}
+        self.assertEqual(intake["builder_site_template"]["name"], "Chosen Kit")
+        self.assertEqual(intake["builder_site_template"]["theme_name"], "Template Theme")
+        self.assertEqual(intake["builder_theme"]["name"], "Template Theme")
+        self.assertEqual(len(intake["builder_templates"]), 1)
+        self.assertEqual(intake["builder_templates"][0]["name"], "Template Shell")
 
 
 if __name__ == "__main__":

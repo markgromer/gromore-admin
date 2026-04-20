@@ -3330,6 +3330,7 @@ def create_app():
         tab = request.args.get("tab", "templates")
         templates = db.get_sb_templates(active_only=False)
         themes = db.get_sb_themes(active_only=False)
+        site_templates = db.get_sb_site_templates(active_only=False)
         overrides = db.get_sb_prompt_overrides()
         categories = db.get_sb_image_categories()
         images = db.get_sb_images(limit=60)
@@ -3349,6 +3350,7 @@ def create_app():
             tab=tab,
             templates=templates,
             themes=themes,
+            site_templates=site_templates,
             overrides=overrides,
             overrides_by_page=overrides_by_page,
             categories=categories,
@@ -3449,6 +3451,60 @@ def create_app():
         if not t:
             return jsonify({"error": "not found"}), 404
         return jsonify(t)
+
+    # -- Full Site Templates CRUD --
+
+    @app.route("/site-builder-admin/site-templates", methods=["POST"])
+    @login_required
+    def sb_admin_site_template_save():
+        from webapp.site_builder import _slugify
+
+        site_template_id = request.form.get("site_template_id")
+        template_ids = []
+        for raw_id in request.form.getlist("template_ids"):
+            try:
+                template_ids.append(int(raw_id))
+            except Exception:
+                continue
+        data = {
+            "name": request.form.get("name", "").strip(),
+            "slug": (request.form.get("slug", "").strip() or _slugify(request.form.get("name", ""))),
+            "description": request.form.get("description", ""),
+            "theme_id": int(request.form.get("theme_id") or 0),
+            "template_ids": template_ids,
+            "prompt_notes": request.form.get("prompt_notes", ""),
+            "sort_order": int(request.form.get("sort_order", 0)),
+            "is_default": 1 if request.form.get("is_default") else 0,
+            "is_active": 1 if request.form.get("is_active") else 0,
+        }
+        if not data["name"]:
+            flash("Site template name is required.", "danger")
+            return redirect(url_for("site_builder_admin", tab="site-templates"))
+        if not data["slug"]:
+            flash("Site template slug is required.", "danger")
+            return redirect(url_for("site_builder_admin", tab="site-templates"))
+        if site_template_id:
+            db.update_sb_site_template(int(site_template_id), data)
+            flash("Site template updated.", "success")
+        else:
+            db.create_sb_site_template(data)
+            flash("Site template created.", "success")
+        return redirect(url_for("site_builder_admin", tab="site-templates"))
+
+    @app.route("/site-builder-admin/site-templates/<int:tid>/delete", methods=["POST"])
+    @login_required
+    def sb_admin_site_template_delete(tid):
+        db.delete_sb_site_template(tid)
+        flash("Site template deleted.", "info")
+        return redirect(url_for("site_builder_admin", tab="site-templates"))
+
+    @app.route("/api/site-builder-admin/site-templates/<int:tid>")
+    @login_required
+    def sb_admin_site_template_get(tid):
+        site_template = db.get_sb_site_template(tid)
+        if not site_template:
+            return jsonify({"error": "not found"}), 404
+        return jsonify(site_template)
 
     # -- Prompt Overrides --
 

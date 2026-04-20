@@ -114,6 +114,7 @@ def build_brand_context(brand, intake=None, builder_theme=None, builder_template
 
     builder_theme = _normalize_builder_theme(intake.get("builder_theme"))
     builder_templates = _normalize_builder_templates(intake.get("builder_templates"))
+    builder_site_template = _normalize_builder_site_template(intake.get("builder_site_template"))
     builder_prompt_overrides = _normalize_builder_prompt_overrides(intake.get("builder_prompt_overrides"))
     reference_site_brief = _normalize_reference_site_brief(intake.get("reference_site_brief"))
     brand_colors = _extract_brand_hex_colors(brand)
@@ -169,6 +170,8 @@ def build_brand_context(brand, intake=None, builder_theme=None, builder_template
         "builder_theme": builder_theme,
         "builder_theme_name": (builder_theme.get("name") or "").strip(),
         "builder_templates": builder_templates,
+        "builder_site_template": builder_site_template,
+        "builder_site_template_name": (builder_site_template.get("name") or "").strip(),
         "builder_prompt_overrides": builder_prompt_overrides,
         "reference_url": str(intake.get("reference_url") or "").strip(),
         "reference_mode": str(intake.get("reference_mode") or reference_site_brief.get("mode") or "vibe").strip(),
@@ -305,6 +308,29 @@ def _normalize_builder_templates(raw_templates):
             "sort_order": int(item.get("sort_order") or 0),
         })
     normalized.sort(key=lambda item: (item.get("sort_order", 0), item.get("name", "")))
+    return normalized
+
+
+def _normalize_builder_site_template(raw_site_template):
+    if not isinstance(raw_site_template, dict):
+        return {}
+
+    normalized = {}
+    for key in (
+        "id",
+        "name",
+        "slug",
+        "description",
+        "preview_image",
+        "prompt_notes",
+        "theme_id",
+    ):
+        value = raw_site_template.get(key)
+        normalized[key] = str(value).strip() if isinstance(value, str) else value
+    normalized["template_ids"] = [
+        int(item) for item in (raw_site_template.get("template_ids") or [])
+        if str(item or "").strip().isdigit()
+    ]
     return normalized
 
 
@@ -560,16 +586,27 @@ def _template_library_block(page_spec, ctx):
         return ""
 
     parts = ["APPROVED TEMPLATE LIBRARY:"]
+    site_template = ctx.get("builder_site_template") or {}
+    if site_template.get("name"):
+        parts.append(f"- Selected site template: {site_template['name']}")
+    if site_template.get("description"):
+        parts.append(f"- Site template intent: {site_template['description']}")
+    if site_template.get("prompt_notes"):
+        parts.append(f"- Site template notes: {site_template['prompt_notes']}")
     header_template = _select_builder_template(matched, page_type, "navigation", "nav", "header")
     footer_template = _select_builder_template(matched, page_type, "footer")
+    page_shell_template = _select_builder_template(matched, page_type, "page_shell", "page-shell", "shell")
     if header_template:
         parts.append(f"- Shared header/navigation template: {header_template.get('name') or 'Unnamed header'}")
     if footer_template:
         parts.append(f"- Shared footer template: {footer_template.get('name') or 'Unnamed footer'}")
+    if page_shell_template:
+        shell_desc = page_shell_template.get("description") or _truncate_html_for_prompt(page_shell_template.get("html_content"), 220)
+        parts.append(f"- Required page shell: {page_shell_template.get('name') or 'Unnamed shell'} - fill this shell for the final page structure. {shell_desc}")
 
     section_templates = [
         template for template in matched
-        if template is not header_template and template is not footer_template
+        if template is not header_template and template is not footer_template and template is not page_shell_template
     ]
     if not section_templates:
         return "\n".join(parts) + "\n"
@@ -620,20 +657,42 @@ def _template_token_map(page_spec, brand_ctx, content=None):
         "website": brand_ctx.get("website") or "",
         "tagline": brand_ctx.get("tagline") or "",
         "page_title": content.get("title") or page_spec.get("label") or "",
+        "page_excerpt": content.get("excerpt") or "",
+        "page_content": content.get("content") or "",
+        "page_body": content.get("content") or "",
         "page_slug": page_spec.get("slug") or "",
         "service_name": page_context.get("service_name") or "",
         "area_name": page_context.get("area_name") or "",
     }
 
 
-def _render_builder_template_html(template, page_spec, brand_ctx, content=None):
+def _render_builder_template_html(template, page_spec, brand_ctx, content=None, extra_tokens=None):
     html = str(template.get("html_content") or "")
     if not html:
         return ""
 
     rendered = html
-    for key, value in _template_token_map(page_spec, brand_ctx, content).items():
+    token_map = _template_token_map(page_spec, brand_ctx, content)
+    if isinstance(extra_tokens, dict):
+        token_map.update(extra_tokens)
+    for key, value in token_map.items():
         rendered = rendered.replace(f"{{{{{key}}}}}", str(value or ""))
+    return rendered.strip()
+
+
+def _render_page_shell_html(template, page_spec, brand_ctx, content, body_html):
+    rendered = _render_builder_template_html(
+        template,
+        page_spec,
+        brand_ctx,
+        content,
+        extra_tokens={
+            "page_content": body_html,
+            "page_body": body_html,
+        },
+    )
+    if "{{page_content}}" not in str(template.get("html_content") or "") and "{{page_body}}" not in str(template.get("html_content") or ""):
+        rendered = rendered + "\n" + str(body_html or "")
     return rendered.strip()
 
 
@@ -2768,11 +2827,17 @@ def assemble_page(page_spec, brand_ctx, content):
     template_style = ""
     header_html = ""
     footer_html = ""
+    page_shell_html = ""
+    templates = brand_ctx.get("builder_templates") or []
+    page_shell_template = _select_builder_template(templates, page_type, "page_shell", "page-shell", "shell")
+    template_style = _template_style_tag(None, None, page_shell_template)
+    if page_shell_template and body_html:
+        page_shell_html = _render_page_shell_html(page_shell_template, page_spec, brand_ctx, content, body_html)
+        body_html = page_shell_html
     if page_type != "landing_page":
-        templates = brand_ctx.get("builder_templates") or []
         header_template = _select_builder_template(templates, page_type, "navigation", "nav", "header")
         footer_template = _select_builder_template(templates, page_type, "footer")
-        template_style = _template_style_tag(header_template, footer_template)
+        template_style = _template_style_tag(header_template, footer_template, page_shell_template)
         if header_template:
             header_html = _render_builder_template_html(header_template, page_spec, brand_ctx, content)
         if footer_template:

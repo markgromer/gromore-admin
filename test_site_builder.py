@@ -218,6 +218,36 @@ class PromptTests(unittest.TestCase):
         self.assertIn("Proof Strip", user_msg)
         self.assertIn("Feature the financing CTA above the fold.", user_msg)
 
+    def test_prompt_mentions_selected_site_template_and_page_shell(self):
+        ctx = build_brand_context(
+            _BRAND,
+            intake={
+                "builder_site_template": {
+                    "name": "Premium Service Kit",
+                    "description": "A higher-ticket trust-heavy site kit.",
+                    "prompt_notes": "Keep social proof above the first CTA.",
+                },
+                "builder_templates": [
+                    {
+                        "name": "Service Shell",
+                        "category": "page_shell",
+                        "page_types": "home,about",
+                        "html_content": "<div class='page-shell'>{{page_content}}</div>",
+                        "description": "Deterministic layout shell with hero, trust band, and CTA blocks.",
+                        "sort_order": 1,
+                    }
+                ],
+            },
+        )
+        home = next(p for p in build_site_blueprint(ctx) if p["page_type"] == "home")
+
+        _, user_msg = build_page_prompt(home, ctx)
+
+        self.assertIn("Selected site template: Premium Service Kit", user_msg)
+        self.assertIn("Site template intent: A higher-ticket trust-heavy site kit.", user_msg)
+        self.assertIn("Site template notes: Keep social proof above the first CTA.", user_msg)
+        self.assertIn("Required page shell: Service Shell", user_msg)
+
     def test_brand_context_uses_builder_theme_as_fallback(self):
         ctx = build_brand_context(
             {"display_name": "Fallback Plumbing"},
@@ -554,6 +584,30 @@ class AssemblyTests(unittest.TestCase):
 
         self.assertNotIn("<header>", result["full_html"])
         self.assertNotIn("<footer>", result["full_html"])
+        self.assertIn("<main><p>Landing</p></main>", result["full_html"])
+
+    def test_landing_page_uses_page_shell_template_and_css(self):
+        ctx = build_brand_context(
+            _BRAND,
+            intake={
+                "builder_templates": [
+                    {
+                        "name": "Landing Shell",
+                        "category": "page_shell",
+                        "page_types": "landing_page",
+                        "html_content": "<div class=\"lp-shell\"><section class=\"lp-shell-inner\">{{page_content}}</section></div>",
+                        "css_content": ".lp-shell{padding:40px}.lp-shell-inner{max-width:880px;margin:0 auto}",
+                    }
+                ]
+            },
+        )
+        page_spec = {"page_type": "landing_page", "slug": "lp/test", "schema_types": []}
+        content = {"title": "Offer", "content": "<main><p>Landing</p></main>", "faq_items": [], "schema_hints": {}}
+
+        result = assemble_page(page_spec, ctx, content)
+
+        self.assertIn(".lp-shell{padding:40px}", result["full_html"])
+        self.assertIn("<div class=\"lp-shell\">", result["full_html"])
         self.assertIn("<main><p>Landing</p></main>", result["full_html"])
 
     def test_assemble_injects_reference_images_when_content_has_none(self):
