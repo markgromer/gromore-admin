@@ -4277,14 +4277,16 @@ class WebDB:
     def save_heatmap_scan(self, brand_id, keyword, grid_size, radius_miles,
                           center_lat, center_lng, results_json, avg_rank):
         conn = self._conn()
-        conn.execute(
+        cursor = conn.execute(
             """INSERT INTO heatmap_scans
                (brand_id, keyword, grid_size, radius_miles, center_lat, center_lng, results_json, avg_rank)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (brand_id, keyword, grid_size, radius_miles, center_lat, center_lng, results_json, avg_rank),
         )
         conn.commit()
+        scan_id = cursor.lastrowid
         conn.close()
+        return scan_id
 
     def get_heatmap_scans(self, brand_id, limit=20):
         conn = self._conn()

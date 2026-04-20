@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { useAuthStore } from './stores/authStore'
 import Shell from './components/layout/Shell'
 import Dashboard from './pages/dashboard/Dashboard'
+import Heatmap from './pages/heatmap/Heatmap'
 import Login from './pages/login/Login'
 import PlaceholderPage from './pages/PlaceholderPage'
 import LegacyRedirectPage from './pages/LegacyRedirectPage'
@@ -58,7 +59,7 @@ export default function App() {
         <Route path="google-business-profile" element={<PlaceholderPage title="Google Profile" />} />
         <Route path="competitors" element={<PlaceholderPage title="Competitor Intel" />} />
         <Route path="kpis" element={<PlaceholderPage title="KPIs" />} />
-        <Route path="heatmap" element={<PlaceholderPage title="Rank Heatmap" />} />
+        <Route path="heatmap" element={<Heatmap />} />
         <Route path="settings" element={<PlaceholderPage title="Connections" />} />
         <Route path="feedback" element={<PlaceholderPage title="Feedback" />} />
         <Route path="help" element={<PlaceholderPage title="Help" />} />

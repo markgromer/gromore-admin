@@ -430,6 +430,16 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertIn(b"Sweep and Go CRM", help_response.data)
         self.assertIn(b"GoHighLevel CRM", help_response.data)
 
+    def test_connections_page_includes_google_maps_and_place_id_setup(self):
+        response = self.client.get("/client/settings")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Google Maps", response.data)
+        self.assertIn(b"Google Maps API Key", response.data)
+        self.assertIn(b"Test Google Maps Key", response.data)
+        self.assertIn(b"Find Place ID", response.data)
+        self.assertIn(b"#google-maps", response.data)
+
     def test_automations_page_shows_appointment_reminder_reports(self):
         with self.app.app_context():
             self.app.db.record_appointment_reminder_run(

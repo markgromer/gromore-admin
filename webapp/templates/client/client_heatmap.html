@@ -38,10 +38,17 @@
     }
 
     .legend-item {
-        display: flex; align-items: center; gap: 6px; font-size: .82rem; color: #6b7280;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: .82rem;
+        color: #6b7280;
     }
     .legend-dot {
-        width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0;
+        width: 14px;
+        height: 14px;
+        border-radius: 4px;
+        flex-shrink: 0;
     }
 
     .scan-history-item {
@@ -52,7 +59,8 @@
         cursor: pointer;
         transition: background .15s, border-color .15s;
     }
-    .scan-history-item:hover, .scan-history-item.active {
+    .scan-history-item:hover,
+    .scan-history-item.active {
         background: #eef2ff;
         border-color: #a5b4fc;
     }
@@ -80,6 +88,53 @@
         font-size: .88rem;
         font-weight: 600;
     }
+
+    .scan-control-card {
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1rem;
+    }
+
+    .scan-meta-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        padding: .55rem 0;
+        border-bottom: 1px solid #e5e7eb;
+        font-size: .84rem;
+    }
+
+    .scan-meta-row:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+    }
+
+    .scan-meta-row strong {
+        color: #0f172a;
+        font-weight: 700;
+        text-align: right;
+    }
+
+    .map-meta {
+        font-size: .82rem;
+        color: #64748b;
+    }
+
+    #rankMap {
+        width: 100%;
+        height: 520px;
+        background: #e5e7eb;
+    }
+
+    #scanStateNote.is-dirty {
+        color: #b45309 !important;
+    }
+
+    #scanStateNote.is-fresh {
+        color: #2563eb !important;
+    }
 </style>
 {% endblock %}
 
@@ -97,24 +152,37 @@
     .hm-header::before {
         content: '';
         position: absolute;
-        top: -30%; right: -5%;
-        width: 250px; height: 250px;
+        top: -30%;
+        right: -5%;
+        width: 250px;
+        height: 250px;
         background: radial-gradient(circle, rgba(129,140,248,.2) 0%, transparent 70%);
         border-radius: 50%;
     }
-    .hm-header h3 { font-weight: 800; font-size: 1.35rem; margin-bottom: .15rem; position: relative; color: #fff !important; }
-    .hm-header p { opacity: .7; font-size: .88rem; margin: 0; position: relative; }
+    .hm-header h3 {
+        font-weight: 800;
+        font-size: 1.35rem;
+        margin-bottom: .15rem;
+        position: relative;
+        color: #fff !important;
+    }
+    .hm-header p {
+        opacity: .7;
+        font-size: .88rem;
+        margin: 0;
+        position: relative;
+    }
 </style>
+
 <div class="hm-header">
     <h3><i class="bi bi-geo-alt me-2"></i>Local Rank Heatmap</h3>
-    <p>See where you rank in local search across your service area, just like Local Falcon.</p>
+    <p>Drag the scan center, set your grid, and run a map-first local visibility scan across your service area.</p>
 </div>
 
 {% set has_location = brand.business_lat and brand.business_lng and brand.business_lat != 0 %}
 {% set has_api_key = brand.google_maps_api_key %}
 
 {% if not has_api_key %}
-<!-- No API Key -->
 <div class="setup-card text-center">
     <i class="bi bi-key" style="font-size: 2.5rem; color: #6366f1;"></i>
     <h5 class="mt-3">Google Maps API Key Required</h5>
@@ -129,13 +197,12 @@
 </div>
 {% else %}
 
-<!-- Location Setup -->
 {% if not has_location %}
 <div class="setup-card mb-4">
     <div class="row align-items-center">
         <div class="col-md-7">
             <h5 class="mb-2"><i class="bi bi-crosshair me-2"></i>Set Your Business Location</h5>
-            <p class="text-muted mb-3">Enter your business address so we know where to center the grid.</p>
+            <p class="text-muted mb-3">Enter your business address so we know where to start the scan center.</p>
             <div class="input-group" style="max-width: 500px;">
                 <input type="text" class="form-control" id="addressInput"
                        placeholder="123 Main St, Phoenix, AZ 85001" autocomplete="off">
@@ -152,7 +219,6 @@
 </div>
 {% endif %}
 
-<!-- Place ID Setup -->
 {% if has_api_key and has_location %}
 <div class="card mb-4" id="placeIdCard" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);{% if brand.google_place_id %} border-left: 4px solid #22c55e !important;{% else %} border-left: 4px solid #f59e0b !important;{% endif %}">
     <div class="card-body p-3 p-md-4">
@@ -170,7 +236,7 @@
             <i class="bi bi-exclamation-triangle text-warning" style="font-size:1.1rem;"></i>
             <span class="fw-medium" style="font-size:.9rem;">Link your Google Business listing for accurate ranking</span>
         </div>
-        <p class="text-muted mb-3" style="font-size:.85rem;">Without a Place ID, the heatmap can't reliably match your business in search results. Search for your business name below and select the correct listing.</p>
+        <p class="text-muted mb-3" style="font-size:.85rem;">Without a Place ID, the heatmap can only try to match by business name. Search for your business below and select the right listing for cleaner results.</p>
         <div id="placeIdSearch">
         {% endif %}
             <div class="row g-2 align-items-end">
@@ -204,69 +270,118 @@
 </div>
 {% endif %}
 
-<!-- Scan Form -->
 {% if has_location %}
 <div class="card mb-4" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
     <div class="card-body p-3 p-md-4">
-        <div class="row g-3 align-items-end">
-            <div class="col-md-5">
-                <label class="form-label fw-medium mb-1" style="font-size:.88rem;">Keyword</label>
-                <input type="text" class="form-control" id="keywordInput"
-                       placeholder="e.g. pooper scooper, plumber, lawn care" autocomplete="off"
-                       {% if active_scan %}value="{{ active_scan.keyword }}"{% endif %}>
-                <small class="text-muted" style="font-size:.78rem;">Use service keywords (what customers search). Skip "near me" - we already use your location.</small>
+        <div class="row g-4 align-items-start">
+            <div class="col-xl-8">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-5">
+                        <label class="form-label fw-medium mb-1" style="font-size:.88rem;">Search term</label>
+                        <input type="text" class="form-control" id="keywordInput"
+                               placeholder="e.g. pooper scooper, plumber, lawn care" autocomplete="off"
+                               {% if active_scan %}value="{{ active_scan.keyword }}"{% endif %}>
+                        <small class="text-muted" style="font-size:.78rem;">Use the service term customers search for. Skip "near me" because the scan already uses the live map center.</small>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-medium mb-1" style="font-size:.88rem;">Radius (miles)</label>
+                        <select class="form-select" id="radiusSelect">
+                            <option value="1" {% if active_scan and active_scan.radius_miles == 1 %}selected{% endif %}>1 mi</option>
+                            <option value="3" {% if active_scan and active_scan.radius_miles == 3 %}selected{% endif %}>3 mi</option>
+                            <option value="5" {% if not active_scan or active_scan.radius_miles == 5 %}selected{% endif %}>5 mi</option>
+                            <option value="10" {% if active_scan and active_scan.radius_miles == 10 %}selected{% endif %}>10 mi</option>
+                            <option value="15" {% if active_scan and active_scan.radius_miles == 15 %}selected{% endif %}>15 mi</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-medium mb-1" style="font-size:.88rem;">Grid</label>
+                        <select class="form-select" id="gridSelect">
+                            <option value="3" {% if active_scan and active_scan.grid_size == 3 %}selected{% endif %}>3 x 3</option>
+                            <option value="5" {% if not active_scan or active_scan.grid_size == 5 %}selected{% endif %}>5 x 5</option>
+                            <option value="7" {% if active_scan and active_scan.grid_size == 7 %}selected{% endif %}>7 x 7</option>
+                            <option value="9" {% if active_scan and active_scan.grid_size == 9 %}selected{% endif %}>9 x 9</option>
+                            {% if active_scan and active_scan.grid_size not in [3, 5, 7, 9] %}
+                            <option value="{{ active_scan.grid_size }}" selected>{{ active_scan.grid_size }} x {{ active_scan.grid_size }} (legacy)</option>
+                            {% endif %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <button class="btn btn-primary w-100" id="scanBtn" type="button">
+                            <span id="scanSpinner" class="spinner-border spinner-border-sm me-1" role="status"></span>
+                            <i class="bi bi-radar me-1" id="scanIcon"></i> Run Heatmap
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mt-3 d-flex flex-wrap gap-2 align-items-center">
+                    <span class="stat-pill" style="background:#eef2ff; color:#3730a3;">
+                        Scan center: <span id="scanCenterDisplay">{{ "%.4f, %.4f"|format(active_scan.center_lat if active_scan else brand.business_lat, active_scan.center_lng if active_scan else brand.business_lng) }}</span>
+                    </span>
+                    <span class="stat-pill" style="background:#eff6ff; color:#1d4ed8;">
+                        Distance from business: <span id="scanDistanceDisplay">0.0 mi</span>
+                    </span>
+                </div>
+
+                <div class="mt-2">
+                    <small id="scanStateNote" class="text-muted">
+                        <i class="bi bi-cursor-fill me-1"></i>Drag the pin or click the map to move the scan center before you run the search.
+                    </small>
+                </div>
+
+                <div class="mt-2">
+                    <small class="text-muted">
+                        <i class="bi bi-building me-1"></i>
+                        Stored business location: {{ "%.4f"|format(brand.business_lat) }}, {{ "%.4f"|format(brand.business_lng) }}
+                        {% if brand.service_area %} ({{ brand.service_area }}){% endif %}
+                        <a href="#" id="changeLocationLink" style="margin-left:8px;">Update business location</a>
+                    </small>
+                </div>
             </div>
-            <div class="col-md-2">
-                <label class="form-label fw-medium mb-1" style="font-size:.88rem;">Radius (miles)</label>
-                <select class="form-select" id="radiusSelect">
-                    <option value="1" {% if active_scan and active_scan.radius_miles == 1 %}selected{% endif %}>1 mi</option>
-                    <option value="3" {% if active_scan and active_scan.radius_miles == 3 %}selected{% endif %}>3 mi</option>
-                    <option value="5" {% if not active_scan or active_scan.radius_miles == 5 %}selected{% endif %}>5 mi</option>
-                    <option value="10" {% if active_scan and active_scan.radius_miles == 10 %}selected{% endif %}>10 mi</option>
-                    <option value="15" {% if active_scan and active_scan.radius_miles == 15 %}selected{% endif %}>15 mi</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label fw-medium mb-1" style="font-size:.88rem;">Grid</label>
-                <select class="form-select" id="gridSelect">
-                    <option value="4">4 x 4</option>
-                    <option value="5">5 x 5</option>
-                    <option value="6" selected>6 x 6</option>
-                    <option value="7">7 x 7</option>
-                    <option value="8">8 x 8</option>
-                </select>
-            </div>
-            <div class="col-md-3">
-                <button class="btn btn-primary w-100" id="scanBtn" type="button"
-                        {% if not has_location %}disabled title="Set your business location first"{% endif %}>
-                    <span id="scanSpinner" class="spinner-border spinner-border-sm me-1" role="status"></span>
-                    <i class="bi bi-radar me-1" id="scanIcon"></i> Scan Rankings
-                </button>
+
+            <div class="col-xl-4">
+                <div class="scan-control-card h-100">
+                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                        <div>
+                            <div class="fw-semibold">Map-first scan</div>
+                            <div class="map-meta">The draggable center pin changes this scan only. Your business marker stays fixed so you can scan away from the listing when needed.</div>
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" id="resetCenterBtn">Use business location</button>
+                    </div>
+
+                    <div class="scan-meta-row">
+                        <span>Business marker</span>
+                        <strong id="businessLocationDisplay">{{ "%.4f, %.4f"|format(brand.business_lat, brand.business_lng) }}</strong>
+                    </div>
+                    <div class="scan-meta-row">
+                        <span>Grid preview</span>
+                        <strong><span id="mapGridLabel">{{ active_scan.grid_size if active_scan else 5 }}</span> x <span id="mapGridLabelMirror">{{ active_scan.grid_size if active_scan else 5 }}</span></strong>
+                    </div>
+                    <div class="scan-meta-row">
+                        <span>Radius</span>
+                        <strong><span id="mapRadiusLabel">{{ active_scan.radius_miles if active_scan else 5 }}</span> mi</strong>
+                    </div>
+                    <div class="scan-meta-row">
+                        <span>Grid points</span>
+                        <strong id="gridPointCount">0</strong>
+                    </div>
+                    <div class="scan-meta-row">
+                        <span>Estimated Places calls</span>
+                        <strong id="apiCallEstimate">0</strong>
+                    </div>
+
+                    <div class="map-meta mt-3 mb-3">Odd grids keep a true center point, so they behave better when you drag the pin around the map.</div>
+
+                    <button class="btn btn-sm btn-outline-secondary w-100" type="button" id="testApiBtn">
+                        <i class="bi bi-tools me-1"></i> Test API Key
+                    </button>
+                    <div id="apiTestResult" class="mt-2" style="font-size:.85rem;"></div>
+                </div>
             </div>
         </div>
-        {% if has_location %}
-        <div class="mt-2">
-            <small class="text-muted">
-                <i class="bi bi-crosshair me-1"></i>
-                Center: {{ "%.4f"|format(brand.business_lat) }}, {{ "%.4f"|format(brand.business_lng) }}
-                {% if brand.service_area %} ({{ brand.service_area }}){% endif %}
-                <a href="#" id="changeLocationLink" style="margin-left:8px;">Change location</a>
-            </small>
-        </div>
-        {% endif %}
     </div>
 </div>
+{% endif %}
 
-<!-- API Diagnostics -->
-<div class="mb-3">
-    <button class="btn btn-sm btn-outline-secondary" type="button" id="testApiBtn">
-        <i class="bi bi-tools me-1"></i> Test API Key
-    </button>
-    <span id="apiTestResult" class="ms-2" style="font-size:.85rem;"></span>
-</div>
-{% endif %}{# end has_location #}
-
-<!-- Location change form (hidden by default when location exists) -->
 <div class="card mb-4 {% if has_location %}d-none{% endif %}" id="locationChangeCard"
      style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
     <div class="card-body p-3 p-md-4">
@@ -282,10 +397,25 @@
     </div>
 </div>
 
-<!-- Results -->
+{% if has_location %}
 <div class="row">
     <div class="col-lg-8 mb-4">
-        <!-- Grid Card -->
+        <div class="card mb-3" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05); overflow:hidden;">
+            <div class="card-body p-3 p-md-4 pb-0">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+                    <div>
+                        <h6 class="mb-1">Move the scan center</h6>
+                        <small class="text-muted">Drag the pin or click anywhere on the map. The preview updates before you run the scan.</small>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="stat-pill" style="background:#eef2ff; color:#3730a3;">Grid: <span id="mapGridSummary">{{ active_scan.grid_size if active_scan else 5 }}</span> x <span id="mapGridSummaryMirror">{{ active_scan.grid_size if active_scan else 5 }}</span></span>
+                        <span class="stat-pill" style="background:#eff6ff; color:#1d4ed8;">Radius: <span id="mapRadiusSummary">{{ active_scan.radius_miles if active_scan else 5 }}</span> mi</span>
+                    </div>
+                </div>
+            </div>
+            <div id="rankMap"></div>
+        </div>
+
         <div class="card mb-3" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
             <div class="card-body p-3 p-md-4">
                 <div id="gridContainer">
@@ -298,7 +428,7 @@
                     <div class="text-center py-5">
                         <i class="bi bi-grid-3x3" style="font-size: 3rem; color: #d1d5db;"></i>
                         <h5 class="mt-3 text-muted">No scan yet</h5>
-                        <p class="text-muted">Enter a keyword and hit Scan to see your local rankings.</p>
+                        <p class="text-muted">Set a search term, move the scan center if needed, and run the heatmap.</p>
                     </div>
                     {% endif %}
                 </div>
@@ -331,24 +461,17 @@
                 <div id="statsBar" class="d-flex flex-wrap gap-2 justify-content-center mt-3" style="display:none !important;"></div>
                 {% endif %}
 
-                <!-- Legend -->
                 <div class="d-flex flex-wrap gap-3 justify-content-center mt-3">
                     <div class="legend-item"><div class="legend-dot" style="background:#22c55e;"></div> #1-3</div>
                     <div class="legend-item"><div class="legend-dot" style="background:#f59e0b;"></div> #4-10</div>
                     <div class="legend-item"><div class="legend-dot" style="background:#ef4444;"></div> #11-20</div>
                     <div class="legend-item"><div class="legend-dot" style="background:#d1d5db;"></div> Not found</div>
-                    <div class="legend-item"><div class="legend-dot" style="background:#fff; border:2px solid #4f46e5;"></div> Your location</div>
+                    <div class="legend-item"><div class="legend-dot" style="background:#fff; border:2px solid #4f46e5;"></div> Closest cell to scan center</div>
                 </div>
             </div>
         </div>
-
-        <!-- Map Card -->
-        <div class="card" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05); overflow:hidden;">
-            <div id="rankMap" style="width:100%; height:450px; background:#e5e7eb;"></div>
-        </div>
     </div>
 
-    <!-- Scan History -->
     <div class="col-lg-4 mb-4">
         <div class="card" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
             <div class="card-body p-3 p-md-4">
@@ -363,10 +486,9 @@
                 <div id="scanHistory">
                     {% if scans %}
                     {% for scan in scans %}
-                    <div class="scan-history-item mb-2 {% if loop.first %}active{% endif %}"
-                         data-scan-id="{{ scan.id }}">
+                    <div class="scan-history-item mb-2 {% if loop.first %}active{% endif %}" data-scan-id="{{ scan.id }}">
                         <div class="d-flex justify-content-between align-items-start">
-                            <div style="cursor:pointer; flex:1;" onclick="loadScan({{ scan.id }})">
+                            <div style="cursor:pointer; flex:1;">
                                 <div class="fw-semibold" style="font-size:.9rem;">{{ scan.keyword }}</div>
                                 <div class="d-flex justify-content-between align-items-center mt-1">
                                     <small class="text-muted">{{ scan.radius_miles }}mi | {{ scan.grid_size }}x{{ scan.grid_size }}</small>
@@ -392,16 +514,15 @@
             </div>
         </div>
 
-        <!-- How it works -->
         <div class="card mt-3" style="border:none; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.05);">
             <div class="card-body p-3 p-md-4">
                 <h6 class="mb-2"><i class="bi bi-info-circle me-1"></i> How It Works</h6>
                 <ul class="mb-0" style="font-size: .85rem; color: #4b5563; padding-left: 1.2rem;">
-                    <li>A grid of points is placed around your business location</li>
-                    <li>For each point, we search Google for your keyword</li>
-                    <li>Your ranking at each point is shown on the grid</li>
-                    <li>Green = top 3, Yellow = 4-10, Red = 11-20, Gray = not found</li>
-                    <li>The purple-bordered cell marks your business location</li>
+                    <li>Set the keyword, radius, and odd grid size you want to test</li>
+                    <li>Drag the scan center pin or click the map to move the grid</li>
+                    <li>We query Google around every grid point and match your listing by Place ID first when available</li>
+                    <li>Green means top 3, yellow means page 1, red means lower visibility, and gray means not returned</li>
+                    <li>The highlighted cell is the grid point closest to the live scan center</li>
                 </ul>
             </div>
         </div>
@@ -409,60 +530,293 @@
 </div>
 {% endif %}
 
+{% endif %}
+
 <script>
 var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-var mapApiKey = '{{ brand.google_maps_api_key|default("", true) }}';
-var centerLat = {{ brand.business_lat or 0 }};
-var centerLng = {{ brand.business_lng or 0 }};
+var mapApiKey = {{ brand.google_maps_api_key|default('', true)|tojson }};
+var businessLat = {{ brand.business_lat or 0 }};
+var businessLng = {{ brand.business_lng or 0 }};
+var centerLat = {% if active_scan %}{{ active_scan.center_lat or brand.business_lat or 0 }}{% else %}{{ brand.business_lat or 0 }}{% endif %};
+var centerLng = {% if active_scan %}{{ active_scan.center_lng or brand.business_lng or 0 }}{% else %}{{ brand.business_lng or 0 }}{% endif %};
 var gmap = null;
-var mapMarkers = [];
 var mapsLoaded = false;
-var placesService = null;
-var brandPlaceId = '{{ brand.google_place_id|default("", true) }}';
-var brandName = '{{ brand.display_name|default("", true) }}';
+var resultMarkers = [];
+var previewPointOverlays = [];
+var previewLineOverlays = [];
+var radiusCircle = null;
+var businessMarker = null;
+var scanCenterMarker = null;
+var currentRadiusMiles = {% if active_scan %}{{ active_scan.radius_miles or 5 }}{% else %}5{% endif %};
+var currentGridSize = {% if active_scan %}{{ active_scan.grid_size or 5 }}{% else %}5{% endif %};
+var currentResults = {% if active_scan and active_scan.results %}{{ active_scan.results | tojson }}{% else %}[]{% endif %};
+var currentKeyword = {% if active_scan %}{{ active_scan.keyword|tojson }}{% else %}''{% endif %};
 
-// Load Google Maps JS API
+var MILES_TO_KM = 1.60934;
+var KM_PER_DEG_LAT = 111.32;
+
 function loadMapsApi() {
-    if (mapsLoaded || !mapApiKey) return;
+    if (mapsLoaded || !mapApiKey || !document.getElementById('rankMap')) return;
     mapsLoaded = true;
-    var s = document.createElement('script');
-    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + mapApiKey + '&libraries=places&callback=initMap&loading=async';
-    s.async = true;
-    s.defer = true;
-    document.head.appendChild(s);
+    var script = document.createElement('script');
+    script.src = 'https://maps.googleapis.com/maps/api/js?key=' + mapApiKey + '&callback=initMap&loading=async';
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
 }
 
-function initMap() {
-    var mapEl = document.getElementById('rankMap');
-    if (!mapEl || !centerLat) return;
-    gmap = new google.maps.Map(mapEl, {
-        center: {lat: centerLat, lng: centerLng},
-        zoom: 10,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: true,
+function formatCoordinates(lat, lng) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return 'Not set';
+    return lat.toFixed(4) + ', ' + lng.toFixed(4);
+}
+
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function computeDistanceMiles(lat1, lng1, lat2, lng2) {
+    if (!Number.isFinite(lat1) || !Number.isFinite(lng1) || !Number.isFinite(lat2) || !Number.isFinite(lng2)) {
+        return 0;
+    }
+    var toRad = Math.PI / 180;
+    var dLat = (lat2 - lat1) * toRad;
+    var dLng = (lng2 - lng1) * toRad;
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return 3958.8 * c;
+}
+
+function ensureSelectOption(selectId, value, label) {
+    var select = document.getElementById(selectId);
+    if (!select || value === null || value === undefined || value === '') return;
+    var normalized = String(value);
+    var existing = Array.from(select.options).find(function(option) {
+        return option.value === normalized;
     });
-    placesService = new google.maps.places.PlacesService(gmap);
-    // Business location marker
-    new google.maps.Marker({
-        position: {lat: centerLat, lng: centerLng},
+    if (!existing) {
+        existing = document.createElement('option');
+        existing.value = normalized;
+        existing.textContent = label || normalized;
+        select.appendChild(existing);
+    }
+    select.value = normalized;
+}
+
+function setScanStateNote(message, stateClass) {
+    var note = document.getElementById('scanStateNote');
+    if (!note) return;
+    note.classList.remove('is-dirty', 'is-fresh');
+    if (stateClass) note.classList.add(stateClass);
+    note.innerHTML = message;
+}
+
+function markResultsDirty() {
+    if (!currentResults.length) return;
+    setScanStateNote('<i class="bi bi-exclamation-circle me-1"></i>Scan settings changed. Run the heatmap again to refresh the results for this center.', 'is-dirty');
+}
+
+function markResultsFresh(keyword) {
+    if (!keyword) {
+        setScanStateNote('<i class="bi bi-cursor-fill me-1"></i>Drag the pin or click the map to move the scan center before you run the search.', '');
+        return;
+    }
+    setScanStateNote('<i class="bi bi-check-circle me-1"></i>Showing heatmap results for <strong>' + escapeHtml(keyword) + '</strong> at the current scan center.', 'is-fresh');
+}
+
+function getSelectedRadiusMiles() {
+    var select = document.getElementById('radiusSelect');
+    return select ? parseFloat(select.value || currentRadiusMiles || 5) : currentRadiusMiles;
+}
+
+function getSelectedGridSize() {
+    var select = document.getElementById('gridSelect');
+    return select ? parseInt(select.value || currentGridSize || 5, 10) : currentGridSize;
+}
+
+function updateScanMeta(gridPointCount) {
+    var scanCenterDisplay = document.getElementById('scanCenterDisplay');
+    if (scanCenterDisplay) scanCenterDisplay.textContent = formatCoordinates(centerLat, centerLng);
+
+    var businessLocationDisplay = document.getElementById('businessLocationDisplay');
+    if (businessLocationDisplay) businessLocationDisplay.textContent = formatCoordinates(businessLat, businessLng);
+
+    var distanceMiles = computeDistanceMiles(businessLat, businessLng, centerLat, centerLng);
+    var scanDistanceDisplay = document.getElementById('scanDistanceDisplay');
+    if (scanDistanceDisplay) {
+        scanDistanceDisplay.textContent = distanceMiles < 0.1 ? '< 0.1 mi' : distanceMiles.toFixed(1) + ' mi';
+    }
+
+    var pointCount = Number.isFinite(gridPointCount) ? gridPointCount : Math.max(currentGridSize * currentGridSize, 0);
+    var gridPointCountEl = document.getElementById('gridPointCount');
+    if (gridPointCountEl) gridPointCountEl.textContent = String(pointCount);
+
+    var apiCallEstimate = document.getElementById('apiCallEstimate');
+    if (apiCallEstimate) apiCallEstimate.textContent = String(pointCount * 3);
+
+    ['mapGridLabel', 'mapGridLabelMirror', 'mapGridSummary', 'mapGridSummaryMirror'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = String(currentGridSize);
+    });
+    ['mapRadiusLabel', 'mapRadiusSummary'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = String(currentRadiusMiles);
+    });
+}
+
+function buildGridPoints(lat, lng, radiusMiles, gridSize) {
+    var radiusKm = radiusMiles * MILES_TO_KM;
+    var half = (gridSize - 1) / 2;
+    var kmPerDegLng = KM_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180);
+    var stepKm = gridSize > 1 ? (2 * radiusKm) / (gridSize - 1) : 0;
+    var points = [];
+
+    for (var row = 0; row < gridSize; row += 1) {
+        for (var col = 0; col < gridSize; col += 1) {
+            var dLat = ((half - row) * stepKm) / KM_PER_DEG_LAT;
+            var dLng = kmPerDegLng ? ((col - half) * stepKm) / kmPerDegLng : 0;
+            points.push({
+                row: row,
+                col: col,
+                lat: Number((lat + dLat).toFixed(6)),
+                lng: Number((lng + dLng).toFixed(6))
+            });
+        }
+    }
+    return points;
+}
+
+function findClosestCellIndex(points, targetLat, targetLng) {
+    var bestIndex = -1;
+    var bestDistance = Number.POSITIVE_INFINITY;
+
+    points.forEach(function(point, index) {
+        var deltaLat = point.lat - targetLat;
+        var deltaLng = point.lng - targetLng;
+        var distance = (deltaLat * deltaLat) + (deltaLng * deltaLng);
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            bestIndex = index;
+        }
+    });
+
+    return bestIndex;
+}
+
+function clearPreviewOverlays() {
+    previewPointOverlays.forEach(function(overlay) { overlay.setMap(null); });
+    previewLineOverlays.forEach(function(overlay) { overlay.setMap(null); });
+    previewPointOverlays = [];
+    previewLineOverlays = [];
+    if (radiusCircle) {
+        radiusCircle.setMap(null);
+        radiusCircle = null;
+    }
+}
+
+function clearResultMarkers() {
+    resultMarkers.forEach(function(marker) { marker.setMap(null); });
+    resultMarkers = [];
+}
+
+function fitMapToArea(results) {
+    if (!gmap) return;
+
+    if (results && results.length) {
+        var bounds = new google.maps.LatLngBounds();
+        results.forEach(function(cell) {
+            bounds.extend({lat: cell.lat, lng: cell.lng});
+        });
+        if (Number.isFinite(centerLat) && Number.isFinite(centerLng)) {
+            bounds.extend({lat: centerLat, lng: centerLng});
+        }
+        if (Number.isFinite(businessLat) && Number.isFinite(businessLng)) {
+            bounds.extend({lat: businessLat, lng: businessLng});
+        }
+        gmap.fitBounds(bounds);
+        return;
+    }
+
+    if (radiusCircle) {
+        gmap.fitBounds(radiusCircle.getBounds());
+    } else if (Number.isFinite(centerLat) && Number.isFinite(centerLng)) {
+        gmap.setCenter({lat: centerLat, lng: centerLng});
+        gmap.setZoom(11);
+    }
+}
+
+function drawPreviewGrid() {
+    if (!gmap || !Number.isFinite(centerLat) || !Number.isFinite(centerLng)) return;
+
+    clearPreviewOverlays();
+
+    var gridPoints = buildGridPoints(centerLat, centerLng, currentRadiusMiles, currentGridSize);
+    var centerPreviewIndex = findClosestCellIndex(gridPoints, centerLat, centerLng);
+
+    radiusCircle = new google.maps.Circle({
         map: gmap,
-        icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 10,
-            fillColor: '#4f46e5',
-            fillOpacity: 1,
-            strokeColor: '#fff',
-            strokeWeight: 3,
-        },
-        title: 'Your Business',
-        zIndex: 999,
+        center: {lat: centerLat, lng: centerLng},
+        radius: currentRadiusMiles * 1609.34,
+        strokeColor: '#2563eb',
+        strokeOpacity: 0.35,
+        strokeWeight: 2,
+        fillColor: '#2563eb',
+        fillOpacity: 0.05,
+        clickable: false
     });
-    // If we have server-rendered results, plot them
-    {% if active_scan and active_scan.results %}
-    var initialResults = {{ active_scan.results | tojson }};
-    plotMapMarkers(initialResults);
-    {% endif %}
+
+    for (var row = 0; row < currentGridSize; row += 1) {
+        var rowPath = [];
+        for (var col = 0; col < currentGridSize; col += 1) {
+            var rowPoint = gridPoints[(row * currentGridSize) + col];
+            rowPath.push({lat: rowPoint.lat, lng: rowPoint.lng});
+        }
+        previewLineOverlays.push(new google.maps.Polyline({
+            map: gmap,
+            path: rowPath,
+            strokeColor: '#94a3b8',
+            strokeOpacity: 0.55,
+            strokeWeight: 1,
+            clickable: false
+        }));
+    }
+
+    for (var column = 0; column < currentGridSize; column += 1) {
+        var columnPath = [];
+        for (var lineRow = 0; lineRow < currentGridSize; lineRow += 1) {
+            var columnPoint = gridPoints[(lineRow * currentGridSize) + column];
+            columnPath.push({lat: columnPoint.lat, lng: columnPoint.lng});
+        }
+        previewLineOverlays.push(new google.maps.Polyline({
+            map: gmap,
+            path: columnPath,
+            strokeColor: '#94a3b8',
+            strokeOpacity: 0.55,
+            strokeWeight: 1,
+            clickable: false
+        }));
+    }
+
+    gridPoints.forEach(function(point, index) {
+        var isCenterCell = index === centerPreviewIndex;
+        previewPointOverlays.push(new google.maps.Circle({
+            map: gmap,
+            center: {lat: point.lat, lng: point.lng},
+            radius: isCenterCell ? 160 : 110,
+            strokeOpacity: 0,
+            fillColor: isCenterCell ? '#4f46e5' : '#64748b',
+            fillOpacity: isCenterCell ? 0.75 : 0.28,
+            clickable: false
+        }));
+    });
+
+    updateScanMeta(gridPoints.length);
 }
 
 function rankColor(rank) {
@@ -472,45 +826,387 @@ function rankColor(rank) {
     return '#9ca3af';
 }
 
-function plotMapMarkers(results) {
+function plotMapMarkers(results, options) {
     if (!gmap) return;
-    // Clear old markers
-    mapMarkers.forEach(function(m) { m.setMap(null); });
-    mapMarkers = [];
-    var bounds = new google.maps.LatLngBounds();
-    bounds.extend({lat: centerLat, lng: centerLng});
+
+    clearResultMarkers();
+
     results.forEach(function(cell) {
-        var color = rankColor(cell.rank);
         var marker = new google.maps.Marker({
             position: {lat: cell.lat, lng: cell.lng},
             map: gmap,
             icon: {
                 path: google.maps.SymbolPath.CIRCLE,
                 scale: 18,
-                fillColor: color,
-                fillOpacity: 0.85,
+                fillColor: rankColor(cell.rank),
+                fillOpacity: 0.88,
                 strokeColor: '#fff',
-                strokeWeight: 2,
+                strokeWeight: 2
             },
             label: {
                 text: cell.rank > 0 ? String(cell.rank) : '-',
                 color: '#fff',
-                fontWeight: 'bold',
-                fontSize: '11px',
+                fontWeight: '700',
+                fontSize: '11px'
             },
             title: 'Rank ' + (cell.rank > 0 ? cell.rank : 'Not found'),
-            zIndex: cell.rank > 0 ? (100 - cell.rank) : 1,
+            zIndex: cell.rank > 0 ? (100 - cell.rank) : 1
         });
-        mapMarkers.push(marker);
-        bounds.extend({lat: cell.lat, lng: cell.lng});
+        resultMarkers.push(marker);
     });
-    gmap.fitBounds(bounds, 40);
+
+    if (options && options.fitBounds) {
+        fitMapToArea(results);
+    }
+}
+
+function setScanCenter(lat, lng, options) {
+    var parsedLat = Number(lat);
+    var parsedLng = Number(lng);
+    if (!Number.isFinite(parsedLat) || !Number.isFinite(parsedLng)) return;
+
+    centerLat = parsedLat;
+    centerLng = parsedLng;
+
+    if (scanCenterMarker) {
+        scanCenterMarker.setPosition({lat: centerLat, lng: centerLng});
+    }
+
+    drawPreviewGrid();
+    updateScanMeta();
+
+    if (gmap && (!options || options.pan !== false)) {
+        gmap.panTo({lat: centerLat, lng: centerLng});
+    }
+
+    if (!options || options.markDirty !== false) {
+        markResultsDirty();
+    }
+}
+
+function initMap() {
+    var mapEl = document.getElementById('rankMap');
+    if (!mapEl || !Number.isFinite(centerLat) || !Number.isFinite(centerLng)) return;
+
+    gmap = new google.maps.Map(mapEl, {
+        center: {lat: centerLat, lng: centerLng},
+        zoom: 11,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: true
+    });
+
+    if (Number.isFinite(businessLat) && Number.isFinite(businessLng) && (businessLat !== 0 || businessLng !== 0)) {
+        businessMarker = new google.maps.Marker({
+            position: {lat: businessLat, lng: businessLng},
+            map: gmap,
+            icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 10,
+                fillColor: '#4f46e5',
+                fillOpacity: 1,
+                strokeColor: '#fff',
+                strokeWeight: 3
+            },
+            title: 'Business location',
+            zIndex: 999
+        });
+    }
+
+    scanCenterMarker = new google.maps.Marker({
+        position: {lat: centerLat, lng: centerLng},
+        map: gmap,
+        draggable: true,
+        animation: google.maps.Animation.DROP,
+        title: 'Scan center'
+    });
+
+    scanCenterMarker.addListener('dragend', function(event) {
+        setScanCenter(event.latLng.lat(), event.latLng.lng());
+    });
+
+    gmap.addListener('click', function(event) {
+        setScanCenter(event.latLng.lat(), event.latLng.lng());
+    });
+
+    drawPreviewGrid();
+
+    if (currentResults.length) {
+        plotMapMarkers(currentResults, {fitBounds: true});
+    } else {
+        fitMapToArea();
+    }
+}
+
+function renderGrid(results, gridSize, keyword, radiusMiles, centerPoint) {
+    var container = document.getElementById('gridContainer');
+    var grid = document.getElementById('heatmapGrid');
+    if (!container || !grid) return;
+
+    if (!results || !results.length) {
+        container.innerHTML = '<div class="text-center py-5"><i class="bi bi-grid-3x3" style="font-size: 3rem; color: #d1d5db;"></i><h5 class="mt-3 text-muted">No scan results</h5><p class="text-muted">Run the heatmap to populate the grid.</p></div>';
+        grid.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = '<div class="text-center mb-3"><h6 class="mb-1">"' + escapeHtml(keyword) + '"</h6><small class="text-muted">' + radiusMiles + ' mile radius | ' + gridSize + 'x' + gridSize + ' grid</small></div>';
+    grid.style.gridTemplateColumns = 'repeat(' + gridSize + ', 1fr)';
+    grid.innerHTML = '';
+
+    var centerIndex = centerPoint ? findClosestCellIndex(results, centerPoint.lat, centerPoint.lng) : -1;
+    results.forEach(function(cell, index) {
+        var div = document.createElement('div');
+        div.className = 'heatmap-cell';
+        if (cell.rank >= 1 && cell.rank <= 3) div.className += ' rank-top';
+        else if (cell.rank >= 4 && cell.rank <= 10) div.className += ' rank-mid';
+        else if (cell.rank > 10) div.className += ' rank-low';
+        else div.className += ' rank-none';
+        if (index === centerIndex) div.className += ' rank-center';
+        div.textContent = cell.rank > 0 ? cell.rank : '-';
+        div.title = 'Rank ' + (cell.rank > 0 ? cell.rank : 'Not found') + ' at (' + cell.lat.toFixed(4) + ', ' + cell.lng.toFixed(4) + ')';
+        grid.appendChild(div);
+    });
+}
+
+function renderStats(avgRank, found, total, results) {
+    var bar = document.getElementById('statsBar');
+    if (!bar) return;
+    bar.style.display = '';
+    var top3 = results.filter(function(result) {
+        return result.rank >= 1 && result.rank <= 3;
+    }).length;
+    bar.innerHTML =
+        '<span class="stat-pill" style="background:#dcfce7; color:#166534;">Avg Rank: ' + avgRank + '</span>' +
+        '<span class="stat-pill" style="background:#e0e7ff; color:#3730a3;">Found: ' + found + ' / ' + total + '</span>' +
+        '<span class="stat-pill" style="background:#dcfce7; color:#166534;">Top 3: ' + top3 + '</span>';
+}
+
+function showDebug(debugInfo) {
+    var el = document.getElementById('debugInfo');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'debugInfo';
+        el.style.cssText = 'margin:10px 0; padding:10px; background:#f1f5f9; border-radius:8px; font-size:13px;';
+        document.getElementById('statsBar').parentNode.insertBefore(el, document.getElementById('statsBar').nextSibling);
+    }
+    el.innerHTML =
+        '<strong>Debug:</strong> Matching business name: <code>' + (debugInfo.business_name_used || 'none') + '</code>' +
+        ' | Place ID: <code>' + (debugInfo.place_id_used || 'none') + '</code>' +
+        ' | Search radius: ' + Math.round(debugInfo.search_radius_m) + 'm' +
+        ' | Places returned: ' + debugInfo.places_returned +
+        (debugInfo.debug_point ? ' | Sample point: ' + debugInfo.debug_point : '') +
+        '<br><strong>Google Places results (center grid point):</strong> ' +
+        (debugInfo.top_results && debugInfo.top_results.length ? debugInfo.top_results.map(function(result, index) {
+            var match = debugInfo.place_id_used && result.id === debugInfo.place_id_used ? ' <span style="color:#22c55e; font-weight:600;">MATCH</span>' : '';
+            return '<br>' + (index + 1) + '. ' + result.name + ' <small style="color:#9ca3af;">(' + result.id.substring(0, 20) + '...)</small>' + match;
+        }).join('') : '<em>none returned</em>');
+
+    if (debugInfo.api_diagnostics) {
+        var diagnostics = debugInfo.api_diagnostics;
+        var diagnosticsHtml = '<br><strong>API Diagnostics (center grid point - all 3 APIs queried, results merged):</strong>';
+
+        function apiRow(label, info) {
+            if (!info) return '<br>' + label + ': not attempted';
+            if (info.error) return '<br>' + label + ': <span style="color:#ef4444">Error - ' + info.error + '</span>';
+            var row = '<br>' + label + ': HTTP ' + info.status;
+            if (info.gstatus) row += ' | Google status: ' + info.gstatus;
+            if (info.count !== undefined) row += ' | <strong>' + info.count + ' results</strong>';
+            if (info.error_message) row += ' | ' + info.error_message;
+            return row;
+        }
+
+        diagnosticsHtml += apiRow('New Text Search', diagnostics.new_api);
+        diagnosticsHtml += apiRow('Legacy Text Search', diagnostics.legacy_api);
+        diagnosticsHtml += apiRow('Nearby Search', diagnostics.nearby_api);
+        el.innerHTML += diagnosticsHtml;
+    }
+
+    if (debugInfo.place_id_verification) {
+        var verification = debugInfo.place_id_verification;
+        var verificationHtml = '<br><strong>Place ID (<code>' + (debugInfo.place_id_used || '?') + '</code>) resolves to:</strong> ';
+        if (verification.error) {
+            verificationHtml += '<span style="color:red">ERROR - ' + verification.error + (verification.message ? ': ' + verification.message : '') + '</span>';
+        } else {
+            verificationHtml += '"' + (verification.name || '?') + '"';
+            if (verification.address) verificationHtml += ' - ' + verification.address;
+            if (verification.lat && verification.lng) {
+                verificationHtml += ' (' + verification.lat.toFixed(4) + ', ' + verification.lng.toFixed(4) + ')';
+            }
+            if (verification.types && verification.types.length) {
+                verificationHtml += ' | Types: ' + verification.types.join(', ');
+            }
+            if (verification.business_status) {
+                verificationHtml += ' | Status: ' + verification.business_status;
+            }
+            if (verification.distance_from_center_km !== undefined) {
+                verificationHtml += ' | ' + verification.distance_from_center_km + 'km from stored location';
+            }
+            if (verification.location_warning) {
+                verificationHtml += '<br><span style="color:#ef4444; font-weight:600;">' + verification.location_warning + '</span>';
+            }
+        }
+        el.innerHTML += verificationHtml;
+    }
+
+    if (debugInfo.keyword_warning) {
+        el.innerHTML = '<div style="background:#fef3c7; border:1px solid #f59e0b; border-radius:8px; padding:10px; margin-bottom:10px; color:#92400e; font-weight:500;">' +
+            '<i class="bi bi-exclamation-triangle me-1"></i> ' + debugInfo.keyword_warning + '</div>' + el.innerHTML;
+    }
+
+    if (debugInfo.api_errors) {
+        el.innerHTML += '<br><span style="color:#ef4444; font-weight:600;">API errors: ' +
+            debugInfo.api_errors + ' / ' + debugInfo.total_points + ' grid points failed. ' +
+            'This usually means rate limiting or API key restrictions. Try a smaller grid or check your API key.</span>';
+    }
+
+    if (debugInfo.places_returned === 0) {
+        el.innerHTML += '<br><span style="color:#f59e0b; font-weight:600;">No places returned from any of the 3 APIs. Click "Test API Key" to diagnose the issue.</span>';
+    }
+
+    if (debugInfo.places_returned > 0 && debugInfo.place_id_used && debugInfo.place_id_verification && !debugInfo.place_id_verification.error) {
+        var foundMatch = false;
+        if (debugInfo.top_results) {
+            for (var resultIndex = 0; resultIndex < debugInfo.top_results.length; resultIndex += 1) {
+                if (debugInfo.top_results[resultIndex].id === debugInfo.place_id_used) {
+                    foundMatch = true;
+                    break;
+                }
+            }
+        }
+        if (!foundMatch) {
+            el.innerHTML += '<br><div style="background:#eff6ff; border:1px solid #3b82f6; border-radius:8px; padding:10px; margin-top:8px; color:#1e40af;">' +
+                '<strong>Why "Not found"?</strong> Your business exists in Google, but Google\'s Places API did not return it for this keyword at this location. ' +
+                'This is common for service-area businesses with weak keyword visibility. The Places API returns far fewer results than a regular Google search.' +
+                '<br><strong>What this means:</strong> Your Google Business Profile may need optimization for this keyword. Try a few different service phrases to see where it does rank.' +
+                '</div>';
+        }
+    }
+}
+
+function setActiveHistoryItem(scanId) {
+    document.querySelectorAll('.scan-history-item').forEach(function(item) {
+        item.classList.toggle('active', String(item.getAttribute('data-scan-id')) === String(scanId));
+    });
+}
+
+function buildHistoryItemHtml(scan) {
+    var avgLabel = scan.avg_rank > 0 ? 'Avg #' + scan.avg_rank : 'Not found';
+    var timeLabel = scan.scanned_at || 'Just now';
+    return '<div class="scan-history-item mb-2 active" data-scan-id="' + scan.id + '">' +
+        '<div class="d-flex justify-content-between align-items-start">' +
+        '<div style="cursor:pointer; flex:1;">' +
+        '<div class="fw-semibold" style="font-size:.9rem;">' + escapeHtml(scan.keyword) + '</div>' +
+        '<div class="d-flex justify-content-between align-items-center mt-1">' +
+        '<small class="text-muted">' + scan.radius_miles + 'mi | ' + scan.grid_size + 'x' + scan.grid_size + '</small>' +
+        '<small class="text-muted">' + avgLabel + '</small>' +
+        '</div>' +
+        '<small class="text-muted" style="font-size:.75rem;">' + escapeHtml(timeLabel) + '</small>' +
+        '</div>' +
+        '<button class="btn btn-sm btn-link text-danger p-0 ms-2 delete-scan-btn" type="button" data-scan-id="' + scan.id + '" title="Delete this scan" style="font-size:.85rem; line-height:1;">' +
+        '<i class="bi bi-x-lg"></i>' +
+        '</button>' +
+        '</div>' +
+        '</div>';
+}
+
+function prependHistoryItem(scan) {
+    var history = document.getElementById('scanHistory');
+    if (!history || !scan || !scan.id) return;
+
+    var existing = history.querySelector('.scan-history-item[data-scan-id="' + scan.id + '"]');
+    if (existing) existing.remove();
+
+    var emptyState = history.querySelector('.text-center.py-3');
+    if (emptyState) emptyState.remove();
+
+    history.insertAdjacentHTML('afterbegin', buildHistoryItemHtml(scan));
+    setActiveHistoryItem(scan.id);
+
+    var clearBtn = document.getElementById('clearAllScansBtn');
+    if (clearBtn) clearBtn.style.display = '';
+}
+
+function hydrateScan(scan, options) {
+    if (!scan) return;
+
+    currentKeyword = scan.keyword || '';
+    currentGridSize = parseInt(scan.grid_size || currentGridSize || 5, 10);
+    currentRadiusMiles = parseFloat(scan.radius_miles || currentRadiusMiles || 5);
+    currentResults = Array.isArray(scan.results) ? scan.results : [];
+
+    ensureSelectOption('gridSelect', currentGridSize, currentGridSize + ' x ' + currentGridSize + ' (legacy)');
+    ensureSelectOption('radiusSelect', currentRadiusMiles, currentRadiusMiles + ' mi');
+
+    var keywordInput = document.getElementById('keywordInput');
+    if (keywordInput) keywordInput.value = currentKeyword;
+
+    setScanCenter(scan.center_lat, scan.center_lng, {pan: !options || options.pan !== false, markDirty: false});
+    renderGrid(currentResults, currentGridSize, currentKeyword, currentRadiusMiles, {lat: centerLat, lng: centerLng});
+    renderStats(scan.avg_rank || 0, currentResults.filter(function(result) { return result.rank > 0; }).length, currentResults.length, currentResults);
+    plotMapMarkers(currentResults, {fitBounds: !options || options.fitBounds !== false});
+    markResultsFresh(currentKeyword);
+}
+
+function loadScan(scanId) {
+    setActiveHistoryItem(scanId);
+    fetch('/client/heatmap/scan/' + scanId)
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            if (!data.ok) return;
+            hydrateScan(data.scan, {fitBounds: true, pan: true});
+        });
+}
+
+function deleteScan(scanId, triggerEl) {
+    if (!confirm('Delete this scan?')) return;
+    fetch('/client/heatmap/scan/' + scanId, {
+        method: 'DELETE',
+        headers: {'X-CSRFToken': csrfToken}
+    })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            if (!data.ok) return;
+            var item = triggerEl.closest('.scan-history-item');
+            if (item) item.remove();
+            var remaining = document.querySelectorAll('.scan-history-item');
+            if (!remaining.length) {
+                document.getElementById('scanHistory').innerHTML = '<div class="text-center py-3"><small class="text-muted">No scans yet. Run your first scan above.</small></div>';
+                var clearBtn = document.getElementById('clearAllScansBtn');
+                if (clearBtn) clearBtn.style.display = 'none';
+            }
+        });
+}
+
+function clearAllScans() {
+    if (!confirm('Delete ALL scan history?')) return;
+    fetch('/client/heatmap/scans', {
+        method: 'DELETE',
+        headers: {'X-CSRFToken': csrfToken}
+    })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            if (!data.ok) return;
+            document.getElementById('scanHistory').innerHTML = '<div class="text-center py-3"><small class="text-muted">No scans yet. Run your first scan above.</small></div>';
+            var clearBtn = document.getElementById('clearAllScansBtn');
+            if (clearBtn) clearBtn.style.display = 'none';
+        });
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    ensureSelectOption('gridSelect', currentGridSize, currentGridSize + ' x ' + currentGridSize + ' (legacy)');
+    ensureSelectOption('radiusSelect', currentRadiusMiles, currentRadiusMiles + ' mi');
+    updateScanMeta();
+
+    if (currentResults.length) {
+        renderGrid(currentResults, currentGridSize, currentKeyword, currentRadiusMiles, {lat: centerLat, lng: centerLng});
+        renderStats({% if active_scan %}{{ active_scan.avg_rank or 0 }}{% else %}0{% endif %}, currentResults.filter(function(result) { return result.rank > 0; }).length, currentResults.length, currentResults);
+        markResultsFresh(currentKeyword);
+    } else {
+        markResultsFresh('');
+    }
+
     loadMapsApi();
 
-    // Geocode handlers
     function handleGeocode(inputId, resultId) {
         var address = document.getElementById(inputId).value.trim();
         if (!address) return;
@@ -522,46 +1218,75 @@ document.addEventListener('DOMContentLoaded', function() {
             headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
             body: JSON.stringify({address: address})
         })
-        .then(function(r) {
-            if (!r.ok && r.headers.get('content-type')?.indexOf('json') === -1) {
-                throw new Error('Server returned ' + r.status);
-            }
-            return r.json();
-        })
-        .then(function(data) {
-            if (data.ok) {
-                resultEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> ' +
-                    data.formatted + ' (' + data.lat.toFixed(4) + ', ' + data.lng.toFixed(4) + ')</span>';
-                setTimeout(function() { location.reload(); }, 1000);
-            } else {
-                resultEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> ' + (data.error || 'Geocoding failed') + '</span>';
-            }
-        })
-        .catch(function(err) {
-            resultEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> Error: ' + err.message + '</span>';
-        });
+            .then(function(response) {
+                if (!response.ok && response.headers.get('content-type')?.indexOf('json') === -1) {
+                    throw new Error('Server returned ' + response.status);
+                }
+                return response.json();
+            })
+            .then(function(data) {
+                if (data.ok) {
+                    resultEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> ' + data.formatted + ' (' + data.lat.toFixed(4) + ', ' + data.lng.toFixed(4) + ')</span>';
+                    setTimeout(function() { location.reload(); }, 1000);
+                } else {
+                    resultEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> ' + (data.error || 'Geocoding failed') + '</span>';
+                }
+            })
+            .catch(function(error) {
+                resultEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> Error: ' + error.message + '</span>';
+            });
     }
 
     var geocodeBtn = document.getElementById('geocodeBtn');
-    if (geocodeBtn) geocodeBtn.addEventListener('click', function() { handleGeocode('addressInput', 'geocodeResult'); });
+    if (geocodeBtn) geocodeBtn.addEventListener('click', function() {
+        handleGeocode('addressInput', 'geocodeResult');
+    });
 
     var geocodeBtnAlt = document.getElementById('geocodeBtnAlt');
-    if (geocodeBtnAlt) geocodeBtnAlt.addEventListener('click', function() { handleGeocode('addressInputAlt', 'geocodeResultAlt'); });
+    if (geocodeBtnAlt) geocodeBtnAlt.addEventListener('click', function() {
+        handleGeocode('addressInputAlt', 'geocodeResultAlt');
+    });
 
     var changeLink = document.getElementById('changeLocationLink');
     if (changeLink) {
-        changeLink.addEventListener('click', function(e) {
-            e.preventDefault();
+        changeLink.addEventListener('click', function(event) {
+            event.preventDefault();
             document.getElementById('locationChangeCard').classList.remove('d-none');
         });
     }
 
-    // Place ID search handler
+    var resetCenterBtn = document.getElementById('resetCenterBtn');
+    if (resetCenterBtn) {
+        resetCenterBtn.addEventListener('click', function() {
+            setScanCenter(businessLat, businessLng, {pan: true});
+        });
+    }
+
+    var gridSelect = document.getElementById('gridSelect');
+    if (gridSelect) {
+        gridSelect.addEventListener('change', function() {
+            currentGridSize = getSelectedGridSize();
+            drawPreviewGrid();
+            updateScanMeta();
+            markResultsDirty();
+        });
+    }
+
+    var radiusSelect = document.getElementById('radiusSelect');
+    if (radiusSelect) {
+        radiusSelect.addEventListener('change', function() {
+            currentRadiusMiles = getSelectedRadiusMiles();
+            drawPreviewGrid();
+            updateScanMeta();
+            markResultsDirty();
+        });
+    }
+
     var placeSearchBtn = document.getElementById('heatmapPlaceSearchBtn');
     if (placeSearchBtn) {
         placeSearchBtn.addEventListener('click', function() {
-            var q = document.getElementById('heatmapPlaceSearch').value.trim();
-            if (!q) return;
+            var query = document.getElementById('heatmapPlaceSearch').value.trim();
+            if (!query) return;
             var resultsDiv = document.getElementById('heatmapPlaceResults');
             var savedDiv = document.getElementById('heatmapPlaceSaved');
             placeSearchBtn.disabled = true;
@@ -570,82 +1295,93 @@ document.addEventListener('DOMContentLoaded', function() {
             fetch('/client/settings/search-place', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-                body: JSON.stringify({query: q})
+                body: JSON.stringify({query: query})
             })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                placeSearchBtn.disabled = false;
-                placeSearchBtn.innerHTML = '<i class="bi bi-search me-1"></i> Find';
-                if (!data.ok) { alert(data.error || 'Search failed'); return; }
-                if (!data.results.length) {
-                    resultsDiv.innerHTML = '<p class="text-muted mb-0">No results. Try a different search.</p>';
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    placeSearchBtn.disabled = false;
+                    placeSearchBtn.innerHTML = '<i class="bi bi-search me-1"></i> Find';
+                    if (!data.ok) {
+                        alert(data.error || 'Search failed');
+                        return;
+                    }
+                    if (!data.results.length) {
+                        resultsDiv.innerHTML = '<p class="text-muted mb-0">No results. Try a different search.</p>';
+                        resultsDiv.style.display = '';
+                        return;
+                    }
+                    var html = '<div class="list-group">';
+                    data.results.forEach(function(place) {
+                        html += '<button type="button" class="list-group-item list-group-item-action hm-place-pick" data-pid="' + place.place_id + '">' +
+                            '<strong>' + escapeHtml(place.name) + '</strong><br>' +
+                            '<small class="text-muted">' + escapeHtml(place.address) + '</small>' +
+                            '</button>';
+                    });
+                    html += '</div>';
+                    resultsDiv.innerHTML = html;
                     resultsDiv.style.display = '';
-                    return;
-                }
-                var html = '<div class="list-group">';
-                data.results.forEach(function(p) {
-                    html += '<button type="button" class="list-group-item list-group-item-action hm-place-pick" data-pid="' + p.place_id + '">' +
-                        '<strong>' + p.name + '</strong><br>' +
-                        '<small class="text-muted">' + p.address + '</small>' +
-                        '</button>';
-                });
-                html += '</div>';
-                resultsDiv.innerHTML = html;
-                resultsDiv.style.display = '';
 
-                resultsDiv.querySelectorAll('.hm-place-pick').forEach(function(btn) {
-                    btn.addEventListener('click', function() {
-                        var pid = this.getAttribute('data-pid');
-                        fetch('/client/settings/save-place-id', {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-                            body: JSON.stringify({place_id: pid})
-                        })
-                        .then(function(r) { return r.json(); })
-                        .then(function(sdata) {
-                            if (sdata.ok) {
-                                resultsDiv.style.display = 'none';
-                                savedDiv.style.display = '';
-                                setTimeout(function() { location.reload(); }, 1000);
-                            } else { alert(sdata.error || 'Save failed'); }
+                    resultsDiv.querySelectorAll('.hm-place-pick').forEach(function(button) {
+                        button.addEventListener('click', function() {
+                            var placeId = this.getAttribute('data-pid');
+                            fetch('/client/settings/save-place-id', {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+                                body: JSON.stringify({place_id: placeId})
+                            })
+                                .then(function(response) { return response.json(); })
+                                .then(function(saveData) {
+                                    if (saveData.ok) {
+                                        resultsDiv.style.display = 'none';
+                                        savedDiv.style.display = '';
+                                        setTimeout(function() { location.reload(); }, 1000);
+                                    } else {
+                                        alert(saveData.error || 'Save failed');
+                                    }
+                                });
                         });
                     });
-                });
-            })
-            .catch(function() {
-                placeSearchBtn.disabled = false;
-                placeSearchBtn.innerHTML = '<i class="bi bi-search me-1"></i> Find';
-                alert('Network error');
-            });
-        });
-
-        document.getElementById('heatmapPlaceSearch').addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') { e.preventDefault(); placeSearchBtn.click(); }
-        });
-
-        // Manual Place ID paste handler
-        var manualBtn = document.getElementById('saveManualPlaceIdBtn');
-        if (manualBtn) {
-            manualBtn.addEventListener('click', function() {
-                var pid = document.getElementById('manualPlaceId').value.trim();
-                if (!pid) { alert('Paste a Place ID first.'); return; }
-                manualBtn.disabled = true;
-                manualBtn.textContent = 'Saving...';
-                fetch('/client/settings/save-place-id', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-                    body: JSON.stringify({place_id: pid})
                 })
-                .then(function(r) { return r.json(); })
-                .then(function(d) {
-                    if (d.ok) {
+                .catch(function() {
+                    placeSearchBtn.disabled = false;
+                    placeSearchBtn.innerHTML = '<i class="bi bi-search me-1"></i> Find';
+                    alert('Network error');
+                });
+        });
+
+        document.getElementById('heatmapPlaceSearch').addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                placeSearchBtn.click();
+            }
+        });
+    }
+
+    var manualBtn = document.getElementById('saveManualPlaceIdBtn');
+    if (manualBtn) {
+        manualBtn.addEventListener('click', function() {
+            var placeId = document.getElementById('manualPlaceId').value.trim();
+            if (!placeId) {
+                alert('Paste a Place ID first.');
+                return;
+            }
+            manualBtn.disabled = true;
+            manualBtn.textContent = 'Saving...';
+            fetch('/client/settings/save-place-id', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+                body: JSON.stringify({place_id: placeId})
+            })
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    if (data.ok) {
                         manualBtn.textContent = 'Saved!';
                         manualBtn.classList.replace('btn-outline-primary', 'btn-success');
                         setTimeout(function() { location.reload(); }, 1000);
                     } else {
                         manualBtn.disabled = false;
                         manualBtn.textContent = 'Save';
-                        alert(d.error || 'Save failed');
+                        alert(data.error || 'Save failed');
                     }
                 })
                 .catch(function() {
@@ -653,21 +1389,21 @@ document.addEventListener('DOMContentLoaded', function() {
                     manualBtn.textContent = 'Save';
                     alert('Network error');
                 });
-            });
-        }
+        });
     }
 
-    // Scan handler
     var scanBtn = document.getElementById('scanBtn');
     if (scanBtn) {
         scanBtn.addEventListener('click', function() {
-            var keyword = document.getElementById('keywordInput').value.trim();
+            var keywordInput = document.getElementById('keywordInput');
+            var keyword = keywordInput.value.trim();
             if (!keyword) {
-                document.getElementById('keywordInput').focus();
+                keywordInput.focus();
                 return;
             }
-            var radius = document.getElementById('radiusSelect').value;
-            var gridSize = parseInt(document.getElementById('gridSelect').value);
+
+            currentRadiusMiles = getSelectedRadiusMiles();
+            currentGridSize = getSelectedGridSize();
 
             scanBtn.disabled = true;
             document.getElementById('scanSpinner').classList.add('active');
@@ -676,38 +1412,56 @@ document.addEventListener('DOMContentLoaded', function() {
             fetch('/client/heatmap/scan', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-                body: JSON.stringify({keyword: keyword, radius_miles: parseFloat(radius), grid_size: gridSize})
+                body: JSON.stringify({
+                    keyword: keyword,
+                    radius_miles: currentRadiusMiles,
+                    grid_size: currentGridSize,
+                    center_lat: centerLat,
+                    center_lng: centerLng
+                })
             })
-            .then(function(r) {
-                if (!r.ok && r.headers.get('content-type')?.indexOf('json') === -1) {
-                    throw new Error('Server returned ' + r.status);
-                }
-                return r.json();
-            })
-            .then(function(data) {
-                scanBtn.disabled = false;
-                document.getElementById('scanSpinner').classList.remove('active');
-                document.getElementById('scanIcon').style.display = '';
+                .then(function(response) {
+                    if (!response.ok && response.headers.get('content-type')?.indexOf('json') === -1) {
+                        throw new Error('Server returned ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(function(data) {
+                    scanBtn.disabled = false;
+                    document.getElementById('scanSpinner').classList.remove('active');
+                    document.getElementById('scanIcon').style.display = '';
 
-                if (!data.ok) {
-                    alert(data.error || 'Scan failed');
-                    return;
-                }
-                renderGrid(data.results, gridSize, keyword, radius);
-                renderStats(data.avg_rank, data.found, data.total, data.results);
-                if (data.debug) showDebug(data.debug);
-                plotMapMarkers(data.results);
-            })
-            .catch(function(err) {
-                scanBtn.disabled = false;
-                document.getElementById('scanSpinner').classList.remove('active');
-                document.getElementById('scanIcon').style.display = '';
-                alert('Network error. Check your connection and try again.');
-            });
+                    if (!data.ok) {
+                        alert(data.error || 'Scan failed');
+                        return;
+                    }
+
+                    currentKeyword = keyword;
+                    currentResults = data.results || [];
+                    setScanCenter(data.center_lat, data.center_lng, {pan: false, markDirty: false});
+                    renderGrid(currentResults, currentGridSize, currentKeyword, currentRadiusMiles, {lat: centerLat, lng: centerLng});
+                    renderStats(data.avg_rank, data.found, data.total, currentResults);
+                    if (data.debug) showDebug(data.debug);
+                    plotMapMarkers(currentResults, {fitBounds: true});
+                    markResultsFresh(currentKeyword);
+                    prependHistoryItem({
+                        id: data.scan_id,
+                        keyword: currentKeyword,
+                        radius_miles: currentRadiusMiles,
+                        grid_size: currentGridSize,
+                        avg_rank: data.avg_rank,
+                        scanned_at: 'Just now'
+                    });
+                })
+                .catch(function() {
+                    scanBtn.disabled = false;
+                    document.getElementById('scanSpinner').classList.remove('active');
+                    document.getElementById('scanIcon').style.display = '';
+                    alert('Network error. Check your connection and try again.');
+                });
         });
     }
 
-    // API Test handler
     var testApiBtn = document.getElementById('testApiBtn');
     if (testApiBtn) {
         testApiBtn.addEventListener('click', function() {
@@ -719,244 +1473,48 @@ document.addEventListener('DOMContentLoaded', function() {
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
                 body: '{}'
             })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                testApiBtn.disabled = false;
-                if (!data.ok) {
-                    resultEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> ' + (data.error || 'Test failed') + '</span>';
-                    return;
-                }
-                var html = '';
-                var c = data.checks;
-                function icon(ok) { return ok ? '<i class="bi bi-check-circle text-success"></i>' : '<i class="bi bi-x-circle text-danger"></i>'; }
-                html += icon(c.places_new.ok) + ' Places API (New): ' + c.places_new.detail + '<br>';
-                html += icon(c.places_legacy.ok) + ' Places API (Legacy): ' + c.places_legacy.detail + '<br>';
-                html += icon(c.geocoding.ok) + ' Geocoding API: ' + c.geocoding.detail;
-                if (!data.any_places) {
-                    html += '<br><span class="text-danger fw-bold">Neither Places API is working. Check that your API key has no HTTP referrer restrictions (server-side calls need IP restrictions or none) and that Places API is enabled in Google Cloud Console.</span>';
-                }
-                resultEl.innerHTML = html;
-            })
-            .catch(function() {
-                testApiBtn.disabled = false;
-                resultEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> Network error</span>';
-            });
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    testApiBtn.disabled = false;
+                    if (!data.ok) {
+                        resultEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> ' + (data.error || 'Test failed') + '</span>';
+                        return;
+                    }
+                    var checks = data.checks;
+                    function icon(ok) { return ok ? '<i class="bi bi-check-circle text-success"></i>' : '<i class="bi bi-x-circle text-danger"></i>'; }
+                    var html = '';
+                    html += icon(checks.places_new.ok) + ' Places API (New): ' + checks.places_new.detail + '<br>';
+                    html += icon(checks.places_legacy.ok) + ' Places API (Legacy): ' + checks.places_legacy.detail + '<br>';
+                    html += icon(checks.geocoding.ok) + ' Geocoding API: ' + checks.geocoding.detail;
+                    if (!data.any_places) {
+                        html += '<br><span class="text-danger fw-bold">Neither Places API is working. Check that your API key has no HTTP referrer restrictions for server-side calls and that Places API is enabled in Google Cloud Console.</span>';
+                    }
+                    resultEl.innerHTML = html;
+                })
+                .catch(function() {
+                    testApiBtn.disabled = false;
+                    resultEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> Network error</span>';
+                });
         });
     }
-});
 
-function renderGrid(results, gridSize, keyword, radius) {
-    var container = document.getElementById('gridContainer');
-    container.innerHTML = '<div class="text-center mb-3"><h6 class="mb-1">"' + keyword +
-        '"</h6><small class="text-muted">' + radius + ' mile radius | ' + gridSize + 'x' + gridSize + ' grid</small></div>';
-
-    var grid = document.getElementById('heatmapGrid');
-    grid.style.gridTemplateColumns = 'repeat(' + gridSize + ', 1fr)';
-    grid.innerHTML = '';
-
-    var center = Math.floor(gridSize / 2);
-    results.forEach(function(cell) {
-        var div = document.createElement('div');
-        div.className = 'heatmap-cell';
-        if (cell.rank >= 1 && cell.rank <= 3) div.className += ' rank-top';
-        else if (cell.rank >= 4 && cell.rank <= 10) div.className += ' rank-mid';
-        else if (cell.rank > 10) div.className += ' rank-low';
-        else div.className += ' rank-none';
-        if (cell.row === center && cell.col === center) div.className += ' rank-center';
-        div.textContent = cell.rank > 0 ? cell.rank : '-';
-        div.title = 'Rank ' + (cell.rank > 0 ? cell.rank : 'Not found') +
-                    ' at (' + cell.lat.toFixed(4) + ', ' + cell.lng.toFixed(4) + ')';
-        grid.appendChild(div);
-    });
-}
-
-function renderStats(avgRank, found, total, results) {
-    var bar = document.getElementById('statsBar');
-    bar.style.display = '';
-    var top3 = results.filter(function(r) { return r.rank >= 1 && r.rank <= 3; }).length;
-    bar.innerHTML =
-        '<span class="stat-pill" style="background:#dcfce7; color:#166534;">Avg Rank: ' + avgRank + '</span>' +
-        '<span class="stat-pill" style="background:#e0e7ff; color:#3730a3;">Found: ' + found + ' / ' + total + '</span>' +
-        '<span class="stat-pill" style="background:#dcfce7; color:#166534;">Top 3: ' + top3 + '</span>';
-}
-
-function showDebug(d) {
-    var el = document.getElementById('debugInfo');
-    if (!el) {
-        el = document.createElement('div');
-        el.id = 'debugInfo';
-        el.style.cssText = 'margin:10px 0; padding:10px; background:#f1f5f9; border-radius:8px; font-size:13px;';
-        document.getElementById('statsBar').parentNode.insertBefore(el, document.getElementById('statsBar').nextSibling);
-    }
-    el.innerHTML =
-        '<strong>Debug:</strong> Matching business name: <code>' + (d.business_name_used || 'none') + '</code>' +
-        ' | Place ID: <code>' + (d.place_id_used || 'none') + '</code>' +
-        ' | Search radius: ' + Math.round(d.search_radius_m) + 'm' +
-        ' | Places returned: ' + d.places_returned +
-        (d.debug_point ? ' | Sample point: ' + d.debug_point : '') +
-        '<br><strong>Google Places results (center grid point):</strong> ' +
-        (d.top_results && d.top_results.length ? d.top_results.map(function(r, i) {
-            var match = d.place_id_used && r.id === d.place_id_used ? ' <span style="color:#22c55e; font-weight:600;">MATCH</span>' : '';
-            return '<br>' + (i+1) + '. ' + r.name + ' <small style="color:#9ca3af;">(' + r.id.substring(0, 20) + '...)</small>' + match;
-        }).join('') : '<em>none returned</em>');
-
-    // Show API diagnostics when available
-    if (d.api_diagnostics) {
-        var ad = d.api_diagnostics;
-        var diagHtml = '<br><strong>API Diagnostics (center grid point - all 3 APIs queried, results merged):</strong>';
-        function apiRow(label, info) {
-            if (!info) return '<br>' + label + ': not attempted';
-            if (info.error) return '<br>' + label + ': <span style="color:#ef4444">Error - ' + info.error + '</span>';
-            var row = '<br>' + label + ': HTTP ' + info.status;
-            if (info.gstatus) row += ' | Google status: ' + info.gstatus;
-            if (info.count !== undefined) row += ' | <strong>' + info.count + ' results</strong>';
-            if (info.error_message) row += ' | ' + info.error_message;
-            return row;
-        }
-        diagHtml += apiRow('New Text Search', ad.new_api);
-        diagHtml += apiRow('Legacy Text Search', ad.legacy_api);
-        diagHtml += apiRow('Nearby Search', ad.nearby_api);
-        el.innerHTML += diagHtml;
-    }
-
-    // Place ID verification
-    if (d.place_id_verification) {
-        var pv = d.place_id_verification;
-        var pvHtml = '<br><strong>Place ID (<code>' + (d.place_id_used || '?') + '</code>) resolves to:</strong> ';
-        if (pv.error) {
-            pvHtml += '<span style="color:red">ERROR - ' + pv.error + (pv.message ? ': ' + pv.message : '') + '</span>';
-        } else {
-            pvHtml += '"' + (pv.name || '?') + '"';
-            if (pv.address) pvHtml += ' - ' + pv.address;
-            if (pv.lat && pv.lng) {
-                pvHtml += ' (' + pv.lat.toFixed(4) + ', ' + pv.lng.toFixed(4) + ')';
+    var scanHistory = document.getElementById('scanHistory');
+    if (scanHistory) {
+        scanHistory.addEventListener('click', function(event) {
+            var deleteBtn = event.target.closest('.delete-scan-btn');
+            if (deleteBtn) {
+                event.stopPropagation();
+                deleteScan(deleteBtn.getAttribute('data-scan-id'), deleteBtn);
+                return;
             }
-            if (pv.types && pv.types.length) {
-                pvHtml += ' | Types: ' + pv.types.join(', ');
+
+            var item = event.target.closest('.scan-history-item');
+            if (item) {
+                loadScan(item.getAttribute('data-scan-id'));
             }
-            if (pv.business_status) {
-                pvHtml += ' | Status: ' + pv.business_status;
-            }
-            if (pv.distance_from_center_km !== undefined) {
-                pvHtml += ' | ' + pv.distance_from_center_km + 'km from stored location';
-            }
-            if (pv.location_warning) {
-                pvHtml += '<br><span style="color:#ef4444; font-weight:600;">' + pv.location_warning + '</span>';
-            }
-        }
-        el.innerHTML += pvHtml;
-    }
-
-    // Keyword warning
-    if (d.keyword_warning) {
-        el.innerHTML = '<div style="background:#fef3c7; border:1px solid #f59e0b; border-radius:8px; padding:10px; margin-bottom:10px; color:#92400e; font-weight:500;">' +
-            '<i class="bi bi-exclamation-triangle me-1"></i> ' + d.keyword_warning + '</div>' + el.innerHTML;
-    }
-
-    // API error count
-    if (d.api_errors) {
-        el.innerHTML += '<br><span style="color:#ef4444; font-weight:600;">API errors: ' +
-            d.api_errors + ' / ' + d.total_points + ' grid points failed. ' +
-            'This usually means rate limiting or API key restrictions. Try a smaller grid or check your API key.</span>';
-    }
-
-    // No results guidance
-    if (d.places_returned === 0) {
-        el.innerHTML += '<br><span style="color:#f59e0b; font-weight:600;">No places returned from any of the 3 APIs. ' +
-            'Click "Test API Key" below the scan form to diagnose the issue.</span>';
-    }
-
-    // Business not found despite results existing and valid Place ID
-    if (d.places_returned > 0 && d.place_id_used && d.place_id_verification && !d.place_id_verification.error) {
-        var foundMatch = false;
-        if (d.top_results) {
-            for (var ti = 0; ti < d.top_results.length; ti++) {
-                if (d.top_results[ti].id === d.place_id_used) { foundMatch = true; break; }
-            }
-        }
-        if (!foundMatch) {
-            el.innerHTML += '<br><div style="background:#eff6ff; border:1px solid #3b82f6; border-radius:8px; padding:10px; margin-top:8px; color:#1e40af;">' +
-                '<strong>Why "Not found"?</strong> Your business exists in Google (Place ID verified, OPERATIONAL), ' +
-                'but Google\'s Places API did not return it for this keyword at this location. ' +
-                'This is normal for service-area businesses (SABs) with low keyword visibility. ' +
-                'The Places API returns far fewer results than a regular Google search.' +
-                '<br><strong>What this means:</strong> Your Google Business Profile may need optimization for this keyword. ' +
-                'Try different keywords to see which ones your business does rank for.' +
-                '<br><strong>Keywords to try:</strong> "dog poop cleanup", "pet waste removal", "pooper scooper service", "yard cleanup service"' +
-                '</div>';
-        }
-    }
-}
-
-function loadScan(scanId) {
-    document.querySelectorAll('.scan-history-item').forEach(function(el) {
-        el.classList.remove('active');
-    });
-    var clicked = document.querySelector('[data-scan-id="' + scanId + '"]');
-    if (clicked) clicked.classList.add('active');
-
-    fetch('/client/heatmap/scan/' + scanId)
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (!data.ok) return;
-        var scan = data.scan;
-        var gridSize = scan.grid_size || 6;
-        renderGrid(scan.results, gridSize, scan.keyword, scan.radius_miles);
-        renderStats(scan.avg_rank,
-            scan.results.filter(function(r) { return r.rank > 0; }).length,
-            scan.results.length, scan.results);
-        plotMapMarkers(scan.results);
-    });
-}
-
-function deleteScan(scanId, el) {
-    if (!confirm('Delete this scan?')) return;
-    fetch('/client/heatmap/scan/' + scanId, {
-        method: 'DELETE',
-        headers: {'X-CSRFToken': csrfToken},
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.ok) {
-            var item = el.closest('.scan-history-item');
-            if (item) item.remove();
-            // If no scans left, show empty message
-            var remaining = document.querySelectorAll('.scan-history-item');
-            if (remaining.length === 0) {
-                document.getElementById('scanHistory').innerHTML =
-                    '<div class="text-center py-3"><small class="text-muted">No scans yet. Run your first scan above.</small></div>';
-                var clearBtn = document.getElementById('clearAllScansBtn');
-                if (clearBtn) clearBtn.style.display = 'none';
-            }
-        }
-    });
-}
-
-function clearAllScans() {
-    if (!confirm('Delete ALL scan history?')) return;
-    fetch('/client/heatmap/scans', {
-        method: 'DELETE',
-        headers: {'X-CSRFToken': csrfToken},
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.ok) {
-            document.getElementById('scanHistory').innerHTML =
-                '<div class="text-center py-3"><small class="text-muted">No scans yet. Run your first scan above.</small></div>';
-            var clearBtn = document.getElementById('clearAllScansBtn');
-            if (clearBtn) clearBtn.style.display = 'none';
-        }
-    });
-}
-
-// Bind delete buttons
-document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.delete-scan-btn').forEach(function(btn) {
-        btn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            deleteScan(this.getAttribute('data-scan-id'), this);
         });
-    });
+    }
+
     var clearBtn = document.getElementById('clearAllScansBtn');
     if (clearBtn) clearBtn.addEventListener('click', clearAllScans);
 });

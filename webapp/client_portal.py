@@ -3192,6 +3192,53 @@ def api_logout():
     return jsonify({"ok": True})
 
 
+def _serialize_heatmap_scan(scan, include_results=False):
+    if not scan:
+        return None
+    payload = dict(scan)
+    if include_results:
+        try:
+            payload["results"] = json.loads(payload.get("results_json") or "[]")
+        except Exception:
+            payload["results"] = []
+    return payload
+
+
+def _load_heatmap_state(db, brand_id, scan_limit=20):
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return None, [], None
+
+    scans = db.get_heatmap_scans(brand_id, limit=scan_limit)
+    active_scan = _serialize_heatmap_scan(scans[0], include_results=True) if scans else None
+    return brand, scans, active_scan
+
+
+@client_bp.route("/api/heatmap")
+@client_login_required
+def api_heatmap_state():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand, scans, active_scan = _load_heatmap_state(db, brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    return jsonify(
+        ok=True,
+        brand={
+            "id": brand.get("id"),
+            "display_name": brand.get("display_name", ""),
+            "service_area": brand.get("service_area", ""),
+            "business_lat": float(brand.get("business_lat") or 0),
+            "business_lng": float(brand.get("business_lng") or 0),
+            "google_maps_api_key": brand.get("google_maps_api_key", ""),
+            "google_place_id": brand.get("google_place_id", ""),
+        },
+        scans=[_serialize_heatmap_scan(scan, include_results=False) for scan in scans],
+        active_scan=active_scan,
+    )
+
+
 # ── Agent Activity Helper ──
 
 def _log_agent(agent_key, action, detail="", status="completed"):
@@ -8895,20 +8942,9 @@ def client_gbp_audit():
 def client_heatmap():
     db = _get_db()
     brand_id = session["client_brand_id"]
-    brand = db.get_brand(brand_id)
+    brand, scans, active_scan = _load_heatmap_state(db, brand_id)
     if not brand:
         abort(404)
-    scans = db.get_heatmap_scans(brand_id, limit=20)
-    # parse results_json for the most recent scan to pre-render
-    active_scan = None
-    if scans:
-        import json as _json
-        top = scans[0]
-        try:
-            top["results"] = _json.loads(top.get("results_json") or "[]")
-        except Exception:
-            top["results"] = []
-        active_scan = top
     return render_template(
         "client_heatmap.html",
         brand=brand,
@@ -8943,13 +8979,24 @@ def client_heatmap_scan():
     if not api_key:
         return jsonify(ok=False, error="Google Maps API key not configured. Add it in Connections."), 400
 
-    lat = float(brand.get("business_lat") or 0)
-    lng = float(brand.get("business_lng") or 0)
-    if lat == 0 and lng == 0:
+    business_lat = float(brand.get("business_lat") or 0)
+    business_lng = float(brand.get("business_lng") or 0)
+    if business_lat == 0 and business_lng == 0:
         return jsonify(ok=False, error="Business location not set. Set your address on the heatmap page first."), 400
 
+    center_lat_raw = data.get("center_lat")
+    center_lng_raw = data.get("center_lng")
+    try:
+        scan_center_lat = float(center_lat_raw) if center_lat_raw is not None else business_lat
+        scan_center_lng = float(center_lng_raw) if center_lng_raw is not None else business_lng
+    except (TypeError, ValueError):
+        return jsonify(ok=False, error="Scan center coordinates are invalid."), 400
+
+    if not (-90 <= scan_center_lat <= 90) or not (-180 <= scan_center_lng <= 180):
+        return jsonify(ok=False, error="Scan center coordinates are out of range."), 400
+
     from webapp.heatmap import generate_grid, scan_grid, calc_search_radius_m, verify_place_id, clean_keyword
-    grid_points = generate_grid(lat, lng, radius, grid_size)
+    grid_points = generate_grid(scan_center_lat, scan_center_lng, radius, grid_size)
     search_radius = calc_search_radius_m(radius, grid_size)
     business_name = brand.get("display_name", "")
     place_id = brand.get("google_place_id") or None
@@ -8977,8 +9024,8 @@ def client_heatmap_scan():
         pv_lng = place_verification.get("lng")
         if pv_lat is not None and pv_lng is not None:
             import math as _math
-            dlat = abs(pv_lat - lat)
-            dlng = abs(pv_lng - lng)
+            dlat = abs(pv_lat - business_lat)
+            dlng = abs(pv_lng - business_lng)
             dist_km = _math.sqrt(dlat**2 + dlng**2) * 111.32
             place_verification["distance_from_center_km"] = round(dist_km, 1)
             if dist_km > 50:
@@ -9016,11 +9063,13 @@ def client_heatmap_scan():
     avg_rank = round(sum(r["rank"] for r in ranked) / len(ranked), 1) if ranked else 0
 
     import json as _json
-    db.save_heatmap_scan(brand_id, keyword, grid_size, radius, lat, lng,
-                         _json.dumps(results), avg_rank)
+    scan_id = db.save_heatmap_scan(brand_id, keyword, grid_size, radius, scan_center_lat, scan_center_lng,
+                                   _json.dumps(results), avg_rank)
 
     return jsonify(ok=True, results=results, avg_rank=avg_rank,
                    found=len(ranked), total=len(results),
+                   scan_id=scan_id,
+                   center_lat=scan_center_lat, center_lng=scan_center_lng,
                    debug=debug_info)
 
 
