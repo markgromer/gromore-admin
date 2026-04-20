@@ -256,7 +256,7 @@
 
 <div class="hm-header">
     <h3><i class="bi bi-geo-alt me-2"></i>Local Rank Heatmap</h3>
-    <p>Drag the scan center, set your grid, and run a map-first local visibility scan across your service area.</p>
+    <p>Drag the scan center, set your grid, and run a map-first Google Maps local-pack scan across your service area. This does not track organic website page-one rankings.</p>
 </div>
 
 {% set has_location = brand.business_lat and brand.business_lng and brand.business_lat != 0 %}
@@ -266,7 +266,7 @@
 <div class="setup-card text-center">
     <i class="bi bi-key" style="font-size: 2.5rem; color: #6366f1;"></i>
     <h5 class="mt-3">Google Maps API Key Required</h5>
-    <p class="text-muted mb-3">The heatmap uses Google's Places API to check your ranking at each grid point.<br>
+    <p class="text-muted mb-3">The heatmap uses Google's Places API to estimate your Google Maps local-pack rank at each grid point.<br>
     Add your key in Connections to get started.</p>
     <a href="{{ url_for('client.client_settings') }}" class="btn btn-primary">
         <i class="bi bi-plug me-1"></i> Go to Connections
@@ -528,7 +528,7 @@
                 <div id="statsBar" class="d-flex flex-wrap gap-2 justify-content-center mt-3">
                     {% set ranked_cells = active_scan.results | selectattr('rank', '>', 0) | list %}
                     <span class="stat-pill" style="background:#dcfce7; color:#166534;">
-                        Avg Rank: {{ active_scan.avg_rank }}
+                        Avg Local Rank: {{ active_scan.avg_rank }}
                     </span>
                     <span class="stat-pill" style="background:#e0e7ff; color:#3730a3;">
                         Found: {{ ranked_cells | length }} / {{ active_scan.results | length }}
@@ -543,9 +543,9 @@
 
                 <div class="d-flex flex-wrap gap-3 justify-content-center mt-3">
                     <div class="legend-item"><div class="legend-dot" style="background:#22c55e;"></div> #1-3</div>
-                    <div class="legend-item"><div class="legend-dot" style="background:#f59e0b;"></div> #4-10</div>
-                    <div class="legend-item"><div class="legend-dot" style="background:#ef4444;"></div> #11-20</div>
-                    <div class="legend-item"><div class="legend-dot" style="background:#d1d5db;"></div> Not found</div>
+                    <div class="legend-item"><div class="legend-dot" style="background:#f59e0b;"></div> #4-10 local pack</div>
+                    <div class="legend-item"><div class="legend-dot" style="background:#ef4444;"></div> #11-20 local pack</div>
+                    <div class="legend-item"><div class="legend-dot" style="background:#d1d5db;"></div> Not returned by Places</div>
                     <div class="legend-item"><div class="legend-dot" style="background:#fff; border:2px solid #4f46e5;"></div> Closest cell to scan center</div>
                 </div>
             </div>
@@ -607,7 +607,7 @@
                                 <div class="d-flex justify-content-between align-items-center mt-1">
                                     <small class="text-muted">{{ scan.radius_miles }}mi | {{ scan.grid_size }}x{{ scan.grid_size }}</small>
                                     <small class="text-muted">
-                                        {% if scan.avg_rank > 0 %}Avg #{{ scan.avg_rank }}{% else %}Not found{% endif %}
+                                        {% if scan.avg_rank > 0 %}Avg local #{{ scan.avg_rank }}{% else %}Not returned by Places{% endif %}
                                     </small>
                                 </div>
                                 <small class="text-muted" style="font-size:.75rem;">{{ scan.scanned_at[:16] }}</small>
@@ -635,8 +635,9 @@
                     <li>Set the keyword, radius, and odd grid size you want to test</li>
                     <li>Drag the scan center pin or click the map to move the grid</li>
                     <li>We query Google around every grid point and match your listing by Place ID first when available</li>
-                    <li>Green means top 3, yellow means page 1, red means lower visibility, and gray means not returned</li>
+                    <li>Green means top 3 in the local pack, yellow means top 10 in the local pack, red means lower local-pack visibility, and gray means Places did not return you</li>
                     <li>The highlighted cell is the grid point closest to the live scan center</li>
+                    <li>Service-area businesses can rank on page one organically while still being inconsistent in Places local-pack responses</li>
                 </ul>
             </div>
         </div>
@@ -1164,7 +1165,7 @@ function renderStats(avgRank, found, total, results) {
         return result.rank >= 1 && result.rank <= 3;
     }).length;
     bar.innerHTML =
-        '<span class="stat-pill" style="background:#dcfce7; color:#166534;">Avg Rank: ' + avgRank + '</span>' +
+        '<span class="stat-pill" style="background:#dcfce7; color:#166534;">Avg Local Rank: ' + avgRank + '</span>' +
         '<span class="stat-pill" style="background:#e0e7ff; color:#3730a3;">Found: ' + found + ' / ' + total + '</span>' +
         '<span class="stat-pill" style="background:#dcfce7; color:#166534;">Top 3: ' + top3 + '</span>';
 }
@@ -1227,6 +1228,9 @@ function showDebug(debugInfo) {
             }
             if (verification.types && verification.types.length) {
                 verificationHtml += ' | Types: ' + verification.types.join(', ');
+                if ((verification.address || '').toLowerCase().indexOf('service-area business') !== -1) {
+                    verificationHtml += '<br><span style="color:#1d4ed8; font-weight:600;">This linked listing is a service-area business. It can rank on page one in standard Google results without being returned consistently by Places local-pack APIs.</span>';
+                }
             }
             if (verification.business_status) {
                 verificationHtml += ' | Status: ' + verification.business_status;
@@ -1269,8 +1273,8 @@ function showDebug(debugInfo) {
         if (!foundMatch) {
             el.innerHTML += '<br><div style="background:#eff6ff; border:1px solid #3b82f6; border-radius:8px; padding:10px; margin-top:8px; color:#1e40af;">' +
                 '<strong>Why "Not found"?</strong> Your business exists in Google, but Google\'s Places API did not return it for this keyword at this location. ' +
-                'This is common for service-area businesses with weak keyword visibility. The Places API returns far fewer results than a regular Google search.' +
-                '<br><strong>What this means:</strong> Your Google Business Profile may need optimization for this keyword. Try a few different service phrases to see where it does rank.' +
+                'This heatmap measures Google Maps local-pack visibility, not your website\'s organic page-one ranking. Service-area businesses often show up in standard Google results more often than they appear in Places API responses.' +
+                '<br><strong>What this means:</strong> This keyword and location combo is weak in the local pack feed. Try a few different service phrases to see where your Google Business Profile does appear.' +
                 '</div>';
         }
     }
@@ -1283,7 +1287,7 @@ function setActiveHistoryItem(scanId) {
 }
 
 function buildHistoryItemHtml(scan) {
-    var avgLabel = scan.avg_rank > 0 ? 'Avg #' + scan.avg_rank : 'Not found';
+    var avgLabel = scan.avg_rank > 0 ? 'Avg local #' + scan.avg_rank : 'Not returned by Places';
     var timeLabel = scan.scanned_at || 'Just now';
     return '<div class="scan-history-item mb-2 active" data-scan-id="' + scan.id + '">' +
         '<div class="d-flex justify-content-between align-items-start">' +

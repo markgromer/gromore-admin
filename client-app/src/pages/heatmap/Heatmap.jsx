@@ -686,7 +686,7 @@ export default function Heatmap() {
       <div className={styles.hero}>
         <div>
           <h1 className={styles.title}>Rank Heatmap</h1>
-          <p className={styles.subtitle}>Search a service term, move the scan center, and map local visibility across the grid before you spend more on traffic.</p>
+          <p className={styles.subtitle}>Search a service term, move the scan center, and map Google Maps local-pack visibility across the grid. This does not track your website&apos;s organic page-one ranking.</p>
         </div>
         <div className={styles.heroPills}>
           <span className={styles.heroPill}><MapPin size={14} /> {formatCoords(center?.lat, center?.lng)}</span>
@@ -819,11 +819,11 @@ export default function Heatmap() {
 
             {hasLocation && (
               <Card>
-                <CardHeader title="Heatmap grid" subtitle={results.length ? `${radiusMiles} mile radius | ${gridSize} x ${gridSize} grid` : 'Run a scan to populate the grid.'} />
+                <CardHeader title="Heatmap grid" subtitle={results.length ? `${radiusMiles} mile radius | ${gridSize} x ${gridSize} local-pack grid` : 'Run a scan to populate the local-pack grid.'} />
                 {results.length ? (
                   <>
                     <div className={styles.statsRow}>
-                      <span className={styles.statPill}>Avg rank: {avgRank || 'N/A'}</span>
+                      <span className={styles.statPill}>Avg local rank: {avgRank || 'N/A'}</span>
                       <span className={styles.statPill}>Found: {rankedCount} / {results.length}</span>
                       <span className={styles.statPill}>Top 3: {top3Count}</span>
                     </div>
@@ -852,11 +852,12 @@ export default function Heatmap() {
                     </div>
                     <div className={styles.legend}>
                       <span><i className={`${styles.legendDot} ${styles.legendTop}`} /> #1-3</span>
-                      <span><i className={`${styles.legendDot} ${styles.legendMid}`} /> #4-10</span>
-                      <span><i className={`${styles.legendDot} ${styles.legendLow}`} /> #11+</span>
-                      <span><i className={`${styles.legendDot} ${styles.legendNone}`} /> Not found</span>
+                      <span><i className={`${styles.legendDot} ${styles.legendMid}`} /> #4-10 local pack</span>
+                      <span><i className={`${styles.legendDot} ${styles.legendLow}`} /> #11+ local pack</span>
+                      <span><i className={`${styles.legendDot} ${styles.legendNone}`} /> Not returned by Places</span>
                       <span><i className={`${styles.legendDot} ${styles.legendCenter}`} /> Closest cell to center</span>
                     </div>
+                    <p className={styles.inlineMessage}>This heatmap measures Google Maps and Places local-pack visibility. Service-area businesses can rank on page one organically while still appearing inconsistently in Places results.</p>
                   </>
                 ) : (
                   <div className={styles.emptyState}>No scan yet. Set the term, move the center, and run the heatmap.</div>
@@ -925,7 +926,7 @@ export default function Heatmap() {
 
             {(debugInfo || apiTestLines.length > 0) && (
               <Card>
-                <CardHeader title="Diagnostics" subtitle="Use this when results look thin or the API is not returning enough listings." />
+                <CardHeader title="Diagnostics" subtitle="Use this when Maps and Places results look thin or the API is not returning enough listings." />
                 {apiTestLines.length > 0 && (
                   <div className={styles.debugBlock}>
                     <div className={styles.debugLabel}>API test</div>
@@ -938,6 +939,9 @@ export default function Heatmap() {
                     <p>Matched listing: {debugInfo.business_name_used || 'Unknown'}</p>
                     <p>Place ID: {debugInfo.place_id_used || 'Not linked'}</p>
                     <p>Places returned at sample point: {debugInfo.places_returned ?? 0}</p>
+                    {(debugInfo.place_id_verification?.address || '').toLowerCase().includes('service-area business') && (
+                      <p>This linked listing is a service-area business. It may rank in standard Google results while still appearing inconsistently in Places local-pack responses.</p>
+                    )}
                     {debugInfo.keyword_warning && <p>{debugInfo.keyword_warning}</p>}
                   </div>
                 )}
@@ -1010,7 +1014,7 @@ export default function Heatmap() {
                       <button type="button" className={styles.historyMain} onClick={() => handleLoadScan(scan.id)}>
                         <span className={styles.historyTitle}>{scan.keyword}</span>
                         <span className={styles.historyMeta}>{scan.radius_miles} mi | {scan.grid_size} x {scan.grid_size}</span>
-                        <span className={styles.historyMeta}>{scan.avg_rank > 0 ? `Avg #${scan.avg_rank}` : 'Not found'}</span>
+                        <span className={styles.historyMeta}>{scan.avg_rank > 0 ? `Avg local #${scan.avg_rank}` : 'Not returned by Places'}</span>
                         <span className={styles.historyMeta}>{scan.scanned_at?.slice(0, 16) || 'Just now'}</span>
                       </button>
                       <button type="button" className={styles.historyDelete} onClick={() => handleDeleteScan(scan.id)}>
