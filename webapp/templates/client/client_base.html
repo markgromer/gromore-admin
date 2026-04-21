@@ -311,6 +311,9 @@
     (function() {
         var lastLoaderShownAt = 0;
         var pendingNavLabel = '';
+        var activePjaxRequest = null;
+        var activePjaxSeq = 0;
+        var PJAX_TIMEOUT_MS = 15000;
 
         function labelForHref(href) {
             try {
@@ -381,7 +384,19 @@
         window._pjaxNavigate = function(url, pushState) {
             var content = document.getElementById('pjaxContent');
             var fade = document.getElementById('pageFade');
+            var navBar = document.getElementById('navProgress');
+            var navSeq = ++activePjaxSeq;
+            var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            var timedOut = false;
+            var timeoutId = null;
             if (!content) { window.location.href = url; return; }
+
+            if (activePjaxRequest && typeof activePjaxRequest.abort === 'function') {
+                try {
+                    activePjaxRequest.abort();
+                } catch (e) {}
+            }
+            activePjaxRequest = controller;
 
             pendingNavLabel = labelForHref(url);
 
@@ -400,10 +415,11 @@
                 fade.classList.add('active');
             }
 
-            var navBar = document.getElementById('navProgress');
-            navBar.classList.remove('running');
-            void navBar.offsetWidth;
-            navBar.classList.add('running');
+            if (navBar) {
+                navBar.classList.remove('running');
+                void navBar.offsetWidth;
+                navBar.classList.add('running');
+            }
 
             // Fade out current content immediately
             content.classList.add('pjax-out');
@@ -424,13 +440,30 @@
                 content.classList.remove('pjax-out');
             }, 120);
 
-            fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'PJAX' } })
+            if (controller) {
+                timeoutId = setTimeout(function() {
+                    timedOut = true;
+                    try {
+                        controller.abort();
+                    } catch (e) {}
+                }, PJAX_TIMEOUT_MS);
+            }
+
+            fetch(url, {
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'PJAX' },
+                signal: controller ? controller.signal : undefined,
+            })
             .then(function(r) {
+                if (navSeq !== activePjaxSeq) throw new Error('stale_navigation');
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.text();
             })
             .then(function(html) {
+                if (navSeq !== activePjaxSeq) return;
                 clearTimeout(shimmerTimer);
+                if (timeoutId) clearTimeout(timeoutId);
+                if (activePjaxRequest === controller) activePjaxRequest = null;
                 var parser = new DOMParser();
                 var doc = parser.parseFromString(html, 'text/html');
 
@@ -520,9 +553,17 @@
                 });
 
                 // Done - complete the progress bar
-                navBar.classList.remove('running');
-                navBar.style.width = '100%';
-                setTimeout(function() { navBar.style.opacity = '0'; setTimeout(function() { navBar.style.width = ''; navBar.style.opacity = ''; }, 200); }, 100);
+                if (navBar) {
+                    navBar.classList.remove('running');
+                    navBar.style.width = '100%';
+                    setTimeout(function() {
+                        navBar.style.opacity = '0';
+                        setTimeout(function() {
+                            navBar.style.width = '';
+                            navBar.style.opacity = '';
+                        }, 200);
+                    }, 100);
+                }
 
                 // Re-bind nav links for PJAX
                 _bindPjaxLinks();
@@ -534,15 +575,27 @@
                     fade.classList.remove('active');
                 }
             })
-            .catch(function() {
+            .catch(function(err) {
+                if (navSeq !== activePjaxSeq) return;
                 clearTimeout(shimmerTimer);
-                navBar.classList.remove('running');
+                if (timeoutId) clearTimeout(timeoutId);
+                if (activePjaxRequest === controller) activePjaxRequest = null;
+                if (navBar) {
+                    navBar.classList.remove('running');
+                }
                 content.classList.remove('pjax-out');
                 if (window.hidePageLoader) {
                     window.hidePageLoader();
                 }
                 if (fade) {
                     fade.classList.remove('active');
+                }
+                if (err && err.message === 'stale_navigation') {
+                    return;
+                }
+                if (timedOut) {
+                    window.location.href = url;
+                    return;
                 }
                 window.location.href = url;
             });

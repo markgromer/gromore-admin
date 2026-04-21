@@ -1231,6 +1231,44 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date, user_access_
         },
     }
 
+    post_tokens_to_try = []
+    for candidate in (access_token, user_access_token):
+        if candidate and candidate not in post_tokens_to_try:
+            post_tokens_to_try.append(candidate)
+
+    def _extract_total_count(payload):
+        summary = (payload or {}).get("summary") or {}
+        total_count = summary.get("total_count")
+        if isinstance(total_count, (int, float)):
+            return int(total_count)
+        return 0
+
+    def _fetch_post_count_hint(endpoint, token_candidate):
+        try:
+            resp = requests.get(
+                endpoint,
+                params={
+                    "access_token": token_candidate,
+                    "fields": "id",
+                    "since": since_ts,
+                    "until": until_ts,
+                    "limit": 1,
+                    "summary": "true",
+                },
+                timeout=15,
+            )
+            if resp.status_code != 200:
+                return 0
+            payload = resp.json()
+            if "error" in payload:
+                return 0
+            total_count = _extract_total_count(payload)
+            if total_count > 0:
+                return total_count
+            return len(payload.get("data", []) or [])
+        except Exception:
+            return 0
+
     # ── Top posts for the period ──
     # Request basic post fields first (insights sub-request can cause
     # the entire call to fail on some page/token configurations)
@@ -1241,6 +1279,7 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date, user_access_
     simple_post_fields = "id,message,created_time,type,permalink_url"
     posts = []
     raw_posts = []
+    post_count_hint = 0
 
     # Try each endpoint in order until one returns posts
     date_endpoints = [
@@ -1250,59 +1289,63 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date, user_access_
     ]
     for ep in date_endpoints:
         ep_name = ep.split("/")[-1]
-        try:
-            params = {
-                "access_token": access_token,
-                "fields": basic_post_fields,
-                "since": since_ts,
-                "until": until_ts,
-                "limit": 100,
-            }
-            next_url = ep
-            paged_posts = []
-            page_count = 0
-            while next_url and page_count < 5:
-                posts_resp = requests.get(next_url, params=params if next_url == ep else None, timeout=30)
-                if posts_resp.status_code != 200:
-                    log.info("FB %s (date-filtered) HTTP %s", ep_name, posts_resp.status_code)
-                    paged_posts = []
-                    break
-                posts_data = posts_resp.json()
-                if "error" in posts_data:
-                    log.warning("FB %s (date-filtered) error: %s", ep_name, posts_data["error"].get("message", posts_data["error"]))
-                    paged_posts = []
-                    break
-                paged_posts.extend(posts_data.get("data", []))
-                next_url = (posts_data.get("paging") or {}).get("next")
-                params = None
-                page_count += 1
-
-            raw_posts = paged_posts
-            log.info("FB %s (date-filtered) returned %d posts for page %s", ep_name, len(raw_posts), page_id)
-            if raw_posts:
-                break
-
-            # Try with simpler fields in case engagement sub-requests caused the failure
-            posts_resp2 = requests.get(
-                ep,
-                params={
-                    "access_token": access_token,
-                    "fields": simple_post_fields,
+        for token_candidate in post_tokens_to_try:
+            post_count_hint = max(post_count_hint, _fetch_post_count_hint(ep, token_candidate))
+            try:
+                params = {
+                    "access_token": token_candidate,
+                    "fields": basic_post_fields,
                     "since": since_ts,
                     "until": until_ts,
                     "limit": 100,
-                },
-                timeout=30,
-            )
-            if posts_resp2.status_code == 200:
-                posts_data2 = posts_resp2.json()
-                if "error" not in posts_data2:
-                    raw_posts = posts_data2.get("data", [])
-                    log.info("FB %s (date-filtered, simple fields) returned %d posts", ep_name, len(raw_posts))
-                    if raw_posts:
+                }
+                next_url = ep
+                paged_posts = []
+                page_count = 0
+                while next_url and page_count < 5:
+                    posts_resp = requests.get(next_url, params=params if next_url == ep else None, timeout=30)
+                    if posts_resp.status_code != 200:
+                        log.info("FB %s (date-filtered) HTTP %s", ep_name, posts_resp.status_code)
+                        paged_posts = []
                         break
-        except Exception as exc:
-            log.warning("FB %s (date-filtered) exception: %s", ep_name, exc)
+                    posts_data = posts_resp.json()
+                    if "error" in posts_data:
+                        log.warning("FB %s (date-filtered) error: %s", ep_name, posts_data["error"].get("message", posts_data["error"]))
+                        paged_posts = []
+                        break
+                    paged_posts.extend(posts_data.get("data", []))
+                    next_url = (posts_data.get("paging") or {}).get("next")
+                    params = None
+                    page_count += 1
+
+                raw_posts = paged_posts
+                log.info("FB %s (date-filtered) returned %d posts for page %s", ep_name, len(raw_posts), page_id)
+                if raw_posts:
+                    break
+
+                # Try with simpler fields in case engagement sub-requests caused the failure
+                posts_resp2 = requests.get(
+                    ep,
+                    params={
+                        "access_token": token_candidate,
+                        "fields": simple_post_fields,
+                        "since": since_ts,
+                        "until": until_ts,
+                        "limit": 100,
+                    },
+                    timeout=30,
+                )
+                if posts_resp2.status_code == 200:
+                    posts_data2 = posts_resp2.json()
+                    if "error" not in posts_data2:
+                        raw_posts = posts_data2.get("data", [])
+                        log.info("FB %s (date-filtered, simple fields) returned %d posts", ep_name, len(raw_posts))
+                        if raw_posts:
+                            break
+            except Exception as exc:
+                log.warning("FB %s (date-filtered) exception: %s", ep_name, exc)
+        if raw_posts:
+            break
 
     if raw_posts:
         log.info("FB posts endpoint returned %d posts for page %s", len(raw_posts), page_id)
@@ -1366,20 +1409,38 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date, user_access_
     if not posts:
         log.info("No posts from date-filtered endpoints, trying without date filter for page %s", page_id)
         for endpoint in [f"{base}/published_posts", f"{base}/posts", f"{base}/feed"]:
-            try:
-                nodate_resp = requests.get(
-                    endpoint,
-                    params={
-                        "access_token": access_token,
+            for token_candidate in post_tokens_to_try:
+                try:
+                    next_url = endpoint
+                    params = {
+                        "access_token": token_candidate,
                         "fields": "id,message,created_time,type,permalink_url,"
                                   "shares,likes.limit(0).summary(true),"
                                   "comments.limit(0).summary(true)",
                         "limit": 100,
-                    },
-                    timeout=30,
-                )
-                if nodate_resp.status_code == 200:
-                    all_posts = nodate_resp.json().get("data", [])
+                    }
+                    all_posts = []
+                    page_count = 0
+                    while next_url and page_count < 5:
+                        nodate_resp = requests.get(
+                            next_url,
+                            params=params if next_url == endpoint else None,
+                            timeout=30,
+                        )
+                        if nodate_resp.status_code != 200:
+                            log.info("FB %s (no date filter) returned %s", endpoint.split("/")[-1], nodate_resp.status_code)
+                            all_posts = []
+                            break
+                        payload = nodate_resp.json()
+                        if "error" in payload:
+                            log.warning("FB no-date fallback %s error: %s", endpoint.split("/")[-1], payload["error"].get("message", payload["error"]))
+                            all_posts = []
+                            break
+                        all_posts.extend(payload.get("data", []))
+                        next_url = (payload.get("paging") or {}).get("next")
+                        params = None
+                        page_count += 1
+
                     log.info("FB %s (no date filter) returned %d posts", endpoint.split("/")[-1], len(all_posts))
                     for post in all_posts:
                         ct = post.get("created_time", "")
@@ -1406,10 +1467,10 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date, user_access_
                     if posts:
                         log.info("Found %d posts in date range via no-date fallback", len(posts))
                         break
-                else:
-                    log.info("FB %s (no date filter) returned %s", endpoint.split("/")[-1], nodate_resp.status_code)
-            except Exception as e:
-                log.warning("FB no-date fallback %s exception: %s", endpoint.split("/")[-1], e)
+                except Exception as e:
+                    log.warning("FB no-date fallback %s exception: %s", endpoint.split("/")[-1], e)
+            if posts:
+                break
 
     # Sort by engagement
     posts.sort(key=lambda x: (x.get("likes", 0) + x.get("comments", 0) + x.get("shares", 0)), reverse=True)
@@ -1436,10 +1497,15 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date, user_access_
             page_metrics["post_engagements"] / reach_for_rate * 100, 2
         )
 
+    post_count = max(len(posts), post_count_hint)
     page_metrics["engagement_rate"] = total_engagement_rate
+    page_metrics["_debug"]["post_count_hint"] = post_count_hint
+    page_metrics["_debug"]["post_count_source"] = (
+        "enumerated_posts" if len(posts) >= post_count_hint else "count_hint"
+    )
 
     return {
         "metrics": page_metrics,
         "top_posts": posts[:15],
-        "post_count": len(posts),
+        "post_count": post_count,
     }

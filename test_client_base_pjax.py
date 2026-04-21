@@ -70,6 +70,10 @@ class ClientBasePjaxTests(unittest.TestCase):
         self.assertIn("Loading a new mission track", html)
         self.assertIn("window._pjaxNavigate(btn.href, true)", html)
         self.assertIn("class=\"track-btn", html)
+        self.assertIn("var activePjaxRequest = null;", html)
+        self.assertIn("var PJAX_TIMEOUT_MS = 15000;", html)
+        self.assertIn("controller.abort();", html)
+        self.assertIn("if (navSeq !== activePjaxSeq) return;", html)
 
 
 if __name__ == "__main__":
