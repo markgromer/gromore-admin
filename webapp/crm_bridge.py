@@ -61,6 +61,7 @@ def _parse_ts_ms(value):
 
 
 def _sng_extract_payments(result_dict):
+    result_dict = _sng_normalize_detail_payload(result_dict)
     if not isinstance(result_dict, dict):
         return []
     payments = result_dict.get("payments")
@@ -84,7 +85,44 @@ def _sng_extract_payments(result_dict):
     return []
 
 
+def _sng_normalize_detail_payload(payload):
+    if isinstance(payload, dict):
+        return payload
+    if not isinstance(payload, list):
+        return payload
+    if not payload:
+        return {}
+
+    dict_items = [item for item in payload if isinstance(item, dict)]
+    if not dict_items:
+        if len(payload) == 1:
+            return _sng_normalize_detail_payload(payload[0])
+        return {}
+
+    payment_like_keys = {"amount", "amount_paid", "total", "value", "status", "date", "created_at", "createdAt", "tip_amount", "tip"}
+    if all(payment_like_keys.intersection(item.keys()) for item in dict_items):
+        return {"payments": dict_items}
+
+    if len(payload) == 1:
+        return _sng_normalize_detail_payload(payload[0])
+
+    for item in dict_items:
+        if isinstance(item.get("payments"), list):
+            return item
+        data = item.get("data")
+        if isinstance(data, dict):
+            if isinstance(data.get("payments"), list):
+                return item
+            if isinstance(data.get("client"), dict):
+                return item
+        if isinstance(item.get("client"), dict):
+            return item
+
+    return dict_items[0]
+
+
 def _sng_extract_client_record(result_dict):
+    result_dict = _sng_normalize_detail_payload(result_dict)
     if not isinstance(result_dict, dict):
         return {}
     data = result_dict.get("data")
@@ -911,7 +949,8 @@ def _sng_sum_payments_for_month(brand, client_ids, month_prefix):
             if not diag["first_error"]:
                 diag["first_error"] = f"{cid}: {error}"
             continue
-        if not isinstance(result, dict):
+        normalized_result = _sng_normalize_detail_payload(result)
+        if not isinstance(normalized_result, dict):
             diag["errors"] += 1
             if not diag["first_error"]:
                 diag["first_error"] = f"{cid}: non-dict response ({type(result).__name__})"
@@ -919,9 +958,9 @@ def _sng_sum_payments_for_month(brand, client_ids, month_prefix):
 
         # Capture the keys from first successful response
         if diag["sample_response_keys"] is None:
-            diag["sample_response_keys"] = list(result.keys())
+            diag["sample_response_keys"] = list(normalized_result.keys())
 
-        payments = _sng_extract_payments(result)
+        payments = _sng_extract_payments(normalized_result)
         if payments:
             diag["clients_with_payments"] += 1
             # Capture first payment as sample
