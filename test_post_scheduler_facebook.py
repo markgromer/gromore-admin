@@ -98,6 +98,51 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertIn("happy customer", payload["image_hint"])
 
     @patch("openai.OpenAI")
+    def test_generate_facebook_post_prompt_includes_storytelling_controls(self, mock_openai):
+        with self.app.app_context():
+            db = self.app.db
+            db.update_brand_text_field(self.brand_id, "facebook_storytelling_strategy", "Let people watch us grow the business in public.")
+            db.update_brand_text_field(self.brand_id, "facebook_content_personality", "playful_funny")
+            db.update_brand_text_field(self.brand_id, "facebook_cta_style", "subtle")
+            db.update_brand_text_field(self.brand_id, "facebook_storytelling_guardrails", "No cheesy motivation. Keep the humor dry.")
+            db.update_brand_text_field(
+                self.brand_id,
+                "facebook_recurring_characters",
+                json.dumps(
+                    [
+                        {
+                            "name": "Marty",
+                            "role": "Dispatcher",
+                            "description": "Keeps the schedule tight and the jokes dry.",
+                            "voice": "Short, sharp, practical",
+                        }
+                    ]
+                ),
+            )
+
+        mock_client = Mock()
+        mock_client.chat.completions.create.return_value = _FakeChatResponse(
+            '{"message":"Marty gives a quick update on how the team is handling spring demand.","image_hint":"Dispatcher at the service board","link_url":""}'
+        )
+        mock_openai.return_value = mock_client
+
+        response = self.client.post(
+            "/client/post-scheduler/generate",
+            json={"post_type": "character_spotlight", "brief": "Show the business momentum.", "character_name": "Marty"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["ok"])
+
+        prompt = mock_client.chat.completions.create.call_args.kwargs["messages"][1]["content"]
+        self.assertIn("Organic storytelling controls", prompt)
+        self.assertIn("Let people watch us grow the business in public.", prompt)
+        self.assertIn("Playful And Funny", prompt)
+        self.assertIn("Subtle", prompt)
+        self.assertIn("Requested recurring character: Marty", prompt)
+        self.assertIn("No cheesy motivation. Keep the humor dry.", prompt)
+
+    @patch("openai.OpenAI")
     def test_generate_facebook_calendar_returns_typed_posts(self, mock_openai):
         mock_client = Mock()
         mock_client.chat.completions.create.return_value = _FakeChatResponse(
@@ -241,6 +286,51 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertEqual(payload["file"]["id"], "drive-file-123")
         self.assertEqual(payload["file"]["download_url"], "/client/api/drive/download/drive-file-123")
         self.assertEqual(payload["file"]["thumbnail_url"], "/client/api/drive/thumbnail/drive-file-123")
+
+    def test_my_business_voice_section_saves_storytelling_fields(self):
+        response = self.client.post(
+            "/client/my-business",
+            data={
+                "section": "voice",
+                "brand_voice": "Direct and local.",
+                "active_offers": "Free estimate.",
+                "target_audience": "Homeowners who want reliability.",
+                "facebook_storytelling_strategy": "Make the feed feel like an ongoing story about disciplined growth.",
+                "facebook_content_personality": "warm_professional",
+                "facebook_cta_style": "consultative",
+                "facebook_storytelling_guardrails": "No forced jokes and no fake urgency.",
+                "facebook_recurring_characters": "Alex: Owner-operator with calm authority",
+                "reporting_notes": "Keep reports plain English.",
+                "website_url": "https://example.com",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        with self.app.app_context():
+            brand = self.app.db.get_brand(self.brand_id)
+
+        self.assertEqual(brand["facebook_storytelling_strategy"], "Make the feed feel like an ongoing story about disciplined growth.")
+        self.assertEqual(brand["facebook_content_personality"], "warm_professional")
+        self.assertEqual(brand["facebook_cta_style"], "consultative")
+        self.assertEqual(brand["facebook_storytelling_guardrails"], "No forced jokes and no fake urgency.")
+        self.assertEqual(brand["facebook_recurring_characters"], "Alex: Owner-operator with calm authority")
+
+    def test_storytelling_pages_render(self):
+        with self.app.app_context():
+            db = self.app.db
+            db.update_brand_text_field(self.brand_id, "facebook_storytelling_strategy", "Make the feed feel like an unfolding brand story.")
+            db.update_brand_text_field(self.brand_id, "facebook_content_personality", "warm_professional")
+            db.update_brand_text_field(self.brand_id, "facebook_cta_style", "subtle")
+            db.update_brand_text_field(self.brand_id, "facebook_recurring_characters", json.dumps([{"name": "Marty", "role": "Dispatcher"}]))
+
+        my_business_response = self.client.get("/client/my-business")
+        scheduler_response = self.client.get("/client/post-scheduler")
+
+        self.assertEqual(my_business_response.status_code, 200)
+        self.assertEqual(scheduler_response.status_code, 200)
+        self.assertIn(b"Facebook Storytelling Strategy", my_business_response.data)
+        self.assertIn(b"Brand storytelling profile is active", scheduler_response.data)
 
 
 if __name__ == "__main__":

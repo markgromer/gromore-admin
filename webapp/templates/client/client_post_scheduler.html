@@ -77,6 +77,20 @@
         background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: .75rem .85rem;
         font-size: .86rem; color: var(--text-muted);
     }
+    .storytelling-card {
+        background: linear-gradient(135deg, #f8fafc, #fff7ed);
+        border: 1px solid #fed7aa;
+        border-radius: 12px;
+        padding: 1rem;
+    }
+    .storytelling-stat {
+        display: inline-flex; align-items: center; gap: .35rem;
+        background: rgba(255,255,255,.8); border: 1px solid #fdba74; border-radius: 999px;
+        padding: .3rem .7rem; font-size: .78rem; color: #9a3412; font-weight: 600;
+    }
+    .storytelling-character-list {
+        margin: .75rem 0 0; padding-left: 1rem; color: var(--text-muted); font-size: .84rem;
+    }
 </style>
 
 <div class="page-title-bar">
@@ -116,10 +130,37 @@
 <div class="card border-0 shadow-sm mb-4" style="border-radius:var(--radius);">
     <div class="card-body p-4">
         <h5 class="fw-bold mb-3">Compose a Post</h5>
+        {% if facebook_storytelling_profile.has_profile %}
+        <div class="storytelling-card mb-3">
+            <div class="d-flex flex-wrap justify-content-between gap-2 align-items-start">
+                <div>
+                    <div class="fw-semibold" style="color:var(--text-strong);">Brand storytelling profile is active</div>
+                    <div class="text-muted" style="font-size:.86rem;">AI drafts and calendars will use this profile automatically. Update it in <a href="{{ url_for('client.client_my_business') }}">My Business</a>.</div>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    {% if facebook_storytelling_profile.personality_label %}<span class="storytelling-stat"><i class="bi bi-emoji-smile"></i>{{ facebook_storytelling_profile.personality_label }}</span>{% endif %}
+                    {% if facebook_storytelling_profile.cta_label %}<span class="storytelling-stat"><i class="bi bi-megaphone"></i>{{ facebook_storytelling_profile.cta_label }}</span>{% endif %}
+                    {% if facebook_storytelling_profile.character_count %}<span class="storytelling-stat"><i class="bi bi-person-badge"></i>{{ facebook_storytelling_profile.character_count }} recurring characters</span>{% endif %}
+                </div>
+            </div>
+            {% if facebook_storytelling_profile.strategy %}
+            <div class="mt-2" style="font-size:.88rem; color:var(--text-muted);">
+                <strong style="color:var(--text-strong);">Strategy:</strong> {{ facebook_storytelling_profile.strategy }}
+            </div>
+            {% endif %}
+            {% if facebook_storytelling_profile.characters %}
+            <ul class="storytelling-character-list mb-0">
+                {% for character in facebook_storytelling_profile.characters[:3] %}
+                <li><strong style="color:var(--text-strong);">{{ character.name }}</strong>{% if character.role %} - {{ character.role }}{% endif %}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        {% endif %}
         <form id="composeForm">
             <div class="composer-helper mb-3">
                 <div class="row g-3 align-items-end">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label fw-medium">Facebook Post Type</label>
                         <select class="form-select" id="composePostType">
                             {% for post_type in facebook_post_types %}
@@ -128,7 +169,23 @@
                         </select>
                         <small class="text-muted">Choose the angle before you draft or schedule.</small>
                     </div>
-                    <div class="col-md-8">
+                    <div class="col-md-3">
+                        <label class="form-label fw-medium">Recurring Character</label>
+                        <select class="form-select" id="composeCharacterName" {% if not facebook_recurring_characters %}disabled{% endif %}>
+                            <option value="">No character</option>
+                            {% for character in facebook_recurring_characters %}
+                            <option value="{{ character.name }}">{{ character.name }}{% if character.role %} - {{ character.role }}{% endif %}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">
+                            {% if facebook_recurring_characters %}
+                            Optional. Force the draft to center on one recurring character.
+                            {% else %}
+                            Add recurring characters in My Business to unlock character-led posts.
+                            {% endif %}
+                        </small>
+                    </div>
+                    <div class="col-md-6">
                         <label class="form-label fw-medium">Optional Brief</label>
                         <div class="input-group">
                             <input type="text" class="form-control" id="composeBrief" maxlength="600"
@@ -256,7 +313,7 @@
             <button type="button" class="btn btn-primary" id="calendarGenerateBtn" onclick="generateCalendarPlan()">
                 <i class="bi bi-magic me-1"></i> Generate Calendar With AI
             </button>
-            <span class="text-muted" style="font-size:.88rem;">The generated posts will open in the CSV preview so you can review before scheduling.</span>
+            <span class="text-muted" style="font-size:.88rem;">The generated posts will open in the CSV preview so you can review before scheduling.{% if facebook_storytelling_profile.character_count %} Recurring characters will be woven in automatically where they fit.{% endif %}</span>
         </div>
         <div id="calendarAiResult" class="mt-2"></div>
         {% else %}
@@ -481,6 +538,7 @@ function generatePostDraft() {
     var btn = document.getElementById('composeGenerateBtn');
     var postType = document.getElementById('composePostType').value;
     var brief = document.getElementById('composeBrief').value.trim();
+    var characterName = document.getElementById('composeCharacterName') ? document.getElementById('composeCharacterName').value : '';
     if (!btn) return;
 
     btn.disabled = true;
@@ -490,7 +548,7 @@ function generatePostDraft() {
     fetch('/client/post-scheduler/generate', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-        body: JSON.stringify({post_type: postType, brief: brief})
+        body: JSON.stringify({post_type: postType, brief: brief, character_name: characterName})
     })
     .then(parseJsonResponse)
     .then(function(data) {
@@ -575,7 +633,8 @@ function generateCalendarPlan() {
                 scheduled_at: post.scheduled_at || '',
                 image_url: '',
                 link_url: post.link_url || '',
-                image_hint: post.image_hint || ''
+                image_hint: post.image_hint || '',
+                character_name: post.character_name || ''
             };
         });
         renderCsvPreviewRows(csvParsedRows);
@@ -750,16 +809,18 @@ function renderCsvPreviewRows(rows) {
     tbody.innerHTML = '';
     rows.forEach(function(row, index) {
         var imageHint = row.image_hint ? '<div class="text-muted mt-1" style="font-size:.78rem;">Idea: ' + escapeHtml(row.image_hint) + '</div>' : '';
+        var characterHint = row.character_name ? '<div class="text-muted mt-1" style="font-size:.78rem;">Character: ' + escapeHtml(row.character_name) + '</div>' : '';
         var imageActions = hasDrive
             ? '<button type="button" class="btn btn-outline-secondary btn-sm mt-1" onclick="triggerCsvImageUpload(' + index + ')"><i class="bi bi-cloud-arrow-up me-1"></i>Upload</button>'
             : '';
         var imageValue = escapeHtml(row.image_url || '');
         var linkValue = escapeHtml(row.link_url || '');
         var imageName = row.image_name ? '<div class="text-muted mt-1" style="font-size:.78rem;">Attached: ' + escapeHtml(row.image_name) + '</div>' : '';
+        var messagePreview = escapeHtml(row.message.substring(0, 80)) + (row.message.length > 80 ? '...' : '');
         var tr = document.createElement('tr');
         tr.innerHTML = '<td>' + (index + 1) + '</td>' +
             '<td>' + (row.post_type || 'value') + '</td>' +
-            '<td>' + row.message.substring(0, 80) + (row.message.length > 80 ? '...' : '') + '</td>' +
+            '<td>' + messagePreview + characterHint + '</td>' +
             '<td><code>' + row.scheduled_at + '</code></td>' +
             '<td style="min-width:260px;">' +
                 '<input type="url" class="form-control form-control-sm" value="' + imageValue + '" placeholder="https://..." oninput="updateCsvRowField(' + index + ', \'image_url\', this.value)">' +

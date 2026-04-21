@@ -2329,6 +2329,12 @@ _FACEBOOK_POST_TYPE_OPTIONS = [
         "description": "Share momentum, milestones, new tools, team growth, or progress updates.",
         "prompt_focus": "Show growth in a grounded way that reinforces trust and momentum.",
     },
+    {
+        "key": "character_spotlight",
+        "label": "Recurring Character",
+        "description": "Feature a recurring person, mascot, crew personality, or branded voice the audience should get to know.",
+        "prompt_focus": "Use one recurring character to tell the story in a way that feels consistent, human, and memorable.",
+    },
 ]
 _FACEBOOK_POST_TYPE_MAP = {item["key"]: item for item in _FACEBOOK_POST_TYPE_OPTIONS}
 _FACEBOOK_POST_TYPE_ALIASES = {
@@ -2354,6 +2360,9 @@ _FACEBOOK_POST_TYPE_ALIASES = {
     "watch_our_business_grow": "business_growth",
     "watch_business_grow": "business_growth",
     "growth": "business_growth",
+    "character": "character_spotlight",
+    "recurring_character": "character_spotlight",
+    "character_post": "character_spotlight",
 }
 _FACEBOOK_POST_TYPE_RULES = {
     "value": "Lead with one practical lesson, warning sign, tip, or FAQ answer that helps a prospect make a better decision.",
@@ -2365,6 +2374,7 @@ _FACEBOOK_POST_TYPE_RULES = {
     "community_spotlight": "Reference something local that feels authentic to the business, such as a neighborhood, event, nearby project, or local partner.",
     "seasonal_reminder": "Anchor the post in a real seasonal concern, weather pattern, or calendar moment that matters to local customers right now.",
     "business_growth": "Share a milestone, upgrade, new team member, new capability, or community momentum update that shows the business is growing for the right reasons.",
+    "character_spotlight": "Make the recurring character feel consistent and real. Show how that person or persona reveals the brand without turning the post into a forced skit.",
 }
 _FACEBOOK_CONTENT_MIXES = [
     {
@@ -2392,8 +2402,15 @@ _FACEBOOK_CONTENT_MIXES = [
         "key": "community_momentum",
         "label": "Community Momentum",
         "description": "Emphasize local visibility, crew personality, and growth in the market.",
-        "post_types": ["community_spotlight", "team_intro", "behind_the_scenes", "business_growth", "value", "seasonal_reminder"],
+        "post_types": ["community_spotlight", "team_intro", "behind_the_scenes", "business_growth", "character_spotlight", "seasonal_reminder"],
         "prompt_focus": "Make the business feel active, visible, and rooted in the local community.",
+    },
+    {
+        "key": "brand_story_engine",
+        "label": "Brand Story Engine",
+        "description": "Tell an ongoing story about the people, momentum, and personalities behind the business.",
+        "post_types": ["business_growth", "behind_the_scenes", "character_spotlight", "team_intro", "community_spotlight", "value"],
+        "prompt_focus": "Make the brand feel like an unfolding story customers want to follow, not just a stream of offers.",
     },
 ]
 _FACEBOOK_CONTENT_MIX_MAP = {item["key"]: item for item in _FACEBOOK_CONTENT_MIXES}
@@ -2403,6 +2420,54 @@ _FACEBOOK_CALENDAR_DAY_OFFSETS = {
     4: [0, 2, 4, 6],
 }
 _FACEBOOK_CALENDAR_TIMES = ["09:15:00", "11:45:00", "14:30:00", "16:15:00"]
+_FACEBOOK_CONTENT_PERSONALITY_OPTIONS = [
+    {
+        "key": "straight_forward",
+        "label": "Straight Forward",
+        "description": "Professional, clear, no joking, no cute copy.",
+        "instruction": "Keep the tone direct, grounded, and professional. Do not joke around or lean on playful copy.",
+    },
+    {
+        "key": "warm_professional",
+        "label": "Warm Professional",
+        "description": "Competent and polished, but still human and approachable.",
+        "instruction": "Keep the tone warm, competent, and polished. Let the posts feel human without slipping into goofy language.",
+    },
+    {
+        "key": "light_personality",
+        "label": "Light Personality",
+        "description": "A little personality and charm, but still credible and service-first.",
+        "instruction": "Allow light personality, charm, and small moments of humor, but keep the business credible and useful.",
+    },
+    {
+        "key": "playful_funny",
+        "label": "Playful And Funny",
+        "description": "Use humor and memorable voice intentionally, without making the brand sound sloppy.",
+        "instruction": "Use humor intentionally where it fits, but keep the post coherent, brand-safe, and still commercially useful.",
+    },
+]
+_FACEBOOK_CONTENT_PERSONALITY_MAP = {item["key"]: item for item in _FACEBOOK_CONTENT_PERSONALITY_OPTIONS}
+_FACEBOOK_CTA_STYLE_OPTIONS = [
+    {
+        "key": "subtle",
+        "label": "Subtle",
+        "description": "Sell without sounding like a sales pitch.",
+        "instruction": "Use a subtle CTA. It should still sell, but it should feel observational or invitational, not pushy.",
+    },
+    {
+        "key": "consultative",
+        "label": "Consultative",
+        "description": "Guide the reader toward the next step like a trusted advisor.",
+        "instruction": "Use a consultative CTA. Encourage the next step like a trusted operator giving practical advice.",
+    },
+    {
+        "key": "direct",
+        "label": "Direct",
+        "description": "Be clear and explicit about booking, calling, or messaging now.",
+        "instruction": "Use a direct CTA. Tell the reader exactly what action to take next without hedging.",
+    },
+]
+_FACEBOOK_CTA_STYLE_MAP = {item["key"]: item for item in _FACEBOOK_CTA_STYLE_OPTIONS}
 
 
 def _normalize_facebook_post_type(value, default="value"):
@@ -2481,6 +2546,191 @@ def _normalize_facebook_content_mix(value, default="balanced_local_presence"):
     return default if default is not None else cleaned
 
 
+def _normalize_facebook_content_personality(value, default="warm_professional"):
+    cleaned = (value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if cleaned in _FACEBOOK_CONTENT_PERSONALITY_MAP:
+        return cleaned
+    return default if default is not None else cleaned
+
+
+def _normalize_facebook_cta_style(value, default="subtle"):
+    cleaned = (value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if cleaned in _FACEBOOK_CTA_STYLE_MAP:
+        return cleaned
+    return default if default is not None else cleaned
+
+
+def _parse_facebook_recurring_characters(raw_value):
+    raw = (raw_value or "").strip()
+    if not raw:
+        return []
+
+    parsed = None
+    if raw[:1] in ("[", "{"):
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            parsed = None
+
+    if isinstance(parsed, dict):
+        if isinstance(parsed.get("characters"), list):
+            parsed = parsed.get("characters")
+        else:
+            parsed = [parsed]
+
+    characters = []
+
+    def _append_character(name, profile, role=""):
+        cleaned_name = (name or "").strip()[:80]
+        cleaned_role = (role or "").strip()[:120]
+        cleaned_profile = re.sub(r"\s+", " ", (profile or "").strip())[:1200]
+        if not cleaned_name and cleaned_profile:
+            cleaned_name = f"Character {len(characters) + 1}"
+        if cleaned_name:
+            characters.append(
+                {
+                    "key": cleaned_name.lower().replace(" ", "_")[:80],
+                    "name": cleaned_name,
+                    "role": cleaned_role,
+                    "profile": cleaned_profile,
+                }
+            )
+
+    if isinstance(parsed, list):
+        for index, item in enumerate(parsed, start=1):
+            if isinstance(item, str):
+                _append_character(item, item)
+            elif isinstance(item, dict):
+                name = item.get("name") or item.get("character") or item.get("title") or f"Character {index}"
+                role = item.get("role") or item.get("job") or item.get("archetype") or ""
+                parts = []
+                for key in ("description", "backstory", "voice", "traits", "hook", "running_bit", "guardrails", "notes"):
+                    value = item.get(key)
+                    if value:
+                        label = key.replace("_", " ").title()
+                        parts.append(f"{label}: {value}")
+                profile = "; ".join(parts) or json.dumps(item, ensure_ascii=True)
+                _append_character(name, profile, role=role)
+
+    if characters:
+        return characters
+
+    for line in raw.splitlines():
+        cleaned = line.strip(" -\t")
+        if not cleaned:
+            continue
+        if ":" in cleaned:
+            name, details = cleaned.split(":", 1)
+            _append_character(name, details)
+        else:
+            _append_character(cleaned, cleaned)
+    return characters
+
+
+def _select_facebook_recurring_character(brand, requested=""):
+    characters = _parse_facebook_recurring_characters((brand or {}).get("facebook_recurring_characters"))
+    if not characters:
+        return None
+    requested_clean = (requested or "").strip().lower()
+    if not requested_clean:
+        return None
+    for character in characters:
+        if requested_clean in {
+            character["name"].strip().lower(),
+            character["key"].strip().lower(),
+        }:
+            return character
+    return None
+
+
+def _format_facebook_storytelling_context(brand):
+    strategy = ((brand or {}).get("facebook_storytelling_strategy") or "").strip()
+    personality_key = _normalize_facebook_content_personality((brand or {}).get("facebook_content_personality"), default=None)
+    cta_key = _normalize_facebook_cta_style((brand or {}).get("facebook_cta_style"), default=None)
+    guardrails = ((brand or {}).get("facebook_storytelling_guardrails") or "").strip()
+    characters = _parse_facebook_recurring_characters((brand or {}).get("facebook_recurring_characters"))
+    personality = _FACEBOOK_CONTENT_PERSONALITY_MAP.get(personality_key)
+    cta_style = _FACEBOOK_CTA_STYLE_MAP.get(cta_key)
+
+    context_lines = []
+    if strategy:
+        context_lines.append(f"Organic storytelling direction: {strategy}")
+    if personality:
+        context_lines.append(f"Personality mode: {personality['label']} - {personality['description']}")
+        context_lines.append(f"Personality instruction: {personality['instruction']}")
+    if cta_style:
+        context_lines.append(f"CTA style: {cta_style['label']} - {cta_style['description']}")
+        context_lines.append(f"CTA instruction: {cta_style['instruction']}")
+    if guardrails:
+        context_lines.append(f"Organic guardrails: {guardrails}")
+    if characters:
+        char_lines = []
+        for character in characters:
+            role = f" ({character['role']})" if character.get("role") else ""
+            char_lines.append(f"- {character['name']}{role}: {character.get('profile') or ''}".strip())
+        context_lines.append("Recurring characters:\n" + "\n".join(char_lines))
+
+    return {
+        "strategy": strategy,
+        "personality": personality,
+        "cta_style": cta_style,
+        "guardrails": guardrails,
+        "characters": characters,
+        "prompt_block": "\n".join(context_lines).strip(),
+    }
+
+
+def _apply_recurring_characters_to_calendar_plan(calendar_plan, characters):
+    if not calendar_plan or not characters:
+        return [dict(slot) for slot in calendar_plan or []]
+
+    eligible_types = {"behind_the_scenes", "team_intro", "business_growth", "community_spotlight", "character_spotlight", "value"}
+    interval = 3 if len(calendar_plan) >= 5 else 2
+    enriched = []
+    character_index = 0
+    assigned_count = 0
+
+    for index, slot in enumerate(calendar_plan):
+        slot_copy = dict(slot)
+        if slot_copy.get("post_type") in eligible_types and (index % interval == 1 or slot_copy.get("post_type") == "character_spotlight"):
+            character = characters[character_index % len(characters)]
+            slot_copy["character_name"] = character["name"]
+            slot_copy["character_profile"] = character.get("profile") or ""
+            character_index += 1
+            assigned_count += 1
+        enriched.append(slot_copy)
+
+    if assigned_count == 0:
+        for slot_copy in enriched:
+            if slot_copy.get("post_type") in eligible_types:
+                character = characters[0]
+                slot_copy["character_name"] = character["name"]
+                slot_copy["character_profile"] = character.get("profile") or ""
+                break
+
+    return enriched
+
+
+def _build_facebook_storytelling_summary(brand):
+    context = _format_facebook_storytelling_context(brand)
+    return {
+        "strategy": context["strategy"],
+        "personality_label": (context.get("personality") or {}).get("label", ""),
+        "cta_label": (context.get("cta_style") or {}).get("label", ""),
+        "character_count": len(context.get("characters") or []),
+        "has_profile": any(
+            [
+                context["strategy"],
+                context.get("personality"),
+                context.get("cta_style"),
+                context["guardrails"],
+                context.get("characters"),
+            ]
+        ),
+        "characters": context.get("characters") or [],
+    }
+
+
 def _resolve_facebook_calendar_post_types(selected_types=None, content_mix=None):
     normalized_selected = _normalize_facebook_post_type_list(selected_types)
     mix_key = _normalize_facebook_content_mix(content_mix)
@@ -2526,7 +2776,7 @@ def _build_facebook_calendar_plan(start_date, weeks, posts_per_week, selected_ty
     return plan
 
 
-def _build_facebook_post_generation_messages(brand, post_type, brief=""):
+def _build_facebook_post_generation_messages(brand, post_type, brief="", character_name=""):
     post_type = _normalize_facebook_post_type(post_type)
     config = _FACEBOOK_POST_TYPE_MAP[post_type]
     brand_name = (brand.get("display_name") or brand.get("name") or "This business").strip()
@@ -2536,6 +2786,14 @@ def _build_facebook_post_generation_messages(brand, post_type, brief=""):
     voice = (brand.get("brand_voice") or "Clear, helpful, confident").strip()
     audience = (brand.get("target_audience") or "local customers").strip()
     offers = (brand.get("active_offers") or "").strip()
+    story_ctx = _format_facebook_storytelling_context(brand)
+    selected_character = _select_facebook_recurring_character(brand, character_name)
+    storytelling_block = story_ctx.get("prompt_block") or "None provided"
+    selected_character_block = (
+        f"Requested recurring character: {selected_character['name']} - {selected_character.get('profile') or ''}"
+        if selected_character
+        else "Requested recurring character: None"
+    )
 
     system_prompt = (
         "You write strong Facebook Page posts for local businesses. "
@@ -2554,6 +2812,9 @@ Active offers: {offers or 'None provided'}
 Post type: {config['label']}
 Type goal: {config['description']}
 Type focus: {config['prompt_focus']}
+Organic storytelling controls:
+{storytelling_block}
+{selected_character_block}
 Additional brief: {brief or 'None provided'}
 
 Rules:
@@ -2565,6 +2826,8 @@ Rules:
 - Do NOT use em dashes.
 - Use at most 2 hashtags, and only if they actually fit.
 - Do not invent fake statistics, awards, or customer details.
+- If a recurring character is assigned, center the post around that character and keep them consistent.
+- If storytelling controls are provided, follow them even when they push the post away from generic service marketing.
 - {_FACEBOOK_POST_TYPE_RULES[post_type]}
 
 Return a JSON object with these exact keys:
@@ -2584,10 +2847,15 @@ def _build_facebook_calendar_generation_messages(brand, calendar_plan, brief="",
     audience = (brand.get("target_audience") or "local customers").strip()
     offers = (brand.get("active_offers") or "").strip()
     mix = _FACEBOOK_CONTENT_MIX_MAP.get(_normalize_facebook_content_mix(content_mix), _FACEBOOK_CONTENT_MIXES[0])
+    story_ctx = _format_facebook_storytelling_context(brand)
+    calendar_plan = _apply_recurring_characters_to_calendar_plan(calendar_plan, story_ctx.get("characters") or [])
     slot_lines = []
     for slot in calendar_plan:
+        character_clause = ""
+        if slot.get("character_name"):
+            character_clause = f" - Feature character: {slot['character_name']} - {slot.get('character_profile') or ''}"
         slot_lines.append(
-            f"{slot['index']}. {slot['scheduled_at']} - {slot['post_type_label']} - {slot['description']} - Focus: {slot['prompt_focus']}"
+            f"{slot['index']}. {slot['scheduled_at']} - {slot['post_type_label']} - {slot['description']} - Focus: {slot['prompt_focus']}{character_clause}"
         )
 
     system_prompt = (
@@ -2607,6 +2875,8 @@ Active offers: {offers or 'None provided'}
 Content mix: {mix['label']}
 Mix goal: {mix['description']}
 Mix focus: {mix['prompt_focus']}
+Organic storytelling controls:
+{story_ctx.get('prompt_block') or 'None provided'}
 Additional brief: {brief or 'None provided'}
 
 Post plan:
@@ -2623,6 +2893,8 @@ Rules:
 - Use at most 2 hashtags per post, and only when they fit naturally.
 - Do not invent fake reviews, fake names, fake awards, or fake metrics.
 - Respect the assigned post type for each slot.
+- If a slot includes a recurring character, build the post around that character and keep them consistent.
+- If recurring characters are provided overall, weave them in periodically so the feed feels like an ongoing brand story.
 
 Return a JSON object with this exact shape:
 {{
@@ -5441,12 +5713,24 @@ def client_my_business():
             brand_voice = request.form.get("brand_voice", "")[:2000].strip()
             active_offers = request.form.get("active_offers", "")[:1000].strip()
             target_audience = request.form.get("target_audience", "")[:2000].strip()
+            storytelling_strategy = request.form.get("facebook_storytelling_strategy", "")[:2000].strip()
+            personality_raw = request.form.get("facebook_content_personality", "")
+            cta_style_raw = request.form.get("facebook_cta_style", "")
+            storytelling_guardrails = request.form.get("facebook_storytelling_guardrails", "")[:2000].strip()
+            recurring_characters = request.form.get("facebook_recurring_characters", "")[:6000].strip()
             reporting_notes = request.form.get("reporting_notes", "")[:1000].strip()
             website_url = request.form.get("website_url", "")[:500].strip()
+            content_personality = _normalize_facebook_content_personality(personality_raw, default="") if personality_raw.strip() else ""
+            cta_style = _normalize_facebook_cta_style(cta_style_raw, default="") if cta_style_raw.strip() else ""
 
             db.update_brand_text_field(brand_id, "brand_voice", brand_voice)
             db.update_brand_text_field(brand_id, "active_offers", active_offers)
             db.update_brand_text_field(brand_id, "target_audience", target_audience)
+            db.update_brand_text_field(brand_id, "facebook_storytelling_strategy", storytelling_strategy)
+            db.update_brand_text_field(brand_id, "facebook_content_personality", content_personality)
+            db.update_brand_text_field(brand_id, "facebook_cta_style", cta_style)
+            db.update_brand_text_field(brand_id, "facebook_storytelling_guardrails", storytelling_guardrails)
+            db.update_brand_text_field(brand_id, "facebook_recurring_characters", recurring_characters)
             db.update_brand_text_field(brand_id, "reporting_notes", reporting_notes)
             db.update_brand_text_field(brand_id, "website", website_url)
             flash("Brand profile updated.", "success")
@@ -5520,6 +5804,8 @@ def client_my_business():
         profile_score=profile_score,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
         google_font_choices=GOOGLE_FONT_CHOICES,
+        facebook_personality_options=_FACEBOOK_CONTENT_PERSONALITY_OPTIONS,
+        facebook_cta_style_options=_FACEBOOK_CTA_STYLE_OPTIONS,
     )
 
 
@@ -13409,6 +13695,8 @@ def client_post_scheduler():
         has_ai_generation=has_ai_generation,
         facebook_post_types=_FACEBOOK_POST_TYPE_OPTIONS,
         facebook_content_mixes=_FACEBOOK_CONTENT_MIXES,
+        facebook_recurring_characters=_parse_facebook_recurring_characters(brand.get("facebook_recurring_characters")),
+        facebook_storytelling_profile=_build_facebook_storytelling_summary(brand),
         posts=posts,
         pending_count=pending_count,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
@@ -13431,8 +13719,9 @@ def client_generate_facebook_post():
     data = request.get_json(silent=True) or {}
     post_type = _normalize_facebook_post_type(data.get("post_type"))
     brief = (data.get("brief") or "").strip()[:600]
+    character_name = (data.get("character_name") or "").strip()[:120]
     model = _pick_ai_model(brand, "ads")
-    system_prompt, user_prompt = _build_facebook_post_generation_messages(brand, post_type, brief)
+    system_prompt, user_prompt = _build_facebook_post_generation_messages(brand, post_type, brief, character_name)
 
     import openai
 
@@ -13508,6 +13797,10 @@ def client_generate_facebook_calendar():
 
         model = _pick_ai_model(brand, "ads")
         system_prompt, user_prompt = _build_facebook_calendar_generation_messages(brand, calendar_plan, brief, content_mix)
+        calendar_plan = _apply_recurring_characters_to_calendar_plan(
+            calendar_plan,
+            _parse_facebook_recurring_characters(brand.get("facebook_recurring_characters")),
+        )
 
         import openai
 
@@ -13543,6 +13836,7 @@ def client_generate_facebook_calendar():
                     "message": message[:5000],
                     "image_hint": image_hint[:160],
                     "link_url": link_url[:500],
+                    "character_name": (slot.get("character_name") or "")[:120],
                 }
             )
 

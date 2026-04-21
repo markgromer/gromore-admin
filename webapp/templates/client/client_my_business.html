@@ -549,6 +549,69 @@
 
                     <div class="biz-field">
                         <label>
+                            <span class="field-icon"><i class="bi bi-film"></i></span>
+                            Facebook Storytelling Strategy
+                        </label>
+                        <textarea name="facebook_storytelling_strategy" maxlength="2000" rows="3"
+                                  placeholder="e.g. Show the business growing in public. Let people watch the team improve systems, serve customers, and build trust over time. Sell indirectly through progress, not constant offers.">{{ brand.facebook_storytelling_strategy or '' }}</textarea>
+                        <div class="field-help">Define the bigger organic story your Facebook page should tell over time.</div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="biz-field h-100 mb-0">
+                                <label>
+                                    <span class="field-icon"><i class="bi bi-emoji-smile"></i></span>
+                                    Content Personality
+                                </label>
+                                <select name="facebook_content_personality">
+                                    <option value="">Use default brand voice</option>
+                                    {% for option in facebook_personality_options %}
+                                    <option value="{{ option.key }}" {% if (brand.facebook_content_personality or '') == option.key %}selected{% endif %}>{{ option.label }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div class="field-help">Choose whether organic posts stay serious, warm, lightly playful, or openly funny.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="biz-field h-100 mb-0">
+                                <label>
+                                    <span class="field-icon"><i class="bi bi-megaphone"></i></span>
+                                    Selling Style
+                                </label>
+                                <select name="facebook_cta_style">
+                                    <option value="">Use default CTA style</option>
+                                    {% for option in facebook_cta_style_options %}
+                                    <option value="{{ option.key }}" {% if (brand.facebook_cta_style or '') == option.key %}selected{% endif %}>{{ option.label }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div class="field-help">Control whether the feed sells subtly, consults like an expert, or asks directly for the next step.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="biz-field mt-3">
+                        <label>
+                            <span class="field-icon"><i class="bi bi-sign-no-left-turn"></i></span>
+                            Storytelling Guardrails
+                        </label>
+                        <textarea name="facebook_storytelling_guardrails" maxlength="2000" rows="3"
+                                  placeholder="e.g. No corny inspiration. No fake banter. Never make us sound cheap. Keep humor dry and controlled. Don't overuse offers unless we are in a real promo window.">{{ brand.facebook_storytelling_guardrails or '' }}</textarea>
+                        <div class="field-help">Set the lines the AI should not cross for humor, tone, claims, or how aggressively it sells.</div>
+                    </div>
+
+                    <div class="biz-field">
+                        <label>
+                            <span class="field-icon"><i class="bi bi-person-badge"></i></span>
+                            Recurring Characters
+                        </label>
+                        <textarea name="facebook_recurring_characters" maxlength="6000" rows="6"
+                                  placeholder='JSON or plain text both work. Example: [{"name":"Marty","role":"Dispatcher","description":"Dry humor, knows the schedule, keeps the chaos organized","voice":"Short, sharp, practical"}]'>{{ brand.facebook_recurring_characters or '' }}</textarea>
+                        <div class="field-help">Define recurring people, mascots, or brand personas the feed can rotate through. JSON works best when you want detailed profiles.</div>
+                    </div>
+
+                    <div class="biz-field">
+                        <label>
                             <span class="field-icon"><i class="bi bi-globe2"></i></span>
                             Website URL
                         </label>
