@@ -3,6 +3,7 @@ CRM integration bridge - pushes lead/conversion events to external CRMs.
 Supports GoHighLevel, HubSpot, Sweep and Go, Jobber, and generic webhooks.
 """
 
+import json
 import logging
 from collections import Counter
 from datetime import date, datetime, timedelta
@@ -186,6 +187,30 @@ def _sng_money(value):
     return 0.0
 
 
+def _sng_json_object(value):
+    if isinstance(value, dict):
+        return value
+    if not value or not isinstance(value, str):
+        return {}
+    try:
+        parsed = json.loads(value)
+    except Exception:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _sng_json_list(value):
+    if isinstance(value, list):
+        return value
+    if not value or not isinstance(value, str):
+        return []
+    try:
+        parsed = json.loads(value)
+    except Exception:
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
 def _sng_payment_amount(pmt):
     if not isinstance(pmt, dict):
         return 0.0
@@ -198,6 +223,205 @@ def _sng_payment_amount(pmt):
     )
     tip = pmt.get("tip_amount") or pmt.get("tip") or 0
     return _sng_money(base) + _sng_money(tip)
+
+
+def _sng_webhook_rows(result_dict):
+    if isinstance(result_dict, list):
+        return result_dict
+    if not isinstance(result_dict, dict):
+        return []
+    for key in ("data", "items", "webhooks", "events"):
+        rows = result_dict.get(key)
+        if isinstance(rows, list):
+            return rows
+        parsed_rows = _sng_json_list(rows)
+        if parsed_rows:
+            return parsed_rows
+    return []
+
+
+def _sng_webhook_total_pages(result_dict):
+    if not isinstance(result_dict, dict):
+        return 1
+    paginate = result_dict.get("paginate") or result_dict.get("pagination") or {}
+    if not isinstance(paginate, dict):
+        return 1
+    try:
+        return max(int(paginate.get("total_pages") or paginate.get("pages") or 1), 1)
+    except (TypeError, ValueError):
+        return 1
+
+
+def _sng_find_nested_value(payload, *keys):
+    wanted = {str(key or "").strip().lower() for key in keys if str(key or "").strip()}
+    if not wanted:
+        return ""
+
+    queue = [payload]
+    depth = 0
+    while queue and depth < 6:
+        next_queue = []
+        for item in queue:
+            if isinstance(item, dict):
+                for key, value in item.items():
+                    if str(key).strip().lower() in wanted and value not in (None, ""):
+                        return value
+                    if isinstance(value, (dict, list)):
+                        next_queue.append(value)
+            elif isinstance(item, list):
+                next_queue.extend(value for value in item if isinstance(value, (dict, list)))
+        queue = next_queue
+        depth += 1
+    return ""
+
+
+def _sng_webhook_payload(row):
+    if not isinstance(row, dict):
+        return {}
+
+    for key in ("payload", "payload_json", "body"):
+        value = row.get(key)
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, list):
+            return {"items": value}
+        parsed = _sng_json_object(value)
+        if parsed:
+            return parsed
+
+    direct_payload = {}
+    for key in ("client", "payment", "invoice", "subscription"):
+        value = row.get(key)
+        if isinstance(value, dict):
+            direct_payload[key] = value
+        else:
+            parsed = _sng_json_object(value)
+            if parsed:
+                direct_payload[key] = parsed
+    if direct_payload:
+        for key in ("event_type", "type", "topic", "name", "created_at", "received_at", "sent_at", "date"):
+            if row.get(key) not in (None, ""):
+                direct_payload[key] = row.get(key)
+        return direct_payload
+
+    return row
+
+
+def _sng_webhook_event_type(row):
+    if not isinstance(row, dict):
+        return ""
+    for key in ("event_type", "type", "topic", "name"):
+        value = row.get(key)
+        if isinstance(value, str) and value.strip() and value.strip().lower() != "event":
+            return value.strip()
+
+    payload = _sng_webhook_payload(row)
+    for key in ("event_type", "type", "topic", "name"):
+        value = _sng_find_nested_value(payload, key)
+        if isinstance(value, str) and value.strip() and value.strip().lower() != "event":
+            return value.strip()
+    return ""
+
+
+def _sng_webhook_payment_row(row):
+    payload = _sng_webhook_payload(row)
+    payment = payload.get("payment") if isinstance(payload.get("payment"), dict) else {}
+    payment_block = payment if payment else payload
+
+    payment_date = _sng_parse_date(
+        payment_block.get("date")
+        or payment_block.get("created_at")
+        or payment_block.get("createdAt")
+        or row.get("created_at")
+        or row.get("received_at")
+        or row.get("sent_at")
+    )
+    if not payment_date:
+        return None
+
+    amount = _sng_payment_amount(payment_block)
+    if amount <= 0:
+        amount = _sng_payment_amount(payload)
+    if amount <= 0:
+        return None
+
+    payment_id = (
+        payment_block.get("id")
+        or payment_block.get("payment_id")
+        or row.get("payment_id")
+        or row.get("id")
+        or ""
+    )
+    return {
+        "date": payment_date,
+        "amount": amount,
+        "payment_id": str(payment_id or ""),
+        "raw": row,
+    }
+
+
+def _sng_sum_webhook_payments_for_month(brand, month_prefix, max_pages=12):
+    total_revenue = 0.0
+    payment_count = 0
+    diag = {
+        "pages_fetched": 0,
+        "rows_seen": 0,
+        "matched_events": 0,
+        "event_types_seen": {},
+        "sample_event": None,
+        "first_error": None,
+    }
+    seen_payment_keys = set()
+    page = 1
+
+    while page <= max_pages:
+        result, error = sng_list_webhook_events(brand, page=page)
+        if error:
+            if not diag["first_error"]:
+                diag["first_error"] = error
+            break
+
+        rows = _sng_webhook_rows(result)
+        diag["pages_fetched"] += 1
+        if not rows:
+            break
+
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            diag["rows_seen"] += 1
+            event_type = _sng_webhook_event_type(row) or "unknown"
+            diag["event_types_seen"][event_type] = diag["event_types_seen"].get(event_type, 0) + 1
+            if event_type != "client:client_payment_accepted":
+                continue
+
+            payment_row = _sng_webhook_payment_row(row)
+            if not payment_row:
+                continue
+            if payment_row["date"].strftime("%Y-%m") != month_prefix:
+                continue
+
+            dedupe_key = payment_row["payment_id"] or f"{payment_row['date'].isoformat()}:{payment_row['amount']:.2f}"
+            if dedupe_key in seen_payment_keys:
+                continue
+            seen_payment_keys.add(dedupe_key)
+
+            total_revenue += payment_row["amount"]
+            payment_count += 1
+            diag["matched_events"] += 1
+            if diag["sample_event"] is None:
+                diag["sample_event"] = {
+                    "event_type": event_type,
+                    "payment_id": payment_row["payment_id"],
+                    "amount": round(payment_row["amount"], 2),
+                    "date": payment_row["date"].isoformat(),
+                }
+
+        if page >= _sng_webhook_total_pages(result):
+            break
+        page += 1
+
+    return round(total_revenue, 2), payment_count, diag
 
 
 def _sng_successful_payments(result_dict):
@@ -812,6 +1036,11 @@ def sng_get_staff(brand):
     return _sng_api(brand, "GET", "api/v2/report/staff_select_list")
 
 
+def sng_list_webhook_events(brand, page=1):
+    """List previously triggered Sweep and Go webhook events."""
+    return _sng_api(brand, "GET", "api/v1/webhooks/list", params={"page": page})
+
+
 def sng_welcome_v2(brand):
     """Test endpoint for auth/connectivity."""
     return _sng_api(brand, "GET", "api/v2/welcome")
@@ -1115,6 +1344,10 @@ def sng_sync_revenue(brand, db, max_sample=50, month=None):
     sample_revenue = 0.0
     sample_payments = 0
     diag = {}
+    revenue_source = "client_details"
+    webhook_revenue = 0.0
+    webhook_payments = 0
+    webhook_diag = {}
     if sample_ids:
         sample_revenue, sample_payments, diag = _sng_sum_payments_for_month(brand, sample_ids, rev_month)
 
@@ -1135,6 +1368,13 @@ def sng_sync_revenue(brand, db, max_sample=50, month=None):
                 if alt_revenue > 0:
                     rev_month = latest_month
                     sample_revenue, sample_payments, diag = alt_revenue, alt_payments, alt_diag
+
+    if sample_revenue == 0:
+        webhook_revenue, webhook_payments, webhook_diag = _sng_sum_webhook_payments_for_month(brand, rev_month)
+        if webhook_revenue > 0:
+            sample_revenue = webhook_revenue
+            sample_payments = webhook_payments
+            revenue_source = "webhook_history"
 
     debug_note = ""
     auth_debug = {}
@@ -1175,13 +1415,26 @@ def sng_sync_revenue(brand, db, max_sample=50, month=None):
                     f"Months seen in sample: {', '.join(months_seen[-6:])}. "
                     f"Statuses seen: {', '.join(statuses_seen[:8])}"
                 )
+            elif webhook_diag.get("first_error"):
+                debug_note = f"SNG sync returned no client_details payments and webhook history failed: {webhook_diag['first_error']}"
+            elif webhook_diag.get("rows_seen"):
+                event_types_seen = sorted((webhook_diag.get("event_types_seen") or {}).keys())
+                debug_note = (
+                    "SNG sync returned no payments in sampled client_details responses and found no "
+                    f"accepted-payment events in webhook history for {rev_month}. "
+                    f"Webhook events seen: {', '.join(event_types_seen[:8])}"
+                )
             else:
                 debug_note = f"SNG sync returned no payments in the sample client_details responses.{auth_suffix}"
     except Exception:
         debug_note = ""
 
     # Extrapolate from sample to full subscribed client base
-    if sample_size > 0 and subscribed_count > 0:
+    if revenue_source == "webhook_history":
+        scale = 1
+        mrr = sample_revenue
+        payment_count = sample_payments
+    elif sample_size > 0 and subscribed_count > 0:
         scale = subscribed_count / sample_size
         mrr = round(sample_revenue * scale, 2)
         payment_count = int(sample_payments * scale)
@@ -1214,8 +1467,13 @@ def sng_sync_revenue(brand, db, max_sample=50, month=None):
         "avg_retention_months": avg_retention_months,
         "synced_at": now.strftime("%Y-%m-%d %H:%M:%S"),
         "sync_status": "done",
-        "data_source": "real_payments_sampled" if sample_size < active_count else "real_payments_full",
+        "data_source": (
+            "webhook_payment_history"
+            if revenue_source == "webhook_history"
+            else ("real_payments_sampled" if sample_size < active_count else "real_payments_full")
+        ),
         "diagnostics": diag,
+        "webhook_diagnostics": webhook_diag,
         "debug_note": debug_note,
         "auth_debug": auth_debug,
     }
@@ -1227,7 +1485,11 @@ def sng_sync_revenue(brand, db, max_sample=50, month=None):
                 brand_id, rev_month,
                 closed_revenue=mrr,
                 closed_deals=payment_count,
-                notes=f"SNG sync ({sample_size} of {active_count} clients sampled)"
+                notes=(
+                    "SNG sync from webhook payment history"
+                    if revenue_source == "webhook_history"
+                    else f"SNG sync ({sample_size} of {active_count} clients sampled)"
+                )
             )
         except Exception as exc:
             log.warning("Failed to upsert brand_month_finance: %s", exc)
