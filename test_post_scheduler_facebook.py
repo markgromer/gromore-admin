@@ -1,5 +1,6 @@
 import os
 import json
+import io
 import unittest
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -200,6 +201,46 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertEqual(len(posts), 1)
         self.assertEqual(posts[0]["post_type"], "testimonial")
         self.assertEqual(posts[0]["status"], "scheduled")
+
+    @patch("webapp.google_drive.upload_file")
+    def test_drive_upload_returns_scheduler_ready_urls(self, mock_upload_file):
+        mock_upload_file.return_value = {
+            "id": "drive-file-123",
+            "name": "promo.jpg",
+            "webViewLink": "https://drive.google.com/file/d/drive-file-123/view",
+        }
+
+        with self.app.app_context():
+            db = self.app.db
+            db.update_brand_text_field(self.brand_id, "google_drive_folder_id", "https://drive.google.com/drive/folders/root-folder-123")
+            db.upsert_connection(
+                self.brand_id,
+                "google",
+                {
+                    "access_token": "google-access-token",
+                    "refresh_token": "google-refresh-token",
+                    "token_expiry": "2099-01-01T00:00:00",
+                    "scopes": "openid email profile https://www.googleapis.com/auth/drive.file",
+                    "account_id": "google-account-1",
+                    "account_name": "Test Google",
+                },
+            )
+
+        response = self.client.post(
+            "/client/api/drive/upload",
+            data={
+                "subfolder": "Images",
+                "file": (io.BytesIO(b"fake-image-bytes"), "promo.jpg"),
+            },
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["file"]["id"], "drive-file-123")
+        self.assertEqual(payload["file"]["download_url"], "/client/api/drive/download/drive-file-123")
+        self.assertEqual(payload["file"]["thumbnail_url"], "/client/api/drive/thumbnail/drive-file-123")
 
 
 if __name__ == "__main__":

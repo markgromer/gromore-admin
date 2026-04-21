@@ -173,8 +173,12 @@
                     <button type="button" class="btn btn-outline-secondary btn-sm" id="pickImageBtn" onclick="loadDriveImages()">
                         <i class="bi bi-image me-1"></i> Pick from Drive
                     </button>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="uploadComposeImageBtn" onclick="triggerComposeImageUpload()">
+                        <i class="bi bi-cloud-arrow-up me-1"></i> Upload to Drive
+                    </button>
                     <span id="selectedImageName" class="ms-2 text-muted" style="font-size:.88rem;"></span>
                     <input type="hidden" id="composeImageUrl" value="">
+                    <input type="file" id="composeImageUploadInput" accept="image/*" style="display:none;" onchange="handleComposeImageUpload(this)">
                 </div>
                 <div id="driveImageGrid" class="image-picker-grid mt-2" style="display:none;"></div>
                 {% else %}
@@ -283,6 +287,12 @@
 
         <div id="csvPreview" style="display:none;">
             <h6 class="fw-bold mb-2">Preview <span id="csvCount" class="text-muted fw-normal"></span></h6>
+            {% if has_drive %}
+            <div class="text-muted mb-2" style="font-size:.85rem;">
+                Upload an image on the row that needs it. The Drive download URL will be inserted automatically for that post.
+            </div>
+            <input type="file" id="csvImageUploadInput" accept="image/*" style="display:none;" onchange="handleCsvImageUpload(this)">
+            {% endif %}
             <div class="table-responsive" style="max-height:400px; overflow-y:auto;">
                 <table class="table table-sm csv-preview-table" id="csvTable">
                     <thead><tr><th>#</th><th>Type</th><th>Message</th><th>Scheduled</th><th>Image</th><th>Link</th></tr></thead>
@@ -379,9 +389,76 @@ special_offer,"Spring special: book now and ask about this month's inspection of
 {% endif %}
 
 <script type="application/json" id="calendarMixesData">{{ facebook_content_mixes|tojson }}</script>
+<script type="application/json" id="hasDriveData">{{ has_drive|tojson }}</script>
 <script>
 var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 var calendarMixes = JSON.parse(document.getElementById('calendarMixesData').textContent || '[]');
+var hasDrive = JSON.parse(document.getElementById('hasDriveData').textContent || 'false');
+var pendingCsvImageRowIndex = null;
+
+function summarizeResponseError(text, status) {
+    var cleaned = String(text || '').trim();
+    if (!cleaned) return 'Request failed (' + status + ').';
+    if (cleaned.charAt(0) === '<') return 'Request failed (' + status + '). The server returned an unexpected response.';
+    return cleaned.length > 220 ? cleaned.slice(0, 220) + '...' : cleaned;
+}
+
+function parseJsonResponse(response) {
+    return response.text().then(function(text) {
+        var data = null;
+        if (text) {
+            try {
+                data = JSON.parse(text);
+            } catch (_err) {
+                data = {ok: false, error: summarizeResponseError(text, response.status)};
+            }
+        }
+        if (!data) data = {ok: response.ok};
+        if (!response.ok && !data.error) data.error = 'Request failed (' + response.status + ').';
+        if (typeof data.ok === 'undefined') data.ok = response.ok;
+        return data;
+    });
+}
+
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function setComposeImage(url, name) {
+    var input = document.getElementById('composeImageUrl');
+    var nameEl = document.getElementById('selectedImageName');
+    if (input) input.value = url || '';
+    if (nameEl) nameEl.textContent = name || '';
+}
+
+function uploadDriveImage(file, onSuccess, onError) {
+    if (!file) return;
+    var body = new FormData();
+    body.append('subfolder', 'Images');
+    body.append('file', file);
+
+    fetch('/client/api/drive/upload', {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrfToken},
+        body: body
+    })
+    .then(parseJsonResponse)
+    .then(function(data) {
+        if (!data.ok || !data.file) {
+            if (onError) onError(data.error || 'Image upload failed.');
+            return;
+        }
+        if (onSuccess) onSuccess(data.file);
+    })
+    .catch(function(err) {
+        if (onError) onError((err && err.message) ? err.message : 'Image upload failed.');
+    });
+}
 
 // ── Tab switching ──
 function showTab(name) {
@@ -415,7 +492,7 @@ function generatePostDraft() {
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
         body: JSON.stringify({post_type: postType, brief: brief})
     })
-    .then(function(r) { return r.json(); })
+    .then(parseJsonResponse)
     .then(function(data) {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-stars me-1"></i> Generate With AI';
@@ -431,10 +508,10 @@ function generatePostDraft() {
             showResult('composeAiResult', 'error', data.error || 'Failed to generate draft.');
         }
     })
-    .catch(function() {
+    .catch(function(err) {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-stars me-1"></i> Generate With AI';
-        showResult('composeAiResult', 'error', 'Network error.');
+        showResult('composeAiResult', 'error', (err && err.message) ? err.message : 'Network error.');
     });
 }
 
@@ -482,7 +559,7 @@ function generateCalendarPlan() {
             post_types: postTypes
         })
     })
-    .then(function(r) { return r.json(); })
+    .then(parseJsonResponse)
     .then(function(data) {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-magic me-1"></i> Generate Calendar With AI';
@@ -505,10 +582,10 @@ function generateCalendarPlan() {
         showResult('calendarAiResult', 'success', (data.content_mix_label || 'Calendar') + ' ready. Review it in the CSV tab, then schedule the batch.');
         showTab('csv');
     })
-    .catch(function() {
+    .catch(function(err) {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-magic me-1"></i> Generate Calendar With AI';
-        showResult('calendarAiResult', 'error', 'Network error.');
+        showResult('calendarAiResult', 'error', (err && err.message) ? err.message : 'Network error.');
     });
 }
 
@@ -534,7 +611,7 @@ if (composeForm) {
             headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
             body: JSON.stringify({message: msg, scheduled_at: dt, link_url: link, image_url: img, post_type: postType})
         })
-        .then(function(r) { return r.json(); })
+        .then(parseJsonResponse)
         .then(function(data) {
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-send me-1"></i> Schedule Facebook Post';
@@ -549,10 +626,10 @@ if (composeForm) {
                 showResult('composeResult', 'error', data.error || 'Failed to schedule post.');
             }
         })
-        .catch(function() {
+        .catch(function(err) {
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-send me-1"></i> Schedule Facebook Post';
-            showResult('composeResult', 'error', 'Network error.');
+            showResult('composeResult', 'error', (err && err.message) ? err.message : 'Network error.');
         });
     });
 }
@@ -564,7 +641,7 @@ function loadDriveImages() {
     grid.innerHTML = '<div class="text-center py-3"><span class="spinner-border spinner-border-sm"></span> Loading images...</div>';
 
     fetch('/client/api/drive/all-images', {headers: {'X-CSRFToken': csrfToken}})
-    .then(function(r) { return r.json(); })
+    .then(parseJsonResponse)
     .then(function(data) {
         var files = data.files || [];
         if (!files.length) {
@@ -590,8 +667,79 @@ function loadDriveImages() {
 function selectDriveImage(el, url, name) {
     document.querySelectorAll('.image-picker-item').forEach(function(item) { item.classList.remove('selected'); });
     el.classList.add('selected');
-    document.getElementById('composeImageUrl').value = url;
-    document.getElementById('selectedImageName').textContent = name;
+    setComposeImage(url, name);
+}
+
+function triggerComposeImageUpload() {
+    var input = document.getElementById('composeImageUploadInput');
+    if (input) {
+        input.value = '';
+        input.click();
+    }
+}
+
+function handleComposeImageUpload(input) {
+    var file = input && input.files ? input.files[0] : null;
+    var btn = document.getElementById('uploadComposeImageBtn');
+    if (!file) return;
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Uploading...';
+    }
+    showResult('composeResult', 'success', 'Uploading image to Drive...');
+
+    uploadDriveImage(file, function(uploaded) {
+        var downloadUrl = uploaded.download_url || ('/client/api/drive/download/' + uploaded.id);
+        setComposeImage(downloadUrl, uploaded.name || file.name);
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-cloud-arrow-up me-1"></i> Upload to Drive';
+        }
+        showResult('composeResult', 'success', 'Image uploaded and attached to this post.');
+        var grid = document.getElementById('driveImageGrid');
+        if (grid && grid.style.display !== 'none') loadDriveImages();
+    }, function(error) {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-cloud-arrow-up me-1"></i> Upload to Drive';
+        }
+        showResult('composeResult', 'error', error);
+    });
+}
+
+function updateCsvRowField(index, field, value) {
+    if (!csvParsedRows[index]) return;
+    csvParsedRows[index][field] = value;
+}
+
+function triggerCsvImageUpload(index) {
+    if (!hasDrive) return;
+    pendingCsvImageRowIndex = index;
+    var input = document.getElementById('csvImageUploadInput');
+    if (input) {
+        input.value = '';
+        input.click();
+    }
+}
+
+function handleCsvImageUpload(input) {
+    var file = input && input.files ? input.files[0] : null;
+    var rowIndex = pendingCsvImageRowIndex;
+    if (!file || rowIndex === null || !csvParsedRows[rowIndex]) return;
+
+    showResult('csvResult', 'success', 'Uploading image for row ' + (rowIndex + 1) + '...');
+    uploadDriveImage(file, function(uploaded) {
+        var downloadUrl = uploaded.download_url || ('/client/api/drive/download/' + uploaded.id);
+        csvParsedRows[rowIndex].image_url = downloadUrl;
+        csvParsedRows[rowIndex].image_name = uploaded.name || file.name;
+        renderCsvPreviewRows(csvParsedRows);
+        showResult('csvResult', 'success', 'Image uploaded and assigned to row ' + (rowIndex + 1) + '.');
+        pendingCsvImageRowIndex = null;
+    }, function(error) {
+        showResult('csvResult', 'error', error);
+        pendingCsvImageRowIndex = null;
+    });
 }
 
 // ── CSV Upload ──
@@ -601,14 +749,25 @@ function renderCsvPreviewRows(rows) {
     var tbody = document.querySelector('#csvTable tbody');
     tbody.innerHTML = '';
     rows.forEach(function(row, index) {
-        var imageHintIcon = row.image_hint ? '<i class="bi bi-lightbulb text-warning" title="' + String(row.image_hint).replace(/"/g, '&quot;') + '"></i>' : '';
+        var imageHint = row.image_hint ? '<div class="text-muted mt-1" style="font-size:.78rem;">Idea: ' + escapeHtml(row.image_hint) + '</div>' : '';
+        var imageActions = hasDrive
+            ? '<button type="button" class="btn btn-outline-secondary btn-sm mt-1" onclick="triggerCsvImageUpload(' + index + ')"><i class="bi bi-cloud-arrow-up me-1"></i>Upload</button>'
+            : '';
+        var imageValue = escapeHtml(row.image_url || '');
+        var linkValue = escapeHtml(row.link_url || '');
+        var imageName = row.image_name ? '<div class="text-muted mt-1" style="font-size:.78rem;">Attached: ' + escapeHtml(row.image_name) + '</div>' : '';
         var tr = document.createElement('tr');
         tr.innerHTML = '<td>' + (index + 1) + '</td>' +
             '<td>' + (row.post_type || 'value') + '</td>' +
             '<td>' + row.message.substring(0, 80) + (row.message.length > 80 ? '...' : '') + '</td>' +
             '<td><code>' + row.scheduled_at + '</code></td>' +
-            '<td>' + (row.image_url ? '<i class="bi bi-image text-success"></i>' : imageHintIcon) + '</td>' +
-            '<td>' + (row.link_url ? '<i class="bi bi-link-45deg text-primary"></i>' : '') + '</td>';
+            '<td style="min-width:260px;">' +
+                '<input type="url" class="form-control form-control-sm" value="' + imageValue + '" placeholder="https://..." oninput="updateCsvRowField(' + index + ', \'image_url\', this.value)">' +
+                imageActions + imageName + imageHint +
+            '</td>' +
+            '<td style="min-width:220px;">' +
+                '<input type="url" class="form-control form-control-sm" value="' + linkValue + '" placeholder="https://..." oninput="updateCsvRowField(' + index + ', \'link_url\', this.value)">' +
+            '</td>';
         tbody.appendChild(tr);
     });
 
@@ -700,7 +859,7 @@ function submitCsvPosts() {
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
         body: JSON.stringify({posts: csvParsedRows})
     })
-    .then(function(r) { return r.json(); })
+    .then(parseJsonResponse)
     .then(function(data) {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i> Schedule All';
@@ -711,10 +870,10 @@ function submitCsvPosts() {
             showResult('csvResult', 'error', data.error || 'Failed to schedule posts.');
         }
     })
-    .catch(function() {
+    .catch(function(err) {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i> Schedule All';
-        showResult('csvResult', 'error', 'Network error.');
+        showResult('csvResult', 'error', (err && err.message) ? err.message : 'Network error.');
     });
 }
 
@@ -741,7 +900,7 @@ function deletePost(postId) {
         method: 'DELETE',
         headers: {'X-CSRFToken': csrfToken},
     })
-    .then(function(r) { return r.json(); })
+    .then(parseJsonResponse)
     .then(function(data) {
         if (data.ok) location.reload();
         else alert(data.error || 'Failed to delete.');

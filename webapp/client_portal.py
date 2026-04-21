@@ -9009,7 +9009,12 @@ def client_drive_upload():
     from webapp.google_drive import upload_file as drive_upload
     result = drive_upload(db, brand_id, subfolder, f.filename, f.read(), f.content_type or "application/octet-stream")
     if result:
-        return jsonify({"ok": True, "file": result})
+        file_payload = dict(result)
+        file_id = str(file_payload.get("id") or "").strip()
+        if file_id:
+            file_payload["download_url"] = url_for("client.client_drive_download", file_id=file_id)
+            file_payload["thumbnail_url"] = url_for("client.client_drive_thumbnail", file_id=file_id)
+        return jsonify({"ok": True, "file": file_payload})
     return jsonify({"error": "Upload failed. The Google token may lack permission for this folder. Try reconnecting Google With Drive Access."}), 500
 
 
@@ -13478,38 +13483,34 @@ def client_generate_facebook_calendar():
     if not api_key:
         return jsonify(ok=False, error="No OpenAI API key. Add one in Settings > AI Configuration."), 400
 
-    data = request.get_json(silent=True) or {}
-    weeks = 4 if _coerce_int(data.get("weeks"), 2, minimum=2, maximum=4) >= 4 else 2
-    posts_per_week = _coerce_int(data.get("posts_per_week"), 3, minimum=2, maximum=4)
-    brief = (data.get("brief") or "").strip()[:1200]
-    content_mix = _normalize_facebook_content_mix(data.get("content_mix"))
-    selected_types = _normalize_facebook_post_type_list(data.get("post_types") or [])
-    start_date_raw = (data.get("start_date") or "").strip()
-    now_utc = datetime.now(timezone.utc)
-    today = now_utc.date()
-
     try:
+        data = request.get_json(silent=True) or {}
+        weeks = 4 if _coerce_int(data.get("weeks"), 2, minimum=2, maximum=4) >= 4 else 2
+        posts_per_week = _coerce_int(data.get("posts_per_week"), 3, minimum=2, maximum=4)
+        brief = (data.get("brief") or "").strip()[:1200]
+        content_mix = _normalize_facebook_content_mix(data.get("content_mix"))
+        selected_types = _normalize_facebook_post_type_list(data.get("post_types") or [])
+        start_date_raw = (data.get("start_date") or "").strip()
+        now_utc = datetime.now(timezone.utc)
+        today = now_utc.date()
+
         start_date = datetime.fromisoformat(start_date_raw).date() if start_date_raw else today + timedelta(days=1)
-    except ValueError:
-        return jsonify(ok=False, error="Invalid start date."), 400
+        if start_date < today:
+            return jsonify(ok=False, error="Start date must be today or later."), 400
 
-    if start_date < today:
-        return jsonify(ok=False, error="Start date must be today or later."), 400
+        calendar_plan = _build_facebook_calendar_plan(start_date, weeks, posts_per_week, selected_types, content_mix)
+        if not calendar_plan:
+            return jsonify(ok=False, error="Could not build a content calendar plan."), 400
 
-    calendar_plan = _build_facebook_calendar_plan(start_date, weeks, posts_per_week, selected_types, content_mix)
-    if not calendar_plan:
-        return jsonify(ok=False, error="Could not build a content calendar plan."), 400
+        last_date = datetime.fromisoformat(calendar_plan[-1]["scheduled_at"]).replace(tzinfo=timezone.utc)
+        if last_date > now_utc + timedelta(days=75):
+            return jsonify(ok=False, error="Calendar must stay within Facebook's 75-day scheduling window."), 400
 
-    last_date = datetime.fromisoformat(calendar_plan[-1]["scheduled_at"]).replace(tzinfo=timezone.utc)
-    if last_date > now_utc + timedelta(days=75):
-        return jsonify(ok=False, error="Calendar must stay within Facebook's 75-day scheduling window."), 400
+        model = _pick_ai_model(brand, "ads")
+        system_prompt, user_prompt = _build_facebook_calendar_generation_messages(brand, calendar_plan, brief, content_mix)
 
-    model = _pick_ai_model(brand, "ads")
-    system_prompt, user_prompt = _build_facebook_calendar_generation_messages(brand, calendar_plan, brief, content_mix)
+        import openai
 
-    import openai
-
-    try:
         client = openai.OpenAI(api_key=api_key)
         resp = client.chat.completions.create(
             model=model,
@@ -13564,6 +13565,7 @@ def client_generate_facebook_calendar():
     except ValueError as exc:
         return jsonify(ok=False, error=str(exc)[:200]), 400
     except Exception as exc:
+        current_app.logger.exception("facebook calendar generation failed for brand %s", brand_id)
         return jsonify(ok=False, error=str(exc)[:200]), 500
 
 
