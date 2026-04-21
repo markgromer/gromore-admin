@@ -184,7 +184,7 @@ export default function Heatmap() {
     ? distanceMiles(brand.business_lat, brand.business_lng, center.lat, center.lng)
     : 0
   const gridPointCount = gridSize * gridSize
-  const apiCallEstimate = gridPointCount * 3
+  const browserLookupEstimate = gridPointCount
   const centerCellIndex = center ? closestCellIndex(results, center.lat, center.lng) : -1
   const selectedCell = selectedCellIndex >= 0 ? results[selectedCellIndex] : null
 
@@ -742,7 +742,7 @@ export default function Heatmap() {
 
               <div className={styles.metaRow}>
                 <span className={styles.metaPill}>Grid points: {gridPointCount}</span>
-                <span className={styles.metaPill}>Estimated Places calls: {apiCallEstimate}</span>
+                <span className={styles.metaPill}>Estimated Google Maps lookups: {browserLookupEstimate}</span>
                 <span className={`${styles.metaPill} ${scanDirty ? styles.metaPillWarning : ''}`}>
                   {scanDirty ? 'Scan settings changed - rerun to refresh results' : 'Results match the current center'}
                 </span>
@@ -854,10 +854,10 @@ export default function Heatmap() {
                       <span><i className={`${styles.legendDot} ${styles.legendTop}`} /> #1-3</span>
                       <span><i className={`${styles.legendDot} ${styles.legendMid}`} /> #4-10 local pack</span>
                       <span><i className={`${styles.legendDot} ${styles.legendLow}`} /> #11+ local pack</span>
-                      <span><i className={`${styles.legendDot} ${styles.legendNone}`} /> Not returned by Places</span>
+                      <span><i className={`${styles.legendDot} ${styles.legendNone}`} /> Not returned in scan results</span>
                       <span><i className={`${styles.legendDot} ${styles.legendCenter}`} /> Closest cell to center</span>
                     </div>
-                    <p className={styles.inlineMessage}>This heatmap measures Google Maps and Places local-pack visibility. Service-area businesses can rank on page one organically while still appearing inconsistently in Places results.</p>
+                    <p className={styles.inlineMessage}>This heatmap measures Google Maps visibility from live browser results, with Places used only as a fallback when needed. Service-area businesses can rank on page one organically while still appearing inconsistently in map results.</p>
                   </>
                 ) : (
                   <div className={styles.emptyState}>No scan yet. Set the term, move the center, and run the heatmap.</div>
@@ -926,7 +926,7 @@ export default function Heatmap() {
 
             {(debugInfo || apiTestLines.length > 0) && (
               <Card>
-                <CardHeader title="Diagnostics" subtitle="Use this when Maps and Places results look thin or the API is not returning enough listings." />
+                <CardHeader title="Diagnostics" subtitle="Use this when live Google Maps results look thin or the fallback Places checks are carrying too much of the scan." />
                 {apiTestLines.length > 0 && (
                   <div className={styles.debugBlock}>
                     <div className={styles.debugLabel}>API test</div>
@@ -938,9 +938,9 @@ export default function Heatmap() {
                     <div className={styles.debugLabel}>Last scan</div>
                     <p>Matched listing: {debugInfo.business_name_used || 'Unknown'}</p>
                     <p>Place ID: {debugInfo.place_id_used || 'Not linked'}</p>
-                    <p>Places returned at sample point: {debugInfo.places_returned ?? 0}</p>
+                    <p>Results returned at sample point: {debugInfo.places_returned ?? 0}</p>
                     {(debugInfo.place_id_verification?.address || '').toLowerCase().includes('service-area business') && (
-                      <p>This linked listing is a service-area business. It may rank in standard Google results while still appearing inconsistently in Places local-pack responses.</p>
+                      <p>This linked listing is a service-area business. It may rank in standard Google results while still appearing inconsistently in Google Maps and local-pack results.</p>
                     )}
                     {debugInfo.keyword_warning && <p>{debugInfo.keyword_warning}</p>}
                   </div>
@@ -1014,7 +1014,7 @@ export default function Heatmap() {
                       <button type="button" className={styles.historyMain} onClick={() => handleLoadScan(scan.id)}>
                         <span className={styles.historyTitle}>{scan.keyword}</span>
                         <span className={styles.historyMeta}>{scan.radius_miles} mi | {scan.grid_size} x {scan.grid_size}</span>
-                        <span className={styles.historyMeta}>{scan.avg_rank > 0 ? `Avg local #${scan.avg_rank}` : 'Not returned by Places'}</span>
+                        <span className={styles.historyMeta}>{scan.avg_rank > 0 ? `Avg local #${scan.avg_rank}` : 'Not returned in scan'}</span>
                         <span className={styles.historyMeta}>{scan.scanned_at?.slice(0, 16) || 'Just now'}</span>
                       </button>
                       <button type="button" className={styles.historyDelete} onClick={() => handleDeleteScan(scan.id)}>

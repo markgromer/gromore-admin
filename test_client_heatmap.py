@@ -4,7 +4,13 @@ import uuid
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from webapp.heatmap import _match_business, _search_places, summarize_competitor_landscape
+from webapp.heatmap import (
+    _extract_place_id_from_maps_href,
+    _match_business,
+    _normalize_browser_maps_result,
+    _search_places,
+    summarize_competitor_landscape,
+)
 
 _TEST_ROOT = Path(__file__).resolve().parent / ".tmp-test-artifacts"
 _TEST_ROOT.mkdir(exist_ok=True)
@@ -64,7 +70,7 @@ class ClientHeatmapTests(unittest.TestCase):
         self.assertIn("Move the scan center", html)
         self.assertIn("Use business location", html)
         self.assertIn("Run Heatmap", html)
-        self.assertIn("Estimated Places calls", html)
+        self.assertIn("Estimated Google Maps lookups", html)
 
     def test_heatmap_api_bootstrap_returns_brand_and_active_scan(self):
         with self.app.app_context():
@@ -184,6 +190,25 @@ class ClientHeatmapTests(unittest.TestCase):
         )
 
         self.assertEqual(rank, 1)
+
+    def test_extract_place_id_from_maps_href_reads_bang_19_token(self):
+        href = "https://www.google.com/maps/place/Test/@33.4,-112.0,17z/data=!4m6!3m5!1s0x872b123456789abc:0xdef!8m2!3d33.4!4d-112.0!16s%2Fg%2F11c2abc!19sChIJ123PlaceToken"
+
+        place_id = _extract_place_id_from_maps_href(href)
+
+        self.assertEqual(place_id, "ChIJ123PlaceToken")
+
+    def test_normalize_browser_maps_result_maps_scraped_row(self):
+        place = _normalize_browser_maps_result({
+            "name": "Rival Plumbing",
+            "href": "https://www.google.com/maps/place/Rival/@33.4,-112.0,17z/data=!4m6!3m5!1s0x872b123456789abc:0xdef!8m2!3d33.4!4d-112.0!16s%2Fg%2F11c2abc!19sChIJBrowserPlaceId",
+            "text": "Rival Plumbing · 123 Main St Phoenix, AZ 85001",
+        })
+
+        self.assertEqual(place["displayName"]["text"], "Rival Plumbing")
+        self.assertEqual(place["id"], "ChIJBrowserPlaceId")
+        self.assertEqual(place["formattedAddress"], "123 Main St Phoenix, AZ 85001")
+        self.assertEqual(place["source"], "browser_maps")
 
     def test_competitor_summary_aggregates_grid_results(self):
         summary = summarize_competitor_landscape([

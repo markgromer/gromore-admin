@@ -1,9 +1,9 @@
 """
 Local-rank heatmap scanner.
 
-Generates a grid of geographic points around a business location and queries
-the Google Places API (New) Text Search to determine the business's ranking
-for a keyword at each point.
+Generates a grid of geographic points around a business location and checks
+live Google Maps results first, with Places API fallbacks, to determine the
+business's ranking for a keyword at each point.
 """
 
 import math
@@ -11,6 +11,7 @@ import logging
 import re
 import time
 import requests
+from urllib.parse import quote
 
 log = logging.getLogger(__name__)
 
@@ -177,6 +178,128 @@ def _find_place_candidates(api_key, query, lat=None, lng=None, use_bias=True):
         "query": query,
         "biased": bool(use_bias and lat is not None and lng is not None and (lat != 0 or lng != 0)),
     }
+
+
+def _estimate_google_maps_zoom(radius_miles):
+    """Translate scan radius into a coarse Google Maps zoom level."""
+    if radius_miles <= 1:
+        return 14
+    if radius_miles <= 3:
+        return 13
+    if radius_miles <= 5:
+        return 12
+    if radius_miles <= 10:
+        return 11
+    return 10
+
+
+def _extract_place_id_from_maps_href(href):
+    """Extract a Place ID from a Google Maps place href when available."""
+    href = (href or "").strip()
+    if not href:
+        return ""
+    match = re.search(r'!19s([A-Za-z0-9_-]+)', href)
+    if match:
+        return match.group(1)
+    match = re.search(r'place_id=([A-Za-z0-9_-]+)', href)
+    if match:
+        return match.group(1)
+    return ""
+
+
+def _extract_browser_result_address(result_text, business_name=""):
+    """Best-effort address extraction from a Google Maps result row."""
+    text = " ".join((result_text or "").split())
+    name = " ".join((business_name or "").split())
+    if not text:
+        return ""
+    if name and text.lower().startswith(name.lower()):
+        text = text[len(name):].strip()
+
+    text = text.replace("·", " ").replace("•", " ").replace("", " ").replace("", " ")
+    street_match = re.search(
+        r'(\d{2,6}\s+[A-Za-z0-9.#\-\s]+?(?:Ave|Avenue|Rd|Road|St|Street|Dr|Drive|Blvd|Boulevard|Ln|Lane|Way|Ct|Court|Cir|Circle|Pl|Place|Pkwy|Parkway|Hwy|Highway)\b[^()]*)',
+        text,
+        re.IGNORECASE,
+    )
+    if street_match:
+        return street_match.group(1).strip(" -,")
+
+    city_match = re.search(r'([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*,\s*[A-Z]{2}(?:\s+\d{5})?)', text)
+    if city_match:
+        return city_match.group(1).strip(" -,")
+    return ""
+
+
+def _normalize_browser_maps_result(raw_result):
+    """Map a scraped Google Maps result row into the heatmap place shape."""
+    name = " ".join((raw_result.get("name") or raw_result.get("aria") or "").split())
+    href = raw_result.get("href", "")
+    place_id = _extract_place_id_from_maps_href(href)
+    text = raw_result.get("text", "")
+    return {
+        "displayName": {"text": name},
+        "id": place_id,
+        "formattedAddress": _extract_browser_result_address(text, business_name=name),
+        "googleMapsUri": href,
+        "source": "browser_maps",
+    }
+
+
+def _search_google_maps_page(page, keyword, lat, lng, radius_m=2000, max_results=20):
+    """Search Google Maps in a headless browser and return the visible ranked pack."""
+    radius_miles = max(float(radius_m or 0) / 1609.34, 0.1)
+    zoom = _estimate_google_maps_zoom(radius_miles)
+    url = f"https://www.google.com/maps/search/{quote(keyword, safe='')}/@{lat:.6f},{lng:.6f},{zoom}z?hl=en"
+    diag = {"browser_maps": {"provider": "browser_maps", "url": url, "zoom": zoom}}
+
+    page.goto(url, wait_until="domcontentloaded", timeout=60000)
+    try:
+        page.wait_for_load_state("networkidle", timeout=12000)
+    except Exception:
+        pass
+
+    try:
+        page.locator('[role="article"]').first.wait_for(timeout=12000)
+    except Exception:
+        diag["browser_maps"]["title"] = page.title()
+        diag["browser_maps"]["count"] = 0
+        return [], diag
+
+    feed = page.locator('[role="feed"]')
+    last_count = 0
+    for _ in range(4):
+        current_count = page.locator('[role="article"]').count()
+        if current_count >= max_results or current_count == last_count:
+            break
+        last_count = current_count
+        if feed.count() > 0:
+            try:
+                feed.evaluate('(node) => { node.scrollTop = node.scrollHeight; }')
+            except Exception:
+                pass
+        page.wait_for_timeout(700)
+
+    raw_results = page.evaluate(
+        r"""
+() => Array.from(document.querySelectorAll('[role="article"]')).slice(0, 20).map((node, index) => {
+  const anchor = node.querySelector('a[href*="/place/"]');
+  return {
+    rank: index + 1,
+    name: (anchor?.getAttribute('aria-label') || anchor?.innerText || node.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim(),
+    href: anchor?.href || '',
+    aria: node.getAttribute('aria-label') || '',
+    text: (node.innerText || '').replace(/\s+/g, ' ').trim(),
+  };
+}).filter((item) => item.name);
+        """
+    )
+
+    places = [_normalize_browser_maps_result(row) for row in raw_results[:max_results]]
+    diag["browser_maps"]["count"] = len(places)
+    diag["browser_maps"]["title"] = page.title()
+    diag["browser_maps"]["top_names"] = [place.get("displayName", {}).get("text", "") for place in places[:5]]
+    return places, diag
 
 def _search_places(api_key, keyword, lat, lng, radius_m=2000, brand_query=False, fallback_queries=None):
     """Query Google Places APIs for a keyword near a point.
@@ -489,53 +612,145 @@ def scan_grid(api_key, keyword, business_name, grid_points,
     debug_sample = None
     errors = 0
     candidate_names = [business_name, *(alternate_names or [])]
-    for seq, (idx, pt) in enumerate(ordered):
-        # Rate limit: delay between grid points (3 API calls per point)
-        if seq > 0:
-            time.sleep(0.5)
-        try:
-            places, api_diag = _search_places(api_key, keyword, pt["lat"], pt["lng"],
-                                              radius_m=search_radius_m,
-                                              brand_query=brand_query,
-                                              fallback_queries=candidate_names)
-        except Exception as exc:
-            log.warning("scan_grid: API error at point %d (%.4f, %.4f): %s",
-                        idx, pt["lat"], pt["lng"], exc)
-            places, api_diag = [], {"error": str(exc)}
-            errors += 1
-        rank = _match_business(places, business_name, place_id, alternate_names=alternate_names)
-        competitors = _extract_competitors(places, place_id=place_id, candidate_names=candidate_names)
-        # Capture center point's results for diagnostics (first in our ordering)
-        if seq == 0:
-            debug_sample = {
-                "business_name_used": business_name,
-                "place_id_used": place_id,
-                "alternate_names_used": alternate_names or [],
-                "brand_query": brand_query,
-                "search_radius_m": search_radius_m,
-                "places_returned": len(places),
-                "debug_point": f"center ({pt['lat']:.4f}, {pt['lng']:.4f})",
-                "top_results": [
-                    {
-                        "name": (p.get("displayName", {}).get("text", "") or ""),
-                        "id": p.get("id", ""),
+    browser = None
+    context = None
+    page = None
+    browser_error = None
+    try:
+        import importlib
+        sync_playwright = importlib.import_module("playwright.sync_api").sync_playwright
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            center_point = ordered[0][1] if ordered else {"lat": 0, "lng": 0}
+            context = browser.new_context(
+                viewport={"width": 1440, "height": 1200},
+                locale="en-US",
+                geolocation={"latitude": center_point["lat"], "longitude": center_point["lng"]},
+                permissions=["geolocation"],
+            )
+            page = context.new_page()
+
+            for seq, (idx, pt) in enumerate(ordered):
+                if seq > 0:
+                    time.sleep(0.35)
+                try:
+                    context.set_geolocation({"latitude": pt["lat"], "longitude": pt["lng"]})
+                    places, api_diag = _search_google_maps_page(page, keyword, pt["lat"], pt["lng"], radius_m=search_radius_m)
+                    if not places and api_key:
+                        fallback_places, fallback_diag = _search_places(
+                            api_key,
+                            keyword,
+                            pt["lat"],
+                            pt["lng"],
+                            radius_m=search_radius_m,
+                            brand_query=brand_query,
+                            fallback_queries=candidate_names,
+                        )
+                        if fallback_places:
+                            places = fallback_places
+                        api_diag.update(fallback_diag)
+                except Exception as exc:
+                    log.warning("scan_grid: browser search error at point %d (%.4f, %.4f): %s",
+                                idx, pt["lat"], pt["lng"], exc)
+                    browser_error = str(exc)
+                    if api_key:
+                        try:
+                            places, api_diag = _search_places(
+                                api_key,
+                                keyword,
+                                pt["lat"],
+                                pt["lng"],
+                                radius_m=search_radius_m,
+                                brand_query=brand_query,
+                                fallback_queries=candidate_names,
+                            )
+                            api_diag.setdefault("browser_maps", {"error": str(exc)})
+                        except Exception as fallback_exc:
+                            log.warning("scan_grid: fallback API error at point %d (%.4f, %.4f): %s",
+                                        idx, pt["lat"], pt["lng"], fallback_exc)
+                            places, api_diag = [], {"browser_maps": {"error": str(exc)}, "error": str(fallback_exc)}
+                            errors += 1
+                    else:
+                        places, api_diag = [], {"browser_maps": {"error": str(exc)}}
+                        errors += 1
+
+                rank = _match_business(places, business_name, place_id, alternate_names=alternate_names)
+                competitors = _extract_competitors(places, place_id=place_id, candidate_names=candidate_names)
+                if seq == 0:
+                    debug_sample = {
+                        "business_name_used": business_name,
+                        "place_id_used": place_id,
+                        "alternate_names_used": alternate_names or [],
+                        "brand_query": brand_query,
+                        "search_radius_m": search_radius_m,
+                        "places_returned": len(places),
+                        "debug_point": f"center ({pt['lat']:.4f}, {pt['lng']:.4f})",
+                        "top_results": [
+                            {
+                                "name": (p.get("displayName", {}).get("text", "") or ""),
+                                "id": p.get("id", ""),
+                            }
+                            for p in places[:10]
+                        ],
+                        "api_diagnostics": api_diag,
                     }
-                    for p in places[:10]
-                ],
-                "api_diagnostics": api_diag,
+                    log.info("Heatmap debug (center) - matching '%s' (place_id=%s) | top results: %s | api_diag: %s",
+                             business_name, place_id,
+                             [r["name"] for r in debug_sample["top_results"]], api_diag)
+                results[idx] = {
+                    "row": pt["row"],
+                    "col": pt["col"],
+                    "lat": pt["lat"],
+                    "lng": pt["lng"],
+                    "rank": rank,
+                    "competitors": competitors,
+                }
+    except Exception as exc:
+        browser_error = str(exc)
+
+    if browser is None and ordered:
+        for seq, (idx, pt) in enumerate(ordered):
+            if seq > 0:
+                time.sleep(0.35)
+            try:
+                places, api_diag = _search_places(api_key, keyword, pt["lat"], pt["lng"],
+                                                  radius_m=search_radius_m,
+                                                  brand_query=brand_query,
+                                                  fallback_queries=candidate_names)
+                api_diag.setdefault("browser_maps", {"error": browser_error or "Playwright unavailable"})
+            except Exception as exc:
+                log.warning("scan_grid: API error at point %d (%.4f, %.4f): %s",
+                            idx, pt["lat"], pt["lng"], exc)
+                places, api_diag = [], {"browser_maps": {"error": browser_error or "Playwright unavailable"}, "error": str(exc)}
+                errors += 1
+            rank = _match_business(places, business_name, place_id, alternate_names=alternate_names)
+            competitors = _extract_competitors(places, place_id=place_id, candidate_names=candidate_names)
+            if seq == 0:
+                debug_sample = {
+                    "business_name_used": business_name,
+                    "place_id_used": place_id,
+                    "alternate_names_used": alternate_names or [],
+                    "brand_query": brand_query,
+                    "search_radius_m": search_radius_m,
+                    "places_returned": len(places),
+                    "debug_point": f"center ({pt['lat']:.4f}, {pt['lng']:.4f})",
+                    "top_results": [
+                        {
+                            "name": (p.get("displayName", {}).get("text", "") or ""),
+                            "id": p.get("id", ""),
+                        }
+                        for p in places[:10]
+                    ],
+                    "api_diagnostics": api_diag,
+                }
+            results[idx] = {
+                "row": pt["row"],
+                "col": pt["col"],
+                "lat": pt["lat"],
+                "lng": pt["lng"],
+                "rank": rank,
+                "competitors": competitors,
             }
-            log.info("Heatmap debug (center) - matching '%s' (place_id=%s) | "
-                     "top results: %s | api_diag: %s",
-                     business_name, place_id,
-                     [r["name"] for r in debug_sample["top_results"]], api_diag)
-        results[idx] = {
-            "row": pt["row"],
-            "col": pt["col"],
-            "lat": pt["lat"],
-            "lng": pt["lng"],
-            "rank": rank,
-            "competitors": competitors,
-        }
     if errors:
         if debug_sample is None:
             debug_sample = {}

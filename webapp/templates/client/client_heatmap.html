@@ -445,7 +445,7 @@
                         <strong id="gridPointCount">0</strong>
                     </div>
                     <div class="scan-meta-row">
-                        <span>Estimated Places calls</span>
+                        <span>Estimated Google Maps lookups</span>
                         <strong id="apiCallEstimate">0</strong>
                     </div>
 
@@ -545,7 +545,7 @@
                     <div class="legend-item"><div class="legend-dot" style="background:#22c55e;"></div> #1-3</div>
                     <div class="legend-item"><div class="legend-dot" style="background:#f59e0b;"></div> #4-10 local pack</div>
                     <div class="legend-item"><div class="legend-dot" style="background:#ef4444;"></div> #11-20 local pack</div>
-                    <div class="legend-item"><div class="legend-dot" style="background:#d1d5db;"></div> Not returned by Places</div>
+                    <div class="legend-item"><div class="legend-dot" style="background:#d1d5db;"></div> Not returned in scan results</div>
                     <div class="legend-item"><div class="legend-dot" style="background:#fff; border:2px solid #4f46e5;"></div> Closest cell to scan center</div>
                 </div>
             </div>
@@ -607,7 +607,7 @@
                                 <div class="d-flex justify-content-between align-items-center mt-1">
                                     <small class="text-muted">{{ scan.radius_miles }}mi | {{ scan.grid_size }}x{{ scan.grid_size }}</small>
                                     <small class="text-muted">
-                                        {% if scan.avg_rank > 0 %}Avg local #{{ scan.avg_rank }}{% else %}Not returned by Places{% endif %}
+                                        {% if scan.avg_rank > 0 %}Avg local #{{ scan.avg_rank }}{% else %}Not returned in scan{% endif %}
                                     </small>
                                 </div>
                                 <small class="text-muted" style="font-size:.75rem;">{{ scan.scanned_at[:16] }}</small>
@@ -634,10 +634,10 @@
                 <ul class="mb-0" style="font-size: .85rem; color: #4b5563; padding-left: 1.2rem;">
                     <li>Set the keyword, radius, and odd grid size you want to test</li>
                     <li>Drag the scan center pin or click the map to move the grid</li>
-                    <li>We query Google around every grid point and match your listing by Place ID first when available</li>
-                    <li>Green means top 3 in the local pack, yellow means top 10 in the local pack, red means lower local-pack visibility, and gray means Places did not return you</li>
+                    <li>We check live Google Maps results around every grid point, then fall back to Places APIs if the browser result set comes back empty or errors</li>
+                    <li>Green means top 3 in the local pack, yellow means top 10 in the local pack, red means lower local-pack visibility, and gray means the scan did not return you</li>
                     <li>The highlighted cell is the grid point closest to the live scan center</li>
-                    <li>Service-area businesses can rank on page one organically while still being inconsistent in Places local-pack responses</li>
+                    <li>Service-area businesses can rank on page one organically while still being inconsistent in Google Maps and local-pack results</li>
                 </ul>
             </div>
         </div>
@@ -775,7 +775,7 @@ function updateScanMeta(gridPointCount) {
     if (gridPointCountEl) gridPointCountEl.textContent = String(pointCount);
 
     var apiCallEstimate = document.getElementById('apiCallEstimate');
-    if (apiCallEstimate) apiCallEstimate.textContent = String(pointCount * 3);
+    if (apiCallEstimate) apiCallEstimate.textContent = String(pointCount);
 
     ['mapGridLabel', 'mapGridLabelMirror', 'mapGridSummary', 'mapGridSummaryMirror'].forEach(function(id) {
         var el = document.getElementById(id);
@@ -1182,9 +1182,9 @@ function showDebug(debugInfo) {
         '<strong>Debug:</strong> Matching business name: <code>' + (debugInfo.business_name_used || 'none') + '</code>' +
         ' | Place ID: <code>' + (debugInfo.place_id_used || 'none') + '</code>' +
         ' | Search radius: ' + Math.round(debugInfo.search_radius_m) + 'm' +
-        ' | Places returned: ' + debugInfo.places_returned +
+        ' | Results returned: ' + debugInfo.places_returned +
         (debugInfo.debug_point ? ' | Sample point: ' + debugInfo.debug_point : '') +
-        '<br><strong>Google Places results (center grid point):</strong> ' +
+        '<br><strong>Ranked results (center grid point - Google Maps browser-first, Places fallback):</strong> ' +
         (debugInfo.top_results && debugInfo.top_results.length ? debugInfo.top_results.map(function(result, index) {
             var match = debugInfo.place_id_used && result.id === debugInfo.place_id_used ? ' <span style="color:#22c55e; font-weight:600;">MATCH</span>' : '';
             return '<br>' + (index + 1) + '. ' + result.name + ' <small style="color:#9ca3af;">(' + result.id.substring(0, 20) + '...)</small>' + match;
@@ -1192,21 +1192,31 @@ function showDebug(debugInfo) {
 
     if (debugInfo.api_diagnostics) {
         var diagnostics = debugInfo.api_diagnostics;
-        var diagnosticsHtml = '<br><strong>API Diagnostics (center grid point - all 3 APIs queried, results merged):</strong>';
+        var diagnosticsHtml = '<br><strong>Provider Diagnostics (center grid point):</strong>';
 
         function apiRow(label, info) {
             if (!info) return '<br>' + label + ': not attempted';
             if (info.error) return '<br>' + label + ': <span style="color:#ef4444">Error - ' + info.error + '</span>';
-            var row = '<br>' + label + ': HTTP ' + info.status;
-            if (info.gstatus) row += ' | Google status: ' + info.gstatus;
-            if (info.count !== undefined) row += ' | <strong>' + info.count + ' results</strong>';
-            if (info.error_message) row += ' | ' + info.error_message;
+            var parts = [];
+            if (info.provider) parts.push(info.provider);
+            if (info.status !== undefined) parts.push('HTTP ' + info.status);
+            if (info.gstatus) parts.push('Google status: ' + info.gstatus);
+            if (info.zoom !== undefined) parts.push('Zoom: ' + info.zoom);
+            if (info.count !== undefined) parts.push('<strong>' + info.count + ' results</strong>');
+            if (info.title) parts.push('Page: ' + escapeHtml(info.title));
+            if (info.error_message) parts.push(info.error_message);
+            if (!parts.length) parts.push('attempted');
+            var row = '<br>' + label + ': ' + parts.join(' | ');
             return row;
         }
 
-        diagnosticsHtml += apiRow('New Text Search', diagnostics.new_api);
-        diagnosticsHtml += apiRow('Legacy Text Search', diagnostics.legacy_api);
-        diagnosticsHtml += apiRow('Nearby Search', diagnostics.nearby_api);
+        diagnosticsHtml += apiRow('Google Maps browser', diagnostics.browser_maps);
+        if (diagnostics.new_api || diagnostics.legacy_api || diagnostics.nearby_api || diagnostics.find_place) {
+            diagnosticsHtml += '<br><span style="color:#64748b; font-weight:600;">Fallback Places APIs:</span>';
+        }
+        diagnosticsHtml += apiRow('Places API (New)', diagnostics.new_api);
+        diagnosticsHtml += apiRow('Places Text Search (Legacy)', diagnostics.legacy_api);
+        diagnosticsHtml += apiRow('Places Nearby Search', diagnostics.nearby_api);
         if (diagnostics.find_place && diagnostics.find_place.attempts) {
             diagnostics.find_place.attempts.forEach(function(attempt) {
                 diagnosticsHtml += apiRow('Find Place (' + (attempt.mode || 'fallback') + ')', attempt);
@@ -1229,7 +1239,7 @@ function showDebug(debugInfo) {
             if (verification.types && verification.types.length) {
                 verificationHtml += ' | Types: ' + verification.types.join(', ');
                 if ((verification.address || '').toLowerCase().indexOf('service-area business') !== -1) {
-                    verificationHtml += '<br><span style="color:#1d4ed8; font-weight:600;">This linked listing is a service-area business. It can rank on page one in standard Google results without being returned consistently by Places local-pack APIs.</span>';
+                    verificationHtml += '<br><span style="color:#1d4ed8; font-weight:600;">This linked listing is a service-area business. It can rank on page one in standard Google results without being returned consistently in Google Maps and local-pack results.</span>';
                 }
             }
             if (verification.business_status) {
@@ -1257,7 +1267,7 @@ function showDebug(debugInfo) {
     }
 
     if (debugInfo.places_returned === 0) {
-        el.innerHTML += '<br><span style="color:#f59e0b; font-weight:600;">No places returned from any of the 3 APIs. Click "Test API Key" to diagnose the issue.</span>';
+        el.innerHTML += '<br><span style="color:#f59e0b; font-weight:600;">No ranked results were returned at the sample point from live Google Maps or the fallback APIs. Click "Test API Key" if this looks wrong.</span>';
     }
 
     if (debugInfo.places_returned > 0 && debugInfo.place_id_used && debugInfo.place_id_verification && !debugInfo.place_id_verification.error) {
@@ -1272,8 +1282,8 @@ function showDebug(debugInfo) {
         }
         if (!foundMatch) {
             el.innerHTML += '<br><div style="background:#eff6ff; border:1px solid #3b82f6; border-radius:8px; padding:10px; margin-top:8px; color:#1e40af;">' +
-                '<strong>Why "Not found"?</strong> Your business exists in Google, but Google\'s Places API did not return it for this keyword at this location. ' +
-                'This heatmap measures Google Maps local-pack visibility, not your website\'s organic page-one ranking. Service-area businesses often show up in standard Google results more often than they appear in Places API responses.' +
+                '<strong>Why "Not found"?</strong> Your business exists in Google, but this scan did not return it for this keyword at this location. ' +
+                'This heatmap measures Google Maps local-pack visibility from live browser results, with Places used only as fallback coverage. It does not measure your website\'s organic page-one ranking. Service-area businesses often show up in standard Google results more often than they appear in map results.' +
                 '<br><strong>What this means:</strong> This keyword and location combo is weak in the local pack feed. Try a few different service phrases to see where your Google Business Profile does appear.' +
                 '</div>';
         }
@@ -1287,7 +1297,7 @@ function setActiveHistoryItem(scanId) {
 }
 
 function buildHistoryItemHtml(scan) {
-    var avgLabel = scan.avg_rank > 0 ? 'Avg local #' + scan.avg_rank : 'Not returned by Places';
+    var avgLabel = scan.avg_rank > 0 ? 'Avg local #' + scan.avg_rank : 'Not returned in scan';
     var timeLabel = scan.scanned_at || 'Just now';
     return '<div class="scan-history-item mb-2 active" data-scan-id="' + scan.id + '">' +
         '<div class="d-flex justify-content-between align-items-start">' +
