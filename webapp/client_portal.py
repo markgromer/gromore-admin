@@ -12630,6 +12630,18 @@ def client_inbox_warren_draft(thread_id):
 @client_login_required
 def client_crm_data():
     """JSON endpoint: fetch all SNG data for the CRM tab."""
+    def _revenue_cache_is_stale(snapshot, max_age_hours=20):
+        if not isinstance(snapshot, dict):
+            return True
+        synced_at = str(snapshot.get("synced_at") or "").strip()
+        if not synced_at:
+            return True
+        try:
+            synced_dt = datetime.strptime(synced_at, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return True
+        return (datetime.now() - synced_dt) > timedelta(hours=max_age_hours)
+
     db = _get_db()
     brand_id = session["client_brand_id"]
     brand = db.get_brand(brand_id)
@@ -12703,8 +12715,10 @@ def client_crm_data():
             # Full sync: sample clients, get real payments, cache results
             rev = sng_sync_revenue(brand, db, month=request.args.get("month"))
         else:
-            # Normal page load: read from cache (fast, no heavy API calls)
+            # Normal page load: prefer cache, but auto-refresh if it's missing or stale.
             rev = sng_get_cached_revenue(brand, db)
+            if _revenue_cache_is_stale(rev):
+                rev = sng_sync_revenue(brand, db, month=request.args.get("month"))
 
         data["revenue"] = rev
 
