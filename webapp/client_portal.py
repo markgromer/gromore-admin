@@ -2274,6 +2274,371 @@ def _compact_message_text(text, limit=160):
     return cleaned[: limit - 3].rstrip() + "..."
 
 
+_FACEBOOK_POST_TYPE_OPTIONS = [
+    {
+        "key": "value",
+        "label": "Value Post",
+        "description": "Share one useful tip, lesson, or buyer insight people can use right away.",
+        "prompt_focus": "Teach something practical and make the business sound helpful, not preachy.",
+    },
+    {
+        "key": "faq",
+        "label": "FAQ Post",
+        "description": "Answer one common customer question in a way that removes friction and builds trust.",
+        "prompt_focus": "Make the answer practical, clear, and grounded in how the business actually works.",
+    },
+    {
+        "key": "special_offer",
+        "label": "Special Post",
+        "description": "Promote an offer, seasonal push, or short-term reason to reach out now.",
+        "prompt_focus": "Make the offer specific, credible, and easy to act on.",
+    },
+    {
+        "key": "testimonial",
+        "label": "Testimonial Post",
+        "description": "Turn customer proof into a trust-building post with a clear takeaway.",
+        "prompt_focus": "Use believable social proof and connect it back to why someone should trust the team.",
+    },
+    {
+        "key": "behind_the_scenes",
+        "label": "Behind The Scenes",
+        "description": "Show the people, process, prep work, or standards behind the service.",
+        "prompt_focus": "Make the business feel real, local, and hands-on.",
+    },
+    {
+        "key": "team_intro",
+        "label": "Team Intro",
+        "description": "Introduce an owner, tech, team member, or role so the business feels more personal.",
+        "prompt_focus": "Highlight competence, personality, and why that person matters to customers.",
+    },
+    {
+        "key": "community_spotlight",
+        "label": "Community Spotlight",
+        "description": "Highlight a neighborhood, local event, nearby project, or local partnership.",
+        "prompt_focus": "Make the business feel present in the local community instead of abstract or corporate.",
+    },
+    {
+        "key": "seasonal_reminder",
+        "label": "Seasonal Reminder",
+        "description": "Tie a timely reminder or preventive tip to the season, weather, or local calendar.",
+        "prompt_focus": "Make the timing feel relevant and useful, not manufactured.",
+    },
+    {
+        "key": "business_growth",
+        "label": "Watch Our Business Grow",
+        "description": "Share momentum, milestones, new tools, team growth, or progress updates.",
+        "prompt_focus": "Show growth in a grounded way that reinforces trust and momentum.",
+    },
+]
+_FACEBOOK_POST_TYPE_MAP = {item["key"]: item for item in _FACEBOOK_POST_TYPE_OPTIONS}
+_FACEBOOK_POST_TYPE_ALIASES = {
+    "faq_post": "faq",
+    "frequently_asked_question": "faq",
+    "special": "special_offer",
+    "offer": "special_offer",
+    "special_post": "special_offer",
+    "testimonial_post": "testimonial",
+    "behind_the_scenes_post": "behind_the_scenes",
+    "behind_the_scenes": "behind_the_scenes",
+    "behind_the_scences": "behind_the_scenes",
+    "behind_scenes": "behind_the_scenes",
+    "team": "team_intro",
+    "team_member": "team_intro",
+    "team_member_intro": "team_intro",
+    "community": "community_spotlight",
+    "spotlight": "community_spotlight",
+    "community_feature": "community_spotlight",
+    "seasonal": "seasonal_reminder",
+    "seasonal_post": "seasonal_reminder",
+    "seasonal_tip": "seasonal_reminder",
+    "watch_our_business_grow": "business_growth",
+    "watch_business_grow": "business_growth",
+    "growth": "business_growth",
+}
+_FACEBOOK_POST_TYPE_RULES = {
+    "value": "Lead with one practical lesson, warning sign, tip, or FAQ answer that helps a prospect make a better decision.",
+    "faq": "Answer a real customer question clearly. Reduce hesitation and explain what the customer should do next if they need help.",
+    "special_offer": "Make the offer concrete. Mention timing, audience fit, or what makes the offer worth acting on without sounding desperate.",
+    "testimonial": "Write like a real owner highlighting a customer result or experience. Do not fabricate exact names unless the brief gives one.",
+    "behind_the_scenes": "Describe the work, prep, standards, people, or process behind the service so the business feels tangible and trustworthy.",
+    "team_intro": "Make the person feel competent and approachable. Tie their role back to the quality customers receive.",
+    "community_spotlight": "Reference something local that feels authentic to the business, such as a neighborhood, event, nearby project, or local partner.",
+    "seasonal_reminder": "Anchor the post in a real seasonal concern, weather pattern, or calendar moment that matters to local customers right now.",
+    "business_growth": "Share a milestone, upgrade, new team member, new capability, or community momentum update that shows the business is growing for the right reasons.",
+}
+_FACEBOOK_CONTENT_MIXES = [
+    {
+        "key": "balanced_local_presence",
+        "label": "Balanced Local Presence",
+        "description": "A steady mix of education, proof, local relevance, and business momentum.",
+        "post_types": ["value", "faq", "testimonial", "behind_the_scenes", "community_spotlight", "business_growth"],
+        "prompt_focus": "Keep the calendar balanced across education, trust, and local brand presence.",
+    },
+    {
+        "key": "trust_and_proof",
+        "label": "Trust And Proof",
+        "description": "Lean harder on testimonials, team credibility, and how the work actually gets done.",
+        "post_types": ["testimonial", "behind_the_scenes", "team_intro", "value", "faq", "community_spotlight"],
+        "prompt_focus": "Bias the calendar toward trust-building proof, visible standards, and real people.",
+    },
+    {
+        "key": "offer_and_conversion",
+        "label": "Offer And Conversion",
+        "description": "Use stronger offer, urgency, and decision-stage content without turning spammy.",
+        "post_types": ["special_offer", "value", "faq", "testimonial", "seasonal_reminder", "behind_the_scenes"],
+        "prompt_focus": "Keep the calendar oriented toward booked calls, seasonal demand, and credible reasons to act now.",
+    },
+    {
+        "key": "community_momentum",
+        "label": "Community Momentum",
+        "description": "Emphasize local visibility, crew personality, and growth in the market.",
+        "post_types": ["community_spotlight", "team_intro", "behind_the_scenes", "business_growth", "value", "seasonal_reminder"],
+        "prompt_focus": "Make the business feel active, visible, and rooted in the local community.",
+    },
+]
+_FACEBOOK_CONTENT_MIX_MAP = {item["key"]: item for item in _FACEBOOK_CONTENT_MIXES}
+_FACEBOOK_CALENDAR_DAY_OFFSETS = {
+    2: [1, 4],
+    3: [0, 2, 4],
+    4: [0, 2, 4, 6],
+}
+_FACEBOOK_CALENDAR_TIMES = ["09:15:00", "11:45:00", "14:30:00", "16:15:00"]
+
+
+def _normalize_facebook_post_type(value, default="value"):
+    cleaned = (value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    cleaned = _FACEBOOK_POST_TYPE_ALIASES.get(cleaned, cleaned)
+    if cleaned in _FACEBOOK_POST_TYPE_MAP:
+        return cleaned
+    return default if default is not None else cleaned
+
+
+def _facebook_post_type_label(value):
+    normalized = _normalize_facebook_post_type(value, default=None)
+    if normalized in _FACEBOOK_POST_TYPE_MAP:
+        return _FACEBOOK_POST_TYPE_MAP[normalized]["label"]
+    raw_value = (value or "").strip()
+    if not raw_value:
+        return ""
+    return raw_value.replace("_", " ").replace("-", " ").title()
+
+
+def _clean_gbp_cid(value):
+    return re.sub(r"\D", "", (value or "").strip())[:32]
+
+
+def _extract_json_object(raw_text):
+    raw = (raw_text or "").strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[-1]
+        if raw.endswith("```"):
+            raw = raw[:-3]
+        raw = raw.strip()
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not match:
+        raise ValueError("AI returned invalid format. Try again.")
+    return json.loads(match.group())
+
+
+def _default_post_link_url(brand, post_type):
+    website = ((brand or {}).get("website_url") or (brand or {}).get("website") or "").strip()
+    if not website:
+        return ""
+    if not website.startswith(("http://", "https://")):
+        website = f"https://{website.lstrip('/')}"
+    if post_type in {"value", "faq", "special_offer", "testimonial", "seasonal_reminder"}:
+        return website
+    return ""
+
+
+def _coerce_int(value, default, minimum=None, maximum=None):
+    try:
+        parsed = int(str(value).strip())
+    except (TypeError, ValueError):
+        parsed = default
+    if minimum is not None:
+        parsed = max(minimum, parsed)
+    if maximum is not None:
+        parsed = min(maximum, parsed)
+    return parsed
+
+
+def _normalize_facebook_post_type_list(values):
+    if isinstance(values, str):
+        values = [chunk.strip() for chunk in values.split(",")]
+    normalized = []
+    for value in values or []:
+        key = _normalize_facebook_post_type(value, default=None)
+        if key and key not in normalized:
+            normalized.append(key)
+    return normalized
+
+
+def _normalize_facebook_content_mix(value, default="balanced_local_presence"):
+    cleaned = (value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if cleaned in _FACEBOOK_CONTENT_MIX_MAP:
+        return cleaned
+    return default if default is not None else cleaned
+
+
+def _resolve_facebook_calendar_post_types(selected_types=None, content_mix=None):
+    normalized_selected = _normalize_facebook_post_type_list(selected_types)
+    mix_key = _normalize_facebook_content_mix(content_mix)
+    mix = _FACEBOOK_CONTENT_MIX_MAP.get(mix_key, _FACEBOOK_CONTENT_MIXES[0])
+    if not normalized_selected:
+        return list(mix["post_types"]), mix
+
+    ordered = [post_type for post_type in mix["post_types"] if post_type in normalized_selected]
+    ordered.extend(post_type for post_type in normalized_selected if post_type not in ordered)
+    return ordered, mix
+
+
+def _build_facebook_calendar_slots(start_date, weeks, posts_per_week):
+    offsets = _FACEBOOK_CALENDAR_DAY_OFFSETS.get(posts_per_week, _FACEBOOK_CALENDAR_DAY_OFFSETS[3])
+    slots = []
+    for week_index in range(weeks):
+        base_date = start_date + timedelta(days=week_index * 7)
+        for post_index, day_offset in enumerate(offsets):
+            slot_date = base_date + timedelta(days=day_offset)
+            slot_time = _FACEBOOK_CALENDAR_TIMES[post_index % len(_FACEBOOK_CALENDAR_TIMES)]
+            scheduled_at = datetime.fromisoformat(f"{slot_date.isoformat()}T{slot_time}")
+            slots.append(scheduled_at.strftime("%Y-%m-%dT%H:%M:%S"))
+    return slots
+
+
+def _build_facebook_calendar_plan(start_date, weeks, posts_per_week, selected_types=None, content_mix=None):
+    post_types, mix = _resolve_facebook_calendar_post_types(selected_types, content_mix)
+    slots = _build_facebook_calendar_slots(start_date, weeks, posts_per_week)
+    plan = []
+    for index, scheduled_at in enumerate(slots):
+        post_type = post_types[index % len(post_types)]
+        plan.append(
+            {
+                "index": index + 1,
+                "scheduled_at": scheduled_at,
+                "post_type": post_type,
+                "post_type_label": _facebook_post_type_label(post_type),
+                "description": _FACEBOOK_POST_TYPE_MAP[post_type]["description"],
+                "prompt_focus": _FACEBOOK_POST_TYPE_MAP[post_type]["prompt_focus"],
+                "content_mix": mix["key"],
+            }
+        )
+    return plan
+
+
+def _build_facebook_post_generation_messages(brand, post_type, brief=""):
+    post_type = _normalize_facebook_post_type(post_type)
+    config = _FACEBOOK_POST_TYPE_MAP[post_type]
+    brand_name = (brand.get("display_name") or brand.get("name") or "This business").strip()
+    industry = (brand.get("industry") or "local services").strip()
+    services = (brand.get("primary_services") or "").strip()
+    area = (brand.get("service_area") or "").strip()
+    voice = (brand.get("brand_voice") or "Clear, helpful, confident").strip()
+    audience = (brand.get("target_audience") or "local customers").strip()
+    offers = (brand.get("active_offers") or "").strip()
+
+    system_prompt = (
+        "You write strong Facebook Page posts for local businesses. "
+        "The posts should feel specific, human, and worth reading in-feed. "
+        "Do not sound like a generic marketing assistant. Return only valid JSON."
+    )
+    user_prompt = f"""Write one Facebook Page post draft.
+
+Business: {brand_name}
+Industry: {industry}
+Primary services: {services or 'Not provided'}
+Service area: {area or 'Not provided'}
+Target audience: {audience}
+Brand voice: {voice}
+Active offers: {offers or 'None provided'}
+Post type: {config['label']}
+Type goal: {config['description']}
+Type focus: {config['prompt_focus']}
+Additional brief: {brief or 'None provided'}
+
+Rules:
+- Write like a competent local business owner or operator, not a social media guru.
+- Keep the post between 70 and 180 words.
+- Make it specific to the service, audience, or local market when possible.
+- Include a clear next step, but do not sound pushy.
+- Avoid cliches, forced inspiration, and vague filler.
+- Do NOT use em dashes.
+- Use at most 2 hashtags, and only if they actually fit.
+- Do not invent fake statistics, awards, or customer details.
+- {_FACEBOOK_POST_TYPE_RULES[post_type]}
+
+Return a JSON object with these exact keys:
+- message: the Facebook post body
+- image_hint: a short suggestion for what image or photo would fit this post
+- link_url: either an empty string or a relevant website URL if a link would genuinely help this type of post
+"""
+    return system_prompt, user_prompt
+
+
+def _build_facebook_calendar_generation_messages(brand, calendar_plan, brief="", content_mix=None):
+    brand_name = (brand.get("display_name") or brand.get("name") or "This business").strip()
+    industry = (brand.get("industry") or "local services").strip()
+    services = (brand.get("primary_services") or "").strip()
+    area = (brand.get("service_area") or "").strip()
+    voice = (brand.get("brand_voice") or "Clear, helpful, confident").strip()
+    audience = (brand.get("target_audience") or "local customers").strip()
+    offers = (brand.get("active_offers") or "").strip()
+    mix = _FACEBOOK_CONTENT_MIX_MAP.get(_normalize_facebook_content_mix(content_mix), _FACEBOOK_CONTENT_MIXES[0])
+    slot_lines = []
+    for slot in calendar_plan:
+        slot_lines.append(
+            f"{slot['index']}. {slot['scheduled_at']} - {slot['post_type_label']} - {slot['description']} - Focus: {slot['prompt_focus']}"
+        )
+
+    system_prompt = (
+        "You create high-quality Facebook Page content calendars for local businesses. "
+        "The writing should feel specific, human, and useful, not like a generic social media assistant. "
+        "Return only valid JSON."
+    )
+    user_prompt = f"""Build a Facebook content calendar.
+
+Business: {brand_name}
+Industry: {industry}
+Primary services: {services or 'Not provided'}
+Service area: {area or 'Not provided'}
+Target audience: {audience}
+Brand voice: {voice}
+Active offers: {offers or 'None provided'}
+Content mix: {mix['label']}
+Mix goal: {mix['description']}
+Mix focus: {mix['prompt_focus']}
+Additional brief: {brief or 'None provided'}
+
+Post plan:
+{chr(10).join(slot_lines)}
+
+Rules:
+- Write one post for each planned slot and keep the same order.
+- Each post should be 70 to 170 words.
+- Make each post specific to the business, service mix, audience, or local market.
+- Vary the opening lines so the calendar does not sound repetitive.
+- Keep calls to action clear but not pushy.
+- Avoid cliches, vague filler, and generic motivational language.
+- Do NOT use em dashes.
+- Use at most 2 hashtags per post, and only when they fit naturally.
+- Do not invent fake reviews, fake names, fake awards, or fake metrics.
+- Respect the assigned post type for each slot.
+
+Return a JSON object with this exact shape:
+{{
+    "posts": [
+        {{
+            "post_type": "value",
+            "message": "...",
+            "image_hint": "...",
+            "link_url": ""
+        }}
+    ]
+}}
+"""
+    return system_prompt, user_prompt
+
+
 def _build_warren_lead_intelligence(db, brand):
     """Build a compact lead and pipeline snapshot for owner-facing Warren chat."""
     brand_id = brand["id"]
@@ -5183,6 +5548,7 @@ def client_add_competitor():
         website=request.form.get("website", "").strip()[:500],
         facebook_url=request.form.get("facebook_url", "").strip()[:500],
         google_maps_url=request.form.get("google_maps_url", "").strip()[:500],
+        gbp_cid=_clean_gbp_cid(request.form.get("gbp_cid", "")),
         yelp_url=request.form.get("yelp_url", "").strip()[:500],
         instagram_url=request.form.get("instagram_url", "").strip()[:500],
         notes=request.form.get("notes", "").strip()[:500],
@@ -5221,6 +5587,7 @@ def client_edit_competitor(competitor_id):
         website=request.form.get("website", "").strip()[:500],
         facebook_url=request.form.get("facebook_url", "").strip()[:500],
         google_maps_url=request.form.get("google_maps_url", "").strip()[:500],
+        gbp_cid=_clean_gbp_cid(request.form.get("gbp_cid", "")),
         yelp_url=request.form.get("yelp_url", "").strip()[:500],
         instagram_url=request.form.get("instagram_url", "").strip()[:500],
         notes=request.form.get("notes", "").strip()[:500],
@@ -5308,6 +5675,22 @@ def _build_competitor_report_card(report):
         "fresh": 3,
     }.get(status_tone, 4)
 
+    google_places = report.get("google_places") or {}
+    google_places_match_reasons = []
+    for reason in google_places.get("match_reasons") or []:
+        cleaned = str(reason or "").strip()
+        if cleaned and cleaned not in google_places_match_reasons:
+            google_places_match_reasons.append(cleaned)
+    google_places_match_score = float(google_places.get("match_score") or 0)
+    if google_places_match_score >= 10:
+        google_places_match_confidence = "Exact"
+    elif google_places_match_score >= 6:
+        google_places_match_confidence = "High"
+    elif google_places_match_score >= 3:
+        google_places_match_confidence = "Medium"
+    else:
+        google_places_match_confidence = "Low"
+
     return {
         "competitor": competitor,
         "report": report,
@@ -5323,6 +5706,9 @@ def _build_competitor_report_card(report):
         "scan_button_label": scan_button_label,
         "warren_prompt": warren_prompt,
         "sort_weight": sort_weight,
+        "google_places_match_reasons": google_places_match_reasons,
+        "google_places_match_score": google_places_match_score,
+        "google_places_match_confidence": google_places_match_confidence,
     }
 
 
@@ -9358,8 +9744,11 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
             timeout=30,
         )
         if resp.status_code not in (200, 201):
+            resp_headers = getattr(resp, "headers", {}) or {}
+            if not isinstance(resp_headers, dict):
+                resp_headers = {}
             _wp_log.warning("[WP-PUBLISH] status=%d headers=%s body=%s",
-                            resp.status_code, dict(resp.headers), resp.text[:500])
+                            resp.status_code, dict(resp_headers), resp.text[:500])
         if resp.status_code in (200, 201):
             wp_post = resp.json()
             return {
@@ -9648,12 +10037,12 @@ def _create_fb_promo_for_blog(db, brand, brand_id, title, wp_post_url, excerpt="
         resp_data = resp.json()
     except Exception as exc:
         db.save_scheduled_post(brand_id, "facebook", message, fb_sched_str,
-                               link_url=wp_post_url, image_url=featured_image_url or "")
+                               link_url=wp_post_url, image_url=featured_image_url or "", post_type="blog_promo")
         return {"ok": False, "error": str(exc)[:200]}
 
     fb_post_id = resp_data.get("id") or resp_data.get("post_id") or ""
     post_id = db.save_scheduled_post(brand_id, "facebook", message, fb_sched_str,
-                                      link_url=wp_post_url, image_url=featured_image_url or "")
+                                      link_url=wp_post_url, image_url=featured_image_url or "", post_type="blog_promo")
 
     if resp.status_code == 200 and fb_post_id:
         db.update_scheduled_post_status(post_id, "scheduled", fb_post_id=fb_post_id)
@@ -13001,17 +13390,181 @@ def client_post_scheduler():
     has_drive = bool(google_conn) and "drive" in (google_conn.get("scopes") or "").lower() and bool(brand.get("google_drive_folder_id"))
 
     posts = db.get_scheduled_posts(brand_id)
+    for post in posts:
+        raw_type = (post.get("post_type") or "").strip()
+        post["post_type_label"] = _facebook_post_type_label(raw_type)
     pending_count = sum(1 for p in posts if p.get("status") in ("pending", "scheduled"))
+    has_ai_generation = bool(_get_openai_api_key(brand))
 
     return render_template(
         "client/client_post_scheduler.html",
         brand=brand,
         has_facebook=has_facebook,
         has_drive=has_drive,
+        has_ai_generation=has_ai_generation,
+        facebook_post_types=_FACEBOOK_POST_TYPE_OPTIONS,
+        facebook_content_mixes=_FACEBOOK_CONTENT_MIXES,
         posts=posts,
         pending_count=pending_count,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
+
+
+@client_bp.route("/post-scheduler/generate", methods=["POST"])
+@client_login_required
+def client_generate_facebook_post():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    api_key = _get_openai_api_key(brand)
+    if not api_key:
+        return jsonify(ok=False, error="No OpenAI API key. Add one in Settings > AI Configuration."), 400
+
+    data = request.get_json(silent=True) or {}
+    post_type = _normalize_facebook_post_type(data.get("post_type"))
+    brief = (data.get("brief") or "").strip()[:600]
+    model = _pick_ai_model(brand, "ads")
+    system_prompt, user_prompt = _build_facebook_post_generation_messages(brand, post_type, brief)
+
+    import openai
+
+    try:
+        client = openai.OpenAI(api_key=api_key)
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.8,
+            max_tokens=700,
+        )
+        result = _extract_json_object(resp.choices[0].message.content)
+        message = str(result.get("message") or "").replace("—", "-").strip()
+        if not message:
+            return jsonify(ok=False, error="AI returned an empty message. Try again."), 400
+        image_hint = str(result.get("image_hint") or "").replace("—", "-").strip()
+        link_url = str(result.get("link_url") or "").strip() or _default_post_link_url(brand, post_type)
+        _log_agent("spark", "Generated Facebook post", f"{_facebook_post_type_label(post_type)} for {brand.get('display_name') or brand.get('name') or ''}".strip())
+        return jsonify(
+            ok=True,
+            post_type=post_type,
+            post_type_label=_facebook_post_type_label(post_type),
+            message=message[:5000],
+            image_hint=image_hint[:160],
+            link_url=link_url[:500],
+        )
+    except json.JSONDecodeError:
+        return jsonify(ok=False, error="AI returned invalid format. Try again."), 400
+    except ValueError as exc:
+        return jsonify(ok=False, error=str(exc)[:200]), 400
+    except Exception as exc:
+        return jsonify(ok=False, error=str(exc)[:200]), 500
+
+
+@client_bp.route("/post-scheduler/generate-calendar", methods=["POST"])
+@client_login_required
+def client_generate_facebook_calendar():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    api_key = _get_openai_api_key(brand)
+    if not api_key:
+        return jsonify(ok=False, error="No OpenAI API key. Add one in Settings > AI Configuration."), 400
+
+    data = request.get_json(silent=True) or {}
+    weeks = 4 if _coerce_int(data.get("weeks"), 2, minimum=2, maximum=4) >= 4 else 2
+    posts_per_week = _coerce_int(data.get("posts_per_week"), 3, minimum=2, maximum=4)
+    brief = (data.get("brief") or "").strip()[:1200]
+    content_mix = _normalize_facebook_content_mix(data.get("content_mix"))
+    selected_types = _normalize_facebook_post_type_list(data.get("post_types") or [])
+    start_date_raw = (data.get("start_date") or "").strip()
+    now_utc = datetime.now(timezone.utc)
+    today = now_utc.date()
+
+    try:
+        start_date = datetime.fromisoformat(start_date_raw).date() if start_date_raw else today + timedelta(days=1)
+    except ValueError:
+        return jsonify(ok=False, error="Invalid start date."), 400
+
+    if start_date < today:
+        return jsonify(ok=False, error="Start date must be today or later."), 400
+
+    calendar_plan = _build_facebook_calendar_plan(start_date, weeks, posts_per_week, selected_types, content_mix)
+    if not calendar_plan:
+        return jsonify(ok=False, error="Could not build a content calendar plan."), 400
+
+    last_date = datetime.fromisoformat(calendar_plan[-1]["scheduled_at"]).replace(tzinfo=timezone.utc)
+    if last_date > now_utc + timedelta(days=75):
+        return jsonify(ok=False, error="Calendar must stay within Facebook's 75-day scheduling window."), 400
+
+    model = _pick_ai_model(brand, "ads")
+    system_prompt, user_prompt = _build_facebook_calendar_generation_messages(brand, calendar_plan, brief, content_mix)
+
+    import openai
+
+    try:
+        client = openai.OpenAI(api_key=api_key)
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.9,
+            max_tokens=4500,
+        )
+        result = _extract_json_object(resp.choices[0].message.content)
+        raw_posts = result.get("posts") or []
+        if not isinstance(raw_posts, list) or len(raw_posts) < len(calendar_plan):
+            return jsonify(ok=False, error="AI returned too few calendar posts. Try again."), 400
+
+        posts = []
+        for slot, raw_post in zip(calendar_plan, raw_posts):
+            raw_post = raw_post or {}
+            post_type = _normalize_facebook_post_type(raw_post.get("post_type") or slot["post_type"], default=slot["post_type"])
+            message = str(raw_post.get("message") or "").replace("—", "-").strip()
+            if not message:
+                return jsonify(ok=False, error="AI returned an empty post in the calendar. Try again."), 400
+            image_hint = str(raw_post.get("image_hint") or "").replace("—", "-").strip()
+            link_url = str(raw_post.get("link_url") or "").strip() or _default_post_link_url(brand, post_type)
+            posts.append(
+                {
+                    "post_type": post_type,
+                    "post_type_label": _facebook_post_type_label(post_type),
+                    "scheduled_at": slot["scheduled_at"],
+                    "message": message[:5000],
+                    "image_hint": image_hint[:160],
+                    "link_url": link_url[:500],
+                }
+            )
+
+        _log_agent(
+            "spark",
+            "Generated Facebook calendar",
+            f"{len(posts)} posts for {brand.get('display_name') or brand.get('name') or ''}".strip(),
+        )
+        return jsonify(
+            ok=True,
+            content_mix=content_mix,
+            content_mix_label=_FACEBOOK_CONTENT_MIX_MAP[content_mix]["label"],
+            weeks=weeks,
+            posts_per_week=posts_per_week,
+            total_posts=len(posts),
+            posts=posts,
+        )
+    except json.JSONDecodeError:
+        return jsonify(ok=False, error="AI returned invalid format. Try again."), 400
+    except ValueError as exc:
+        return jsonify(ok=False, error=str(exc)[:200]), 400
+    except Exception as exc:
+        return jsonify(ok=False, error=str(exc)[:200]), 500
 
 
 @client_bp.route("/post-scheduler/schedule", methods=["POST"])
@@ -13029,6 +13582,7 @@ def client_schedule_post():
     scheduled_at = (data.get("scheduled_at") or "").strip()
     link_url = (data.get("link_url") or "").strip()
     image_url = (data.get("image_url") or "").strip()
+    post_type = _normalize_facebook_post_type(data.get("post_type"))
 
     if not message:
         return jsonify(ok=False, error="Message is required."), 400
@@ -13100,7 +13654,7 @@ def client_schedule_post():
         resp_data = resp.json()
     except Exception as exc:
         db.save_scheduled_post(brand_id, "facebook", message, scheduled_at,
-                               image_url=image_url, link_url=link_url)
+                               image_url=image_url, link_url=link_url, post_type=post_type)
         db.update_scheduled_post_status(
             db.get_scheduled_posts(brand_id, status="pending")[-1]["id"],
             "failed", error_message=str(exc))
@@ -13110,13 +13664,13 @@ def client_schedule_post():
 
     if resp.status_code == 200 and fb_post_id:
         post_id = db.save_scheduled_post(brand_id, "facebook", message, scheduled_at,
-                                         image_url=image_url, link_url=link_url)
+                                         image_url=image_url, link_url=link_url, post_type=post_type)
         db.update_scheduled_post_status(post_id, "scheduled", fb_post_id=fb_post_id)
-        return jsonify(ok=True, post_id=post_id, fb_post_id=fb_post_id)
+        return jsonify(ok=True, post_id=post_id, fb_post_id=fb_post_id, post_type=post_type)
     else:
         error_msg = resp_data.get("error", {}).get("message", resp.text[:300])
         post_id = db.save_scheduled_post(brand_id, "facebook", message, scheduled_at,
-                                         image_url=image_url, link_url=link_url)
+                                         image_url=image_url, link_url=link_url, post_type=post_type)
         db.update_scheduled_post_status(post_id, "failed", error_message=error_msg)
         return jsonify(ok=False, error=f"Facebook rejected the post: {error_msg}"), 400
 
@@ -13167,6 +13721,7 @@ def client_schedule_posts_bulk():
         scheduled_at = (post.get("scheduled_at") or "").strip()
         image_url = (post.get("image_url") or "").strip()
         link_url = (post.get("link_url") or "").strip()
+        post_type = _normalize_facebook_post_type(post.get("post_type"))
 
         if not message or not scheduled_at:
             errors += 1
@@ -13212,7 +13767,7 @@ def client_schedule_posts_bulk():
             fb_post_id = resp_data.get("id") or resp_data.get("post_id") or ""
 
             post_id = db.save_scheduled_post(brand_id, "facebook", message, scheduled_at,
-                                             image_url=image_url, link_url=link_url)
+                                             image_url=image_url, link_url=link_url, post_type=post_type)
             if resp.status_code == 200 and fb_post_id:
                 db.update_scheduled_post_status(post_id, "scheduled", fb_post_id=fb_post_id)
                 scheduled += 1
@@ -13222,7 +13777,7 @@ def client_schedule_posts_bulk():
                 errors += 1
         except Exception as exc:
             post_id = db.save_scheduled_post(brand_id, "facebook", message, scheduled_at,
-                                             image_url=image_url, link_url=link_url)
+                                             image_url=image_url, link_url=link_url, post_type=post_type)
             db.update_scheduled_post_status(post_id, "failed", error_message=str(exc))
             errors += 1
 

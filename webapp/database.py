@@ -681,6 +681,7 @@ class WebDB:
                 website TEXT DEFAULT '',
                 facebook_url TEXT DEFAULT '',
                 google_maps_url TEXT DEFAULT '',
+                gbp_cid TEXT DEFAULT '',
                 yelp_url TEXT DEFAULT '',
                 instagram_url TEXT DEFAULT '',
                 notes TEXT DEFAULT '',
@@ -736,6 +737,7 @@ class WebDB:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand_id INTEGER NOT NULL,
                 platform TEXT NOT NULL DEFAULT 'facebook',
+                post_type TEXT DEFAULT '',
                 message TEXT NOT NULL DEFAULT '',
                 image_url TEXT DEFAULT '',
                 link_url TEXT DEFAULT '',
@@ -1850,6 +1852,24 @@ class WebDB:
         for col_name, col_def in new_fair_cols:
             if col_name not in fair_columns:
                 self._safe_add_column(conn, "feedback_ai_runs", col_name, col_def)
+        conn.commit()
+
+        competitor_columns = {r[1] for r in conn.execute("PRAGMA table_info(competitors)").fetchall()}
+        new_competitor_cols = [
+            ("gbp_cid", "TEXT DEFAULT ''"),
+        ]
+        for col_name, col_def in new_competitor_cols:
+            if col_name not in competitor_columns:
+                self._safe_add_column(conn, "competitors", col_name, col_def)
+        conn.commit()
+
+        scheduled_post_columns = {r[1] for r in conn.execute("PRAGMA table_info(scheduled_posts)").fetchall()}
+        new_scheduled_post_cols = [
+            ("post_type", "TEXT DEFAULT ''"),
+        ]
+        for col_name, col_def in new_scheduled_post_cols:
+            if col_name not in scheduled_post_columns:
+                self._safe_add_column(conn, "scheduled_posts", col_name, col_def)
         conn.commit()
 
         # ── feedback_ai_drafts migrations ──
@@ -4688,17 +4708,17 @@ class WebDB:
     # ── Competitors (structured) ─────────────────────────────────
 
     def add_competitor(self, brand_id, name, website="", facebook_url="",
-                       google_maps_url="", yelp_url="", instagram_url="",
+                       google_maps_url="", gbp_cid="", yelp_url="", instagram_url="",
                        notes=""):
         try:
             conn = self._conn()
             cur = conn.execute(
                 """INSERT INTO competitors
                    (brand_id, name, website, facebook_url, google_maps_url,
-                    yelp_url, instagram_url, notes)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    gbp_cid, yelp_url, instagram_url, notes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (brand_id, name, website, facebook_url, google_maps_url,
-                 yelp_url, instagram_url, notes),
+                 gbp_cid, yelp_url, instagram_url, notes),
             )
             conn.commit()
             new_id = cur.lastrowid
@@ -4713,6 +4733,7 @@ class WebDB:
                     website=website,
                     facebook_url=facebook_url,
                     google_maps_url=google_maps_url,
+                    gbp_cid=gbp_cid,
                     yelp_url=yelp_url,
                     instagram_url=instagram_url,
                     notes=notes,
@@ -4750,7 +4771,7 @@ class WebDB:
             raise
 
     def update_competitor(self, competitor_id, brand_id, **kwargs):
-        allowed = {"name", "website", "facebook_url", "google_maps_url",
+        allowed = {"name", "website", "facebook_url", "google_maps_url", "gbp_cid",
                     "yelp_url", "instagram_url", "notes"}
         sets, params = [], []
         for k, v in kwargs.items():
@@ -4880,13 +4901,13 @@ class WebDB:
     # ── Scheduled Posts ─────────────────────────────────────────────
 
     def save_scheduled_post(self, brand_id, platform, message, scheduled_at,
-                            image_url="", link_url=""):
+                            image_url="", link_url="", post_type=""):
         conn = self._conn()
         conn.execute(
             """INSERT INTO scheduled_posts
-               (brand_id, platform, message, image_url, link_url, scheduled_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (brand_id, platform, message, image_url, link_url, scheduled_at),
+               (brand_id, platform, post_type, message, image_url, link_url, scheduled_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (brand_id, platform, post_type, message, image_url, link_url, scheduled_at),
         )
         conn.commit()
         row_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -4895,14 +4916,14 @@ class WebDB:
 
     def save_scheduled_posts_bulk(self, posts):
         """Insert multiple posts. Each item: dict with brand_id, platform,
-        message, scheduled_at, image_url, link_url."""
+        message, scheduled_at, image_url, link_url, post_type."""
         conn = self._conn()
         for p in posts:
             conn.execute(
                 """INSERT INTO scheduled_posts
-                   (brand_id, platform, message, image_url, link_url, scheduled_at)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (p["brand_id"], p.get("platform", "facebook"), p["message"],
+                   (brand_id, platform, post_type, message, image_url, link_url, scheduled_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (p["brand_id"], p.get("platform", "facebook"), p.get("post_type", ""), p["message"],
                  p.get("image_url", ""), p.get("link_url", ""), p["scheduled_at"]),
             )
         conn.commit()

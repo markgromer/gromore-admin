@@ -27,6 +27,464 @@ _CLICHE_WORDS = [
     "synergy", "leverage", "empower", "unleash", "supercharge",
 ]
 
+_GENERIC_COPY_PATTERNS = [
+    "attention-grabbing headline",
+    "compelling ad body text",
+    "drives action",
+    "benefit-focused",
+    "short description",
+    "who this targets and why",
+    "descriptive campaign name",
+    "brief explanation of the strategy",
+    "ad set name",
+    "ad group name",
+]
+
+_CTA_HINTS = [
+    "book",
+    "schedule",
+    "quote",
+    "estimate",
+    "call",
+    "contact",
+    "check availability",
+    "learn more",
+    "get pricing",
+    "message us",
+]
+
+_COMMON_NEGATIVE_KEYWORDS = [
+    "free",
+    "diy",
+    "how to",
+    "jobs",
+    "salary",
+    "training",
+    "youtube",
+    "reddit",
+]
+
+_STOP_WORDS = {
+    "and", "the", "for", "with", "your", "from", "near", "local",
+    "service", "services", "company", "repair", "replacement", "install",
+    "installation", "quote", "estimate", "best", "cost", "price", "pricing",
+}
+
+
+def _clean_copy_text(value):
+    return re.sub(r"\s+", " ", str(value or "").replace("—", "-")).strip()
+
+
+def _dedupe_copy(values, limit=None):
+    results = []
+    seen = set()
+    for value in values:
+        text = _clean_copy_text(value)
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        results.append(text)
+        if limit and len(results) >= limit:
+            break
+    return results
+
+
+def _truncate_copy(text, limit):
+    text = _clean_copy_text(text)
+    if len(text) <= limit:
+        return text
+    trimmed = text[: limit + 1]
+    if " " in trimmed:
+        trimmed = trimmed[:trimmed.rfind(" ")]
+    trimmed = trimmed.strip(" ,.-")
+    if trimmed:
+        return trimmed
+    return text[:limit].strip(" ,.-")
+
+
+def _is_placeholder_text(text):
+    cleaned = _clean_copy_text(text)
+    if not cleaned:
+        return True
+    lower = cleaned.lower()
+    if any(pattern in lower for pattern in _GENERIC_COPY_PATTERNS):
+        return True
+    return bool(re.match(r"^(headline|description|keyword|ad set|ad group)\b", lower))
+
+
+def _split_snippets(raw_text):
+    raw_text = _clean_copy_text(raw_text)
+    if not raw_text:
+        return []
+    parts = re.split(r"[\n;|]+", raw_text)
+    results = []
+    for part in parts:
+        part = _clean_copy_text(part)
+        if part:
+            results.append(part)
+    return results
+
+
+def _short_location(location):
+    location = _clean_copy_text(location)
+    if not location:
+        return ""
+    return location.split(",", 1)[0].strip()
+
+
+def _compact_service_name(service, fallback="Service"):
+    service = _clean_copy_text(service)
+    if not service:
+        return fallback
+    words = [word for word in service.split() if word.lower() not in {"service", "services"}]
+    compact = " ".join(words[:3]).strip()
+    if not compact:
+        compact = service
+    return _truncate_copy(compact, 24)
+
+
+def _service_terms(service):
+    return [
+        token for token in re.findall(r"[a-z0-9]+", _clean_copy_text(service).lower())
+        if len(token) > 2 and token not in _STOP_WORDS
+    ]
+
+
+def _meta_interest_seeds(service, industry):
+    combined = f"{service} {industry}".lower()
+    if any(term in combined for term in ["plumb", "drain", "pipe", "water heater"]):
+        return ["Home improvement", "Water heating", "Bathroom", "Kitchen"]
+    if any(term in combined for term in ["hvac", "air conditioning", "heating", "furnace", "ac "]):
+        return ["Home improvement", "Air conditioning", "Heating system", "Home appliance"]
+    if any(term in combined for term in ["roof", "siding", "gutter"]):
+        return ["Home improvement", "Roof", "Real estate investing", "Property management"]
+    if any(term in combined for term in ["electric", "generator", "panel", "wiring"]):
+        return ["Home improvement", "Electricity", "Smart home", "Home automation"]
+    if any(term in combined for term in ["landscap", "lawn", "tree", "irrigation"]):
+        return ["Home improvement", "Gardening", "Landscape design", "Outdoor recreation"]
+    return ["Home improvement", "Homeowners insurance", "Property management", "Real estate"]
+
+
+def _campaign_context(brand, service, location, notes, monthly_budget):
+    brand_name = _clean_copy_text(brand.get("display_name") or brand.get("name") or "Local Team")
+    service_name = _clean_copy_text(service) or "local service"
+    area = _short_location(location) or "your area"
+    offers = _split_snippets(brand.get("active_offers") or notes)
+    offer = offers[0] if offers else ""
+    trust_parts = []
+    year_founded = _clean_copy_text(brand.get("year_founded"))
+    if year_founded and year_founded.isdigit():
+        trust_parts.append(f"Serving customers since {year_founded}")
+    license_info = _clean_copy_text(brand.get("license_info"))
+    if license_info:
+        trust_parts.append("Licensed team")
+    certifications = _split_snippets(brand.get("certifications"))
+    if certifications:
+        trust_parts.append(certifications[0])
+    audience = _clean_copy_text(brand.get("target_audience") or "local homeowners")
+    daily_budget = round(float(monthly_budget or 0) / 30, 2) if monthly_budget else 0
+    return {
+        "brand_name": brand_name,
+        "service_name": service_name,
+        "service_compact": _compact_service_name(service_name),
+        "service_terms": _service_terms(service_name),
+        "area": area,
+        "industry": _clean_copy_text(brand.get("industry") or "home services"),
+        "audience": audience,
+        "offer": _truncate_copy(offer, 30) if offer else "",
+        "trust": _truncate_copy(trust_parts[0], 30) if trust_parts else "",
+        "notes": _clean_copy_text(notes),
+        "daily_budget": daily_budget,
+    }
+
+
+def _build_google_keywords(ctx, theme):
+    service_name = ctx["service_name"].lower()
+    area = ctx["area"].lower()
+    brand_name = ctx["brand_name"].lower()
+
+    if theme == "quotes":
+        phrases = [
+            f"{service_name} quote",
+            f"{service_name} estimate",
+            f"hire {service_name}",
+            f"{service_name} pricing",
+            f"{service_name} company",
+        ]
+    elif theme == "local":
+        phrases = [
+            f"{service_name} {area}",
+            f"local {service_name}",
+            f"{service_name} near me",
+            brand_name,
+            f"{brand_name} {service_name}",
+        ]
+    else:
+        phrases = [
+            service_name,
+            f"{service_name} near me",
+            f"{service_name} {area}",
+            f"best {service_name}",
+            f"{service_name} contractor",
+        ]
+
+    keywords = []
+    for phrase in phrases:
+        phrase = _clean_copy_text(phrase)
+        if not phrase or _is_placeholder_text(phrase):
+            continue
+        keywords.extend([f'[{phrase}]', f'"{phrase}"'])
+    return _dedupe_copy(keywords, limit=12)
+
+
+def _build_google_headlines(ctx, theme):
+    service_name = ctx["service_compact"]
+    brand_name = _truncate_copy(ctx["brand_name"], 18)
+    area = _truncate_copy(ctx["area"], 14)
+    offer = ctx["offer"]
+    trust = ctx["trust"]
+
+    base = [
+        f"{service_name} {area}",
+        f"{brand_name} {service_name}",
+        f"Book {service_name}",
+        f"Need {service_name}?",
+        f"Local {service_name} Team",
+        f"Fast {service_name} Quotes",
+        f"Trusted in {area}",
+        f"Clear {service_name} Pricing",
+    ]
+    if theme == "quotes":
+        base.extend([
+            "Request A Clear Quote",
+            f"Compare {service_name} Costs",
+            "See Current Availability",
+        ])
+    elif theme == "local":
+        base.extend([
+            f"{area} Homeowners Call",
+            f"Talk With {brand_name}",
+            "Local Crew, Fast Reply",
+        ])
+    else:
+        base.extend([
+            f"Schedule {service_name}",
+            "Real Help, No Runaround",
+            "Start With A Quick Call",
+        ])
+    if offer:
+        base.append(offer)
+    if trust:
+        base.append(trust)
+    return [_truncate_copy(text, 30) for text in _dedupe_copy(base, limit=12)]
+
+
+def _build_google_descriptions(ctx, theme):
+    service_name = ctx["service_name"].lower()
+    area = ctx["area"]
+    brand_name = ctx["brand_name"]
+    offer = ctx["offer"]
+    trust = ctx["trust"]
+
+    descriptions = [
+        f"Need {service_name} in {area}? Get a clear quote and fast scheduling.",
+        f"{brand_name} helps {area} customers book quickly and know the next step.",
+        f"Talk with a local team, review pricing, and book {service_name} with confidence.",
+    ]
+    if theme == "quotes":
+        descriptions.append(f"Compare options, ask questions, and get pricing for {service_name} today.")
+    elif theme == "local":
+        descriptions.append(f"Choose a local crew that knows {area} and responds with real availability.")
+    else:
+        descriptions.append(f"Book {service_name} with a local crew that keeps communication simple.")
+    if offer:
+        descriptions.append(f"{offer}. Ask what is available for {area} right now.")
+    if trust:
+        descriptions.append(f"{trust}. Contact {brand_name} for {service_name} in {area}.")
+    return [_truncate_copy(text, 90) for text in _dedupe_copy(descriptions, limit=4)]
+
+
+def _build_meta_ad_copy(ctx, angle):
+    service_name = ctx["service_name"].lower()
+    service_compact = ctx["service_compact"]
+    brand_name = ctx["brand_name"]
+    area = ctx["area"]
+    offer = ctx["offer"]
+    trust = ctx["trust"]
+
+    if angle == "offer":
+        headline = _truncate_copy(offer or f"{service_compact} Value", 40)
+        primary = (
+            f"Need {service_name} in {area}? {brand_name} gives you a clear quote, fast follow-up, "
+            f"and a simple way to get scheduled. {offer or 'See current availability and pricing today.'}"
+        )
+        description = _truncate_copy("See current pricing and availability", 90)
+        cta = "GET_QUOTE"
+    elif angle == "trust":
+        headline = _truncate_copy(f"Trusted {service_compact} In {area}", 40)
+        primary = (
+            f"If you want {service_name} from a team that communicates well and shows up ready, start here. "
+            f"{trust or brand_name + ' is built for local customers who want a real plan, not a vague promise.'}"
+        )
+        description = _truncate_copy(trust or "Talk with a proven local team", 90)
+        cta = "LEARN_MORE"
+    else:
+        headline = _truncate_copy(f"{area} {service_compact} Help", 40)
+        primary = (
+            f"{service_compact} problems do not fix themselves. {brand_name} helps {area} customers move quickly, "
+            f"get a clear next step, and book with less back and forth."
+        )
+        description = _truncate_copy("Fast response with a clear next step", 90)
+        cta = "GET_QUOTE"
+
+    return {
+        "headline": headline,
+        "primary_text": _truncate_copy(primary, 220),
+        "description": description,
+        "call_to_action": cta,
+    }
+
+
+def _merge_google_ad_group(existing_group, ctx, theme_name, theme_key):
+    existing_group = existing_group or {}
+    generated_keywords = _build_google_keywords(ctx, theme_key)
+    generated_headlines = _build_google_headlines(ctx, theme_key)
+    generated_descriptions = _build_google_descriptions(ctx, theme_key)
+
+    existing_keywords = [kw for kw in existing_group.get("keywords", []) if not _is_placeholder_text(kw)]
+    existing_headlines = [h for h in existing_group.get("headlines", []) if not _is_placeholder_text(h)]
+    existing_descriptions = [d for d in existing_group.get("descriptions", []) if not _is_placeholder_text(d)]
+    existing_name = _clean_copy_text(existing_group.get("name"))
+
+    return {
+        "name": existing_name or theme_name,
+        "keywords": _dedupe_copy(generated_keywords + existing_keywords, limit=12),
+        "negative_keywords": _dedupe_copy(existing_group.get("negative_keywords", []) + _COMMON_NEGATIVE_KEYWORDS, limit=12),
+        "headlines": [_truncate_copy(text, 30) for text in _dedupe_copy(generated_headlines + existing_headlines, limit=12)],
+        "descriptions": [_truncate_copy(text, 90) for text in _dedupe_copy(generated_descriptions + existing_descriptions, limit=4)],
+    }
+
+
+def _merge_meta_ad_set(existing_set, ctx, name, description, interests, age_min, age_max):
+    existing_set = existing_set or {}
+    existing_name = _clean_copy_text(existing_set.get("name"))
+    existing_description = _clean_copy_text(existing_set.get("targeting_description"))
+    valid_existing_copy = []
+    for item in existing_set.get("ad_copy", []):
+        if _is_placeholder_text(item.get("headline")) and _is_placeholder_text(item.get("primary_text")):
+            continue
+        valid_existing_copy.append({
+            "headline": _truncate_copy(item.get("headline", ""), 40),
+            "primary_text": _truncate_copy(item.get("primary_text", ""), 220),
+            "description": _truncate_copy(item.get("description", ""), 90),
+            "call_to_action": item.get("call_to_action") or "GET_QUOTE",
+        })
+
+    generated_copy = [
+        _build_meta_ad_copy(ctx, "problem"),
+        _build_meta_ad_copy(ctx, "offer"),
+        _build_meta_ad_copy(ctx, "trust"),
+    ]
+
+    deduped_copy = []
+    seen = set()
+    for item in generated_copy + valid_existing_copy:
+        key = (item.get("headline", "").lower(), item.get("primary_text", "").lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped_copy.append(item)
+        if len(deduped_copy) >= 4:
+            break
+
+    return {
+        "name": existing_name or name,
+        "targeting_description": existing_description if existing_description and not _is_placeholder_text(existing_description) else description,
+        "age_min": int(existing_set.get("age_min") or age_min),
+        "age_max": int(existing_set.get("age_max") or age_max),
+        "radius_miles": int(existing_set.get("radius_miles") or 20),
+        "interests": _dedupe_copy(existing_set.get("interests", []) + interests, limit=5),
+        "ad_copy": deduped_copy[:3],
+    }
+
+
+def _upgrade_campaign_plan_quality(plan, brand, service, location, monthly_budget, notes=""):
+    plan = dict(plan or {})
+    platform = plan.get("platform", "")
+    ctx = _campaign_context(brand, service, location, notes, monthly_budget)
+
+    plan["location_targeting"] = _clean_copy_text(plan.get("location_targeting") or location)
+    if ctx["daily_budget"]:
+        plan["daily_budget"] = ctx["daily_budget"]
+
+    campaign_name = _clean_copy_text(plan.get("campaign_name"))
+    if not campaign_name or _is_placeholder_text(campaign_name) or campaign_name.lower() == "new campaign":
+        suffix = "Search" if platform == "google" else "Lead Campaign"
+        plan["campaign_name"] = _truncate_copy(f"{ctx['service_compact']} - {ctx['area']} {suffix}", 60)
+
+    if platform == "google":
+        themes = [
+            (f"{ctx['service_compact']} Core", "core"),
+            (f"{ctx['service_compact']} Quotes", "quotes"),
+            (f"{ctx['area']} Local", "local"),
+        ]
+        existing_groups = plan.get("ad_groups") or []
+        merged_groups = []
+        for index, (theme_name, theme_key) in enumerate(themes):
+            existing_group = existing_groups[index] if index < len(existing_groups) else {}
+            merged_groups.append(_merge_google_ad_group(existing_group, ctx, theme_name, theme_key))
+        plan["ad_groups"] = merged_groups
+        plan["campaign_negative_keywords"] = _dedupe_copy(
+            plan.get("campaign_negative_keywords", []) + _COMMON_NEGATIVE_KEYWORDS,
+            limit=14,
+        )
+        if not _clean_copy_text(plan.get("rationale")):
+            plan["rationale"] = (
+                "Split demand into core service, quote-ready, and local trust themes so the campaign can test "
+                "buyer intent instead of dumping every keyword into one lazy ad group."
+            )
+    elif platform == "meta":
+        interest_seeds = _meta_interest_seeds(ctx["service_name"], ctx["industry"])
+        blueprints = [
+            (
+                f"{ctx['area']} Problem Aware",
+                f"Reach {ctx['audience']} in {ctx['area']} who likely need {ctx['service_name'].lower()} soon and want a fast next step.",
+                interest_seeds[:3],
+                28,
+                65,
+            ),
+            (
+                f"{ctx['area']} Value Seekers",
+                f"Target people in {ctx['area']} comparing providers and looking for clear pricing, offers, or flexible scheduling.",
+                interest_seeds[1:4],
+                30,
+                65,
+            ),
+            (
+                f"{ctx['area']} Trust Focus",
+                f"Show ads to local prospects who respond to proof, reputation, and a steady local brand instead of the cheapest promise.",
+                [interest_seeds[0], interest_seeds[-1]],
+                32,
+                65,
+            ),
+        ]
+        existing_sets = plan.get("ad_sets") or []
+        merged_sets = []
+        for index, blueprint in enumerate(blueprints):
+            existing_set = existing_sets[index] if index < len(existing_sets) else {}
+            merged_sets.append(_merge_meta_ad_set(existing_set, ctx, *blueprint))
+        plan["ad_sets"] = merged_sets
+        if not _clean_copy_text(plan.get("rationale")):
+            plan["rationale"] = (
+                "Use separate urgency, value, and trust ad sets so Meta can learn which audience-message pairing "
+                "actually produces qualified leads instead of recycling one thin angle everywhere."
+            )
+
+    return plan
+
 
 def _validate_plan_copy(plan):
     """Check character limits and clichés in a campaign plan.
@@ -45,13 +503,21 @@ def _validate_plan_copy(plan):
     # Google ad groups
     for ag in plan.get("ad_groups", []):
         ag_name = ag.get("name", "Ad Group")
+        if len(ag.get("headlines", [])) < 8:
+            warnings.append(f'{ag_name}: only {len(ag.get("headlines", []))} headlines, expected at least 8')
+        if len(ag.get("descriptions", [])) < 3:
+            warnings.append(f'{ag_name}: only {len(ag.get("descriptions", []))} descriptions, expected at least 3')
         for i, h in enumerate(ag.get("headlines", [])):
+            if _is_placeholder_text(h):
+                warnings.append(f'{ag_name}: headline {i+1} looks like placeholder copy: "{h}"')
             if len(h) > headline_limit:
                 warnings.append(
                     f'{ag_name}: headline {i+1} is {len(h)} chars '
                     f'(limit {headline_limit}): "{h}"'
                 )
         for i, d in enumerate(ag.get("descriptions", [])):
+            if _is_placeholder_text(d):
+                warnings.append(f'{ag_name}: description {i+1} looks like placeholder copy: "{d}"')
             if len(d) > desc_limit:
                 warnings.append(
                     f'{ag_name}: description {i+1} is {len(d)} chars '
@@ -61,14 +527,25 @@ def _validate_plan_copy(plan):
     # Meta ad sets
     for adset in plan.get("ad_sets", []):
         set_name = adset.get("name", "Ad Set")
+        if len(adset.get("ad_copy", [])) < 3:
+            warnings.append(f'{set_name}: only {len(adset.get("ad_copy", []))} ad variations, expected at least 3')
+        if _is_placeholder_text(adset.get("targeting_description", "")):
+            warnings.append(f'{set_name}: targeting description looks generic and needs a sharper audience angle')
         for i, copy in enumerate(adset.get("ad_copy", [])):
             hl = copy.get("headline", "")
+            if _is_placeholder_text(hl):
+                warnings.append(f'{set_name} ad {i+1}: headline looks like placeholder copy: "{hl}"')
             if len(hl) > headline_limit:
                 warnings.append(
                     f'{set_name} ad {i+1}: headline is {len(hl)} chars '
                     f'(limit {headline_limit}): "{hl}"'
                 )
+            primary = copy.get("primary_text", "")
+            if _is_placeholder_text(primary):
+                warnings.append(f'{set_name} ad {i+1}: primary text looks like placeholder copy')
             desc = copy.get("description", "")
+            if desc and _is_placeholder_text(desc):
+                warnings.append(f'{set_name} ad {i+1}: description looks like placeholder copy: "{desc}"')
             if desc and len(desc) > desc_limit:
                 warnings.append(
                     f'{set_name} ad {i+1}: description is {len(desc)} chars '
@@ -107,7 +584,7 @@ def _scan_cliches(plan):
     return findings
 
 
-def _build_quality_scorecard(plan):
+def _build_quality_scorecard(plan, brand=None, service="", location=""):
     """Score a campaign plan on concrete quality checks.
 
     Returns a dict: {score: int 0-100, checks: [{name, passed, detail}], grade: str}
@@ -132,6 +609,12 @@ def _build_quality_scorecard(plan):
                 all_descriptions.append(copy["description"])
             if copy.get("primary_text"):
                 all_primary_texts.append(copy["primary_text"])
+
+    all_copy = all_headlines + all_descriptions + all_primary_texts
+    service_tokens = _service_terms(service)
+    area = _short_location(location or plan.get("location_targeting", ""))
+    area_lower = area.lower()
+    brand_name = _clean_copy_text((brand or {}).get("display_name") or (brand or {}).get("name") or "").lower()
 
     # Check 1: Character limits
     over_limit = sum(1 for h in all_headlines if len(h) > headline_limit)
@@ -195,6 +678,67 @@ def _build_quality_scorecard(plan):
         "name": "Ad Volume",
         "passed": total_ads >= min_ads,
         "detail": f"{total_ads} ad element(s)" if total_ads >= min_ads else f"Only {total_ads} ad element(s), expected at least {min_ads}",
+    })
+
+    # Check 7: Service specificity
+    service_mentions = 0
+    for text in all_copy:
+        lower = text.lower()
+        if any(token in lower for token in service_tokens):
+            service_mentions += 1
+    service_needed = max(3, len(plan.get("ad_groups", [])) + len(plan.get("ad_sets", [])))
+    checks.append({
+        "name": "Service Specificity",
+        "passed": service_mentions >= service_needed if service_tokens else True,
+        "detail": (
+            f"{service_mentions} copy assets mention the service"
+            if service_tokens else "No service context available to score"
+        ),
+    })
+
+    # Check 8: CTA clarity
+    cta_mentions = 0
+    for text in all_descriptions + all_primary_texts:
+        lower = text.lower()
+        if any(hint in lower for hint in _CTA_HINTS):
+            cta_mentions += 1
+    if platform == "meta":
+        cta_mentions += sum(1 for adset in plan.get("ad_sets", []) for copy in adset.get("ad_copy", []) if copy.get("call_to_action"))
+    checks.append({
+        "name": "CTA Clarity",
+        "passed": cta_mentions >= max(2, len(plan.get("ad_sets", [])) or 2),
+        "detail": f"{cta_mentions} copy assets include a direct CTA",
+    })
+
+    # Check 9: Structure strength
+    if platform == "google":
+        structure_ok = len(plan.get("ad_groups", [])) >= 3 and all(
+            len(group.get("keywords", [])) >= 6 and len(group.get("headlines", [])) >= 8 and len(group.get("descriptions", [])) >= 3
+            for group in plan.get("ad_groups", [])
+        )
+        structure_detail = f"{len(plan.get('ad_groups', []))} ad groups with keyword and copy depth"
+    else:
+        structure_ok = len(plan.get("ad_sets", [])) >= 3 and all(
+            len(adset.get("ad_copy", [])) >= 3 and bool(_clean_copy_text(adset.get("targeting_description", "")))
+            for adset in plan.get("ad_sets", [])
+        )
+        structure_detail = f"{len(plan.get('ad_sets', []))} ad sets with distinct creative coverage"
+    checks.append({
+        "name": "Structure Strength",
+        "passed": structure_ok,
+        "detail": structure_detail,
+    })
+
+    # Check 10: Brand and local proof
+    proof_mentions = 0
+    for text in all_copy:
+        lower = text.lower()
+        if (area_lower and area_lower in lower) or (brand_name and brand_name in lower):
+            proof_mentions += 1
+    checks.append({
+        "name": "Brand Or Local Proof",
+        "passed": proof_mentions >= max(2, len(plan.get("ad_groups", [])) or len(plan.get("ad_sets", [])) or 2),
+        "detail": f"{proof_mentions} assets mention the brand or local market",
     })
 
     passed = sum(1 for c in checks if c["passed"])
@@ -1158,10 +1702,12 @@ def generate_campaign_plan(brand, service, location, monthly_budget,
                 plan = json.loads(text)
                 plan["platform"] = platform
                 plan["strategy"] = strategy_type
+                plan = _upgrade_campaign_plan_quality(plan, brand, service, location, monthly_budget, notes)
                 plan = _proofread_campaign_plan(plan, brand)
+                plan = _upgrade_campaign_plan_quality(plan, brand, service, location, monthly_budget, notes)
                 validation = _validate_plan_copy(plan)
                 cliches = _scan_cliches(plan)
-                scorecard = _build_quality_scorecard(plan)
+                scorecard = _build_quality_scorecard(plan, brand=brand, service=service, location=location)
                 result = {"success": True, "plan": plan, "scorecard": scorecard}
                 if validation["warnings"]:
                     result["copy_warnings"] = validation["warnings"]
@@ -1221,16 +1767,17 @@ Return a JSON object with this exact structure:
 }}
 
 Requirements:
-- Create 2-3 ad groups focused on different keyword themes
+- Create 3 ad groups focused on distinct intent themes: core service, quote-ready, and local trust
 - 10-15 keywords per ad group, mix of exact and phrase match
-- Headlines must be under 30 characters each
-- Descriptions must be under 90 characters each
+- Provide 8-12 unique headlines per ad group, each under 30 characters
+- Provide 3-4 unique descriptions per ad group, each under 90 characters
 - Include relevant negative keywords to prevent wasted spend
 - Focus on high-intent commercial keywords
 - Daily budget should be ${daily}
 - Ad copy MUST reflect the brand voice and tone described above
 - If competitors are listed, position against their weaknesses
-- If active offers exist, feature them prominently in ad copy"""
+- If active offers exist, feature them prominently in ad copy
+- Do not use placeholders or lazy labels like 'headline 1' or 'ad group name'"""
 
     else:  # meta
         prompt = f"""Create a Facebook/Instagram Ads campaign plan for a {industry} business.
@@ -1268,8 +1815,8 @@ Return a JSON object with this exact structure:
 }}
 
 Requirements:
-- Create 2-3 ad sets with different targeting approaches
-- Each ad set should have 2-3 ad variations
+- Create exactly 3 ad sets with materially different targeting angles: problem aware, value-driven, and trust/proof
+- Each ad set should have exactly 3 ad variations with different hooks, not minor rewrites
 - Focus on lead generation
 - Use compelling, benefit-focused copy that matches the brand voice above
 - Headlines should be short and punchy
@@ -1277,7 +1824,8 @@ Requirements:
 - If competitors are listed, differentiate against them
 - If active offers exist, weave them into ad copy
 - Call to action options: GET_QUOTE, LEARN_MORE, CONTACT_US, SIGN_UP, BOOK_NOW
-- Daily budget should be ${daily}"""
+- Daily budget should be ${daily}
+- Do not use placeholders or lazy labels like 'attention-grabbing headline' or 'ad set name'"""
 
     try:
         response = client.chat.completions.create(
@@ -1310,10 +1858,12 @@ Requirements:
 
         plan = json.loads(text)
         plan["platform"] = platform
+        plan = _upgrade_campaign_plan_quality(plan, brand, service, location, monthly_budget, notes)
         plan = _proofread_campaign_plan(plan, brand)
+        plan = _upgrade_campaign_plan_quality(plan, brand, service, location, monthly_budget, notes)
         validation = _validate_plan_copy(plan)
         cliches = _scan_cliches(plan)
-        scorecard = _build_quality_scorecard(plan)
+        scorecard = _build_quality_scorecard(plan, brand=brand, service=service, location=location)
         result = {"success": True, "plan": plan, "scorecard": scorecard}
         if validation["warnings"]:
             result["copy_warnings"] = validation["warnings"]

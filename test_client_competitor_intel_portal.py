@@ -61,7 +61,13 @@ class ClientCompetitorIntelPortalTests(unittest.TestCase):
         self._add_competitor("Beta Plumbing", website="https://beta.example.com")
 
         with self.app.app_context():
-            self.app.db.upsert_competitor_intel(alpha_id, self.brand_id, "google_places", json.dumps({"rating": 4.8, "review_count": 120}))
+            self.app.db.upsert_competitor_intel(alpha_id, self.brand_id, "google_places", json.dumps({
+                "rating": 4.8,
+                "review_count": 120,
+                "match_score": 12,
+                "match_reasons": ["Exact GBP CID match", "Website host match"],
+                "query_used": "https://www.google.com/maps?cid=123456789012",
+            }))
             self.app.db.upsert_competitor_intel(alpha_id, self.brand_id, "meta_ads", json.dumps({"active_ad_count": 3, "sample_ads": []}))
             self.app.db.upsert_competitor_intel(alpha_id, self.brand_id, "website", json.dumps({"title": "Alpha Plumbing", "description": "Fast plumbing help"}))
             self.app.db.upsert_competitor_intel(alpha_id, self.brand_id, "pricing", json.dumps({"summary": {"sample_count": 2, "price_min": 79, "price_max": 249}}))
@@ -78,6 +84,9 @@ class ClientCompetitorIntelPortalTests(unittest.TestCase):
         self.assertIn("Ready", html)
         self.assertIn("Alpha Plumbing", html)
         self.assertIn("Beta Plumbing", html)
+        self.assertIn("Exact GBP CID match", html)
+        self.assertIn("Match confidence: Exact", html)
+        self.assertIn("Resolved from query", html)
 
     @patch("webapp.competitor_intel.refresh_competitor_intel")
     def test_single_competitor_rescan_uses_refresh_pipeline(self, mock_refresh):
@@ -102,6 +111,27 @@ class ClientCompetitorIntelPortalTests(unittest.TestCase):
         self.assertEqual(mock_refresh.call_count, 2)
         for call in mock_refresh.call_args_list:
             self.assertTrue(call.kwargs["force"])
+
+    def test_competitor_profile_persists_gbp_cid(self):
+        response = self.client.post(
+            "/client/competitors/add",
+            data={
+                "name": "CID Plumbing",
+                "gbp_cid": "cid: 1234-5678-9012",
+                "notes": "Tracks the exact GBP listing",
+            },
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+
+        with self.app.app_context():
+            competitors = self.app.db.get_competitors(self.brand_id)
+
+        self.assertEqual(len(competitors), 1)
+        self.assertEqual(competitors[0]["gbp_cid"], "123456789012")
+        self.assertIn("GBP CID 123456789012", html)
 
 
 if __name__ == "__main__":

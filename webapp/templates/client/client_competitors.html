@@ -251,6 +251,26 @@
         color: var(--text-muted);
         margin-top: .5rem;
     }
+    .match-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem;
+        margin-top: .65rem;
+    }
+    .match-chip {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: .22rem .55rem;
+        font-size: .72rem;
+        font-weight: 700;
+        background: #eff6ff;
+        color: #1d4ed8;
+    }
+    .match-chip.confidence {
+        background: #ecfdf5;
+        color: #047857;
+    }
     .pricing-chip {
         display: inline-flex;
         align-items: center;
@@ -505,6 +525,17 @@
                 {% endif %}
                 {% if gp.types %}
                 <div class="intel-stat"><span class="label">Categories</span><span class="value" style="font-size:.82rem;">{{ gp.types[:3] | join(', ') | replace('_', ' ') }}</span></div>
+                {% endif %}
+                {% if card.google_places_match_reasons %}
+                <div class="match-chip-row">
+                    <span class="match-chip confidence">Match confidence: {{ card.google_places_match_confidence }}</span>
+                    {% for reason in card.google_places_match_reasons[:3] %}
+                    <span class="match-chip">{{ reason }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if gp.query_used %}
+                <div class="intel-stale">Resolved from query: {{ gp.query_used }}</div>
                 {% endif %}
                 {% if gp.maps_url %}
                 <a href="{{ gp.maps_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary mt-2" style="font-size:.78rem;"><i class="bi bi-box-arrow-up-right"></i> View on Maps</a>

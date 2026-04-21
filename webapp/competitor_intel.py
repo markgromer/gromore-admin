@@ -67,6 +67,94 @@ def _normalize_url(url: str) -> str:
     return url
 
 
+def _normalize_host(url: str) -> str:
+    normalized = _normalize_url(url)
+    if not normalized:
+        return ""
+    host = urlparse(normalized).netloc.lower()
+    if host.startswith("www."):
+        host = host[4:]
+    return host
+
+
+def _normalize_name(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
+
+
+def _extract_gbp_cid(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    match = re.search(r"[?&]cid=(\d{8,32})", raw)
+    if match:
+        return match.group(1)
+    lowered = raw.lower()
+    if lowered.startswith("cid"):
+        digits = re.sub(r"\D", "", raw)
+        return digits[:32]
+    if re.fullmatch(r"\d{8,32}", raw):
+        return raw
+    return ""
+
+
+def _build_google_places_queries(competitor: dict) -> List[str]:
+    queries: List[str] = []
+    name = (competitor.get("name") or "").strip()
+    website_host = _normalize_host(competitor.get("website") or "")
+    maps_url = _normalize_url(competitor.get("google_maps_url") or "")
+    gbp_cid = _extract_gbp_cid(competitor.get("gbp_cid") or maps_url)
+
+    for query in (
+        maps_url if gbp_cid else "",
+        f"https://www.google.com/maps?cid={gbp_cid}" if gbp_cid else "",
+        f"{name} {website_host}" if name and website_host else "",
+        name,
+    ):
+        cleaned = (query or "").strip()
+        if cleaned and cleaned not in queries:
+            queries.append(cleaned)
+    return queries[:4]
+
+
+def _score_google_places_candidate(competitor: dict, place: dict) -> tuple[float, List[str]]:
+    score = 0.0
+    reasons: List[str] = []
+    competitor_name = _normalize_name(competitor.get("name") or "")
+    place_name = _normalize_name(((place.get("displayName") or {}).get("text") or ""))
+    competitor_host = _normalize_host(competitor.get("website") or "")
+    place_host = _normalize_host(place.get("websiteUri") or "")
+    competitor_maps_url = _normalize_url(competitor.get("google_maps_url") or "")
+    place_maps_url = _normalize_url(place.get("googleMapsUri") or "")
+    competitor_cid = _extract_gbp_cid(competitor.get("gbp_cid") or competitor_maps_url)
+    place_cid = _extract_gbp_cid(place_maps_url)
+
+    if competitor_cid and place_cid == competitor_cid:
+        score += 12.0
+        reasons.append("Exact GBP CID match")
+    if competitor_maps_url and place_maps_url and competitor_maps_url.rstrip("/") == place_maps_url.rstrip("/"):
+        score += 9.0
+        reasons.append("Exact Google Maps URL match")
+    if competitor_host and place_host and competitor_host == place_host:
+        score += 4.0
+        reasons.append("Website host match")
+    if competitor_name and place_name:
+        if competitor_name == place_name:
+            score += 6.0
+            reasons.append("Exact business name match")
+        elif competitor_name in place_name or place_name in competitor_name:
+            score += 3.0
+            reasons.append("Close business name match")
+
+    review_count = float(place.get("userRatingCount") or 0)
+    rating = float(place.get("rating") or 0)
+    score += min(review_count / 500.0, 1.0)
+    score += min(rating / 10.0, 0.5)
+
+    if not reasons:
+        reasons.append("Best available Places candidate")
+    return round(score, 3), reasons
+
+
 def _fetch_page(url: str) -> Dict[str, Any]:
     """Fetch a public page with an SSL fallback for weak cert chains."""
     page_url = _normalize_url(url)
@@ -550,29 +638,59 @@ def _scrape_google_places(competitor, api_key):
         ),
         "Content-Type": "application/json",
     }
-    body = {"textQuery": name, "maxResultCount": 1}
+    queries = _build_google_places_queries(competitor)
+    candidates = []
+    seen_ids = set()
 
-    try:
-        resp = requests.post(url, json=body, headers=headers, timeout=15)
-        if resp.status_code == 200:
+    for query in queries:
+        body = {"textQuery": query, "maxResultCount": 5}
+        try:
+            resp = requests.post(url, json=body, headers=headers, timeout=15)
+            if resp.status_code != 200:
+                log.warning("Places API returned %s for %s query %s", resp.status_code, name, query)
+                continue
             places = resp.json().get("places", [])
-            if places:
-                p = places[0]
-                return {
-                    "name": (p.get("displayName") or {}).get("text", ""),
-                    "place_id": p.get("id", ""),
-                    "rating": p.get("rating"),
-                    "review_count": p.get("userRatingCount"),
-                    "types": p.get("types", []),
-                    "address": p.get("formattedAddress", ""),
-                    "website": p.get("websiteUri", ""),
-                    "maps_url": p.get("googleMapsUri", ""),
-                    "price_level": p.get("priceLevel", ""),
-                }
-        else:
-            log.warning("Places API returned %s for %s", resp.status_code, name)
-    except Exception as exc:
-        log.warning("Places API error for %s: %s", name, exc)
+            for p in places:
+                place_id = p.get("id", "")
+                dedupe_key = place_id or (p.get("googleMapsUri") or "")
+                if dedupe_key in seen_ids:
+                    continue
+                seen_ids.add(dedupe_key)
+                score, reasons = _score_google_places_candidate(competitor, p)
+                candidates.append(
+                    {
+                        "name": (p.get("displayName") or {}).get("text", ""),
+                        "place_id": place_id,
+                        "rating": p.get("rating"),
+                        "review_count": p.get("userRatingCount"),
+                        "types": p.get("types", []),
+                        "address": p.get("formattedAddress", ""),
+                        "website": p.get("websiteUri", ""),
+                        "maps_url": p.get("googleMapsUri", ""),
+                        "price_level": p.get("priceLevel", ""),
+                        "match_score": score,
+                        "match_reasons": reasons,
+                        "query_used": query,
+                    }
+                )
+            if any("Exact GBP CID match" in candidate.get("match_reasons", []) for candidate in candidates):
+                break
+        except Exception as exc:
+            log.warning("Places API error for %s: %s", name, exc)
+
+    if candidates:
+        candidates.sort(
+            key=lambda item: (
+                -float(item.get("match_score") or 0),
+                -float(item.get("review_count") or 0),
+                -float(item.get("rating") or 0),
+                item.get("name") or "",
+            )
+        )
+        best = dict(candidates[0])
+        best["candidate_count"] = len(candidates)
+        best["search_queries"] = queries
+        return best
 
     return None
 
@@ -729,6 +847,7 @@ def _generate_competitor_research(*, api_key: str, model: str, brand: dict, comp
             "name": competitor.get("name"),
             "website": competitor.get("website"),
             "google_maps_url": competitor.get("google_maps_url"),
+            "gbp_cid": competitor.get("gbp_cid"),
             "facebook_url": competitor.get("facebook_url"),
             "instagram_url": competitor.get("instagram_url"),
             "yelp_url": competitor.get("yelp_url"),

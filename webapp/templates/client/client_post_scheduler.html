@@ -55,11 +55,33 @@
         transition: var(--transition);
     }
     .tab-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .post-type-chip {
+        display: inline-flex; align-items: center; gap: .35rem;
+        font-size: .72rem; font-weight: 600; padding: 4px 10px;
+        border-radius: 999px; background: #eef2ff; color: #3730a3;
+    }
+    .composer-helper {
+        background: linear-gradient(135deg, #f8fafc, #eef2ff);
+        border: 1px solid #dbe4ff; border-radius: 12px; padding: 1rem;
+    }
+    .post-type-checklist {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: .75rem;
+    }
+    .post-type-toggle {
+        display: flex; gap: .5rem; align-items: flex-start;
+        background: #f8fafc; border: 1px solid var(--line); border-radius: 12px; padding: .75rem .85rem;
+    }
+    .post-type-toggle small { display: block; color: var(--text-muted); line-height: 1.35; }
+    .preset-card {
+        background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: .75rem .85rem;
+        font-size: .86rem; color: var(--text-muted);
+    }
 </style>
 
 <div class="page-title-bar">
     <h5><i class="bi bi-calendar2-week"></i>Post Scheduler</h5>
-    <p>Schedule Facebook posts with images from your Google Drive. Upload a CSV or compose posts one at a time.</p>
+    <p>Schedule Facebook posts, draft them with AI by post type, and generate a 2 or 4 week content calendar you can schedule in bulk.</p>
 </div>
 
 {% if not has_facebook %}
@@ -77,13 +99,13 @@
 
 <!-- Tabs: Compose / CSV Upload / Scheduled -->
 <div class="d-flex gap-2 mb-3">
-    <button class="tab-btn active" onclick="showTab('compose')">
+    <button class="tab-btn active" data-tab="compose" onclick="showTab('compose', this)">
         <i class="bi bi-pencil-square me-1"></i> Compose
     </button>
-    <button class="tab-btn" onclick="showTab('csv')">
+    <button class="tab-btn" data-tab="csv" onclick="showTab('csv', this)">
         <i class="bi bi-filetype-csv me-1"></i> CSV Upload
     </button>
-    <button class="tab-btn" onclick="showTab('scheduled')">
+    <button class="tab-btn" data-tab="scheduled" onclick="showTab('scheduled', this)">
         <i class="bi bi-clock-history me-1"></i> Scheduled
         {% if pending_count %}<span class="badge bg-primary ms-1">{{ pending_count }}</span>{% endif %}
     </button>
@@ -95,6 +117,39 @@
     <div class="card-body p-4">
         <h5 class="fw-bold mb-3">Compose a Post</h5>
         <form id="composeForm">
+            <div class="composer-helper mb-3">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label fw-medium">Facebook Post Type</label>
+                        <select class="form-select" id="composePostType">
+                            {% for post_type in facebook_post_types %}
+                            <option value="{{ post_type.key }}">{{ post_type.label }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Choose the angle before you draft or schedule.</small>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label fw-medium">Optional Brief</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="composeBrief" maxlength="600"
+                                   placeholder="e.g. Talk about our drain camera inspections, spring offer, or new team member">
+                            {% if has_ai_generation %}
+                            <button type="button" class="btn btn-outline-primary" id="composeGenerateBtn" onclick="generatePostDraft()">
+                                <i class="bi bi-stars me-1"></i> Generate With AI
+                            </button>
+                            {% endif %}
+                        </div>
+                        <small class="text-muted">
+                            {% if has_ai_generation %}
+                            Use AI to draft a value post, special, testimonial, behind-the-scenes update, or growth post.
+                            {% else %}
+                            Add an OpenAI key in Settings to generate draft posts automatically.
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+                <div id="composeAiResult" class="mt-2"></div>
+            </div>
             <div class="mb-3">
                 <label class="form-label fw-medium">Message</label>
                 <textarea class="form-control compose-form" id="composeMessage" placeholder="Write your post..." maxlength="5000"></textarea>
@@ -130,10 +185,81 @@
                 {% endif %}
             </div>
             <button type="submit" class="btn btn-primary">
-                <i class="bi bi-send me-1"></i> Schedule Post
+                <i class="bi bi-send me-1"></i> Schedule Facebook Post
             </button>
             <div id="composeResult" class="mt-2"></div>
         </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4" style="border-radius:var(--radius);">
+    <div class="card-body p-4">
+        <h5 class="fw-bold mb-2">Generate an AI Content Calendar</h5>
+        <p class="text-muted mb-3" style="font-size:.9rem;">
+            Build a 2 or 4 week Facebook calendar, preview it in the CSV tab, then schedule the full batch in one pass.
+        </p>
+        {% if has_ai_generation %}
+        <div class="row g-3 align-items-end mb-3">
+            <div class="col-md-2">
+                <label class="form-label fw-medium">Content Mix</label>
+                <select class="form-select" id="calendarContentMix" onchange="applyCalendarMixPreset()">
+                    {% for mix in facebook_content_mixes %}
+                    <option value="{{ mix.key }}">{{ mix.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-medium">Weeks</label>
+                <select class="form-select" id="calendarWeeks">
+                    <option value="2">2 weeks</option>
+                    <option value="4">4 weeks</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-medium">Posts / Week</label>
+                <select class="form-select" id="calendarPostsPerWeek">
+                    <option value="2">2 posts</option>
+                    <option value="3" selected>3 posts</option>
+                    <option value="4">4 posts</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-medium">Start Date</label>
+                <input type="date" class="form-control" id="calendarStartDate">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-medium">Focus For This Run</label>
+                <input type="text" class="form-control" id="calendarBrief" maxlength="1200"
+                       placeholder="e.g. Push spring tune-ups, local trust, and FAQs about emergency calls">
+            </div>
+        </div>
+        <div class="preset-card mb-3" id="calendarMixDescription"></div>
+        <div class="mb-3">
+            <label class="form-label fw-medium">Include These Post Types</label>
+            <div class="post-type-checklist">
+                {% for post_type in facebook_post_types %}
+                <label class="post-type-toggle">
+                    <input class="form-check-input mt-1" type="checkbox" data-calendar-post-type value="{{ post_type.key }}" checked>
+                    <span>
+                        <strong style="font-size:.9rem;">{{ post_type.label }}</strong>
+                        <small>{{ post_type.description }}</small>
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <button type="button" class="btn btn-primary" id="calendarGenerateBtn" onclick="generateCalendarPlan()">
+                <i class="bi bi-magic me-1"></i> Generate Calendar With AI
+            </button>
+            <span class="text-muted" style="font-size:.88rem;">The generated posts will open in the CSV preview so you can review before scheduling.</span>
+        </div>
+        <div id="calendarAiResult" class="mt-2"></div>
+        {% else %}
+        <div class="text-muted" style="font-size:.88rem;">
+            Add an OpenAI key in <a href="{{ url_for('client.client_settings') }}">Settings</a> to generate a full calendar automatically.
+        </div>
+        {% endif %}
     </div>
 </div>
 </div>
@@ -145,7 +271,7 @@
         <h5 class="fw-bold mb-2">Upload Posts via CSV</h5>
         <p class="text-muted mb-3" style="font-size:.88rem;">
             Upload a CSV file with columns: <code>message</code>, <code>scheduled_at</code> (YYYY-MM-DD HH:MM),
-            <code>image_url</code> (optional), <code>link_url</code> (optional).
+            <code>post_type</code> (optional), <code>image_url</code> (optional), <code>link_url</code> (optional).
         </p>
 
         <div class="upload-zone mb-3" id="csvDropZone" onclick="document.getElementById('csvFileInput').click()">
@@ -159,7 +285,7 @@
             <h6 class="fw-bold mb-2">Preview <span id="csvCount" class="text-muted fw-normal"></span></h6>
             <div class="table-responsive" style="max-height:400px; overflow-y:auto;">
                 <table class="table table-sm csv-preview-table" id="csvTable">
-                    <thead><tr><th>#</th><th>Message</th><th>Scheduled</th><th>Image</th><th>Link</th></tr></thead>
+                    <thead><tr><th>#</th><th>Type</th><th>Message</th><th>Scheduled</th><th>Image</th><th>Link</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -174,10 +300,10 @@
 
         <div class="mt-3 p-3" style="background:#f8fafc; border-radius:10px;">
             <h6 class="fw-bold mb-2" style="font-size:.88rem;">CSV Template</h6>
-            <pre style="font-size:.82rem; margin:0; background:#fff; padding:.75rem; border-radius:8px; border:1px solid var(--line);">message,scheduled_at,image_url,link_url
-"Check out our latest service!",2026-04-01 09:00,,https://example.com
-"Happy Monday from our team!",2026-04-07 10:30,https://drive.google.com/...,
-"Spring special - 20% off!",2026-04-15 12:00,,https://example.com/spring</pre>
+            <pre style="font-size:.82rem; margin:0; background:#fff; padding:.75rem; border-radius:8px; border:1px solid var(--line);">post_type,message,scheduled_at,image_url,link_url
+value,"Three signs your water heater needs attention before it quits",2026-04-01 09:00,,https://example.com
+behind_the_scenes,"A quick look at how our crew preps before a drain camera inspection",2026-04-07 10:30,https://drive.google.com/..., 
+special_offer,"Spring special: book now and ask about this month's inspection offer",2026-04-15 12:00,,https://example.com/spring</pre>
             <button class="btn btn-outline-secondary btn-sm mt-2" onclick="downloadCsvTemplate()">
                 <i class="bi bi-download me-1"></i> Download Template
             </button>
@@ -208,9 +334,12 @@
             <div class="col-md-6 col-lg-4">
                 <div class="post-card">
                     <div class="d-flex justify-content-between align-items-start mb-2">
-                        <span class="status-badge status-{{ post.status }}">{{ post.status|title }}</span>
+                        <div class="d-flex flex-column gap-1">
+                            <span class="status-badge status-{{ post.status }}">{{ post.status|title }}</span>
+                            {% if post.post_type_label %}<span class="post-type-chip">{{ post.post_type_label }}</span>{% endif %}
+                        </div>
                         {% if post.status in ('pending', 'scheduled') %}
-                        <button class="btn btn-link btn-sm text-danger p-0" onclick="deletePost({{ post.id }})" title="Delete">
+                        <button class="btn btn-link btn-sm text-danger p-0" data-post-id="{{ post.id }}" onclick="deletePost(this.dataset.postId)" title="Delete">
                             <i class="bi bi-trash"></i>
                         </button>
                         {% endif %}
@@ -249,15 +378,18 @@
 
 {% endif %}
 
+<script type="application/json" id="calendarMixesData">{{ facebook_content_mixes|tojson }}</script>
 <script>
 var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+var calendarMixes = JSON.parse(document.getElementById('calendarMixesData').textContent || '[]');
 
 // ── Tab switching ──
 function showTab(name) {
     document.querySelectorAll('.tab-content').forEach(function(el) { el.style.display = 'none'; });
     document.querySelectorAll('.tab-btn').forEach(function(el) { el.classList.remove('active'); });
     document.getElementById('tab-' + name).style.display = '';
-    event.target.closest('.tab-btn').classList.add('active');
+    var activeBtn = arguments[1] || document.querySelector('.tab-btn[data-tab="' + name + '"]');
+    if (activeBtn) activeBtn.classList.add('active');
 }
 
 // ── Compose form ──
@@ -265,6 +397,118 @@ var msgEl = document.getElementById('composeMessage');
 if (msgEl) {
     msgEl.addEventListener('input', function() {
         document.getElementById('charCount').textContent = this.value.length;
+    });
+}
+
+function generatePostDraft() {
+    var btn = document.getElementById('composeGenerateBtn');
+    var postType = document.getElementById('composePostType').value;
+    var brief = document.getElementById('composeBrief').value.trim();
+    if (!btn) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generating...';
+    showResult('composeAiResult', 'success', 'Generating a draft...');
+
+    fetch('/client/post-scheduler/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({post_type: postType, brief: brief})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-stars me-1"></i> Generate With AI';
+        if (data.ok) {
+            document.getElementById('composeMessage').value = data.message || '';
+            document.getElementById('charCount').textContent = (data.message || '').length;
+            if (data.link_url && !document.getElementById('composeLink').value.trim()) {
+                document.getElementById('composeLink').value = data.link_url;
+            }
+            var msg = 'Draft ready.' + (data.image_hint ? ' Image idea: ' + data.image_hint : '');
+            showResult('composeAiResult', 'success', msg);
+        } else {
+            showResult('composeAiResult', 'error', data.error || 'Failed to generate draft.');
+        }
+    })
+    .catch(function() {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-stars me-1"></i> Generate With AI';
+        showResult('composeAiResult', 'error', 'Network error.');
+    });
+}
+
+function collectCalendarPostTypes() {
+    return Array.from(document.querySelectorAll('[data-calendar-post-type]:checked')).map(function(el) {
+        return el.value;
+    });
+}
+
+function applyCalendarMixPreset() {
+    var mixSelect = document.getElementById('calendarContentMix');
+    var mixKey = mixSelect ? mixSelect.value : '';
+    var mix = (calendarMixes || []).find(function(item) { return item.key === mixKey; }) || calendarMixes[0];
+    var description = document.getElementById('calendarMixDescription');
+    if (description && mix) {
+        description.innerHTML = '<strong style="color:var(--text-strong);">' + mix.label + '.</strong> ' + mix.description + ' <span style="color:var(--text-muted);">Mix focus: ' + mix.prompt_focus + '</span>';
+    }
+    Array.from(document.querySelectorAll('[data-calendar-post-type]')).forEach(function(el) {
+        el.checked = !!(mix && mix.post_types.indexOf(el.value) >= 0);
+    });
+}
+
+function generateCalendarPlan() {
+    var btn = document.getElementById('calendarGenerateBtn');
+    var postTypes = collectCalendarPostTypes();
+    if (!btn) return;
+    if (!postTypes.length) {
+        showResult('calendarAiResult', 'error', 'Pick at least one post type for the calendar.');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generating...';
+    showResult('calendarAiResult', 'success', 'Building your calendar...');
+
+    fetch('/client/post-scheduler/generate-calendar', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({
+            content_mix: document.getElementById('calendarContentMix').value,
+            weeks: document.getElementById('calendarWeeks').value,
+            posts_per_week: document.getElementById('calendarPostsPerWeek').value,
+            start_date: document.getElementById('calendarStartDate').value,
+            brief: document.getElementById('calendarBrief').value.trim(),
+            post_types: postTypes
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-magic me-1"></i> Generate Calendar With AI';
+        if (!data.ok) {
+            showResult('calendarAiResult', 'error', data.error || 'Failed to generate calendar.');
+            return;
+        }
+
+        csvParsedRows = (data.posts || []).map(function(post) {
+            return {
+                post_type: post.post_type || '',
+                message: post.message || '',
+                scheduled_at: post.scheduled_at || '',
+                image_url: '',
+                link_url: post.link_url || '',
+                image_hint: post.image_hint || ''
+            };
+        });
+        renderCsvPreviewRows(csvParsedRows);
+        showResult('calendarAiResult', 'success', (data.content_mix_label || 'Calendar') + ' ready. Review it in the CSV tab, then schedule the batch.');
+        showTab('csv');
+    })
+    .catch(function() {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-magic me-1"></i> Generate Calendar With AI';
+        showResult('calendarAiResult', 'error', 'Network error.');
     });
 }
 
@@ -276,6 +520,7 @@ if (composeForm) {
         var dt = document.getElementById('composeSchedule').value;
         var link = document.getElementById('composeLink').value.trim();
         var img = document.getElementById('composeImageUrl') ? document.getElementById('composeImageUrl').value : '';
+        var postType = document.getElementById('composePostType').value;
 
         if (!msg) { showResult('composeResult', 'error', 'Message is required.'); return; }
         if (!dt) { showResult('composeResult', 'error', 'Schedule date is required.'); return; }
@@ -287,16 +532,17 @@ if (composeForm) {
         fetch('/client/post-scheduler/schedule', {
             method: 'POST',
             headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-            body: JSON.stringify({message: msg, scheduled_at: dt, link_url: link, image_url: img})
+            body: JSON.stringify({message: msg, scheduled_at: dt, link_url: link, image_url: img, post_type: postType})
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-send me-1"></i> Schedule Post';
+            btn.innerHTML = '<i class="bi bi-send me-1"></i> Schedule Facebook Post';
             if (data.ok) {
                 showResult('composeResult', 'success', 'Post scheduled! It will publish at the scheduled time.');
                 composeForm.reset();
                 document.getElementById('charCount').textContent = '0';
+                document.getElementById('composeAiResult').innerHTML = '';
                 if (document.getElementById('selectedImageName')) document.getElementById('selectedImageName').textContent = '';
                 if (document.getElementById('composeImageUrl')) document.getElementById('composeImageUrl').value = '';
             } else {
@@ -305,7 +551,7 @@ if (composeForm) {
         })
         .catch(function() {
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-send me-1"></i> Schedule Post';
+            btn.innerHTML = '<i class="bi bi-send me-1"></i> Schedule Facebook Post';
             showResult('composeResult', 'error', 'Network error.');
         });
     });
@@ -350,6 +596,25 @@ function selectDriveImage(el, url, name) {
 
 // ── CSV Upload ──
 var csvParsedRows = [];
+
+function renderCsvPreviewRows(rows) {
+    var tbody = document.querySelector('#csvTable tbody');
+    tbody.innerHTML = '';
+    rows.forEach(function(row, index) {
+        var imageHintIcon = row.image_hint ? '<i class="bi bi-lightbulb text-warning" title="' + String(row.image_hint).replace(/"/g, '&quot;') + '"></i>' : '';
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + (index + 1) + '</td>' +
+            '<td>' + (row.post_type || 'value') + '</td>' +
+            '<td>' + row.message.substring(0, 80) + (row.message.length > 80 ? '...' : '') + '</td>' +
+            '<td><code>' + row.scheduled_at + '</code></td>' +
+            '<td>' + (row.image_url ? '<i class="bi bi-image text-success"></i>' : imageHintIcon) + '</td>' +
+            '<td>' + (row.link_url ? '<i class="bi bi-link-45deg text-primary"></i>' : '') + '</td>';
+        tbody.appendChild(tr);
+    });
+
+    document.getElementById('csvCount').textContent = '(' + rows.length + ' posts)';
+    document.getElementById('csvPreview').style.display = rows.length ? '' : 'none';
+}
 
 function handleCsvFile(input) {
     var file = input.files[0];
@@ -397,6 +662,7 @@ function parseCsv(text) {
     var headers = splitCsvLine(lines[0]).map(function(h) { return h.toLowerCase().replace(/[^a-z_]/g, ''); });
     var msgIdx = headers.indexOf('message');
     var dtIdx = headers.indexOf('scheduled_at');
+    var typeIdx = headers.indexOf('post_type');
     var imgIdx = headers.indexOf('image_url');
     var linkIdx = headers.indexOf('link_url');
 
@@ -406,12 +672,11 @@ function parseCsv(text) {
     }
 
     csvParsedRows = [];
-    var tbody = document.querySelector('#csvTable tbody');
-    tbody.innerHTML = '';
 
     for (var i = 1; i < Math.min(lines.length, 501); i++) {
         var cols = splitCsvLine(lines[i]);
         var row = {
+            post_type: typeIdx >= 0 ? (cols[typeIdx] || '') : '',
             message: cols[msgIdx] || '',
             scheduled_at: cols[dtIdx] || '',
             image_url: imgIdx >= 0 ? (cols[imgIdx] || '') : '',
@@ -419,18 +684,9 @@ function parseCsv(text) {
         };
         if (!row.message) continue;
         csvParsedRows.push(row);
-
-        var tr = document.createElement('tr');
-        tr.innerHTML = '<td>' + csvParsedRows.length + '</td>' +
-            '<td>' + row.message.substring(0, 80) + (row.message.length > 80 ? '...' : '') + '</td>' +
-            '<td><code>' + row.scheduled_at + '</code></td>' +
-            '<td>' + (row.image_url ? '<i class="bi bi-image text-success"></i>' : '') + '</td>' +
-            '<td>' + (row.link_url ? '<i class="bi bi-link-45deg text-primary"></i>' : '') + '</td>';
-        tbody.appendChild(tr);
     }
 
-    document.getElementById('csvCount').textContent = '(' + csvParsedRows.length + ' posts)';
-    document.getElementById('csvPreview').style.display = '';
+    renderCsvPreviewRows(csvParsedRows);
 }
 
 function submitCsvPosts() {
@@ -470,7 +726,7 @@ function clearCsvPreview() {
 }
 
 function downloadCsvTemplate() {
-    var csv = 'message,scheduled_at,image_url,link_url\n"Your post text here",2026-04-01 09:00,,https://yoursite.com\n';
+    var csv = 'post_type,message,scheduled_at,image_url,link_url\nvalue,"Your post text here",2026-04-01 09:00,,https://yoursite.com\n';
     var blob = new Blob([csv], {type: 'text/csv'});
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -501,5 +757,17 @@ function showResult(elId, type, msg) {
     var icon = type === 'success' ? 'bi-check-circle' : 'bi-exclamation-circle';
     el.innerHTML = '<span class="' + cls + '"><i class="bi ' + icon + ' me-1"></i>' + msg + '</span>';
 }
+
+(function setDefaultCalendarDate() {
+    var input = document.getElementById('calendarStartDate');
+    if (!input || input.value) return;
+    var tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    input.value = tomorrow.toISOString().slice(0, 10);
+})();
+
+(function initCalendarMixPreset() {
+    if (calendarMixes && calendarMixes.length) applyCalendarMixPreset();
+})();
 </script>
 {% endblock %}

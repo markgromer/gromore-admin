@@ -632,6 +632,13 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-semibold">
+                                    <i class="bi bi-123" style="color:#4285f4;"></i> GBP CID
+                                </label>
+                                <input type="text" name="gbp_cid" class="form-control form-control-sm"
+                                       placeholder="Optional exact GBP CID" maxlength="32">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">
                                     <i class="bi bi-instagram" style="color:#e4405f;"></i> Instagram
                                 </label>
                                 <input type="url" name="instagram_url" class="form-control form-control-sm"
@@ -677,8 +684,9 @@
                                     <i class="bi bi-facebook" style="color:#1877f2;"></i> Facebook
                                 </a>
                                 {% endif %}
-                                {% if c.google_maps_url %}
-                                <a href="{{ c.google_maps_url }}" target="_blank" rel="noopener" class="badge bg-light text-dark border text-decoration-none">
+                                {% set competitor_google_url = c.google_maps_url or ('https://www.google.com/maps?cid=' ~ c.gbp_cid if c.gbp_cid else '') %}
+                                {% if competitor_google_url %}
+                                <a href="{{ competitor_google_url }}" target="_blank" rel="noopener" class="badge bg-light text-dark border text-decoration-none">
                                     <i class="bi bi-google" style="color:#4285f4;"></i> Google Maps
                                 </a>
                                 {% endif %}
@@ -691,6 +699,11 @@
                                 <a href="{{ c.yelp_url }}" target="_blank" rel="noopener" class="badge bg-light text-dark border text-decoration-none">
                                     <i class="bi bi-star" style="color:#af0606;"></i> Yelp
                                 </a>
+                                {% endif %}
+                                {% if c.gbp_cid %}
+                                <span class="badge bg-light text-dark border text-decoration-none" style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">
+                                    GBP CID {{ c.gbp_cid }}
+                                </span>
                                 {% endif %}
                             </div>
                             {% if c.notes %}
@@ -735,6 +748,11 @@
                                     <label class="form-label small fw-semibold"><i class="bi bi-google" style="color:#4285f4;"></i> Google Maps</label>
                                     <input type="url" name="google_maps_url" class="form-control form-control-sm"
                                            value="{{ c.google_maps_url or '' }}">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold"><i class="bi bi-123" style="color:#4285f4;"></i> GBP CID</label>
+                                    <input type="text" name="gbp_cid" class="form-control form-control-sm"
+                                           value="{{ c.gbp_cid or '' }}" maxlength="32">
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label small fw-semibold"><i class="bi bi-instagram" style="color:#e4405f;"></i> Instagram</label>

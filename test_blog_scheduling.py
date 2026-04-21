@@ -125,7 +125,10 @@ class BlogSchedulingTests(unittest.TestCase):
         )
 
         self.assertFalse(result["ok"])
-        self.assertIn("security challenge", result["error"].lower())
+        self.assertTrue(
+            "captcha challenge" in result["error"].lower()
+            or "security challenge" in result["error"].lower()
+        )
         self.assertIn("siteground", result["error"].lower())
 
 
