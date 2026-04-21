@@ -2468,6 +2468,41 @@ _FACEBOOK_CTA_STYLE_OPTIONS = [
     },
 ]
 _FACEBOOK_CTA_STYLE_MAP = {item["key"]: item for item in _FACEBOOK_CTA_STYLE_OPTIONS}
+_FACEBOOK_POST_LENGTH_OPTIONS = [
+    {
+        "key": "short",
+        "label": "Short",
+        "description": "Quick, punchy, easy to scan in-feed.",
+        "instruction": "Keep it compact and punchy. Prioritize one sharp idea and a brief CTA.",
+        "single_post_words": "between 45 and 80 words",
+        "calendar_words": "between 45 and 80 words",
+    },
+    {
+        "key": "medium",
+        "label": "Medium",
+        "description": "Balanced length for most day-to-day posts.",
+        "instruction": "Keep it balanced. Give enough detail to feel useful without dragging.",
+        "single_post_words": "between 80 and 140 words",
+        "calendar_words": "between 80 and 140 words",
+    },
+    {
+        "key": "long",
+        "label": "Long",
+        "description": "Deeper explanation with more detail and context.",
+        "instruction": "Go deeper than normal. Add detail, examples, or context, but keep it readable.",
+        "single_post_words": "between 140 and 220 words",
+        "calendar_words": "between 140 and 220 words",
+    },
+    {
+        "key": "story_time",
+        "label": "Story Time",
+        "description": "A fuller narrative post with room for setup, payoff, and CTA.",
+        "instruction": "Write like a real story post. Use a clear hook, fuller body, and a closing CTA with breathing room between sections.",
+        "single_post_words": "between 220 and 320 words",
+        "calendar_words": "between 220 and 320 words",
+    },
+]
+_FACEBOOK_POST_LENGTH_MAP = {item["key"]: item for item in _FACEBOOK_POST_LENGTH_OPTIONS}
 _FACEBOOK_CHARACTER_CADENCE_OPTIONS = [
     {
         "key": "once_per_calendar",
@@ -2587,6 +2622,13 @@ def _normalize_facebook_cta_style(value, default="subtle"):
     return default if default is not None else cleaned
 
 
+def _normalize_facebook_post_length(value, default="medium"):
+    cleaned = (value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if cleaned in _FACEBOOK_POST_LENGTH_MAP:
+        return cleaned
+    return default if default is not None else cleaned
+
+
 def _normalize_facebook_character_cadence(value, default="every_6_posts"):
     cleaned = (value or "").strip().lower().replace("-", "_").replace(" ", "_")
     if cleaned in _FACEBOOK_CHARACTER_CADENCE_MAP:
@@ -2700,10 +2742,12 @@ def _format_facebook_storytelling_context(brand):
     strategy = ((brand or {}).get("facebook_storytelling_strategy") or "").strip()
     personality_key = _normalize_facebook_content_personality((brand or {}).get("facebook_content_personality"), default=None)
     cta_key = _normalize_facebook_cta_style((brand or {}).get("facebook_cta_style"), default=None)
+    length_key = _normalize_facebook_post_length((brand or {}).get("facebook_post_length"), default=None)
     guardrails = ((brand or {}).get("facebook_storytelling_guardrails") or "").strip()
     characters = _parse_facebook_recurring_characters((brand or {}).get("facebook_recurring_characters"))
     personality = _FACEBOOK_CONTENT_PERSONALITY_MAP.get(personality_key)
     cta_style = _FACEBOOK_CTA_STYLE_MAP.get(cta_key)
+    length_profile = _FACEBOOK_POST_LENGTH_MAP.get(length_key)
 
     context_lines = []
     if strategy:
@@ -2714,6 +2758,9 @@ def _format_facebook_storytelling_context(brand):
     if cta_style:
         context_lines.append(f"CTA style: {cta_style['label']} - {cta_style['description']}")
         context_lines.append(f"CTA instruction: {cta_style['instruction']}")
+    if length_profile:
+        context_lines.append(f"Post length: {length_profile['label']} - {length_profile['description']}")
+        context_lines.append(f"Length instruction: {length_profile['instruction']}")
     if guardrails:
         context_lines.append(f"Organic guardrails: {guardrails}")
     if characters:
@@ -2732,6 +2779,7 @@ def _format_facebook_storytelling_context(brand):
         "strategy": strategy,
         "personality": personality,
         "cta_style": cta_style,
+        "length_profile": length_profile,
         "guardrails": guardrails,
         "characters": characters,
         "prompt_block": "\n".join(context_lines).strip(),
@@ -2817,12 +2865,14 @@ def _build_facebook_storytelling_summary(brand):
         "strategy": context["strategy"],
         "personality_label": (context.get("personality") or {}).get("label", ""),
         "cta_label": (context.get("cta_style") or {}).get("label", ""),
+        "length_label": (context.get("length_profile") or {}).get("label", ""),
         "character_count": len(context.get("characters") or []),
         "has_profile": any(
             [
                 context["strategy"],
                 context.get("personality"),
                 context.get("cta_style"),
+                context.get("length_profile"),
                 context["guardrails"],
                 context.get("characters"),
             ]
@@ -2887,6 +2937,7 @@ def _build_facebook_post_generation_messages(brand, post_type, brief="", charact
     audience = (brand.get("target_audience") or "local customers").strip()
     offers = (brand.get("active_offers") or "").strip()
     story_ctx = _format_facebook_storytelling_context(brand)
+    length_profile = story_ctx.get("length_profile")
     selected_character = _select_facebook_recurring_character(brand, character_name)
     storytelling_block = story_ctx.get("prompt_block") or "None provided"
     selected_character_block = (
@@ -2919,8 +2970,11 @@ Additional brief: {brief or 'None provided'}
 
 Rules:
 - Write like a competent local business owner or operator, not a social media guru.
-- Keep the post between 70 and 180 words.
+- Keep the post {length_profile['single_post_words'] if length_profile else 'between 70 and 180 words'}.
 - Make it specific to the service, audience, or local market when possible.
+- Format the post for readability in-feed, not as one dense block of text.
+- Use intentional line breaks between the hook, the body, and the CTA when it helps clarity.
+- Prefer this flow when it fits the idea: opening hook, supporting body, closing CTA.
 - Include a clear next step, but do not sound pushy.
 - Avoid cliches, forced inspiration, and vague filler.
 - Do NOT use em dashes.
@@ -2948,6 +3002,7 @@ def _build_facebook_calendar_generation_messages(brand, calendar_plan, brief="",
     offers = (brand.get("active_offers") or "").strip()
     mix = _FACEBOOK_CONTENT_MIX_MAP.get(_normalize_facebook_content_mix(content_mix), _FACEBOOK_CONTENT_MIXES[0])
     story_ctx = _format_facebook_storytelling_context(brand)
+    length_profile = story_ctx.get("length_profile")
     calendar_plan = _apply_recurring_characters_to_calendar_plan(calendar_plan, story_ctx.get("characters") or [])
     slot_lines = []
     for slot in calendar_plan:
@@ -2984,7 +3039,7 @@ Post plan:
 
 Rules:
 - Write one post for each planned slot and keep the same order.
-- Each post should be 70 to 170 words.
+- Each post should be {length_profile['calendar_words'] if length_profile else 'between 70 and 170 words'}.
 - Make each post specific to the business, service mix, audience, or local market.
 - Vary the opening lines so the calendar does not sound repetitive.
 - Keep calls to action clear but not pushy.
@@ -13759,14 +13814,17 @@ def client_post_scheduler():
             storytelling_strategy = request.form.get("facebook_storytelling_strategy", "")[:2000].strip()
             personality_raw = request.form.get("facebook_content_personality", "")
             cta_style_raw = request.form.get("facebook_cta_style", "")
+            post_length_raw = request.form.get("facebook_post_length", "")
             storytelling_guardrails = request.form.get("facebook_storytelling_guardrails", "")[:2000].strip()
             recurring_characters = request.form.get("facebook_recurring_characters", "")[:6000].strip()
             content_personality = _normalize_facebook_content_personality(personality_raw, default="") if personality_raw.strip() else ""
             cta_style = _normalize_facebook_cta_style(cta_style_raw, default="") if cta_style_raw.strip() else ""
+            post_length = _normalize_facebook_post_length(post_length_raw, default="") if post_length_raw.strip() else ""
 
             db.update_brand_text_field(brand_id, "facebook_storytelling_strategy", storytelling_strategy)
             db.update_brand_text_field(brand_id, "facebook_content_personality", content_personality)
             db.update_brand_text_field(brand_id, "facebook_cta_style", cta_style)
+            db.update_brand_text_field(brand_id, "facebook_post_length", post_length)
             db.update_brand_text_field(brand_id, "facebook_storytelling_guardrails", storytelling_guardrails)
             db.update_brand_text_field(brand_id, "facebook_recurring_characters", recurring_characters)
             flash("Facebook story settings updated.", "success")
@@ -13802,6 +13860,7 @@ def client_post_scheduler():
         facebook_content_mixes=_FACEBOOK_CONTENT_MIXES,
         facebook_personality_options=_FACEBOOK_CONTENT_PERSONALITY_OPTIONS,
         facebook_cta_style_options=_FACEBOOK_CTA_STYLE_OPTIONS,
+        facebook_post_length_options=_FACEBOOK_POST_LENGTH_OPTIONS,
         facebook_character_cadence_options=_FACEBOOK_CHARACTER_CADENCE_OPTIONS,
         facebook_recurring_characters=_parse_facebook_recurring_characters(brand.get("facebook_recurring_characters")),
         facebook_storytelling_profile=_build_facebook_storytelling_summary(brand),

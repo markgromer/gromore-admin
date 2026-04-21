@@ -104,6 +104,7 @@ class FacebookPostSchedulerTests(unittest.TestCase):
             db.update_brand_text_field(self.brand_id, "facebook_storytelling_strategy", "Let people watch us grow the business in public.")
             db.update_brand_text_field(self.brand_id, "facebook_content_personality", "playful_funny")
             db.update_brand_text_field(self.brand_id, "facebook_cta_style", "subtle")
+            db.update_brand_text_field(self.brand_id, "facebook_post_length", "story_time")
             db.update_brand_text_field(self.brand_id, "facebook_storytelling_guardrails", "No cheesy motivation. Keep the humor dry.")
             db.update_brand_text_field(
                 self.brand_id,
@@ -140,10 +141,14 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertIn("Let people watch us grow the business in public.", prompt)
         self.assertIn("Playful And Funny", prompt)
         self.assertIn("Subtle", prompt)
+        self.assertIn("Story Time", prompt)
         self.assertIn("Requested recurring character: Marty", prompt)
         self.assertIn("No cheesy motivation. Keep the humor dry.", prompt)
         self.assertIn("JSON Profile:", prompt)
         self.assertIn("favorite_service", prompt)
+        self.assertIn("Keep the post between 220 and 320 words.", prompt)
+        self.assertIn("Use intentional line breaks between the hook, the body, and the CTA when it helps clarity.", prompt)
+        self.assertIn("Prefer this flow when it fits the idea: opening hook, supporting body, closing CTA.", prompt)
 
     @patch("openai.OpenAI")
     def test_generate_facebook_calendar_returns_typed_posts(self, mock_openai):
@@ -363,6 +368,7 @@ class FacebookPostSchedulerTests(unittest.TestCase):
                 "facebook_storytelling_strategy": "Make the feed feel like an ongoing story about disciplined growth.",
                 "facebook_content_personality": "warm_professional",
                 "facebook_cta_style": "consultative",
+                "facebook_post_length": "long",
                 "facebook_storytelling_guardrails": "No forced jokes and no fake urgency.",
                 "facebook_recurring_characters": recurring_characters,
             },
@@ -376,6 +382,7 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertEqual(brand["facebook_storytelling_strategy"], "Make the feed feel like an ongoing story about disciplined growth.")
         self.assertEqual(brand["facebook_content_personality"], "warm_professional")
         self.assertEqual(brand["facebook_cta_style"], "consultative")
+        self.assertEqual(brand["facebook_post_length"], "long")
         self.assertEqual(brand["facebook_storytelling_guardrails"], "No forced jokes and no fake urgency.")
         self.assertEqual(brand["facebook_recurring_characters"], recurring_characters)
 
@@ -385,6 +392,7 @@ class FacebookPostSchedulerTests(unittest.TestCase):
             db.update_brand_text_field(self.brand_id, "facebook_storytelling_strategy", "Do not clear this strategy.")
             db.update_brand_text_field(self.brand_id, "facebook_content_personality", "playful_funny")
             db.update_brand_text_field(self.brand_id, "facebook_cta_style", "subtle")
+            db.update_brand_text_field(self.brand_id, "facebook_post_length", "short")
             db.update_brand_text_field(self.brand_id, "facebook_storytelling_guardrails", "Keep this guardrail.")
             db.update_brand_text_field(self.brand_id, "facebook_recurring_characters", json.dumps([{"name": "Marty", "cadence": "every_3_posts"}]))
 
@@ -409,6 +417,7 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertEqual(brand["facebook_storytelling_strategy"], "Do not clear this strategy.")
         self.assertEqual(brand["facebook_content_personality"], "playful_funny")
         self.assertEqual(brand["facebook_cta_style"], "subtle")
+        self.assertEqual(brand["facebook_post_length"], "short")
         self.assertEqual(brand["facebook_storytelling_guardrails"], "Keep this guardrail.")
         self.assertIn("Marty", brand["facebook_recurring_characters"])
 
@@ -418,6 +427,7 @@ class FacebookPostSchedulerTests(unittest.TestCase):
             db.update_brand_text_field(self.brand_id, "facebook_storytelling_strategy", "Make the feed feel like an unfolding brand story.")
             db.update_brand_text_field(self.brand_id, "facebook_content_personality", "warm_professional")
             db.update_brand_text_field(self.brand_id, "facebook_cta_style", "subtle")
+            db.update_brand_text_field(self.brand_id, "facebook_post_length", "story_time")
             db.update_brand_text_field(self.brand_id, "facebook_recurring_characters", json.dumps([{"name": "Marty", "role": "Dispatcher"}]))
 
         my_business_response = self.client.get("/client/my-business")
@@ -427,10 +437,13 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertEqual(scheduler_response.status_code, 200)
         self.assertNotIn(b"Facebook Storytelling Strategy", my_business_response.data)
         self.assertIn(b"Facebook Story Settings", scheduler_response.data)
+        self.assertIn(b"Post Length", scheduler_response.data)
+        self.assertIn(b"Story Time", scheduler_response.data)
         self.assertIn(b"Add Character", scheduler_response.data)
         self.assertIn(b"How often should they show up?", scheduler_response.data)
         self.assertIn(b"Optional JSON Profile", scheduler_response.data)
         self.assertIn(b"Brand storytelling profile is active", scheduler_response.data)
+        self.assertIn(b"The preview keeps line breaks and surfaces the hook, body, and CTA", scheduler_response.data)
 
 
 if __name__ == "__main__":

@@ -31,6 +31,49 @@
 
     .csv-preview-table { font-size: .85rem; }
     .csv-preview-table th { background: #f1f5f9; font-weight: 600; }
+    .csv-message-cell {
+        min-width: 360px;
+    }
+    .csv-message-preview {
+        display: flex;
+        flex-direction: column;
+        gap: .55rem;
+    }
+    .csv-message-segment {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: .65rem .75rem;
+        background: #fff;
+    }
+    .csv-message-heading {
+        background: #eff6ff;
+        border-color: #bfdbfe;
+    }
+    .csv-message-body {
+        background: #ffffff;
+    }
+    .csv-message-cta {
+        background: #fff7ed;
+        border-color: #fdba74;
+    }
+    .csv-message-label {
+        font-size: .72rem;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        margin-bottom: .3rem;
+    }
+    .csv-message-text {
+        white-space: pre-wrap;
+        line-height: 1.5;
+        color: var(--text-strong);
+    }
+    .csv-message-meta {
+        font-size: .78rem;
+        color: var(--text-muted);
+        margin-top: .5rem;
+    }
 
     .compose-form textarea { min-height: 120px; resize: vertical; }
 
@@ -304,6 +347,7 @@
         <div class="d-flex flex-wrap gap-2">
             {% if facebook_storytelling_profile.personality_label %}<span class="storytelling-stat"><i class="bi bi-emoji-smile"></i>{{ facebook_storytelling_profile.personality_label }}</span>{% endif %}
             {% if facebook_storytelling_profile.cta_label %}<span class="storytelling-stat"><i class="bi bi-megaphone"></i>{{ facebook_storytelling_profile.cta_label }}</span>{% endif %}
+            {% if facebook_storytelling_profile.length_label %}<span class="storytelling-stat"><i class="bi bi-text-paragraph"></i>{{ facebook_storytelling_profile.length_label }}</span>{% endif %}
             {% if facebook_storytelling_profile.character_count %}<span class="storytelling-stat"><i class="bi bi-person-badge"></i>{{ facebook_storytelling_profile.character_count }} recurring characters</span>{% endif %}
         </div>
     </div>
@@ -316,7 +360,7 @@
                 <textarea name="facebook_storytelling_strategy" class="form-control" maxlength="2000" rows="3" placeholder="e.g. Show the business growing in public. Let people watch the team improve systems, serve customers, and build trust over time. Sell indirectly through progress, not constant offers.">{{ brand.facebook_storytelling_strategy or '' }}</textarea>
                 <div class="text-muted mt-1" style="font-size:.8rem;">Define the bigger organic arc the Facebook page should tell over time.</div>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <label class="form-label">Content Personality</label>
                 <select name="facebook_content_personality" class="form-select">
                     <option value="">Use default brand voice</option>
@@ -326,7 +370,7 @@
                 </select>
                 <div class="text-muted mt-1" style="font-size:.8rem;">Choose whether the feed stays serious, warm, lightly playful, or openly funny.</div>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <label class="form-label">Selling Style</label>
                 <select name="facebook_cta_style" class="form-select">
                     <option value="">Use default CTA style</option>
@@ -335,6 +379,16 @@
                     {% endfor %}
                 </select>
                 <div class="text-muted mt-1" style="font-size:.8rem;">Control whether posts sell subtly, consult like an expert, or ask directly for the next step.</div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Post Length</label>
+                <select name="facebook_post_length" class="form-select">
+                    <option value="">Use adaptive default</option>
+                    {% for option in facebook_post_length_options %}
+                    <option value="{{ option.key }}" {% if (brand.facebook_post_length or '') == option.key %}selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+                <div class="text-muted mt-1" style="font-size:.8rem;">Choose whether posts stay tight, balanced, deeper, or go full story mode.</div>
             </div>
             <div class="col-12">
                 <label class="form-label">Storytelling Guardrails</label>
@@ -375,6 +429,7 @@
                 <div class="d-flex flex-wrap gap-2">
                     {% if facebook_storytelling_profile.personality_label %}<span class="storytelling-stat"><i class="bi bi-emoji-smile"></i>{{ facebook_storytelling_profile.personality_label }}</span>{% endif %}
                     {% if facebook_storytelling_profile.cta_label %}<span class="storytelling-stat"><i class="bi bi-megaphone"></i>{{ facebook_storytelling_profile.cta_label }}</span>{% endif %}
+                    {% if facebook_storytelling_profile.length_label %}<span class="storytelling-stat"><i class="bi bi-text-paragraph"></i>{{ facebook_storytelling_profile.length_label }}</span>{% endif %}
                     {% if facebook_storytelling_profile.character_count %}<span class="storytelling-stat"><i class="bi bi-person-badge"></i>{{ facebook_storytelling_profile.character_count }} recurring characters</span>{% endif %}
                 </div>
             </div>
@@ -579,6 +634,7 @@
 
         <div id="csvPreview" style="display:none;">
             <h6 class="fw-bold mb-2">Preview <span id="csvCount" class="text-muted fw-normal"></span></h6>
+            <div class="text-muted mb-2" style="font-size:.82rem;">The preview keeps line breaks and surfaces the hook, body, and CTA when the draft gives them to us.</div>
             {% if has_drive %}
             <div class="text-muted mb-2" style="font-size:.85rem;">
                 Upload an image on the row that needs it. The Drive download URL will be inserted automatically for that post.
@@ -1008,6 +1064,98 @@ function updateCsvRowField(index, field, value) {
     csvParsedRows[index][field] = value;
 }
 
+function normalizePreviewMessage(message) {
+    return String(message || '').replace(/\r\n/g, '\n').trim();
+}
+
+function isLikelyCtaBlock(text) {
+    var cleaned = String(text || '').trim();
+    if (!cleaned) return false;
+    var lowered = cleaned.toLowerCase();
+    var starters = [
+        'call ', 'book ', 'schedule ', 'send ', 'dm ', 'text ', 'message ', 'learn more',
+        'get ', 'grab ', 'ask about', 'need ', 'want ', 'ready ', 'click ', 'visit ',
+        'reach out', 'let us', 'give us', 'request '
+    ];
+    if (starters.some(function(starter) { return lowered.indexOf(starter) === 0; })) return true;
+    return cleaned.length <= 140 && /(call|book|schedule|text|dm|message|visit|learn more|get a|get your|request|contact|quote|estimate|today|this week|when you are ready|when you're ready|next step|ready\?)/i.test(cleaned);
+}
+
+function buildStructuredPreviewSegments(message) {
+    var normalized = normalizePreviewMessage(message);
+    if (!normalized) return [];
+
+    var blocks = normalized.split(/\n\s*\n+/).map(function(block) {
+        return block.trim();
+    }).filter(Boolean);
+
+    if (blocks.length >= 3) {
+        return [
+            {label: 'Heading', className: 'heading', text: blocks[0]},
+            {label: 'Body', className: 'body', text: blocks.slice(1, -1).join('\n\n')},
+            {label: 'CTA', className: 'cta', text: blocks[blocks.length - 1]}
+        ];
+    }
+
+    if (blocks.length === 2) {
+        if (isLikelyCtaBlock(blocks[1])) {
+            return [
+                {label: 'Body', className: 'body', text: blocks[0]},
+                {label: 'CTA', className: 'cta', text: blocks[1]}
+            ];
+        }
+        if (blocks[0].length <= 110) {
+            return [
+                {label: 'Heading', className: 'heading', text: blocks[0]},
+                {label: 'Body', className: 'body', text: blocks[1]}
+            ];
+        }
+    }
+
+    var lines = normalized.split('\n').map(function(line) {
+        return line.trim();
+    }).filter(Boolean);
+    if (lines.length >= 3 && lines[0].length <= 90 && isLikelyCtaBlock(lines[lines.length - 1])) {
+        return [
+            {label: 'Heading', className: 'heading', text: lines[0]},
+            {label: 'Body', className: 'body', text: lines.slice(1, -1).join('\n')},
+            {label: 'CTA', className: 'cta', text: lines[lines.length - 1]}
+        ];
+    }
+
+    return [{label: 'Message', className: 'body', text: normalized}];
+}
+
+function renderCsvMessagePreview(message, characterName, imageHint) {
+    var segments = buildStructuredPreviewSegments(message);
+    var html = '<div class="csv-message-preview">';
+
+    if (!segments.length) {
+        html += '<div class="csv-message-segment csv-message-body"><div class="csv-message-label">Message</div><div class="csv-message-text">No message provided.</div></div>';
+    } else {
+        html += segments.map(function(segment) {
+            return '<div class="csv-message-segment csv-message-' + escapeHtml(segment.className) + '">' +
+                '<div class="csv-message-label">' + escapeHtml(segment.label) + '</div>' +
+                '<div class="csv-message-text">' + escapeHtml(segment.text) + '</div>' +
+            '</div>';
+        }).join('');
+    }
+
+    if (characterName || imageHint) {
+        html += '<div class="csv-message-meta">';
+        if (characterName) {
+            html += '<div>Character: ' + escapeHtml(characterName) + '</div>';
+        }
+        if (imageHint) {
+            html += '<div>Image idea: ' + escapeHtml(imageHint) + '</div>';
+        }
+        html += '</div>';
+    }
+
+    html += '</div>';
+    return html;
+}
+
 function triggerCsvImageUpload(index) {
     if (!hasDrive) return;
     pendingCsvImageRowIndex = index;
@@ -1044,23 +1192,21 @@ function renderCsvPreviewRows(rows) {
     var tbody = document.querySelector('#csvTable tbody');
     tbody.innerHTML = '';
     rows.forEach(function(row, index) {
-        var imageHint = row.image_hint ? '<div class="text-muted mt-1" style="font-size:.78rem;">Idea: ' + escapeHtml(row.image_hint) + '</div>' : '';
-        var characterHint = row.character_name ? '<div class="text-muted mt-1" style="font-size:.78rem;">Character: ' + escapeHtml(row.character_name) + '</div>' : '';
         var imageActions = hasDrive
             ? '<button type="button" class="btn btn-outline-secondary btn-sm mt-1" onclick="triggerCsvImageUpload(' + index + ')"><i class="bi bi-cloud-arrow-up me-1"></i>Upload</button>'
             : '';
         var imageValue = escapeHtml(row.image_url || '');
         var linkValue = escapeHtml(row.link_url || '');
         var imageName = row.image_name ? '<div class="text-muted mt-1" style="font-size:.78rem;">Attached: ' + escapeHtml(row.image_name) + '</div>' : '';
-        var messagePreview = escapeHtml(row.message.substring(0, 80)) + (row.message.length > 80 ? '...' : '');
+        var messagePreview = renderCsvMessagePreview(row.message, row.character_name, row.image_hint);
         var tr = document.createElement('tr');
         tr.innerHTML = '<td>' + (index + 1) + '</td>' +
             '<td>' + (row.post_type || 'value') + '</td>' +
-            '<td>' + messagePreview + characterHint + '</td>' +
+            '<td class="csv-message-cell">' + messagePreview + '</td>' +
             '<td><code>' + row.scheduled_at + '</code></td>' +
             '<td style="min-width:260px;">' +
                 '<input type="url" class="form-control form-control-sm" value="' + imageValue + '" placeholder="https://..." oninput="updateCsvRowField(' + index + ', \'image_url\', this.value)">' +
-                imageActions + imageName + imageHint +
+                imageActions + imageName +
             '</td>' +
             '<td style="min-width:220px;">' +
                 '<input type="url" class="form-control form-control-sm" value="' + linkValue + '" placeholder="https://..." oninput="updateCsvRowField(' + index + ', \'link_url\', this.value)">' +
