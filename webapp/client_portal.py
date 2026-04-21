@@ -2634,6 +2634,17 @@ def _parse_facebook_recurring_characters(raw_value):
                 }
             )
 
+    def _json_profile_text(value):
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            cleaned = re.sub(r"\s+", " ", value.strip())
+            return f"JSON Profile: {cleaned}" if cleaned else ""
+        try:
+            return f"JSON Profile: {json.dumps(value, ensure_ascii=True, sort_keys=True)}"
+        except Exception:
+            return ""
+
     if isinstance(parsed, list):
         for index, item in enumerate(parsed, start=1):
             if isinstance(item, str):
@@ -2648,6 +2659,9 @@ def _parse_facebook_recurring_characters(raw_value):
                     if value:
                         label = key.replace("_", " ").title()
                         parts.append(f"{label}: {value}")
+                json_profile = _json_profile_text(item.get("json_profile"))
+                if json_profile:
+                    parts.append(json_profile)
                 profile = "; ".join(parts) or json.dumps(item, ensure_ascii=True)
                 _append_character(name, profile, role=role, cadence=cadence)
 

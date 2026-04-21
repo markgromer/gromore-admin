@@ -115,6 +115,7 @@ class FacebookPostSchedulerTests(unittest.TestCase):
                             "role": "Dispatcher",
                             "description": "Keeps the schedule tight and the jokes dry.",
                             "voice": "Short, sharp, practical",
+                            "json_profile": {"favorite_service": "Emergency dispatch", "camera_ready": True},
                         }
                     ]
                 ),
@@ -141,6 +142,8 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertIn("Subtle", prompt)
         self.assertIn("Requested recurring character: Marty", prompt)
         self.assertIn("No cheesy motivation. Keep the humor dry.", prompt)
+        self.assertIn("JSON Profile:", prompt)
+        self.assertIn("favorite_service", prompt)
 
     @patch("openai.OpenAI")
     def test_generate_facebook_calendar_returns_typed_posts(self, mock_openai):
@@ -424,7 +427,9 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertEqual(scheduler_response.status_code, 200)
         self.assertNotIn(b"Facebook Storytelling Strategy", my_business_response.data)
         self.assertIn(b"Facebook Story Settings", scheduler_response.data)
-        self.assertIn(b"Character Cadence", scheduler_response.data)
+        self.assertIn(b"Add Character", scheduler_response.data)
+        self.assertIn(b"How often should they show up?", scheduler_response.data)
+        self.assertIn(b"Optional JSON Profile", scheduler_response.data)
         self.assertIn(b"Brand storytelling profile is active", scheduler_response.data)
 
 
