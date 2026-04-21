@@ -163,6 +163,72 @@ class ClientCrmRevenueTests(unittest.TestCase):
         mock_get_cached.assert_called_once()
         mock_sync.assert_not_called()
 
+    @patch("webapp.report_runner.get_analysis_and_suggestions_for_brand", return_value=(None, None))
+    @patch("webapp.crm_bridge.sng_sync_revenue")
+    @patch("webapp.crm_bridge.sng_get_cached_revenue")
+    @patch("webapp.crm_bridge.sng_get_free_quotes")
+    @patch("webapp.crm_bridge.sng_get_leads")
+    @patch("webapp.crm_bridge.sng_get_active_no_subscription")
+    @patch("webapp.crm_bridge.sng_get_inactive_clients")
+    @patch("webapp.crm_bridge.sng_get_active_clients")
+    @patch("webapp.crm_bridge.sng_count_jobs")
+    @patch("webapp.crm_bridge.sng_count_happy_dogs")
+    @patch("webapp.crm_bridge.sng_count_happy_clients")
+    @patch("webapp.crm_bridge.sng_count_active_clients")
+    def test_crm_data_builds_opportunity_snapshot_when_revenue_unavailable(
+        self,
+        mock_count_active,
+        mock_count_happy,
+        mock_count_dogs,
+        mock_count_jobs,
+        mock_active_clients,
+        mock_inactive,
+        mock_no_sub,
+        mock_leads,
+        mock_quotes,
+        mock_get_cached,
+        mock_sync,
+        mock_analysis,
+    ):
+        mock_count_active.return_value = ({"data": 12}, None)
+        mock_count_happy.return_value = ({"data": 9}, None)
+        mock_count_dogs.return_value = ({"data": 27}, None)
+        mock_count_jobs.return_value = ({"data": 144}, None)
+        mock_active_clients.return_value = ({"data": [], "paginate": {"total": 12}}, None)
+        mock_inactive.return_value = ({"data": [], "paginate": {"total": 5}}, None)
+        mock_no_sub.return_value = ({"data": [], "paginate": {"total": 3}}, None)
+        mock_leads.return_value = ({"data": [], "paginate": {"total": 7}}, None)
+        mock_quotes.return_value = ({"free_quotes": [{"id": 1}, {"id": 2}]}, None)
+        mock_get_cached.return_value = {
+            "mrr": 0.0,
+            "estimated_clv": 0.0,
+            "churn_cost_total": 0.0,
+            "avg_client_monthly_value": 0.0,
+            "inactive_clients": 5,
+            "synced_at": "2099-04-20 09:30:00",
+            "revenue_month": "2026-03",
+            "debug_note": "SNG sync returned no payments in sampled client_details responses and found no accepted-payment events in webhook history for 2026-03.",
+        }
+
+        response = self.client.get("/client/crm/data")
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["revenue"]["availability"], "unavailable")
+        self.assertEqual(payload["crm_snapshot"]["panel_mode"], "opportunity")
+        self.assertEqual(payload["crm_snapshot"]["subscribed_clients"], 9)
+        self.assertEqual(payload["crm_snapshot"]["follow_up_queue"], 12)
+        self.assertEqual(payload["crm_snapshot"]["warm_pipeline_total"], 9)
+        self.assertEqual(payload["crm_snapshot"]["growth_surface_total"], 17)
+        self.assertEqual(payload["crm_snapshot"]["subscription_coverage_pct"], 75)
+        self.assertEqual(payload["crm_snapshot"]["subscription_gap_pct"], 25)
+        self.assertEqual(payload["crm_snapshot"]["happy_client_rate_pct"], 75)
+        self.assertEqual(payload["crm_snapshot"]["free_quotes_total"], 2)
+        self.assertEqual(payload["crm_snapshot"]["happy_clients"], 9)
+        self.assertEqual(len(payload["crm_snapshot"]["priorities"]), 3)
+        self.assertEqual(payload["crm_snapshot"]["priorities"][0]["count"], 3)
+        mock_sync.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

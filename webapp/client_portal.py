@@ -12626,6 +12626,123 @@ def client_inbox_warren_draft(thread_id):
     )
 
 
+def _sng_revenue_availability(snapshot):
+    if not isinstance(snapshot, dict) or not snapshot:
+        return "not_synced"
+    if snapshot.get("error"):
+        return "unavailable"
+    if not str(snapshot.get("synced_at") or "").strip():
+        return "not_synced"
+
+    debug_note = str(snapshot.get("debug_note") or "").strip().lower()
+    unavailable_markers = (
+        "returned no payments",
+        "no accepted-payment events",
+        "client_details payments and webhook history failed",
+    )
+    if any(marker in debug_note for marker in unavailable_markers):
+        return "unavailable"
+    return "available"
+
+
+def _build_sng_crm_snapshot(data):
+    kpis = data.get("kpis") or {}
+    revenue = data.get("revenue") or {}
+
+    active_total = int(kpis.get("active_clients") or 0)
+    happy_total = int(kpis.get("happy_clients") or 0)
+    happy_dogs_total = int(kpis.get("happy_dogs") or 0)
+    inactive_total = int((data.get("inactive_pagination") or {}).get("total") or len(data.get("inactive") or []))
+    no_subscription_total = int((data.get("no_sub_pagination") or {}).get("total") or len(data.get("no_subscription") or []))
+    leads_total = int((data.get("leads_pagination") or {}).get("total") or len(data.get("leads") or []))
+    free_quotes_total = len(data.get("free_quotes") or [])
+    subscribed_total = max(active_total - no_subscription_total, 0)
+    warm_pipeline_total = leads_total + free_quotes_total
+    follow_up_queue = no_subscription_total + leads_total + free_quotes_total
+    total_known_clients = active_total + inactive_total
+    growth_surface_total = no_subscription_total + warm_pipeline_total + inactive_total
+
+    coverage_pct = round((subscribed_total / active_total) * 100) if active_total else 0
+    subscription_gap_pct = round((no_subscription_total / active_total) * 100) if active_total else 0
+    happy_rate_pct = round((happy_total / active_total) * 100) if active_total else 0
+    reactivation_share_pct = round((inactive_total / total_known_clients) * 100) if total_known_clients else 0
+    dogs_per_happy_client = round(happy_dogs_total / happy_total, 1) if happy_total else 0.0
+    warm_pipeline_pct = round((warm_pipeline_total / active_total) * 100) if active_total else 0
+
+    priorities = []
+    if no_subscription_total > 0:
+        priorities.append({
+            "title": "Convert active clients without a subscription",
+            "count": no_subscription_total,
+            "detail": f"{no_subscription_total} active clients are outside the recurring base, which is {subscription_gap_pct}% of active clients.",
+            "tone": "warning",
+        })
+    if warm_pipeline_total > 0:
+        priorities.append({
+            "title": "Work the warm pipeline fast",
+            "count": warm_pipeline_total,
+            "detail": f"{leads_total} leads and {free_quotes_total} free quotes are sitting in queue right now.",
+            "tone": "primary",
+        })
+    if inactive_total > 0:
+        priorities.append({
+            "title": "Run a reactivation push",
+            "count": inactive_total,
+            "detail": f"{inactive_total} inactive clients represent {reactivation_share_pct}% of known client records.",
+            "tone": "danger",
+        })
+    if happy_total > 0:
+        priorities.append({
+            "title": "Use happy clients for referrals and reviews",
+            "count": happy_total,
+            "detail": f"{happy_total} happy clients give you a live advocacy pool without needing new acquisition spend.",
+            "tone": "success",
+        })
+
+    if not priorities:
+        priorities.append({
+            "title": "No immediate CRM pressure detected",
+            "count": 0,
+            "detail": "This token is connected, but the current SNG data does not show a follow-up queue yet.",
+            "tone": "secondary",
+        })
+
+    availability = _sng_revenue_availability(revenue)
+    return {
+        "panel_mode": "opportunity" if availability != "available" else "revenue",
+        "revenue_availability": availability,
+        "active_clients": active_total,
+        "subscribed_clients": subscribed_total,
+        "no_subscription_clients": no_subscription_total,
+        "inactive_clients": inactive_total,
+        "leads_total": leads_total,
+        "free_quotes_total": free_quotes_total,
+        "warm_pipeline_total": warm_pipeline_total,
+        "growth_surface_total": growth_surface_total,
+        "happy_clients": happy_total,
+        "happy_dogs_total": happy_dogs_total,
+        "follow_up_queue": follow_up_queue,
+        "subscription_coverage_pct": coverage_pct,
+        "subscription_gap_pct": subscription_gap_pct,
+        "happy_client_rate_pct": happy_rate_pct,
+        "reactivation_share_pct": reactivation_share_pct,
+        "warm_pipeline_pct": warm_pipeline_pct,
+        "known_client_base": total_known_clients,
+        "dogs_per_happy_client": dogs_per_happy_client,
+        "priorities": priorities[:3],
+        "headline": (
+            "Revenue is not available from this Sweep and Go token."
+            if availability == "unavailable"
+            else "Live client-base and pipeline totals from Sweep and Go."
+        ),
+        "subheadline": (
+            "Using the live client base, warm pipeline, and reactivation pool instead of invented revenue."
+            if availability == "unavailable"
+            else "Revenue panel is available when Sweep and Go exposes payment history."
+        ),
+    }
+
+
 @client_bp.route("/crm/data")
 @client_login_required
 def client_crm_data():
@@ -12661,7 +12778,7 @@ def client_crm_data():
     )
 
     data = {"kpis": {}, "clients": [], "inactive": [], "no_subscription": [],
-            "leads": [], "free_quotes": [], "revenue": {}}
+            "leads": [], "free_quotes": [], "revenue": {}, "crm_snapshot": {}}
 
     # If ?sync=1 is passed, do a full revenue sync first
     do_sync = request.args.get("sync") == "1"
@@ -12751,6 +12868,9 @@ def client_crm_data():
     except Exception as exc:
         import traceback
         data["revenue"] = {"error": str(exc), "traceback": traceback.format_exc()}
+
+    data["revenue"]["availability"] = _sng_revenue_availability(data.get("revenue"))
+    data["crm_snapshot"] = _build_sng_crm_snapshot(data)
 
     return jsonify(data)
 

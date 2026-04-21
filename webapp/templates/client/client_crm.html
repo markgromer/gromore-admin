@@ -160,7 +160,7 @@
     <!-- Revenue Intelligence -->
     <div id="revenueSection" class="crm-section" style="display:none;">
         <div class="d-flex align-items-center justify-content-between mb-2">
-            <h5 class="mb-0"><i class="bi bi-graph-up-arrow text-success"></i> Revenue Intelligence</h5>
+            <h5 class="mb-0" id="crmInsightHeading"><i class="bi bi-graph-up-arrow text-success"></i> Revenue Intelligence</h5>
             <div class="d-flex align-items-center gap-2">
                 <small class="text-muted" id="revSyncedAt" style="font-size:.75rem;"></small>
                 <button class="btn btn-outline-success btn-sm" id="revSyncBtn" onclick="syncRevenue()" style="font-size:.78rem;">
@@ -246,6 +246,90 @@
             </div>
             <div class="mt-2 text-end">
                 <small class="text-muted" style="font-size:.75rem;">Revenue from real Sweep and Go payment data for <span id="revMonthLabel">previous month</span>. CLV based on ~18 month avg retention.</small>
+            </div>
+        </div>
+        <div id="crmSnapshotCards" style="display:none;">
+            <div class="row g-3 mb-3">
+                <div class="col-6 col-lg-3">
+                    <div class="crm-kpi-card">
+                        <div class="kpi-value text-warning" id="snapConvertNow">-</div>
+                        <div class="kpi-label">Convert Now</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="crm-kpi-card">
+                        <div class="kpi-value text-primary" id="snapWarmPipeline">-</div>
+                        <div class="kpi-label">Warm Pipeline</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="crm-kpi-card">
+                        <div class="kpi-value" style="color:#dc2626;" id="snapReactivationPool">-</div>
+                        <div class="kpi-label">Reactivation Pool</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="crm-kpi-card">
+                        <div class="kpi-value text-success" id="snapReferralPool">-</div>
+                        <div class="kpi-label">Referral Pool</div>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="p-3" style="background:#f0fdf4; border-radius:10px; border:1px solid #bbf7d0;">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <span class="fw-bold" style="font-size:.88rem;"><i class="bi bi-lightning-charge text-success me-1"></i> Next Best Moves</span>
+                        </div>
+                        <div id="snapPriorityList" style="display:grid; gap:.6rem;"></div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="p-3" style="background:#eff6ff; border-radius:10px; border:1px solid #bfdbfe;">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <span class="fw-bold" style="font-size:.88rem;"><i class="bi bi-people text-primary me-1"></i> What The Data Says</span>
+                        </div>
+                        <div class="d-flex gap-4" style="font-size:.84rem; flex-wrap:wrap;">
+                            <div>
+                                <div class="text-muted">Subscription Coverage</div>
+                                <div class="fw-bold text-primary" id="snapCoverage">-</div>
+                            </div>
+                            <div>
+                                <div class="text-muted">Subscription Gap</div>
+                                <div class="fw-bold" id="snapGap" style="color:#d97706;">-</div>
+                            </div>
+                            <div>
+                                <div class="text-muted">Warm Pipeline Share</div>
+                                <div class="fw-bold text-primary" id="snapPipelineShare">-</div>
+                            </div>
+                            <div>
+                                <div class="text-muted">Inactive Share</div>
+                                <div class="fw-bold" id="snapInactiveShare" style="color:#dc2626;">-</div>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-4 mt-3" style="font-size:.84rem; flex-wrap:wrap;">
+                            <div>
+                                <div class="text-muted">Known Client Base</div>
+                                <div class="fw-bold" id="snapKnownBase" style="color:#1f2937;">-</div>
+                            </div>
+                            <div>
+                                <div class="text-muted">Growth Surface</div>
+                                <div class="fw-bold" id="snapGrowthSurface" style="color:#2563eb;">-</div>
+                            </div>
+                            <div>
+                                <div class="text-muted">Happy Clients</div>
+                                <div class="fw-bold text-success" id="snapHappyClients">-</div>
+                            </div>
+                            <div>
+                                <div class="text-muted">Happy Dogs</div>
+                                <div class="fw-bold" id="snapHappyDogs" style="color:#0f766e;">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-2 text-end">
+                <small class="text-muted" style="font-size:.75rem;" id="crmSnapshotFooter">Live Sweep and Go client, lead, and quote totals.</small>
             </div>
         </div>
     </div>
@@ -573,66 +657,17 @@ function loadCrmData() {
             function(c) { return c.created_at ? c.created_at.substring(0, 10) : '-'; }
         ]);
 
-        // Revenue Intelligence
+        // Revenue Intelligence / CRM opportunity snapshot
         var rev = data.revenue || {};
+        var snapshot = data.crm_snapshot || {};
         var revSection = document.getElementById('revenueSection');
         revSection.style.display = '';
 
-        // Show error info in console if revenue failed
         if (rev.error) {
             console.error('Revenue error:', rev.error, rev.traceback);
         }
 
-        document.getElementById('revenueCards').style.display = '';
-
-        function fmtDollar(v) { return '$' + (parseFloat(v) || 0).toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}); }
-        function fmtDollar2(v) { return '$' + (parseFloat(v) || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
-
-        // Show "no data yet" state if cache is empty (no mrr key or zero with no synced_at)
-        var hasRevenueData = rev.synced_at && rev.mrr !== undefined;
-        if (!hasRevenueData) {
-            document.getElementById('revMrr').innerHTML = '<span style="font-size:.85rem;color:#94a3b8;">Not synced yet</span>';
-            document.getElementById('revClv').innerHTML = '<span style="font-size:.85rem;color:#94a3b8;">-</span>';
-            document.getElementById('revChurn').innerHTML = '<span style="font-size:.85rem;color:#94a3b8;">-</span>';
-            document.getElementById('revSyncedAt').textContent = 'Click "Sync Revenue" to pull payment data';
-        } else {
-            document.getElementById('revMrr').textContent = fmtDollar(rev.mrr);
-            document.getElementById('revClv').textContent = fmtDollar(rev.estimated_clv);
-            document.getElementById('revChurn').textContent = fmtDollar(rev.churn_cost_total);
-            document.getElementById('revSyncedAt').textContent = 'Last synced: ' + rev.synced_at + ' (' + (rev.revenue_month || '') + ')';
-            document.getElementById('revMonthLabel').textContent = rev.revenue_month || 'previous month';
-        }
-
-        document.getElementById('revMonthlyVal').textContent = fmtDollar2(rev.avg_client_monthly_value);
-        document.getElementById('revLifetimeVal').textContent = fmtDollar(rev.estimated_clv);
-        document.getElementById('revChurnCount').textContent = (rev.inactive_clients || 0).toLocaleString();
-        document.getElementById('revChurnMonthly').textContent = fmtDollar(rev.inactive_clients * (rev.avg_client_monthly_value || 0));
-        document.getElementById('revChurnTotal').textContent = fmtDollar(rev.churn_cost_total);
-
-        // ROAS
-        if (rev.blended_roas) {
-            document.getElementById('revRoas').textContent = rev.blended_roas.toFixed(1) + 'x';
-        } else if (rev.ad_spend) {
-            document.getElementById('revRoas').innerHTML = '<span style="font-size:.85rem;color:#94a3b8;">No spend data</span>';
-        } else {
-            document.getElementById('revRoas').innerHTML = '<span style="font-size:.85rem;color:#94a3b8;">Connect ads</span>';
-        }
-
-        // CPA
-        if (rev.cost_per_acquisition) {
-            document.getElementById('revCpa').textContent = fmtDollar2(rev.cost_per_acquisition);
-        } else {
-            document.getElementById('revCpa').innerHTML = '<span style="color:#94a3b8;">-</span>';
-        }
-
-        // ROI per client
-        if (rev.cost_per_acquisition && rev.estimated_clv) {
-            var roi = ((rev.estimated_clv - rev.cost_per_acquisition) / rev.cost_per_acquisition * 100).toFixed(0);
-            document.getElementById('revRoi').textContent = roi + '%';
-            document.getElementById('revRoi').style.color = roi > 0 ? '#16a34a' : '#dc2626';
-        } else {
-            document.getElementById('revRoi').innerHTML = '<span style="color:#94a3b8;">-</span>';
-        }
+        applyCrmInsightPanel(rev, snapshot);
 
         loader.style.display = 'none';
         content.style.display = '';
@@ -657,8 +692,8 @@ function syncRevenue() {
     .then(function(data) {
         btn.disabled = false;
         btn.innerHTML = origHtml;
-        if (data.revenue && data.revenue.synced_at) {
-            updateRevenueCards(data.revenue);
+        if (data.revenue) {
+            applyCrmInsightPanel(data.revenue, data.crm_snapshot || {});
         } else if (data.revenue && data.revenue.error) {
             document.getElementById('revSyncedAt').textContent = 'Sync error: ' + data.revenue.error;
             console.error('Revenue sync error:', data.revenue);
@@ -674,12 +709,93 @@ function syncRevenue() {
     });
 }
 
+function updateSnapshotCards(snapshot) {
+    function fmtPercent(v) { return (parseFloat(v) || 0).toFixed(0) + '%'; }
+    var whole = function(v) { return (parseInt(v, 10) || 0).toLocaleString(); };
+    var priorityTone = {
+        warning: { border: '#fde68a', bg: '#fffbeb', text: '#b45309' },
+        primary: { border: '#bfdbfe', bg: '#eff6ff', text: '#1d4ed8' },
+        danger: { border: '#fecaca', bg: '#fef2f2', text: '#b91c1c' },
+        success: { border: '#bbf7d0', bg: '#f0fdf4', text: '#15803d' },
+        secondary: { border: '#e5e7eb', bg: '#f8fafc', text: '#475569' }
+    };
+
+    document.getElementById('snapConvertNow').textContent = whole(snapshot.no_subscription_clients);
+    document.getElementById('snapWarmPipeline').textContent = whole(snapshot.warm_pipeline_total);
+    document.getElementById('snapReactivationPool').textContent = whole(snapshot.inactive_clients);
+    document.getElementById('snapReferralPool').textContent = whole(snapshot.happy_clients);
+    document.getElementById('snapCoverage').textContent = fmtPercent(snapshot.subscription_coverage_pct);
+    document.getElementById('snapGap').textContent = fmtPercent(snapshot.subscription_gap_pct);
+    document.getElementById('snapPipelineShare').textContent = fmtPercent(snapshot.warm_pipeline_pct);
+    document.getElementById('snapInactiveShare').textContent = fmtPercent(snapshot.reactivation_share_pct);
+    document.getElementById('snapKnownBase').textContent = whole(snapshot.known_client_base);
+    document.getElementById('snapGrowthSurface').textContent = whole(snapshot.growth_surface_total);
+    document.getElementById('snapHappyClients').textContent = whole(snapshot.happy_clients);
+    document.getElementById('snapHappyDogs').textContent = whole(snapshot.happy_dogs_total || 0);
+    document.getElementById('crmSnapshotFooter').textContent = snapshot.subheadline || 'Live Sweep and Go client, lead, and quote totals.';
+
+    var priorityList = document.getElementById('snapPriorityList');
+    var priorities = Array.isArray(snapshot.priorities) ? snapshot.priorities : [];
+    if (!priorities.length) {
+        priorityList.innerHTML = '<div class="text-muted" style="font-size:.84rem;">No immediate follow-up priorities detected.</div>';
+        return;
+    }
+
+    priorityList.innerHTML = priorities.map(function(item) {
+        var tone = priorityTone[item.tone] || priorityTone.secondary;
+        return '<div style="border:1px solid ' + tone.border + '; background:' + tone.bg + '; border-radius:10px; padding:.75rem .9rem;">'
+            + '<div class="d-flex align-items-center justify-content-between" style="gap:1rem;">'
+            + '<div>'
+            + '<div class="fw-semibold" style="font-size:.88rem; color:#0f172a;">' + esc(item.title || '') + '</div>'
+            + '<div class="text-muted" style="font-size:.8rem; line-height:1.4; margin-top:.15rem;">' + esc(item.detail || '') + '</div>'
+            + '</div>'
+            + '<div class="fw-bold" style="font-size:1.1rem; color:' + tone.text + '; white-space:nowrap;">' + whole(item.count) + '</div>'
+            + '</div>'
+            + '</div>';
+    }).join('');
+}
+
+function applyCrmInsightPanel(rev, snapshot) {
+    var heading = document.getElementById('crmInsightHeading');
+    var syncInfoEl = document.getElementById('revSyncedAt');
+    var syncBtn = document.getElementById('revSyncBtn');
+    var revenueCards = document.getElementById('revenueCards');
+    var snapshotCards = document.getElementById('crmSnapshotCards');
+    var snapshotMode = (snapshot.panel_mode || '') === 'opportunity';
+
+    if (snapshotMode) {
+        heading.innerHTML = '<i class="bi bi-people text-primary"></i> CRM Opportunity Snapshot';
+        syncInfoEl.textContent = snapshot.headline || 'Live client-base and pipeline totals from Sweep and Go.';
+        syncBtn.style.display = 'none';
+        revenueCards.style.display = 'none';
+        snapshotCards.style.display = '';
+        updateSnapshotCards(snapshot);
+        return;
+    }
+
+    heading.innerHTML = '<i class="bi bi-graph-up-arrow text-success"></i> Revenue Intelligence';
+    syncBtn.style.display = '';
+    revenueCards.style.display = '';
+    snapshotCards.style.display = 'none';
+    updateRevenueCards(rev);
+}
+
 function updateRevenueCards(rev) {
     function fmtDollar(v) { return '$' + (parseFloat(v) || 0).toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}); }
     function fmtDollar2(v) { return '$' + (parseFloat(v) || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
-    document.getElementById('revMrr').textContent = fmtDollar(rev.mrr);
-    document.getElementById('revClv').textContent = fmtDollar(rev.estimated_clv);
-    document.getElementById('revChurn').textContent = fmtDollar(rev.churn_cost_total);
+    var hasRevenueData = rev.synced_at && rev.mrr !== undefined;
+
+    if (!hasRevenueData) {
+        document.getElementById('revMrr').innerHTML = '<span style="font-size:.85rem;color:#94a3b8;">Not synced yet</span>';
+        document.getElementById('revClv').innerHTML = '<span style="font-size:.85rem;color:#94a3b8;">-</span>';
+        document.getElementById('revChurn').innerHTML = '<span style="font-size:.85rem;color:#94a3b8;">-</span>';
+        document.getElementById('revSyncedAt').textContent = 'Click "Sync Revenue" to pull payment data';
+    } else {
+        document.getElementById('revMrr').textContent = fmtDollar(rev.mrr);
+        document.getElementById('revClv').textContent = fmtDollar(rev.estimated_clv);
+        document.getElementById('revChurn').textContent = fmtDollar(rev.churn_cost_total);
+    }
+
     document.getElementById('revMonthlyVal').textContent = fmtDollar2(rev.avg_client_monthly_value);
     document.getElementById('revLifetimeVal').textContent = fmtDollar(rev.estimated_clv);
     document.getElementById('revChurnCount').textContent = (rev.inactive_clients || 0).toLocaleString();
