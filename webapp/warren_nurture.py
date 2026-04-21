@@ -12,6 +12,8 @@ Cadence (hot/warm/cold) and DND settings are per-brand, configured in settings.
 import logging
 from datetime import datetime, timedelta
 
+from webapp.warren_contact_policy import lookup_contact_policy
+
 log = logging.getLogger(__name__)
 
 _SPOUSE_CHECK_PATTERNS = (
@@ -265,6 +267,16 @@ def _process_brand_nurture(db, brand):
 
     for thread in _find_contextual_candidates(db, brand_id):
         thread_id = thread["id"]
+        contact_policy = lookup_contact_policy(db, brand, thread)
+        if contact_policy.get("suppress_marketing"):
+            log.info(
+                "Skipping contextual nurture for thread %s brand %s due to contact policy: %s",
+                thread_id,
+                brand_id,
+                contact_policy.get("reason") or "suppressed",
+            )
+            skipped += 1
+            continue
         messages = db.get_lead_messages(thread_id)
         plan = _detect_contextual_nudge_plan(thread, messages)
         if not plan:
@@ -297,6 +309,17 @@ def _process_brand_nurture(db, brand):
         threads = _find_stale_threads(db, brand_id, rule)
         for thread in threads:
             thread_id = thread["id"]
+
+            contact_policy = lookup_contact_policy(db, brand, thread)
+            if contact_policy.get("suppress_marketing"):
+                log.info(
+                    "Skipping nurture for thread %s brand %s due to contact policy: %s",
+                    thread_id,
+                    brand_id,
+                    contact_policy.get("reason") or "suppressed",
+                )
+                skipped += 1
+                continue
 
             if thread_id in suppressed_thread_ids:
                 skipped += 1
@@ -384,6 +407,16 @@ def _send_nurture(db, brand, thread, rule, messages=None):
     thread_id = thread["id"]
     brand_id = brand["id"]
     channel = thread.get("channel", "sms")
+    contact_policy = lookup_contact_policy(db, brand, thread)
+
+    if contact_policy.get("suppress_marketing"):
+        log.info(
+            "Skipping nurture send for thread %s brand %s due to contact policy: %s",
+            thread_id,
+            brand_id,
+            contact_policy.get("reason") or "suppressed",
+        )
+        return False
 
     # A2P: skip opted-out leads
     if channel == "sms":

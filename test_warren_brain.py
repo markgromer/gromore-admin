@@ -848,6 +848,171 @@ class WarrenA2PConsentTests(unittest.TestCase):
             self.assertEqual(record["opted_out_keyword"], "CANCEL")
 
 
+class WarrenContactPolicyTests(unittest.TestCase):
+    def setUp(self):
+        self.app = create_app()
+        self.app.config["TESTING"] = True
+        self.db = self.app.db
+
+        with self.app.app_context():
+            conn = self.db._conn()
+            brand_row = conn.execute(
+                "SELECT id FROM brands WHERE slug = 'warren_contact_policy_test'"
+            ).fetchone()
+            if brand_row:
+                self.brand_id = brand_row["id"]
+            else:
+                cur = conn.execute(
+                    "INSERT INTO brands (slug, display_name, industry, sales_bot_enabled, crm_api_key) VALUES (?, ?, ?, ?, ?)",
+                    ("warren_contact_policy_test", "Contact Policy Co", "plumbing", 1, "test-crm-key"),
+                )
+                self.brand_id = cur.lastrowid
+
+            conn.execute(
+                "UPDATE brands SET sales_bot_enabled = 1, crm_api_key = ? WHERE id = ?",
+                ("test-crm-key", self.brand_id),
+            )
+            conn.commit()
+            conn.close()
+
+        from webapp import warren_contact_policy
+
+        warren_contact_policy._CONTACT_POLICY_CACHE.clear()
+
+    @patch("webapp.warren_contact_policy.sng_get_client_details")
+    @patch("webapp.warren_contact_policy.sng_get_active_clients")
+    def test_lookup_contact_policy_detects_active_client_and_blocks_marketing(self, mock_active_clients, mock_client_details):
+        from webapp.warren_contact_policy import lookup_contact_policy
+
+        mock_active_clients.return_value = ({
+            "data": [{
+                "client": "client_123",
+                "first_name": "Taylor",
+                "last_name": "Client",
+                "cell_phone": "+15551234567",
+            }],
+            "paginate": {"total_pages": 1},
+        }, None)
+        mock_client_details.return_value = ({
+            "data": {
+                "client": {
+                    "id": "client_123",
+                    "marketing_allowed": False,
+                    "subscription_names": "Weekly Lawn Care",
+                }
+            }
+        }, None)
+
+        with self.app.app_context():
+            brand = self.db.get_brand(self.brand_id)
+            thread = {
+                "id": 111,
+                "lead_phone": "555-123-4567",
+                "lead_email": "",
+            }
+            policy = lookup_contact_policy(self.db, brand, thread)
+
+        self.assertTrue(policy["matched"])
+        self.assertTrue(policy["is_active_client"])
+        self.assertFalse(policy["marketing_allowed"])
+        self.assertTrue(policy["suppress_marketing"])
+        self.assertEqual(policy["reason"], "marketing_disabled")
+        self.assertEqual(policy["client_name"], "Taylor Client")
+        self.assertEqual(policy["subscription_names"], "Weekly Lawn Care")
+
+    @patch("webapp.warren_brain.generate_response")
+    @patch("webapp.warren_brain.lookup_contact_policy")
+    def test_process_and_respond_routes_active_client_without_quote(self, mock_lookup_contact_policy, mock_generate_response):
+        from webapp.warren_brain import process_and_respond
+
+        mock_lookup_contact_policy.return_value = {
+            "matched": True,
+            "client_id": "client_abc",
+            "client_name": "Active Client",
+            "is_active_client": True,
+            "marketing_allowed": True,
+            "contact_dnd": False,
+            "is_opted_out": False,
+            "suppress_marketing": True,
+            "reason": "active_client",
+            "subscription_names": "Recurring Cleaning",
+            "source": "sng_active_clients",
+        }
+
+        with self.app.app_context():
+            thread_id = self.db.create_lead_thread(self.brand_id, {
+                "lead_name": "Active Client",
+                "lead_phone": "+15556667777",
+                "channel": "sms",
+                "source": "openphone",
+                "status": "new",
+            })
+            self.db.add_lead_message(
+                thread_id,
+                "inbound",
+                "lead",
+                "Can you send me pricing for another service?",
+                channel="sms",
+            )
+
+            result = process_and_respond(self.db, self.brand_id, thread_id, channel="sms")
+            thread = self.db.get_lead_thread(thread_id)
+            quote = self.db.get_lead_quote_for_thread(thread_id)
+            messages = self.db.get_lead_messages(thread_id)
+            events = self.db.get_lead_events(self.brand_id, thread_id, event_type="marketing_suppressed")
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["action"], "reply")
+        self.assertTrue(result["should_send"])
+        self.assertEqual(result["handoff_reason"], "active_client")
+        self.assertEqual(thread["assigned_to"], "human")
+        self.assertIsNone(quote)
+        self.assertTrue(any("already an active client" in (m["content"] or "").lower() for m in messages if m["direction"] == "outbound"))
+        self.assertEqual(len(events), 1)
+        mock_generate_response.assert_not_called()
+
+    @patch("webapp.warren_sender.send_reply")
+    @patch("webapp.warren_brain.process_and_respond")
+    @patch("webapp.warren_nurture.lookup_contact_policy")
+    def test_send_nurture_skips_marketing_suppressed_contact(self, mock_lookup_contact_policy, mock_process_and_respond, mock_send_reply):
+        from webapp.warren_nurture import _send_nurture
+
+        mock_lookup_contact_policy.return_value = {
+            "matched": True,
+            "is_active_client": True,
+            "suppress_marketing": True,
+            "reason": "active_client",
+        }
+
+        with self.app.app_context():
+            thread_id = self.db.create_lead_thread(self.brand_id, {
+                "lead_name": "Suppressed Client",
+                "lead_phone": "+15558889999",
+                "channel": "sms",
+                "status": "quoted",
+                "last_outbound_at": "2026-04-01T10:00:00",
+            })
+            self.db.add_lead_message(
+                thread_id,
+                "outbound",
+                "assistant",
+                "Just checking in.",
+                channel="sms",
+            )
+            brand = self.db.get_brand(self.brand_id)
+            thread = self.db.get_lead_thread(thread_id)
+            success = _send_nurture(
+                self.db,
+                brand,
+                thread,
+                {"event": "nurture_followup", "hours_since_last": 24, "prompt": "Follow up"},
+            )
+
+        self.assertFalse(success)
+        mock_process_and_respond.assert_not_called()
+        mock_send_reply.assert_not_called()
+
+
 class WarrenWebhookSTOPTests(unittest.TestCase):
     """Test that STOP/START keywords are handled at the webhook level."""
 

@@ -16,6 +16,7 @@ import requests
 from datetime import datetime
 
 from flask import current_app
+from webapp.warren_contact_policy import lookup_contact_policy
 
 log = logging.getLogger(__name__)
 
@@ -153,7 +154,21 @@ def _get_openai_key(db):
     return (db.get_setting("openai_api_key", "") or "").strip()
 
 
-def _build_system_prompt(brand):
+def _build_active_client_reply(thread, contact_policy, channel):
+    client_name = (contact_policy.get("client_name") or thread.get("lead_name") or "").strip()
+    greeting = f"Thanks, {client_name}." if client_name else "Thanks for the reply."
+    if channel == "messenger":
+        return (
+            f"{greeting} I can see you're already an active client, so I am not going to send sales info or a quote here. "
+            "I flagged this for the team and they will handle the conversation directly."
+        )
+    return (
+        f"{greeting} You're already an active client, so I am not going to send sales info or a quote here. "
+        "I flagged this for the team and they will handle it directly."
+    )
+
+
+def _build_system_prompt(brand, contact_policy=None):
     """Build Warren's lead-handling system prompt from brand settings."""
     name = brand.get("display_name", "our company")
     industry = brand.get("industry", "home services")
@@ -273,6 +288,24 @@ QUOTING MODE: {quote_mode}
         prompt += "\n- If you don't have their name yet, work it in: 'By the way, who am I chatting with?'"
         prompt += "\n- Never demand info. If they don't share it, move on."
 
+    if contact_policy and contact_policy.get("is_active_client"):
+        subscription_names = (contact_policy.get("subscription_names") or "").strip()
+        prompt += "\n\nCONTACT POLICY:"
+        prompt += "\n- This person is already an active client in the CRM."
+        if contact_policy.get("client_name"):
+            prompt += f"\n- Active client name: {contact_policy['client_name']}"
+        if subscription_names:
+            prompt += f"\n- Current services/subscriptions: {subscription_names}"
+        prompt += "\n- Do not pitch, qualify, nurture, or quote this person."
+        prompt += "\n- Treat this as an existing-customer support or coordination conversation."
+        prompt += "\n- If you are unsure, keep the reply short, helpful, and route to the team instead of selling."
+    elif contact_policy and contact_policy.get("suppress_marketing"):
+        reason = (contact_policy.get("reason") or "marketing_restricted").strip()
+        prompt += "\n\nCONTACT POLICY:"
+        prompt += f"\n- This contact is marketing-restricted ({reason})."
+        prompt += "\n- Do not send promotional nudges, sales pressure, or proactive quote-pushing."
+        prompt += "\n- Only answer the specific inbound question in a restrained, non-promotional way."
+
     prompt += """
 
 RESPONSE FORMAT:
@@ -379,7 +412,7 @@ def generate_response(db, brand, thread, messages, channel="sms"):
         log.error("Warren brain: no OpenAI API key configured")
         return None
 
-    system_prompt = _build_system_prompt(brand)
+    system_prompt = _build_system_prompt(brand, thread.get("_contact_policy") or {})
 
     # Add channel-specific context
     if channel == "sms":
@@ -521,10 +554,51 @@ def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=
 
     messages = db.get_lead_messages(thread_id)
     thread["_messages"] = messages
+    contact_policy = lookup_contact_policy(db, brand, thread)
+    thread["_contact_policy"] = contact_policy
 
     # Load past objections into thread context for the brain
     objection_events = db.get_lead_events(brand_id, thread_id, event_type="objection_detected")
     thread["_objections"] = [e.get("event_value", "") for e in (objection_events or []) if e.get("event_value")]
+
+    if contact_policy.get("is_active_client"):
+        reply_text = _build_active_client_reply(thread, contact_policy, channel)
+        should_send = allow_auto_send and bool(reply_text)
+        db.update_lead_thread_status(thread_id, assigned_to="human")
+        db.add_lead_event(
+            brand_id,
+            thread_id,
+            "marketing_suppressed",
+            event_value=contact_policy.get("reason") or "active_client",
+            metadata={
+                "source": "warren_brain",
+                "contact_policy": contact_policy,
+            },
+        )
+        if reply_text:
+            db.add_lead_message(
+                thread_id,
+                direction="outbound",
+                role="assistant",
+                content=reply_text,
+                channel=channel,
+                metadata={
+                    "action": "reply",
+                    "confidence": 1.0,
+                    "auto_sent": should_send,
+                    "internal_notes": "Active CRM client detected. Routed away from sales automation.",
+                    "contact_policy_reason": contact_policy.get("reason") or "active_client",
+                },
+            )
+        return {
+            "reply": reply_text,
+            "action": "reply",
+            "thread_id": thread_id,
+            "should_send": should_send,
+            "handoff_reason": "active_client",
+            "closing_action": None,
+            "confidence": 1.0,
+        }
 
     response = generate_response(db, brand, thread, messages, channel=channel)
     if not response:
@@ -557,6 +631,16 @@ def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=
     confidence = response.get("confidence", 0)
     should_send = allow_auto_send and confidence >= 0.7 and action != "handoff"
 
+    if contact_policy.get("suppress_marketing") and action == "nurture":
+        action = "reply"
+        response["action"] = "reply"
+        should_send = allow_auto_send and confidence >= 0.7
+        response["internal_notes"] = (
+            (response.get("internal_notes") or "").strip() + " Marketing nurture suppressed by contact policy."
+        ).strip()
+    if contact_policy.get("suppress_marketing"):
+        response["closing_action"] = None
+
     # Log Warren's response as an outbound message
     if reply_text:
         db.add_lead_message(
@@ -570,11 +654,12 @@ def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=
                 "confidence": confidence,
                 "auto_sent": should_send,
                 "internal_notes": response.get("internal_notes", ""),
+                "contact_policy_reason": contact_policy.get("reason") or "",
             },
         )
 
     # Handle quoting
-    if action == "quote" and (response.get("quote_low") or response.get("quote_high")):
+    if action == "quote" and not contact_policy.get("suppress_marketing") and (response.get("quote_low") or response.get("quote_high")):
         db.upsert_lead_quote(
             brand_id, thread_id,
             status="sent" if should_send else "draft",
@@ -601,12 +686,12 @@ def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=
 
     # Stage suggestion from AI
     stage_suggestion = response.get("stage_suggestion")
-    if stage_suggestion:
+    if stage_suggestion and not contact_policy.get("suppress_marketing"):
         advance_stage(db, thread_id, brand_id, f"lead_{stage_suggestion}" if stage_suggestion != "engaged" else "warren_replied")
 
     # Handle closing actions (CRM push / onboarding link)
     closing_action = response.get("closing_action")
-    if closing_action in ("push_crm", "both"):
+    if closing_action in ("push_crm", "both") and not contact_policy.get("suppress_marketing"):
         try:
             from webapp.crm_bridge import push_lead
             lead_data = {
