@@ -5799,24 +5799,12 @@ def client_my_business():
             brand_voice = request.form.get("brand_voice", "")[:2000].strip()
             active_offers = request.form.get("active_offers", "")[:1000].strip()
             target_audience = request.form.get("target_audience", "")[:2000].strip()
-            storytelling_strategy = request.form.get("facebook_storytelling_strategy", "")[:2000].strip()
-            personality_raw = request.form.get("facebook_content_personality", "")
-            cta_style_raw = request.form.get("facebook_cta_style", "")
-            storytelling_guardrails = request.form.get("facebook_storytelling_guardrails", "")[:2000].strip()
-            recurring_characters = request.form.get("facebook_recurring_characters", "")[:6000].strip()
             reporting_notes = request.form.get("reporting_notes", "")[:1000].strip()
             website_url = request.form.get("website_url", "")[:500].strip()
-            content_personality = _normalize_facebook_content_personality(personality_raw, default="") if personality_raw.strip() else ""
-            cta_style = _normalize_facebook_cta_style(cta_style_raw, default="") if cta_style_raw.strip() else ""
 
             db.update_brand_text_field(brand_id, "brand_voice", brand_voice)
             db.update_brand_text_field(brand_id, "active_offers", active_offers)
             db.update_brand_text_field(brand_id, "target_audience", target_audience)
-            db.update_brand_text_field(brand_id, "facebook_storytelling_strategy", storytelling_strategy)
-            db.update_brand_text_field(brand_id, "facebook_content_personality", content_personality)
-            db.update_brand_text_field(brand_id, "facebook_cta_style", cta_style)
-            db.update_brand_text_field(brand_id, "facebook_storytelling_guardrails", storytelling_guardrails)
-            db.update_brand_text_field(brand_id, "facebook_recurring_characters", recurring_characters)
             db.update_brand_text_field(brand_id, "reporting_notes", reporting_notes)
             db.update_brand_text_field(brand_id, "website", website_url)
             flash("Brand profile updated.", "success")
@@ -5890,9 +5878,6 @@ def client_my_business():
         profile_score=profile_score,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
         google_font_choices=GOOGLE_FONT_CHOICES,
-        facebook_personality_options=_FACEBOOK_CONTENT_PERSONALITY_OPTIONS,
-        facebook_cta_style_options=_FACEBOOK_CTA_STYLE_OPTIONS,
-        facebook_character_cadence_options=_FACEBOOK_CHARACTER_CADENCE_OPTIONS,
     )
 
 
@@ -13745,7 +13730,7 @@ def client_sng_create_coupon():
 
 # ── Post Scheduler ──
 
-@client_bp.route("/post-scheduler")
+@client_bp.route("/post-scheduler", methods=["GET", "POST"])
 @client_login_required
 def client_post_scheduler():
     db = _get_db()
@@ -13753,6 +13738,25 @@ def client_post_scheduler():
     brand = db.get_brand(brand_id)
     if not brand:
         abort(404)
+
+    if request.method == "POST":
+        section = request.form.get("section", "")
+        if section == "facebook_storytelling_profile":
+            storytelling_strategy = request.form.get("facebook_storytelling_strategy", "")[:2000].strip()
+            personality_raw = request.form.get("facebook_content_personality", "")
+            cta_style_raw = request.form.get("facebook_cta_style", "")
+            storytelling_guardrails = request.form.get("facebook_storytelling_guardrails", "")[:2000].strip()
+            recurring_characters = request.form.get("facebook_recurring_characters", "")[:6000].strip()
+            content_personality = _normalize_facebook_content_personality(personality_raw, default="") if personality_raw.strip() else ""
+            cta_style = _normalize_facebook_cta_style(cta_style_raw, default="") if cta_style_raw.strip() else ""
+
+            db.update_brand_text_field(brand_id, "facebook_storytelling_strategy", storytelling_strategy)
+            db.update_brand_text_field(brand_id, "facebook_content_personality", content_personality)
+            db.update_brand_text_field(brand_id, "facebook_cta_style", cta_style)
+            db.update_brand_text_field(brand_id, "facebook_storytelling_guardrails", storytelling_guardrails)
+            db.update_brand_text_field(brand_id, "facebook_recurring_characters", recurring_characters)
+            flash("Facebook story settings updated.", "success")
+        return redirect(url_for("client.client_post_scheduler"))
 
     # Check Facebook connection
     connections = db.get_brand_connections(brand_id)
@@ -13782,6 +13786,9 @@ def client_post_scheduler():
         has_ai_generation=has_ai_generation,
         facebook_post_types=_FACEBOOK_POST_TYPE_OPTIONS,
         facebook_content_mixes=_FACEBOOK_CONTENT_MIXES,
+        facebook_personality_options=_FACEBOOK_CONTENT_PERSONALITY_OPTIONS,
+        facebook_cta_style_options=_FACEBOOK_CTA_STYLE_OPTIONS,
+        facebook_character_cadence_options=_FACEBOOK_CHARACTER_CADENCE_OPTIONS,
         facebook_recurring_characters=_parse_facebook_recurring_characters(brand.get("facebook_recurring_characters")),
         facebook_storytelling_profile=_build_facebook_storytelling_summary(brand),
         posts=posts,

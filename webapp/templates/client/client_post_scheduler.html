@@ -91,6 +91,75 @@
     .storytelling-character-list {
         margin: .75rem 0 0; padding-left: 1rem; color: var(--text-muted); font-size: .84rem;
     }
+    .story-settings-card {
+        background: linear-gradient(135deg, #f8fafc, #fff7ed);
+        border: 1px solid #fed7aa;
+        border-radius: 14px;
+        padding: 1.1rem;
+        margin-bottom: 1rem;
+    }
+    .story-settings-card .form-label {
+        font-weight: 600;
+        font-size: .88rem;
+    }
+    .story-settings-card .form-control,
+    .story-settings-card .form-select {
+        border-radius: 10px;
+    }
+    .story-settings-card textarea.form-control {
+        min-height: 92px;
+        resize: vertical;
+    }
+    .character-cadence-panel {
+        margin-top: .85rem;
+        padding: .9rem 1rem;
+        border: 1px solid #fed7aa;
+        border-radius: 12px;
+        background: rgba(255,255,255,.78);
+    }
+    .character-cadence-title {
+        font-size: .86rem;
+        font-weight: 700;
+        color: var(--text-strong);
+        margin-bottom: .25rem;
+    }
+    .character-cadence-list {
+        display: flex;
+        flex-direction: column;
+        gap: .65rem;
+        margin-top: .75rem;
+    }
+    .character-cadence-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 220px;
+        gap: .75rem;
+        align-items: center;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: .7rem .8rem;
+    }
+    .character-cadence-name {
+        font-size: .88rem;
+        font-weight: 700;
+        color: var(--text-strong);
+    }
+    .character-cadence-meta {
+        font-size: .8rem;
+        color: var(--text-muted);
+        margin-top: .2rem;
+        line-height: 1.45;
+    }
+    .character-cadence-empty {
+        font-size: .82rem;
+        color: var(--text-muted);
+        margin-top: .65rem;
+    }
+    @media (max-width: 767px) {
+        .character-cadence-row {
+            grid-template-columns: 1fr;
+        }
+    }
 </style>
 
 <div class="page-title-bar">
@@ -127,6 +196,70 @@
 
 <!-- ═══════════════════ COMPOSE TAB ═══════════════════ -->
 <div id="tab-compose" class="tab-content">
+<div class="story-settings-card">
+    <div class="d-flex flex-wrap justify-content-between gap-2 align-items-start mb-3">
+        <div>
+            <h5 class="fw-bold mb-1">Facebook Story Settings</h5>
+            <div class="text-muted" style="font-size:.88rem;">Keep the Facebook organic strategy controls here so drafting, calendars, and story rules live in the same place.</div>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            {% if facebook_storytelling_profile.personality_label %}<span class="storytelling-stat"><i class="bi bi-emoji-smile"></i>{{ facebook_storytelling_profile.personality_label }}</span>{% endif %}
+            {% if facebook_storytelling_profile.cta_label %}<span class="storytelling-stat"><i class="bi bi-megaphone"></i>{{ facebook_storytelling_profile.cta_label }}</span>{% endif %}
+            {% if facebook_storytelling_profile.character_count %}<span class="storytelling-stat"><i class="bi bi-person-badge"></i>{{ facebook_storytelling_profile.character_count }} recurring characters</span>{% endif %}
+        </div>
+    </div>
+    <form method="POST" action="{{ url_for('client.client_post_scheduler') }}" id="facebookStorySettingsForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="section" value="facebook_storytelling_profile">
+        <div class="row g-3">
+            <div class="col-12">
+                <label class="form-label">Facebook Storytelling Strategy</label>
+                <textarea name="facebook_storytelling_strategy" class="form-control" maxlength="2000" rows="3" placeholder="e.g. Show the business growing in public. Let people watch the team improve systems, serve customers, and build trust over time. Sell indirectly through progress, not constant offers.">{{ brand.facebook_storytelling_strategy or '' }}</textarea>
+                <div class="text-muted mt-1" style="font-size:.8rem;">Define the bigger organic arc the Facebook page should tell over time.</div>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Content Personality</label>
+                <select name="facebook_content_personality" class="form-select">
+                    <option value="">Use default brand voice</option>
+                    {% for option in facebook_personality_options %}
+                    <option value="{{ option.key }}" {% if (brand.facebook_content_personality or '') == option.key %}selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+                <div class="text-muted mt-1" style="font-size:.8rem;">Choose whether the feed stays serious, warm, lightly playful, or openly funny.</div>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Selling Style</label>
+                <select name="facebook_cta_style" class="form-select">
+                    <option value="">Use default CTA style</option>
+                    {% for option in facebook_cta_style_options %}
+                    <option value="{{ option.key }}" {% if (brand.facebook_cta_style or '') == option.key %}selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+                <div class="text-muted mt-1" style="font-size:.8rem;">Control whether posts sell subtly, consult like an expert, or ask directly for the next step.</div>
+            </div>
+            <div class="col-12">
+                <label class="form-label">Storytelling Guardrails</label>
+                <textarea name="facebook_storytelling_guardrails" class="form-control" maxlength="2000" rows="3" placeholder="e.g. No corny inspiration. No fake banter. Never make us sound cheap. Keep humor dry and controlled. Don't overuse offers unless we are in a real promo window.">{{ brand.facebook_storytelling_guardrails or '' }}</textarea>
+                <div class="text-muted mt-1" style="font-size:.8rem;">Set the lines the AI should not cross for humor, tone, claims, or how aggressively it sells.</div>
+            </div>
+            <div class="col-12">
+                <label class="form-label">Recurring Characters</label>
+                <textarea name="facebook_recurring_characters" id="facebookRecurringCharactersInput" class="form-control" maxlength="6000" rows="6" placeholder='JSON or plain text both work. Example: [{"name":"Marty","role":"Dispatcher","description":"Dry humor, knows the schedule, keeps the chaos organized","voice":"Short, sharp, practical"}]'>{{ brand.facebook_recurring_characters or '' }}</textarea>
+                <div class="text-muted mt-1" style="font-size:.8rem;">Define recurring people, mascots, or brand personas the feed can rotate through. JSON works best when you want detailed profiles.</div>
+                <div class="character-cadence-panel">
+                    <div class="character-cadence-title">Character Cadence</div>
+                    <div class="text-muted" style="font-size:.8rem;">Choose how often each character should show up in the Facebook calendar. Saving will preserve the cadence inside the recurring-character JSON.</div>
+                    <div class="character-cadence-empty" id="characterCadenceEmpty">Add characters above to unlock cadence dropdowns for each one.</div>
+                    <div class="character-cadence-list" id="characterCadenceList"></div>
+                </div>
+            </div>
+        </div>
+        <div class="mt-3 d-flex flex-wrap gap-2 align-items-center">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i> Save Facebook Story Settings</button>
+            <span class="text-muted" style="font-size:.84rem;">These settings only affect Facebook organic drafting and calendar generation.</span>
+        </div>
+    </form>
+</div>
 <div class="card border-0 shadow-sm mb-4" style="border-radius:var(--radius);">
     <div class="card-body p-4">
         <h5 class="fw-bold mb-3">Compose a Post</h5>
@@ -135,7 +268,7 @@
             <div class="d-flex flex-wrap justify-content-between gap-2 align-items-start">
                 <div>
                     <div class="fw-semibold" style="color:var(--text-strong);">Brand storytelling profile is active</div>
-                    <div class="text-muted" style="font-size:.86rem;">AI drafts and calendars will use this profile automatically. Update it in <a href="{{ url_for('client.client_my_business') }}">My Business</a>.</div>
+                    <div class="text-muted" style="font-size:.86rem;">AI drafts and calendars will use these story settings automatically.</div>
                 </div>
                 <div class="d-flex flex-wrap gap-2">
                     {% if facebook_storytelling_profile.personality_label %}<span class="storytelling-stat"><i class="bi bi-emoji-smile"></i>{{ facebook_storytelling_profile.personality_label }}</span>{% endif %}
@@ -181,7 +314,7 @@
                             {% if facebook_recurring_characters %}
                             Optional. Force the draft to center on one recurring character.
                             {% else %}
-                            Add recurring characters in My Business to unlock character-led posts.
+                            Save recurring characters in the story settings above to unlock character-led posts.
                             {% endif %}
                         </small>
                     </div>
@@ -447,6 +580,7 @@ special_offer,"Spring special: book now and ask about this month's inspection of
 
 <script type="application/json" id="calendarMixesData">{{ facebook_content_mixes|tojson }}</script>
 <script type="application/json" id="hasDriveData">{{ has_drive|tojson }}</script>
+<script type="application/json" id="facebookCharacterCadenceOptions">{{ facebook_character_cadence_options|tojson }}</script>
 <script>
 var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 var calendarMixes = JSON.parse(document.getElementById('calendarMixesData').textContent || '[]');
@@ -969,6 +1103,169 @@ function deletePost(postId) {
 }
 
 function refreshPosts() { location.reload(); }
+
+(function(){
+    const form = document.getElementById('facebookStorySettingsForm');
+    const input = document.getElementById('facebookRecurringCharactersInput');
+    const list = document.getElementById('characterCadenceList');
+    const empty = document.getElementById('characterCadenceEmpty');
+    const cadenceOptions = JSON.parse(document.getElementById('facebookCharacterCadenceOptions').textContent || '[]');
+    const defaultCadence = 'every_6_posts';
+    let renderTimer = null;
+
+    if (!form || !input || !list || !empty) return;
+
+    function normalizeCadence(value) {
+        const cleaned = String(value || '').trim().toLowerCase().replace(/-/g, '_').replace(/\s+/g, '_');
+        return cadenceOptions.some(function(option) { return option.key === cleaned; }) ? cleaned : defaultCadence;
+    }
+
+    function parseCharacters(rawValue) {
+        const raw = String(rawValue || '').trim();
+        if (!raw) return [];
+
+        let parsed = null;
+        if (raw[0] === '[' || raw[0] === '{') {
+            try {
+                parsed = JSON.parse(raw);
+            } catch (_error) {
+                parsed = null;
+            }
+        }
+
+        if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.characters)) {
+            parsed = parsed.characters;
+        } else if (parsed && !Array.isArray(parsed)) {
+            parsed = [parsed];
+        }
+
+        const characters = [];
+
+        function appendCharacter(character) {
+            if (!character || !character.name) return;
+            characters.push(character);
+        }
+
+        if (Array.isArray(parsed)) {
+            parsed.forEach(function(item, index) {
+                if (typeof item === 'string') {
+                    appendCharacter({
+                        name: item.trim(),
+                        role: '',
+                        profile: item.trim(),
+                        cadence: defaultCadence,
+                        data: {name: item.trim(), description: item.trim(), cadence: defaultCadence},
+                    });
+                    return;
+                }
+                if (!item || typeof item !== 'object') return;
+                const data = Object.assign({}, item);
+                const name = (data.name || data.character || data.title || ('Character ' + (index + 1))).trim();
+                const role = String(data.role || data.job || data.archetype || '').trim();
+                const cadence = normalizeCadence(data.cadence || data.frequency || data.cadence_rule || defaultCadence);
+                const parts = [];
+                ['description', 'backstory', 'voice', 'traits', 'hook', 'running_bit', 'guardrails', 'notes'].forEach(function(key) {
+                    if (data[key]) parts.push(String(data[key]).trim());
+                });
+                appendCharacter({
+                    name: name,
+                    role: role,
+                    profile: parts.join('; ') || JSON.stringify(data),
+                    cadence: cadence,
+                    data: data,
+                });
+            });
+            return characters;
+        }
+
+        raw.split(/\r?\n/).forEach(function(line) {
+            const cleaned = line.trim().replace(/^[-*]\s*/, '');
+            if (!cleaned) return;
+            const parts = cleaned.split(':');
+            const name = parts.shift().trim();
+            const profile = parts.join(':').trim() || name;
+            appendCharacter({
+                name: name,
+                role: '',
+                profile: profile,
+                cadence: defaultCadence,
+                data: {name: name, description: profile, cadence: defaultCadence},
+            });
+        });
+        return characters;
+    }
+
+    function serializeCharacters(characters) {
+        return JSON.stringify(characters.map(function(character) {
+            const data = Object.assign({}, character.data || {});
+            data.name = character.name;
+            if (character.role) data.role = character.role;
+            if (!data.description && character.profile) data.description = character.profile;
+            data.cadence = normalizeCadence(character.cadence);
+            return data;
+        }), null, 2);
+    }
+
+    function currentCharactersFromUi() {
+        const characters = parseCharacters(input.value);
+        Array.from(list.querySelectorAll('select[data-character-index]')).forEach(function(selectEl) {
+            const index = Number(selectEl.getAttribute('data-character-index'));
+            if (characters[index]) {
+                characters[index].cadence = normalizeCadence(selectEl.value);
+            }
+        });
+        return characters;
+    }
+
+    function renderCadenceRows() {
+        const characters = currentCharactersFromUi();
+        list.innerHTML = '';
+        empty.style.display = characters.length ? 'none' : '';
+        if (!characters.length) return;
+
+        characters.forEach(function(character, index) {
+            const row = document.createElement('div');
+            row.className = 'character-cadence-row';
+            const metaBits = [];
+            if (character.role) metaBits.push(character.role);
+            if (character.profile) metaBits.push(character.profile.length > 140 ? character.profile.slice(0, 140) + '...' : character.profile);
+            const optionsHtml = cadenceOptions.map(function(option) {
+                const selected = option.key === normalizeCadence(character.cadence) ? ' selected' : '';
+                return '<option value="' + escapeHtml(option.key) + '"' + selected + '>' + escapeHtml(option.label) + '</option>';
+            }).join('');
+
+            row.innerHTML =
+                '<div>' +
+                    '<div class="character-cadence-name">' + escapeHtml(character.name) + '</div>' +
+                    '<div class="character-cadence-meta">' + escapeHtml(metaBits.join(' - ')) + '</div>' +
+                '</div>' +
+                '<div><select class="form-select form-select-sm" data-character-index="' + index + '">' + optionsHtml + '</select></div>';
+
+            list.appendChild(row);
+        });
+    }
+
+    list.addEventListener('change', function(event) {
+        const target = event.target;
+        if (!target || target.tagName !== 'SELECT') return;
+        input.value = serializeCharacters(currentCharactersFromUi());
+        renderCadenceRows();
+    });
+
+    input.addEventListener('input', function() {
+        window.clearTimeout(renderTimer);
+        renderTimer = window.setTimeout(renderCadenceRows, 180);
+    });
+
+    form.addEventListener('submit', function() {
+        const characters = currentCharactersFromUi();
+        if (characters.length) {
+            input.value = serializeCharacters(characters);
+        }
+    });
+
+    renderCadenceRows();
+})();
 
 // ── Helpers ──
 function showResult(elId, type, msg) {

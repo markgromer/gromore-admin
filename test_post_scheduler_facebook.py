@@ -344,21 +344,24 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertEqual(payload["file"]["download_url"], "/client/api/drive/download/drive-file-123")
         self.assertEqual(payload["file"]["thumbnail_url"], "/client/api/drive/thumbnail/drive-file-123")
 
-    def test_my_business_voice_section_saves_storytelling_fields(self):
+    def test_post_scheduler_story_settings_save_storytelling_fields(self):
+        recurring_characters = json.dumps([
+            {
+                "name": "Alex",
+                "role": "Owner-operator",
+                "description": "Calm authority",
+                "cadence": "every_4_posts",
+            }
+        ])
         response = self.client.post(
-            "/client/my-business",
+            "/client/post-scheduler",
             data={
-                "section": "voice",
-                "brand_voice": "Direct and local.",
-                "active_offers": "Free estimate.",
-                "target_audience": "Homeowners who want reliability.",
+                "section": "facebook_storytelling_profile",
                 "facebook_storytelling_strategy": "Make the feed feel like an ongoing story about disciplined growth.",
                 "facebook_content_personality": "warm_professional",
                 "facebook_cta_style": "consultative",
                 "facebook_storytelling_guardrails": "No forced jokes and no fake urgency.",
-                "facebook_recurring_characters": "Alex: Owner-operator with calm authority",
-                "reporting_notes": "Keep reports plain English.",
-                "website_url": "https://example.com",
+                "facebook_recurring_characters": recurring_characters,
             },
         )
 
@@ -371,7 +374,40 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertEqual(brand["facebook_content_personality"], "warm_professional")
         self.assertEqual(brand["facebook_cta_style"], "consultative")
         self.assertEqual(brand["facebook_storytelling_guardrails"], "No forced jokes and no fake urgency.")
-        self.assertEqual(brand["facebook_recurring_characters"], "Alex: Owner-operator with calm authority")
+        self.assertEqual(brand["facebook_recurring_characters"], recurring_characters)
+
+    def test_my_business_voice_section_preserves_storytelling_fields(self):
+        with self.app.app_context():
+            db = self.app.db
+            db.update_brand_text_field(self.brand_id, "facebook_storytelling_strategy", "Do not clear this strategy.")
+            db.update_brand_text_field(self.brand_id, "facebook_content_personality", "playful_funny")
+            db.update_brand_text_field(self.brand_id, "facebook_cta_style", "subtle")
+            db.update_brand_text_field(self.brand_id, "facebook_storytelling_guardrails", "Keep this guardrail.")
+            db.update_brand_text_field(self.brand_id, "facebook_recurring_characters", json.dumps([{"name": "Marty", "cadence": "every_3_posts"}]))
+
+        response = self.client.post(
+            "/client/my-business",
+            data={
+                "section": "voice",
+                "brand_voice": "Direct and local.",
+                "active_offers": "Free estimate.",
+                "target_audience": "Homeowners who want reliability.",
+                "reporting_notes": "Keep reports plain English.",
+                "website_url": "https://example.com",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        with self.app.app_context():
+            brand = self.app.db.get_brand(self.brand_id)
+
+        self.assertEqual(brand["brand_voice"], "Direct and local.")
+        self.assertEqual(brand["facebook_storytelling_strategy"], "Do not clear this strategy.")
+        self.assertEqual(brand["facebook_content_personality"], "playful_funny")
+        self.assertEqual(brand["facebook_cta_style"], "subtle")
+        self.assertEqual(brand["facebook_storytelling_guardrails"], "Keep this guardrail.")
+        self.assertIn("Marty", brand["facebook_recurring_characters"])
 
     def test_storytelling_pages_render(self):
         with self.app.app_context():
@@ -386,8 +422,9 @@ class FacebookPostSchedulerTests(unittest.TestCase):
 
         self.assertEqual(my_business_response.status_code, 200)
         self.assertEqual(scheduler_response.status_code, 200)
-        self.assertIn(b"Facebook Storytelling Strategy", my_business_response.data)
-        self.assertIn(b"Character Cadence", my_business_response.data)
+        self.assertNotIn(b"Facebook Storytelling Strategy", my_business_response.data)
+        self.assertIn(b"Facebook Story Settings", scheduler_response.data)
+        self.assertIn(b"Character Cadence", scheduler_response.data)
         self.assertIn(b"Brand storytelling profile is active", scheduler_response.data)
 
 
