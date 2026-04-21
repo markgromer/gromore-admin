@@ -2468,6 +2468,33 @@ _FACEBOOK_CTA_STYLE_OPTIONS = [
     },
 ]
 _FACEBOOK_CTA_STYLE_MAP = {item["key"]: item for item in _FACEBOOK_CTA_STYLE_OPTIONS}
+_FACEBOOK_CHARACTER_CADENCE_OPTIONS = [
+    {
+        "key": "once_per_calendar",
+        "label": "Once Per Calendar",
+        "description": "Use this character once when the calendar has a strong fit.",
+        "interval_posts": None,
+    },
+    {
+        "key": "every_6_posts",
+        "label": "Light Rotation",
+        "description": "Roughly once every 6 posts.",
+        "interval_posts": 6,
+    },
+    {
+        "key": "every_4_posts",
+        "label": "Regular Rotation",
+        "description": "Roughly once every 4 posts.",
+        "interval_posts": 4,
+    },
+    {
+        "key": "every_3_posts",
+        "label": "Heavy Rotation",
+        "description": "Roughly once every 3 posts.",
+        "interval_posts": 3,
+    },
+]
+_FACEBOOK_CHARACTER_CADENCE_MAP = {item["key"]: item for item in _FACEBOOK_CHARACTER_CADENCE_OPTIONS}
 
 
 def _normalize_facebook_post_type(value, default="value"):
@@ -2560,6 +2587,13 @@ def _normalize_facebook_cta_style(value, default="subtle"):
     return default if default is not None else cleaned
 
 
+def _normalize_facebook_character_cadence(value, default="every_6_posts"):
+    cleaned = (value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if cleaned in _FACEBOOK_CHARACTER_CADENCE_MAP:
+        return cleaned
+    return default if default is not None else cleaned
+
+
 def _parse_facebook_recurring_characters(raw_value):
     raw = (raw_value or "").strip()
     if not raw:
@@ -2580,10 +2614,12 @@ def _parse_facebook_recurring_characters(raw_value):
 
     characters = []
 
-    def _append_character(name, profile, role=""):
+    def _append_character(name, profile, role="", cadence="every_6_posts"):
         cleaned_name = (name or "").strip()[:80]
         cleaned_role = (role or "").strip()[:120]
         cleaned_profile = re.sub(r"\s+", " ", (profile or "").strip())[:1200]
+        cadence_key = _normalize_facebook_character_cadence(cadence)
+        cadence_option = _FACEBOOK_CHARACTER_CADENCE_MAP.get(cadence_key, _FACEBOOK_CHARACTER_CADENCE_OPTIONS[1])
         if not cleaned_name and cleaned_profile:
             cleaned_name = f"Character {len(characters) + 1}"
         if cleaned_name:
@@ -2593,6 +2629,8 @@ def _parse_facebook_recurring_characters(raw_value):
                     "name": cleaned_name,
                     "role": cleaned_role,
                     "profile": cleaned_profile,
+                    "cadence": cadence_key,
+                    "cadence_label": cadence_option["label"],
                 }
             )
 
@@ -2603,6 +2641,7 @@ def _parse_facebook_recurring_characters(raw_value):
             elif isinstance(item, dict):
                 name = item.get("name") or item.get("character") or item.get("title") or f"Character {index}"
                 role = item.get("role") or item.get("job") or item.get("archetype") or ""
+                cadence = item.get("cadence") or item.get("frequency") or item.get("cadence_rule") or "every_6_posts"
                 parts = []
                 for key in ("description", "backstory", "voice", "traits", "hook", "running_bit", "guardrails", "notes"):
                     value = item.get(key)
@@ -2610,7 +2649,7 @@ def _parse_facebook_recurring_characters(raw_value):
                         label = key.replace("_", " ").title()
                         parts.append(f"{label}: {value}")
                 profile = "; ".join(parts) or json.dumps(item, ensure_ascii=True)
-                _append_character(name, profile, role=role)
+                _append_character(name, profile, role=role, cadence=cadence)
 
     if characters:
         return characters
@@ -2666,8 +2705,13 @@ def _format_facebook_storytelling_context(brand):
     if characters:
         char_lines = []
         for character in characters:
-            role = f" ({character['role']})" if character.get("role") else ""
-            char_lines.append(f"- {character['name']}{role}: {character.get('profile') or ''}".strip())
+            meta_parts = []
+            if character.get("role"):
+                meta_parts.append(character["role"])
+            if character.get("cadence_label"):
+                meta_parts.append(character["cadence_label"])
+            meta = f" ({', '.join(meta_parts)})" if meta_parts else ""
+            char_lines.append(f"- {character['name']}{meta}: {character.get('profile') or ''}".strip())
         context_lines.append("Recurring characters:\n" + "\n".join(char_lines))
 
     return {
@@ -2685,28 +2729,70 @@ def _apply_recurring_characters_to_calendar_plan(calendar_plan, characters):
         return [dict(slot) for slot in calendar_plan or []]
 
     eligible_types = {"behind_the_scenes", "team_intro", "business_growth", "community_spotlight", "character_spotlight", "value"}
-    interval = 3 if len(calendar_plan) >= 5 else 2
-    enriched = []
-    character_index = 0
-    assigned_count = 0
+    enriched = [dict(slot) for slot in calendar_plan]
+    eligible_indices = [index for index, slot in enumerate(enriched) if slot.get("post_type") in eligible_types]
+    if not eligible_indices:
+        return enriched
 
-    for index, slot in enumerate(calendar_plan):
-        slot_copy = dict(slot)
-        if slot_copy.get("post_type") in eligible_types and (index % interval == 1 or slot_copy.get("post_type") == "character_spotlight"):
-            character = characters[character_index % len(characters)]
-            slot_copy["character_name"] = character["name"]
-            slot_copy["character_profile"] = character.get("profile") or ""
-            character_index += 1
-            assigned_count += 1
-        enriched.append(slot_copy)
+    assignments = {}
+    ordered_characters = []
+    for position, character in enumerate(characters):
+        cadence_key = _normalize_facebook_character_cadence(character.get("cadence"))
+        cadence_option = _FACEBOOK_CHARACTER_CADENCE_MAP.get(cadence_key, _FACEBOOK_CHARACTER_CADENCE_OPTIONS[1])
+        interval_posts = cadence_option.get("interval_posts")
+        if interval_posts:
+            target_count = max(1, (len(eligible_indices) + interval_posts - 1) // interval_posts)
+        else:
+            target_count = 1
+        ordered_characters.append((0 - target_count, position, character, cadence_option, target_count))
 
-    if assigned_count == 0:
-        for slot_copy in enriched:
-            if slot_copy.get("post_type") in eligible_types:
-                character = characters[0]
-                slot_copy["character_name"] = character["name"]
-                slot_copy["character_profile"] = character.get("profile") or ""
-                break
+    ordered_characters.sort()
+
+    def _pick_even_slots(free_indices, count):
+        if count <= 0 or not free_indices:
+            return []
+        if count >= len(free_indices):
+            return list(free_indices)
+        selected = []
+        for offset in range(count):
+            if count == 1:
+                candidate_position = len(free_indices) // 2
+            else:
+                candidate_position = round(offset * (len(free_indices) - 1) / (count - 1))
+            chosen = free_indices[candidate_position]
+            if chosen in selected:
+                for fallback in free_indices:
+                    if fallback not in selected:
+                        chosen = fallback
+                        break
+            selected.append(chosen)
+        return selected
+
+    for _negative_target, _position, character, cadence_option, target_count in ordered_characters:
+        free_indices = [idx for idx in eligible_indices if idx not in assignments]
+        selected_indices = _pick_even_slots(free_indices, min(target_count, len(free_indices)))
+        for idx in selected_indices:
+            assignments[idx] = {
+                "character_name": character["name"],
+                "character_profile": character.get("profile") or "",
+                "character_cadence": cadence_option["label"],
+            }
+
+    if not assignments:
+        fallback_index = eligible_indices[len(eligible_indices) // 2]
+        fallback_character = characters[0]
+        fallback_cadence = _FACEBOOK_CHARACTER_CADENCE_MAP.get(
+            _normalize_facebook_character_cadence(fallback_character.get("cadence")),
+            _FACEBOOK_CHARACTER_CADENCE_OPTIONS[1],
+        )
+        assignments[fallback_index] = {
+            "character_name": fallback_character["name"],
+            "character_profile": fallback_character.get("profile") or "",
+            "character_cadence": fallback_cadence["label"],
+        }
+
+    for index, payload in assignments.items():
+        enriched[index].update(payload)
 
     return enriched
 
@@ -5806,6 +5892,7 @@ def client_my_business():
         google_font_choices=GOOGLE_FONT_CHOICES,
         facebook_personality_options=_FACEBOOK_CONTENT_PERSONALITY_OPTIONS,
         facebook_cta_style_options=_FACEBOOK_CTA_STYLE_OPTIONS,
+        facebook_character_cadence_options=_FACEBOOK_CHARACTER_CADENCE_OPTIONS,
     )
 
 

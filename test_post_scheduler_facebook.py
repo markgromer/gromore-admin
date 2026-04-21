@@ -215,6 +215,63 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertTrue(all(post["scheduled_at"] for post in payload["posts"]))
         self.assertIn("example.com", payload["posts"][0]["link_url"])
 
+    @patch("openai.OpenAI")
+    def test_generate_facebook_calendar_respects_character_cadence(self, mock_openai):
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(
+                self.brand_id,
+                "facebook_recurring_characters",
+                json.dumps(
+                    [
+                        {
+                            "name": "Marty",
+                            "role": "Dispatcher",
+                            "description": "Dry and practical.",
+                            "cadence": "every_3_posts",
+                        },
+                        {
+                            "name": "Alex",
+                            "role": "Owner",
+                            "description": "Shows up for milestone moments.",
+                            "cadence": "once_per_calendar",
+                        },
+                    ]
+                ),
+            )
+
+        mock_client = Mock()
+        mock_client.chat.completions.create.return_value = _FakeChatResponse(
+            json.dumps(
+                {
+                    "posts": [
+                        {"post_type": "business_growth", "message": f"Calendar post {index}", "image_hint": "Photo idea", "link_url": ""}
+                        for index in range(1, 9)
+                    ]
+                }
+            )
+        )
+        mock_openai.return_value = mock_client
+
+        response = self.client.post(
+            "/client/post-scheduler/generate-calendar",
+            json={
+                "content_mix": "brand_story_engine",
+                "weeks": 2,
+                "posts_per_week": 4,
+                "start_date": (datetime.now(timezone.utc) + timedelta(days=1)).date().isoformat(),
+                "post_types": ["business_growth", "behind_the_scenes", "team_intro", "community_spotlight"],
+                "brief": "Make the story feel like a living business.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        character_names = [post.get("character_name") for post in payload["posts"] if post.get("character_name")]
+        self.assertGreaterEqual(character_names.count("Marty"), 2)
+        self.assertLessEqual(character_names.count("Alex"), 1)
+        self.assertGreater(character_names.count("Marty"), character_names.count("Alex"))
+
     @patch("webapp.api_bridge._get_page_access_token", return_value="page-token")
     @patch("webapp.api_bridge._get_meta_token", return_value="meta-user-token")
     @patch("requests.post")
@@ -330,6 +387,7 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertEqual(my_business_response.status_code, 200)
         self.assertEqual(scheduler_response.status_code, 200)
         self.assertIn(b"Facebook Storytelling Strategy", my_business_response.data)
+        self.assertIn(b"Character Cadence", my_business_response.data)
         self.assertIn(b"Brand storytelling profile is active", scheduler_response.data)
 
 
