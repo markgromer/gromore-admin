@@ -449,6 +449,9 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertIn(b"Optional JSON Profile", scheduler_response.data)
         self.assertIn(b"Brand storytelling profile is active", scheduler_response.data)
         self.assertIn(b"The preview keeps line breaks and surfaces the hook, body, and CTA", scheduler_response.data)
+        self.assertIn(b"Schedule Selected", scheduler_response.data)
+        self.assertIn(b"Select All", scheduler_response.data)
+        self.assertIn(b"Select None", scheduler_response.data)
 
 
 if __name__ == "__main__":

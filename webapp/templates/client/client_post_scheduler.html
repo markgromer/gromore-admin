@@ -31,8 +31,34 @@
 
     .csv-preview-table { font-size: .85rem; }
     .csv-preview-table th { background: #f1f5f9; font-weight: 600; }
+    .csv-preview-table td { vertical-align: top; }
+    .csv-select-col {
+        width: 52px;
+        text-align: center;
+    }
     .csv-message-cell {
         min-width: 360px;
+    }
+    .csv-preview-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        align-items: center;
+    }
+    .csv-editor-label {
+        display: block;
+        font-size: .72rem;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        margin: .75rem 0 .35rem;
+    }
+    .csv-edit-textarea {
+        min-height: 150px;
+        resize: vertical;
+        font-size: .84rem;
+        line-height: 1.5;
     }
     .csv-message-preview {
         display: flex;
@@ -633,8 +659,14 @@
         </div>
 
         <div id="csvPreview" style="display:none;">
-            <h6 class="fw-bold mb-2">Preview <span id="csvCount" class="text-muted fw-normal"></span></h6>
-            <div class="text-muted mb-2" style="font-size:.82rem;">The preview keeps line breaks and surfaces the hook, body, and CTA when the draft gives them to us.</div>
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <h6 class="fw-bold mb-0">Preview <span id="csvCount" class="text-muted fw-normal"></span></h6>
+                <div class="csv-preview-toolbar">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setAllCsvRowsSelected(true)">Select All</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setAllCsvRowsSelected(false)">Select None</button>
+                </div>
+            </div>
+            <div class="text-muted mb-2" style="font-size:.82rem;">Review, edit, and select which posts to schedule. The preview keeps line breaks and surfaces the hook, body, and CTA when the draft gives them to us.</div>
             {% if has_drive %}
             <div class="text-muted mb-2" style="font-size:.85rem;">
                 Upload an image on the row that needs it. The Drive download URL will be inserted automatically for that post.
@@ -643,13 +675,13 @@
             {% endif %}
             <div class="table-responsive" style="max-height:400px; overflow-y:auto;">
                 <table class="table table-sm csv-preview-table" id="csvTable">
-                    <thead><tr><th>#</th><th>Type</th><th>Message</th><th>Scheduled</th><th>Image</th><th>Link</th></tr></thead>
+                    <thead><tr><th class="csv-select-col">Use</th><th>#</th><th>Type</th><th>Message</th><th>Scheduled</th><th>Image</th><th>Link</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
             <div class="mt-3 d-flex gap-2">
                 <button class="btn btn-primary" id="csvScheduleBtn" onclick="submitCsvPosts()">
-                    <i class="bi bi-calendar-plus me-1"></i> Schedule All
+                    <i class="bi bi-calendar-plus me-1"></i> Schedule Selected
                 </button>
                 <button class="btn btn-outline-secondary" onclick="clearCsvPreview()">Cancel</button>
             </div>
@@ -739,10 +771,12 @@ special_offer,"Spring special: book now and ask about this month's inspection of
 <script type="application/json" id="calendarMixesData">{{ facebook_content_mixes|tojson }}</script>
 <script type="application/json" id="hasDriveData">{{ has_drive|tojson }}</script>
 <script type="application/json" id="facebookCharacterCadenceOptions">{{ facebook_character_cadence_options|tojson }}</script>
+<script type="application/json" id="facebookPostTypesData">{{ facebook_post_types|tojson }}</script>
 <script>
 var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 var calendarMixes = JSON.parse(document.getElementById('calendarMixesData').textContent || '[]');
 var hasDrive = JSON.parse(document.getElementById('hasDriveData').textContent || 'false');
+var facebookPostTypes = JSON.parse(document.getElementById('facebookPostTypesData').textContent || '[]');
 var pendingCsvImageRowIndex = null;
 
 function summarizeResponseError(text, status) {
@@ -920,6 +954,7 @@ function generateCalendarPlan() {
 
         csvParsedRows = (data.posts || []).map(function(post) {
             return {
+                selected: true,
                 post_type: post.post_type || '',
                 message: post.message || '',
                 scheduled_at: post.scheduled_at || '',
@@ -1064,6 +1099,46 @@ function updateCsvRowField(index, field, value) {
     csvParsedRows[index][field] = value;
 }
 
+function isCsvRowSelected(row) {
+    return !!row && row.selected !== false;
+}
+
+function setCsvRowSelected(index, selected) {
+    if (!csvParsedRows[index]) return;
+    csvParsedRows[index].selected = !!selected;
+    refreshCsvPreviewSummary();
+}
+
+function setAllCsvRowsSelected(selected) {
+    csvParsedRows.forEach(function(row) {
+        row.selected = !!selected;
+    });
+    renderCsvPreviewRows(csvParsedRows);
+}
+
+function selectedCsvRows() {
+    return csvParsedRows.filter(isCsvRowSelected);
+}
+
+function refreshCsvPreviewSummary() {
+    var selectedCount = selectedCsvRows().length;
+    document.getElementById('csvCount').textContent = csvParsedRows.length ? '(' + selectedCount + ' selected of ' + csvParsedRows.length + ' posts)' : '';
+    var button = document.getElementById('csvScheduleBtn');
+    if (button) {
+        button.disabled = !csvParsedRows.length || !selectedCount;
+        button.innerHTML = '<i class="bi bi-calendar-plus me-1"></i> Schedule Selected' + (csvParsedRows.length ? ' (' + selectedCount + ')' : '');
+    }
+    document.getElementById('csvPreview').style.display = csvParsedRows.length ? '' : 'none';
+}
+
+function renderPostTypeLabel(postType) {
+    var normalized = String(postType || '').trim();
+    var match = (facebookPostTypes || []).find(function(option) {
+        return option.key === normalized;
+    });
+    return match ? match.label : (normalized || 'Value Post');
+}
+
 function normalizePreviewMessage(message) {
     return String(message || '').replace(/\r\n/g, '\n').trim();
 }
@@ -1192,6 +1267,7 @@ function renderCsvPreviewRows(rows) {
     var tbody = document.querySelector('#csvTable tbody');
     tbody.innerHTML = '';
     rows.forEach(function(row, index) {
+        var checked = isCsvRowSelected(row) ? ' checked' : '';
         var imageActions = hasDrive
             ? '<button type="button" class="btn btn-outline-secondary btn-sm mt-1" onclick="triggerCsvImageUpload(' + index + ')"><i class="bi bi-cloud-arrow-up me-1"></i>Upload</button>'
             : '';
@@ -1199,10 +1275,15 @@ function renderCsvPreviewRows(rows) {
         var linkValue = escapeHtml(row.link_url || '');
         var imageName = row.image_name ? '<div class="text-muted mt-1" style="font-size:.78rem;">Attached: ' + escapeHtml(row.image_name) + '</div>' : '';
         var messagePreview = renderCsvMessagePreview(row.message, row.character_name, row.image_hint);
+        var messageValue = escapeHtml(row.message || '');
         var tr = document.createElement('tr');
-        tr.innerHTML = '<td>' + (index + 1) + '</td>' +
-            '<td>' + (row.post_type || 'value') + '</td>' +
-            '<td class="csv-message-cell">' + messagePreview + '</td>' +
+        tr.innerHTML = '<td class="csv-select-col"><input type="checkbox" class="form-check-input"' + checked + ' onchange="setCsvRowSelected(' + index + ', this.checked)"></td>' +
+            '<td>' + (index + 1) + '</td>' +
+            '<td>' + escapeHtml(renderPostTypeLabel(row.post_type || 'value')) + '</td>' +
+            '<td class="csv-message-cell">' + messagePreview +
+                '<label class="csv-editor-label">Edit Draft</label>' +
+                '<textarea class="form-control form-control-sm csv-edit-textarea" oninput="updateCsvRowField(' + index + ', \'message\', this.value)" onblur="renderCsvPreviewRows(csvParsedRows)">' + messageValue + '</textarea>' +
+            '</td>' +
             '<td><code>' + row.scheduled_at + '</code></td>' +
             '<td style="min-width:260px;">' +
                 '<input type="url" class="form-control form-control-sm" value="' + imageValue + '" placeholder="https://..." oninput="updateCsvRowField(' + index + ', \'image_url\', this.value)">' +
@@ -1214,8 +1295,7 @@ function renderCsvPreviewRows(rows) {
         tbody.appendChild(tr);
     });
 
-    document.getElementById('csvCount').textContent = '(' + rows.length + ' posts)';
-    document.getElementById('csvPreview').style.display = rows.length ? '' : 'none';
+    refreshCsvPreviewSummary();
 }
 
 function handleCsvFile(input) {
@@ -1278,6 +1358,7 @@ function parseCsv(text) {
     for (var i = 1; i < Math.min(lines.length, 501); i++) {
         var cols = splitCsvLine(lines[i]);
         var row = {
+            selected: true,
             post_type: typeIdx >= 0 ? (cols[typeIdx] || '') : '',
             message: cols[msgIdx] || '',
             scheduled_at: cols[dtIdx] || '',
@@ -1293,6 +1374,19 @@ function parseCsv(text) {
 
 function submitCsvPosts() {
     if (!csvParsedRows.length) return;
+    var postsToSchedule = selectedCsvRows().map(function(row) {
+        return {
+            post_type: row.post_type || '',
+            message: row.message || '',
+            scheduled_at: row.scheduled_at || '',
+            image_url: row.image_url || '',
+            link_url: row.link_url || '',
+        };
+    });
+    if (!postsToSchedule.length) {
+        showResult('csvResult', 'error', 'Select at least one post to schedule.');
+        return;
+    }
     var btn = document.getElementById('csvScheduleBtn');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Scheduling...';
@@ -1300,22 +1394,21 @@ function submitCsvPosts() {
     fetch('/client/post-scheduler/schedule-bulk', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-        body: JSON.stringify({posts: csvParsedRows})
+        body: JSON.stringify({posts: postsToSchedule})
     })
     .then(parseJsonResponse)
     .then(function(data) {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i> Schedule All';
         if (data.ok) {
-            showResult('csvResult', 'success', data.scheduled + ' posts scheduled successfully!');
+            showResult('csvResult', 'success', data.scheduled + ' selected posts scheduled successfully!');
             csvParsedRows = [];
+            renderCsvPreviewRows(csvParsedRows);
         } else {
+            refreshCsvPreviewSummary();
             showResult('csvResult', 'error', data.error || 'Failed to schedule posts.');
         }
     })
     .catch(function(err) {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-calendar-plus me-1"></i> Schedule All';
+        refreshCsvPreviewSummary();
         showResult('csvResult', 'error', (err && err.message) ? err.message : 'Network error.');
     });
 }
