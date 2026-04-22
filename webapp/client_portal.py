@@ -2369,12 +2369,12 @@ _FACEBOOK_POST_TYPE_RULES = {
     "faq": "Answer a real customer question clearly. Reduce hesitation and explain what the customer should do next if they need help.",
     "special_offer": "Make the offer concrete. Mention timing, audience fit, or what makes the offer worth acting on without sounding desperate.",
     "testimonial": "Write like a real owner highlighting a customer result or experience. Do not fabricate exact names unless the brief gives one.",
-    "behind_the_scenes": "Describe the work, prep, standards, people, or process behind the service so the business feels tangible and trustworthy.",
-    "team_intro": "Make the person feel competent and approachable. Tie their role back to the quality customers receive.",
+    "behind_the_scenes": "Describe the work, prep, standards, people, or process behind the service so the business feels tangible and trustworthy. Do not invent tools, vehicles, upgrades, or jobsite drama that were not provided.",
+    "team_intro": "Make the person feel competent and approachable without naming staff members. Focus on role, standards, and how their work helps customers.",
     "community_spotlight": "Reference something local that feels authentic to the business, such as a neighborhood, event, nearby project, or local partner.",
     "seasonal_reminder": "Anchor the post in a real seasonal concern, weather pattern, or calendar moment that matters to local customers right now.",
-    "business_growth": "Share a milestone, upgrade, new team member, new capability, or community momentum update that shows the business is growing for the right reasons.",
-    "character_spotlight": "Make the recurring character feel consistent and real. Show how that person or persona reveals the brand without turning the post into a forced skit.",
+    "business_growth": "Share a milestone, upgrade, new capability, or community momentum update only when that change is actually supported by the brief or brand context. Do not invent a new vehicle, new hire, new office, or new system.",
+    "character_spotlight": "Make the recurring character feel consistent and real. Show how that person or persona reveals the brand without turning the post into a forced skit, and avoid presenting unverified real staff names as facts.",
 }
 _FACEBOOK_CONTENT_MIXES = [
     {
@@ -2979,8 +2979,9 @@ Rules:
 - Avoid cliches, forced inspiration, and vague filler.
 - Do NOT use em dashes.
 - Use at most 2 hashtags, and only if they actually fit.
-- Do not invent fake statistics, awards, or customer details.
-- If a recurring character is assigned, center the post around that character and keep them consistent.
+- Do not invent fake statistics, awards, customer details, staff members, vehicles, or growth milestones.
+- Do not mention staff members by name in automated posts.
+- If a recurring character is assigned, center the post around that character and keep them consistent, but do not present them as a verified real staff member unless the brief explicitly establishes that.
 - If storytelling controls are provided, follow them even when they push the post away from generic service marketing.
 - {_FACEBOOK_POST_TYPE_RULES[post_type]}
 
@@ -3046,7 +3047,8 @@ Rules:
 - Avoid cliches, vague filler, and generic motivational language.
 - Do NOT use em dashes.
 - Use at most 2 hashtags per post, and only when they fit naturally.
-- Do not invent fake reviews, fake names, fake awards, or fake metrics.
+- Do not invent fake reviews, fake names, fake awards, fake metrics, fake staff members, fake vehicles, or fake growth events.
+- Do not mention staff members by name in automated posts.
 - Respect the assigned post type for each slot.
 - If a slot includes a recurring character, build the post around that character and keep them consistent.
 - If recurring characters are provided overall, weave them in periodically so the feed feels like an ongoing brand story.

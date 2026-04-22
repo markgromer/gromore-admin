@@ -149,6 +149,8 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertIn("Keep the post between 220 and 320 words.", prompt)
         self.assertIn("Use intentional line breaks between the hook, the body, and the CTA when it helps clarity.", prompt)
         self.assertIn("Prefer this flow when it fits the idea: opening hook, supporting body, closing CTA.", prompt)
+        self.assertIn("Do not invent fake statistics, awards, customer details, staff members, vehicles, or growth milestones.", prompt)
+        self.assertIn("Do not mention staff members by name in automated posts.", prompt)
 
     @patch("openai.OpenAI")
     def test_generate_facebook_calendar_returns_typed_posts(self, mock_openai):
@@ -222,6 +224,9 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertEqual(payload["posts"][2]["post_type"], "team_intro")
         self.assertTrue(all(post["scheduled_at"] for post in payload["posts"]))
         self.assertIn("example.com", payload["posts"][0]["link_url"])
+        calendar_prompt = mock_client.chat.completions.create.call_args.kwargs["messages"][1]["content"]
+        self.assertIn("Do not invent fake reviews, fake names, fake awards, fake metrics, fake staff members, fake vehicles, or fake growth events.", calendar_prompt)
+        self.assertIn("Do not mention staff members by name in automated posts.", calendar_prompt)
 
     @patch("openai.OpenAI")
     def test_generate_facebook_calendar_respects_character_cadence(self, mock_openai):
