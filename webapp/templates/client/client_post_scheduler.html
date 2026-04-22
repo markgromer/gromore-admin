@@ -323,8 +323,38 @@
     .story-settings-result {
         min-height: 1.1rem;
     }
+    .proof-list {
+        display: flex;
+        flex-direction: column;
+        gap: .85rem;
+    }
+    .proof-item {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 1rem;
+        align-items: start;
+        padding: .9rem 1rem;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #fff;
+    }
+    .proof-item-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .45rem;
+        margin-bottom: .4rem;
+    }
+    .proof-item-message {
+        font-size: .88rem;
+        color: var(--text-strong);
+        line-height: 1.55;
+        white-space: pre-wrap;
+    }
     @media (max-width: 767px) {
         .character-cadence-row {
+            grid-template-columns: 1fr;
+        }
+        .proof-item {
             grid-template-columns: 1fr;
         }
     }
@@ -708,10 +738,47 @@ special_offer,"Spring special: book now and ask about this month's inspection of
     <div class="card-body p-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="fw-bold mb-0">Scheduled &amp; Published Posts</h5>
-            <button class="btn btn-outline-secondary btn-sm" onclick="refreshPosts()">
-                <i class="bi bi-arrow-clockwise me-1"></i> Refresh
-            </button>
+            <div class="d-flex gap-2 align-items-center">
+                {% if failed_count %}
+                <button class="btn btn-outline-secondary btn-sm" id="toggleFailedPostsBtn" type="button" onclick="toggleFailedPosts()">
+                    <i class="bi bi-eye-slash me-1"></i> Hide Failed ({{ failed_count }})
+                </button>
+                {% endif %}
+                <button class="btn btn-outline-secondary btn-sm" onclick="refreshPosts()">
+                    <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+                </button>
+            </div>
         </div>
+
+        {% if published_post_proof %}
+        <div class="mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
+                <div>
+                    <h6 class="fw-bold mb-1">Published Post Proof</h6>
+                    <div class="text-muted" style="font-size:.84rem;">Verified Facebook permalinks for posts Meta is already returning as live.</div>
+                </div>
+                <span class="storytelling-stat"><i class="bi bi-check2-circle"></i>{{ published_post_proof|length }} verified</span>
+            </div>
+            <div class="proof-list">
+                {% for proof in published_post_proof %}
+                <div class="proof-item">
+                    <div>
+                        <div class="proof-item-meta">
+                            {% if proof.post_type_label %}<span class="post-type-chip">{{ proof.post_type_label }}</span>{% endif %}
+                            {% if proof.published_at %}<span class="text-muted" style="font-size:.8rem;"><i class="bi bi-clock me-1"></i>{{ proof.published_at }}</span>{% endif %}
+                        </div>
+                        <div class="proof-item-message">{{ proof.message }}</div>
+                    </div>
+                    <div>
+                        <a href="{{ proof.permalink_url }}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-box-arrow-up-right me-1"></i> View Post
+                        </a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
 
         {% if not posts %}
         <div class="text-center py-4 text-muted">
@@ -719,16 +786,16 @@ special_offer,"Spring special: book now and ask about this month's inspection of
             <p class="mt-2 mb-0">No scheduled posts yet. Compose one or upload a CSV.</p>
         </div>
         {% else %}
-        <div class="row g-3">
+        <div class="row g-3" id="scheduledPostsGrid">
             {% for post in posts %}
-            <div class="col-md-6 col-lg-4">
+            <div class="col-md-6 col-lg-4" data-post-status="{{ post.status }}">
                 <div class="post-card">
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <div class="d-flex flex-column gap-1">
                             <span class="status-badge status-{{ post.status }}">{{ post.status|title }}</span>
                             {% if post.post_type_label %}<span class="post-type-chip">{{ post.post_type_label }}</span>{% endif %}
                         </div>
-                        {% if post.status in ('pending', 'scheduled') %}
+                        {% if post.status in ('pending', 'scheduled', 'failed') %}
                         <button class="btn btn-link btn-sm text-danger p-0" data-post-id="{{ post.id }}" onclick="deletePost(this.dataset.postId)" title="Delete">
                             <i class="bi bi-trash"></i>
                         </button>
@@ -752,6 +819,13 @@ special_offer,"Spring special: book now and ask about this month's inspection of
                             Scheduled for {{ post.scheduled_at }}
                         {% endif %}
                     </div>
+                    {% if post.proof_url %}
+                    <div class="mt-2">
+                        <a href="{{ post.proof_url }}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-box-arrow-up-right me-1"></i> View Post
+                        </a>
+                    </div>
+                    {% endif %}
                     {% if post.error_message %}
                     <div class="mt-1" style="font-size:.8rem; color:#991b1b;">
                         <i class="bi bi-exclamation-circle me-1"></i>{{ post.error_message }}
@@ -1444,6 +1518,23 @@ function deletePost(postId) {
 }
 
 function refreshPosts() { location.reload(); }
+
+var failedPostsHidden = false;
+
+function toggleFailedPosts() {
+    var button = document.getElementById('toggleFailedPostsBtn');
+    var failedCards = document.querySelectorAll('#scheduledPostsGrid [data-post-status="failed"]');
+    if (!button || !failedCards.length) return;
+
+    failedPostsHidden = !failedPostsHidden;
+    failedCards.forEach(function(card) {
+        card.style.display = failedPostsHidden ? 'none' : '';
+    });
+
+    button.innerHTML = failedPostsHidden
+        ? '<i class="bi bi-eye me-1"></i> Show Failed (' + failedCards.length + ')'
+        : '<i class="bi bi-eye-slash me-1"></i> Hide Failed (' + failedCards.length + ')';
+}
 
 (function(){
     const form = document.getElementById('facebookStorySettingsForm');

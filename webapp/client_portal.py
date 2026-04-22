@@ -2051,6 +2051,95 @@ def _normalize_scheduled_datetime(raw_value):
     return parsed.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _format_facebook_proof_timestamp(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    try:
+        cleaned = raw.replace("Z", "+00:00")
+        if re.search(r"[+-]\d{4}$", cleaned):
+            cleaned = f"{cleaned[:-5]}{cleaned[-5:-2]}:{cleaned[-2:]}"
+        parsed = datetime.fromisoformat(cleaned)
+        return parsed.strftime("%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return raw.replace("T", " ")[:19]
+
+
+def _load_facebook_published_post_proof(db, brand, brand_id, posts, limit=12):
+    page_id = str((brand or {}).get("facebook_page_id") or "").strip()
+    candidates = [post for post in posts or [] if str(post.get("fb_post_id") or "").strip()]
+    if not page_id or not candidates:
+        return []
+
+    try:
+        from webapp.api_bridge import _get_meta_token, _get_page_access_token
+        import requests as req_lib
+
+        connections = db.get_brand_connections(brand_id)
+        meta_conn = connections.get("meta")
+        if not meta_conn or meta_conn.get("status") != "connected":
+            return []
+        user_token = _get_meta_token(db, brand_id, meta_conn)
+        if not user_token:
+            return []
+        page_token = _get_page_access_token(page_id, user_token)
+        if not page_token:
+            return []
+
+        proofs = []
+        for post in candidates[: max(limit * 2, limit)]:
+            fb_post_id = str(post.get("fb_post_id") or "").strip()
+            if not fb_post_id:
+                continue
+
+            try:
+                resp = req_lib.get(
+                    f"https://graph.facebook.com/v21.0/{fb_post_id}",
+                    params={
+                        "access_token": page_token,
+                        "fields": "id,permalink_url,created_time,message",
+                    },
+                    timeout=15,
+                )
+            except Exception:
+                continue
+
+            if resp.status_code != 200:
+                continue
+            payload = resp.json() or {}
+            if payload.get("error"):
+                continue
+
+            permalink_url = str(payload.get("permalink_url") or "").strip()
+            if not permalink_url:
+                continue
+
+            published_at = _format_facebook_proof_timestamp(payload.get("created_time") or post.get("published_at") or post.get("scheduled_at"))
+            post["proof_url"] = permalink_url
+            post["published_at"] = published_at or post.get("published_at") or ""
+            if post.get("status") != "published":
+                db.update_scheduled_post_status(post["id"], "published", fb_post_id=fb_post_id)
+                post["status"] = "published"
+
+            proofs.append(
+                {
+                    "id": post.get("id"),
+                    "post_type_label": post.get("post_type_label") or _facebook_post_type_label(post.get("post_type")),
+                    "message": (payload.get("message") or post.get("message") or "")[:280],
+                    "permalink_url": permalink_url,
+                    "published_at": published_at,
+                    "fb_post_id": fb_post_id,
+                    "proof_url": permalink_url,
+                }
+            )
+            if len(proofs) >= limit:
+                break
+        return proofs
+    except Exception:
+        current_app.logger.exception("scheduler published proof lookup failed for brand %s", brand_id)
+        return []
+
+
 def _warm_client_snapshots_async(*, brand_id: int, month: str) -> None:
     """Warm heavy caches in the background after login.
 
@@ -14070,7 +14159,9 @@ def client_post_scheduler():
     for post in posts:
         raw_type = (post.get("post_type") or "").strip()
         post["post_type_label"] = _facebook_post_type_label(raw_type)
+    published_post_proof = _load_facebook_published_post_proof(db, brand, brand_id, posts)
     pending_count = sum(1 for p in posts if p.get("status") in ("pending", "scheduled"))
+    failed_count = sum(1 for p in posts if p.get("status") == "failed")
     has_ai_generation = bool(_get_openai_api_key(brand))
 
     return render_template(
@@ -14088,7 +14179,9 @@ def client_post_scheduler():
         facebook_recurring_characters=_parse_facebook_recurring_characters(brand.get("facebook_recurring_characters")),
         facebook_storytelling_profile=_build_facebook_storytelling_summary(brand),
         posts=posts,
+        published_post_proof=published_post_proof,
         pending_count=pending_count,
+        failed_count=failed_count,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
 

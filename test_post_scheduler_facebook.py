@@ -513,6 +513,59 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertIn(b"Select All", scheduler_response.data)
         self.assertIn(b"Select None", scheduler_response.data)
 
+    def test_failed_posts_can_be_hidden_or_deleted_from_scheduler(self):
+        with self.app.app_context():
+            self.app.db.save_scheduled_post(
+                self.brand_id,
+                "facebook",
+                "This one failed and should be removable.",
+                (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S"),
+                image_url="https://example.com/fail.jpg",
+                post_type="faq",
+            )
+            failed_post = self.app.db.get_scheduled_posts(self.brand_id)[0]
+            self.app.db.update_scheduled_post_status(failed_post["id"], "failed", error_message="Missing or invalid image file")
+
+        response = self.client.get("/client/post-scheduler")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Hide Failed (1)", response.data)
+        self.assertIn(b'toggleFailedPosts()', response.data)
+        self.assertIn(b'data-post-status="failed"', response.data)
+        self.assertIn(b'data-post-id="1"', response.data)
+
+    @patch("webapp.client_portal._load_facebook_published_post_proof")
+    def test_scheduler_renders_published_post_proof_links(self, mock_proof_loader):
+        with self.app.app_context():
+            post_id = self.app.db.save_scheduled_post(
+                self.brand_id,
+                "facebook",
+                "This post has proof.",
+                (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S"),
+                post_type="testimonial",
+            )
+            self.app.db.update_scheduled_post_status(post_id, "scheduled")
+
+        mock_proof_loader.return_value = [
+            {
+                "id": post_id,
+                "post_type_label": "Testimonial Post",
+                "message": "Proof that the post is live on Facebook.",
+                "permalink_url": "https://facebook.com/test/posts/123",
+                "published_at": "2026-04-22 11:30:00",
+                "fb_post_id": "123_456",
+                "proof_url": "https://facebook.com/test/posts/123",
+            }
+        ]
+
+        response = self.client.get("/client/post-scheduler")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Published Post Proof", response.data)
+        self.assertIn(b"View Post", response.data)
+        self.assertIn(b"Proof that the post is live on Facebook.", response.data)
+        self.assertIn(b"https://facebook.com/test/posts/123", response.data)
+
 
 if __name__ == "__main__":
     unittest.main()
