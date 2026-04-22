@@ -6,7 +6,7 @@ pip install -r requirements.txt
 
 echo "=== Installing Playwright browser ==="
 export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$PWD/.playwright-browsers}"
-python -m playwright install chromium
+python -m playwright install --with-deps chromium
 
 echo "=== Building React client app ==="
 cd client-app
