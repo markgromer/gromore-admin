@@ -4001,10 +4001,58 @@ def _serialize_heatmap_scan(scan, include_results=False):
     return payload
 
 
+def _resolve_brand_maps_api_key(db, brand):
+    if not brand:
+        return ""
+    return (
+        brand.get("google_maps_api_key")
+        or os.environ.get("GOOGLE_MAPS_API_KEY")
+        or db.get_setting("google_maps_api_key")
+        or ""
+    ).strip()
+
+
+def _hydrate_heatmap_brand(db, brand):
+    if not brand:
+        return None
+
+    hydrated = dict(brand)
+    hydrated["google_maps_api_key"] = _resolve_brand_maps_api_key(db, hydrated)
+
+    business_lat = float(hydrated.get("business_lat") or 0)
+    business_lng = float(hydrated.get("business_lng") or 0)
+    place_id = (hydrated.get("google_place_id") or "").strip()
+    api_key = hydrated.get("google_maps_api_key", "")
+
+    if (business_lat != 0 or business_lng != 0) or not place_id or not api_key:
+        return hydrated
+
+    try:
+        from webapp.heatmap import verify_place_id
+
+        verified = verify_place_id(api_key, place_id) or {}
+        verified_lat = verified.get("lat")
+        verified_lng = verified.get("lng")
+        if verified_lat is None or verified_lng is None:
+            return hydrated
+
+        verified_lat = float(verified_lat)
+        verified_lng = float(verified_lng)
+        db.update_brand_number_field(hydrated["id"], "business_lat", verified_lat)
+        db.update_brand_number_field(hydrated["id"], "business_lng", verified_lng)
+        hydrated["business_lat"] = verified_lat
+        hydrated["business_lng"] = verified_lng
+    except Exception:
+        pass
+
+    return hydrated
+
+
 def _load_heatmap_state(db, brand_id, scan_limit=20):
     brand = db.get_brand(brand_id)
     if not brand:
         return None, [], None
+    brand = _hydrate_heatmap_brand(db, brand)
 
     scans = db.get_heatmap_scans(brand_id, limit=scan_limit)
     active_scan = _serialize_heatmap_scan(scans[0], include_results=True) if scans else None
@@ -9785,6 +9833,7 @@ def client_heatmap_scan():
     brand = db.get_brand(brand_id)
     if not brand:
         return jsonify(ok=False, error="Brand not found"), 404
+    brand = _hydrate_heatmap_brand(db, brand)
 
     data = request.get_json(silent=True) or {}
     keyword = (data.get("keyword") or "").strip()
@@ -9798,7 +9847,7 @@ def client_heatmap_scan():
     if not keyword:
         return jsonify(ok=False, error="Keyword is required"), 400
 
-    api_key = (brand.get("google_maps_api_key") or "").strip()
+    api_key = _resolve_brand_maps_api_key(db, brand)
     if not api_key:
         return jsonify(ok=False, error="Google Maps API key not configured. Add it in Connections."), 400
 
@@ -9926,8 +9975,9 @@ def client_heatmap_test_api():
     brand = db.get_brand(brand_id)
     if not brand:
         return jsonify(ok=False, error="Brand not found"), 404
+    brand = _hydrate_heatmap_brand(db, brand)
 
-    api_key = (brand.get("google_maps_api_key") or "").strip()
+    api_key = _resolve_brand_maps_api_key(db, brand)
     if not api_key:
         return jsonify(ok=False, error="No API key configured."), 400
 
@@ -9997,6 +10047,7 @@ def client_heatmap_save_location():
     brand = db.get_brand(brand_id)
     if not brand:
         return jsonify(ok=False, error="Brand not found"), 404
+    brand = _hydrate_heatmap_brand(db, brand)
 
     data = request.get_json(silent=True) or {}
     address = (data.get("address") or "").strip()
@@ -10004,7 +10055,7 @@ def client_heatmap_save_location():
     if not address:
         return jsonify(ok=False, error="Address is required"), 400
 
-    api_key = (brand.get("google_maps_api_key") or "").strip()
+    api_key = _resolve_brand_maps_api_key(db, brand)
     if not api_key:
         return jsonify(ok=False, error="Google Maps API key not configured. Add it in Connections."), 400
 

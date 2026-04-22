@@ -96,6 +96,44 @@ class ClientHeatmapTests(unittest.TestCase):
         self.assertEqual(payload["scans"][0]["center_lat"], 33.5001)
         self.assertEqual(payload["active_scan"]["competitor_summary"][0]["name"], "Rival Plumbing")
 
+    def test_heatmap_api_bootstrap_uses_fallback_maps_key(self):
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "google_maps_api_key", "")
+
+        with patch.dict(os.environ, {"GOOGLE_MAPS_API_KEY": "fallback-key"}, clear=False):
+            response = self.client.get("/client/api/heatmap")
+
+        payload = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["brand"]["google_maps_api_key"], "fallback-key")
+
+    @patch("webapp.heatmap.verify_place_id")
+    def test_heatmap_api_bootstrap_hydrates_location_from_place_id(self, mock_verify_place_id):
+        mock_verify_place_id.return_value = {
+            "name": "Heatmap Test Brand",
+            "lat": 32.0869,
+            "lng": -110.8243,
+        }
+
+        with self.app.app_context():
+            self.app.db.update_brand_number_field(self.brand_id, "business_lat", 0)
+            self.app.db.update_brand_number_field(self.brand_id, "business_lng", 0)
+            self.app.db.update_brand_text_field(self.brand_id, "google_place_id", "place-123")
+
+        response = self.client.get("/client/api/heatmap")
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["brand"]["business_lat"], 32.0869)
+        self.assertEqual(payload["brand"]["business_lng"], -110.8243)
+        mock_verify_place_id.assert_called_once_with("maps-key", "place-123")
+
+        with self.app.app_context():
+            refreshed = self.app.db.get_brand(self.brand_id)
+
+        self.assertEqual(float(refreshed["business_lat"]), 32.0869)
+        self.assertEqual(float(refreshed["business_lng"]), -110.8243)
+
     @patch("webapp.heatmap.scan_grid")
     @patch("webapp.heatmap.verify_place_id")
     @patch("webapp.heatmap.calc_search_radius_m")
@@ -155,6 +193,45 @@ class ClientHeatmapTests(unittest.TestCase):
         self.assertEqual(saved_scan["center_lat"], 33.5001)
         self.assertEqual(saved_scan["center_lng"], -112.1999)
         self.assertEqual(saved_scan["keyword"], "plumber")
+
+    @patch("webapp.heatmap.scan_grid")
+    @patch("webapp.heatmap.verify_place_id")
+    @patch("webapp.heatmap.calc_search_radius_m")
+    @patch("webapp.heatmap.generate_grid")
+    @patch("webapp.heatmap.clean_keyword")
+    def test_heatmap_scan_uses_fallback_maps_key(
+        self,
+        mock_clean_keyword,
+        mock_generate_grid,
+        mock_calc_search_radius_m,
+        mock_verify_place_id,
+        mock_scan_grid,
+    ):
+        mock_clean_keyword.return_value = ("plumber", False)
+        mock_generate_grid.return_value = [{"row": 0, "col": 0, "lat": 33.5001, "lng": -112.1999}]
+        mock_calc_search_radius_m.return_value = 5000
+        mock_verify_place_id.return_value = {"name": "Heatmap Test Brand Phoenix"}
+        mock_scan_grid.return_value = ([{"row": 0, "col": 0, "lat": 33.5001, "lng": -112.1999, "rank": 2, "competitors": []}], {})
+
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "google_maps_api_key", "")
+            self.app.db.update_brand_text_field(self.brand_id, "google_place_id", "place-123")
+
+        with patch.dict(os.environ, {"GOOGLE_MAPS_API_KEY": "fallback-key"}, clear=False):
+            response = self.client.post(
+                "/client/heatmap/scan",
+                json={
+                    "keyword": "plumber",
+                    "radius_miles": 3,
+                    "grid_size": 5,
+                    "center_lat": 33.5001,
+                    "center_lng": -112.1999,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        mock_verify_place_id.assert_called_once_with("fallback-key", "place-123")
+        self.assertEqual(mock_scan_grid.call_args.args[0], "fallback-key")
 
     def test_heatmap_scan_rejects_invalid_custom_center(self):
         response = self.client.post(
