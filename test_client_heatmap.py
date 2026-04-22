@@ -315,6 +315,13 @@ class ClientHeatmapTests(unittest.TestCase):
 
         self.assertEqual(rank, 1)
 
+    def test_match_business_accepts_franchise_market_suffix_alias(self):
+        places = [{"id": "", "displayName": {"text": "DoodyCalls of Wake County"}}]
+
+        rank = _match_business(places, "DoodyCalls of Raleigh")
+
+        self.assertEqual(rank, 1)
+
     def test_extract_place_id_from_maps_href_reads_bang_19_token(self):
         href = "https://www.google.com/maps/place/Test/@33.4,-112.0,17z/data=!4m6!3m5!1s0x872b123456789abc:0xdef!8m2!3d33.4!4d-112.0!16s%2Fg%2F11c2abc!19sChIJ123PlaceToken"
 

@@ -446,6 +446,51 @@ def _tokenize(name):
     return set(re.findall(r'[a-z0-9]+', (name or "").lower()))
 
 
+def _name_match_variants(name):
+    """Generate stable name variants for franchise and compact-brand matching."""
+    normalized = " ".join((name or "").strip().lower().split())
+    if not normalized:
+        return set()
+
+    variants = set()
+    raw_variants = {normalized}
+    for separator in (" - ", " | ", " – ", " — ", ":"):
+        if separator in normalized:
+            raw_variants.add(normalized.split(separator, 1)[0].strip())
+    if " of " in normalized:
+        raw_variants.add(normalized.split(" of ", 1)[0].strip())
+
+    for value in raw_variants:
+        cleaned = re.sub(r"[^a-z0-9]+", " ", value).strip()
+        cleaned = re.sub(r"\s{2,}", " ", cleaned)
+        if not cleaned:
+            continue
+        variants.add(cleaned)
+        compact = cleaned.replace(" ", "")
+        if compact:
+            variants.add(compact)
+            if compact.endswith("s") and len(compact) >= 5:
+                variants.add(compact[:-1])
+    return variants
+
+
+def _names_loosely_match(left, right):
+    """Return True when two business names differ only by market suffixes or spacing."""
+    left_variants = _name_match_variants(left)
+    right_variants = _name_match_variants(right)
+    if not left_variants or not right_variants:
+        return False
+    if left_variants & right_variants:
+        return True
+    for left_value in left_variants:
+        for right_value in right_variants:
+            if len(left_value) >= 5 and len(right_value) >= 5 and (
+                left_value in right_value or right_value in left_value
+            ):
+                return True
+    return False
+
+
 def _normalize_place_id(value):
     """Normalize Google Place IDs so resource paths and raw IDs compare cleanly."""
     normalized = (value or "").strip()
@@ -468,6 +513,8 @@ def _matches_candidate_name(place_name, candidate_names):
         cleaned_name = " ".join((name or "").strip().split()).lower()
         if not cleaned_name:
             continue
+        if _names_loosely_match(cleaned_name, pname):
+            return True
         if cleaned_name in pname or pname in cleaned_name:
             return True
         ntokens = _tokenize(cleaned_name) - stop_words
@@ -572,6 +619,9 @@ def _match_business(places, business_name, place_id=None, alternate_names=None):
         for candidate in candidate_names:
             bname = candidate["name"]
             btokens_clean = candidate["tokens"]
+
+            if _names_loosely_match(bname, pname):
+                return i
 
             # Substring match (either direction)
             if bname and (bname in pname or pname in bname):
