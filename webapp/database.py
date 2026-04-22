@@ -553,6 +553,9 @@ class WebDB:
                 center_lng REAL NOT NULL,
                 results_json TEXT NOT NULL DEFAULT '[]',
                 avg_rank REAL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'complete',
+                error_message TEXT NOT NULL DEFAULT '',
+                debug_json TEXT NOT NULL DEFAULT '{}',
                 scanned_at TEXT DEFAULT (datetime('now')),
                 FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
             );
@@ -1801,6 +1804,17 @@ class WebDB:
         for col_name, col_def in new_brand_cols:
             if col_name not in brand_columns:
                 self._safe_add_column(conn, "brands", col_name, col_def)
+        conn.commit()
+
+        heatmap_columns = {r[1] for r in conn.execute("PRAGMA table_info(heatmap_scans)").fetchall()}
+        new_heatmap_cols = [
+            ("status", "TEXT NOT NULL DEFAULT 'complete'"),
+            ("error_message", "TEXT NOT NULL DEFAULT ''"),
+            ("debug_json", "TEXT NOT NULL DEFAULT '{}'"),
+        ]
+        for col_name, col_def in new_heatmap_cols:
+            if col_name not in heatmap_columns:
+                self._safe_add_column(conn, "heatmap_scans", col_name, col_def)
         conn.commit()
 
         # ── agent_findings migrations ──
@@ -4304,18 +4318,45 @@ class WebDB:
     # ── Heatmap Scans ──
 
     def save_heatmap_scan(self, brand_id, keyword, grid_size, radius_miles,
-                          center_lat, center_lng, results_json, avg_rank):
+                          center_lat, center_lng, results_json, avg_rank,
+                          status="complete", error_message="", debug_json="{}"):
         conn = self._conn()
         cursor = conn.execute(
             """INSERT INTO heatmap_scans
-               (brand_id, keyword, grid_size, radius_miles, center_lat, center_lng, results_json, avg_rank)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (brand_id, keyword, grid_size, radius_miles, center_lat, center_lng, results_json, avg_rank),
+               (brand_id, keyword, grid_size, radius_miles, center_lat, center_lng, results_json, avg_rank, status, error_message, debug_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (brand_id, keyword, grid_size, radius_miles, center_lat, center_lng, results_json, avg_rank, status, error_message, debug_json),
         )
         conn.commit()
         scan_id = cursor.lastrowid
         conn.close()
         return scan_id
+
+    def update_heatmap_scan(self, scan_id, brand_id, *, results_json=None, avg_rank=None,
+                            status=None, error_message=None, debug_json=None):
+        fields = []
+        values = []
+        updates = {
+            "results_json": results_json,
+            "avg_rank": avg_rank,
+            "status": status,
+            "error_message": error_message,
+            "debug_json": debug_json,
+        }
+        for field_name, value in updates.items():
+            if value is not None:
+                fields.append(f"{field_name} = ?")
+                values.append(value)
+        if not fields:
+            return
+
+        conn = self._conn()
+        conn.execute(
+            f"UPDATE heatmap_scans SET {', '.join(fields)} WHERE id = ? AND brand_id = ?",
+            (*values, scan_id, brand_id),
+        )
+        conn.commit()
+        conn.close()
 
     def get_heatmap_scans(self, brand_id, limit=20):
         conn = self._conn()

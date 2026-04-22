@@ -25,6 +25,12 @@ const MILES_TO_METERS = 1609.34
 
 let googleMapsPromise
 
+function sleep(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
 function loadGoogleMapsApi(apiKey) {
   if (!apiKey) {
     return Promise.reject(new Error('Google Maps API key is missing.'))
@@ -187,6 +193,32 @@ export default function Heatmap() {
   const browserLookupEstimate = gridPointCount
   const centerCellIndex = center ? closestCellIndex(results, center.lat, center.lng) : -1
   const selectedCell = selectedCellIndex >= 0 ? results[selectedCellIndex] : null
+
+  const applyLoadedScan = (scan) => {
+    setActiveScanId(scan.id)
+    setKeyword(scan.keyword || '')
+    setRadiusMiles(scan.radius_miles || 5)
+    setGridSize(scan.grid_size || 5)
+    setCenter({ lat: scan.center_lat, lng: scan.center_lng })
+    setResults(scan.results || [])
+    setCompetitorSummary(scan.competitor_summary || [])
+    setAvgRank(scan.avg_rank || 0)
+    setSelectedCellIndex(-1)
+    setDebugInfo(scan.debug || null)
+    setScanDirty(false)
+  }
+
+  const waitForScanCompletion = async (scanId) => {
+    for (let attempt = 0; attempt < 90; attempt += 1) {
+      const data = await api.get(`/heatmap/scan/${scanId}`)
+      if (!data.ok) throw new Error(data.error || 'Failed to load scan.')
+      const scan = data.scan
+      if (scan.status === 'complete') return scan
+      if (scan.status === 'failed') throw new Error(scan.error_message || 'Heatmap scan failed.')
+      await sleep(2000)
+    }
+    throw new Error('Heatmap scan is still running. Refresh in a moment.')
+  }
 
   const hydrateState = (payload) => {
     const nextBrand = payload.brand
@@ -496,7 +528,27 @@ export default function Heatmap() {
         avg_rank: data.avg_rank,
         center_lat: data.center_lat,
         center_lng: data.center_lng,
+        status: data.status || 'complete',
         scanned_at: 'Just now',
+      }
+
+      setHistory((prev) => [newHistoryItem, ...prev.filter(scan => scan.id !== data.scan_id)])
+      setActiveScanId(data.scan_id)
+
+      if (data.pending) {
+        const completedScan = await waitForScanCompletion(data.scan_id)
+        applyLoadedScan(completedScan)
+        setHistory((prev) => prev.map((scan) => (
+          scan.id === completedScan.id
+            ? {
+                ...scan,
+                avg_rank: completedScan.avg_rank,
+                status: completedScan.status || 'complete',
+                scanned_at: completedScan.scanned_at || scan.scanned_at,
+              }
+            : scan
+        )))
+        return
       }
 
       setResults(data.results || [])
@@ -504,10 +556,8 @@ export default function Heatmap() {
       setAvgRank(data.avg_rank || 0)
       setSelectedCellIndex(-1)
       setDebugInfo(data.debug || null)
-      setActiveScanId(data.scan_id)
       setScanDirty(false)
       setCenter({ lat: data.center_lat, lng: data.center_lng })
-      setHistory((prev) => [newHistoryItem, ...prev.filter(scan => scan.id !== data.scan_id)])
     } catch (error) {
       setPageError(error.message || 'Heatmap scan failed.')
     } finally {
@@ -520,18 +570,8 @@ export default function Heatmap() {
       setPageError('')
       const data = await api.get(`/heatmap/scan/${scanId}`)
       if (!data.ok) throw new Error(data.error || 'Failed to load scan.')
-      const scan = data.scan
-      setActiveScanId(scan.id)
-      setKeyword(scan.keyword || '')
-      setRadiusMiles(scan.radius_miles || 5)
-      setGridSize(scan.grid_size || 5)
-      setCenter({ lat: scan.center_lat, lng: scan.center_lng })
-      setResults(scan.results || [])
-      setCompetitorSummary(scan.competitor_summary || [])
-      setAvgRank(scan.avg_rank || 0)
-      setSelectedCellIndex(-1)
-      setDebugInfo(null)
-      setScanDirty(false)
+      const scan = data.scan.status === 'pending' ? await waitForScanCompletion(scanId) : data.scan
+      applyLoadedScan(scan)
     } catch (error) {
       setPageError(error.message || 'Failed to load scan.')
     }

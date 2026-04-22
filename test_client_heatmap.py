@@ -194,6 +194,53 @@ class ClientHeatmapTests(unittest.TestCase):
         self.assertEqual(saved_scan["center_lng"], -112.1999)
         self.assertEqual(saved_scan["keyword"], "plumber")
 
+    @patch("webapp.client_portal._start_heatmap_scan_job")
+    @patch("webapp.heatmap.verify_place_id")
+    @patch("webapp.heatmap.calc_search_radius_m")
+    @patch("webapp.heatmap.generate_grid")
+    @patch("webapp.heatmap.clean_keyword")
+    def test_heatmap_scan_returns_pending_for_large_grid(
+        self,
+        mock_clean_keyword,
+        mock_generate_grid,
+        mock_calc_search_radius_m,
+        mock_verify_place_id,
+        mock_start_heatmap_scan_job,
+    ):
+        mock_clean_keyword.return_value = ("pet waste removal", False)
+        mock_generate_grid.return_value = [
+            {"row": index // 7, "col": index % 7, "lat": 33.5 + index * 0.0001, "lng": -112.1 - index * 0.0001}
+            for index in range(49)
+        ]
+        mock_calc_search_radius_m.return_value = 5000
+        mock_verify_place_id.return_value = {"name": "Heatmap Test Brand Phoenix"}
+
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "google_place_id", "place-123")
+
+        response = self.client.post(
+            "/client/heatmap/scan",
+            json={
+                "keyword": "pet waste removal",
+                "radius_miles": 10,
+                "grid_size": 7,
+                "center_lat": 33.5001,
+                "center_lng": -112.1999,
+            },
+        )
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["pending"])
+        self.assertEqual(payload["status"], "pending")
+        mock_start_heatmap_scan_job.assert_called_once()
+
+        with self.app.app_context():
+            saved_scan = self.app.db.get_heatmap_scan(payload["scan_id"])
+
+        self.assertEqual(saved_scan["status"], "pending")
+
     @patch("webapp.heatmap.scan_grid")
     @patch("webapp.heatmap.verify_place_id")
     @patch("webapp.heatmap.calc_search_radius_m")

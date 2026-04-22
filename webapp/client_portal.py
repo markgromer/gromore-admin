@@ -49,6 +49,8 @@ client_public_bp = Blueprint(
 
 log = logging.getLogger(__name__)
 
+_HEATMAP_ASYNC_POINT_THRESHOLD = 25
+
 _SITE_BUILDER_MAX_CONTENT_BYTES = 1024 * 1024
 _SITE_BUILDER_MAX_EDITOR_JSON_BYTES = 2 * 1024 * 1024
 _SITE_BUILDER_MAX_PAGE_CSS_BYTES = 256 * 1024
@@ -3992,6 +3994,12 @@ def _serialize_heatmap_scan(scan, include_results=False):
     if not scan:
         return None
     payload = dict(scan)
+    payload["status"] = payload.get("status") or "complete"
+    payload["error_message"] = payload.get("error_message") or ""
+    try:
+        payload["debug"] = json.loads(payload.get("debug_json") or "{}")
+    except Exception:
+        payload["debug"] = {}
     if include_results:
         try:
             payload["results"] = json.loads(payload.get("results_json") or "[]")
@@ -3999,6 +4007,102 @@ def _serialize_heatmap_scan(scan, include_results=False):
             payload["results"] = []
         payload["competitor_summary"] = summarize_competitor_landscape(payload["results"])
     return payload
+
+
+def _finalize_heatmap_scan(*, keyword, api_key, business_name, grid_points, place_id,
+                           search_radius, alternate_names, brand_query, place_verification,
+                           business_lat, business_lng, keyword_warning, keyword_was_cleaned):
+    from webapp.heatmap import scan_grid, summarize_competitor_landscape
+
+    try:
+        results, debug_info = scan_grid(
+            api_key,
+            keyword,
+            business_name,
+            grid_points,
+            place_id=place_id,
+            search_radius_m=search_radius,
+            alternate_names=alternate_names,
+            brand_query=brand_query,
+        )
+    except Exception as exc:
+        raise RuntimeError(f"Scan failed: {exc}") from exc
+
+    if debug_info and place_verification:
+        debug_info["place_id_verification"] = place_verification
+        pv_lat = place_verification.get("lat")
+        pv_lng = place_verification.get("lng")
+        if pv_lat is not None and pv_lng is not None:
+            import math as _math
+            dlat = abs(pv_lat - business_lat)
+            dlng = abs(pv_lng - business_lng)
+            dist_km = _math.sqrt(dlat**2 + dlng**2) * 111.32
+            place_verification["distance_from_center_km"] = round(dist_km, 1)
+            if dist_km > 50:
+                place_verification["location_warning"] = (
+                    f"Place ID location is {round(dist_km)}km from your stored business location. "
+                    "This may be the wrong listing. Try re-searching your Place ID."
+                )
+
+    if debug_info and keyword_warning:
+        debug_info["keyword_warning"] = keyword_warning
+    if keyword_was_cleaned and debug_info:
+        near_me_note = (
+            'Stripped "near me" from your keyword (the API already receives your '
+            'exact coordinates and search radius, so "near me" is redundant and '
+            'can reduce result count).'
+        )
+        if debug_info.get("keyword_warning"):
+            debug_info["keyword_warning"] += " " + near_me_note
+        else:
+            debug_info["keyword_warning"] = near_me_note
+
+    ranked = [r for r in results if r["rank"] > 0]
+    avg_rank = round(sum(r["rank"] for r in ranked) / len(ranked), 1) if ranked else 0
+    competitor_summary = summarize_competitor_landscape(results)
+
+    return {
+        "keyword": keyword,
+        "results": results,
+        "avg_rank": avg_rank,
+        "found": len(ranked),
+        "total": len(results),
+        "competitor_summary": competitor_summary,
+        "debug": debug_info,
+    }
+
+
+def _run_heatmap_scan_job(app, brand_id, scan_id, scan_kwargs):
+    with app.app_context():
+        db = app.db
+        try:
+            payload = _finalize_heatmap_scan(**scan_kwargs)
+            db.update_heatmap_scan(
+                scan_id,
+                brand_id,
+                results_json=json.dumps(payload["results"]),
+                avg_rank=payload["avg_rank"],
+                status="complete",
+                error_message="",
+                debug_json=json.dumps(payload.get("debug") or {}),
+            )
+        except Exception as exc:
+            db.update_heatmap_scan(
+                scan_id,
+                brand_id,
+                status="failed",
+                error_message=str(exc)[:2000],
+                debug_json=json.dumps({"error": str(exc)}),
+            )
+
+
+def _start_heatmap_scan_job(app, brand_id, scan_id, scan_kwargs):
+    thread = threading.Thread(
+        target=_run_heatmap_scan_job,
+        args=(app, brand_id, scan_id, scan_kwargs),
+        daemon=True,
+    )
+    thread.start()
 
 
 def _resolve_brand_maps_api_key(db, brand):
@@ -9897,33 +10001,6 @@ def client_heatmap_scan():
             keyword_brand_query = True
             break
 
-    try:
-        results, debug_info = scan_grid(api_key, keyword, business_name, grid_points,
-                                        place_id=place_id, search_radius_m=search_radius,
-                                        alternate_names=alternate_names,
-                                        brand_query=keyword_brand_query)
-    except Exception as exc:
-        import traceback
-        traceback.print_exc()
-        return jsonify(ok=False, error=f"Scan failed: {exc}"), 500
-
-    if debug_info and place_verification:
-        debug_info["place_id_verification"] = place_verification
-        # Check if Place ID location matches stored business location
-        pv_lat = place_verification.get("lat")
-        pv_lng = place_verification.get("lng")
-        if pv_lat is not None and pv_lng is not None:
-            import math as _math
-            dlat = abs(pv_lat - business_lat)
-            dlng = abs(pv_lng - business_lng)
-            dist_km = _math.sqrt(dlat**2 + dlng**2) * 111.32
-            place_verification["distance_from_center_km"] = round(dist_km, 1)
-            if dist_km > 50:
-                place_verification["location_warning"] = (
-                    f"Place ID location is {round(dist_km)}km from your stored business location. "
-                    "This may be the wrong listing. Try re-searching your Place ID."
-                )
-
     # Detect if keyword looks like the business name (common user mistake)
     keyword_warning = None
     bn_lower = business_name.lower().strip()
@@ -9934,36 +10011,74 @@ def client_heatmap_scan():
             "Try keywords like \"pooper scooper\", \"dog poop cleanup\", etc. "
             "That shows where you rank vs. competitors when people search for your service."
         )
-    if debug_info and keyword_warning:
-        debug_info["keyword_warning"] = keyword_warning
-    # Warn (but still scan) if we stripped "near me" from the keyword
-    if keyword_was_cleaned and debug_info:
-        near_me_note = (
-            'Stripped "near me" from your keyword (the API already receives your '
-            'exact coordinates and search radius, so "near me" is redundant and '
-            'can reduce result count).'
+    scan_kwargs = {
+        "keyword": keyword,
+        "api_key": api_key,
+        "business_name": business_name,
+        "grid_points": grid_points,
+        "place_id": place_id,
+        "search_radius": search_radius,
+        "alternate_names": alternate_names,
+        "brand_query": keyword_brand_query,
+        "place_verification": place_verification,
+        "business_lat": business_lat,
+        "business_lng": business_lng,
+        "keyword_warning": keyword_warning,
+        "keyword_was_cleaned": keyword_was_cleaned,
+    }
+
+    if len(grid_points) > _HEATMAP_ASYNC_POINT_THRESHOLD:
+        scan_id = db.save_heatmap_scan(
+            brand_id,
+            keyword,
+            grid_size,
+            radius,
+            scan_center_lat,
+            scan_center_lng,
+            "[]",
+            0,
+            status="pending",
+            debug_json=json.dumps({"status": "pending"}),
         )
-        if debug_info.get("keyword_warning"):
-            debug_info["keyword_warning"] += " " + near_me_note
-        else:
-            debug_info["keyword_warning"] = near_me_note
+        _start_heatmap_scan_job(current_app._get_current_object(), brand_id, scan_id, scan_kwargs)
+        return jsonify(
+            ok=True,
+            pending=True,
+            status="pending",
+            scan_id=scan_id,
+            keyword=keyword,
+            center_lat=scan_center_lat,
+            center_lng=scan_center_lng,
+        )
 
-    from webapp.heatmap import summarize_competitor_landscape
+    payload = _finalize_heatmap_scan(**scan_kwargs)
+    scan_id = db.save_heatmap_scan(
+        brand_id,
+        keyword,
+        grid_size,
+        radius,
+        scan_center_lat,
+        scan_center_lng,
+        json.dumps(payload["results"]),
+        payload["avg_rank"],
+        status="complete",
+        debug_json=json.dumps(payload.get("debug") or {}),
+    )
 
-    ranked = [r for r in results if r["rank"] > 0]
-    avg_rank = round(sum(r["rank"] for r in ranked) / len(ranked), 1) if ranked else 0
-    competitor_summary = summarize_competitor_landscape(results)
-
-    import json as _json
-    scan_id = db.save_heatmap_scan(brand_id, keyword, grid_size, radius, scan_center_lat, scan_center_lng,
-                                   _json.dumps(results), avg_rank)
-
-    return jsonify(ok=True, results=results, avg_rank=avg_rank,
-                   found=len(ranked), total=len(results),
-                   competitor_summary=competitor_summary,
-                   scan_id=scan_id,
-                   center_lat=scan_center_lat, center_lng=scan_center_lng,
-                   debug=debug_info)
+    return jsonify(
+        ok=True,
+        pending=False,
+        status="complete",
+        results=payload["results"],
+        avg_rank=payload["avg_rank"],
+        found=payload["found"],
+        total=payload["total"],
+        competitor_summary=payload["competitor_summary"],
+        scan_id=scan_id,
+        center_lat=scan_center_lat,
+        center_lng=scan_center_lng,
+        debug=payload["debug"],
+    )
 
 
 @client_bp.route("/heatmap/test-api", methods=["POST"])
