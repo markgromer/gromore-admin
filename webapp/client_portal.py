@@ -2624,6 +2624,66 @@ _FACEBOOK_POST_LENGTH_OPTIONS = [
     },
 ]
 _FACEBOOK_POST_LENGTH_MAP = {item["key"]: item for item in _FACEBOOK_POST_LENGTH_OPTIONS}
+_FACEBOOK_STORY_PRESET_OPTIONS = [
+    {
+        "key": "operator_journal",
+        "label": "Operator Journal",
+        "description": "Make the page feel like a disciplined owner is documenting how the business gets better over time.",
+        "strategy": "Treat Facebook like an operator journal for a real local service business. Show the route notes, field patterns, operational fixes, customer observations, and small standards that make the business more trustworthy over time. Let people watch the work get sharper and the service get more reliable. Sell indirectly through visible competence, consistency, and familiarity.",
+        "guardrails": "No hustle-guru talk. No fake breakthroughs. No corny inspiration. No corporate filler. Keep the details grounded in real work, real observations, and believable day-to-day business momentum.",
+        "content_personality": "straight_forward",
+        "cta_style": "consultative",
+        "post_length": "medium",
+    },
+    {
+        "key": "local_familiarity",
+        "label": "Local Familiarity",
+        "description": "Build trust by sounding like the business genuinely knows the neighborhoods, customer problems, and patterns in the market.",
+        "strategy": "Use Facebook to make the business feel familiar before a prospect ever calls. Keep returning to the neighborhoods, customer situations, seasonal patterns, and service moments that local people recognize. Make the page feel rooted in the service area so the audience gradually feels like they already know how this company works.",
+        "guardrails": "No fake local references. No generic community pandering. No random sentimental fluff. Keep the local details practical, specific, and tied to actual service situations or customer needs.",
+        "content_personality": "warm_professional",
+        "cta_style": "subtle",
+        "post_length": "medium",
+    },
+    {
+        "key": "dry_character_brand",
+        "label": "Dry Character Brand",
+        "description": "Use recurring characters and dry humor without making the page feel like a forced skit account.",
+        "strategy": "Let the brand feel like a real cast of operators, routines, and recurring personalities that customers can get to know over time. Use dry humor, controlled character moments, and repeatable points of view to make the feed more memorable, but keep the business competent and commercially credible first.",
+        "guardrails": "No cringe jokes. No meme-speak. No slapstick. No chaos for attention. Humor should stay dry, controlled, and in service of trust, competence, and brand distinctiveness.",
+        "content_personality": "playful_funny",
+        "cta_style": "subtle",
+        "post_length": "story_time",
+    },
+]
+_FACEBOOK_STORY_PRESET_MAP = {item["key"]: item for item in _FACEBOOK_STORY_PRESET_OPTIONS}
+_FACEBOOK_STORY_BUILDER_QUESTIONS = [
+    {
+        "key": "business_arc",
+        "label": "What should people feel the business is becoming?",
+        "placeholder": "e.g. more trusted, more dialed-in, more premium, more personal, more established",
+    },
+    {
+        "key": "field_moments",
+        "label": "What real moments should the posts keep coming back to?",
+        "placeholder": "e.g. route notes, common customer problems, before-and-after jobs, daily prep, neighborhood patterns",
+    },
+    {
+        "key": "voice_shape",
+        "label": "How should the voice feel when it is right?",
+        "placeholder": "e.g. calm, dry, premium, no-BS, warm, funny-but-controlled",
+    },
+    {
+        "key": "selling_boundary",
+        "label": "What should the page avoid doing when it sells?",
+        "placeholder": "e.g. no discount desperation, no hard closes, no cheesy urgency, no fake hype",
+    },
+    {
+        "key": "story_assets",
+        "label": "Who or what can become recurring story assets?",
+        "placeholder": "e.g. owner, dispatcher, mascot, route routines, recurring FAQs, seasonal patterns, crew habits",
+    },
+]
 _FACEBOOK_CHARACTER_CADENCE_OPTIONS = [
     {
         "key": "once_per_calendar",
@@ -2755,6 +2815,71 @@ def _normalize_facebook_character_cadence(value, default="every_6_posts"):
     if cleaned in _FACEBOOK_CHARACTER_CADENCE_MAP:
         return cleaned
     return default if default is not None else cleaned
+
+
+def _build_warren_storytelling_profile(brand, responses=None):
+    responses = responses or {}
+    cleaned = {}
+    for question in _FACEBOOK_STORY_BUILDER_QUESTIONS:
+        key = question["key"]
+        cleaned[key] = re.sub(r"\s+", " ", str(responses.get(key) or "").strip())[:400]
+
+    brand_name = (brand.get("display_name") or brand.get("name") or "This business").strip()
+    services = (brand.get("primary_services") or "").strip()
+    area = (brand.get("service_area") or "").strip()
+
+    strategy_parts = [
+        f"Use Facebook as a slow-burn documentary of how {brand_name} operates in the real world, not just a place to push offers.",
+    ]
+    if cleaned["business_arc"]:
+        strategy_parts.append(f"The bigger arc should make people feel the business is becoming {cleaned['business_arc']}.")
+    if cleaned["field_moments"]:
+        strategy_parts.append(f"Keep returning to these real moments and patterns: {cleaned['field_moments']}.")
+    if cleaned["story_assets"]:
+        strategy_parts.append(f"Build recurring story assets around {cleaned['story_assets']} so the page feels familiar over time.")
+    if services:
+        strategy_parts.append(f"Keep the story anchored in real service work like {services}.")
+    if area:
+        strategy_parts.append(f"Make the voice feel rooted in {area} whenever that helps the posts feel more local and believable.")
+    strategy_parts.append("Sell indirectly through familiarity, reliability, and visible proof of competence before asking for the next step.")
+
+    guardrail_parts = [
+        "No fake stories, fake claims, fake milestones, or generic motivational filler.",
+        "Do not sound like a marketing assistant, ad agency, or corporate content machine.",
+    ]
+    if cleaned["voice_shape"]:
+        guardrail_parts.append(f"Protect this voice shape: {cleaned['voice_shape']}. If a draft loses that feel, rewrite it instead of forcing it through.")
+    if cleaned["selling_boundary"]:
+        guardrail_parts.append(f"Selling boundary: {cleaned['selling_boundary']}.")
+    guardrail_parts.append("Use real-world details, real observations, and a believable operator tone instead of polished generic copy.")
+
+    voice_text = " ".join(cleaned.values()).lower()
+    personality = "warm_professional"
+    if re.search(r"\b(no-bs|no bs|plain|direct|blunt|serious|premium)\b", voice_text):
+        personality = "straight_forward"
+    elif re.search(r"\b(dry|funny|humor|humour|witty|playful)\b", voice_text):
+        personality = "playful_funny" if re.search(r"\b(funny|playful|witty)\b", voice_text) else "light_personality"
+
+    cta_style = "consultative"
+    selling_boundary = cleaned.get("selling_boundary", "").lower()
+    if re.search(r"\b(subtle|soft|indirect|low pressure|observational)\b", selling_boundary):
+        cta_style = "subtle"
+    elif re.search(r"\b(direct|clear ask|book now|call now|ask directly)\b", selling_boundary):
+        cta_style = "direct"
+
+    post_length = "medium"
+    if re.search(r"\b(story|documentary|journal|deeper|narrative|long)\b", voice_text):
+        post_length = "story_time"
+    elif re.search(r"\b(short|quick|tight|punchy)\b", voice_text):
+        post_length = "short"
+
+    return {
+        "strategy": " ".join(strategy_parts)[:2000],
+        "guardrails": " ".join(guardrail_parts)[:2000],
+        "content_personality": personality,
+        "cta_style": cta_style,
+        "post_length": post_length,
+    }
 
 
 def _parse_facebook_recurring_characters(raw_value):
@@ -10416,6 +10541,162 @@ def _delete_wp_page(brand, wp_page_id, force=True):
         return {"ok": False, "error": str(exc)[:200]}
 
 
+def _read_wp_media_source(featured_image_url):
+    import mimetypes
+    import requests as req_lib
+
+    source = str(featured_image_url or "").strip()
+    if not source:
+        return {"ok": False, "error": "No featured image source provided."}
+
+    parsed = urlparse(source)
+    path = parsed.path or source
+
+    def _content_type_to_extension(content_type):
+        guessed = mimetypes.guess_extension((content_type or "").split(";", 1)[0].strip().lower())
+        if guessed == ".jpe":
+            return ".jpg"
+        return guessed or ""
+
+    def _safe_local_read(base_dir, relative_path):
+        try:
+            root = Path(base_dir).resolve()
+            candidate = (root / relative_path).resolve()
+            if root != candidate and root not in candidate.parents:
+                return None
+            if not candidate.exists() or not candidate.is_file():
+                return None
+            return candidate
+        except Exception:
+            return None
+
+    local_candidate = None
+    if path.startswith("/client/uploads/"):
+        rel_path = path.split("/client/uploads/", 1)[1].lstrip("/")
+        local_candidate = _safe_local_read(current_app.config.get("UPLOADS_DIR", "data/uploads"), rel_path)
+    elif path.startswith("/static/uploads/"):
+        rel_path = path.split("/static/", 1)[1].lstrip("/")
+        local_candidate = _safe_local_read(current_app.static_folder or "static", rel_path)
+
+    if local_candidate:
+        mime_type = mimetypes.guess_type(str(local_candidate.name))[0] or "application/octet-stream"
+        return {
+            "ok": True,
+            "filename": local_candidate.name,
+            "content_type": mime_type,
+            "bytes": local_candidate.read_bytes(),
+        }
+
+    try:
+        resp = req_lib.get(source, timeout=30)
+    except Exception as exc:
+        return {"ok": False, "error": f"Could not fetch featured image: {str(exc)[:160]}"}
+
+    if resp.status_code != 200:
+        return {"ok": False, "error": f"Could not fetch featured image: HTTP {resp.status_code}."}
+
+    content_type = (resp.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+    if not content_type.startswith("image/"):
+        guessed_type = mimetypes.guess_type(path)[0] or ""
+        if guessed_type.startswith("image/"):
+            content_type = guessed_type
+        else:
+            return {"ok": False, "error": "Featured image URL did not return an image."}
+
+    filename = Path(parsed.path or "featured-image").name or "featured-image"
+    if "." not in filename:
+        filename = f"{filename}{_content_type_to_extension(content_type) or '.jpg'}"
+
+    return {
+        "ok": True,
+        "filename": filename,
+        "content_type": content_type,
+        "bytes": resp.content,
+    }
+
+
+def _upload_wp_media(brand, featured_image_url):
+    import requests as req_lib
+
+    media_source = _read_wp_media_source(featured_image_url)
+    if not media_source.get("ok"):
+        return media_source
+
+    wp_url = (brand.get("wp_site_url") or "").strip().rstrip("/")
+    headers = _wp_auth_headers(brand, "GroMore/1.0 (WordPress Blog Media Upload; +https://gromore.com)")
+    headers.pop("Content-Type", None)
+    headers["Content-Type"] = media_source["content_type"]
+    headers["Content-Disposition"] = f'attachment; filename="{media_source["filename"]}"'
+
+    try:
+        resp = req_lib.post(
+            f"{wp_url}/wp-json/wp/v2/media",
+            headers=headers,
+            data=media_source["bytes"],
+            timeout=60,
+        )
+    except Exception as exc:
+        return {"ok": False, "error": f"Featured image upload failed: {str(exc)[:160]}"}
+
+    if resp.status_code not in (200, 201):
+        return {"ok": False, "error": f"Featured image upload failed: WordPress API error {resp.status_code}: {resp.text[:200]}"}
+
+    payload = resp.json() or {}
+    media_id = payload.get("id")
+    if not media_id:
+        return {"ok": False, "error": "Featured image upload failed: WordPress did not return a media id."}
+
+    return {
+        "ok": True,
+        "wp_media_id": media_id,
+        "wp_media_url": payload.get("source_url", ""),
+    }
+
+
+def _store_blog_featured_image_upload(file_storage):
+    import uuid
+    from werkzeug.utils import secure_filename
+
+    if not file_storage or not getattr(file_storage, "filename", ""):
+        return {"ok": False, "error": "No image file provided."}
+
+    allowed_ext = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+    ext = Path(file_storage.filename).suffix.lower()
+    if ext not in allowed_ext:
+        return {"ok": False, "error": f"Featured image type {ext or 'unknown'} is not allowed."}
+
+    try:
+        file_storage.stream.seek(0, 2)
+        size = file_storage.stream.tell()
+        file_storage.stream.seek(0)
+    except Exception:
+        size = 0
+    if size > 10 * 1024 * 1024:
+        return {"ok": False, "error": "Featured image is too large. Max 10MB."}
+
+    safe_name = secure_filename(f"blog_featured_{uuid.uuid4().hex}{ext}")
+    if not safe_name:
+        return {"ok": False, "error": "Could not create a safe filename for the featured image."}
+
+    uploads_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads"))
+    target_dir = uploads_dir / "blog_featured"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path = target_dir / safe_name
+
+    try:
+        file_storage.save(target_path)
+    except Exception as exc:
+        current_app.logger.exception("blog featured image upload failed")
+        return {"ok": False, "error": f"Featured image upload failed: {str(exc)[:160]}"}
+
+    rel_path = f"blog_featured/{safe_name}".replace("\\", "/")
+    return {
+        "ok": True,
+        "path": rel_path,
+        "url": url_for("client.client_serve_upload", filename=rel_path),
+    }
+
+
 def _publish_to_wp(brand, title, content, excerpt="", slug="",
                     seo_title="", seo_description="", categories="",
                     tags="", featured_image_url="", status="publish"):
@@ -10443,6 +10724,11 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
         "excerpt": excerpt,
         "status": status,
     }
+    if featured_image_url:
+        media_result = _upload_wp_media(brand, featured_image_url)
+        if not media_result.get("ok"):
+            return {"ok": False, "error": media_result.get("error", "Featured image upload failed.")}
+        post_data["featured_media"] = media_result["wp_media_id"]
     if slug:
         post_data["slug"] = slug
     # Yoast SEO fields (if plugin installed)
@@ -10499,6 +10785,7 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
                 "ok": True,
                 "wp_post_id": wp_post.get("id", 0),
                 "wp_post_url": wp_post.get("link", ""),
+                "wp_media_id": post_data.get("featured_media", 0),
             }
         else:
             return {"ok": False, "error": _describe_wp_error(resp.status_code, resp.text)}
@@ -10602,6 +10889,13 @@ def client_blog_save():
     seo_title = request.form.get("seo_title", "").strip()
     seo_description = request.form.get("seo_description", "").strip()
     featured_image_url = request.form.get("featured_image_url", "").strip()
+    featured_image_file = request.files.get("featured_image_file")
+    if featured_image_file and getattr(featured_image_file, "filename", ""):
+        upload_result = _store_blog_featured_image_upload(featured_image_file)
+        if not upload_result.get("ok"):
+            flash(upload_result.get("error", "Featured image upload failed."), "error")
+            return redirect(url_for("client.client_blog_editor", post_id=int(post_id))) if post_id else redirect(url_for("client.client_blog_editor"))
+        featured_image_url = upload_result["url"]
     raw_scheduled_at = request.form.get("scheduled_at", "").strip()
     scheduled_at = _normalize_scheduled_datetime(raw_scheduled_at)
     action = (request.form.get("action", "draft") or "draft").strip().lower()
@@ -14175,6 +14469,8 @@ def client_post_scheduler():
         facebook_personality_options=_FACEBOOK_CONTENT_PERSONALITY_OPTIONS,
         facebook_cta_style_options=_FACEBOOK_CTA_STYLE_OPTIONS,
         facebook_post_length_options=_FACEBOOK_POST_LENGTH_OPTIONS,
+        facebook_story_preset_options=_FACEBOOK_STORY_PRESET_OPTIONS,
+        facebook_story_builder_questions=_FACEBOOK_STORY_BUILDER_QUESTIONS,
         facebook_character_cadence_options=_FACEBOOK_CHARACTER_CADENCE_OPTIONS,
         facebook_recurring_characters=_parse_facebook_recurring_characters(brand.get("facebook_recurring_characters")),
         facebook_storytelling_profile=_build_facebook_storytelling_summary(brand),
@@ -14183,6 +14479,36 @@ def client_post_scheduler():
         pending_count=pending_count,
         failed_count=failed_count,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/post-scheduler/story-builder", methods=["POST"])
+@client_login_required
+def client_post_scheduler_story_builder():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    data = request.get_json(silent=True) or {}
+    answers = {}
+    answer_count = 0
+    for question in _FACEBOOK_STORY_BUILDER_QUESTIONS:
+        key = question["key"]
+        value = re.sub(r"\s+", " ", str(data.get(key) or "").strip())[:400]
+        answers[key] = value
+        if value:
+            answer_count += 1
+
+    if answer_count < 2:
+        return jsonify(ok=False, error="Answer at least two Warren questions so the builder has enough context."), 400
+
+    draft = _build_warren_storytelling_profile(brand, answers)
+    return jsonify(
+        ok=True,
+        draft=draft,
+        message="Warren built a draft strategy and guardrails. Review it and edit anything before saving.",
     )
 
 

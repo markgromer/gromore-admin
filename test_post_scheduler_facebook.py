@@ -512,6 +512,40 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertIn(b"Schedule Selected", scheduler_response.data)
         self.assertIn(b"Select All", scheduler_response.data)
         self.assertIn(b"Select None", scheduler_response.data)
+        self.assertIn(b"Build With Warren", scheduler_response.data)
+        self.assertIn(b"Apply Example", scheduler_response.data)
+        self.assertIn(b"Operator Journal", scheduler_response.data)
+
+    def test_warren_story_builder_returns_profile_draft(self):
+        response = self.client.post(
+            "/client/post-scheduler/story-builder",
+            json={
+                "business_arc": "more trusted and more dialed-in",
+                "field_moments": "route notes, awkward gates, recurring customer questions",
+                "voice_shape": "dry, calm, no-BS",
+                "selling_boundary": "no cheesy urgency or discount desperation",
+                "story_assets": "owner updates and recurring route patterns",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertIn("slow-burn documentary", payload["draft"]["strategy"])
+        self.assertIn("no cheesy urgency or discount desperation", payload["draft"]["guardrails"].lower())
+        self.assertEqual(payload["draft"]["content_personality"], "straight_forward")
+        self.assertEqual(payload["draft"]["cta_style"], "consultative")
+
+    def test_warren_story_builder_requires_enough_answers(self):
+        response = self.client.post(
+            "/client/post-scheduler/story-builder",
+            json={"business_arc": "more trusted"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        payload = response.get_json()
+        self.assertFalse(payload["ok"])
+        self.assertIn("Answer at least two", payload["error"])
 
     def test_failed_posts_can_be_hidden_or_deleted_from_scheduler(self):
         with self.app.app_context():

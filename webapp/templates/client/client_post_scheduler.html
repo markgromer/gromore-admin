@@ -323,6 +323,55 @@
     .story-settings-result {
         min-height: 1.1rem;
     }
+    .story-helper-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: .85rem;
+        margin-bottom: 1rem;
+    }
+    .story-helper-card {
+        background: rgba(255,255,255,.82);
+        border: 1px solid #fed7aa;
+        border-radius: 12px;
+        padding: .9rem 1rem;
+    }
+    .story-helper-card h6 {
+        font-size: .88rem;
+        font-weight: 700;
+        margin-bottom: .25rem;
+        color: var(--text-strong) !important;
+    }
+    .story-helper-card p {
+        margin: 0 0 .65rem;
+        font-size: .82rem;
+        color: var(--text-muted);
+        line-height: 1.45;
+    }
+    .story-builder-panel {
+        display: none;
+        margin-bottom: 1rem;
+        padding: 1rem;
+        border: 1px solid #fdba74;
+        border-radius: 12px;
+        background: rgba(255,255,255,.78);
+    }
+    .story-builder-panel.open {
+        display: block;
+    }
+    .story-builder-question {
+        margin-bottom: .85rem;
+    }
+    .story-builder-question label {
+        display: block;
+        font-size: .84rem;
+        font-weight: 700;
+        color: var(--text-strong);
+        margin-bottom: .3rem;
+    }
+    .story-builder-question textarea {
+        min-height: 74px;
+        resize: vertical;
+    }
     .proof-list {
         display: flex;
         flex-direction: column;
@@ -410,15 +459,57 @@
     <form method="POST" action="{{ url_for('client.client_post_scheduler') }}" id="facebookStorySettingsForm">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="section" value="facebook_storytelling_profile">
+        <div class="story-helper-grid">
+            {% for preset in facebook_story_preset_options %}
+            <div class="story-helper-card">
+                <h6>{{ preset.label }}</h6>
+                <p>{{ preset.description }}</p>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyStoryPreset('{{ preset.key }}')">
+                    <i class="bi bi-magic me-1"></i> Apply Example
+                </button>
+            </div>
+            {% endfor %}
+            <div class="story-helper-card">
+                <h6>Build With Warren</h6>
+                <p>Answer a handful of questions and Warren will draft your strategy, guardrails, and default tone controls. You can still edit everything manually before saving.</p>
+                <button type="button" class="btn btn-outline-primary btn-sm" id="storyBuilderToggleBtn" onclick="toggleStoryBuilder()">
+                    <i class="bi bi-chat-square-text me-1"></i> Open Warren Builder
+                </button>
+            </div>
+        </div>
+        <div class="story-builder-panel" id="storyBuilderPanel">
+            <div class="d-flex flex-wrap justify-content-between gap-2 align-items-start mb-3">
+                <div>
+                    <div class="fw-semibold" style="color:var(--text-strong);">Warren Story Builder</div>
+                    <div class="text-muted" style="font-size:.82rem;">Give Warren enough business context to draft the Facebook storytelling profile for you.</div>
+                </div>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleStoryBuilder(false)">
+                    <i class="bi bi-x-lg me-1"></i> Close
+                </button>
+            </div>
+            {% for question in facebook_story_builder_questions %}
+            <div class="story-builder-question">
+                <label for="storyBuilder_{{ question.key }}">{{ question.label }}</label>
+                <textarea class="form-control" id="storyBuilder_{{ question.key }}" data-story-builder-key="{{ question.key }}" placeholder="{{ question.placeholder }}"></textarea>
+            </div>
+            {% endfor %}
+            <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+                <button type="button" class="btn btn-primary btn-sm" id="buildStoryWithWarrenBtn" onclick="buildStoryWithWarren()">
+                    <i class="bi bi-stars me-1"></i> Build Draft With Warren
+                </button>
+                <span class="text-muted" style="font-size:.82rem;">Warren writes into the editable fields below. Nothing is saved until you click Save Facebook Story Settings.</span>
+            </div>
+            <div class="story-settings-result mt-2" id="storyBuilderResult"></div>
+        </div>
         <div class="row g-3">
             <div class="col-12">
                 <label class="form-label">Facebook Storytelling Strategy</label>
-                <textarea name="facebook_storytelling_strategy" class="form-control" maxlength="2000" rows="3" placeholder="e.g. Show the business growing in public. Let people watch the team improve systems, serve customers, and build trust over time. Sell indirectly through progress, not constant offers.">{{ brand.facebook_storytelling_strategy or '' }}</textarea>
+                <textarea name="facebook_storytelling_strategy" id="facebookStorytellingStrategy" class="form-control" maxlength="2000" rows="3" placeholder="e.g. Show the business growing in public. Let people watch the team improve systems, serve customers, and build trust over time. Sell indirectly through progress, not constant offers.">{{ brand.facebook_storytelling_strategy or '' }}</textarea>
                 <div class="text-muted mt-1" style="font-size:.8rem;">Define the bigger organic arc the Facebook page should tell over time.</div>
             </div>
             <div class="col-md-4">
                 <label class="form-label">Content Personality</label>
-                <select name="facebook_content_personality" class="form-select">
+                <select name="facebook_content_personality" id="facebookContentPersonality" class="form-select">
                     <option value="">Use default brand voice</option>
                     {% for option in facebook_personality_options %}
                     <option value="{{ option.key }}" {% if (brand.facebook_content_personality or '') == option.key %}selected{% endif %}>{{ option.label }}</option>
@@ -428,7 +519,7 @@
             </div>
             <div class="col-md-4">
                 <label class="form-label">Selling Style</label>
-                <select name="facebook_cta_style" class="form-select">
+                <select name="facebook_cta_style" id="facebookCtaStyle" class="form-select">
                     <option value="">Use default CTA style</option>
                     {% for option in facebook_cta_style_options %}
                     <option value="{{ option.key }}" {% if (brand.facebook_cta_style or '') == option.key %}selected{% endif %}>{{ option.label }}</option>
@@ -438,7 +529,7 @@
             </div>
             <div class="col-md-4">
                 <label class="form-label">Post Length</label>
-                <select name="facebook_post_length" class="form-select">
+                <select name="facebook_post_length" id="facebookPostLength" class="form-select">
                     <option value="">Use adaptive default</option>
                     {% for option in facebook_post_length_options %}
                     <option value="{{ option.key }}" {% if (brand.facebook_post_length or '') == option.key %}selected{% endif %}>{{ option.label }}</option>
@@ -448,7 +539,7 @@
             </div>
             <div class="col-12">
                 <label class="form-label">Storytelling Guardrails</label>
-                <textarea name="facebook_storytelling_guardrails" class="form-control" maxlength="2000" rows="3" placeholder="e.g. No corny inspiration. No fake banter. Never make us sound cheap. Keep humor dry and controlled. Don't overuse offers unless we are in a real promo window.">{{ brand.facebook_storytelling_guardrails or '' }}</textarea>
+                <textarea name="facebook_storytelling_guardrails" id="facebookStorytellingGuardrails" class="form-control" maxlength="2000" rows="3" placeholder="e.g. No corny inspiration. No fake banter. Never make us sound cheap. Keep humor dry and controlled. Don't overuse offers unless we are in a real promo window.">{{ brand.facebook_storytelling_guardrails or '' }}</textarea>
                 <div class="text-muted mt-1" style="font-size:.8rem;">Set the lines the AI should not cross for humor, tone, claims, or how aggressively it sells.</div>
             </div>
             <div class="col-12">
@@ -846,11 +937,13 @@ special_offer,"Spring special: book now and ask about this month's inspection of
 <script type="application/json" id="hasDriveData">{{ has_drive|tojson }}</script>
 <script type="application/json" id="facebookCharacterCadenceOptions">{{ facebook_character_cadence_options|tojson }}</script>
 <script type="application/json" id="facebookPostTypesData">{{ facebook_post_types|tojson }}</script>
+<script type="application/json" id="facebookStoryPresetsData">{{ facebook_story_preset_options|tojson }}</script>
 <script>
 var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 var calendarMixes = JSON.parse(document.getElementById('calendarMixesData').textContent || '[]');
 var hasDrive = JSON.parse(document.getElementById('hasDriveData').textContent || 'false');
 var facebookPostTypes = JSON.parse(document.getElementById('facebookPostTypesData').textContent || '[]');
+var facebookStoryPresets = JSON.parse(document.getElementById('facebookStoryPresetsData').textContent || '[]');
 var pendingCsvImageRowIndex = null;
 
 function summarizeResponseError(text, status) {
@@ -1518,6 +1611,79 @@ function deletePost(postId) {
 }
 
 function refreshPosts() { location.reload(); }
+
+function setStoryFieldValues(values) {
+    var strategy = document.getElementById('facebookStorytellingStrategy');
+    var guardrails = document.getElementById('facebookStorytellingGuardrails');
+    var personality = document.getElementById('facebookContentPersonality');
+    var ctaStyle = document.getElementById('facebookCtaStyle');
+    var postLength = document.getElementById('facebookPostLength');
+    if (strategy && typeof values.strategy !== 'undefined') strategy.value = values.strategy || '';
+    if (guardrails && typeof values.guardrails !== 'undefined') guardrails.value = values.guardrails || '';
+    if (personality && typeof values.content_personality !== 'undefined') personality.value = values.content_personality || '';
+    if (ctaStyle && typeof values.cta_style !== 'undefined') ctaStyle.value = values.cta_style || '';
+    if (postLength && typeof values.post_length !== 'undefined') postLength.value = values.post_length || '';
+}
+
+function applyStoryPreset(presetKey) {
+    var preset = facebookStoryPresets.find(function(item) { return item.key === presetKey; });
+    if (!preset) {
+        showResult('storySettingsResult', 'error', 'Could not find that example preset.');
+        return;
+    }
+    setStoryFieldValues(preset);
+    showResult('storySettingsResult', 'success', 'Example applied. Review it and edit anything you want before saving.');
+}
+
+function toggleStoryBuilder(forceOpen) {
+    var panel = document.getElementById('storyBuilderPanel');
+    var button = document.getElementById('storyBuilderToggleBtn');
+    if (!panel || !button) return;
+    var shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !panel.classList.contains('open');
+    panel.classList.toggle('open', shouldOpen);
+    button.innerHTML = shouldOpen
+        ? '<i class="bi bi-chat-square-text me-1"></i> Warren Builder Open'
+        : '<i class="bi bi-chat-square-text me-1"></i> Open Warren Builder';
+}
+
+function buildStoryWithWarren() {
+    var button = document.getElementById('buildStoryWithWarrenBtn');
+    var payload = {};
+    document.querySelectorAll('[data-story-builder-key]').forEach(function(field) {
+        payload[field.getAttribute('data-story-builder-key')] = field.value || '';
+    });
+
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Warren is building...';
+    }
+
+    fetch('/client/post-scheduler/story-builder', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify(payload)
+    })
+    .then(parseJsonResponse)
+    .then(function(data) {
+        if (!data.ok || !data.draft) {
+            showResult('storyBuilderResult', 'error', data.error || 'Warren could not build a draft right now.');
+            return;
+        }
+        setStoryFieldValues(data.draft);
+        showResult('storyBuilderResult', 'success', data.message || 'Warren built a draft.');
+        showResult('storySettingsResult', 'success', 'Warren draft applied to the editable fields below. Save when you are ready.');
+        toggleStoryBuilder(false);
+    })
+    .catch(function(err) {
+        showResult('storyBuilderResult', 'error', (err && err.message) ? err.message : 'Network error while talking to Warren.');
+    })
+    .finally(function() {
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = '<i class="bi bi-stars me-1"></i> Build Draft With Warren';
+        }
+    });
+}
 
 var failedPostsHidden = false;
 

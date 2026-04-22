@@ -75,7 +75,7 @@
     </div>
 </div>
 
-<form id="blogForm" method="POST" action="{{ url_for('client.client_blog_save') }}">
+<form id="blogForm" method="POST" action="{{ url_for('client.client_blog_save') }}" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="post_id" value="{{ post.id if post else '' }}">
     <input type="hidden" name="action" id="blogAction" value="draft">
@@ -192,6 +192,12 @@
             <!-- Featured Image -->
             <div class="editor-card">
                 <h6><i class="bi bi-image me-1"></i> Featured Image</h6>
+                <div class="mb-2">
+                    <label class="form-label" style="font-size:.82rem;">Upload image</label>
+                    <input type="file" class="form-control form-control-sm" name="featured_image_file" accept="image/*">
+                    <small class="text-muted">Upload a file here and GroMore will push it into WordPress Media when the post publishes.</small>
+                </div>
+                <div class="text-center text-muted my-2" style="font-size:.78rem;">or use an existing image URL</div>
                 <input type="url" class="form-control form-control-sm" name="featured_image_url"
                        value="{{ post.featured_image_url if post else '' }}" placeholder="Image URL">
                 {% if post and post.featured_image_url %}
