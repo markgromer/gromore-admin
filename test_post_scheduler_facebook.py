@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
+from urllib.parse import urlparse
 
 _TEST_ROOT = Path(__file__).resolve().parent / ".tmp-test-artifacts"
 _TEST_ROOT.mkdir(exist_ok=True)
@@ -316,6 +317,65 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertEqual(len(posts), 1)
         self.assertEqual(posts[0]["post_type"], "testimonial")
         self.assertEqual(posts[0]["status"], "scheduled")
+
+    @patch("webapp.api_bridge._get_page_access_token", return_value="page-token")
+    @patch("webapp.api_bridge._get_meta_token", return_value="meta-user-token")
+    @patch("requests.post")
+    def test_schedule_post_uses_public_drive_url_for_facebook_photo(self, mock_post, _mock_meta_token, _mock_page_token):
+        mock_post.return_value = Mock(
+            status_code=200,
+            json=lambda: {"id": "fb-photo-123"},
+            text="",
+        )
+
+        response = self.client.post(
+            "/client/post-scheduler/schedule",
+            json={
+                "message": "A photo post with a scheduler upload.",
+                "scheduled_at": (datetime.now(timezone.utc) + timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S"),
+                "image_url": "/client/api/drive/download/drive-file-123",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = mock_post.call_args.kwargs["data"]
+        self.assertEqual(urlparse(payload["url"]).path.split("/")[:4], ["", "public", "drive", "download"])
+        self.assertNotIn("/client/api/drive/download/drive-file-123", payload["url"])
+
+        with self.app.app_context():
+            posts = self.app.db.get_scheduled_posts(self.brand_id)
+
+        self.assertEqual(posts[0]["image_url"], "/client/api/drive/download/drive-file-123")
+
+    @patch("webapp.api_bridge._get_page_access_token", return_value="page-token")
+    @patch("webapp.api_bridge._get_meta_token", return_value="meta-user-token")
+    @patch("requests.post")
+    def test_schedule_bulk_uses_public_drive_url_for_facebook_photos(self, mock_post, _mock_meta_token, _mock_page_token):
+        mock_post.return_value = Mock(
+            status_code=200,
+            json=lambda: {"id": "fb-photo-123"},
+            text="",
+        )
+
+        response = self.client.post(
+            "/client/post-scheduler/schedule-bulk",
+            json={
+                "posts": [
+                    {
+                        "message": "Bulk photo post",
+                        "scheduled_at": (datetime.now(timezone.utc) + timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S"),
+                        "image_url": "/client/api/drive/download/drive-file-123",
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        graph_payload = mock_post.call_args.kwargs["data"]
+        self.assertEqual(urlparse(graph_payload["url"]).path.split("/")[:4], ["", "public", "drive", "download"])
+        self.assertNotIn("/client/api/drive/download/drive-file-123", graph_payload["url"])
 
     @patch("webapp.google_drive.upload_file")
     def test_drive_upload_returns_scheduler_ready_urls(self, mock_upload_file):

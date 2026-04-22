@@ -17,6 +17,7 @@ from functools import wraps
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse, urljoin, quote_plus
+from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 from flask import (
     Blueprint, render_template, request, redirect,
@@ -1995,6 +1996,35 @@ def _external_app_url() -> str:
     if not configured or "localhost" in configured:
         return request_base.rstrip("/")
     return configured
+
+
+def _drive_public_download_serializer():
+    return URLSafeTimedSerializer(current_app.secret_key, salt="client-drive-public-download")
+
+
+def _build_public_drive_download_url(brand_id, file_id):
+    token = _drive_public_download_serializer().dumps({
+        "brand_id": int(brand_id),
+        "file_id": str(file_id or "").strip(),
+    })
+    return f"{_external_app_url()}{url_for('client_public.public_drive_download', token=token)}"
+
+
+def _extract_drive_download_file_id(image_url):
+    parsed = urlparse((image_url or "").strip())
+    path = parsed.path or (image_url or "").strip()
+    match = re.match(r"^/client/api/drive/download/([A-Za-z0-9_-]+)$", path)
+    return match.group(1) if match else ""
+
+
+def _resolve_scheduler_image_url(image_url, brand_id):
+    cleaned = (image_url or "").strip()
+    if not cleaned:
+        return ""
+    file_id = _extract_drive_download_file_id(cleaned)
+    if file_id:
+        return _build_public_drive_download_url(brand_id, file_id)
+    return cleaned
 
 
 def _normalize_scheduled_datetime(raw_value):
@@ -9618,6 +9648,31 @@ def client_drive_download(file_id):
     return resp
 
 
+@client_public_bp.route("/public/drive/download/<token>")
+def public_drive_download(token):
+    try:
+        payload = _drive_public_download_serializer().loads(token, max_age=7 * 24 * 60 * 60)
+    except BadSignature:
+        abort(404)
+
+    brand_id = int(payload.get("brand_id") or 0)
+    file_id = str(payload.get("file_id") or "").strip()
+    if brand_id <= 0 or not file_id or not all(char.isalnum() or char in "-_" for char in file_id):
+        abort(404)
+
+    db = _get_db()
+    from webapp.google_drive import download_file
+
+    data, mime = download_file(db, brand_id, file_id)
+    if data is None:
+        abort(404)
+
+    resp = make_response(data)
+    resp.headers["Content-Type"] = mime
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
+
+
 @client_bp.route("/api/drive/thumbnail/<file_id>")
 @client_login_required
 def client_drive_thumbnail(file_id):
@@ -14253,17 +14308,14 @@ def client_schedule_post():
     # Build the Graph API request
     import requests as req_lib
     unix_ts = int(sched_dt.timestamp())
+    graph_image_url = _resolve_scheduler_image_url(image_url, brand_id)
 
     if image_url:
         # Photo post with scheduled time
-        # If it's a local Drive proxy URL, convert to full URL
-        if image_url.startswith("/client/api/drive/download/"):
-            image_url = request.host_url.rstrip("/") + image_url
-
         fb_url = f"https://graph.facebook.com/v21.0/{page_id}/photos"
         payload = {
             "access_token": page_token,
-            "url": image_url,
+            "url": graph_image_url,
             "message": message,
             "scheduled_publish_time": unix_ts,
             "published": "false",
@@ -14369,14 +14421,13 @@ def client_schedule_posts_bulk():
             continue
 
         unix_ts = int(sched_dt.timestamp())
+        graph_image_url = _resolve_scheduler_image_url(image_url, brand_id)
 
         if image_url:
-            if image_url.startswith("/client/api/drive/download/"):
-                image_url = request.host_url.rstrip("/") + image_url
             fb_url = f"https://graph.facebook.com/v21.0/{page_id}/photos"
             payload = {
                 "access_token": page_token,
-                "url": image_url,
+                "url": graph_image_url,
                 "message": message,
                 "scheduled_publish_time": unix_ts,
                 "published": "false",
