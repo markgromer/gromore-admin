@@ -11,8 +11,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m playwright install chromium
 
 COPY . .
 

@@ -9,6 +9,8 @@ services:
         generateValue: true
       - key: RENDER
         value: "1"
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: /opt/render/project/src/.playwright-browsers
       - key: NODE_VERSION
         value: "22.16.0"
       - key: DATABASE_PATH
