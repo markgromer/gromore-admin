@@ -78,13 +78,6 @@
         line-height: 1.6;
         max-width: 64ch;
     }
-    .warren-console-shell {
-        margin-top: 1rem;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(220px, 270px);
-        gap: .9rem;
-        align-items: stretch;
-    }
     .warren-voice-card {
         display: grid;
         grid-template-columns: 48px minmax(0, 1fr);
@@ -156,8 +149,7 @@
         border: 1px solid rgba(125, 211, 252, .16);
         box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
     }
-    .warren-inline-label,
-    .warren-transcript-label {
+    .warren-inline-label {
         color: rgba(186, 230, 253, .84);
         font-size: .7rem;
         font-weight: 800;
@@ -197,82 +189,10 @@
         font-weight: 800;
         white-space: nowrap;
     }
-    .warren-inline-meta {
-        display: flex;
-        justify-content: space-between;
-        gap: .75rem;
-        align-items: center;
-        color: rgba(226, 232, 240, .58);
-        font-size: .74rem;
-    }
-    .warren-inline-status {
-        display: inline-flex;
-        align-items: center;
-        gap: .35rem;
-        padding: .28rem .55rem;
-        border-radius: 999px;
-        background: rgba(15, 23, 42, .55);
-        border: 1px solid rgba(148, 163, 184, .14);
-        color: rgba(186, 230, 253, .92);
-        font-weight: 700;
-    }
-    .warren-inline-status.offline {
-        color: rgba(253, 230, 138, .92);
-    }
-    .warren-transcript {
-        display: flex;
-        flex-direction: column;
-        gap: .65rem;
-        padding: .95rem 1rem;
-        border-radius: 18px;
-        background: linear-gradient(180deg, rgba(2, 6, 23, .54) 0%, rgba(15, 23, 42, .44) 100%);
-        border: 1px solid rgba(148, 163, 184, .14);
-        min-height: 220px;
-    }
-    .warren-transcript-log {
-        display: flex;
-        flex-direction: column;
-        gap: .55rem;
-        max-height: 240px;
-        overflow-y: auto;
-        padding-right: .2rem;
-    }
-    .warren-transcript-entry {
-        border-radius: 14px;
-        padding: .72rem .78rem;
-        background: rgba(15, 23, 42, .46);
-        border: 1px solid rgba(148, 163, 184, .10);
-    }
-    .warren-transcript-entry.user {
-        background: rgba(8, 47, 73, .42);
-        border-color: rgba(103, 232, 249, .16);
-    }
-    .warren-transcript-entry.assistant {
-        background: rgba(15, 23, 42, .62);
-    }
-    .warren-transcript-entry.system {
-        background: rgba(15, 23, 42, .38);
-        border-style: dashed;
-    }
-    .warren-transcript-role {
-        display: block;
-        margin-bottom: .28rem;
-        color: rgba(186, 230, 253, .82);
-        font-size: .62rem;
-        font-weight: 800;
-        letter-spacing: .08em;
-        text-transform: uppercase;
-    }
-    .warren-transcript-text {
-        color: #e2e8f0;
-        font-size: .8rem;
-        line-height: 1.45;
-        white-space: pre-wrap;
-    }
-    .warren-transcript-empty {
+    .warren-inline-note {
         color: rgba(226, 232, 240, .56);
-        font-size: .78rem;
-        line-height: 1.5;
+        font-size: .74rem;
+        line-height: 1.45;
     }
     .warren-brain-stats {
         display: flex;
@@ -1243,7 +1163,6 @@
         .warren-brain-grid {
             display: block;
         }
-        .warren-console-shell,
         .warren-inline-form {
             display: block;
         }
@@ -1395,39 +1314,18 @@
                         <span class="warren-command-hint">Or ask him to trace organic traffic, pressure-test the website, or rank the next move.</span>
                     </div>
                 </div>
-                <div class="warren-console-shell" data-warren-console data-warren-console-enabled="{{ '1' if assistant_enabled else '0' }}">
-                    <div class="warren-inline-console">
-                        <div class="warren-inline-label">Ask Warren directly</div>
-                        <form class="warren-inline-form" data-warren-console-form>
-                            <textarea class="warren-inline-input" data-warren-console-input placeholder="Warren, tell me what changed this month and what I should do next." {% if not assistant_enabled %}disabled{% endif %}></textarea>
-                            <button type="submit" class="btn btn-sm btn-primary warren-inline-send" {% if not assistant_enabled %}disabled{% endif %}>Send to Warren</button>
-                        </form>
-                        <div class="warren-inline-meta">
-                            <span class="warren-inline-status {% if not assistant_enabled %}offline{% endif %}" data-warren-console-status>
-                                <i class="bi {% if assistant_enabled %}bi-broadcast-pin{% else %}bi-plug{% endif %}"></i>
-                                {% if assistant_enabled %}Live Warren link ready{% else %}Assistant chat not enabled{% endif %}
-                            </span>
-                            <span>{% if assistant_enabled %}This console mirrors the live Warren side panel.{% else %}Add your OpenAI key in Settings to enable live replies.{% endif %}</span>
-                        </div>
-                    </div>
-                    <div class="warren-transcript">
-                        <div class="warren-transcript-label">Live Transcript</div>
-                        <div class="warren-transcript-log" data-warren-transcript>
-                            <div class="warren-transcript-empty" data-warren-transcript-empty>Ask Warren a question here and this pane will mirror the live exchange from the main assistant.</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="warren-brain-stats">
-                    <span class="warren-brain-stat"><i class="bi bi-broadcast-pin"></i> Listening across 6 lanes</span>
-                    <span class="warren-brain-stat"><i class="bi bi-activity"></i> Live channel memory</span>
-                    <span class="warren-brain-stat"><i class="bi bi-lightning-charge"></i> Action-linked replies</span>
+                <div class="warren-inline-console" data-warren-console data-warren-console-enabled="{{ '1' if assistant_enabled else '0' }}">
+                    <div class="warren-inline-label">Ask Warren directly</div>
+                    <form class="warren-inline-form" data-warren-console-form>
+                        <textarea class="warren-inline-input" data-warren-console-input placeholder="Warren, tell me what changed this month and what I should do next." {% if not assistant_enabled %}disabled{% endif %}></textarea>
+                        <button type="submit" class="btn btn-sm btn-primary warren-inline-send" {% if not assistant_enabled %}disabled{% endif %}>Send to Warren</button>
+                    </form>
+                    <div class="warren-inline-note">{% if assistant_enabled %}This sends straight into the live Warren side panel.{% else %}Add your OpenAI key in Settings to enable live replies.{% endif %}</div>
                 </div>
                 <div class="warren-brain-actions">
-                    <button type="button" class="btn btn-sm warren-brain-open" data-warren-dashboard-prompt="Walk me through the whole business brain for this month. Show me what is helping, what is slipping, and what I should fix first.">Open Warren Console</button>
                     <button type="button" class="warren-brain-quick" data-warren-dashboard-prompt="Why are leads ahead of plan right now, and which channel is really carrying that lift?"><i class="bi bi-graph-up-arrow"></i><span><strong>Why are leads up?</strong><small>Trace the real source</small></span></button>
                     <button type="button" class="warren-brain-quick" data-warren-dashboard-prompt="Trace organic traffic. Tell me what search and organic social are doing, where traffic is actually coming from, and what to fix next."><i class="bi bi-node-plus"></i><span><strong>Trace organic traffic</strong><small>Search plus Facebook organic</small></span></button>
                     <button type="button" class="warren-brain-quick" data-warren-dashboard-prompt="Show me the biggest blocker in this account right now and explain why it matters before I spend more."><i class="bi bi-exclamation-diamond"></i><span><strong>Show me the blocker</strong><small>Pressure-test before scaling</small></span></button>
-                    <button type="button" class="warren-brain-quick" data-warren-dashboard-prompt="Walk me through the next move I should make and explain why it beats the other options this month."><i class="bi bi-clipboard2-pulse"></i><span><strong>Walk me through next move</strong><small>Rank the best action</small></span></button>
                 </div>
             </div>
             <div class="warren-brain-map">
@@ -2092,7 +1990,6 @@ function fmtInt(v) {
 
         var liveLaneCount = linkedLanes.filter(function(item) { return item.tone && item.tone !== 'neutral'; }).length;
         var specialistText = (ts.total_available || ts.trained) ? (String(ts.trained || 0) + '/' + String(ts.total_available || ts.trained || 0) + ' specialists active') : 'Channel map connected';
-        var findingsText = wb.total_findings ? (String(wb.total_findings) + ' findings linked in') : 'No findings linked yet';
         var summary = buildWarrenFocusSummary(d);
         var voiceLine = summary;
         if (topAction && (topAction.mission_name || topAction.title)) {
@@ -2114,34 +2011,18 @@ function fmtInt(v) {
         html += '<div><div class="warren-voice-label">Warren says</div><div class="warren-voice-text">' + esc(voiceLine) + '</div></div>';
         html += '</div>';
         html += '<div class="warren-command-bar"><i class="bi bi-mic-fill"></i><div>Try: &quot;Warren, why are leads ahead of plan?&quot;<span class="warren-command-hint">Or ask him to trace organic traffic, pressure-test the website, or rank the next move.</span></div></div>';
-        html += '<div class="warren-console-shell" data-warren-console data-warren-console-enabled="' + (assistantReady ? '1' : '0') + '">';
-        html += '<div class="warren-inline-console">';
+        html += '<div class="warren-inline-console" data-warren-console data-warren-console-enabled="' + (assistantReady ? '1' : '0') + '">';
         html += '<div class="warren-inline-label">Ask Warren directly</div>';
         html += '<form class="warren-inline-form" data-warren-console-form>';
         html += '<textarea class="warren-inline-input" data-warren-console-input placeholder="Warren, tell me what changed this month and what I should do next."' + (assistantReady ? '' : ' disabled') + '></textarea>';
         html += '<button type="submit" class="btn btn-sm btn-primary warren-inline-send"' + (assistantReady ? '' : ' disabled') + '>Send to Warren</button>';
         html += '</form>';
-        html += '<div class="warren-inline-meta">';
-        html += '<span class="warren-inline-status' + (assistantReady ? '' : ' offline') + '" data-warren-console-status><i class="bi ' + (assistantReady ? 'bi-broadcast-pin' : 'bi-plug') + '"></i> ' + esc(assistantReady ? 'Live Warren link ready' : 'Assistant chat not enabled') + '</span>';
-        html += '<span>' + esc(assistantReady ? 'This console mirrors the live Warren side panel.' : 'Add your OpenAI key in Settings to enable live replies.') + '</span>';
-        html += '</div>';
-        html += '</div>';
-        html += '<div class="warren-transcript">';
-        html += '<div class="warren-transcript-label">Live Transcript</div>';
-        html += '<div class="warren-transcript-log" data-warren-transcript><div class="warren-transcript-empty" data-warren-transcript-empty>Ask Warren a question here and this pane will mirror the live exchange from the main assistant.</div></div>';
-        html += '</div>';
-        html += '</div>';
-        html += '<div class="warren-brain-stats">';
-        html += '<span class="warren-brain-stat"><i class="bi bi-broadcast-pin"></i> ' + esc('Listening across ' + String(liveLaneCount || linkedLanes.length) + ' lanes') + '</span>';
-        html += '<span class="warren-brain-stat"><i class="bi bi-search"></i> ' + esc(findingsText) + '</span>';
-        html += '<span class="warren-brain-stat"><i class="bi bi-people"></i> ' + esc(specialistText) + '</span>';
+        html += '<div class="warren-inline-note">' + esc(assistantReady ? 'This sends straight into the live Warren side panel.' : 'Add your OpenAI key in Settings to enable live replies.') + '</div>';
         html += '</div>';
         html += '<div class="warren-brain-actions">';
-        html += '<button type="button" class="btn btn-sm warren-brain-open" data-warren-dashboard-prompt="Walk me through the whole business brain for ' + esc(month) + '. Show me what is helping, what is slipping, and what I should fix first.">Open Warren Console</button>';
         html += '<button type="button" class="warren-brain-quick" data-warren-dashboard-prompt="Why are leads ahead of plan right now, and which channel is really carrying that lift?"><i class="bi bi-graph-up-arrow"></i><span><strong>Why are leads up?</strong><small>Trace the real source</small></span></button>';
         html += '<button type="button" class="warren-brain-quick" data-warren-dashboard-prompt="Trace organic traffic. Tell me what search and organic social are doing, where traffic is actually coming from, and what to fix next."><i class="bi bi-node-plus"></i><span><strong>Trace organic traffic</strong><small>Search plus Facebook organic</small></span></button>';
         html += '<button type="button" class="warren-brain-quick" data-warren-dashboard-prompt="Show me the biggest blocker in this account right now and explain why it matters before I spend more."><i class="bi bi-exclamation-diamond"></i><span><strong>Show me the blocker</strong><small>Pressure-test before scaling</small></span></button>';
-        html += '<button type="button" class="warren-brain-quick" data-warren-dashboard-prompt="Walk me through the next move I should make and explain why it beats the other options this month."><i class="bi bi-clipboard2-pulse"></i><span><strong>Walk me through next move</strong><small>Rank the best action</small></span></button>';
         html += '</div>';
         html += '</div>';
         html += '<div class="warren-brain-map">';
@@ -2541,73 +2422,13 @@ function toggleMovesRows(platform, btn) {
 })();
 
 (function() {
-    function escapeTranscriptText(text) {
-        return String(text || '')
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-    }
-
-    function buildTranscriptEntry(role, text) {
-        return '<div class="warren-transcript-entry ' + role + '">' +
-            '<span class="warren-transcript-role">' + (role === 'user' ? 'You' : role === 'assistant' ? 'Warren' : 'System') + '</span>' +
-            '<div class="warren-transcript-text">' + escapeTranscriptText(text) + '</div>' +
-            '</div>';
-    }
-
-    function syncWarrenTranscript(root) {
-        if (!root) return;
-        var transcript = root.querySelector('[data-warren-transcript]');
-        if (!transcript) return;
-        var assistantLog = document.getElementById('assistantLog');
-        if (!assistantLog) return;
-        var entries = [];
-        assistantLog.querySelectorAll('.assistant-bubble').forEach(function(el) {
-            var role = el.classList.contains('user') ? 'user' : 'assistant';
-            var text = (el.textContent || '').trim();
-            if (text) entries.push({ role: role, text: text });
-        });
-        assistantLog.querySelectorAll('.typing-indicator').forEach(function() {
-            entries.push({ role: 'system', text: 'Warren is thinking...' });
-        });
-
-        if (!entries.length) {
-            transcript.innerHTML = '<div class="warren-transcript-empty" data-warren-transcript-empty>Ask Warren a question here and this pane will mirror the live exchange from the main assistant.</div>';
-            return;
-        }
-
-        transcript.innerHTML = entries.slice(-6).map(function(entry) {
-            return buildTranscriptEntry(entry.role, entry.text);
-        }).join('');
-        transcript.scrollTop = transcript.scrollHeight;
-    }
-
-    var warrenTranscriptObserver = null;
-    function ensureWarrenTranscriptObserver(root) {
-        var assistantLog = document.getElementById('assistantLog');
-        if (!assistantLog || !root) return;
-        if (warrenTranscriptObserver) warrenTranscriptObserver.disconnect();
-        warrenTranscriptObserver = new MutationObserver(function() {
-            syncWarrenTranscript(root);
-        });
-        warrenTranscriptObserver.observe(assistantLog, { childList: true, subtree: true, characterData: true });
-        syncWarrenTranscript(root);
-    }
-
     function wireWarrenConsole(root) {
         if (!root) return;
         var form = root.querySelector('[data-warren-console-form]');
         var input = root.querySelector('[data-warren-console-input]');
-        var status = root.querySelector('[data-warren-console-status]');
         var enabled = root.getAttribute('data-warren-console-enabled') === '1';
-        if (!form || !input) {
-            ensureWarrenTranscriptObserver(root);
-            return;
-        }
-        if (form.dataset.warrenConsoleBound === '1') {
-            ensureWarrenTranscriptObserver(root);
-            return;
-        }
+        if (!form || !input) return;
+        if (form.dataset.warrenConsoleBound === '1') return;
         form.dataset.warrenConsoleBound = '1';
 
         form.addEventListener('submit', function(event) {
@@ -2615,25 +2436,12 @@ function toggleMovesRows(platform, btn) {
             var prompt = (input.value || '').trim();
             if (!prompt) return;
             if (!enabled || typeof window.gromorePrimeWarrenPrompt !== 'function') {
-                if (status) {
-                    status.classList.add('offline');
-                    status.innerHTML = '<i class="bi bi-plug"></i> Assistant chat not enabled';
-                }
-                syncWarrenTranscript(root);
                 return;
             }
 
             window.gromorePrimeWarrenPrompt(prompt, { sendNow: true });
             input.value = '';
             input.dispatchEvent(new Event('input', { bubbles: true }));
-            if (status) {
-                status.classList.remove('offline');
-                status.innerHTML = '<i class="bi bi-broadcast-pin"></i> Sending to Warren';
-                window.setTimeout(function() {
-                    status.innerHTML = '<i class="bi bi-broadcast-pin"></i> Live Warren link ready';
-                }, 1200);
-            }
-            syncWarrenTranscript(root);
         });
 
         input.addEventListener('keydown', function(event) {
@@ -2642,8 +2450,6 @@ function toggleMovesRows(platform, btn) {
                 form.requestSubmit();
             }
         });
-
-        ensureWarrenTranscriptObserver(root);
     }
 
     var initialMount = document.getElementById('warrenBrainMount');
@@ -2657,8 +2463,6 @@ function toggleMovesRows(platform, btn) {
         event.preventDefault();
         if (typeof window.gromorePrimeWarrenPrompt === 'function') {
             window.gromorePrimeWarrenPrompt(trigger.getAttribute('data-warren-dashboard-prompt') || '');
-            var mount = document.getElementById('warrenBrainMount');
-            if (mount) syncWarrenTranscript(mount);
         }
     });
 

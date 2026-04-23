@@ -104,7 +104,6 @@ class ClientDashboardMonthFallbackTests(unittest.TestCase):
         self.assertIn("Warren Brain", html)
         self.assertIn("Warren is online. What do you want to know?", html)
         self.assertIn("Ask Warren directly", html)
-        self.assertIn("Live Transcript", html)
         self.assertIn("Try: &quot;Warren, why are leads ahead of plan?&quot;", html)
         self.assertIn("Trace organic traffic", html)
         self.assertIn("Start in the right order", html)
