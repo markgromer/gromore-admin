@@ -905,6 +905,42 @@
     </section>
 </div>
 
+<div class="card mb-4" style="border-radius:12px; border:none; box-shadow:0 1px 3px rgba(0,0,0,.05);">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+            <div>
+                <h5 class="fw-semibold mb-1">Password</h5>
+                <p class="text-muted mb-0" style="font-size:.88rem;">Change the password you use to sign in to the client portal. If you were given a temporary password, replace it here.</p>
+            </div>
+            {% if client_user and client_user.email %}
+            <span class="badge bg-light text-dark border rounded-pill px-3 py-2">{{ client_user.email }}</span>
+            {% endif %}
+        </div>
+
+        <form method="POST" action="{{ url_for('client.client_change_password') }}" class="mt-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row g-3">
+                <div class="col-lg-4">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">Current Password</label>
+                    <input type="password" class="form-control" name="current_password" autocomplete="current-password" required>
+                </div>
+                <div class="col-lg-4">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">New Password</label>
+                    <input type="password" class="form-control" name="new_password" autocomplete="new-password" minlength="8" required>
+                </div>
+                <div class="col-lg-4">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">Confirm New Password</label>
+                    <input type="password" class="form-control" name="confirm_password" autocomplete="new-password" minlength="8" required>
+                </div>
+            </div>
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-3">
+                <small class="text-muted">Minimum 8 characters.</small>
+                <button class="btn btn-primary" type="submit">Update Password</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}

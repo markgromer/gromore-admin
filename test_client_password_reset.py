@@ -64,6 +64,14 @@ class ClientPasswordResetTests(unittest.TestCase):
         if shm_path.exists():
             shm_path.unlink()
 
+    def _login_client(self):
+        with self.client.session_transaction() as session:
+            session["client_user_id"] = self.user_id
+            session["client_brand_id"] = self.brand_id
+            session["client_name"] = "Case Test User"
+            session["client_brand_name"] = "Case Test Brand"
+            session["client_role"] = "owner"
+
     def test_client_login_accepts_case_insensitive_email(self):
         with patch("webapp.client_portal._warm_client_snapshots_async", return_value=None):
             response = self.client.post(
@@ -108,6 +116,46 @@ class ClientPasswordResetTests(unittest.TestCase):
             self.assertEqual(user["password_reset_token"], "")
             authenticated = self.app.db.authenticate_client("mixedcase@example.com", "NewPassword1")
             self.assertIsNotNone(authenticated)
+
+    def test_client_can_change_password_from_settings(self):
+        self._login_client()
+
+        response = self.client.post(
+            "/client/settings/password",
+            data={
+                "current_password": "OldPassword1",
+                "new_password": "ChangedPassword1",
+                "confirm_password": "ChangedPassword1",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/client/settings"))
+
+        with self.app.app_context():
+            self.assertIsNone(self.app.db.authenticate_client("mixedcase@example.com", "OldPassword1"))
+            self.assertIsNotNone(self.app.db.authenticate_client("mixedcase@example.com", "ChangedPassword1"))
+
+    def test_client_change_password_rejects_wrong_current_password(self):
+        self._login_client()
+
+        response = self.client.post(
+            "/client/settings/password",
+            data={
+                "current_password": "WrongPassword1",
+                "new_password": "ChangedPassword1",
+                "confirm_password": "ChangedPassword1",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/client/settings"))
+
+        with self.app.app_context():
+            self.assertIsNotNone(self.app.db.authenticate_client("mixedcase@example.com", "OldPassword1"))
+            self.assertIsNone(self.app.db.authenticate_client("mixedcase@example.com", "ChangedPassword1"))
 
 
 if __name__ == "__main__":

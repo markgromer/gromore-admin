@@ -4143,17 +4143,23 @@ def client_reset_password(token):
     if request.method == "POST":
         password = request.form.get("password", "")
         confirm = request.form.get("confirm_password", "")
-        if len(password) < 8:
-            flash("Password must be at least 8 characters.", "error")
-            return render_template("client_reset_password.html", token=token)
-        if password != confirm:
-            flash("Passwords do not match.", "error")
+        password_error = _validate_client_password(password, confirm)
+        if password_error:
+            flash(password_error, "error")
             return render_template("client_reset_password.html", token=token)
         db.update_client_user_password(user["id"], password)
         db.clear_password_reset_token(user["id"])
         flash("Password updated. You can now sign in.", "success")
         return redirect(url_for("client.client_login"))
     return render_template("client_reset_password.html", token=token)
+
+
+def _validate_client_password(password, confirm_password):
+    if len(password or "") < 8:
+        return "Password must be at least 8 characters."
+    if (password or "") != (confirm_password or ""):
+        return "Passwords do not match."
+    return None
 
 
 @client_bp.route("/logout")
@@ -8947,6 +8953,7 @@ def client_settings():
     brand = db.get_brand(brand_id)
     if not brand:
         abort(404)
+    client_user = db.get_client_user(session.get("client_user_id"))
 
     connections = db.get_brand_connections(brand_id)
     google_conn = connections.get("google", {})
@@ -8998,6 +9005,7 @@ def client_settings():
         return render_template(
             "client_connections.html",
             brand=brand,
+            client_user=client_user,
             google_connected=(google_conn.get("status") == "connected"),
             meta_connected=(meta_conn.get("status") == "connected"),
             drive_scoped=drive_scoped,
@@ -9016,6 +9024,38 @@ def client_settings():
         current_app.logger.exception("client_settings render error for brand %s", brand_id)
         flash("Settings page failed to load. The error has been logged.", "error")
         return redirect(url_for("client.client_dashboard"))
+
+
+@client_bp.route("/settings/password", methods=["POST"])
+@client_login_required
+def client_change_password():
+    db = _get_db()
+    client_user_id = session.get("client_user_id")
+    client_user = db.get_client_user(client_user_id)
+    if not client_user or int(client_user.get("brand_id") or 0) != int(session.get("client_brand_id") or 0):
+        session.pop("client_user_id", None)
+        session.pop("client_brand_id", None)
+        session.pop("client_name", None)
+        session.pop("client_brand_name", None)
+        flash("Your session expired. Sign in again to update your password.", "error")
+        return redirect(url_for("client.client_login"))
+
+    current_password = request.form.get("current_password", "")
+    new_password = request.form.get("new_password", "")
+    confirm_password = request.form.get("confirm_password", "")
+
+    if not db.authenticate_client(client_user.get("email") or "", current_password):
+        flash("Current password is incorrect.", "error")
+        return redirect(url_for("client.client_settings"))
+
+    password_error = _validate_client_password(new_password, confirm_password)
+    if password_error:
+        flash(password_error, "error")
+        return redirect(url_for("client.client_settings"))
+
+    db.update_client_user_password(client_user_id, new_password)
+    flash("Password updated.", "success")
+    return redirect(url_for("client.client_settings"))
 
 
 def _load_client_automation_context(db, brand_id):
