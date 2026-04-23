@@ -1,6 +1,6 @@
 {% extends "client/client_base.html" %}
 
-{% block title %}Mission Control{% endblock %}
+{% block title %}Action Plan{% endblock %}
 
 {% block content %}
 <style>
@@ -522,25 +522,25 @@
 <div class="mc-header">
     <div class="d-flex justify-content-between align-items-start mb-2">
         <div>
-            <h3><i class="bi bi-rocket-takeoff-fill"></i> Mission Control</h3>
-            <span class="tagline">Complete missions. Earn XP. Level up your marketing.</span>
+            <h3><i class="bi bi-rocket-takeoff-fill"></i> Action Plan</h3>
+            <span class="tagline">Clear next steps for this month, ranked by impact.</span>
         </div>
         <div class="d-flex align-items-center gap-2">
-            <form method="GET" class="mission-load-form" data-loader-label="fresh missions" data-loader-messages='["Refreshing your mission queue...", "Re-ranking priorities for this month...", "Building a fresh set of missions..."]' style="margin:0;" onsubmit="var b=this.querySelector('button');b.disabled=true;b.innerHTML='<i class=\'bi bi-hourglass-split me-1\'></i> Regenerating...';">
+            <form method="GET" class="mission-load-form" data-loader-label="fresh action plan" data-loader-messages='["Refreshing your action plan...", "Re-ranking priorities for this month...", "Building your next best moves..."]' style="margin:0;" onsubmit="var b=this.querySelector('button');b.disabled=true;b.innerHTML='<i class=\'bi bi-hourglass-split me-1\'></i> Refreshing...';">
                 <input type="hidden" name="month" value="{{ month }}">
                 <input type="hidden" name="ai_model" value="{{ ai_model or '' }}">
                 <input type="hidden" name="skill_level" value="{{ requested_skill_level }}">
                 <input type="hidden" name="refresh" value="1">
                 <button class="btn btn-sm" type="submit"
                         style="background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.25); color:#fff; font-size:.78rem; font-weight:700;">
-                    <i class="bi bi-arrow-clockwise me-1"></i> Regenerate Missions
+                    <i class="bi bi-arrow-clockwise me-1"></i> Refresh Plan
                 </button>
             </form>
             <div class="level-badge">
                 <span class="lvl-num">{{ level_num }}</span>
                 {{ level_name }}
             </div>
-            <form method="GET" class="d-flex mission-load-form" data-loader-label="{{ month }} missions" data-loader-messages='["Loading mission history for {{ month }}...", "Checking completed missions and XP...", "Preparing the selected month..."]' style="margin:0;">
+            <form method="GET" class="d-flex mission-load-form" data-loader-label="{{ month }} action plan" data-loader-messages='["Loading plan history for {{ month }}...", "Checking completed priorities and XP...", "Preparing the selected month..."]' style="margin:0;">
                 <input type="month" name="month" value="{{ month }}" class="form-control form-control-sm"
                        style="width:140px; background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.2); color:#fff; font-size:.78rem;"
                        onchange="this.form.submit()">
@@ -552,7 +552,7 @@
 
     <div class="d-flex align-items-center gap-3 mt-3">
         <div class="stat-pill"><i class="bi bi-lightning-charge-fill" style="color:#fbbf24"></i> {{ total_xp }} XP</div>
-        <div class="stat-pill"><i class="bi bi-check-circle-fill" style="color:#4ade80"></i> {{ completed_count }} / {{ monthly_cap }} missions</div>
+        <div class="stat-pill"><i class="bi bi-check-circle-fill" style="color:#4ade80"></i> {{ completed_count }} / {{ monthly_cap }} priorities cleared</div>
     </div>
     <div class="xp-track">
         {% set xp_pct = ((total_xp / next_level_xp * 100) | round | int) if next_level_xp > 0 else 100 %}
@@ -575,8 +575,8 @@
     <div class="mission-track-switch">
         {% for value, label in [('auto', 'Auto'), ('beginner', 'Starter'), ('intermediate', 'Builder'), ('advanced', 'Operator')] %}
         <a class="track-btn {% if requested_skill_level == value or (value == 'auto' and requested_skill_level not in ['beginner','intermediate','advanced']) %}active{% endif %}"
-           data-loader-label="{{ label }} missions"
-           data-loader-messages='["Loading {{ label|lower }} missions...", "Re-scoring your mission track...", "Preparing the {{ label|lower }} queue..."]'
+              data-loader-label="{{ label }} plan"
+              data-loader-messages='["Loading the {{ label|lower }} plan...", "Re-scoring your priority track...", "Preparing the {{ label|lower }} queue..."]'
            href="{{ url_for('client.client_actions', month=month, ai_model=ai_model or '', skill_level=value) }}">
             {% if value == 'auto' %}<i class="bi bi-magic"></i>{% elif value == 'beginner' %}<i class="bi bi-flag"></i>{% elif value == 'intermediate' %}<i class="bi bi-hammer"></i>{% else %}<i class="bi bi-lightning-charge"></i>{% endif %}
             {{ label }}
@@ -586,8 +586,8 @@
     <div class="mission-loading-note" id="missionLoadingNote">
         <i class="bi bi-arrow-repeat"></i>
         <div>
-            Loading a new mission track...
-            <small>We are rebuilding this queue for the selected difficulty so you know the click registered.</small>
+            Loading a new action plan...
+            <small>We are rebuilding this queue for the selected level so you know the click registered.</small>
         </div>
     </div>
 </div>
@@ -599,7 +599,7 @@
     </summary>
     <div class="settings-bar" style="margin:0; border:none; border-radius:0 0 12px 12px;">
         <div class="d-flex flex-wrap align-items-center gap-2">
-            <form method="GET" class="d-flex align-items-center gap-2 mission-load-form" data-loader-label="updated mission model" data-loader-messages='["Applying your selected AI model...", "Rebuilding mission instructions...", "Refreshing Mission Control..."]'>
+            <form method="GET" class="d-flex align-items-center gap-2 mission-load-form" data-loader-label="updated plan model" data-loader-messages='["Applying your selected AI model...", "Rebuilding action instructions...", "Refreshing the Action Plan..."]'>
                 <input type="hidden" name="month" value="{{ month }}">
                 <input type="hidden" name="skill_level" value="{{ requested_skill_level }}">
                 <label class="form-label mb-0" style="font-size:.8rem; font-weight:600; color:#64748b;">AI Model</label>
@@ -614,7 +614,7 @@
                 </select>
                 <button class="btn btn-outline-secondary btn-sm" type="submit" style="font-size:.78rem;">Apply</button>
             </form>
-            <form method="GET" class="mission-load-form" data-loader-label="deep analysis missions" data-loader-messages='["Running a deeper mission analysis...", "Scanning account signals and patterns...", "Building a more detailed mission queue..."]'>
+            <form method="GET" class="mission-load-form" data-loader-label="deep analysis plan" data-loader-messages='["Running a deeper plan analysis...", "Scanning account signals and patterns...", "Building a more detailed priority queue..."]'>
                 <input type="hidden" name="month" value="{{ month }}">
                 <input type="hidden" name="ai_model" value="{{ ai_model or '' }}">
                 <input type="hidden" name="skill_level" value="{{ requested_skill_level }}">
@@ -647,7 +647,7 @@
 {% if done_actions %}
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header bg-white border-0 pt-3 pb-0">
-        <h5 class="fw-bold mb-0"><i class="bi bi-trophy-fill" style="color:#f59e0b;"></i> Completed Missions</h5>
+        <h5 class="fw-bold mb-0"><i class="bi bi-trophy-fill" style="color:#f59e0b;"></i> Completed This Month</h5>
     </div>
     <div class="card-body">
         <div class="d-flex flex-wrap gap-2">
@@ -673,8 +673,8 @@
 {% if active_actions %}
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header bg-white border-0 pt-3 pb-0">
-        <h5 class="fw-bold mb-0"><i class="bi bi-map-fill" style="color:#6366f1;"></i> Active Missions</h5>
-        <p class="text-muted small mt-1 mb-0">Tap a mission to see the steps. Each one earns XP and makes your marketing stronger.</p>
+        <h5 class="fw-bold mb-0"><i class="bi bi-map-fill" style="color:#6366f1;"></i> Current Priorities</h5>
+        <p class="text-muted small mt-1 mb-0">Open a priority to see the steps, why it matters, and what to do next.</p>
     </div>
     <div class="card-body">
         {% if featured_action %}
@@ -746,7 +746,7 @@
                 {% endif %}
 
                 <button class="mission-header active mt-3" onclick="toggleMission(this)" style="padding:0;">
-                    <span class="mission-sub" style="margin-top:0;"><i class="bi bi-list-check"></i> Open full mission</span>
+                    <span class="mission-sub" style="margin-top:0;"><i class="bi bi-list-check"></i> Open full plan</span>
                     <i class="bi bi-chevron-down mission-chevron"></i>
                 </button>
                 <div class="mission-body" style="padding:.5rem 0 0;">
@@ -775,7 +775,7 @@
 
                     <button class="complete-btn done-btn" type="button"
                             data-action-key="{{ featured_action.key }}" data-month="{{ month }}" data-xp="{{ featured_action.xp }}">
-                        <i class="bi bi-check-circle-fill"></i> Complete Mission &middot; +{{ featured_action.xp }} XP
+                        <i class="bi bi-check-circle-fill"></i> Mark Complete &middot; +{{ featured_action.xp }} XP
                     </button>
                 </div>
             </div>
@@ -884,7 +884,7 @@
                 <!-- Complete Mission button -->
                 <button class="complete-btn done-btn" type="button"
                         data-action-key="{{ action.key }}" data-month="{{ month }}" data-xp="{{ action.xp }}">
-                    <i class="bi bi-check-circle-fill"></i> Complete Mission &middot; +{{ action.xp }} XP
+                    <i class="bi bi-check-circle-fill"></i> Mark Complete &middot; +{{ action.xp }} XP
                 </button>
             </div>
         </div>
@@ -898,11 +898,11 @@
         {% if completed_count >= monthly_cap %}
         <span style="font-size:3rem;">&#127942;</span>
         <h5 class="mt-2 fw-bold" style="color:#6366f1;">Month Complete!</h5>
-        <p class="text-muted mb-0">You knocked out all {{ monthly_cap }} missions for {{ month }}. Legend status.</p>
+        <p class="text-muted mb-0">You cleared all {{ monthly_cap }} priorities for {{ month }}.</p>
         {% else %}
         <span style="font-size:3rem;">&#127881;</span>
         <h5 class="mt-2 fw-bold" style="color:#10b981;">All Caught Up!</h5>
-        <p class="text-muted mb-0">You've completed all available missions for {{ month }}.</p>
+        <p class="text-muted mb-0">You've completed all available priorities for {{ month }}.</p>
         {% endif %}
     </div>
 </div>
@@ -912,8 +912,8 @@
 {% if not error %}
 <div class="text-center py-5">
     <i class="bi bi-rocket-takeoff" style="font-size: 3rem; color: #d1d5db;"></i>
-    <h5 class="mt-3 text-muted">No missions for {{ month }}</h5>
-    <p class="text-muted">Missions appear once your performance data is available.</p>
+    <h5 class="mt-3 text-muted">No action plan for {{ month }}</h5>
+    <p class="text-muted">Recommendations appear once your performance data is available.</p>
 </div>
 {% endif %}
 {% endif %}

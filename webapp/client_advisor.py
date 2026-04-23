@@ -763,6 +763,8 @@ def build_client_dashboard(analysis, suggestions, brand, ai_model=None, include_
         "concerns": analysis.get("concerns", []),
     }
 
+    result["health_cluster"] = _build_health_cluster(result)
+
     if include_deep_analysis:
         result["ai_analysis"] = _generate_ai_analysis_brief(
             analysis,
@@ -2064,6 +2066,254 @@ def _build_health_summary(analysis, actions, overall_grade, overall_score):
         "cpa_on_track": cpa_eval.get("on_track") if cpa_eval else None,
         "roas_on_track": roas_eval.get("on_track") if roas_eval else None,
     }
+
+
+_CLUSTER_STATUS_PCT = {
+    "great": 92,
+    "good": 76,
+    "ok": 56,
+    "warning": 34,
+    "bad": 18,
+}
+
+
+def ensure_dashboard_health_cluster(dashboard):
+    if not isinstance(dashboard, dict):
+        return dashboard
+    if not isinstance(dashboard.get("health_cluster"), dict):
+        dashboard["health_cluster"] = _build_health_cluster(dashboard)
+    return dashboard
+
+
+def _build_health_cluster(dashboard):
+    channels = dashboard.get("channels") if isinstance(dashboard.get("channels"), dict) else {}
+    health_summary = dashboard.get("health_summary") if isinstance(dashboard.get("health_summary"), dict) else {}
+    cards = [
+        _build_channel_cluster_card(
+            channels,
+            key="paid_ads",
+            label="Paid Ads",
+            kicker="Google and Meta",
+            channel_keys=("google_ads", "facebook_ads"),
+            metric_priority=("Cost Per Lead", "Click Rate", "Cost Per Click"),
+            empty_detail="Connect Google Ads or Meta to read paid traffic health here.",
+            positive_detail="Paid traffic is holding up across click quality and lead cost.",
+            caution_detail="Paid traffic is active, but at least one channel is leaking efficiency.",
+            warning_detail="Paid traffic needs attention before you scale budgets.",
+            next_steps={
+                "positive": "Protect the best campaign before increasing spend.",
+                "good": "Keep budgets stable and test one new winner.",
+                "caution": "Refresh one weak ad, offer, or audience this week.",
+                "warning": "Cut waste and fix tracking or CPL before adding spend.",
+                "neutral": "Connect ads data so this gauge can call it clearly.",
+            },
+        ),
+        _build_channel_cluster_card(
+            channels,
+            key="organic",
+            label="Organic",
+            kicker="SEO and content",
+            channel_keys=("seo", "facebook_organic"),
+            metric_priority=("Clicks from Google", "Organic Reach", "Engagement", "Posts This Month"),
+            empty_detail="Search and content signals are too thin to call yet.",
+            positive_detail="Organic visibility is healthy and content is carrying its weight.",
+            caution_detail="Organic visibility is moving, but consistency or ranking strength is slipping.",
+            warning_detail="Organic traffic and content momentum need work.",
+            next_steps={
+                "positive": "Double down on the topics and posts already earning attention.",
+                "good": "Keep publishing and tighten one page that is close to ranking.",
+                "caution": "Ship a few more local posts or refresh one service page this month.",
+                "warning": "Improve publishing consistency and local search coverage first.",
+                "neutral": "Connect Search Console or post more consistently to light this up.",
+            },
+        ),
+        _build_channel_cluster_card(
+            channels,
+            key="website",
+            label="Website",
+            kicker="Conversion health",
+            channel_keys=("website",),
+            metric_priority=("Website Conversions", "Bounce Rate", "Time on Site", "Website Visitors"),
+            empty_detail="The website gauge needs GA4 data before it can judge conversion health.",
+            positive_detail="Visitors are sticking around and the site is helping turn traffic into leads.",
+            caution_detail="The site is usable, but conversion friction is holding it back.",
+            warning_detail="The site is losing too many visitors before they turn into leads.",
+            next_steps={
+                "positive": "Protect the landing page that is converting best and test one new CTA.",
+                "good": "Keep the main CTA visible and tighten one form or offer.",
+                "caution": "Shorten the path to contact and sharpen the main call to action.",
+                "warning": "Fix landing-page friction before buying more traffic.",
+                "neutral": "Connect GA4 so this gauge can read visitor quality and conversions.",
+            },
+        ),
+        _build_kpi_cluster_card(dashboard, health_summary),
+    ]
+    return {
+        "title": "Gauge Cluster",
+        "summary": health_summary.get("summary") or "Your KPI snapshot is ready when enough data is available.",
+        "cards": cards,
+    }
+
+
+def _build_channel_cluster_card(
+    channels,
+    *,
+    key,
+    label,
+    kicker,
+    channel_keys,
+    metric_priority,
+    empty_detail,
+    positive_detail,
+    caution_detail,
+    warning_detail,
+    next_steps,
+):
+    statuses = []
+    for channel_key in channel_keys:
+        channel = channels.get(channel_key) if isinstance(channels.get(channel_key), dict) else {}
+        for card in channel.get("cards") or []:
+            status = (card.get("status") or "").strip()
+            if status and status != "neutral":
+                statuses.append(status)
+
+    score_pct = _average_cluster_score(statuses)
+    tone = _cluster_tone(score_pct)
+    primary_metric = _cluster_primary_metric(channels, channel_keys, metric_priority)
+
+    if score_pct is None:
+        detail = empty_detail
+    elif tone in {"positive", "good"}:
+        detail = positive_detail
+    elif tone == "caution":
+        detail = caution_detail
+    else:
+        detail = warning_detail
+
+    return {
+        "key": key,
+        "label": label,
+        "kicker": kicker,
+        "tone": tone,
+        "score_pct": score_pct or 0,
+        "display_score": str(int(round(score_pct))) if score_pct is not None else "--",
+        "state_label": _cluster_state_label(tone, has_data=score_pct is not None),
+        "primary_metric": primary_metric,
+        "detail": detail,
+        "next_step": next_steps.get(tone) or next_steps.get("neutral") or "Connect more data to unlock this view.",
+    }
+
+
+def _build_kpi_cluster_card(dashboard, health_summary):
+    kpi = dashboard.get("kpi_status") if isinstance(dashboard.get("kpi_status"), dict) else {}
+    evaluation = kpi.get("evaluation") if isinstance(kpi.get("evaluation"), dict) else {}
+    actual = kpi.get("actual") if isinstance(kpi.get("actual"), dict) else {}
+    targets = kpi.get("targets") if isinstance(kpi.get("targets"), dict) else {}
+
+    leads_eval = evaluation.get("leads") if isinstance(evaluation.get("leads"), dict) else None
+    cpa_eval = evaluation.get("cpa") if isinstance(evaluation.get("cpa"), dict) else None
+    roas_eval = evaluation.get("roas") if isinstance(evaluation.get("roas"), dict) else None
+
+    score_parts = []
+    if leads_eval:
+        pace_map = {
+            "ahead": 88,
+            "on_track": 74,
+            "watch": 52,
+            "at_risk": 28,
+        }
+        pace_status = leads_eval.get("pace_status")
+        if pace_status in pace_map:
+            score_parts.append(pace_map[pace_status])
+        elif leads_eval.get("on_track") is not None:
+            score_parts.append(74 if leads_eval.get("on_track") else 28)
+    if cpa_eval and cpa_eval.get("on_track") is not None:
+        score_parts.append(76 if cpa_eval.get("on_track") else 30)
+    if roas_eval and roas_eval.get("on_track") is not None:
+        score_parts.append(78 if roas_eval.get("on_track") else 30)
+
+    score_pct = round(sum(score_parts) / len(score_parts)) if score_parts else None
+    tone = _cluster_tone(score_pct)
+
+    primary_metric = "No KPI target is connected yet"
+    if leads_eval:
+        primary_metric = f"{int(actual.get('paid_leads') or 0)} leads vs {int(targets.get('leads') or 0)} target"
+    elif cpa_eval and cpa_eval.get("actual") is not None and cpa_eval.get("target") is not None:
+        primary_metric = f"${float(cpa_eval.get('actual') or 0):.2f} CPL vs ${float(cpa_eval.get('target') or 0):.2f} target"
+    elif health_summary.get("grade"):
+        primary_metric = f"Overall grade: {health_summary.get('grade')}"
+
+    actions = [item for item in (health_summary.get("actions") or []) if item]
+    if score_pct is None:
+        detail = "The KPI gauge needs lead or cost targets before it can judge the month clearly."
+    else:
+        detail = health_summary.get("summary") or "This bucket rolls up pace, cost, and return against your stated targets."
+
+    return {
+        "key": "kpis",
+        "label": "KPIs",
+        "kicker": "Targets and pacing",
+        "tone": tone,
+        "score_pct": score_pct or 0,
+        "display_score": str(int(round(score_pct))) if score_pct is not None else "--",
+        "state_label": _cluster_state_label(tone, has_data=score_pct is not None),
+        "primary_metric": primary_metric,
+        "detail": detail,
+        "next_step": actions[0] if actions else (
+            "Connect targets so this gauge can tell you what to fix next."
+            if score_pct is None
+            else "Use the Action Plan to work the biggest KPI constraint first."
+        ),
+    }
+
+
+def _average_cluster_score(statuses):
+    values = [_CLUSTER_STATUS_PCT.get(status) for status in statuses if _CLUSTER_STATUS_PCT.get(status) is not None]
+    if not values:
+        return None
+    return round(sum(values) / len(values))
+
+
+def _cluster_tone(score_pct):
+    if score_pct is None:
+        return "neutral"
+    if score_pct >= 82:
+        return "positive"
+    if score_pct >= 68:
+        return "good"
+    if score_pct >= 48:
+        return "caution"
+    return "warning"
+
+
+def _cluster_state_label(tone, *, has_data):
+    if not has_data:
+        return "No data"
+    return {
+        "positive": "Strong",
+        "good": "Healthy",
+        "caution": "Watch",
+        "warning": "Fix",
+        "neutral": "No data",
+    }.get(tone, "Watch")
+
+
+def _cluster_primary_metric(channels, channel_keys, metric_priority):
+    for metric in metric_priority:
+        for channel_key in channel_keys:
+            channel = channels.get(channel_key) if isinstance(channels.get(channel_key), dict) else {}
+            for card in channel.get("cards") or []:
+                if (card.get("metric") or "") == metric:
+                    return f"{metric}: {card.get('value') or 'N/A'}"
+
+    for channel_key in channel_keys:
+        channel = channels.get(channel_key) if isinstance(channels.get(channel_key), dict) else {}
+        for card in channel.get("cards") or []:
+            value = card.get("value") or "N/A"
+            metric = card.get("metric") or "Signal"
+            return f"{metric}: {value}"
+
+    return "No live metric yet"
 
 
 # ── Helpers ──

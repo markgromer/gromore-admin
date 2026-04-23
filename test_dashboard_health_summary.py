@@ -2,7 +2,7 @@ import unittest
 from datetime import date
 
 from src.analytics import _build_lead_pacing
-from webapp.client_advisor import _build_health_summary
+from webapp.client_advisor import _build_health_summary, ensure_dashboard_health_cluster
 
 
 class DashboardHealthSummaryTests(unittest.TestCase):
@@ -58,6 +58,77 @@ class DashboardHealthSummaryTests(unittest.TestCase):
         self.assertIn("4.0 paced target by today", summary["numbers"])
         self.assertIn("ahead of plan", summary["summary"].lower())
         self.assertEqual(summary["actions"], ["Review lead quality", "Keep budget stable"])
+
+    def test_dashboard_health_cluster_groups_signals_into_owner_buckets(self):
+        dashboard = {
+            "channels": {
+                "google_ads": {
+                    "cards": [
+                        {"metric": "Click Rate", "value": "6.4%", "status": "good"},
+                        {"metric": "Cost Per Lead", "value": "$39.00", "status": "great"},
+                    ]
+                },
+                "facebook_ads": {
+                    "cards": [
+                        {"metric": "Click Rate", "value": "1.9%", "status": "good"},
+                    ]
+                },
+                "seo": {
+                    "cards": [
+                        {"metric": "Clicks from Google", "value": "31", "status": "warning"},
+                    ]
+                },
+                "website": {
+                    "cards": [
+                        {"metric": "Website Conversions", "value": "12 (4.8%)", "status": "good"},
+                    ]
+                },
+            },
+            "kpi_status": {
+                "targets": {"leads": 15, "cpa": 50},
+                "actual": {"paid_leads": 12, "blended_cpa": 42.5},
+                "evaluation": {
+                    "leads": {
+                        "target": 15,
+                        "actual": 12,
+                        "expected_to_date": 4.0,
+                        "elapsed_days": 8,
+                        "days_in_month": 30,
+                        "pace_ratio": 3.0,
+                        "pace_status": "ahead",
+                        "is_current_month": True,
+                        "on_track": True,
+                    },
+                    "cpa": {
+                        "target": 50,
+                        "actual": 42.5,
+                        "gap_pct": -15,
+                        "on_track": True,
+                    },
+                },
+            },
+            "health_summary": {
+                "tone": "positive",
+                "label": "Ahead of pace",
+                "summary": "Lead flow is ahead of plan and efficiency is healthy.",
+                "numbers": ["12 leads so far"],
+                "actions": ["Review lead quality", "Keep budget stable"],
+                "meter_pct": 88,
+                "grade": "A",
+                "grade_label": "Excellent - your marketing is performing well across the board",
+                "cpa_on_track": True,
+                "roas_on_track": None,
+            },
+        }
+
+        ensure_dashboard_health_cluster(dashboard)
+        cluster = dashboard["health_cluster"]
+
+        self.assertEqual([card["label"] for card in cluster["cards"]], ["Paid Ads", "Organic", "Website", "KPIs"])
+        self.assertEqual(cluster["cards"][0]["state_label"], "Healthy")
+        self.assertEqual(cluster["cards"][1]["state_label"], "Fix")
+        self.assertIn("12 leads vs 15 target", cluster["cards"][3]["primary_metric"])
+        self.assertEqual(cluster["cards"][3]["next_step"], "Review lead quality")
 
 
 if __name__ == "__main__":

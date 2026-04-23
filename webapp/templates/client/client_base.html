@@ -45,6 +45,8 @@
             <span class="brand-text">{{ client_brand or 'Dashboard' }}</span>
         </div>
         <div class="nav-links">
+            {% set endpoint = request.endpoint|default('') %}
+            {% set pipeline_active = endpoint in ('client.client_crm', 'client.client_lead_assistant', 'client.client_inbox', 'client.client_va_services') or 'client.client_commercial' in endpoint %}
             <div style="padding:0 .35rem .85rem;">
                 <button
                     type="button"
@@ -67,42 +69,47 @@
                 <i class="bi bi-megaphone"></i> <span class="nav-link-label">Campaigns</span>
             </a>
             {% endif %}
-            {% if feature_on('crm') %}
-            <a href="{{ url_for('client.client_crm') }}" class="{% if request.endpoint in ('client.client_crm',) %}active{% endif %}">
-                <i class="bi bi-people"></i> <span class="nav-link-label">CRM</span>
-            </a>
-            <a href="{{ url_for('client.client_lead_assistant') }}" class="{% if request.endpoint in ('client.client_lead_assistant',) %}active{% endif %}">
-                <i class="bi bi-chat-dots"></i> <span class="nav-link-label">Lead Assistant</span>
-            </a>
-            {% endif %}
-            {% if feature_on('commercial') %}
-            <a href="{{ url_for('client.client_commercial_prospecting') }}" class="{% if 'client.client_commercial' in request.endpoint|default('') %}active{% endif %}">
-                <i class="bi bi-buildings"></i> <span class="nav-link-label">Commercial</span>
-            </a>
-            {% endif %}
-            {% if feature_on('va_services') %}
-            <a href="{{ url_for('client.client_va_services') }}" class="{% if request.endpoint in ('client.client_va_services',) %}active{% endif %}">
-                <i class="bi bi-headset"></i> <span class="nav-link-label">VA Desk</span>
-            </a>
-            {% endif %}
-            {% if feature_on('warren_inbox') %}
-            <a href="{{ url_for('client.client_inbox') }}" class="{% if request.endpoint in ('client.client_inbox',) %}active{% endif %}">
-                <i class="bi bi-inbox"></i> <span class="nav-link-label">Inbox</span>
+            {% if feature_on('crm') or feature_on('commercial') or feature_on('va_services') or feature_on('warren_inbox') %}
+            <a href="{% if feature_on('crm') %}{{ url_for('client.client_crm') }}{% elif feature_on('commercial') %}{{ url_for('client.client_commercial_prospecting') }}{% elif feature_on('warren_inbox') %}{{ url_for('client.client_inbox') }}{% else %}{{ url_for('client.client_va_services') }}{% endif %}" class="{% if pipeline_active %}active{% endif %}">
+                <i class="bi bi-diagram-3"></i> <span class="nav-link-label">Pipeline</span>
             </a>
             {% endif %}
             {% if feature_on('missions') %}
             <a href="{{ url_for('client.client_actions') }}" class="{% if request.endpoint == 'client.client_actions' %}active{% endif %}">
-                <i class="bi bi-clipboard2-check"></i> <span class="nav-link-label">Missions</span>
-            </a>
-            {% endif %}
-            {% if feature_on('hiring') %}
-            <a href="{{ url_for('hiring.hiring_dashboard') }}" class="{% if 'hiring' in request.endpoint|default('') %}active{% endif %}">
-                <i class="bi bi-briefcase-fill"></i> <span class="nav-link-label">Hiring Hub</span>
+                <i class="bi bi-clipboard2-check"></i> <span class="nav-link-label">Action Plan</span>
             </a>
             {% endif %}
 
-            {# â”€â”€ Create: collapsed â”€â”€ #}
-            <div class="nav-section-label collapsed" data-section="create">Create</div>
+            {# â”€â”€ Pipeline: collapsed â”€â”€ #}
+            <div class="nav-section-label collapsed" data-section="pipeline">Pipeline Tools</div>
+            <div class="nav-section-group collapsed" data-section="pipeline">
+            {% if feature_on('crm') %}
+            <a href="{{ url_for('client.client_crm') }}" class="{% if endpoint in ('client.client_crm',) %}active{% endif %}">
+                <i class="bi bi-people"></i> <span class="nav-link-label">Leads</span>
+            </a>
+            <a href="{{ url_for('client.client_lead_assistant') }}" class="{% if endpoint in ('client.client_lead_assistant',) %}active{% endif %}">
+                <i class="bi bi-chat-dots"></i> <span class="nav-link-label">Lead Follow-Up</span>
+            </a>
+            {% endif %}
+            {% if feature_on('commercial') %}
+            <a href="{{ url_for('client.client_commercial_prospecting') }}" class="{% if 'client.client_commercial' in endpoint %}active{% endif %}">
+                <i class="bi bi-buildings"></i> <span class="nav-link-label">Commercial Leads</span>
+            </a>
+            {% endif %}
+            {% if feature_on('warren_inbox') %}
+            <a href="{{ url_for('client.client_inbox') }}" class="{% if endpoint in ('client.client_inbox',) %}active{% endif %}">
+                <i class="bi bi-inbox"></i> <span class="nav-link-label">Conversations</span>
+            </a>
+            {% endif %}
+            {% if feature_on('va_services') %}
+            <a href="{{ url_for('client.client_va_services') }}" class="{% if endpoint in ('client.client_va_services',) %}active{% endif %}">
+                <i class="bi bi-headset"></i> <span class="nav-link-label">Execution Desk</span>
+            </a>
+            {% endif %}
+            </div>
+
+            {# â”€â”€ Marketing: collapsed â”€â”€ #}
+            <div class="nav-section-label collapsed" data-section="create">Marketing</div>
             <div class="nav-section-group collapsed" data-section="create">
             {% if feature_on('ad_builder') %}
             <a href="{{ url_for('client.client_ad_builder') }}" class="{% if request.endpoint in ('client.client_ad_builder', 'client.client_ad_builder_generate') %}active{% endif %}">
@@ -141,8 +148,8 @@
             {% endif %}
             </div>
 
-            {# â”€â”€ Business: collapsed â”€â”€ #}
-            <div class="nav-section-label collapsed" data-section="business">Business</div>
+            {# â”€â”€ Operations: collapsed â”€â”€ #}
+            <div class="nav-section-label collapsed" data-section="business">Operations</div>
             <div class="nav-section-group collapsed" data-section="business">
             {% if feature_on('my_business') %}
             <a href="{{ url_for('client.client_my_business') }}" class="{% if request.endpoint == 'client.client_my_business' %}active{% endif %}">
@@ -166,17 +173,22 @@
             {% endif %}
             {% if feature_on('your_team') %}
             <a href="{{ url_for('client.client_team') }}" class="{% if request.endpoint == 'client.client_team' %}active{% endif %}">
-                <i class="bi bi-robot"></i> <span class="nav-link-label">Your Team</span>
+                <i class="bi bi-robot"></i> <span class="nav-link-label">Specialists</span>
             </a>
             {% endif %}
             {% if feature_on('staff') and session.get('client_role', 'owner') in ('owner', 'manager') %}
             <a href="{{ url_for('client.client_staff') }}" class="{% if request.endpoint == 'client.client_staff' %}active{% endif %}">
-                <i class="bi bi-people-fill"></i> <span class="nav-link-label">Staff</span>
+                <i class="bi bi-people-fill"></i> <span class="nav-link-label">People</span>
             </a>
             {% endif %}
             {% if feature_on('tasks') %}
             <a href="{{ url_for('client.client_tasks') }}" class="{% if request.endpoint in ('client.client_tasks',) %}active{% endif %}">
-                <i class="bi bi-list-task"></i> <span class="nav-link-label">Tasks</span>
+                <i class="bi bi-list-task"></i> <span class="nav-link-label">Work Queue</span>
+            </a>
+            {% endif %}
+            {% if feature_on('hiring') %}
+            <a href="{{ url_for('hiring.hiring_dashboard') }}" class="{% if 'hiring' in endpoint %}active{% endif %}">
+                <i class="bi bi-briefcase-fill"></i> <span class="nav-link-label">Hiring Hub</span>
             </a>
             {% endif %}
             </div>
@@ -185,7 +197,7 @@
             <div class="nav-divider"></div>
             {% if feature_on('connections') %}
             <a href="{{ url_for('client.client_settings') }}" class="{% if request.endpoint == 'client.client_settings' %}active{% endif %}">
-                <i class="bi bi-plug"></i> <span class="nav-link-label">Connections</span>
+                <i class="bi bi-plug"></i> <span class="nav-link-label">Settings</span>
             </a>
             <a href="{{ url_for('client.client_automations') }}" class="{% if request.endpoint == 'client.client_automations' %}active{% endif %}">
                 <i class="bi bi-magic"></i> <span class="nav-link-label">Automations</span>
@@ -262,7 +274,7 @@
             </div>
             <div class="text-muted text-center" style="font-size:.68rem; margin-top:4px;">Enter to send, Shift+Enter for new line</div>
             {% if not assistant_enabled %}
-            <small class="text-muted d-block mt-2">Add your OpenAI key in Connections to enable assistant chat.</small>
+            <small class="text-muted d-block mt-2">Add your OpenAI key in Settings to enable assistant chat.</small>
             {% endif %}
         </div>
     </aside>
@@ -271,13 +283,15 @@
         <ul class="bottom-nav-items">
             <li><a href="{{ url_for('client.client_dashboard') }}" class="{% if request.endpoint == 'client.client_dashboard' %}active{% endif %}"><i class="bi bi-speedometer2"></i>Overview</a></li>
             <li><a href="{{ url_for('client.client_campaigns') }}" class="{% if request.endpoint in ('client.client_campaigns', 'client.client_campaign_detail') %}active{% endif %}"><i class="bi bi-megaphone"></i>Campaigns</a></li>
-            <li><a href="{{ url_for('client.client_crm') }}" class="{% if request.endpoint == 'client.client_crm' %}active{% endif %}"><i class="bi bi-people"></i>CRM</a></li>
-            <li><a href="{{ url_for('client.client_lead_assistant') }}" class="{% if request.endpoint == 'client.client_lead_assistant' %}active{% endif %}"><i class="bi bi-chat-dots"></i>Lead AI</a></li>
-            {% if feature_on('warren_inbox') %}
-            <li><a href="{{ url_for('client.client_inbox') }}" class="{% if request.endpoint == 'client.client_inbox' %}active{% endif %}"><i class="bi bi-inbox"></i>Inbox</a></li>
+            {% if feature_on('crm') or feature_on('commercial') or feature_on('va_services') or feature_on('warren_inbox') %}
+            <li><a href="{% if feature_on('crm') %}{{ url_for('client.client_crm') }}{% elif feature_on('commercial') %}{{ url_for('client.client_commercial_prospecting') }}{% elif feature_on('warren_inbox') %}{{ url_for('client.client_inbox') }}{% else %}{{ url_for('client.client_va_services') }}{% endif %}" class="{% if pipeline_active %}active{% endif %}"><i class="bi bi-diagram-3"></i>Pipeline</a></li>
             {% endif %}
-            <li><a href="{{ url_for('client.client_actions') }}" class="{% if request.endpoint == 'client.client_actions' %}active{% endif %}"><i class="bi bi-clipboard2-check"></i>Missions</a></li>
+            <li><a href="{{ url_for('client.client_actions') }}" class="{% if request.endpoint == 'client.client_actions' %}active{% endif %}"><i class="bi bi-clipboard2-check"></i>Plan</a></li>
+            {% if feature_on('help') %}
+            <li><a href="{{ url_for('client.client_help') }}" class="{% if request.endpoint == 'client.client_help' %}active{% endif %}"><i class="bi bi-question-circle"></i>Help</a></li>
+            {% else %}
             <li><a href="{{ url_for('client.client_settings') }}" class="{% if request.endpoint == 'client.client_settings' %}active{% endif %}"><i class="bi bi-gear"></i>Settings</a></li>
+            {% endif %}
         </ul>
     </nav>
 
@@ -1007,9 +1021,9 @@
             var p = normalizeHref(href);
             if (p.indexOf('/actions') !== -1) {
                 return [
-                    'Loading Mission Control...',
-                    'Checking saved missions...',
-                    'Building your action plan...'
+                    'Loading your action plan...',
+                    'Checking saved priorities...',
+                    'Building next steps...'
                 ];
             }
             if (p.indexOf('/campaigns') !== -1) {
@@ -1028,7 +1042,7 @@
             }
             if (p.indexOf('/crm') !== -1) {
                 return [
-                    'Loading CRM dashboard...',
+                    'Loading your pipeline...',
                     'Loading pipeline snapshot...',
                     'Preparing lead metrics...'
                 ];
@@ -1042,16 +1056,16 @@
             }
             if (p.indexOf('/team') !== -1) {
                 return [
-                    'Loading your team...',
+                    'Loading specialist coverage...',
                     'Pulling recent activity...',
-                    'Preparing agent tasks...'
+                    'Preparing support workload...'
                 ];
             }
             if (p.indexOf('/settings') !== -1) {
                 return [
-                    'Loading connections...',
+                    'Loading settings...',
                     'Checking account access...',
-                    'Preparing settings...'
+                    'Preparing integrations...'
                 ];
             }
             return null;

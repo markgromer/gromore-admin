@@ -2335,6 +2335,12 @@ def _assemble_dashboard_payload(db, brand, brand_id, month, analysis, suggestion
     return dashboard_data
 
 
+def _hydrate_cached_dashboard_payload(dashboard_data):
+    from webapp.client_advisor import ensure_dashboard_health_cluster
+
+    return ensure_dashboard_health_cluster(dashboard_data)
+
+
 ALLOWED_AI_MODELS = {
     "",
     "gpt-4o-mini",
@@ -4692,6 +4698,7 @@ def client_dashboard_data():
             snapshot = db.get_dashboard_snapshot(brand_id, month)
             if snapshot:
                 cached_data = json.loads(snapshot["snapshot_json"])
+                cached_data = _hydrate_cached_dashboard_payload(cached_data)
                 cached_data["_cached"] = True
                 cached_data["_cached_at"] = snapshot["created_at"]
                 return jsonify({
@@ -4751,6 +4758,7 @@ def client_dashboard_data():
             stale = db.get_dashboard_snapshot(brand_id, month, max_age_hours=8760)
             if stale:
                 stale_data = json.loads(stale["snapshot_json"])
+                stale_data = _hydrate_cached_dashboard_payload(stale_data)
                 stale_data["_cached"] = True
                 stale_data["_cached_at"] = stale["created_at"]
                 return jsonify({
@@ -4775,6 +4783,7 @@ def client_dashboard_data():
             stale = db.get_dashboard_snapshot(brand_id, month, max_age_hours=8760)
             if stale and force_refresh:
                 stale_data = json.loads(stale["snapshot_json"])
+                stale_data = _hydrate_cached_dashboard_payload(stale_data)
                 # Try to regenerate from the snapshot's stored analysis data
                 analysis_from_snap = stale_data.get("_analysis")
                 if analysis_from_snap and isinstance(analysis_from_snap, dict):
@@ -4820,6 +4829,7 @@ def client_dashboard_data():
                 })
             elif stale:
                 stale_data = json.loads(stale["snapshot_json"])
+                stale_data = _hydrate_cached_dashboard_payload(stale_data)
                 stale_data["_cached"] = True
                 stale_data["_cached_at"] = stale["created_at"]
                 return jsonify({

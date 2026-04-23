@@ -90,7 +90,104 @@
         border-color: rgba(255,255,255,.35);
     }
 
-    /* -- Health Meter -- */
+    /* -- Path Hub -- */
+    .path-hub {
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        border: 1px solid #dbe4f0;
+        border-radius: 18px;
+        padding: 1.35rem;
+        margin-top: 1.35rem;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, .08);
+    }
+    .path-hub-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    .path-hub-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .3rem .6rem;
+        border-radius: 999px;
+        background: #e0f2fe;
+        color: #075985;
+        font-size: .72rem;
+        font-weight: 800;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        margin-bottom: .7rem;
+    }
+    .path-hub-title {
+        font-size: 1.2rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0 0 .35rem;
+    }
+    .path-hub-copy {
+        margin: 0;
+        color: #475569;
+        max-width: 72ch;
+        font-size: .93rem;
+        line-height: 1.55;
+    }
+    .path-hub-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+    }
+    .path-card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 1rem;
+        min-height: 100%;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, .04);
+    }
+    .path-card h5 {
+        display: flex;
+        align-items: center;
+        gap: .55rem;
+        font-size: .96rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0 0 .45rem;
+    }
+    .path-card p {
+        margin: 0 0 .85rem;
+        color: #64748b;
+        font-size: .84rem;
+        line-height: 1.5;
+    }
+    .path-card-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .55rem;
+    }
+    .path-card-link {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .5rem .72rem;
+        border-radius: 999px;
+        border: 1px solid #dbe4f0;
+        background: #f8fafc;
+        color: #334155;
+        text-decoration: none;
+        font-size: .76rem;
+        font-weight: 700;
+        transition: transform .15s ease, border-color .15s ease, background .15s ease;
+    }
+    .path-card-link:hover {
+        transform: translateY(-1px);
+        border-color: #a5b4fc;
+        background: #eef2ff;
+        color: #3730a3;
+    }
+
+    /* -- Health Cluster -- */
     .perf-snapshot {
         background: #fff;
         border: 1px solid #e2e8f0;
@@ -133,6 +230,125 @@
         line-height: 1.5;
         max-width: 64ch;
     }
+    .health-cluster-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+        margin: 1.2rem 0;
+    }
+    .health-cluster-card {
+        --gauge-color: #94a3b8;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 1rem;
+        min-height: 100%;
+    }
+    .health-cluster-card.cluster-positive {
+        --gauge-color: #10b981;
+        border-color: #bbf7d0;
+    }
+    .health-cluster-card.cluster-good {
+        --gauge-color: #3b82f6;
+        border-color: #bfdbfe;
+    }
+    .health-cluster-card.cluster-caution {
+        --gauge-color: #f59e0b;
+        border-color: #fde68a;
+    }
+    .health-cluster-card.cluster-warning {
+        --gauge-color: #ef4444;
+        border-color: #fecaca;
+    }
+    .health-cluster-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: .85rem;
+    }
+    .health-cluster-label {
+        font-size: .94rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0;
+    }
+    .health-cluster-kicker {
+        font-size: .7rem;
+        font-weight: 800;
+        letter-spacing: .05em;
+        text-transform: uppercase;
+        color: #94a3b8;
+        margin-top: .2rem;
+    }
+    .health-cluster-gauge {
+        --gauge-pct: 0%;
+        width: 82px;
+        height: 82px;
+        border-radius: 50%;
+        background: conic-gradient(var(--gauge-color) var(--gauge-pct), #e2e8f0 0);
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    .health-cluster-gauge::before {
+        content: "";
+        position: absolute;
+        inset: 8px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: inset 0 0 0 1px rgba(148, 163, 184, .14);
+    }
+    .health-cluster-gauge-content {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        line-height: 1;
+    }
+    .health-cluster-score {
+        font-size: 1.05rem;
+        font-weight: 800;
+        color: #0f172a;
+    }
+    .health-cluster-state {
+        margin-top: .18rem;
+        font-size: .58rem;
+        font-weight: 800;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        color: #64748b;
+    }
+    .health-cluster-metric {
+        margin-top: .85rem;
+        font-size: .82rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+    .health-cluster-detail {
+        margin: .45rem 0 .75rem;
+        font-size: .81rem;
+        color: #64748b;
+        line-height: 1.45;
+    }
+    .health-cluster-fix {
+        padding-top: .7rem;
+        border-top: 1px dashed #e2e8f0;
+        color: #334155;
+        font-size: .78rem;
+        line-height: 1.45;
+    }
+    .health-cluster-fix span {
+        display: block;
+        margin-bottom: .2rem;
+        font-size: .66rem;
+        font-weight: 800;
+        letter-spacing: .05em;
+        text-transform: uppercase;
+        color: #94a3b8;
+    }
     .health-summary-grade {
         min-width: 92px;
         text-align: right;
@@ -148,22 +364,6 @@
         color: #94a3b8;
         font-size: .74rem;
     }
-    .health-meter-track {
-        height: 14px;
-        border-radius: 999px;
-        background: #e2e8f0;
-        overflow: hidden;
-        margin-bottom: 1rem;
-    }
-    .health-meter-fill {
-        height: 100%;
-        border-radius: 999px;
-    }
-    .health-meter-fill.positive { background: #10b981; }
-    .health-meter-fill.good { background: #3b82f6; }
-    .health-meter-fill.caution { background: #f59e0b; }
-    .health-meter-fill.warning { background: #ef4444; }
-    .health-meter-fill.neutral { background: #94a3b8; }
     .health-number-row {
         display: flex;
         flex-wrap: wrap;
@@ -625,18 +825,22 @@
         margin: 0;
     }
     @media (max-width: 767.98px) {
+        .path-hub-header,
         .onboarding-header,
         .onboarding-restore,
         .onboarding-footer {
             flex-direction: column;
             align-items: stretch;
         }
+        .health-summary-grade {
+            text-align: left;
+        }
     }
 </style>
 <div class="page-head">
     <div>
         <h4 class="mb-1">Welcome back{% if client_name %}, {{ client_name }}{% endif %}</h4>
-        <p class="text-muted mb-0">Here's how your marketing is performing</p>
+        <p class="text-muted mb-0">Your growth snapshot and next steps</p>
     </div>
     <div class="d-flex align-items-center gap-2">
         <span id="syncBadge" style="display:none; font-size:.78rem; color:#94a3b8;"><i class="bi bi-clock-history me-1"></i><span id="syncTime"></span></span>
@@ -666,8 +870,8 @@
         <div class="onboarding-kicker"><i class="bi bi-compass"></i> Getting Started</div>
         <div class="onboarding-header">
             <div>
-                <h3 class="onboarding-title">Learn the app in the right order</h3>
-                <p class="onboarding-copy">Start with setup, then move through the two places that matter most on day one: Quick Launch and Leads. The checklist stays here until you finish it or dismiss it.</p>
+                <h3 class="onboarding-title">Start in the right order</h3>
+                <p class="onboarding-copy">Start with setup, then move through the two places that matter most on day one: Quick Launch and your pipeline. The checklist stays here until you finish it or dismiss it.</p>
             </div>
             <div class="onboarding-progress-pill">
                 <i class="bi bi-check2-square"></i>
@@ -708,7 +912,7 @@
         <div class="onboarding-footer">
             <p class="onboarding-footer-copy mb-0">
                 {% if onboarding['all_done'] %}
-                You have cleared the day-one setup. From here, use the dashboard for results and Missions for next actions.
+                You have cleared the day-one setup. From here, use the dashboard for results and your Action Plan for next steps.
                 {% else %}
                 Dismiss this card if you want a cleaner dashboard. You can restore it later.
                 {% endif %}
@@ -747,6 +951,58 @@
         <button type="button" class="warren-drive-chip" data-warren-dashboard-prompt="Where should I focus first if I want to grow this month?">Where should I focus first?</button>
         <button type="button" class="warren-drive-chip" data-warren-dashboard-prompt="What is blocking scale right now, and what should I fix before spending more?">What is blocking scale?</button>
         <button type="button" class="warren-drive-chip" data-warren-dashboard-prompt="Give me one move that would improve lead quality, not just lead volume.">How do I improve lead quality?</button>
+    </div>
+</section>
+
+<section class="path-hub">
+    <div class="path-hub-header">
+        <div>
+            <div class="path-hub-kicker"><i class="bi bi-signpost-split"></i> Simple Paths</div>
+            <h5 class="path-hub-title">What do you want to do today?</h5>
+            <p class="path-hub-copy">You do not need to learn the whole platform first. Pick the lane that matches the job you are trying to get done, then use the gauge cluster below to see what is healthy, what is slipping, and what to fix next.</p>
+        </div>
+    </div>
+    <div class="path-hub-grid">
+        <article class="path-card">
+            <h5><i class="bi bi-brush"></i> Create</h5>
+            <p>Make ads, organic content, blog posts, and creative assets without hunting through separate tools.</p>
+            <div class="path-card-links">
+                {% if feature_on('campaigns') %}<a class="path-card-link" href="{{ url_for('client.client_campaigns') }}"><i class="bi bi-megaphone"></i> Ads</a>{% endif %}
+                {% if feature_on('post_scheduler') %}<a class="path-card-link" href="{{ url_for('client.client_post_scheduler') }}"><i class="bi bi-calendar2-week"></i> Organic Content</a>{% endif %}
+                {% if feature_on('blog') %}<a class="path-card-link" href="{{ url_for('client.client_blog') }}"><i class="bi bi-journal-richtext"></i> Blog Posts</a>{% endif %}
+                {% if feature_on('creative') %}<a class="path-card-link" href="{{ url_for('client.client_creative') }}"><i class="bi bi-image"></i> Creatives</a>{% endif %}
+            </div>
+        </article>
+        <article class="path-card">
+            <h5><i class="bi bi-building-gear"></i> Manage Your Business</h5>
+            <p>Handle connections, KPIs, Google Profile, and the business settings that keep the rest of the system usable.</p>
+            <div class="path-card-links">
+                {% if feature_on('connections') %}<a class="path-card-link" href="{{ url_for('client.client_settings') }}"><i class="bi bi-plug"></i> Settings</a>{% endif %}
+                {% if feature_on('kpis') %}<a class="path-card-link" href="{{ url_for('client.client_kpis', month=month) }}"><i class="bi bi-bullseye"></i> KPIs</a>{% endif %}
+                {% if feature_on('gbp') %}<a class="path-card-link" href="{{ url_for('client.client_gbp') }}"><i class="bi bi-google"></i> Google Profile</a>{% endif %}
+                {% if feature_on('my_business') %}<a class="path-card-link" href="{{ url_for('client.client_my_business') }}"><i class="bi bi-building"></i> Business Info</a>{% endif %}
+            </div>
+        </article>
+        <article class="path-card">
+            <h5><i class="bi bi-activity"></i> Analyze</h5>
+            <p>Read the gauges, understand what the KPIs mean, and get a clearer picture of what is actually helping or hurting growth.</p>
+            <div class="path-card-links">
+                <a class="path-card-link" href="#health-cluster"><i class="bi bi-speedometer2"></i> Gauge Cluster</a>
+                {% if feature_on('kpis') %}<a class="path-card-link" href="{{ url_for('client.client_kpis', month=month) }}"><i class="bi bi-graph-up"></i> KPI Deep Dive</a>{% endif %}
+                {% if feature_on('missions') %}<a class="path-card-link" href="{{ url_for('client.client_actions', month=month) }}"><i class="bi bi-clipboard2-check"></i> Action Plan</a>{% endif %}
+                {% if feature_on('competitor_intel') %}<a class="path-card-link" href="{{ url_for('client.client_competitors') }}"><i class="bi bi-binoculars"></i> Competitors</a>{% endif %}
+            </div>
+        </article>
+        <article class="path-card">
+            <h5><i class="bi bi-chat-dots"></i> Outreach &amp; Communications</h5>
+            <p>Stay on top of leads, conversations, and follow-up so demand turns into booked jobs instead of missed opportunities.</p>
+            <div class="path-card-links">
+                {% if feature_on('crm') %}<a class="path-card-link" href="{{ url_for('client.client_crm') }}"><i class="bi bi-diagram-3"></i> Pipeline</a>{% endif %}
+                {% if feature_on('warren_inbox') %}<a class="path-card-link" href="{{ url_for('client.client_inbox') }}"><i class="bi bi-inbox"></i> Conversations</a>{% endif %}
+                {% if feature_on('crm') %}<a class="path-card-link" href="{{ url_for('client.client_lead_assistant') }}"><i class="bi bi-chat-square-text"></i> Lead Follow-Up</a>{% endif %}
+                {% if feature_on('commercial') %}<a class="path-card-link" href="{{ url_for('client.client_commercial_prospecting') }}"><i class="bi bi-buildings"></i> Outreach</a>{% endif %}
+            </div>
+        </article>
     </div>
 </section>
 
@@ -1233,12 +1489,14 @@ function fmtInt(v) {
             var hs = d.health_summary;
             if (!hs) return '';
             var tone = hs.tone || 'neutral';
+            var cluster = d.health_cluster || {};
+            var cards = Array.isArray(cluster.cards) ? cluster.cards : [];
             var html = '';
-            html += '<div class="perf-snapshot">';
+            html += '<div class="perf-snapshot" id="health-cluster">';
             html += '<div class="health-summary-header">';
             html += '<div>';
             html += '<div class="health-summary-status ' + esc(tone) + '">' + esc(hs.label || 'Health') + '</div>';
-            html += '<div class="health-summary-title">Health Meter</div>';
+            html += '<div class="health-summary-title">Gauge Cluster</div>';
             html += '<div class="health-summary-text">' + esc(hs.summary || '') + '</div>';
             html += '</div>';
             html += '<div class="health-summary-grade">';
@@ -1246,7 +1504,23 @@ function fmtInt(v) {
             html += '<div class="health-summary-grade-label">' + esc(hs.grade_label || 'Health score') + '</div>';
             html += '</div>';
             html += '</div>';
-            html += '<div class="health-meter-track"><div class="health-meter-fill ' + esc(tone) + '" style="width:' + Math.max(0, Math.min(100, hs.meter_pct || 0)) + '%"></div></div>';
+            if (cards.length) {
+                html += '<div class="health-cluster-grid">';
+                cards.forEach(function(card) {
+                    var pct = Math.max(0, Math.min(100, parseFloat(card.score_pct) || 0));
+                    html += '<article class="health-cluster-card cluster-' + esc(card.tone || 'neutral') + '">';
+                    html += '<div class="health-cluster-top">';
+                    html += '<div><div class="health-cluster-label">' + esc(card.label || '') + '</div><div class="health-cluster-kicker">' + esc(card.kicker || '') + '</div></div>';
+                    html += '<div class="health-cluster-gauge" style="--gauge-pct:' + pct + '%">';
+                    html += '<div class="health-cluster-gauge-content"><div class="health-cluster-score">' + esc(card.display_score || '--') + '</div><div class="health-cluster-state">' + esc(card.state_label || 'No data') + '</div></div>';
+                    html += '</div></div>';
+                    html += '<div class="health-cluster-metric">' + esc(card.primary_metric || 'No live metric yet') + '</div>';
+                    html += '<div class="health-cluster-detail">' + esc(card.detail || '') + '</div>';
+                    html += '<div class="health-cluster-fix"><span>Fix next</span>' + esc(card.next_step || '') + '</div>';
+                    html += '</article>';
+                });
+                html += '</div>';
+            }
             if (hs.numbers && hs.numbers.length) {
                 html += '<div class="health-number-row">';
                 hs.numbers.forEach(function(item) {
@@ -1255,7 +1529,7 @@ function fmtInt(v) {
                 html += '</div>';
             }
             if (hs.actions && hs.actions.length) {
-                html += '<div class="health-actions-label">What to do</div>';
+                html += '<div class="health-actions-label">What the KPIs are saying to fix</div>';
                 html += '<ul class="health-actions-list">';
                 hs.actions.forEach(function(item) {
                     html += '<li>' + esc(item) + '</li>';
@@ -1286,8 +1560,8 @@ function fmtInt(v) {
         var wb = d.warren_briefing;
         if (wb && wb.total_findings > 0) {
             html += '<div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:space-between;">';
-            html += '<span style="font-size:.85rem;color:rgba(255,255,255,.7);"><i class="bi bi-clipboard-data me-1"></i>Your team flagged <strong style="color:#fff;">' + wb.total_findings + ' items</strong> this month</span>';
-            html += '<a href="/client/team" style="color:#a5b4fc;font-size:.82rem;font-weight:600;text-decoration:none;">View details <i class="bi bi-arrow-right"></i></a>';
+            html += '<span style="font-size:.85rem;color:rgba(255,255,255,.7);"><i class="bi bi-clipboard-data me-1"></i>Background review flagged <strong style="color:#fff;">' + wb.total_findings + ' items</strong> this month</span>';
+            html += '<a href="/client/team" style="color:#a5b4fc;font-size:.82rem;font-weight:600;text-decoration:none;">View findings <i class="bi bi-arrow-right"></i></a>';
             html += '</div>';
         }
 
@@ -1295,10 +1569,10 @@ function fmtInt(v) {
         var ts = d.team_status;
         if (ts) {
             html += '<div style="display:flex;align-items:center;gap:16px;margin-top:1.25rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,.12);font-size:.82rem;">';
-            html += '<span style="opacity:.6;"><i class="bi bi-people me-1"></i>Team:</span>';
-            html += '<span>' + ts.trained + '/' + ts.total_available + ' agents active</span>';
+            html += '<span style="opacity:.6;"><i class="bi bi-people me-1"></i>Coverage:</span>';
+            html += '<span>' + ts.trained + '/' + ts.total_available + ' specialists active</span>';
             if (ts.trained < ts.total_available) {
-                html += '<a href="/client/team" style="color:#a5b4fc;font-weight:600;text-decoration:none;margin-left:auto;">Hire more agents <i class="bi bi-arrow-right"></i></a>';
+                html += '<a href="/client/team" style="color:#a5b4fc;font-weight:600;text-decoration:none;margin-left:auto;">Add more support <i class="bi bi-arrow-right"></i></a>';
             }
             html += '</div>';
         }
@@ -1312,7 +1586,7 @@ function fmtInt(v) {
             html += '<div class="perf-snapshot" style="border-left:4px solid #6366f1;">';
             html += '<div class="d-flex justify-content-between align-items-center mb-3">';
             html += '<h5 style="font-weight:800;font-size:.9rem;text-transform:uppercase;letter-spacing:.06em;background:linear-gradient(135deg,#1e1b4b,#4f46e5);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:0;"><i class="bi bi-lightning-charge-fill text-primary me-1"></i>Top Moves This Month</h5>';
-            html += '<a href="/client/actions?month=' + encodeURIComponent(month) + '" class="btn btn-sm btn-primary">Start Missions <i class="bi bi-arrow-right"></i></a>';
+            html += '<a href="/client/actions?month=' + encodeURIComponent(month) + '" class="btn btn-sm btn-primary">Open Action Plan <i class="bi bi-arrow-right"></i></a>';
             html += '</div>';
             d.actions.slice(0, 3).forEach(function(a) {
                 html += '<div style="display:flex;align-items:start;gap:.85rem;padding:.85rem 0;border-bottom:1px solid #f1f5f9;">';
@@ -1642,11 +1916,11 @@ function toggleMovesRows(platform, btn) {
 </div>
 
 {% if dashboard.health_summary %}
-<div class="perf-snapshot">
+<div class="perf-snapshot" id="health-cluster">
     <div class="health-summary-header">
         <div>
             <div class="health-summary-status {{ dashboard.health_summary.tone }}">{{ dashboard.health_summary.label }}</div>
-            <div class="health-summary-title">Health Meter</div>
+            <div class="health-summary-title">Gauge Cluster</div>
             <div class="health-summary-text">{{ dashboard.health_summary.summary }}</div>
         </div>
         <div class="health-summary-grade">
@@ -1654,9 +1928,29 @@ function toggleMovesRows(platform, btn) {
             <div class="health-summary-grade-label">{{ dashboard.health_summary.grade_label }}</div>
         </div>
     </div>
-    <div class="health-meter-track">
-        <div class="health-meter-fill {{ dashboard.health_summary.tone }}" data-health-meter-width="{{ dashboard.health_summary.meter_pct }}"></div>
+    {% if dashboard.health_cluster and dashboard.health_cluster.cards %}
+    <div class="health-cluster-grid">
+        {% for card in dashboard.health_cluster.cards %}
+        <article class="health-cluster-card cluster-{{ card.tone }}">
+            <div class="health-cluster-top">
+                <div>
+                    <div class="health-cluster-label">{{ card.label }}</div>
+                    <div class="health-cluster-kicker">{{ card.kicker }}</div>
+                </div>
+                <div class="health-cluster-gauge" style="--gauge-pct: {{ card.score_pct }}%;">
+                    <div class="health-cluster-gauge-content">
+                        <div class="health-cluster-score">{{ card.display_score }}</div>
+                        <div class="health-cluster-state">{{ card.state_label }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="health-cluster-metric">{{ card.primary_metric }}</div>
+            <div class="health-cluster-detail">{{ card.detail }}</div>
+            <div class="health-cluster-fix"><span>Fix next</span>{{ card.next_step }}</div>
+        </article>
+        {% endfor %}
     </div>
+    {% endif %}
     {% if dashboard.health_summary.numbers %}
     <div class="health-number-row">
         {% for item in dashboard.health_summary.numbers %}
@@ -1665,7 +1959,7 @@ function toggleMovesRows(platform, btn) {
     </div>
     {% endif %}
     {% if dashboard.health_summary.actions %}
-    <div class="health-actions-label">What to do</div>
+    <div class="health-actions-label">What the KPIs are saying to fix</div>
     <ul class="health-actions-list">
         {% for item in dashboard.health_summary.actions %}
         <li>{{ item }}</li>
@@ -1673,19 +1967,13 @@ function toggleMovesRows(platform, btn) {
     </ul>
     {% endif %}
 </div>
-<script>
-document.querySelectorAll('[data-health-meter-width]').forEach(function(el) {
-    var width = parseFloat(el.getAttribute('data-health-meter-width') || '0');
-    el.style.width = Math.max(0, Math.min(100, width)) + '%';
-});
-</script>
 {% endif %}
 
 {% if dashboard.actions %}
 <div class="perf-snapshot" style="border-left:4px solid #6366f1;">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h5 style="font-weight:800;font-size:.9rem;text-transform:uppercase;letter-spacing:.06em;background:linear-gradient(135deg,#1e1b4b,#4f46e5);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:0;"><i class="bi bi-lightning-charge-fill text-primary me-1"></i>Top Moves This Month</h5>
-        <a href="{{ url_for('client.client_actions', month=month) }}" class="btn btn-sm btn-primary">Start Missions <i class="bi bi-arrow-right"></i></a>
+        <a href="{{ url_for('client.client_actions', month=month) }}" class="btn btn-sm btn-primary">Open Action Plan <i class="bi bi-arrow-right"></i></a>
     </div>
     {% for action in dashboard.actions[:3] %}
     <div style="display:flex;align-items:start;gap:.85rem;padding:.85rem 0;border-bottom:1px solid #f1f5f9;">

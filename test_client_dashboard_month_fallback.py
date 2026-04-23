@@ -83,6 +83,8 @@ class ClientDashboardMonthFallbackTests(unittest.TestCase):
         self.assertEqual(payload["month"], "2026-03")
         self.assertTrue(payload["used_month_fallback"])
         self.assertEqual(payload["dashboard"]["health_summary"]["summary"], "March data ready.")
+        self.assertIn("health_cluster", payload["dashboard"])
+        self.assertEqual(len(payload["dashboard"]["health_cluster"]["cards"]), 4)
 
     def test_dashboard_data_falls_back_when_newer_empty_month_is_requested(self):
         response = self.client.get("/client/dashboard/data?month=2026-04")
@@ -101,7 +103,11 @@ class ClientDashboardMonthFallbackTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Talk to W.A.R.R.E.N. first", html)
         self.assertIn("Where should I focus first?", html)
-        self.assertIn("Learn the app in the right order", html)
+        self.assertIn("Start in the right order", html)
+        self.assertIn("Your growth snapshot and next steps", html)
+        self.assertIn("What do you want to do today?", html)
+        self.assertIn("Manage Your Business", html)
+        self.assertIn("Outreach &amp; Communications", html)
         self.assertIn("0 of 5 done", html)
         self.assertIn("Go to Quick Launch", html)
         self.assertIn("Open Leads", html)
