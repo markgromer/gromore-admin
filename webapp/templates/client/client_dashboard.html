@@ -4,90 +4,269 @@
 
 {% block content %}
 <style>
-    /* -- W.A.R.R.E.N.'s Call Card -- */
-    .warren-call {
-        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #3730a3 100%);
-        border-radius: 16px;
-        padding: 1.75rem 2rem;
-        margin-bottom: 1.5rem;
-        color: #fff;
-        box-shadow: 0 8px 32px rgba(30, 27, 75, .25);
+    /* -- Warren Brain -- */
+    .warren-brain-shell {
+        margin-bottom: 1.35rem;
     }
-    .warren-call h3 {
-        font-size: 1.5rem;
+    .warren-brain {
+        position: relative;
+        overflow: hidden;
+        background:
+            radial-gradient(circle at 14% 18%, rgba(56, 189, 248, .18), transparent 26%),
+            radial-gradient(circle at 84% 16%, rgba(45, 212, 191, .16), transparent 24%),
+            radial-gradient(circle at 50% 92%, rgba(250, 204, 21, .10), transparent 22%),
+            linear-gradient(135deg, #07141d 0%, #10273a 48%, #0f3b46 100%);
+        border-radius: 22px;
+        padding: 1.45rem;
+        color: #f8fafc;
+        box-shadow: 0 18px 42px rgba(15, 23, 42, .16);
+        border: 1px solid rgba(148, 163, 184, .16);
+    }
+    .warren-brain::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image:
+            linear-gradient(rgba(148, 163, 184, .06) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(148, 163, 184, .06) 1px, transparent 1px);
+        background-size: 28px 28px;
+        mask-image: radial-gradient(circle at center, rgba(0,0,0,.9), transparent 85%);
+        pointer-events: none;
+    }
+    .warren-brain-grid {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: minmax(280px, 1.05fr) minmax(300px, .95fr);
+        gap: 1.25rem;
+        align-items: center;
+    }
+    .warren-brain-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: .45rem;
+        padding: .34rem .68rem;
+        border-radius: 999px;
+        background: rgba(56, 189, 248, .12);
+        border: 1px solid rgba(125, 211, 252, .22);
+        color: #bae6fd;
+        font-size: .72rem;
         font-weight: 800;
-        margin-bottom: .35rem;
-        color: #fff !important;
+        letter-spacing: .05em;
+        text-transform: uppercase;
+        margin-bottom: .85rem;
     }
-    .warren-call h3 span { color: rgba(255,255,255,.55); font-weight: 400; font-size: 1.1rem; }
-    .warren-call-body {
-        font-size: .95rem;
-        color: rgba(255,255,255,.8);
-        line-height: 1.55;
-    }
-    .warren-call-body strong { color: #fff; }
-    .warren-drive {
-        background: linear-gradient(135deg, #0f172a 0%, #0f766e 55%, #14b8a6 100%);
-        border-radius: 18px;
-        padding: 1.5rem 1.6rem;
-        margin-bottom: 1.25rem;
-        color: #fff;
-        box-shadow: 0 16px 40px rgba(15, 23, 42, .16);
-    }
-    .warren-drive h5 {
-        font-size: 1.25rem;
+    .warren-brain-title {
+        margin: 0 0 .5rem;
+        color: #f8fafc;
+        font-size: 1.45rem;
         font-weight: 800;
-        margin-bottom: .45rem;
-        color: #fff !important;
+        line-height: 1.15;
     }
-    .warren-drive p {
+    .warren-brain-copy {
         margin: 0;
-        color: rgba(255,255,255,.82);
-        max-width: 70ch;
-        line-height: 1.6;
+        color: rgba(226, 232, 240, .86);
         font-size: .95rem;
+        line-height: 1.6;
+        max-width: 64ch;
     }
-    .warren-drive-actions {
+    .warren-brain-stats {
         display: flex;
         flex-wrap: wrap;
-        gap: .7rem;
+        gap: .55rem;
         margin-top: 1rem;
     }
-    .warren-drive-chip {
-        border: 1px solid rgba(255,255,255,.22);
-        background: rgba(255,255,255,.10);
-        color: #fff;
+    .warren-brain-stat {
+        display: inline-flex;
+        align-items: center;
+        gap: .38rem;
+        padding: .45rem .7rem;
         border-radius: 999px;
-        padding: .7rem .95rem;
-        font-size: .84rem;
+        background: rgba(15, 23, 42, .42);
+        border: 1px solid rgba(148, 163, 184, .16);
+        color: #cbd5e1;
+        font-size: .76rem;
         font-weight: 700;
-        transition: transform .15s ease, background .15s ease, border-color .15s ease;
     }
-    .warren-drive-chip:hover {
-        transform: translateY(-1px);
-        background: rgba(255,255,255,.16);
-        border-color: rgba(255,255,255,.4);
-        color: #fff;
-    }
-    .warren-call-actions {
+    .warren-brain-actions {
         display: flex;
         flex-wrap: wrap;
-        gap: .6rem;
+        gap: .65rem;
         margin-top: 1rem;
     }
-    .warren-call-prompt {
-        border: 1px solid rgba(255,255,255,.18);
-        background: rgba(255,255,255,.08);
-        color: #fff;
+    .warren-brain-open {
+        background: #f8fafc;
+        color: #0f172a;
+        border: 0;
+        font-weight: 800;
+        box-shadow: 0 10px 26px rgba(15, 23, 42, .18);
+    }
+    .warren-brain-open:hover {
+        background: #ffffff;
+        color: #020617;
+    }
+    .warren-brain-quick {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .62rem .82rem;
         border-radius: 999px;
-        padding: .55rem .85rem;
+        border: 1px solid rgba(148, 163, 184, .18);
+        background: rgba(255,255,255,.08);
+        color: #f8fafc;
         font-size: .78rem;
         font-weight: 700;
+        transition: transform .16s ease, border-color .16s ease, background .16s ease;
     }
-    .warren-call-prompt:hover {
-        background: rgba(255,255,255,.14);
+    .warren-brain-quick:hover {
+        transform: translateY(-1px);
+        border-color: rgba(125, 211, 252, .38);
+        background: rgba(255,255,255,.12);
         color: #fff;
-        border-color: rgba(255,255,255,.35);
+    }
+    .warren-brain-map {
+        position: relative;
+        min-height: 360px;
+        border-radius: 20px;
+        background: linear-gradient(180deg, rgba(15, 23, 42, .36) 0%, rgba(8, 47, 73, .24) 100%);
+        border: 1px solid rgba(148, 163, 184, .12);
+        overflow: hidden;
+    }
+    .warren-brain-links {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+    }
+    .warren-brain-link {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 120px;
+        height: 1px;
+        transform-origin: 0 0;
+        background: linear-gradient(90deg, rgba(56, 189, 248, .36), rgba(56, 189, 248, 0));
+        opacity: .8;
+        animation: warrenBrainLink 5.5s ease-in-out infinite;
+    }
+    .warren-brain-link.link-paid { transform: translate(-50%, -50%) rotate(-152deg); }
+    .warren-brain-link.link-organic { transform: translate(-50%, -50%) rotate(-42deg); }
+    .warren-brain-link.link-website { transform: translate(-50%, -50%) rotate(32deg); }
+    .warren-brain-link.link-kpis { transform: translate(-50%, -50%) rotate(144deg); }
+    .warren-brain-link.link-findings { transform: translate(-50%, -50%) rotate(92deg); }
+    .warren-brain-link.link-plan { transform: translate(-50%, -50%) rotate(-100deg); }
+    .warren-brain-core {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 152px;
+        height: 152px;
+        border-radius: 50%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        background:
+            radial-gradient(circle at 32% 28%, rgba(255,255,255,.24), transparent 28%),
+            linear-gradient(145deg, rgba(56, 189, 248, .28), rgba(45, 212, 191, .18));
+        border: 1px solid rgba(125, 211, 252, .34);
+        box-shadow:
+            0 0 0 14px rgba(14, 165, 233, .05),
+            0 0 0 28px rgba(45, 212, 191, .04),
+            0 18px 36px rgba(8, 47, 73, .28);
+        animation: warrenBrainPulse 6.2s ease-in-out infinite;
+        z-index: 2;
+    }
+    .warren-brain-core::after {
+        content: "";
+        position: absolute;
+        inset: -18px;
+        border-radius: 50%;
+        border: 1px dashed rgba(125, 211, 252, .18);
+        opacity: .8;
+    }
+    .warren-brain-core-label {
+        color: #f8fafc;
+        font-size: 1.18rem;
+        font-weight: 800;
+        letter-spacing: .03em;
+    }
+    .warren-brain-core-sub {
+        margin-top: .3rem;
+        color: rgba(226, 232, 240, .74);
+        font-size: .75rem;
+        line-height: 1.45;
+        max-width: 110px;
+    }
+    .warren-brain-node {
+        position: absolute;
+        width: 138px;
+        border-radius: 18px;
+        padding: .72rem .78rem;
+        text-align: left;
+        background: rgba(15, 23, 42, .72);
+        border: 1px solid rgba(148, 163, 184, .16);
+        box-shadow: 0 12px 24px rgba(2, 6, 23, .18);
+        color: #f8fafc;
+        backdrop-filter: blur(10px);
+        transition: transform .18s ease, border-color .18s ease, background .18s ease;
+        animation: warrenBrainFloat 10s ease-in-out infinite;
+        z-index: 3;
+    }
+    .warren-brain-node:hover {
+        transform: translateY(-3px) scale(1.01);
+        border-color: rgba(125, 211, 252, .34);
+        background: rgba(15, 23, 42, .82);
+        color: #fff;
+    }
+    .warren-brain-node.node-paid { left: 7%; top: 12%; animation-delay: -.8s; }
+    .warren-brain-node.node-organic { right: 8%; top: 10%; animation-delay: -2.4s; }
+    .warren-brain-node.node-website { right: 6%; bottom: 18%; animation-delay: -1.5s; }
+    .warren-brain-node.node-kpis { left: 10%; bottom: 16%; animation-delay: -3.6s; }
+    .warren-brain-node.node-findings { right: 36%; bottom: 6%; animation-delay: -4.5s; }
+    .warren-brain-node.node-plan { left: 34%; top: 6%; animation-delay: -5.2s; }
+    .warren-brain-node.tone-positive { border-color: rgba(34, 197, 94, .38); box-shadow: inset 0 0 0 1px rgba(34, 197, 94, .14), 0 12px 24px rgba(2, 6, 23, .18); }
+    .warren-brain-node.tone-good { border-color: rgba(59, 130, 246, .34); box-shadow: inset 0 0 0 1px rgba(59, 130, 246, .12), 0 12px 24px rgba(2, 6, 23, .18); }
+    .warren-brain-node.tone-caution { border-color: rgba(245, 158, 11, .38); box-shadow: inset 0 0 0 1px rgba(245, 158, 11, .14), 0 12px 24px rgba(2, 6, 23, .18); }
+    .warren-brain-node.tone-warning { border-color: rgba(239, 68, 68, .42); box-shadow: inset 0 0 0 1px rgba(239, 68, 68, .14), 0 12px 24px rgba(2, 6, 23, .18); }
+    .warren-brain-node.tone-neutral { border-color: rgba(148, 163, 184, .18); }
+    .warren-brain-node-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: .32rem;
+        color: rgba(186, 230, 253, .9);
+        font-size: .58rem;
+        font-weight: 800;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+    }
+    .warren-brain-node-title {
+        display: block;
+        margin-top: .34rem;
+        color: #f8fafc;
+        font-size: .88rem;
+        font-weight: 800;
+        line-height: 1.2;
+    }
+    .warren-brain-node-metric {
+        display: block;
+        margin-top: .28rem;
+        color: rgba(226, 232, 240, .76);
+        font-size: .72rem;
+        line-height: 1.35;
+    }
+    @keyframes warrenBrainPulse {
+        0%, 100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0 14px rgba(14, 165, 233, .05), 0 0 0 28px rgba(45, 212, 191, .04), 0 18px 36px rgba(8, 47, 73, .28); }
+        50% { transform: translate(-50%, -50%) scale(1.035); box-shadow: 0 0 0 18px rgba(14, 165, 233, .06), 0 0 0 34px rgba(45, 212, 191, .05), 0 24px 40px rgba(8, 47, 73, .32); }
+    }
+    @keyframes warrenBrainFloat {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-6px); }
+    }
+    @keyframes warrenBrainLink {
+        0%, 100% { opacity: .45; }
+        50% { opacity: .95; }
     }
 
     /* -- Path Hub -- */
@@ -703,6 +882,13 @@
         gap: 1rem;
         margin-bottom: 1rem;
     }
+    .onboarding-header-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: .6rem;
+        flex-shrink: 0;
+    }
     .onboarding-title {
         font-size: 1.25rem;
         font-weight: 800;
@@ -825,11 +1011,28 @@
         margin: 0;
     }
     @media (max-width: 767.98px) {
+        .warren-brain-grid,
         .path-hub-header,
         .onboarding-header,
         .onboarding-restore,
         .onboarding-footer {
             flex-direction: column;
+            align-items: stretch;
+        }
+        .warren-brain-grid {
+            display: block;
+        }
+        .warren-brain-map {
+            min-height: 640px;
+            margin-top: 1rem;
+        }
+        .warren-brain-node.node-paid { left: 5%; top: 7%; }
+        .warren-brain-node.node-organic { right: 5%; top: 8%; }
+        .warren-brain-node.node-plan { left: 29%; top: 25%; }
+        .warren-brain-node.node-website { right: 5%; bottom: 11%; }
+        .warren-brain-node.node-kpis { left: 5%; bottom: 10%; }
+        .warren-brain-node.node-findings { right: 28%; bottom: 30%; }
+        .onboarding-header-actions {
             align-items: stretch;
         }
         .health-summary-grade {
@@ -873,9 +1076,16 @@
                 <h3 class="onboarding-title">Start in the right order</h3>
                 <p class="onboarding-copy">Start with setup, then move through the two places that matter most on day one: Quick Launch and your pipeline. The checklist stays here until you finish it or dismiss it.</p>
             </div>
-            <div class="onboarding-progress-pill">
-                <i class="bi bi-check2-square"></i>
-                <span>{{ onboarding['completed_count'] }} of {{ onboarding['total_count'] }} done</span>
+            <div class="onboarding-header-actions">
+                <div class="onboarding-progress-pill">
+                    <i class="bi bi-check2-square"></i>
+                    <span>{{ onboarding['completed_count'] }} of {{ onboarding['total_count'] }} done</span>
+                </div>
+                {% if not onboarding['all_done'] %}
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-onboarding-dismiss>
+                    <i class="bi bi-eye-slash me-1"></i> Hide checklist
+                </button>
+                {% endif %}
             </div>
         </div>
         <div class="onboarding-progress" aria-hidden="true">
@@ -914,14 +1124,9 @@
                 {% if onboarding['all_done'] %}
                 You have cleared the day-one setup. From here, use the dashboard for results and your Action Plan for next steps.
                 {% else %}
-                Dismiss this card if you want a cleaner dashboard. You can restore it later.
+                Use Hide checklist if you want a cleaner dashboard. You can restore it later.
                 {% endif %}
             </p>
-            {% if not onboarding['all_done'] %}
-            <button type="button" class="btn btn-sm btn-outline-secondary" data-onboarding-dismiss>
-                <i class="bi bi-eye-slash me-1"></i> Dismiss
-            </button>
-            {% endif %}
         </div>
     </div>
     {% endif %}
@@ -939,18 +1144,70 @@
 </div>
 {% endif %}
 
-<section class="warren-drive">
-    <div class="d-flex flex-wrap justify-content-between gap-3 align-items-start">
-        <div>
-            <h5>Talk to W.A.R.R.E.N. first</h5>
-            <p>Warren should feel like the main growth operator in this product. If you are not sure what to do next, ask Warren where to focus, what is blocking scale, or which move will create the most leverage this month.</p>
+<section id="warrenBrainMount" class="warren-brain-shell">
+    <div class="warren-brain">
+        <div class="warren-brain-grid">
+            <div>
+                <div class="warren-brain-kicker"><i class="bi bi-diagram-3"></i> Warren Brain</div>
+                <h5 class="warren-brain-title">See how your channels connect</h5>
+                <p class="warren-brain-copy">Warren should read paid ads, organic, website, KPIs, findings, and your action plan as one connected system. Open a lane to ask what changed, what is blocking growth, and what to do next.</p>
+                <div class="warren-brain-stats">
+                    <span class="warren-brain-stat"><i class="bi bi-broadcast-pin"></i> 6 connected lanes</span>
+                    <span class="warren-brain-stat"><i class="bi bi-activity"></i> Live channel map</span>
+                    <span class="warren-brain-stat"><i class="bi bi-lightning-charge"></i> Action-linked answers</span>
+                </div>
+                <div class="warren-brain-actions">
+                    <button type="button" class="btn btn-sm warren-brain-open" data-warren-dashboard-prompt="Walk me through the whole business brain for this month. Show me what is helping, what is slipping, and what I should fix first.">Open Warren Workspace</button>
+                    <button type="button" class="warren-brain-quick" data-warren-dashboard-prompt="Inspect organic. Tell me what search and organic social are doing, where traffic is actually coming from, and what to fix next."><i class="bi bi-node-plus"></i> Inspect Organic</button>
+                    <button type="button" class="warren-brain-quick" data-warren-dashboard-prompt="Find the biggest growth constraint in this account right now and explain why it matters before I spend more."><i class="bi bi-exclamation-diamond"></i> Find Constraint</button>
+                    <button type="button" class="warren-brain-quick" data-warren-dashboard-prompt="Review my action plan and tell me which move has the most leverage this month."><i class="bi bi-clipboard2-pulse"></i> Review Action Plan</button>
+                </div>
+            </div>
+            <div class="warren-brain-map">
+                <div class="warren-brain-links">
+                    <span class="warren-brain-link link-paid"></span>
+                    <span class="warren-brain-link link-organic"></span>
+                    <span class="warren-brain-link link-website"></span>
+                    <span class="warren-brain-link link-kpis"></span>
+                    <span class="warren-brain-link link-findings"></span>
+                    <span class="warren-brain-link link-plan"></span>
+                </div>
+                <div class="warren-brain-core">
+                    <div class="warren-brain-core-label">Warren</div>
+                    <div class="warren-brain-core-sub">Reading every lane as one system</div>
+                </div>
+                <button type="button" class="warren-brain-node tone-good node-paid" data-warren-dashboard-prompt="Inspect paid ads. Tell me what is efficient, what is leaking, and what to fix before scaling.">
+                    <span class="warren-brain-node-kicker"><i class="bi bi-broadcast"></i> Linked lane</span>
+                    <span class="warren-brain-node-title">Paid Ads</span>
+                    <span class="warren-brain-node-metric">Campaign efficiency</span>
+                </button>
+                <button type="button" class="warren-brain-node tone-good node-organic" data-warren-dashboard-prompt="Inspect organic. Tell me what search and organic social are doing, where traffic is actually coming from, and what to fix next.">
+                    <span class="warren-brain-node-kicker"><i class="bi bi-broadcast"></i> Linked lane</span>
+                    <span class="warren-brain-node-title">Organic</span>
+                    <span class="warren-brain-node-metric">Search and social traffic</span>
+                </button>
+                <button type="button" class="warren-brain-node tone-neutral node-website" data-warren-dashboard-prompt="Inspect the website lane. Tell me whether the site is helping traffic convert or creating friction.">
+                    <span class="warren-brain-node-kicker"><i class="bi bi-broadcast"></i> Linked lane</span>
+                    <span class="warren-brain-node-title">Website</span>
+                    <span class="warren-brain-node-metric">Conversion path health</span>
+                </button>
+                <button type="button" class="warren-brain-node tone-caution node-kpis" data-warren-dashboard-prompt="Inspect KPIs. Tell me what the numbers are really saying, what is off pace, and what I should do next.">
+                    <span class="warren-brain-node-kicker"><i class="bi bi-broadcast"></i> Linked lane</span>
+                    <span class="warren-brain-node-title">KPIs</span>
+                    <span class="warren-brain-node-metric">Targets and pacing</span>
+                </button>
+                <button type="button" class="warren-brain-node tone-neutral node-findings" data-warren-dashboard-prompt="Summarize current findings across the system. Tell me what needs attention and what can wait.">
+                    <span class="warren-brain-node-kicker"><i class="bi bi-broadcast"></i> Linked lane</span>
+                    <span class="warren-brain-node-title">Findings</span>
+                    <span class="warren-brain-node-metric">Cross-channel review</span>
+                </button>
+                <button type="button" class="warren-brain-node tone-good node-plan" data-warren-dashboard-prompt="Review the action plan. Tell me which move has the most leverage and why.">
+                    <span class="warren-brain-node-kicker"><i class="bi bi-broadcast"></i> Linked lane</span>
+                    <span class="warren-brain-node-title">Action Plan</span>
+                    <span class="warren-brain-node-metric">Ranked next move</span>
+                </button>
+            </div>
         </div>
-        <button type="button" class="btn btn-light btn-sm" data-warren-dashboard-prompt="Give me one clear move that will help me grow this month, and explain why it matters.">Open Warren</button>
-    </div>
-    <div class="warren-drive-actions">
-        <button type="button" class="warren-drive-chip" data-warren-dashboard-prompt="Where should I focus first if I want to grow this month?">Where should I focus first?</button>
-        <button type="button" class="warren-drive-chip" data-warren-dashboard-prompt="What is blocking scale right now, and what should I fix before spending more?">What is blocking scale?</button>
-        <button type="button" class="warren-drive-chip" data-warren-dashboard-prompt="Give me one move that would improve lead quality, not just lead volume.">How do I improve lead quality?</button>
     </div>
 </section>
 
@@ -1478,12 +1735,136 @@ function fmtInt(v) {
         return '<span class="budget-badge ok">$' + budget.toFixed(2) + '/day</span>';
     }
 
-    function buildWarrenCall(d) {
-            if (d.health_summary && d.health_summary.summary) {
-                return d.health_summary.summary;
-            }
-            return 'We need a little more data before the dashboard can make a clear call.';
+    function buildWarrenFocusSummary(d) {
+        if (d.health_summary && d.health_summary.summary) {
+            return d.health_summary.summary;
         }
+        return 'Warren is still gathering enough signal to trace what is helping, what is slipping, and what to fix first.';
+    }
+
+    function buildWarrenBrainNode(item) {
+        return '<button type="button" class="warren-brain-node tone-' + esc(item.tone || 'neutral') + ' ' + esc(item.position || '') + '" data-warren-dashboard-prompt="' + esc(item.prompt || '') + '">' +
+            '<span class="warren-brain-node-kicker"><i class="bi bi-broadcast"></i> Linked lane</span>' +
+            '<span class="warren-brain-node-title">' + esc(item.label || '') + '</span>' +
+            '<span class="warren-brain-node-metric">' + esc(item.metric || '') + '</span>' +
+            '</button>';
+    }
+
+    function buildWarrenBrainHtml(d) {
+        var wb = d.warren_briefing || {};
+        var ts = d.team_status || {};
+        var clusterCards = (d.health_cluster && Array.isArray(d.health_cluster.cards)) ? d.health_cluster.cards : [];
+        var actions = Array.isArray(d.actions) ? d.actions : [];
+        var topAction = actions[0] || null;
+        var cardsByKey = {};
+        clusterCards.forEach(function(card) {
+            cardsByKey[card.key] = card;
+        });
+
+        var linkedLanes = [
+            {
+                key: 'paid_ads',
+                position: 'node-paid',
+                label: 'Paid Ads',
+                metric: 'Campaign efficiency',
+                tone: 'neutral',
+                prompt: 'Inspect paid ads. Tell me what is efficient, what is leaking, and what to fix before scaling.'
+            },
+            {
+                key: 'organic',
+                position: 'node-organic',
+                label: 'Organic',
+                metric: 'Search and social traffic',
+                tone: 'neutral',
+                prompt: 'Inspect organic. Tell me what search and organic social are doing, where traffic is actually coming from, and what to fix next.'
+            },
+            {
+                key: 'website',
+                position: 'node-website',
+                label: 'Website',
+                metric: 'Conversion path health',
+                tone: 'neutral',
+                prompt: 'Inspect the website lane. Tell me whether the site is helping traffic convert or creating friction.'
+            },
+            {
+                key: 'kpis',
+                position: 'node-kpis',
+                label: 'KPIs',
+                metric: 'Targets and pacing',
+                tone: 'neutral',
+                prompt: 'Inspect KPIs. Tell me what the numbers are really saying, what is off pace, and what I should do next.'
+            }
+        ].map(function(item) {
+            var liveCard = cardsByKey[item.key] || {};
+            if (liveCard.label) item.label = liveCard.label;
+            if (liveCard.primary_metric) item.metric = liveCard.primary_metric;
+            if (liveCard.tone) item.tone = liveCard.tone;
+            if (liveCard.label) {
+                item.prompt = 'Inspect ' + liveCard.label.toLowerCase() + '. Tell me what is healthy, what is slipping, and what to fix next.';
+            }
+            return item;
+        });
+
+        var findingsTone = wb.critical_count > 0 ? 'warning' : (wb.warning_count > 0 ? 'caution' : (wb.total_findings > 0 ? 'good' : 'neutral'));
+        linkedLanes.push({
+            position: 'node-findings',
+            label: 'Findings',
+            metric: wb.total_findings ? (wb.total_findings + ' flagged this month') : 'No flagged issues yet',
+            tone: findingsTone,
+            prompt: 'Summarize current findings across the system. Tell me what needs attention, what can wait, and why.'
+        });
+        linkedLanes.push({
+            position: 'node-plan',
+            label: 'Action Plan',
+            metric: topAction ? (topAction.mission_name || topAction.title || 'Top move ready') : 'No move ranked yet',
+            tone: topAction ? 'good' : 'neutral',
+            prompt: topAction
+                ? ('Review the action plan and explain why "' + (topAction.mission_name || topAction.title || 'this move') + '" has the most leverage right now.')
+                : 'Review the action plan and tell me which move should come first once enough data is ready.'
+        });
+
+        var liveLaneCount = linkedLanes.filter(function(item) { return item.tone && item.tone !== 'neutral'; }).length;
+        var specialistText = (ts.total_available || ts.trained) ? (String(ts.trained || 0) + '/' + String(ts.total_available || ts.trained || 0) + ' specialists active') : 'Channel map connected';
+        var findingsText = wb.total_findings ? (String(wb.total_findings) + ' findings linked in') : 'No findings linked yet';
+        var summary = buildWarrenFocusSummary(d);
+
+        var html = '';
+        html += '<div class="warren-brain">';
+        html += '<div class="warren-brain-grid">';
+        html += '<div>';
+        html += '<div class="warren-brain-kicker"><i class="bi bi-diagram-3"></i> Warren Brain</div>';
+        html += '<h5 class="warren-brain-title">See how your channels connect</h5>';
+        html += '<p class="warren-brain-copy">' + esc(summary) + '</p>';
+        html += '<div class="warren-brain-stats">';
+        html += '<span class="warren-brain-stat"><i class="bi bi-broadcast-pin"></i> ' + esc(String(liveLaneCount || linkedLanes.length) + ' live lanes') + '</span>';
+        html += '<span class="warren-brain-stat"><i class="bi bi-search"></i> ' + esc(findingsText) + '</span>';
+        html += '<span class="warren-brain-stat"><i class="bi bi-people"></i> ' + esc(specialistText) + '</span>';
+        html += '</div>';
+        html += '<div class="warren-brain-actions">';
+        html += '<button type="button" class="btn btn-sm warren-brain-open" data-warren-dashboard-prompt="Walk me through the whole business brain for ' + esc(month) + '. Show me what is helping, what is slipping, and what I should fix first.">Open Warren Workspace</button>';
+        html += '<button type="button" class="warren-brain-quick" data-warren-dashboard-prompt="Inspect organic. Tell me what search and organic social are doing, where traffic is actually coming from, and what to fix next."><i class="bi bi-node-plus"></i> Inspect Organic</button>';
+        html += '<button type="button" class="warren-brain-quick" data-warren-dashboard-prompt="Find the biggest growth constraint in this account right now and explain why it matters before I spend more."><i class="bi bi-exclamation-diamond"></i> Find Constraint</button>';
+        html += '<button type="button" class="warren-brain-quick" data-warren-dashboard-prompt="Review the action plan and tell me which move has the most leverage this month."><i class="bi bi-clipboard2-pulse"></i> Review Action Plan</button>';
+        html += '</div>';
+        html += '</div>';
+        html += '<div class="warren-brain-map">';
+        html += '<div class="warren-brain-links">';
+        html += '<span class="warren-brain-link link-paid"></span>';
+        html += '<span class="warren-brain-link link-organic"></span>';
+        html += '<span class="warren-brain-link link-website"></span>';
+        html += '<span class="warren-brain-link link-kpis"></span>';
+        html += '<span class="warren-brain-link link-findings"></span>';
+        html += '<span class="warren-brain-link link-plan"></span>';
+        html += '</div>';
+        html += '<div class="warren-brain-core"><div class="warren-brain-core-label">Warren</div><div class="warren-brain-core-sub">Reading every lane as one system</div></div>';
+        linkedLanes.forEach(function(item) {
+            html += buildWarrenBrainNode(item);
+        });
+        html += '</div>';
+        html += '</div>';
+        html += '</div>';
+        return html;
+    }
 
         function buildHealthSummaryHtml(d) {
             var hs = d.health_summary;
@@ -1544,40 +1925,10 @@ function fmtInt(v) {
         var html = '';
         var targetCpa = parseFloat(d.target_cpa) || 0;
 
-        // Warren's Call
-        var warrenSummary = buildWarrenCall(d);
-        html += '<div class="warren-call">';
-        html += '<h3>W.A.R.R.E.N.\'s Call <span>- ' + esc(month) + '</span></h3>';
-        html += '<div style="font-size:.78rem;font-weight:700;color:rgba(255,255,255,.55);letter-spacing:.03em;margin-bottom:.5rem;">Weighted Analysis for Revenue, Reach, Engagement &amp; Navigation</div>';
-        html += '<div class="warren-call-body">' + esc(warrenSummary) + '</div>';
-        html += '<div class="warren-call-actions">';
-        html += '<button type="button" class="warren-call-prompt" data-warren-dashboard-prompt="Tell me the one move I should make next to grow efficiently.">Ask what to do next</button>';
-        html += '<button type="button" class="warren-call-prompt" data-warren-dashboard-prompt="Should I scale right now, or is something still leaking?">Ask if it is time to scale</button>';
-        html += '<button type="button" class="warren-call-prompt" data-warren-dashboard-prompt="What is the biggest growth constraint in this account right now?">Ask what is holding growth back</button>';
-        html += '</div>';
-
-        // Compact findings link (details live on Team page)
-        var wb = d.warren_briefing;
-        if (wb && wb.total_findings > 0) {
-            html += '<div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:space-between;">';
-            html += '<span style="font-size:.85rem;color:rgba(255,255,255,.7);"><i class="bi bi-clipboard-data me-1"></i>Background review flagged <strong style="color:#fff;">' + wb.total_findings + ' items</strong> this month</span>';
-            html += '<a href="/client/team" style="color:#a5b4fc;font-size:.82rem;font-weight:600;text-decoration:none;">View findings <i class="bi bi-arrow-right"></i></a>';
-            html += '</div>';
+        var brainMount = document.getElementById('warrenBrainMount');
+        if (brainMount) {
+            brainMount.innerHTML = buildWarrenBrainHtml(d);
         }
-
-        // Team status bar
-        var ts = d.team_status;
-        if (ts) {
-            html += '<div style="display:flex;align-items:center;gap:16px;margin-top:1.25rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,.12);font-size:.82rem;">';
-            html += '<span style="opacity:.6;"><i class="bi bi-people me-1"></i>Coverage:</span>';
-            html += '<span>' + ts.trained + '/' + ts.total_available + ' specialists active</span>';
-            if (ts.trained < ts.total_available) {
-                html += '<a href="/client/team" style="color:#a5b4fc;font-weight:600;text-decoration:none;margin-left:auto;">Add more support <i class="bi bi-arrow-right"></i></a>';
-            }
-            html += '</div>';
-        }
-
-        html += '</div>';
 
         html += buildHealthSummaryHtml(d);
 
@@ -1903,17 +2254,6 @@ function toggleMovesRows(platform, btn) {
 {% else %}
 
 {% if dashboard %}
-
-<div class="warren-call">
-    <h3>W.A.R.R.E.N.'s Call <span>- {{ month }}</span></h3>
-    <div class="warren-call-body">
-        {% if dashboard.health_summary %}
-            {{ dashboard.health_summary.summary }}
-        {% else %}
-            Not enough data to generate a call yet.
-        {% endif %}
-    </div>
-</div>
 
 {% if dashboard.health_summary %}
 <div class="perf-snapshot" id="health-cluster">

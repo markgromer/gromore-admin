@@ -990,6 +990,25 @@ def _explain_facebook_organic(fb_organic):
         ),
     })
 
+    post_clicks = metrics.get("post_clicks") or metrics.get("clicks") or sum((post.get("clicks") or 0) for post in top_posts)
+    if post_clicks > 0 or post_count > 0:
+        clicks_per_post = round(post_clicks / max(post_count, 1), 1) if post_count > 0 else 0
+        click_status = "good" if post_clicks >= max(10, post_count) else ("warning" if post_count >= 6 and post_clicks == 0 else "neutral")
+        cards.append({
+            "metric": "Website Clicks from Social",
+            "value": f"{post_clicks:,}",
+            "status": click_status,
+            "explanation": (
+                f"Your organic Facebook posts drove {post_clicks:,} clicks toward your website this month. "
+                + (f"That works out to about {clicks_per_post:.1f} clicks per post. " if post_count > 0 else "")
+                + ("People are moving from social attention to site traffic, which is the right direction."
+                   if click_status == "good"
+                   else "You are getting engagement, but not much traffic back to the site yet. Tighten the offer, CTA, and link placement in your posts."
+                   if click_status == "warning"
+                   else "Keep testing stronger offers and clearer reasons to click through to the site.")
+            ),
+        })
+
     cards.append({
         "metric": "Posts This Month",
         "value": str(post_count),
@@ -2112,13 +2131,13 @@ def _build_health_cluster(dashboard):
             channels,
             key="organic",
             label="Organic",
-            kicker="SEO and content",
+            kicker="SEO, content, and social",
             channel_keys=("seo", "facebook_organic"),
-            metric_priority=("Clicks from Google", "Organic Reach", "Engagement", "Posts This Month"),
+            metric_priority=("Clicks from Google", "Website Clicks from Social", "Organic Reach", "Engagement", "Posts This Month"),
             empty_detail="Search and content signals are too thin to call yet.",
-            positive_detail="Organic visibility is healthy and content is carrying its weight.",
-            caution_detail="Organic visibility is moving, but consistency or ranking strength is slipping.",
-            warning_detail="Organic traffic and content momentum need work.",
+            positive_detail="Organic visibility is healthy across search and social content.",
+            caution_detail="Organic visibility is moving, but consistency, traffic quality, or ranking strength is slipping.",
+            warning_detail="Organic traffic and content momentum need work across search or social.",
             next_steps={
                 "positive": "Double down on the topics and posts already earning attention.",
                 "good": "Keep publishing and tighten one page that is close to ranking.",

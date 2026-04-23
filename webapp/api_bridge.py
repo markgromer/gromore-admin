@@ -1480,6 +1480,7 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date, user_access_
         total_post_impressions = sum(p.get("impressions", 0) or 0 for p in posts)
         total_post_engagements = sum((p.get("likes", 0) or 0) + (p.get("comments", 0) or 0) + (p.get("shares", 0) or 0) for p in posts)
         total_post_engaged_users = sum(p.get("engaged_users", 0) or 0 for p in posts)
+        total_post_clicks = sum(p.get("clicks", 0) or 0 for p in posts)
         if not page_metrics.get("post_engagements"):
             page_metrics["post_engagements"] = total_post_engagements
         if not page_metrics.get("engaged_users"):
@@ -1488,6 +1489,8 @@ def _pull_meta_organic(page_id, access_token, start_date, end_date, user_access_
             page_metrics["organic_impressions"] = total_post_impressions
         if not page_metrics.get("impressions"):
             page_metrics["impressions"] = total_post_impressions
+        if not page_metrics.get("post_clicks"):
+            page_metrics["post_clicks"] = total_post_clicks
 
     # Calculate engagement rate for the period
     total_engagement_rate = 0

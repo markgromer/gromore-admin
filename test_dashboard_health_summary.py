@@ -2,7 +2,7 @@ import unittest
 from datetime import date
 
 from src.analytics import _build_lead_pacing
-from webapp.client_advisor import _build_health_summary, ensure_dashboard_health_cluster
+from webapp.client_advisor import _build_health_summary, _explain_facebook_organic, ensure_dashboard_health_cluster
 
 
 class DashboardHealthSummaryTests(unittest.TestCase):
@@ -129,6 +129,28 @@ class DashboardHealthSummaryTests(unittest.TestCase):
         self.assertEqual(cluster["cards"][1]["state_label"], "Fix")
         self.assertIn("12 leads vs 15 target", cluster["cards"][3]["primary_metric"])
         self.assertEqual(cluster["cards"][3]["next_step"], "Review lead quality")
+
+    def test_facebook_organic_explainer_surfaces_site_clicks(self):
+        summary = _explain_facebook_organic({
+            "metrics": {
+                "followers": 320,
+                "organic_impressions": 1800,
+                "post_engagements": 74,
+                "engagement_rate": 4.1,
+                "post_clicks": 19,
+            },
+            "post_count": 8,
+            "top_posts": [
+                {"clicks": 7},
+                {"clicks": 6},
+            ],
+        })
+
+        clicks_card = next(card for card in summary["cards"] if card["metric"] == "Website Clicks from Social")
+
+        self.assertEqual(clicks_card["value"], "19")
+        self.assertEqual(clicks_card["status"], "good")
+        self.assertIn("clicks toward your website", clicks_card["explanation"])
 
 
 if __name__ == "__main__":
