@@ -182,17 +182,21 @@ def run_agents_all():
 def _verify_cron_secret():
     """Check Bearer token or X-Cron-Secret header against CRON_SECRET env var.
     Returns True if authorized, False otherwise."""
-    cron_secret = (
-        os.environ.get("CRON_SECRET", "")
-        or os.environ.get("SECRET_KEY", "")
-        or current_app.config.get("SECRET_KEY", "")
-    )
-    if not cron_secret:
+    accepted_tokens = []
+    for candidate in (
+        os.environ.get("CRON_SECRET", ""),
+        os.environ.get("SECRET_KEY", ""),
+        current_app.config.get("SECRET_KEY", ""),
+    ):
+        token = str(candidate or "").strip()
+        if token and token not in accepted_tokens:
+            accepted_tokens.append(token)
+    if not accepted_tokens:
         return False
     auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer ") and auth_header[7:] == cron_secret:
+    if auth_header.startswith("Bearer ") and auth_header[7:] in accepted_tokens:
         return True
-    if request.headers.get("X-Cron-Secret", "") == cron_secret:
+    if request.headers.get("X-Cron-Secret", "") in accepted_tokens:
         return True
     return False
 
