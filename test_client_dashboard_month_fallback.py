@@ -101,11 +101,11 @@ class ClientDashboardMonthFallbackTests(unittest.TestCase):
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Warren Brain", html)
-        self.assertIn("Warren is online. What do you want to know?", html)
-        self.assertIn("Ask Warren directly", html)
-        self.assertIn("Try: &quot;Warren, why are leads ahead of plan?&quot;", html)
-        self.assertIn("Trace organic traffic", html)
+        self.assertIn("Warren snapshot", html)
+        self.assertIn("Warren says", html)
+        self.assertIn("Overall health", html)
+        self.assertIn("Connection health", html)
+        self.assertIn("Next move", html)
         self.assertIn("Start in the right order", html)
         self.assertIn("Your growth snapshot and next steps", html)
         self.assertIn("What do you want to do today?", html)
@@ -115,6 +115,16 @@ class ClientDashboardMonthFallbackTests(unittest.TestCase):
         self.assertIn("0 of 5 done", html)
         self.assertIn("Go to Quick Launch", html)
         self.assertIn("Open Leads", html)
+
+    def test_dashboard_onboarding_form_fallback_redirects_after_dismiss(self):
+        response = self.client.post(
+            "/client/dashboard/onboarding",
+            data={"item_key": "dashboard_checklist", "action": "dismiss"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/client/dashboard", response.headers["Location"])
 
     def test_dashboard_page_reflects_auto_completed_onboarding_items(self):
         with self.app.app_context():

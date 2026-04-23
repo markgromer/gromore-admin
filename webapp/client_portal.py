@@ -4643,7 +4643,8 @@ def client_dashboard_onboarding_update():
     db = _get_db()
     brand_id = session["client_brand_id"]
     client_user_id = session["client_user_id"]
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True) if request.is_json else request.form
+    data = data or {}
     item_key = (data.get("item_key") or "").strip()
     action = (data.get("action") or "complete").strip().lower()
 
@@ -4669,6 +4670,8 @@ def client_dashboard_onboarding_update():
 
     brand = db.get_brand(brand_id) or {}
     onboarding = _build_getting_started_checklist(db, brand, brand_id, client_user_id)
+    if not request.is_json:
+        return redirect(url_for("client.client_dashboard"))
     return jsonify({"ok": True, "onboarding": onboarding})
 
 
