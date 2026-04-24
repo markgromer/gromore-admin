@@ -32,6 +32,7 @@ from webapp import client_portal as client_portal_module
 from webapp.client_portal import client_bp, client_public_bp
 from webapp.hiring import hiring_bp
 from webapp.warren_webhooks import webhooks_bp
+from webapp.appointment_runner import start_background_appointment_runner
 
 BASE_DIR = Path(__file__).parent.parent
 logger = logging.getLogger(__name__)
@@ -4641,6 +4642,9 @@ def create_app():
             gsc_connected=False,
             gsc_needs_property=False,
         )
+
+    if on_render:
+        start_background_appointment_runner(app)
 
     return app
 
