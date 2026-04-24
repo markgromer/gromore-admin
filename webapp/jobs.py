@@ -373,9 +373,10 @@ def cron_warren_appointment_reminders():
 
     from webapp.warren_appointments import process_appointment_reminders
 
+    logger.info("[Cron] Warren appointment reminders starting")
     stats = process_appointment_reminders(current_app.db, current_app.config)
     logger.info(
-        "Warren appointment reminders: %d sent, %d failed, %d skipped across %d brands",
+        "[Cron] Warren appointment reminders: %d sent, %d failed, %d skipped across %d brands",
         stats.get("sent", 0),
         stats.get("failed", 0),
         stats.get("skipped", 0),

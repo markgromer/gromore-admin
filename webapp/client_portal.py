@@ -289,7 +289,12 @@ def _save_appointment_reminder_settings(db, brand_id, payload):
     db.update_brand_number_field(brand_id, "sales_bot_appointment_reminders_enabled", enabled)
 
     send_time = (payload.get("sales_bot_appointment_reminder_send_time") or "17:00").strip()[:10]
+    log.info(f"[Appointment] Saving send_time: {send_time} (from payload: {payload.get('sales_bot_appointment_reminder_send_time')})")
     db.update_brand_text_field(brand_id, "sales_bot_appointment_reminder_send_time", send_time)
+    
+    # Verify it was saved
+    brand_check = db.get_brand(brand_id)
+    log.info(f"[Appointment] Verified saved send_time: {brand_check.get('sales_bot_appointment_reminder_send_time')}")
 
     appointment_timezone = (payload.get("sales_bot_appointment_reminder_timezone") or "America/New_York").strip()
     if appointment_timezone not in {
@@ -9858,6 +9863,46 @@ def client_run_appointment_reminders_now():
         "message": message,
         "run": latest_run,
         "stats": stats,
+    })
+
+
+@client_bp.route("/api/warren/appointment-reminders/diagnose", methods=["GET"])
+@client_login_required
+def client_appointment_reminders_diagnose():
+    """Diagnostic endpoint: show current appointment reminder settings and recent runs."""
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"ok": False, "error": "Brand not found."}), 404
+
+    from webapp.warren_appointments import _parse_send_minutes, _format_minutes, _brand_local_now
+    
+    send_time_raw = brand.get("sales_bot_appointment_reminder_send_time") or "17:00"
+    send_minutes = _parse_send_minutes(send_time_raw)
+    timezone_tz = brand.get("sales_bot_appointment_reminder_timezone") or "America/New_York"
+    local_now = _brand_local_now(brand)
+    current_minutes = local_now.hour * 60 + local_now.minute
+    
+    recent_runs = db.get_appointment_reminder_runs(brand_id, limit=5)
+    
+    return jsonify({
+        "ok": True,
+        "settings": {
+            "enabled": int(brand.get("sales_bot_appointment_reminders_enabled") or 0),
+            "send_time_raw": send_time_raw,
+            "send_time_minutes": send_minutes,
+            "send_time_formatted": _format_minutes(send_minutes),
+            "timezone": timezone_tz,
+            "crm_type": brand.get("crm_type") or "",
+            "has_crm_api_key": bool((brand.get("crm_api_key") or "").strip()),
+        },
+        "current": {
+            "local_time": local_now.strftime("%Y-%m-%d %H:%M:%S %Z"),
+            "local_minutes": current_minutes,
+            "is_after_send_time": current_minutes >= send_minutes,
+        },
+        "recent_runs": recent_runs[:5],
     })
 
 

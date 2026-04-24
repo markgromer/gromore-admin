@@ -281,6 +281,8 @@ def process_appointment_reminders(
 
         send_after_minutes = _parse_send_minutes(brand.get("sales_bot_appointment_reminder_send_time"))
         if (not ignore_send_time) and (local_now.hour * 60 + local_now.minute) < send_after_minutes:
+            current_mins = (local_now.hour * 60 + local_now.minute)
+            log.debug(f"[Appointment] Brand {brand['id']}: Current time {current_mins} min < send time {send_after_minutes} min, waiting")
             db.record_appointment_reminder_run(
                 brand["id"],
                 target_date,
@@ -291,6 +293,7 @@ def process_appointment_reminders(
             continue
 
         stats["brands"] += 1
+        log.info(f"[Appointment] Brand {brand['id']}: Proceeding (current time {local_now.strftime('%H:%M')} >= send time {_format_minutes(send_after_minutes)})")
         # Query SNG for day-ahead appointments using target_date (tomorrow in the brand's local timezone)
         # NOTE: This assumes SNG's jobs_for_date endpoint interprets dates in the account's local context.
         # If SNG always interprets dates as UTC regardless of account settings, we need to adjust this.
