@@ -1162,7 +1162,15 @@ if (composeForm) {
         fetch('/client/post-scheduler/schedule', {
             method: 'POST',
             headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-            body: JSON.stringify({message: msg, scheduled_at: dt, link_url: link, image_url: img, post_type: postType})
+            body: JSON.stringify({
+                message: msg,
+                scheduled_at: dt,
+                link_url: link,
+                image_url: img,
+                post_type: postType,
+                client_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+                client_timezone_offset_minutes: new Date().getTimezoneOffset()
+            })
         })
         .then(parseJsonResponse)
         .then(function(data) {
@@ -1561,7 +1569,11 @@ function submitCsvPosts() {
     fetch('/client/post-scheduler/schedule-bulk', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-        body: JSON.stringify({posts: postsToSchedule})
+        body: JSON.stringify({
+            posts: postsToSchedule,
+            client_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+            client_timezone_offset_minutes: new Date().getTimezoneOffset()
+        })
     })
     .then(parseJsonResponse)
     .then(function(data) {

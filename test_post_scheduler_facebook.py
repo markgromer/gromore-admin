@@ -321,6 +321,34 @@ class FacebookPostSchedulerTests(unittest.TestCase):
     @patch("webapp.api_bridge._get_page_access_token", return_value="page-token")
     @patch("webapp.api_bridge._get_meta_token", return_value="meta-user-token")
     @patch("requests.post")
+    def test_schedule_post_accepts_browser_local_datetime(self, mock_post, _mock_meta_token, _mock_page_token):
+        mock_post.return_value = Mock(
+            status_code=200,
+            json=lambda: {"id": "fb-post-local-123"},
+            text="",
+        )
+
+        offset_minutes = 240  # UTC-4 (example: Eastern daylight time)
+        now_utc = datetime.now(timezone.utc)
+        local_plus_one_hour = (now_utc - timedelta(minutes=offset_minutes) + timedelta(hours=1)).replace(tzinfo=None)
+
+        response = self.client.post(
+            "/client/post-scheduler/schedule",
+            json={
+                "message": "Local-time scheduling should work.",
+                "scheduled_at": local_plus_one_hour.strftime("%Y-%m-%dT%H:%M:%S"),
+                "post_type": "value",
+                "client_timezone_offset_minutes": offset_minutes,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+
+    @patch("webapp.api_bridge._get_page_access_token", return_value="page-token")
+    @patch("webapp.api_bridge._get_meta_token", return_value="meta-user-token")
+    @patch("requests.post")
     def test_schedule_post_uses_public_drive_url_for_facebook_photo(self, mock_post, _mock_meta_token, _mock_page_token):
         mock_post.return_value = Mock(
             status_code=200,
