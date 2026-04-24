@@ -211,6 +211,69 @@ def _safe_json_list(raw_value):
     return list(parsed) if isinstance(parsed, list) else []
 
 
+def _format_timestamp_for_timezone(raw_value, timezone_name):
+    text = str(raw_value or "").strip()
+    if not text:
+        return ""
+
+    # SQLite datetime('now') rows are UTC naive; treat naive values as UTC.
+    normalized = text.replace("T", " ")
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    if " " in normalized and "+" in normalized.rsplit(" ", 1)[-1] and "T" not in normalized:
+        normalized = normalized.replace(" ", "T", 1)
+
+    try:
+        dt = datetime.fromisoformat(normalized)
+    except Exception:
+        return text[:16]
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    try:
+        from webapp.warren_appointments import _normalize_timezone_name, _get_zoneinfo
+
+        zone_name = _normalize_timezone_name(timezone_name)
+        zone = _get_zoneinfo(zone_name)
+        return dt.astimezone(zone).strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M")
+
+
+def _maybe_run_due_appointment_check(db, brand_id, app_config):
+    """If appointment reminders are due now, run a one-off check immediately after settings save."""
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return None
+    if int(brand.get("sales_bot_appointment_reminders_enabled") or 0) != 1:
+        return None
+
+    try:
+        from webapp.warren_appointments import _brand_local_now, _parse_send_minutes, process_appointment_reminders
+
+        now_utc = datetime.now(timezone.utc)
+        local_now = _brand_local_now(brand, now=now_utc)
+        send_after_minutes = _parse_send_minutes(brand.get("sales_bot_appointment_reminder_send_time"))
+        local_minutes = local_now.hour * 60 + local_now.minute
+        if local_minutes < send_after_minutes:
+            return None
+
+        target_date = (local_now.date() + timedelta(days=1)).isoformat()
+        recent_runs = db.get_appointment_reminder_runs(brand_id, limit=20)
+        for run in recent_runs:
+            if str(run.get("target_date") or "") == target_date and str(run.get("status") or "").strip().lower() in {
+                "completed",
+                "partial",
+                "failed",
+            }:
+                return None
+
+        return process_appointment_reminders(db, app_config, brand_ids=[brand_id])
+    except Exception:
+        return None
+
+
 def _normalize_site_builder_text(value, field_label, max_length=None, trim=True):
     if value is None:
         return ""
@@ -2049,6 +2112,42 @@ def _normalize_scheduled_datetime(raw_value):
     except ValueError:
         return None
     return parsed.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _parse_scheduler_datetime_to_utc(raw_value, timezone_name="", timezone_offset_minutes=None):
+    raw = str(raw_value or "").strip()
+    if not raw:
+        return None
+
+    normalized = raw.replace(" ", "T")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(timezone.utc)
+
+    tz = None
+    if timezone_name:
+        try:
+            from webapp.warren_appointments import _normalize_timezone_name, _get_zoneinfo
+
+            tz = _get_zoneinfo(_normalize_timezone_name(timezone_name))
+        except Exception:
+            tz = None
+
+    if tz is None and timezone_offset_minutes is not None:
+        try:
+            offset = int(timezone_offset_minutes)
+            tz = timezone(timedelta(minutes=-offset))
+        except Exception:
+            tz = None
+
+    if tz is None:
+        tz = timezone.utc
+
+    return parsed.replace(tzinfo=tz).astimezone(timezone.utc)
 
 
 def _format_facebook_proof_timestamp(value):
@@ -9068,10 +9167,13 @@ def _load_client_automation_context(db, brand_id):
     except Exception:
         chatbot_channels = set()
 
+    appointment_tz = (brand.get("sales_bot_appointment_reminder_timezone") or "America/New_York").strip() or "America/New_York"
+
     appointment_runs = db.get_appointment_reminder_runs(brand_id, limit=8)
     for run in appointment_runs:
         summary = _safe_json_object(run.get("summary_json"))
         run["summary"] = summary
+        run["created_at_display"] = _format_timestamp_for_timezone(run.get("created_at"), appointment_tz)
         run["status_badge"] = {
             "completed": "success",
             "partial": "warning",
@@ -9088,6 +9190,7 @@ def _load_client_automation_context(db, brand_id):
     for attempt in appointment_attempts:
         attempt["detail_data"] = _safe_json_object(attempt.get("detail"))
         attempt["detail_summary"] = _summarize_delivery_detail(attempt.get("detail"))
+        attempt["updated_at_display"] = _format_timestamp_for_timezone(attempt.get("updated_at"), appointment_tz)
 
     billing_attempts = db.get_brand_client_billing_reminders(
         brand_id,
@@ -9097,6 +9200,7 @@ def _load_client_automation_context(db, brand_id):
     for attempt in billing_attempts:
         attempt["detail_data"] = _safe_json_object(attempt.get("detail"))
         attempt["detail_summary"] = _summarize_delivery_detail(attempt.get("detail"))
+        attempt["updated_at_display"] = _format_timestamp_for_timezone(attempt.get("updated_at"), appointment_tz)
 
     sng_webhook_events = db.get_sng_webhook_events(brand_id, limit=10)
     for event in sng_webhook_events:
@@ -9332,7 +9436,15 @@ def client_save_automations():
         ", ".join(crm_event_rules.get("alert_emails") or [])[:1000],
     )
 
-    flash("Automations saved.", "success")
+    auto_run_stats = _maybe_run_due_appointment_check(db, brand_id, current_app.config)
+
+    if auto_run_stats and auto_run_stats.get("brands"):
+        flash(
+            f"Automations saved. Appointment reminder check auto-ran ({auto_run_stats.get('sent', 0)} sent, {auto_run_stats.get('failed', 0)} failed, {auto_run_stats.get('skipped', 0)} skipped).",
+            "success",
+        )
+    else:
+        flash("Automations saved.", "success")
     return redirect(url_for("client.client_automations"))
 
 
@@ -9608,7 +9720,15 @@ def client_save_leads_assistant_settings():
         (request.form.get("sales_bot_sms_opt_out_footer") or "").strip()[:200],
     )
 
-    flash("Lead assistant settings saved.", "success")
+    auto_run_stats = _maybe_run_due_appointment_check(db, brand_id, current_app.config)
+
+    if auto_run_stats and auto_run_stats.get("brands"):
+        flash(
+            f"Lead assistant settings saved. Appointment reminder check auto-ran ({auto_run_stats.get('sent', 0)} sent, {auto_run_stats.get('failed', 0)} failed, {auto_run_stats.get('skipped', 0)} skipped).",
+            "success",
+        )
+    else:
+        flash("Lead assistant settings saved.", "success")
     return redirect(url_for("client.client_settings"))
 
 
@@ -14741,17 +14861,23 @@ def client_schedule_post():
     link_url = (data.get("link_url") or "").strip()
     image_url = (data.get("image_url") or "").strip()
     post_type = _normalize_facebook_post_type(data.get("post_type"))
+    client_timezone = (data.get("client_timezone") or "").strip()
+    client_timezone_offset_minutes = data.get("client_timezone_offset_minutes")
 
     if not message:
         return jsonify(ok=False, error="Message is required."), 400
     if not scheduled_at:
         return jsonify(ok=False, error="Schedule date is required."), 400
 
-    # Validate schedule time (10 min to 75 days in the future)
+    # Validate schedule time (10 min to 75 days in the future).
+    # Datetime-local inputs are naive; interpret them in the browser timezone.
     from datetime import datetime, timedelta, timezone
-    try:
-        sched_dt = datetime.fromisoformat(scheduled_at).replace(tzinfo=timezone.utc)
-    except ValueError:
+    sched_dt = _parse_scheduler_datetime_to_utc(
+        scheduled_at,
+        timezone_name=client_timezone,
+        timezone_offset_minutes=client_timezone_offset_minutes,
+    )
+    if sched_dt is None:
         return jsonify(ok=False, error="Invalid date format."), 400
 
     now = datetime.now(timezone.utc)
@@ -14842,6 +14968,8 @@ def client_schedule_posts_bulk():
 
     data = request.get_json(silent=True) or {}
     posts = data.get("posts", [])
+    client_timezone = (data.get("client_timezone") or "").strip()
+    client_timezone_offset_minutes = data.get("client_timezone_offset_minutes")
     if not posts:
         return jsonify(ok=False, error="No posts to schedule."), 400
     if len(posts) > 500:
@@ -14882,9 +15010,12 @@ def client_schedule_posts_bulk():
             errors += 1
             continue
 
-        try:
-            sched_dt = datetime.fromisoformat(scheduled_at).replace(tzinfo=timezone.utc)
-        except ValueError:
+        sched_dt = _parse_scheduler_datetime_to_utc(
+            scheduled_at,
+            timezone_name=client_timezone,
+            timezone_offset_minutes=client_timezone_offset_minutes,
+        )
+        if sched_dt is None:
             errors += 1
             continue
 
