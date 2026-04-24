@@ -274,6 +274,48 @@ def _maybe_run_due_appointment_check(db, brand_id, app_config):
         return None
 
 
+def _save_appointment_reminder_settings(db, brand_id, payload):
+    valid_appointment_channels = {"email", "sms"}
+    channels_raw = payload.get("sales_bot_appointment_reminder_channels")
+    if isinstance(channels_raw, list):
+        selected_appointment_channels = [c for c in channels_raw if c in valid_appointment_channels]
+    else:
+        selected_appointment_channels = []
+    if not selected_appointment_channels:
+        selected_appointment_channels = ["sms"]
+
+    enabled_raw = payload.get("sales_bot_appointment_reminders_enabled")
+    enabled = 1 if str(enabled_raw).strip().lower() in {"1", "true", "yes", "on"} else 0
+    db.update_brand_number_field(brand_id, "sales_bot_appointment_reminders_enabled", enabled)
+
+    send_time = (payload.get("sales_bot_appointment_reminder_send_time") or "17:00").strip()[:10]
+    db.update_brand_text_field(brand_id, "sales_bot_appointment_reminder_send_time", send_time)
+
+    appointment_timezone = (payload.get("sales_bot_appointment_reminder_timezone") or "America/New_York").strip()
+    if appointment_timezone not in {
+        "America/New_York",
+        "America/Chicago",
+        "America/Denver",
+        "America/Los_Angeles",
+        "America/Anchorage",
+        "Pacific/Honolulu",
+    }:
+        appointment_timezone = "America/New_York"
+    db.update_brand_text_field(brand_id, "sales_bot_appointment_reminder_timezone", appointment_timezone)
+
+    db.update_brand_text_field(brand_id, "sales_bot_appointment_reminder_channels", json.dumps(selected_appointment_channels))
+    db.update_brand_number_field(
+        brand_id,
+        "sales_bot_appointment_reminder_respect_client_channel",
+        1 if str(payload.get("sales_bot_appointment_reminder_respect_client_channel") or "").strip().lower() in {"1", "true", "yes", "on"} else 0,
+    )
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_appointment_reminder_template",
+        (payload.get("sales_bot_appointment_reminder_template") or "").strip()[:2000],
+    )
+
+
 def _normalize_site_builder_text(value, field_label, max_length=None, trim=True):
     if value is None:
         return ""
@@ -9354,26 +9396,17 @@ def client_save_automations():
         (request.form.get("sales_bot_payment_reminder_template") or "").strip()[:2000],
     )
 
-    db.update_brand_number_field(brand_id, "sales_bot_appointment_reminders_enabled", 1 if request.form.get("sales_bot_appointment_reminders_enabled") else 0)
-    db.update_brand_text_field(
+    _save_appointment_reminder_settings(
+        db,
         brand_id,
-        "sales_bot_appointment_reminder_send_time",
-        (request.form.get("sales_bot_appointment_reminder_send_time") or "17:00").strip()[:10],
-    )
-    appointment_timezone = (request.form.get("sales_bot_appointment_reminder_timezone") or "America/New_York").strip()
-    if appointment_timezone not in {"America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"}:
-        appointment_timezone = "America/New_York"
-    db.update_brand_text_field(brand_id, "sales_bot_appointment_reminder_timezone", appointment_timezone)
-    db.update_brand_text_field(brand_id, "sales_bot_appointment_reminder_channels", json.dumps(selected_appointment_channels))
-    db.update_brand_text_field(
-        brand_id,
-        "sales_bot_appointment_reminder_template",
-        (request.form.get("sales_bot_appointment_reminder_template") or "").strip()[:2000],
-    )
-    db.update_brand_number_field(
-        brand_id,
-        "sales_bot_appointment_reminder_respect_client_channel",
-        1 if request.form.get("sales_bot_appointment_reminder_respect_client_channel") else 0,
+        {
+            "sales_bot_appointment_reminders_enabled": request.form.get("sales_bot_appointment_reminders_enabled"),
+            "sales_bot_appointment_reminder_send_time": request.form.get("sales_bot_appointment_reminder_send_time"),
+            "sales_bot_appointment_reminder_timezone": request.form.get("sales_bot_appointment_reminder_timezone"),
+            "sales_bot_appointment_reminder_channels": selected_appointment_channels,
+            "sales_bot_appointment_reminder_template": request.form.get("sales_bot_appointment_reminder_template"),
+            "sales_bot_appointment_reminder_respect_client_channel": request.form.get("sales_bot_appointment_reminder_respect_client_channel"),
+        },
     )
     db.update_brand_text_field(
         brand_id,
@@ -9632,30 +9665,17 @@ def client_save_leads_assistant_settings():
         "sales_bot_payment_reminder_template",
         (request.form.get("sales_bot_payment_reminder_template") or "").strip()[:2000],
     )
-    db.update_brand_number_field(brand_id, "sales_bot_appointment_reminders_enabled", 1 if request.form.get("sales_bot_appointment_reminders_enabled") else 0)
-    db.update_brand_text_field(
+    _save_appointment_reminder_settings(
+        db,
         brand_id,
-        "sales_bot_appointment_reminder_send_time",
-        (request.form.get("sales_bot_appointment_reminder_send_time") or "17:00").strip()[:10],
-    )
-    appointment_timezone = (request.form.get("sales_bot_appointment_reminder_timezone") or "America/New_York").strip()
-    if appointment_timezone not in {"America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"}:
-        appointment_timezone = "America/New_York"
-    db.update_brand_text_field(brand_id, "sales_bot_appointment_reminder_timezone", appointment_timezone)
-    db.update_brand_text_field(
-        brand_id,
-        "sales_bot_appointment_reminder_channels",
-        json.dumps(selected_appointment_channels),
-    )
-    db.update_brand_text_field(
-        brand_id,
-        "sales_bot_appointment_reminder_template",
-        (request.form.get("sales_bot_appointment_reminder_template") or "").strip()[:2000],
-    )
-    db.update_brand_number_field(
-        brand_id,
-        "sales_bot_appointment_reminder_respect_client_channel",
-        1 if request.form.get("sales_bot_appointment_reminder_respect_client_channel") else 0,
+        {
+            "sales_bot_appointment_reminders_enabled": request.form.get("sales_bot_appointment_reminders_enabled"),
+            "sales_bot_appointment_reminder_send_time": request.form.get("sales_bot_appointment_reminder_send_time"),
+            "sales_bot_appointment_reminder_timezone": request.form.get("sales_bot_appointment_reminder_timezone"),
+            "sales_bot_appointment_reminder_channels": selected_appointment_channels,
+            "sales_bot_appointment_reminder_template": request.form.get("sales_bot_appointment_reminder_template"),
+            "sales_bot_appointment_reminder_respect_client_channel": request.form.get("sales_bot_appointment_reminder_respect_client_channel"),
+        },
     )
     db.update_brand_number_field(brand_id, "sales_bot_transcript_export", 1 if request.form.get("sales_bot_transcript_export") else 0)
     db.update_brand_number_field(brand_id, "sales_bot_meta_lead_forms", 1 if request.form.get("sales_bot_meta_lead_forms") else 0)
@@ -9807,6 +9827,9 @@ def client_run_appointment_reminders_now():
     if not brand:
         return jsonify({"ok": False, "error": "Brand not found."}), 404
 
+    payload = request.get_json(silent=True) or {}
+    _save_appointment_reminder_settings(db, brand_id, payload)
+
     from webapp.warren_appointments import process_appointment_reminders
 
     stats = process_appointment_reminders(
@@ -9835,6 +9858,25 @@ def client_run_appointment_reminders_now():
         "message": message,
         "run": latest_run,
         "stats": stats,
+    })
+
+
+@client_bp.route("/api/warren/save-appointment-reminders", methods=["POST"])
+@client_login_required
+def client_save_appointment_reminder_settings_api():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"ok": False, "error": "Brand not found."}), 404
+
+    payload = request.get_json(silent=True) or {}
+    _save_appointment_reminder_settings(db, brand_id, payload)
+    auto_run_stats = _maybe_run_due_appointment_check(db, brand_id, current_app.config)
+
+    return jsonify({
+        "ok": True,
+        "auto_run": auto_run_stats or {},
     })
 
 

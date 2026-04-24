@@ -1028,7 +1028,7 @@
                                 <div class="d-flex justify-content-between align-items-start gap-2">
                                     <div>
                                         <div class="fw-semibold">Tomorrow target: {{ run.target_date }}</div>
-                                        <div class="text-muted" style="font-size:.78rem;">Run logged {{ run.created_at[:16] if run.created_at else '' }}</div>
+                                        <div class="text-muted" style="font-size:.78rem;">Run logged {{ run.created_at_display or (run.created_at[:16] if run.created_at else '') }}</div>
                                     </div>
                                     <span class="badge bg-{{ run.status_badge }}{% if run.status_badge == 'warning' %} text-dark{% endif %}">{{ (run.status or 'unknown')|replace('_', ' ')|title }}</span>
                                 </div>
@@ -1072,7 +1072,7 @@
                                 <tbody>
                                     {% for attempt in appointment_reminder_attempts %}
                                     <tr>
-                                        <td class="text-muted" style="font-size:.78rem;">{{ attempt.updated_at[:16] if attempt.updated_at else '' }}</td>
+                                        <td class="text-muted" style="font-size:.78rem;">{{ attempt.updated_at_display or (attempt.updated_at[:16] if attempt.updated_at else '') }}</td>
                                         <td style="font-size:.82rem;">{{ attempt.due_date }}<br><span class="text-muted">{{ attempt.external_client_id }}</span></td>
                                         <td style="font-size:.82rem;">{{ attempt.recipient or 'No recipient recorded' }}</td>
                                         <td class="text-capitalize" style="font-size:.82rem;">{{ attempt.channel }}</td>
@@ -1746,10 +1746,22 @@ function runAppointmentReminderCheckNow() {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Running...';
     resultDiv.style.display = 'none';
 
+    var channels = Array.prototype.slice.call(document.querySelectorAll('input[name="sales_bot_appointment_reminder_channels"]:checked')).map(function(el) {
+        return el.value;
+    });
+    var payload = {
+        sales_bot_appointment_reminders_enabled: document.getElementById('appointmentRemindersEnabled') && document.getElementById('appointmentRemindersEnabled').checked ? 1 : 0,
+        sales_bot_appointment_reminder_send_time: (document.querySelector('input[name="sales_bot_appointment_reminder_send_time"]') || {}).value || '',
+        sales_bot_appointment_reminder_timezone: (document.querySelector('select[name="sales_bot_appointment_reminder_timezone"]') || {}).value || '',
+        sales_bot_appointment_reminder_channels: channels,
+        sales_bot_appointment_reminder_respect_client_channel: document.getElementById('appointmentRespectChannel') && document.getElementById('appointmentRespectChannel').checked ? 1 : 0,
+        sales_bot_appointment_reminder_template: (document.querySelector('textarea[name="sales_bot_appointment_reminder_template"]') || {}).value || ''
+    };
+
     fetch('/client/api/warren/run-appointment-reminders', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-        body: JSON.stringify({})
+        body: JSON.stringify(payload)
     })
     .then(function(r) {
         return r.json().then(function(data) {
