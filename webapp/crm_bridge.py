@@ -593,6 +593,15 @@ def _sng_job_key(job_row, target_date):
 
 
 def sng_get_day_ahead_appointment_candidates(brand, target_date, max_jobs=None):
+    """Get candidates for day-ahead appointment reminders.
+    
+    IMPORTANT: This function assumes SNG's jobs_for_date endpoint interprets dates
+    in the same timezone context as our caller (i.e., the caller must pass dates
+    that are already in the correct timezone). We calculate target_date in the brand's
+    local timezone before calling this function. If SNG interprets the date string
+    differently (e.g., always as UTC), we need to adjust the datetime conversion at
+    the call site in process_appointment_reminders().
+    """
     if hasattr(target_date, "isoformat"):
         target_date = target_date.isoformat()
     target_date = str(target_date or "").strip()

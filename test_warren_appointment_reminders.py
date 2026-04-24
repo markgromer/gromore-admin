@@ -214,6 +214,33 @@ class WarrenAppointmentReminderTests(unittest.TestCase):
         self.assertEqual(late_stats["sent"], 1)
         send_sms.assert_called_once()
 
+    def test_process_appointment_reminders_queries_sng_with_brand_local_date(self):
+        """Verify that we query SNG for appointments on the correct target date in the brand's timezone."""
+        self.db.update_brand_text_field(self.brand_id, "sales_bot_appointment_reminder_timezone", "America/Los_Angeles")
+
+        # UTC time: 2026-04-18 01:00 UTC = 2026-04-17 18:00 (6 PM) in America/Los_Angeles
+        # So local_now = April 17, 6 PM and target_date should be April 18
+        utc_now = datetime(2026, 4, 18, 1, 0, tzinfo=timezone.utc)
+
+        captured_dates = []
+
+        def capture_sng_call(brand, target_date, max_jobs=None):
+            captured_dates.append(target_date)
+            return ([], None)
+
+        with patch("webapp.warren_appointments.sng_get_day_ahead_appointment_candidates", side_effect=capture_sng_call):
+            process_appointment_reminders(
+                self.db,
+                {},
+                now=utc_now,
+                brand_ids=[self.brand_id],
+                ignore_send_time=True,
+            )
+
+        self.assertEqual(len(captured_dates), 1)
+        queried_date = captured_dates[0] if isinstance(captured_dates[0], date) else date.fromisoformat(str(captured_dates[0]))
+        self.assertEqual(queried_date, date(2026, 4, 18), "Should query for April 18 (tomorrow in Los Angeles), not April 17")
+
 
 if __name__ == "__main__":
     unittest.main()
