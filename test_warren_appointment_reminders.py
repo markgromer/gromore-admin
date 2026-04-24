@@ -253,6 +253,58 @@ class WarrenAppointmentReminderTests(unittest.TestCase):
         queried_date = captured_dates[0] if isinstance(captured_dates[0], date) else date.fromisoformat(str(captured_dates[0]))
         self.assertEqual(queried_date, date(2026, 4, 18), "Should query for April 18 (tomorrow in Los Angeles), not April 17")
 
+    def test_process_appointment_reminders_continues_when_another_brand_raises(self):
+        failing_brand_id = self.db.create_brand({
+            "slug": f"appointment-failing-{uuid.uuid4().hex[:8]}",
+            "display_name": "Broken Reminder Co",
+        })
+        self.db.update_brand_text_field(failing_brand_id, "crm_type", "sweepandgo")
+        self.db.update_brand_text_field(failing_brand_id, "crm_api_key", "broken-sng-token")
+        self.db.update_brand_number_field(failing_brand_id, "sales_bot_appointment_reminders_enabled", 1)
+        self.db.update_brand_text_field(failing_brand_id, "sales_bot_appointment_reminder_send_time", "17:00")
+        self.db.update_brand_text_field(failing_brand_id, "sales_bot_appointment_reminder_timezone", "America/New_York")
+        self.db.update_brand_text_field(failing_brand_id, "sales_bot_appointment_reminder_channels", "sms")
+        self.db.update_brand_text_field(failing_brand_id, "quo_api_key", "quo-test-key")
+        self.db.update_brand_text_field(failing_brand_id, "quo_phone_number", "+15550001112")
+
+        candidate = {
+            "appointment_key": "job:healthy-1",
+            "appointment_date": "2026-04-18",
+            "appointment_date_obj": date(2026, 4, 18),
+            "client_name": "Healthy Client",
+            "client_email": "healthy@example.com",
+            "client_phone": "+15555550127",
+            "assigned_to_name": "Jordan Tech",
+            "address": "123 Main St, Albany, NY",
+            "preferred_channel": "sms",
+            "prefers_sms": True,
+            "prefers_email": False,
+            "job_id": "healthy-1",
+            "status_name": "pending",
+        }
+        after_send_time = datetime(2026, 4, 17, 21, 30, tzinfo=timezone.utc)
+
+        def stub_candidates(brand, target_date, max_jobs=None):
+            if int(brand.get("id") or 0) == failing_brand_id:
+                raise RuntimeError("dispatch board exploded")
+            return [candidate], None
+
+        with patch("webapp.warren_appointments.sng_get_day_ahead_appointment_candidates", side_effect=stub_candidates), \
+             patch("webapp.warren_appointments.send_transactional_sms", return_value=(True, "sent")) as send_sms:
+            stats = process_appointment_reminders(self.db, {}, now=after_send_time)
+
+        self.assertEqual(stats["sent"], 1)
+        self.assertEqual(send_sms.call_count, 1)
+        self.assertTrue(any("dispatch board exploded" in err for err in stats["errors"]))
+
+        healthy_run = self.db.get_appointment_reminder_runs(self.brand_id, limit=1)[0]
+        self.assertEqual(healthy_run["status"], "completed")
+        self.assertEqual(healthy_run["sent"], 1)
+
+        failing_run = self.db.get_appointment_reminder_runs(failing_brand_id, limit=1)[0]
+        self.assertEqual(failing_run["status"], "failed")
+        self.assertIn("Unhandled appointment reminder error", failing_run["reason"])
+
 
 if __name__ == "__main__":
     unittest.main()

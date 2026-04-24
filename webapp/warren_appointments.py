@@ -258,167 +258,189 @@ def process_appointment_reminders(
             continue
         if not include_disabled and int(brand.get("sales_bot_appointment_reminders_enabled") or 0) != 1:
             continue
+        target_date = None
+        base_summary = {}
+        try:
+            local_now = _brand_local_now(brand, now=now)
+            # Calculate tomorrow's date in the brand's local timezone
+            target_date = local_now.date() + timedelta(days=1)
+            send_after_minutes = _parse_send_minutes(brand.get("sales_bot_appointment_reminder_send_time"))
+            base_summary = {
+                "local_time": local_now.strftime("%Y-%m-%d %H:%M"),
+                "timezone": (brand.get("sales_bot_appointment_reminder_timezone") or "America/New_York").strip() or "America/New_York",
+                "send_after": _format_minutes(send_after_minutes),
+            }
 
-        local_now = _brand_local_now(brand, now=now)
-        # Calculate tomorrow's date in the brand's local timezone
-        target_date = local_now.date() + timedelta(days=1)
-        send_after_minutes = _parse_send_minutes(brand.get("sales_bot_appointment_reminder_send_time"))
-        base_summary = {
-            "local_time": local_now.strftime("%Y-%m-%d %H:%M"),
-            "timezone": (brand.get("sales_bot_appointment_reminder_timezone") or "America/New_York").strip() or "America/New_York",
-            "send_after": _format_minutes(send_after_minutes),
-        }
-
-        if (brand.get("crm_type") or "").strip().lower() != "sweepandgo" or not (brand.get("crm_api_key") or "").strip():
-            db.record_appointment_reminder_run(
-                brand["id"],
-                target_date,
-                status="config_error",
-                reason="Sweep and Go CRM is not fully configured for appointment reminders.",
-                summary=base_summary,
-            )
-            continue
-
-        send_after_minutes = _parse_send_minutes(brand.get("sales_bot_appointment_reminder_send_time"))
-        if (not ignore_send_time) and (local_now.hour * 60 + local_now.minute) < send_after_minutes:
-            current_mins = (local_now.hour * 60 + local_now.minute)
-            log.debug(f"[Appointment] Brand {brand['id']}: Current time {current_mins} min < send time {send_after_minutes} min, waiting")
-            db.record_appointment_reminder_run(
-                brand["id"],
-                target_date,
-                status="waiting",
-                reason=f"Current local time {local_now.strftime('%H:%M')} is before the send time {_format_minutes(send_after_minutes)}.",
-                summary=base_summary,
-            )
-            continue
-
-        stats["brands"] += 1
-        log.info(f"[Appointment] Brand {brand['id']}: Proceeding (current time {local_now.strftime('%H:%M')} >= send time {_format_minutes(send_after_minutes)})")
-        # Query SNG for day-ahead appointments using target_date (tomorrow in the brand's local timezone)
-        # NOTE: This assumes SNG's jobs_for_date endpoint interprets dates in the account's local context.
-        # If SNG always interprets dates as UTC regardless of account settings, we need to adjust this.
-        candidates, error = sng_get_day_ahead_appointment_candidates(
-            brand,
-            target_date=target_date,
-            max_jobs=max_per_brand,
-        )
-        if error:
-            stats["errors"].append(str(error)[:200])
-            db.record_appointment_reminder_run(
-                brand["id"],
-                target_date,
-                status="failed",
-                reason=str(error)[:500],
-                summary=base_summary,
-            )
-            continue
-
-        configured_channels = _parse_channels(brand.get("sales_bot_appointment_reminder_channels"))
-        reminder_type = "appointment_day_ahead"
-        brand_stats = {
-            "candidates": 0,
-            "sent": 0,
-            "failed": 0,
-            "skipped": 0,
-        }
-        for candidate in candidates:
-            stats["candidates"] += 1
-            brand_stats["candidates"] += 1
-            appointment_key = candidate.get("appointment_key") or ""
-            appointment_date = candidate.get("appointment_date") or target_date.isoformat()
-            if not appointment_key:
-                stats["skipped"] += 1
-                brand_stats["skipped"] += 1
+            if (brand.get("crm_type") or "").strip().lower() != "sweepandgo" or not (brand.get("crm_api_key") or "").strip():
+                db.record_appointment_reminder_run(
+                    brand["id"],
+                    target_date,
+                    status="config_error",
+                    reason="Sweep and Go CRM is not fully configured for appointment reminders.",
+                    summary=base_summary,
+                )
                 continue
 
-            for channel in _candidate_channels(brand, candidate, configured_channels):
-                recipient = candidate.get("client_phone") if channel == "sms" else candidate.get("client_email")
-                if not recipient:
+            send_after_minutes = _parse_send_minutes(brand.get("sales_bot_appointment_reminder_send_time"))
+            if (not ignore_send_time) and (local_now.hour * 60 + local_now.minute) < send_after_minutes:
+                current_mins = (local_now.hour * 60 + local_now.minute)
+                log.debug(f"[Appointment] Brand {brand['id']}: Current time {current_mins} min < send time {send_after_minutes} min, waiting")
+                db.record_appointment_reminder_run(
+                    brand["id"],
+                    target_date,
+                    status="waiting",
+                    reason=f"Current local time {local_now.strftime('%H:%M')} is before the send time {_format_minutes(send_after_minutes)}.",
+                    summary=base_summary,
+                )
+                continue
+
+            stats["brands"] += 1
+            log.info(f"[Appointment] Brand {brand['id']}: Proceeding (current time {local_now.strftime('%H:%M')} >= send time {_format_minutes(send_after_minutes)})")
+            # Query SNG for day-ahead appointments using target_date (tomorrow in the brand's local timezone)
+            # NOTE: This assumes SNG's jobs_for_date endpoint interprets dates in the account's local context.
+            # If SNG always interprets dates as UTC regardless of account settings, we need to adjust this.
+            candidates, error = sng_get_day_ahead_appointment_candidates(
+                brand,
+                target_date=target_date,
+                max_jobs=max_per_brand,
+            )
+            if error:
+                stats["errors"].append(str(error)[:200])
+                db.record_appointment_reminder_run(
+                    brand["id"],
+                    target_date,
+                    status="failed",
+                    reason=str(error)[:500],
+                    summary=base_summary,
+                )
+                continue
+
+            configured_channels = _parse_channels(brand.get("sales_bot_appointment_reminder_channels"))
+            reminder_type = "appointment_day_ahead"
+            brand_stats = {
+                "candidates": 0,
+                "sent": 0,
+                "failed": 0,
+                "skipped": 0,
+            }
+            for candidate in candidates:
+                stats["candidates"] += 1
+                brand_stats["candidates"] += 1
+                appointment_key = candidate.get("appointment_key") or ""
+                appointment_date = candidate.get("appointment_date") or target_date.isoformat()
+                if not appointment_key:
                     stats["skipped"] += 1
                     brand_stats["skipped"] += 1
                     continue
-                if db.has_sent_client_billing_reminder(brand["id"], appointment_key, appointment_date, channel, reminder_type=reminder_type):
-                    stats["skipped"] += 1
-                    brand_stats["skipped"] += 1
-                    continue
 
-                detail_payload = {
-                    "job_id": candidate.get("job_id") or "",
-                    "status_name": candidate.get("status_name") or "",
-                    "assigned_to_name": candidate.get("assigned_to_name") or "",
-                    "address": candidate.get("address") or "",
-                    "preferred_channel": candidate.get("preferred_channel") or "",
-                }
+                for channel in _candidate_channels(brand, candidate, configured_channels):
+                    recipient = candidate.get("client_phone") if channel == "sms" else candidate.get("client_email")
+                    if not recipient:
+                        stats["skipped"] += 1
+                        brand_stats["skipped"] += 1
+                        continue
+                    if db.has_sent_client_billing_reminder(brand["id"], appointment_key, appointment_date, channel, reminder_type=reminder_type):
+                        stats["skipped"] += 1
+                        brand_stats["skipped"] += 1
+                        continue
 
-                try:
-                    if channel == "email":
-                        _send_email_reminder(app_config, brand, candidate)
-                        ok, detail = True, "sent"
-                    else:
-                        ok, detail = send_transactional_sms(db, brand, candidate["client_phone"], _render_message(brand, candidate, "sms"))
+                    detail_payload = {
+                        "job_id": candidate.get("job_id") or "",
+                        "status_name": candidate.get("status_name") or "",
+                        "assigned_to_name": candidate.get("assigned_to_name") or "",
+                        "address": candidate.get("address") or "",
+                        "preferred_channel": candidate.get("preferred_channel") or "",
+                    }
 
-                    db.record_client_billing_reminder(
-                        brand["id"],
-                        appointment_key,
-                        appointment_date,
-                        channel,
-                        recipient=recipient,
-                        status="sent" if ok else "failed",
-                        detail=json.dumps({"result": detail, **detail_payload}, separators=(",", ":"))[:500],
-                        reminder_type=reminder_type,
-                    )
-                    if ok:
-                        stats["sent"] += 1
-                        brand_stats["sent"] += 1
-                    else:
+                    try:
+                        if channel == "email":
+                            _send_email_reminder(app_config, brand, candidate)
+                            ok, detail = True, "sent"
+                        else:
+                            ok, detail = send_transactional_sms(db, brand, candidate["client_phone"], _render_message(brand, candidate, "sms"))
+
+                        db.record_client_billing_reminder(
+                            brand["id"],
+                            appointment_key,
+                            appointment_date,
+                            channel,
+                            recipient=recipient,
+                            status="sent" if ok else "failed",
+                            detail=json.dumps({"result": detail, **detail_payload}, separators=(",", ":"))[:500],
+                            reminder_type=reminder_type,
+                        )
+                        if ok:
+                            stats["sent"] += 1
+                            brand_stats["sent"] += 1
+                        else:
+                            stats["failed"] += 1
+                            brand_stats["failed"] += 1
+                    except Exception as exc:
+                        log.warning(
+                            "Appointment reminder failed: brand=%s appointment=%s channel=%s err=%s",
+                            brand.get("id"),
+                            appointment_key,
+                            channel,
+                            exc,
+                        )
+                        db.record_client_billing_reminder(
+                            brand["id"],
+                            appointment_key,
+                            appointment_date,
+                            channel,
+                            recipient=recipient,
+                            status="failed",
+                            detail=json.dumps({"error": str(exc), **detail_payload}, separators=(",", ":"))[:500],
+                            reminder_type=reminder_type,
+                        )
                         stats["failed"] += 1
                         brand_stats["failed"] += 1
-                except Exception as exc:
-                    log.warning(
-                        "Appointment reminder failed: brand=%s appointment=%s channel=%s err=%s",
-                        brand.get("id"),
-                        appointment_key,
-                        channel,
-                        exc,
-                    )
-                    db.record_client_billing_reminder(
-                        brand["id"],
-                        appointment_key,
-                        appointment_date,
-                        channel,
-                        recipient=recipient,
-                        status="failed",
-                        detail=json.dumps({"error": str(exc), **detail_payload}, separators=(",", ":"))[:500],
-                        reminder_type=reminder_type,
-                    )
-                    stats["failed"] += 1
-                    brand_stats["failed"] += 1
 
-        if brand_stats["failed"]:
-            run_status = "partial" if brand_stats["sent"] else "failed"
-        else:
-            run_status = "completed"
-        if not brand_stats["candidates"]:
-            run_reason = "No eligible Sweep and Go jobs were found for tomorrow."
-        else:
-            run_reason = (
-                f"Processed {brand_stats['candidates']} appointment candidate(s): "
-                f"{brand_stats['sent']} sent, {brand_stats['failed']} failed, {brand_stats['skipped']} skipped."
+            if brand_stats["failed"]:
+                run_status = "partial" if brand_stats["sent"] else "failed"
+            else:
+                run_status = "completed"
+            if not brand_stats["candidates"]:
+                run_reason = "No eligible Sweep and Go jobs were found for tomorrow."
+            else:
+                run_reason = (
+                    f"Processed {brand_stats['candidates']} appointment candidate(s): "
+                    f"{brand_stats['sent']} sent, {brand_stats['failed']} failed, {brand_stats['skipped']} skipped."
+                )
+            db.record_appointment_reminder_run(
+                brand["id"],
+                target_date,
+                status=run_status,
+                reason=run_reason,
+                candidates=brand_stats["candidates"],
+                sent=brand_stats["sent"],
+                failed=brand_stats["failed"],
+                skipped=brand_stats["skipped"],
+                summary={
+                    **base_summary,
+                    "channels": configured_channels,
+                },
             )
-        db.record_appointment_reminder_run(
-            brand["id"],
-            target_date,
-            status=run_status,
-            reason=run_reason,
-            candidates=brand_stats["candidates"],
-            sent=brand_stats["sent"],
-            failed=brand_stats["failed"],
-            skipped=brand_stats["skipped"],
-            summary={
-                **base_summary,
-                "channels": configured_channels,
-            },
-        )
+        except Exception as exc:
+            brand_id = brand.get("id")
+            log.exception("Unhandled appointment reminder error for brand=%s", brand_id)
+            stats["errors"].append(f"brand {brand_id}: {str(exc)[:180]}")
+            fallback_target_date = target_date or (now.astimezone(_get_zoneinfo(brand.get("sales_bot_appointment_reminder_timezone"))).date() + timedelta(days=1))
+            fallback_summary = base_summary or {
+                "timezone": (brand.get("sales_bot_appointment_reminder_timezone") or "America/New_York").strip() or "America/New_York",
+                "send_after": _format_minutes(_parse_send_minutes(brand.get("sales_bot_appointment_reminder_send_time"))),
+            }
+            try:
+                db.record_appointment_reminder_run(
+                    brand_id,
+                    fallback_target_date,
+                    status="failed",
+                    reason=f"Unhandled appointment reminder error: {str(exc)[:500]}",
+                    summary=fallback_summary,
+                )
+            except Exception:
+                log.exception("Failed to record appointment reminder run failure for brand=%s", brand_id)
+            continue
 
     stats["errors"] = stats["errors"][:10]
     return stats
