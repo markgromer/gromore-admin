@@ -592,6 +592,18 @@ def _sng_job_key(job_row, target_date):
     )
 
 
+def _sng_is_terminal_dispatch_status(status_name):
+    status = str(status_name or "").strip().lower()
+    # Keep reminder eligibility broad and exclude only clearly terminal outcomes.
+    return status in {
+        "completed",
+        "cancelled",
+        "canceled",
+        "failed",
+        "closed",
+    }
+
+
 def sng_get_day_ahead_appointment_candidates(brand, target_date, max_jobs=None):
     """Get candidates for day-ahead appointment reminders.
     
@@ -614,13 +626,12 @@ def sng_get_day_ahead_appointment_candidates(brand, target_date, max_jobs=None):
 
     candidates = []
     seen_keys = set()
-    allowed_statuses = {"pending", "dispatched"}
     rows = result.get("data") or []
     for job_row in rows:
         if not isinstance(job_row, dict):
             continue
         status_name = str(job_row.get("status_name") or "").strip().lower()
-        if status_name not in allowed_statuses:
+        if _sng_is_terminal_dispatch_status(status_name):
             continue
 
         job_key = _sng_job_key(job_row, target_date)

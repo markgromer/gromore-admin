@@ -80,15 +80,27 @@ class WarrenAppointmentReminderTests(unittest.TestCase):
                     "status_name": "completed",
                     "type": "recurring",
                 },
+                {
+                    "id": 992,
+                    "full_name": "Scheduled Client",
+                    "email": "scheduled@example.com",
+                    "cell_phone": "+15555550001",
+                    "status_name": "scheduled",
+                    "type": "recurring",
+                },
             ]
         }
         with patch("webapp.crm_bridge.sng_get_dispatch_board", return_value=(dispatch_payload, None)):
             candidates, error = sng_get_day_ahead_appointment_candidates(self.brand, date(2026, 4, 18))
 
         self.assertIsNone(error)
-        self.assertEqual(len(candidates), 1)
+        self.assertEqual(len(candidates), 2)
         self.assertEqual(candidates[0]["preferred_channel"], "sms")
         self.assertEqual(candidates[0]["appointment_date"], "2026-04-18")
+        status_names = {c.get("status_name") for c in candidates}
+        self.assertIn("pending", status_names)
+        self.assertIn("scheduled", status_names)
+        self.assertNotIn("completed", status_names)
 
     def test_process_appointment_reminders_respects_send_time_and_dedupes(self):
         candidate = {
