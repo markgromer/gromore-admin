@@ -1,5 +1,66 @@
 # GroMore Platform - Complete Feature Inventory
-> Last updated: April 16, 2026 - Audited against live codebase
+> Last updated: April 24, 2026 - Audited against live codebase and commits through `41ecc48`
+
+---
+
+## Recent Additions Since April 16, 2026
+
+### Warren Automations + Reliability
+- **Appointment Reminder System** - Day-ahead Sweep and Go reminder automation with enable/disable controls, send-time window, channel routing, dedupe protection, and manual run support
+- **Reminder Run Reporting** - Per-brand run logs with waiting/completed/failed states, reasons, counts, and local-time summary metadata
+- **Cron Auth Hardening** - Locked down appointment reminder cron endpoint auth flow and Render cron integration
+- **Legacy Schedule Compatibility** - Accepts legacy reminder settings like AM/PM send times and timezone aliases (for example, Central Time labels)
+- **Timezone-Aware Day-Ahead Date Selection** - Calculates tomorrow in each brand's configured local timezone before querying SNG dispatch data
+- **Active Client Marketing Safety** - Prevents active clients from being enrolled into Warren marketing flows unintentionally
+- **Sweep and Go Event Foundation** - Webhook/event ingestion layer for CRM-triggered Warren automations
+- **CRM Event Automations** - Triggered Warren workflows for CRM lifecycle events
+
+### Client Portal + Dashboard UX
+- **Connections/Automations Split** - Broke out client connections and automations into clearer dedicated flows
+- **Dashboard Simplification** - Reduced complexity and noise in dashboard layout and logic for faster client comprehension
+- **Warren Snapshot Refinement** - Streamlined Warren snapshot panels and trimmed dashboard console verbosity
+- **Inline Warren Console Transcript** - Added in-context transcript visibility inside dashboard workflow
+- **Navigation Simplification** - Cleaner client navigation and tab flow to reduce click friction
+- **Client Password Settings** - Added first-class password management inside client settings
+
+### Facebook Post Scheduler + Social Workflow
+- **Recurring Character Builder** - Persistent storytelling character controls for recurring social content
+- **Storytelling Profile Controls** - Configurable narrative profile and cadence options for post generation
+- **Story Builder Integration** - Warren-assisted story workflow connected to scheduler authoring
+- **CSV Review Upgrades** - Editable/selectable CSV post review before scheduling
+- **Authenticity Guardrails** - Stronger anti-generic content checks for Facebook outputs
+- **Preview + Length Controls** - Better preview surfaces with practical length constraints
+- **Drive Upload Reliability** - Improved Google Drive image URL handling, upload recovery, and error messaging
+- **Post Proof + Cleanup Flow** - Added scheduler post proofing and cleanup pipeline improvements
+- **Timezone-Aware Scheduling Validation** - Scheduler now correctly handles browser-local `datetime-local` inputs instead of rejecting valid near-future posts as "already passed"
+
+### Heatmap + Local SEO Intelligence
+- **Async Large Heatmap Scans** - Moved heavy scans to asynchronous execution for reliability at larger radii/keyword sets
+- **Browser-Driven Maps Engine** - Rebuilt heatmap collection around browser-rendered Maps results for stronger real-world capture
+- **Docker/Runtime Improvements** - Deployment/runtime updates for browser-based heatmap jobs, including Playwright availability in deploy targets
+- **Fallback Resilience** - Better key/location fallbacks, restored maps connections, and improved SAB ranking language clarity
+- **Name-Matching Flexibility** - Relaxed listing-name matching to reduce false negatives during competitor grid analysis
+
+### Site Builder + Visual Editing Platform
+- **Site Builder Engine Launch** - Full builder backend, admin panel, client UI, and agent-powered prompt workflows
+- **5-Step Intake Wizard** - Expanded guided intake with business context, page selection, and form-aware inputs
+- **Design + Brand Kit Expansion** - Richer design controls, expanded brand kit handling, quote controls, and layout flexibility
+- **Reference-Site Inspiration Pipeline** - Extracted section patterns from reference sites and fed them into builder generation
+- **GrapesJS Visual Editor** - Wix-like visual editor workflow with richer image/background placement and improved UX
+- **AI Rewrite + Custom Pages** - In-editor AI rewrite support and custom page generation/editing
+- **Template Kit Workflow** - Production-ready site kits, operator kits, and default page system modernization
+- **Workspace + Review UX Improvements** - Better cloning, cleanup, admin uploads, step layout, and review experience
+- **Connections Reliability + Help Coverage** - Hardened builder reliability and added hideable onboarding/help guidance
+
+### Revenue + CRM Intelligence
+- **SNG Revenue Sync Fixes** - Improved auto-sync correctness for CRM-derived revenue data
+- **Revenue Payload Fallbacks** - Added support for list-shaped payloads and fallback handling in SNG revenue endpoints
+- **Opportunity Insights Panel** - Repurposed SNG CRM panel for richer opportunity intelligence views
+
+### QA + Stability Improvements
+- **Feature Flag Seed Race Condition Fix** - Eliminated duplicate-seed race with insert-ignore strategy
+- **Client Tab Loading Robustness** - Fixed client tab loading regressions tied to organic post count flows
+- **Appointment Reminder Time Display Accuracy** - Client automations/settings now show reminder run times in configured local timezone context
 
 ---
 
