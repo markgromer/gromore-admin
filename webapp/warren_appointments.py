@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 
 from webapp.crm_bridge import sng_get_day_ahead_appointment_candidates
@@ -11,13 +12,62 @@ from webapp.warren_sender import send_transactional_sms
 log = logging.getLogger(__name__)
 
 
+_TIMEZONE_ALIASES = {
+    "america/new_york": "America/New_York",
+    "us/eastern": "America/New_York",
+    "eastern": "America/New_York",
+    "eastern time": "America/New_York",
+    "eastern time (us & canada)": "America/New_York",
+    "est": "America/New_York",
+    "edt": "America/New_York",
+    "america/chicago": "America/Chicago",
+    "us/central": "America/Chicago",
+    "central": "America/Chicago",
+    "central time": "America/Chicago",
+    "central time (us & canada)": "America/Chicago",
+    "cst": "America/Chicago",
+    "cdt": "America/Chicago",
+    "america/denver": "America/Denver",
+    "us/mountain": "America/Denver",
+    "mountain": "America/Denver",
+    "mountain time": "America/Denver",
+    "mountain time (us & canada)": "America/Denver",
+    "mst": "America/Denver",
+    "mdt": "America/Denver",
+    "america/los_angeles": "America/Los_Angeles",
+    "us/pacific": "America/Los_Angeles",
+    "pacific": "America/Los_Angeles",
+    "pacific time": "America/Los_Angeles",
+    "pacific time (us & canada)": "America/Los_Angeles",
+    "pst": "America/Los_Angeles",
+    "pdt": "America/Los_Angeles",
+    "america/anchorage": "America/Anchorage",
+    "alaska": "America/Anchorage",
+    "alaska time": "America/Anchorage",
+    "akst": "America/Anchorage",
+    "akdt": "America/Anchorage",
+    "pacific/honolulu": "Pacific/Honolulu",
+    "hawaii": "Pacific/Honolulu",
+    "hawaii time": "Pacific/Honolulu",
+    "hst": "Pacific/Honolulu",
+}
+
+
+def _normalize_timezone_name(value):
+    text = str(value or "").strip()
+    if not text:
+        return "America/New_York"
+    return _TIMEZONE_ALIASES.get(text.lower(), text)
+
+
 def _get_zoneinfo(name):
+    normalized_name = _normalize_timezone_name(name)
     try:
         from zoneinfo import ZoneInfo
     except ImportError:
         from backports.zoneinfo import ZoneInfo
     try:
-        return ZoneInfo(name or "America/New_York")
+        return ZoneInfo(normalized_name)
     except Exception:
         return ZoneInfo("America/New_York")
 
@@ -46,13 +96,34 @@ def _parse_channels(value):
 
 def _parse_send_minutes(value):
     text = str(value or "17:00").strip()
-    try:
-        hour, minute = [int(part) for part in text.split(":", 1)]
-    except Exception:
+    if not text:
         return 17 * 60
-    hour = max(0, min(23, hour))
-    minute = max(0, min(59, minute))
-    return hour * 60 + minute
+
+    # Accept values like 17:00, 17:00:00, 5 PM, and 5:30 PM from legacy forms.
+    ampm_match = re.match(r"^\s*(\d{1,2})(?::(\d{2}))?(?::\d{2})?\s*([AaPp][Mm])\s*$", text)
+    if ampm_match:
+        hour = int(ampm_match.group(1))
+        minute = int(ampm_match.group(2) or 0)
+        marker = ampm_match.group(3).lower()
+        hour = hour % 12
+        if marker == "pm":
+            hour += 12
+        return max(0, min(23, hour)) * 60 + max(0, min(59, minute))
+
+    hhmm_match = re.match(r"^\s*(\d{1,2}):(\d{2})(?::\d{2})?\s*$", text)
+    if hhmm_match:
+        hour = int(hhmm_match.group(1))
+        minute = int(hhmm_match.group(2))
+        return max(0, min(23, hour)) * 60 + max(0, min(59, minute))
+
+    compact_match = re.match(r"^\s*(\d{3,4})\s*$", text)
+    if compact_match:
+        raw = compact_match.group(1)
+        hour = int(raw[:-2])
+        minute = int(raw[-2:])
+        return max(0, min(23, hour)) * 60 + max(0, min(59, minute))
+
+    return 17 * 60
 
 
 def _format_minutes(total_minutes):

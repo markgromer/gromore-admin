@@ -181,6 +181,39 @@ class WarrenAppointmentReminderTests(unittest.TestCase):
         self.assertEqual(stats["sent"], 1)
         send_sms.assert_called_once()
 
+    def test_process_appointment_reminders_accepts_legacy_time_and_timezone_values(self):
+        self.db.update_brand_text_field(self.brand_id, "sales_bot_appointment_reminder_send_time", "5:00 PM")
+        self.db.update_brand_text_field(self.brand_id, "sales_bot_appointment_reminder_timezone", "Central Time (US & Canada)")
+
+        candidate = {
+            "appointment_key": "job:legacy-1",
+            "appointment_date": "2026-04-18",
+            "appointment_date_obj": date(2026, 4, 18),
+            "client_name": "Legacy Client",
+            "client_email": "legacy@example.com",
+            "client_phone": "+15555550126",
+            "assigned_to_name": "Jordan Tech",
+            "address": "789 Main St, Albany, NY",
+            "preferred_channel": "sms",
+            "prefers_sms": True,
+            "prefers_email": False,
+            "job_id": "legacy-1",
+            "status_name": "pending",
+        }
+
+        before_send_time = datetime(2026, 4, 17, 21, 30, tzinfo=timezone.utc)
+        after_send_time = datetime(2026, 4, 17, 22, 10, tzinfo=timezone.utc)
+
+        with patch("webapp.warren_appointments.sng_get_day_ahead_appointment_candidates", return_value=([candidate], None)), \
+             patch("webapp.warren_appointments.send_transactional_sms", return_value=(True, "sent")) as send_sms:
+            early_stats = process_appointment_reminders(self.db, {}, now=before_send_time)
+            late_stats = process_appointment_reminders(self.db, {}, now=after_send_time)
+
+        self.assertEqual(early_stats["sent"], 0)
+        self.assertEqual(early_stats["brands"], 0)
+        self.assertEqual(late_stats["sent"], 1)
+        send_sms.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
