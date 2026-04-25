@@ -464,11 +464,38 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
 
         response = self.client.get("/client/automations")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Recent appointment reminder runs", response.data)
+        self.assertIn(b"Recent successful appointment reminder runs", response.data)
         self.assertIn(b"Processed 1 appointment candidate", response.data)
         self.assertIn(b"Recent delivery attempts", response.data)
         self.assertIn(b"+15555550123", response.data)
         self.assertIn(b"queued - msg_123", response.data)
+
+    def test_automations_page_hides_zero_send_appointment_runs_from_success_list(self):
+        with self.app.app_context():
+            self.app.db.record_appointment_reminder_run(
+                self.brand_id,
+                "2026-04-18",
+                status="failed",
+                reason="No eligible Sweep and Go jobs were found for tomorrow.",
+                candidates=0,
+                sent=0,
+                failed=1,
+            )
+            self.app.db.record_appointment_reminder_run(
+                self.brand_id,
+                "2026-04-19",
+                status="completed",
+                reason="Processed 1 appointment candidate(s): 1 sent, 0 failed, 0 skipped.",
+                candidates=1,
+                sent=1,
+                summary={"local_time": "2026-04-18 17:00", "send_after": "17:00", "timezone": "America/New_York"},
+            )
+
+        response = self.client.get("/client/automations")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Recent successful appointment reminder runs", response.data)
+        self.assertIn(b"Processed 1 appointment candidate", response.data)
+        self.assertNotIn(b"No eligible Sweep and Go jobs were found for tomorrow.", response.data)
 
     def test_automations_page_shows_crm_event_section(self):
         response = self.client.get("/client/automations")

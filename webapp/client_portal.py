@@ -9215,8 +9215,12 @@ def _load_client_automation_context(db, brand_id):
         chatbot_channels = set()
 
     appointment_tz = (brand.get("sales_bot_appointment_reminder_timezone") or "America/New_York").strip() or "America/New_York"
+    appointment_last_attempt_display = _format_timestamp_for_timezone(
+        brand.get("sales_bot_appointment_reminder_last_attempt_at"),
+        appointment_tz,
+    )
 
-    appointment_runs = db.get_appointment_reminder_runs(brand_id, limit=8)
+    appointment_runs = db.get_appointment_reminder_runs(brand_id, limit=8, min_sent=1)
     for run in appointment_runs:
         summary = _safe_json_object(run.get("summary_json"))
         run["summary"] = summary
@@ -9273,6 +9277,7 @@ def _load_client_automation_context(db, brand_id):
     return {
         "brand": brand,
         "chatbot_channels": chatbot_channels,
+        "appointment_reminder_last_attempt_display": appointment_last_attempt_display,
         "appointment_reminder_runs": appointment_runs,
         "appointment_reminder_attempts": appointment_attempts,
         "billing_reminder_attempts": billing_attempts,
@@ -9297,6 +9302,7 @@ def client_automations():
         "client_automations.html",
         brand=brand,
         chatbot_channels=automation_context["chatbot_channels"],
+        appointment_reminder_last_attempt_display=automation_context["appointment_reminder_last_attempt_display"],
         appointment_reminder_runs=automation_context["appointment_reminder_runs"],
         appointment_reminder_attempts=automation_context["appointment_reminder_attempts"],
         billing_reminder_attempts=automation_context["billing_reminder_attempts"],
@@ -9901,6 +9907,7 @@ def client_appointment_reminders_diagnose():
             "local_time": local_now.strftime("%Y-%m-%d %H:%M:%S %Z"),
             "local_minutes": current_minutes,
             "is_after_send_time": current_minutes >= send_minutes,
+            "last_attempt_at": brand.get("sales_bot_appointment_reminder_last_attempt_at") or "",
         },
         "recent_runs": recent_runs[:5],
     })

@@ -36,7 +36,7 @@ def start_background_appointment_runner(app):
         log.info("[AppointmentRunner] Background runner disabled by env flag")
         return False
 
-    interval_seconds = max(60, int(os.environ.get("APPOINTMENT_RUNNER_INTERVAL_SECONDS") or 300))
+    interval_seconds = max(60, int(os.environ.get("APPOINTMENT_RUNNER_INTERVAL_SECONDS") or 600))
     startup_delay_seconds = max(0, int(os.environ.get("APPOINTMENT_RUNNER_STARTUP_DELAY_SECONDS") or 45))
 
     def _loop():

@@ -151,15 +151,13 @@ class WarrenAppointmentReminderTests(unittest.TestCase):
         )
         self.assertEqual(sms_row["status"], "sent")
 
+        brand_after = self.db.get_brand(self.brand_id)
+        self.assertTrue((brand_after.get("sales_bot_appointment_reminder_last_attempt_at") or "").strip())
+
         runs = self.db.get_appointment_reminder_runs(self.brand_id, limit=3)
-        self.assertEqual(len(runs), 3)
+        self.assertEqual(len(runs), 1)
         self.assertEqual(runs[0]["status"], "completed")
-        self.assertEqual(runs[0]["sent"], 0)
-        self.assertGreaterEqual(runs[0]["skipped"], 1)
-        self.assertEqual(runs[1]["status"], "completed")
-        self.assertEqual(runs[1]["sent"], 1)
-        self.assertEqual(runs[2]["status"], "waiting")
-        self.assertIn("before the send time", runs[2]["reason"])
+        self.assertEqual(runs[0]["sent"], 1)
 
     def test_process_appointment_reminders_can_force_run_before_send_time(self):
         candidate = {
@@ -225,6 +223,9 @@ class WarrenAppointmentReminderTests(unittest.TestCase):
         self.assertEqual(early_stats["brands"], 0)
         self.assertEqual(late_stats["sent"], 1)
         send_sms.assert_called_once()
+
+        brand_after = self.db.get_brand(self.brand_id)
+        self.assertTrue((brand_after.get("sales_bot_appointment_reminder_last_attempt_at") or "").strip())
 
     def test_process_appointment_reminders_queries_sng_with_brand_local_date(self):
         """Verify that we query SNG for appointments on the correct target date in the brand's timezone."""

@@ -262,6 +262,14 @@ def process_appointment_reminders(
         base_summary = {}
         try:
             local_now = _brand_local_now(brand, now=now)
+            try:
+                db.update_brand_text_field(
+                    brand["id"],
+                    "sales_bot_appointment_reminder_last_attempt_at",
+                    now.astimezone(timezone.utc).isoformat(),
+                )
+            except Exception:
+                log.exception("Failed to update appointment reminder heartbeat for brand=%s", brand.get("id"))
             # Calculate tomorrow's date in the brand's local timezone
             target_date = local_now.date() + timedelta(days=1)
             send_after_minutes = _parse_send_minutes(brand.get("sales_bot_appointment_reminder_send_time"))
@@ -285,13 +293,6 @@ def process_appointment_reminders(
             if (not ignore_send_time) and (local_now.hour * 60 + local_now.minute) < send_after_minutes:
                 current_mins = (local_now.hour * 60 + local_now.minute)
                 log.debug(f"[Appointment] Brand {brand['id']}: Current time {current_mins} min < send time {send_after_minutes} min, waiting")
-                db.record_appointment_reminder_run(
-                    brand["id"],
-                    target_date,
-                    status="waiting",
-                    reason=f"Current local time {local_now.strftime('%H:%M')} is before the send time {_format_minutes(send_after_minutes)}.",
-                    summary=base_summary,
-                )
                 continue
 
             stats["brands"] += 1
@@ -396,31 +397,32 @@ def process_appointment_reminders(
                         stats["failed"] += 1
                         brand_stats["failed"] += 1
 
-            if brand_stats["failed"]:
-                run_status = "partial" if brand_stats["sent"] else "failed"
-            else:
-                run_status = "completed"
-            if not brand_stats["candidates"]:
-                run_reason = "No eligible Sweep and Go jobs were found for tomorrow."
-            else:
-                run_reason = (
-                    f"Processed {brand_stats['candidates']} appointment candidate(s): "
-                    f"{brand_stats['sent']} sent, {brand_stats['failed']} failed, {brand_stats['skipped']} skipped."
+            if brand_stats["sent"] or brand_stats["failed"]:
+                if brand_stats["failed"]:
+                    run_status = "partial" if brand_stats["sent"] else "failed"
+                else:
+                    run_status = "completed"
+                if not brand_stats["candidates"]:
+                    run_reason = "No eligible Sweep and Go jobs were found for tomorrow."
+                else:
+                    run_reason = (
+                        f"Processed {brand_stats['candidates']} appointment candidate(s): "
+                        f"{brand_stats['sent']} sent, {brand_stats['failed']} failed, {brand_stats['skipped']} skipped."
+                    )
+                db.record_appointment_reminder_run(
+                    brand["id"],
+                    target_date,
+                    status=run_status,
+                    reason=run_reason,
+                    candidates=brand_stats["candidates"],
+                    sent=brand_stats["sent"],
+                    failed=brand_stats["failed"],
+                    skipped=brand_stats["skipped"],
+                    summary={
+                        **base_summary,
+                        "channels": configured_channels,
+                    },
                 )
-            db.record_appointment_reminder_run(
-                brand["id"],
-                target_date,
-                status=run_status,
-                reason=run_reason,
-                candidates=brand_stats["candidates"],
-                sent=brand_stats["sent"],
-                failed=brand_stats["failed"],
-                skipped=brand_stats["skipped"],
-                summary={
-                    **base_summary,
-                    "channels": configured_channels,
-                },
-            )
         except Exception as exc:
             brand_id = brand.get("id")
             log.exception("Unhandled appointment reminder error for brand=%s", brand_id)

@@ -1785,6 +1785,7 @@ class WebDB:
             ("sales_bot_appointment_reminder_channels", "TEXT DEFAULT 'sms'"),
             ("sales_bot_appointment_reminder_template", "TEXT DEFAULT ''"),
             ("sales_bot_appointment_reminder_respect_client_channel", "INTEGER DEFAULT 1"),
+            ("sales_bot_appointment_reminder_last_attempt_at", "TEXT DEFAULT ''"),
             ("sales_bot_sng_webhook_secret", "TEXT DEFAULT ''"),
             ("sales_bot_crm_event_rules", "TEXT DEFAULT '{}'"),
             ("sales_bot_crm_event_alert_emails", "TEXT DEFAULT ''"),
@@ -2250,6 +2251,7 @@ class WebDB:
             "sales_bot_payment_reminder_channels", "sales_bot_payment_reminder_template",
             "sales_bot_appointment_reminder_send_time", "sales_bot_appointment_reminder_timezone",
             "sales_bot_appointment_reminder_channels", "sales_bot_appointment_reminder_template",
+            "sales_bot_appointment_reminder_last_attempt_at",
             "sales_bot_crm_event_rules", "sales_bot_crm_event_alert_emails",
             "sales_bot_dnd_start", "sales_bot_dnd_end", "sales_bot_dnd_timezone",
             "sales_bot_sms_opt_out_footer",
@@ -3499,16 +3501,22 @@ class WebDB:
         conn.commit()
         conn.close()
 
-    def get_appointment_reminder_runs(self, brand_id, limit=10):
+    def get_appointment_reminder_runs(self, brand_id, limit=10, min_sent=None):
         conn = self._conn()
+        clauses = ["brand_id = ?"]
+        values = [brand_id]
+        if min_sent is not None:
+            clauses.append("sent >= ?")
+            values.append(int(min_sent))
+        values.append(limit)
         rows = conn.execute(
-            """
+            f"""
             SELECT * FROM appointment_reminder_runs
-            WHERE brand_id = ?
+            WHERE {' AND '.join(clauses)}
             ORDER BY created_at DESC, id DESC
             LIMIT ?
             """,
-            (brand_id, limit),
+            values,
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
