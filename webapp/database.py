@@ -3125,6 +3125,75 @@ class WebDB:
         reminder = self.get_client_billing_reminder(brand_id, external_client_id, due_date, channel, reminder_type)
         return bool(reminder and reminder.get("status") == "sent")
 
+    def try_claim_client_billing_reminder(
+        self,
+        brand_id,
+        external_client_id,
+        due_date,
+        channel,
+        recipient="",
+        detail="",
+        reminder_type="payment_due",
+    ):
+        """Atomically reserve a reminder row before sending.
+
+        Returns True only for the caller that successfully claims the reminder.
+        Existing sent or pending rows are treated as already in-flight/done.
+        Failed rows can be reclaimed for a retry.
+        """
+        conn = self._conn()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                """
+                SELECT id, status FROM client_billing_reminders
+                WHERE brand_id = ? AND external_client_id = ? AND due_date = ?
+                  AND channel = ? AND reminder_type = ?
+                """,
+                (brand_id, external_client_id, due_date, channel, reminder_type),
+            ).fetchone()
+
+            existing_status = str((row["status"] if row else "") or "").strip().lower()
+            if existing_status in {"sent", "pending"}:
+                conn.rollback()
+                return False
+
+            if row:
+                conn.execute(
+                    """
+                    UPDATE client_billing_reminders
+                    SET recipient = ?, status = 'pending', detail = ?, updated_at = datetime('now')
+                    WHERE id = ?
+                    """,
+                    (recipient or "", detail or "", row["id"]),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO client_billing_reminders (
+                        brand_id, external_client_id, due_date, channel,
+                        reminder_type, recipient, status, detail, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, datetime('now'))
+                    """,
+                    (
+                        brand_id,
+                        external_client_id,
+                        due_date,
+                        channel,
+                        reminder_type,
+                        recipient or "",
+                        detail or "",
+                    ),
+                )
+
+            conn.commit()
+            return True
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
     def record_client_billing_reminder(
         self,
         brand_id,

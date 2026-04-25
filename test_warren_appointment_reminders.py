@@ -227,6 +227,83 @@ class WarrenAppointmentReminderTests(unittest.TestCase):
         brand_after = self.db.get_brand(self.brand_id)
         self.assertTrue((brand_after.get("sales_bot_appointment_reminder_last_attempt_at") or "").strip())
 
+    def test_try_claim_client_billing_reminder_blocks_overlap_and_allows_retry_after_failure(self):
+        claimed_first = self.db.try_claim_client_billing_reminder(
+            self.brand_id,
+            "job:claim-1",
+            "2026-04-18",
+            "sms",
+            recipient="+15555550199",
+            detail='{"state":"pending"}',
+            reminder_type="appointment_day_ahead",
+        )
+        claimed_second = self.db.try_claim_client_billing_reminder(
+            self.brand_id,
+            "job:claim-1",
+            "2026-04-18",
+            "sms",
+            recipient="+15555550199",
+            detail='{"state":"pending"}',
+            reminder_type="appointment_day_ahead",
+        )
+
+        self.assertTrue(claimed_first)
+        self.assertFalse(claimed_second)
+        self.assertEqual(
+            self.db.get_client_billing_reminder(
+                self.brand_id,
+                "job:claim-1",
+                "2026-04-18",
+                "sms",
+                reminder_type="appointment_day_ahead",
+            )["status"],
+            "pending",
+        )
+
+        self.db.record_client_billing_reminder(
+            self.brand_id,
+            "job:claim-1",
+            "2026-04-18",
+            "sms",
+            recipient="+15555550199",
+            status="failed",
+            detail='{"error":"temporary"}',
+            reminder_type="appointment_day_ahead",
+        )
+        self.assertTrue(
+            self.db.try_claim_client_billing_reminder(
+                self.brand_id,
+                "job:claim-1",
+                "2026-04-18",
+                "sms",
+                recipient="+15555550199",
+                detail='{"state":"pending"}',
+                reminder_type="appointment_day_ahead",
+            )
+        )
+
+        self.db.record_client_billing_reminder(
+            self.brand_id,
+            "job:claim-1",
+            "2026-04-18",
+            "sms",
+            recipient="+15555550199",
+            status="sent",
+            detail='{"result":"sent"}',
+            reminder_type="appointment_day_ahead",
+        )
+        self.assertFalse(
+            self.db.try_claim_client_billing_reminder(
+                self.brand_id,
+                "job:claim-1",
+                "2026-04-18",
+                "sms",
+                recipient="+15555550199",
+                detail='{"state":"pending"}',
+                reminder_type="appointment_day_ahead",
+            )
+        )
+
     def test_process_appointment_reminders_queries_sng_with_brand_local_date(self):
         """Verify that we query SNG for appointments on the correct target date in the brand's timezone."""
         self.db.update_brand_text_field(self.brand_id, "sales_bot_appointment_reminder_timezone", "America/Los_Angeles")

@@ -340,10 +340,6 @@ def process_appointment_reminders(
                         stats["skipped"] += 1
                         brand_stats["skipped"] += 1
                         continue
-                    if db.has_sent_client_billing_reminder(brand["id"], appointment_key, appointment_date, channel, reminder_type=reminder_type):
-                        stats["skipped"] += 1
-                        brand_stats["skipped"] += 1
-                        continue
 
                     detail_payload = {
                         "job_id": candidate.get("job_id") or "",
@@ -352,6 +348,20 @@ def process_appointment_reminders(
                         "address": candidate.get("address") or "",
                         "preferred_channel": candidate.get("preferred_channel") or "",
                     }
+                    pending_detail = json.dumps({"state": "pending", **detail_payload}, separators=(",", ":"))[:500]
+                    claimed = db.try_claim_client_billing_reminder(
+                        brand["id"],
+                        appointment_key,
+                        appointment_date,
+                        channel,
+                        recipient=recipient,
+                        detail=pending_detail,
+                        reminder_type=reminder_type,
+                    )
+                    if not claimed:
+                        stats["skipped"] += 1
+                        brand_stats["skipped"] += 1
+                        continue
 
                     try:
                         if channel == "email":
