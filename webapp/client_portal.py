@@ -3949,6 +3949,7 @@ def _update_warren_onboarding_brand_field(db, brand_id, question_key, answer):
 # Map route function names → feature flag keys.
 # Routes not listed here are ungated (login, logout, assistant, etc.).
 _ENDPOINT_FEATURE_MAP = {
+    "client_auto_warren":          "dashboard",
     "client_dashboard":            "dashboard",
     "client_dashboard_data":       "dashboard",
     "client_kpis":                 "kpis",
@@ -4629,6 +4630,251 @@ def _resolve_dashboard_month(db, brand_id, requested_month):
 
 # ── Dashboard ──
 
+def _auto_warren_parse_datetime(value):
+    text = str(value or "").strip()
+    if not text:
+        return None
+    normalized = text.replace("T", " ").replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(normalized)
+    except Exception:
+        pass
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            sample = text[:19] if fmt.endswith("%S") else text[:10]
+            return datetime.strptime(sample, fmt)
+        except Exception:
+            continue
+    return None
+
+
+def _auto_warren_days_since(value):
+    parsed = _auto_warren_parse_datetime(value)
+    if not parsed:
+        return None
+    now = datetime.now(parsed.tzinfo) if parsed.tzinfo else datetime.now()
+    return max(0, (now - parsed).days)
+
+
+def _auto_warren_url(endpoint, **values):
+    try:
+        return url_for(endpoint, **values)
+    except Exception:
+        return ""
+
+
+def _auto_warren_status(label, state, detail="", icon="bi-circle", href="", source=""):
+    return {
+        "label": label,
+        "state": state,
+        "detail": detail,
+        "icon": icon,
+        "href": href,
+        "source": source,
+    }
+
+
+def _auto_warren_action(key, title, why, evidence, outcome, href="", cta="Do this with WARREN",
+                        icon="bi-stars", source="Connected data", confidence="medium",
+                        urgency="normal"):
+    return {
+        "key": key,
+        "title": title,
+        "why": why,
+        "evidence": evidence,
+        "outcome": outcome,
+        "href": href,
+        "cta": cta,
+        "icon": icon,
+        "source": source,
+        "confidence": confidence,
+        "urgency": urgency,
+    }
+
+
+def _build_auto_warren_context(db, brand, brand_id, month, client_user_id=None):
+    """Build Auto WARREN from existing connected-data surfaces."""
+    dashboard = {}
+    snapshot = None
+    try:
+        snapshot = db.get_dashboard_snapshot(brand_id, month, max_age_hours=8760)
+        if snapshot:
+            dashboard = json.loads(snapshot.get("snapshot_json") or "{}")
+    except Exception:
+        dashboard = {}
+
+    connections = db.get_brand_connections(brand_id) or {}
+    google_conn = connections.get("google", {}) if isinstance(connections, dict) else {}
+    meta_conn = connections.get("meta", {}) if isinstance(connections, dict) else {}
+    google_connected = google_conn.get("status") == "connected"
+    meta_connected = meta_conn.get("status") == "connected"
+    has_google_ads, has_meta_ads = _get_ad_connection_status(db, brand)
+    crm_connected = bool(
+        (brand.get("crm_type") or "").strip()
+        and ((brand.get("crm_api_key") or "").strip() or (brand.get("crm_webhook_url") or "").strip())
+    )
+    wordpress_connected = bool(
+        (brand.get("wp_site_url") or "").strip()
+        and (brand.get("wp_username") or "").strip()
+        and (brand.get("wp_app_password") or "").strip()
+    )
+    warren_enabled = int(brand.get("sales_bot_enabled") or 0) == 1
+    appointment_reminders_enabled = int(brand.get("sales_bot_appointment_reminders_enabled") or 0) == 1
+
+    try:
+        lead_threads = db.get_lead_threads(brand_id, limit=80) or []
+    except Exception:
+        lead_threads = []
+    active_leads = [t for t in lead_threads if (t.get("status") or "").lower() not in {"won", "lost"}]
+    won_leads = [t for t in lead_threads if (t.get("status") or "").lower() == "won"]
+    waiting_threads = []
+    unread_threads = []
+    for thread in active_leads:
+        if int(thread.get("unread_count") or 0) > 0:
+            unread_threads.append(thread)
+        inbound_at = _auto_warren_parse_datetime(thread.get("last_inbound_at"))
+        outbound_at = _auto_warren_parse_datetime(thread.get("last_outbound_at"))
+        if inbound_at and (not outbound_at or inbound_at > outbound_at):
+            waiting_threads.append(thread)
+
+    try:
+        posts = db.get_scheduled_posts(brand_id, limit=80) or []
+    except Exception:
+        posts = []
+    pending_posts = [p for p in posts if (p.get("status") or "").lower() == "pending"]
+    failed_posts = [p for p in posts if (p.get("status") or "").lower() == "failed"]
+    published_posts = [p for p in posts if (p.get("status") or "").lower() == "published"]
+    last_post = published_posts[0] if published_posts else None
+    days_since_post = _auto_warren_days_since((last_post or {}).get("published_at") or (last_post or {}).get("scheduled_at"))
+
+    try:
+        blogs = db.get_blog_posts(brand_id, limit=50) or []
+    except Exception:
+        blogs = []
+    scheduled_blogs = [b for b in blogs if (b.get("status") or "").lower() == "scheduled"]
+    draft_blogs = [b for b in blogs if (b.get("status") or "").lower() == "draft"]
+    published_blogs = [b for b in blogs if (b.get("status") or "").lower() == "published"]
+
+    try:
+        tasks = db.get_brand_tasks(brand_id, status="open", limit=20) or []
+    except Exception:
+        tasks = []
+    try:
+        finance = db.get_brand_month_finance(brand_id, month) or {}
+    except Exception:
+        finance = {}
+    try:
+        findings = db.get_agent_findings(brand_id, month=month, limit=12) or []
+    except Exception:
+        findings = []
+    try:
+        dismissed = set(db.get_dismissed_actions(brand_id, month) or [])
+    except Exception:
+        dismissed = set()
+
+    dashboard_actions = _normalize_client_actions(dashboard.get("actions") or [])
+    dashboard_actions = [a for a in dashboard_actions if a.get("key") not in dismissed]
+    connection_cards = [
+        _auto_warren_status("Google data", "good" if google_connected or has_google_ads or brand.get("ga4_property_id") or brand.get("gsc_site_url") else "setup", "Powers website, SEO, Google Ads, and KPI coaching.", "bi-google", _auto_warren_url("client.client_settings"), "Google OAuth, GA4, GSC, Google Ads"),
+        _auto_warren_status("Meta data", "good" if meta_connected or has_meta_ads else "setup", "Powers Facebook ads, organic post context, and lead-form coaching.", "bi-facebook", _auto_warren_url("client.client_settings"), "Meta OAuth and Page data"),
+        _auto_warren_status("Warren leads", "good" if warren_enabled or lead_threads else "setup", f"{len(active_leads)} active lead{'s' if len(active_leads) != 1 else ''} in the pipeline.", "bi-inbox", _auto_warren_url("client.client_inbox"), "Lead threads and message timing"),
+        _auto_warren_status("CRM revenue", "good" if crm_connected or finance else "setup", "Ties booked work and revenue back to marketing decisions.", "bi-cash-coin", _auto_warren_url("client.client_settings"), "CRM sync and monthly finance"),
+        _auto_warren_status("Content engine", "good" if pending_posts or scheduled_blogs or published_posts or published_blogs else "setup", f"{len(pending_posts)} social post{'s' if len(pending_posts) != 1 else ''} queued and {len(scheduled_blogs)} blog{'s' if len(scheduled_blogs) != 1 else ''} scheduled.", "bi-calendar2-week", _auto_warren_url("client.client_post_scheduler"), "Post scheduler and blog queue"),
+    ]
+    data_sources = [card for card in connection_cards if card["state"] == "good"]
+    missing_sources = [card for card in connection_cards if card["state"] != "good"]
+    health_summary = dashboard.get("health_summary") or {}
+    cluster_cards = ((dashboard.get("health_cluster") or {}).get("cards") or [])
+
+    actions = []
+    if waiting_threads:
+        names = [t.get("lead_name") or t.get("lead_phone") or "lead" for t in waiting_threads[:3]]
+        actions.append(_auto_warren_action("reply_waiting_leads", f"Reply to {len(waiting_threads)} lead{'s' if len(waiting_threads) != 1 else ''} waiting on you", "People who already raised their hand are usually easier to book than brand-new strangers.", f"Latest inbound messages are newer than your last outbound reply for: {', '.join(names)}.", "Goal: book the job, send the quote, or mark the lead lost so the pipeline stays clean.", _auto_warren_url("client.client_inbox"), "Open conversations", "bi-reply-fill", "Warren lead threads", "high", "high"))
+    elif unread_threads:
+        actions.append(_auto_warren_action("review_unread_leads", f"Review {len(unread_threads)} unread lead conversation{'s' if len(unread_threads) != 1 else ''}", "Fast replies protect lead quality before the customer starts shopping around.", f"Warren sees {len(unread_threads)} thread{'s' if len(unread_threads) != 1 else ''} with unread messages.", "Goal: clear the unread queue and let Warren keep following up.", _auto_warren_url("client.client_inbox"), "Open conversations", "bi-inbox-fill", "Warren lead threads", "high", "high"))
+
+    if failed_posts:
+        actions.append(_auto_warren_action("fix_failed_posts", f"Fix {len(failed_posts)} failed Facebook post{'s' if len(failed_posts) != 1 else ''}", "A failed scheduled post means your content plan is not actually reaching customers.", failed_posts[0].get("error_message") or "The scheduler has at least one failed post.", "Goal: recover the failed post or replace it with a fresh one this week.", _auto_warren_url("client.client_post_scheduler"), "Open scheduler", "bi-exclamation-triangle-fill", "Post scheduler", "high", "high"))
+    elif days_since_post is not None and days_since_post >= 10:
+        actions.append(_auto_warren_action("post_recency", "Post a simple customer-story update", "Quiet social pages make the business look less active, especially for new customers checking trust signals.", f"Your last published Facebook post appears to be {days_since_post} days old.", "Goal: publish or schedule one helpful post before the end of the week.", _auto_warren_url("client.client_post_scheduler"), "Create post", "bi-calendar-plus", "Post scheduler", "medium", "normal"))
+    elif not posts:
+        actions.append(_auto_warren_action("start_content_queue", "Queue your first simple Facebook post", "Consistency matters more than a perfect post when the page has no current rhythm.", "Warren does not see any scheduled or published posts in the content queue yet.", "Goal: get one useful post scheduled so content is no longer at zero.", _auto_warren_url("client.client_post_scheduler"), "Create post", "bi-calendar-plus", "Post scheduler", "medium", "normal"))
+
+    if dashboard_actions:
+        first = dashboard_actions[0]
+        actions.append(_auto_warren_action(first.get("key") or "dashboard_next_move", first.get("mission_name") or first.get("title") or "Work the top growth mission", first.get("why") or first.get("what") or "This is the highest-ranked action from your performance data.", first.get("data_point") or first.get("detail") or "Pulled from the current dashboard action plan.", first.get("reward") or "Goal: complete the mission and improve the signal Warren flagged.", _auto_warren_url("client.client_actions", month=month), "Open action plan", first.get("icon") or "bi-clipboard2-check", "Dashboard analysis and mission engine", "medium", "normal"))
+
+    if not data_sources:
+        actions.insert(0, _auto_warren_action("connect_first_data_source", "Connect one data source first", "Warren should not guess. It needs a real connection before it can tell you what is moving the business.", "No active Google, Meta, CRM, Warren lead, or content source is ready yet.", "Goal: connect Google or Meta first so Auto WARREN can coach from real numbers.", _auto_warren_url("client.client_settings"), "Open connections", "bi-plug-fill", "Connection status", "high", "high"))
+    elif missing_sources and len(actions) < 3:
+        missing = missing_sources[0]
+        actions.append(_auto_warren_action(f"connect_{missing['label'].lower().replace(' ', '_')}", f"Unlock better coaching: {missing['label']}", "The more complete the data, the less generic Warren has to be.", f"Missing source: {missing['source']}. {missing['detail']}", "Goal: connect this source when you are ready for sharper next-step recommendations.", missing["href"], "Open setup", missing["icon"], "Connection status", "medium", "normal"))
+
+    if tasks and len(actions) < 4:
+        actions.append(_auto_warren_action("open_work_queue", f"Clear {len(tasks)} open work item{'s' if len(tasks) != 1 else ''}", "Owner growth gets easier when the work queue does not disappear into memory or text threads.", f"Warren sees {len(tasks)} open task{'s' if len(tasks) != 1 else ''} assigned in the Work Queue.", "Goal: finish, assign, or update the next open task.", _auto_warren_url("client.client_tasks"), "Open work queue", "bi-list-task", "Brand tasks", "medium", "normal"))
+    if not actions:
+        actions.append(_auto_warren_action("daily_check_in", "Ask Warren for a simple check-in", "Nothing urgent is standing out from the connected data right now.", f"Warren reviewed {len(data_sources)} active data source{'s' if len(data_sources) != 1 else ''} for {month}.", "Goal: understand what is working and keep the next step simple.", "#", "Ask Warren", "bi-chat-dots-fill", "Connected account snapshot", "medium", "normal"))
+
+    focus_action = actions[0]
+    action_queue = actions[1:4]
+    score_cards = [
+        {"label": "Leads", "value": str(len(active_leads)), "state": "attention" if waiting_threads else ("good" if active_leads else "quiet"), "detail": f"{len(waiting_threads)} waiting, {len(won_leads)} won.", "icon": "bi-person-lines-fill"},
+        {"label": "Next move", "value": focus_action["urgency"].title(), "state": "attention" if focus_action["urgency"] == "high" else "good", "detail": focus_action["title"], "icon": "bi-arrow-right-circle-fill"},
+        {"label": "Data sources", "value": f"{len(data_sources)}/{len(connection_cards)}", "state": "good" if len(data_sources) >= 3 else ("attention" if len(data_sources) else "quiet"), "detail": "Connected signals Warren can use without guessing.", "icon": "bi-database-check"},
+        {"label": "Content", "value": str(len(pending_posts) + len(scheduled_blogs)), "state": "attention" if failed_posts else ("good" if pending_posts or scheduled_blogs else "quiet"), "detail": f"{len(pending_posts)} posts queued, {len(scheduled_blogs)} blogs scheduled.", "icon": "bi-calendar-check"},
+    ]
+    path_status = {
+        "lead_capture": "good" if lead_threads or warren_enabled else "setup",
+        "follow_up": "attention" if waiting_threads else ("good" if warren_enabled else "setup"),
+        "advertising": "good" if has_google_ads or has_meta_ads else "setup",
+        "content": "attention" if failed_posts else ("good" if pending_posts or scheduled_blogs or published_posts else "setup"),
+        "website": "good" if google_connected or brand.get("ga4_property_id") or brand.get("gsc_site_url") else "setup",
+        "revenue": "good" if crm_connected or finance else "setup",
+        "team": "good" if tasks else "later",
+    }
+    growth_path = [
+        {"key": "lead_capture", "label": "Get leads organized", "status": path_status["lead_capture"], "detail": f"{len(lead_threads)} total lead threads tracked."},
+        {"key": "follow_up", "label": "Respond and follow up", "status": path_status["follow_up"], "detail": f"{len(waiting_threads)} lead replies need attention."},
+        {"key": "advertising", "label": "Make ads accountable", "status": path_status["advertising"], "detail": "Uses Google and Meta performance data."},
+        {"key": "content", "label": "Stay visible", "status": path_status["content"], "detail": f"{len(pending_posts)} posts queued."},
+        {"key": "website", "label": "Improve the website", "status": path_status["website"], "detail": "Uses website and SEO signals when connected."},
+        {"key": "revenue", "label": "Track booked work", "status": path_status["revenue"], "detail": "Uses CRM or finance data."},
+        {"key": "team", "label": "Delegate and hire", "status": path_status["team"], "detail": f"{len(tasks)} open work queue item(s)."},
+    ]
+    automations = [
+        _auto_warren_status("Lead follow-up", "good" if warren_enabled else "setup", "Warren can reply, collect info, and nurture active leads.", "bi-chat-left-text", _auto_warren_url("client.client_lead_assistant"), "Warren settings"),
+        _auto_warren_status("Appointment reminders", "good" if appointment_reminders_enabled else "setup", "Day-ahead reminders for Sweep & Go clients.", "bi-bell", _auto_warren_url("client.client_automations"), "Automation settings"),
+        _auto_warren_status("Post scheduling", "good" if pending_posts else "setup", f"{len(pending_posts)} pending post(s).", "bi-calendar-event", _auto_warren_url("client.client_post_scheduler"), "Post scheduler"),
+        _auto_warren_status("Blog publishing", "good" if scheduled_blogs or wordpress_connected else "setup", f"{len(scheduled_blogs)} scheduled blog(s).", "bi-journal-richtext", _auto_warren_url("client.client_blog"), "Blog and WordPress"),
+        _auto_warren_status("Revenue sync", "good" if crm_connected else "setup", "Connects booked work to marketing decisions.", "bi-graph-up", _auto_warren_url("client.client_settings"), "CRM connection"),
+    ]
+    summary_text = health_summary.get("summary") or "Warren is ready to guide the next move once enough connected data is available."
+    if waiting_threads:
+        summary_text = f"Start with lead follow-up. {len(waiting_threads)} active lead conversation{'s' if len(waiting_threads) != 1 else ''} appear to be waiting on a reply."
+    elif not data_sources:
+        summary_text = "Start by connecting one real data source. Warren should not coach from guesses."
+    return {
+        "month": month,
+        "snapshot": snapshot,
+        "dashboard": dashboard,
+        "summary_text": summary_text,
+        "focus_action": focus_action,
+        "action_queue": action_queue,
+        "score_cards": score_cards,
+        "connection_cards": connection_cards,
+        "data_sources": data_sources,
+        "missing_sources": missing_sources,
+        "growth_path": growth_path,
+        "automations": automations,
+        "findings": findings[:5],
+        "finance": finance,
+        "lead_summary": {"total": len(lead_threads), "active": len(active_leads), "waiting": len(waiting_threads), "won": len(won_leads)},
+        "content_summary": {"pending_posts": len(pending_posts), "failed_posts": len(failed_posts), "scheduled_blogs": len(scheduled_blogs), "draft_blogs": len(draft_blogs)},
+        "health_summary": health_summary,
+        "health_cluster": cluster_cards,
+    }
+
+
 @client_bp.route("/")
 @client_bp.route("/dashboard")
 @client_login_required
@@ -4677,6 +4923,39 @@ def client_dashboard():
         meta_connected=meta_connected,
         client_name=session.get("client_name", ""),
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/auto-warren")
+@client_bp.route("/auto")
+@client_login_required
+def client_auto_warren():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        flash("Your account is not linked to an active brand.", "error")
+        return redirect(url_for("client.client_logout"))
+
+    requested_month = request.args.get("month", "")
+    month, requested_month, used_fallback = _resolve_dashboard_month(db, brand_id, requested_month)
+    auto_warren = _build_auto_warren_context(
+        db,
+        brand,
+        brand_id,
+        month,
+        client_user_id=session.get("client_user_id"),
+    )
+
+    return render_template(
+        "client_auto_warren.html",
+        brand=brand,
+        month=month,
+        requested_month=requested_month,
+        used_month_fallback=used_fallback,
+        auto_warren=auto_warren,
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+        client_name=session.get("client_name", ""),
     )
 
 

@@ -60,6 +60,9 @@
             </div>
             {# â”€â”€ Primary: always visible â”€â”€ #}
             {% if feature_on('dashboard') %}
+            <a href="{{ url_for('client.client_auto_warren') }}" class="{% if request.endpoint == 'client.client_auto_warren' %}active{% endif %}">
+                <i class="bi bi-magic"></i> <span class="nav-link-label">Auto WARREN</span>
+            </a>
             <a href="{{ url_for('client.client_dashboard') }}" class="{% if request.endpoint == 'client.client_dashboard' %}active{% endif %}">
                 <i class="bi bi-speedometer2"></i> <span class="nav-link-label">Overview</span>
             </a>
@@ -281,6 +284,7 @@
 
     <nav class="mobile-bottom-nav" id="mobileBottomNav">
         <ul class="bottom-nav-items">
+            <li><a href="{{ url_for('client.client_auto_warren') }}" class="{% if request.endpoint == 'client.client_auto_warren' %}active{% endif %}"><i class="bi bi-magic"></i>Auto</a></li>
             <li><a href="{{ url_for('client.client_dashboard') }}" class="{% if request.endpoint == 'client.client_dashboard' %}active{% endif %}"><i class="bi bi-speedometer2"></i>Overview</a></li>
             <li><a href="{{ url_for('client.client_campaigns') }}" class="{% if request.endpoint in ('client.client_campaigns', 'client.client_campaign_detail') %}active{% endif %}"><i class="bi bi-megaphone"></i>Campaigns</a></li>
             {% if feature_on('crm') or feature_on('commercial') or feature_on('va_services') or feature_on('warren_inbox') %}

@@ -1,0 +1,563 @@
+{% extends "client/client_base.html" %}
+
+{% block title %}Auto WARREN{% endblock %}
+
+{% block head %}
+<style>
+    .auto-shell {
+        max-width: 1180px;
+        margin: 0 auto;
+    }
+    .auto-hero {
+        border: 1px solid #d7e7df;
+        border-radius: 18px;
+        background: linear-gradient(180deg, #ffffff 0%, #f5fbf8 100%);
+        box-shadow: 0 18px 42px rgba(15, 23, 42, .07);
+        padding: 1.4rem;
+        margin-bottom: 1rem;
+    }
+    .auto-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: .42rem;
+        border-radius: 999px;
+        padding: .34rem .7rem;
+        background: #ecfdf5;
+        color: #047857;
+        border: 1px solid #bbf7d0;
+        font-size: .72rem;
+        font-weight: 800;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        margin-bottom: .75rem;
+    }
+    .auto-hero h3 {
+        color: #0f172a;
+        font-weight: 850;
+        font-size: 1.55rem;
+        letter-spacing: 0;
+        margin: 0 0 .45rem;
+    }
+    .auto-hero p {
+        color: #475569;
+        font-size: .96rem;
+        line-height: 1.6;
+        max-width: 74ch;
+        margin: 0;
+    }
+    .auto-mode-switch {
+        display: inline-flex;
+        gap: .4rem;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: .28rem;
+    }
+    .auto-mode-switch a {
+        text-decoration: none;
+        color: #475569;
+        border-radius: 9px;
+        padding: .48rem .72rem;
+        font-size: .82rem;
+        font-weight: 750;
+        white-space: nowrap;
+    }
+    .auto-mode-switch a.active {
+        background: #ffffff;
+        color: #0f766e;
+        box-shadow: 0 3px 10px rgba(15, 23, 42, .08);
+    }
+    .auto-trust-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .55rem;
+        margin-top: .95rem;
+    }
+    .auto-trust-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        border-radius: 999px;
+        padding: .42rem .68rem;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        color: #334155;
+        font-size: .78rem;
+        font-weight: 700;
+    }
+    .auto-stat-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: .8rem;
+        margin-bottom: 1rem;
+    }
+    .auto-stat {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: .95rem;
+        min-height: 118px;
+    }
+    .auto-stat .icon {
+        width: 34px;
+        height: 34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        background: #f1f5f9;
+        color: #475569;
+        margin-bottom: .65rem;
+    }
+    .auto-stat.good .icon { background: #dcfce7; color: #15803d; }
+    .auto-stat.attention .icon { background: #fef3c7; color: #b45309; }
+    .auto-stat.quiet .icon { background: #e0f2fe; color: #0369a1; }
+    .auto-stat-label {
+        color: #64748b;
+        font-size: .72rem;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        font-weight: 800;
+    }
+    .auto-stat-value {
+        color: #0f172a;
+        font-weight: 850;
+        font-size: 1.18rem;
+        line-height: 1.25;
+        margin-top: .14rem;
+    }
+    .auto-stat-detail {
+        color: #64748b;
+        font-size: .78rem;
+        line-height: 1.45;
+        margin-top: .3rem;
+    }
+    .auto-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(300px, .8fr);
+        gap: 1rem;
+        align-items: start;
+    }
+    .auto-panel {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 1.1rem;
+        box-shadow: 0 10px 26px rgba(15, 23, 42, .05);
+    }
+    .auto-panel + .auto-panel {
+        margin-top: 1rem;
+    }
+    .auto-panel-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .8rem;
+        margin-bottom: .85rem;
+    }
+    .auto-panel-title h5 {
+        color: #0f172a;
+        font-size: .98rem;
+        font-weight: 850;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: .48rem;
+    }
+    .auto-panel-title span {
+        color: #64748b;
+        font-size: .78rem;
+        font-weight: 650;
+    }
+    .focus-card {
+        border: 1px solid #bbf7d0;
+        border-radius: 16px;
+        background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
+        padding: 1.1rem;
+    }
+    .focus-top {
+        display: flex;
+        align-items: flex-start;
+        gap: .85rem;
+    }
+    .focus-icon {
+        width: 46px;
+        height: 46px;
+        border-radius: 13px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #0f766e;
+        color: #fff;
+        flex: 0 0 auto;
+    }
+    .focus-card h4 {
+        color: #0f172a;
+        font-size: 1.18rem;
+        line-height: 1.25;
+        font-weight: 850;
+        margin: 0 0 .36rem;
+    }
+    .focus-card p {
+        margin: 0;
+        color: #475569;
+        line-height: 1.58;
+        font-size: .92rem;
+    }
+    .evidence-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: .7rem;
+        margin: 1rem 0;
+    }
+    .evidence-box {
+        border-radius: 12px;
+        background: #ffffff;
+        border: 1px solid #dbeafe;
+        padding: .78rem;
+    }
+    .evidence-box .label {
+        color: #2563eb;
+        font-size: .68rem;
+        font-weight: 850;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        margin-bottom: .25rem;
+    }
+    .evidence-box .text {
+        color: #334155;
+        font-size: .82rem;
+        line-height: 1.48;
+    }
+    .focus-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .55rem;
+        align-items: center;
+    }
+    .source-note {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        color: #475569;
+        font-size: .76rem;
+        font-weight: 700;
+    }
+    .queue-list,
+    .status-list {
+        display: grid;
+        gap: .65rem;
+    }
+    .queue-item,
+    .status-item {
+        border: 1px solid #e2e8f0;
+        border-radius: 13px;
+        padding: .82rem;
+        background: #ffffff;
+    }
+    .queue-item {
+        display: grid;
+        grid-template-columns: 32px minmax(0, 1fr) auto;
+        gap: .72rem;
+        align-items: center;
+    }
+    .queue-item .mini-icon,
+    .status-item .mini-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
+        background: #f1f5f9;
+        color: #475569;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .queue-title,
+    .status-title {
+        color: #0f172a;
+        font-size: .88rem;
+        font-weight: 800;
+        line-height: 1.35;
+    }
+    .queue-meta,
+    .status-detail {
+        color: #64748b;
+        font-size: .77rem;
+        line-height: 1.45;
+        margin-top: .18rem;
+    }
+    .path-list {
+        display: grid;
+        gap: .55rem;
+    }
+    .path-row {
+        display: grid;
+        grid-template-columns: 30px minmax(0, 1fr);
+        gap: .62rem;
+        align-items: start;
+        padding: .6rem;
+        border: 1px solid #edf2f7;
+        border-radius: 12px;
+        background: #fbfdff;
+    }
+    .path-dot {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: .82rem;
+        background: #e2e8f0;
+        color: #64748b;
+    }
+    .path-row.good .path-dot { background: #dcfce7; color: #15803d; }
+    .path-row.attention .path-dot { background: #fef3c7; color: #b45309; }
+    .path-row.setup .path-dot { background: #dbeafe; color: #1d4ed8; }
+    .path-title {
+        color: #0f172a;
+        font-size: .86rem;
+        font-weight: 800;
+    }
+    .path-detail {
+        color: #64748b;
+        font-size: .76rem;
+        line-height: 1.45;
+        margin-top: .12rem;
+    }
+    .status-item {
+        display: grid;
+        grid-template-columns: 32px minmax(0, 1fr);
+        gap: .66rem;
+        align-items: start;
+    }
+    .status-item.good .mini-icon { background: #dcfce7; color: #15803d; }
+    .status-item.setup .mini-icon { background: #dbeafe; color: #1d4ed8; }
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+        border-radius: 999px;
+        padding: .2rem .46rem;
+        font-size: .68rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        background: #f1f5f9;
+        color: #475569;
+        margin-top: .35rem;
+    }
+    .status-item.good .status-badge { background: #dcfce7; color: #15803d; }
+    .status-item.setup .status-badge { background: #dbeafe; color: #1d4ed8; }
+    .data-rule {
+        border-radius: 14px;
+        padding: .9rem 1rem;
+        border: 1px solid #bae6fd;
+        background: #f0f9ff;
+        color: #075985;
+        font-size: .86rem;
+        line-height: 1.55;
+        font-weight: 650;
+    }
+    @media (max-width: 1020px) {
+        .auto-layout,
+        .auto-stat-grid,
+        .evidence-grid {
+            grid-template-columns: 1fr;
+        }
+        .auto-hero {
+            padding: 1rem;
+        }
+        .auto-mode-switch {
+            margin-top: .8rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auto-shell">
+    <div class="auto-hero">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+            <div>
+                <div class="auto-kicker"><i class="bi bi-stars"></i>Auto WARREN</div>
+                <h3>One clear next step, based on real data.</h3>
+                <p>{{ auto_warren.summary_text }}</p>
+            </div>
+            <div class="auto-mode-switch" aria-label="Dashboard mode">
+                <a class="active" href="{{ url_for('client.client_auto_warren', month=month) }}"><i class="bi bi-magic me-1"></i>Auto</a>
+                <a href="{{ url_for('client.client_dashboard', month=month) }}"><i class="bi bi-speedometer2 me-1"></i>Overview</a>
+            </div>
+        </div>
+        <div class="auto-trust-row">
+            <span class="auto-trust-pill"><i class="bi bi-shield-check"></i>No fake certainty</span>
+            <span class="auto-trust-pill"><i class="bi bi-database-check"></i>{{ auto_warren.data_sources|length }} connected source{{ 's' if auto_warren.data_sources|length != 1 else '' }}</span>
+            <span class="auto-trust-pill"><i class="bi bi-calendar3"></i>{{ month }}</span>
+            {% if used_month_fallback %}
+            <span class="auto-trust-pill"><i class="bi bi-arrow-repeat"></i>Showing latest available data</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="auto-stat-grid">
+        {% for card in auto_warren.score_cards %}
+        <div class="auto-stat {{ card.state }}">
+            <div class="icon"><i class="bi {{ card.icon }}"></i></div>
+            <div class="auto-stat-label">{{ card.label }}</div>
+            <div class="auto-stat-value">{{ card.value }}</div>
+            <div class="auto-stat-detail">{{ card.detail }}</div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="auto-layout">
+        <main>
+            <section class="auto-panel">
+                <div class="auto-panel-title">
+                    <h5><i class="bi bi-arrow-right-circle text-success"></i>Today's Focus</h5>
+                    <span>WARREN ranked this first</span>
+                </div>
+                {% set focus = auto_warren.focus_action %}
+                <div class="focus-card">
+                    <div class="focus-top">
+                        <div class="focus-icon"><i class="bi {{ focus.icon }}"></i></div>
+                        <div>
+                            <h4>{{ focus.title }}</h4>
+                            <p>{{ focus.why }}</p>
+                        </div>
+                    </div>
+                    <div class="evidence-grid">
+                        <div class="evidence-box">
+                            <div class="label">Data Trigger</div>
+                            <div class="text">{{ focus.evidence }}</div>
+                        </div>
+                        <div class="evidence-box">
+                            <div class="label">Success Looks Like</div>
+                            <div class="text">{{ focus.outcome }}</div>
+                        </div>
+                        <div class="evidence-box">
+                            <div class="label">Source</div>
+                            <div class="text">{{ focus.source }}. Confidence: {{ focus.confidence }}.</div>
+                        </div>
+                    </div>
+                    <div class="focus-actions">
+                        {% if focus.href and focus.href != '#' %}
+                        <a href="{{ focus.href }}" class="btn btn-success btn-sm"><i class="bi bi-check2-circle me-1"></i>{{ focus.cta }}</a>
+                        {% else %}
+                        <button type="button" class="btn btn-success btn-sm" data-warren-auto-prompt="Give me a simple Auto WARREN check-in for {{ month }}. Start with one next step, explain the data source, and keep it beginner-friendly.">
+                            <i class="bi bi-chat-dots me-1"></i>{{ focus.cta }}
+                        </button>
+                        {% endif %}
+                        <span class="source-note"><i class="bi bi-database"></i>{{ focus.source }}</span>
+                    </div>
+                </div>
+            </section>
+
+            {% if auto_warren.action_queue %}
+            <section class="auto-panel">
+                <div class="auto-panel-title">
+                    <h5><i class="bi bi-list-check text-primary"></i>After That</h5>
+                    <span>Keep it to a short queue</span>
+                </div>
+                <div class="queue-list">
+                    {% for action in auto_warren.action_queue %}
+                    <div class="queue-item">
+                        <div class="mini-icon"><i class="bi {{ action.icon }}"></i></div>
+                        <div>
+                            <div class="queue-title">{{ action.title }}</div>
+                            <div class="queue-meta">{{ action.evidence }}</div>
+                        </div>
+                        {% if action.href and action.href != '#' %}
+                        <a href="{{ action.href }}" class="btn btn-sm btn-outline-secondary">{{ action.cta }}</a>
+                        {% else %}
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-warren-auto-prompt="{{ action.title }}. Explain this in simple terms and tell me the first step.">Ask</button>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+
+            <section class="auto-panel">
+                <div class="auto-panel-title">
+                    <h5><i class="bi bi-map text-info"></i>Owner Growth Path</h5>
+                    <span>Simple order, not every tool at once</span>
+                </div>
+                <div class="path-list">
+                    {% for step in auto_warren.growth_path %}
+                    <div class="path-row {{ step.status }}">
+                        <div class="path-dot">
+                            {% if step.status == 'good' %}<i class="bi bi-check2"></i>{% elif step.status == 'attention' %}<i class="bi bi-exclamation"></i>{% elif step.status == 'setup' %}<i class="bi bi-plus"></i>{% else %}<i class="bi bi-clock"></i>{% endif %}
+                        </div>
+                        <div>
+                            <div class="path-title">{{ step.label }}</div>
+                            <div class="path-detail">{{ step.detail }}</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+        </main>
+
+        <aside>
+            <section class="auto-panel">
+                <div class="auto-panel-title">
+                    <h5><i class="bi bi-shield-check text-primary"></i>Data WARREN Can Trust</h5>
+                    <span>{{ auto_warren.data_sources|length }}/{{ auto_warren.connection_cards|length }}</span>
+                </div>
+                <div class="data-rule mb-3">
+                    Auto WARREN only gives strong advice when a connected source supports it. Missing data becomes a setup step, not a guess.
+                </div>
+                <div class="status-list">
+                    {% for item in auto_warren.connection_cards %}
+                    <div class="status-item {{ item.state }}">
+                        <div class="mini-icon"><i class="bi {{ item.icon }}"></i></div>
+                        <div>
+                            <div class="status-title">{{ item.label }}</div>
+                            <div class="status-detail">{{ item.detail }}</div>
+                            <span class="status-badge">{% if item.state == 'good' %}Ready{% else %}Setup{% endif %}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+
+            <section class="auto-panel">
+                <div class="auto-panel-title">
+                    <h5><i class="bi bi-magic text-success"></i>Already Handling</h5>
+                    <span>Automation status</span>
+                </div>
+                <div class="status-list">
+                    {% for item in auto_warren.automations %}
+                    <div class="status-item {{ item.state }}">
+                        <div class="mini-icon"><i class="bi {{ item.icon }}"></i></div>
+                        <div>
+                            <div class="status-title">{{ item.label }}</div>
+                            <div class="status-detail">{{ item.detail }}</div>
+                            {% if item.href %}
+                            <a href="{{ item.href }}" class="status-badge text-decoration-none">{% if item.state == 'good' %}Ready{% else %}Set up{% endif %}</a>
+                            {% else %}
+                            <span class="status-badge">{% if item.state == 'good' %}Ready{% else %}Set up{% endif %}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+        </aside>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('click', function(event) {
+    var trigger = event.target.closest('[data-warren-auto-prompt]');
+    if (!trigger) return;
+    var prompt = trigger.getAttribute('data-warren-auto-prompt') || '';
+    if (window.gromorePrimeWarrenPrompt) {
+        window.gromorePrimeWarrenPrompt(prompt);
+    }
+});
+</script>
+{% endblock %}
