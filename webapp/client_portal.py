@@ -2691,6 +2691,9 @@ _FACEBOOK_CALENDAR_DAY_OFFSETS = {
     2: [1, 4],
     3: [0, 2, 4],
     4: [0, 2, 4, 6],
+    5: [0, 1, 3, 4, 6],
+    6: [0, 1, 2, 4, 5, 6],
+    7: [0, 1, 2, 3, 4, 5, 6],
 }
 _FACEBOOK_CALENDAR_TIMES = ["09:15:00", "11:45:00", "14:30:00", "16:15:00"]
 _FACEBOOK_CONTENT_PERSONALITY_OPTIONS = [
@@ -14851,7 +14854,7 @@ def client_generate_facebook_calendar():
     try:
         data = request.get_json(silent=True) or {}
         weeks = 4 if _coerce_int(data.get("weeks"), 2, minimum=2, maximum=4) >= 4 else 2
-        posts_per_week = _coerce_int(data.get("posts_per_week"), 3, minimum=2, maximum=4)
+        posts_per_week = _coerce_int(data.get("posts_per_week"), 3, minimum=2, maximum=7)
         brief = (data.get("brief") or "").strip()[:1200]
         content_mix = _normalize_facebook_content_mix(data.get("content_mix"))
         selected_types = _normalize_facebook_post_type_list(data.get("post_types") or [])

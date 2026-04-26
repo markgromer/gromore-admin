@@ -286,6 +286,47 @@ class FacebookPostSchedulerTests(unittest.TestCase):
         self.assertLessEqual(character_names.count("Alex"), 1)
         self.assertGreater(character_names.count("Marty"), character_names.count("Alex"))
 
+    @patch("openai.OpenAI")
+    def test_generate_facebook_calendar_allows_up_to_seven_posts_per_week(self, mock_openai):
+        mock_client = Mock()
+        mock_client.chat.completions.create.return_value = _FakeChatResponse(
+            json.dumps(
+                {
+                    "posts": [
+                        {
+                            "post_type": "value",
+                            "message": f"Seven-day cadence post {index}",
+                            "image_hint": "Helpful service visual",
+                            "link_url": "",
+                        }
+                        for index in range(1, 15)
+                    ]
+                }
+            )
+        )
+        mock_openai.return_value = mock_client
+
+        response = self.client.post(
+            "/client/post-scheduler/generate-calendar",
+            json={
+                "content_mix": "balanced_local_presence",
+                "weeks": 2,
+                "posts_per_week": 7,
+                "start_date": (datetime.now(timezone.utc) + timedelta(days=1)).date().isoformat(),
+                "post_types": ["value", "faq", "testimonial", "team_intro", "community_spotlight", "seasonal_reminder", "behind_the_scenes"],
+                "brief": "Keep the page active every day for two weeks.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["total_posts"], 14)
+        self.assertEqual(len(payload["posts"]), 14)
+        first_week_dates = {post["scheduled_at"][:10] for post in payload["posts"][:7]}
+        self.assertEqual(len(first_week_dates), 7)
+        self.assertEqual(len({post["scheduled_at"] for post in payload["posts"]}), 14)
+
     @patch("webapp.api_bridge._get_page_access_token", return_value="page-token")
     @patch("webapp.api_bridge._get_meta_token", return_value="meta-user-token")
     @patch("requests.post")
