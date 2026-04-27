@@ -11063,6 +11063,50 @@ def _wp_auth_headers(brand, user_agent):
     }
 
 
+def _wp_browser_json_headers(brand):
+    headers = _wp_auth_headers(
+        brand,
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    )
+    headers["Accept"] = "application/json"
+    headers["Content-Type"] = "application/json"
+    return headers
+
+
+def _sanitize_wp_post_content(content):
+    raw = str(content or "")
+    if not raw:
+        return ""
+    try:
+        from bs4 import BeautifulSoup
+
+        soup = BeautifulSoup(raw, "html.parser")
+        for tag in soup.find_all(["script", "noscript"]):
+            tag.decompose()
+        for tag in soup.find_all(True):
+            for attr in list(tag.attrs):
+                attr_lower = str(attr or "").lower()
+                value = tag.attrs.get(attr)
+                value_text = " ".join(value) if isinstance(value, list) else str(value or "")
+                if attr_lower.startswith("on") or attr_lower in {"srcdoc"} or value_text.strip().lower().startswith("javascript:"):
+                    del tag.attrs[attr]
+        return str(soup)
+    except Exception:
+        cleaned = re.sub(r"<\s*(script|noscript)\b[^>]*>.*?<\s*/\s*\1\s*>", "", raw, flags=re.I | re.S)
+        cleaned = re.sub(r"\s+on[a-z]+\s*=\s*(['\"]).*?\1", "", cleaned, flags=re.I | re.S)
+        cleaned = re.sub(r"\s+on[a-z]+\s*=\s*[^\s>]+", "", cleaned, flags=re.I)
+        cleaned = re.sub(r"(href|src)\s*=\s*(['\"])\s*javascript:.*?\2", r"\1=\"#\"", cleaned, flags=re.I | re.S)
+        return cleaned
+
+
+def _wp_publish_delay(seconds=0.35):
+    try:
+        time.sleep(float(seconds))
+    except Exception:
+        pass
+
+
 def _delete_wp_page(brand, wp_page_id, force=True):
     """Delete a published site-builder page from WordPress."""
     import requests as req_lib
@@ -11172,7 +11216,7 @@ def _upload_wp_media(brand, featured_image_url):
         return media_source
 
     wp_url = (brand.get("wp_site_url") or "").strip().rstrip("/")
-    headers = _wp_auth_headers(brand, "GroMore/1.0 (WordPress Blog Media Upload; +https://gromore.com)")
+    headers = _wp_browser_json_headers(brand)
     headers.pop("Content-Type", None)
     headers["Content-Type"] = media_source["content_type"]
     headers["Content-Disposition"] = f'attachment; filename="{media_source["filename"]}"'
@@ -11251,35 +11295,32 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
                     tags="", featured_image_url="", status="publish"):
     """Publish or update a post on WordPress via REST API. Returns dict."""
     import requests as req_lib
-    import base64
 
     wp_url = brand["wp_site_url"].strip().rstrip("/")
-    wp_user = brand["wp_username"].strip()
-    wp_pass = brand["wp_app_password"].strip()
 
     api_url = f"{wp_url}/wp-json/wp/v2/posts"
-    token = base64.b64encode(f"{wp_user}:{wp_pass}".encode()).decode()
-    headers = {
-        "Authorization": f"Basic {token}",
-        "X-GM-Auth": f"Basic {token}",
-        "User-Agent": "GroMore/1.0 (WordPress Blog Publisher; +https://gromore.com)",
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-    }
+    headers = _wp_browser_json_headers(brand)
+    sanitized_content = _sanitize_wp_post_content(content)
+    final_status = (status or "publish").strip().lower()
+    if final_status == "published":
+        final_status = "publish"
 
-    post_data = {
+    create_data = {
         "title": seo_title or title,
-        "content": content,
+        "status": "draft",
+    }
+    update_data = {
+        "content": sanitized_content,
         "excerpt": excerpt,
-        "status": status,
     }
     if featured_image_url:
         media_result = _upload_wp_media(brand, featured_image_url)
         if not media_result.get("ok"):
             return {"ok": False, "error": media_result.get("error", "Featured image upload failed.")}
-        post_data["featured_media"] = media_result["wp_media_id"]
+        update_data["featured_media"] = media_result["wp_media_id"]
+        _wp_publish_delay(0.25)
     if slug:
-        post_data["slug"] = slug
+        create_data["slug"] = slug
     # Yoast SEO fields (if plugin installed)
     meta = {}
     if seo_title:
@@ -11287,7 +11328,7 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
     if seo_description:
         meta["_yoast_wpseo_metadesc"] = seo_description
     if meta:
-        post_data["meta"] = meta
+        update_data["meta"] = meta
 
     def _describe_wp_error(status_code, response_text):
         body = (response_text or "")[:500]
@@ -11316,28 +11357,70 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
     try:
         import logging
         _wp_log = logging.getLogger(__name__)
-        resp = req_lib.post(
+
+        # Step 1: create a lightweight draft first. This avoids sending the
+        # full HTML body in the first REST request, which trips some WAF rules.
+        create_resp = req_lib.post(
             api_url,
-            json=post_data,
+            json=create_data,
             headers=headers,
             timeout=30,
         )
-        if resp.status_code not in (200, 201):
-            resp_headers = getattr(resp, "headers", {}) or {}
+        if create_resp.status_code not in (200, 201):
+            resp_headers = getattr(create_resp, "headers", {}) or {}
             if not isinstance(resp_headers, dict):
                 resp_headers = {}
-            _wp_log.warning("[WP-PUBLISH] status=%d headers=%s body=%s",
-                            resp.status_code, dict(resp_headers), resp.text[:500])
-        if resp.status_code in (200, 201):
-            wp_post = resp.json()
-            return {
-                "ok": True,
-                "wp_post_id": wp_post.get("id", 0),
-                "wp_post_url": wp_post.get("link", ""),
-                "wp_media_id": post_data.get("featured_media", 0),
-            }
-        else:
-            return {"ok": False, "error": _describe_wp_error(resp.status_code, resp.text)}
+            _wp_log.warning("[WP-PUBLISH:create] status=%d headers=%s body=%s",
+                            create_resp.status_code, dict(resp_headers), create_resp.text[:500])
+            return {"ok": False, "error": _describe_wp_error(create_resp.status_code, create_resp.text)}
+
+        wp_post = create_resp.json() or {}
+        wp_post_id = int(wp_post.get("id") or 0)
+        if not wp_post_id:
+            return {"ok": False, "error": "WordPress created a draft but did not return a post id."}
+
+        _wp_publish_delay()
+
+        # Step 2: update the draft with the full body and metadata.
+        update_resp = req_lib.post(
+            f"{api_url}/{wp_post_id}",
+            json=update_data,
+            headers=headers,
+            timeout=45,
+        )
+        if update_resp.status_code not in (200, 201):
+            resp_headers = getattr(update_resp, "headers", {}) or {}
+            if not isinstance(resp_headers, dict):
+                resp_headers = {}
+            _wp_log.warning("[WP-PUBLISH:update] status=%d headers=%s body=%s",
+                            update_resp.status_code, dict(resp_headers), update_resp.text[:500])
+            return {"ok": False, "error": _describe_wp_error(update_resp.status_code, update_resp.text)}
+
+        wp_post = update_resp.json() or wp_post
+
+        if final_status and final_status != "draft":
+            _wp_publish_delay()
+            publish_resp = req_lib.post(
+                f"{api_url}/{wp_post_id}",
+                json={"status": final_status},
+                headers=headers,
+                timeout=30,
+            )
+            if publish_resp.status_code not in (200, 201):
+                resp_headers = getattr(publish_resp, "headers", {}) or {}
+                if not isinstance(resp_headers, dict):
+                    resp_headers = {}
+                _wp_log.warning("[WP-PUBLISH:status] status=%d headers=%s body=%s",
+                                publish_resp.status_code, dict(resp_headers), publish_resp.text[:500])
+                return {"ok": False, "error": _describe_wp_error(publish_resp.status_code, publish_resp.text)}
+            wp_post = publish_resp.json() or wp_post
+
+        return {
+            "ok": True,
+            "wp_post_id": wp_post_id,
+            "wp_post_url": wp_post.get("link", ""),
+            "wp_media_id": update_data.get("featured_media", 0),
+        }
     except Exception as e:
         return {"ok": False, "error": str(e)[:200]}
 
@@ -11795,7 +11878,6 @@ def client_blog_test_connection():
         return jsonify(ok=False, error="WordPress not configured.")
 
     import requests as req_lib
-    import base64
     wp_url = brand["wp_site_url"].strip().rstrip("/")
     wp_user = brand["wp_username"].strip()
     wp_pass = brand["wp_app_password"].strip()
@@ -11804,10 +11886,8 @@ def client_blog_test_connection():
     log = logging.getLogger(__name__)
     log.info("[WP-TEST] URL=%s user=%r pass_len=%d pass_preview=%r",
              wp_url, wp_user, len(wp_pass), wp_pass[:4] + "..." if len(wp_pass) > 4 else wp_pass)
-    ua_headers = {
-        "User-Agent": "GroMore/1.0 (WordPress Blog Publisher; +https://gromore.com)",
-        "Accept": "application/json",
-    }
+    ua_headers = _wp_browser_json_headers(brand)
+    ua_headers.pop("Content-Type", None)
 
     try:
         probe = req_lib.get(f"{wp_url}/wp-json/", headers=ua_headers, timeout=15)
@@ -11833,13 +11913,8 @@ def client_blog_test_connection():
 
     # Step 3: Authenticate - send both standard header AND custom header.
     # SiteGround nginx strips Authorization; mu-plugin reads X-GM-Auth instead.
-    token = base64.b64encode(f"{wp_user}:{wp_pass}".encode()).decode()
-    headers = {
-        "Authorization": f"Basic {token}",
-        "X-GM-Auth": f"Basic {token}",
-        "User-Agent": "GroMore/1.0 (WordPress Blog Publisher; +https://gromore.com)",
-        "Accept": "application/json",
-    }
+    headers = _wp_browser_json_headers(brand)
+    headers.pop("Content-Type", None)
 
     try:
         resp = req_lib.get(

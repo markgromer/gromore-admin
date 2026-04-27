@@ -108,9 +108,10 @@ class BlogSchedulingTests(unittest.TestCase):
         self.assertEqual(due_posts[0]["brand_id"], self.brand_id)
         self.assertEqual(due_posts[0]["title"], "Brand One Due")
 
+    @patch("webapp.client_portal.time.sleep")
     @patch("requests.get")
     @patch("requests.post")
-    def test_publish_uploads_featured_image_to_wp_media_before_post(self, mock_post, mock_get):
+    def test_publish_uploads_featured_image_to_wp_media_before_post(self, mock_post, mock_get, _mock_sleep):
         mock_get.return_value = Mock(
             status_code=200,
             headers={"Content-Type": "image/jpeg"},
@@ -118,7 +119,9 @@ class BlogSchedulingTests(unittest.TestCase):
         )
         mock_post.side_effect = [
             Mock(status_code=201, json=lambda: {"id": 321, "source_url": "https://example.com/wp-content/uploads/feature.jpg"}, text=""),
-            Mock(status_code=201, json=lambda: {"id": 654, "link": "https://example.com/blog/scheduled-post/"}, text=""),
+            Mock(status_code=201, json=lambda: {"id": 654, "link": "https://example.com/?p=654"}, text=""),
+            Mock(status_code=200, json=lambda: {"id": 654, "link": "https://example.com/?p=654"}, text=""),
+            Mock(status_code=200, json=lambda: {"id": 654, "link": "https://example.com/blog/scheduled-post/"}, text=""),
         ]
 
         result = _publish_to_wp(
@@ -135,10 +138,55 @@ class BlogSchedulingTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["wp_post_id"], 654)
         self.assertEqual(result["wp_media_id"], 321)
-        self.assertEqual(mock_post.call_count, 2)
+        self.assertEqual(mock_post.call_count, 4)
         self.assertEqual(mock_post.call_args_list[0].args[0], "https://example.com/wp-json/wp/v2/media")
         self.assertEqual(mock_post.call_args_list[1].args[0], "https://example.com/wp-json/wp/v2/posts")
-        self.assertEqual(mock_post.call_args_list[1].kwargs["json"]["featured_media"], 321)
+        self.assertEqual(mock_post.call_args_list[1].kwargs["json"], {
+            "title": "Scheduled Post",
+            "status": "draft",
+        })
+        self.assertEqual(mock_post.call_args_list[2].args[0], "https://example.com/wp-json/wp/v2/posts/654")
+        self.assertEqual(mock_post.call_args_list[2].kwargs["json"]["featured_media"], 321)
+        self.assertEqual(mock_post.call_args_list[2].kwargs["json"]["content"], "<p>Scheduled content</p>")
+        self.assertEqual(mock_post.call_args_list[3].kwargs["json"], {"status": "publish"})
+
+    @patch("webapp.client_portal.time.sleep")
+    @patch("requests.post")
+    def test_publish_splits_create_update_publish_and_sanitizes_content(self, mock_post, _mock_sleep):
+        mock_post.side_effect = [
+            Mock(status_code=201, json=lambda: {"id": 654, "link": "https://example.com/?p=654"}, text=""),
+            Mock(status_code=200, json=lambda: {"id": 654, "link": "https://example.com/?p=654"}, text=""),
+            Mock(status_code=200, json=lambda: {"id": 654, "link": "https://example.com/blog/scheduled-post/"}, text=""),
+        ]
+
+        result = _publish_to_wp(
+            {
+                "wp_site_url": "https://example.com",
+                "wp_username": "editor",
+                "wp_app_password": "app-password",
+            },
+            "Scheduled Post",
+            '<p onclick="bad()">Safe</p><script>alert("x")</script><a href="javascript:bad()">Bad</a>',
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(mock_post.call_count, 3)
+
+        create_payload = mock_post.call_args_list[0].kwargs["json"]
+        update_payload = mock_post.call_args_list[1].kwargs["json"]
+        publish_payload = mock_post.call_args_list[2].kwargs["json"]
+        headers = mock_post.call_args_list[0].kwargs["headers"]
+
+        self.assertEqual(create_payload, {"title": "Scheduled Post", "status": "draft"})
+        self.assertNotIn("content", create_payload)
+        self.assertIn("<p>Safe</p>", update_payload["content"])
+        self.assertNotIn("<script", update_payload["content"].lower())
+        self.assertNotIn("onclick", update_payload["content"].lower())
+        self.assertNotIn("javascript:bad", update_payload["content"].lower())
+        self.assertEqual(publish_payload, {"status": "publish"})
+        self.assertIn("Mozilla/5.0", headers["User-Agent"])
+        self.assertEqual(headers["Accept"], "application/json")
+        self.assertEqual(headers["Content-Type"], "application/json")
 
     def test_blog_save_accepts_uploaded_featured_image_for_draft(self):
         response = self.client.post(
