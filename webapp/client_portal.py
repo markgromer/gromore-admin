@@ -11113,19 +11113,14 @@ def _wp_security_challenge_error(status_code, response_text, action_label="Publi
     prefix = f"{action_label} failed"
     if "sgcaptcha" in body_lower or "/.well-known/sgcaptcha" in body_lower or (status_code == 202 and "captcha" in body_lower):
         return (
-            f"{prefix}: SiteGround's server-level bot protection returned a CAPTCHA challenge (HTTP 202) "
-            "before WordPress could process the publish request. This is happening at the hosting/firewall "
-            "layer, not inside the WordPress post editor. If the GroMore WordPress helper plugin is installed "
-            "and this still appears, ask the host to allow GroMore's server IP to post to wp-admin/admin-ajax.php "
-            "and the WordPress REST API for this site."
+            f"{prefix}: the host returned a CAPTCHA challenge (HTTP 202) before WordPress could process "
+            "the publish request. The request is being blocked at the hosting/firewall layer."
         )
     if status_code == 202:
         return (
             f"{prefix}: the site returned HTTP 202 instead of creating the post. This usually means "
             "a server-level security layer (WAF, bot protection, or firewall) intercepted the request before "
-            "WordPress could process it. If the GroMore WordPress helper plugin is installed and this still "
-            "appears, ask the host to allow GroMore's server IP to post to wp-admin/admin-ajax.php and the "
-            "WordPress REST API for this site."
+            "WordPress could process it."
         )
     if status_code == 401:
         return f"{prefix}: WordPress returned 401. The application password may be expired or the user lacks permission to create posts. Re-enter your app password in Settings, or check that the WordPress user has an Editor/Administrator role."
@@ -11151,60 +11146,153 @@ def _wp_ajax_publish_url(brand):
     return f"{wp_url}/wp-admin/admin-ajax.php"
 
 
-def _publish_via_warren_ajax_endpoint(brand, payload):
-    """Fallback for hosts that challenge /wp-json/* before WordPress sees it."""
-    import json
-    import requests as req_lib
+def _wp_front_publish_url(brand):
+    wp_url = (brand.get("wp_site_url") or "").strip().rstrip("/")
+    return f"{wp_url}/?gromore_warren_publish=1"
 
-    headers = _wp_browser_json_headers(brand)
-    headers.pop("Content-Type", None)
-    form_data = {
-        "action": "gromore_warren_publish",
-        "payload": json.dumps(payload),
-        "gm_user": (brand.get("wp_username") or "").strip(),
-        "gm_app_password": (brand.get("wp_app_password") or "").strip(),
-    }
-    try:
-        resp = req_lib.post(
-            _wp_ajax_publish_url(brand),
-            data=form_data,
-            headers=headers,
-            timeout=60,
-        )
-    except Exception as exc:
-        return {"ok": False, "error": f"Warren AJAX publish failed: {str(exc)[:160]}", "missing_endpoint": False}
 
+def _wp_parse_helper_publish_response(resp, action_label):
     if resp.status_code not in (200, 201):
         return {
             "ok": False,
-            "error": _wp_security_challenge_error(resp.status_code, resp.text, "Warren AJAX publish"),
+            "error": _wp_security_challenge_error(resp.status_code, resp.text, action_label),
             "missing_endpoint": resp.status_code == 404,
+            "blocked_by_waf": _wp_should_try_custom_endpoint(resp.status_code, resp.text),
         }
 
     try:
         data = resp.json() or {}
     except Exception:
         data = {}
-    if not data and (resp.text or "").strip() in {"0", "-1"}:
+    text = (resp.text or "").strip()
+    if not data and text in {"0", "-1"}:
         return {
             "ok": False,
-            "error": "GroMore/Warren WordPress helper plugin is not installed or is older than version 1.1.0.",
+            "error": "GroMore/Warren WordPress helper plugin is not installed or is older than version 1.2.0.",
             "missing_endpoint": True,
+            "blocked_by_waf": False,
+        }
+    if not data:
+        return {
+            "ok": False,
+            "error": "GroMore/Warren WordPress helper endpoint did not return JSON. Install or update the helper plugin.",
+            "missing_endpoint": not _wp_should_try_custom_endpoint(resp.status_code, resp.text),
+            "blocked_by_waf": _wp_should_try_custom_endpoint(resp.status_code, resp.text),
         }
     if data.get("success") is True and isinstance(data.get("data"), dict):
         data = data["data"]
     if data.get("ok") is False or data.get("success") is False:
+        message = ""
+        if isinstance(data.get("data"), dict):
+            message = data["data"].get("message") or data["data"].get("error") or ""
         return {
             "ok": False,
-            "error": str(data.get("error") or data.get("message") or "Warren AJAX publish failed.")[:200],
+            "error": str(data.get("error") or data.get("message") or message or f"{action_label} failed.")[:200],
             "missing_endpoint": False,
+            "blocked_by_waf": False,
         }
 
     wp_id = data.get("id") or data.get("wp_post_id") or data.get("wp_page_id") or 0
     wp_url = data.get("link") or data.get("url") or data.get("wp_post_url") or data.get("wp_page_url") or ""
     if not wp_id:
-        return {"ok": False, "error": "Warren AJAX publish did not return a post/page id.", "missing_endpoint": False}
+        return {"ok": False, "error": f"{action_label} did not return a post/page id.", "missing_endpoint": False, "blocked_by_waf": False}
     return {"ok": True, "wp_id": wp_id, "wp_url": wp_url}
+
+
+def _wp_helper_payload_steps(payload):
+    item_type = payload.get("type") or "post"
+    final_status = (payload.get("status") or "publish").strip().lower()
+    if final_status == "published":
+        final_status = "publish"
+    item_id = int(payload.get("id") or 0)
+
+    if item_id:
+        update_payload = dict(payload)
+        update_payload["status"] = "draft" if final_status != "draft" else "draft"
+        steps = [update_payload]
+    else:
+        create_payload = {
+            "type": item_type,
+            "title": payload.get("title") or "Untitled",
+            "status": "draft",
+        }
+        for key in ("slug", "parent"):
+            if payload.get(key):
+                create_payload[key] = payload[key]
+        steps = [create_payload]
+
+        update_payload = {
+            "type": item_type,
+            "content": payload.get("content") or "",
+            "excerpt": payload.get("excerpt") or "",
+            "status": "draft",
+        }
+        for key in ("title", "slug", "parent", "meta", "featured_media"):
+            if payload.get(key):
+                update_payload[key] = payload[key]
+        steps.append(update_payload)
+
+    if final_status and final_status != "draft":
+        steps.append({"type": item_type, "status": final_status})
+    return steps
+
+
+def _publish_via_warren_form_endpoint(brand, payload, endpoint_url, action_name="", helper_label="GroMore helper publish"):
+    import json
+    import requests as req_lib
+
+    headers = _wp_browser_json_headers(brand)
+    headers.pop("Content-Type", None)
+
+    last_result = {}
+    item_id = int(payload.get("id") or 0)
+    for step_payload in _wp_helper_payload_steps(payload):
+        if item_id and not step_payload.get("id"):
+            step_payload["id"] = item_id
+        form_data = {
+            "payload": json.dumps(step_payload),
+            "gm_user": (brand.get("wp_username") or "").strip(),
+            "gm_app_password": (brand.get("wp_app_password") or "").strip(),
+        }
+        if action_name:
+            form_data["action"] = action_name
+        try:
+            resp = req_lib.post(
+                endpoint_url,
+                data=form_data,
+                headers=headers,
+                timeout=60,
+            )
+        except Exception as exc:
+            return {"ok": False, "error": f"{helper_label} failed: {str(exc)[:160]}", "missing_endpoint": False, "blocked_by_waf": False}
+
+        last_result = _wp_parse_helper_publish_response(resp, helper_label)
+        if not last_result.get("ok"):
+            return last_result
+        item_id = int(last_result.get("wp_id") or item_id or 0)
+
+    return last_result or {"ok": False, "error": f"{helper_label} did not run.", "missing_endpoint": False, "blocked_by_waf": False}
+
+
+def _publish_via_warren_front_endpoint(brand, payload):
+    """Fallback through the normal WordPress front controller, avoiding common blocked publish routes."""
+    return _publish_via_warren_form_endpoint(
+        brand,
+        payload,
+        _wp_front_publish_url(brand),
+        helper_label="GroMore front publish",
+    )
+
+
+def _publish_via_warren_ajax_endpoint(brand, payload):
+    """Fallback for sites where the front helper URL is unavailable but admin-ajax is allowed."""
+    return _publish_via_warren_form_endpoint(
+        brand,
+        payload,
+        _wp_ajax_publish_url(brand),
+        action_name="gromore_warren_publish",
+        helper_label="GroMore AJAX publish",
+    )
 
 
 def _publish_via_warren_wp_endpoint(brand, payload):
@@ -11478,7 +11566,9 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
         if not _wp_should_try_custom_endpoint(status_code, response_text):
             return {"ok": False, "error": original_error}
 
-        custom_result = _publish_via_warren_ajax_endpoint(brand, warren_payload)
+        custom_result = _publish_via_warren_front_endpoint(brand, warren_payload)
+        if not custom_result.get("ok") and custom_result.get("missing_endpoint"):
+            custom_result = _publish_via_warren_ajax_endpoint(brand, warren_payload)
         if not custom_result.get("ok") and custom_result.get("missing_endpoint"):
             custom_result = _publish_via_warren_wp_endpoint(brand, warren_payload)
         if custom_result.get("ok"):
@@ -11489,6 +11579,15 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
                 "wp_media_id": update_data.get("featured_media", 0),
             }
 
+        if custom_result.get("blocked_by_waf"):
+            return {
+                "ok": False,
+                "error": (
+                    "Publish failed: the site's hosting/firewall returned a CAPTCHA challenge before WordPress "
+                    "could process either the normal publish request or the GroMore helper fallback. Server-to-site "
+                    "publishing is blocked for this domain."
+                ),
+            }
         extra = ""
         if custom_result.get("missing_endpoint"):
             extra = " Install or update the GroMore/Warren WordPress helper plugin on this site."
@@ -12271,7 +12370,9 @@ def _publish_wp_page(brand, title, content, excerpt="", slug="",
         if not _wp_should_try_custom_endpoint(status_code, response_text):
             return {"ok": False, "error": original_error}
 
-        custom_result = _publish_via_warren_ajax_endpoint(brand, warren_payload)
+        custom_result = _publish_via_warren_front_endpoint(brand, warren_payload)
+        if not custom_result.get("ok") and custom_result.get("missing_endpoint"):
+            custom_result = _publish_via_warren_ajax_endpoint(brand, warren_payload)
         if not custom_result.get("ok") and custom_result.get("missing_endpoint"):
             custom_result = _publish_via_warren_wp_endpoint(brand, warren_payload)
         if custom_result.get("ok"):
@@ -12281,6 +12382,15 @@ def _publish_wp_page(brand, title, content, excerpt="", slug="",
                 "wp_page_url": custom_result.get("wp_url", ""),
             }
 
+        if custom_result.get("blocked_by_waf"):
+            return {
+                "ok": False,
+                "error": (
+                    "Page publish failed: the site's hosting/firewall returned a CAPTCHA challenge before "
+                    "WordPress could process either the normal publish request or the GroMore helper fallback. "
+                    "Server-to-site publishing is blocked for this domain."
+                ),
+            }
         extra = ""
         if custom_result.get("missing_endpoint"):
             extra = " Install or update the GroMore/Warren WordPress helper plugin on this site."
@@ -12320,7 +12430,9 @@ def _publish_wp_page(brand, title, content, excerpt="", slug="",
     except Exception as e:
         # If the default REST route is blocked by a network/security layer after
         # the request is opened, the custom endpoint is still worth one try.
-        custom_result = _publish_via_warren_ajax_endpoint(brand, warren_payload)
+        custom_result = _publish_via_warren_front_endpoint(brand, warren_payload)
+        if not custom_result.get("ok") and custom_result.get("missing_endpoint"):
+            custom_result = _publish_via_warren_ajax_endpoint(brand, warren_payload)
         if not custom_result.get("ok") and custom_result.get("missing_endpoint"):
             custom_result = _publish_via_warren_wp_endpoint(brand, warren_payload)
         if custom_result.get("ok"):

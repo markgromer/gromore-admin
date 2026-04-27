@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GroMore Warren Publisher Endpoint
  * Description: Adds authenticated GroMore/Warren publishing endpoints for hosts that block default WordPress REST post routes.
- * Version: 1.1.0
+ * Version: 1.2.0
  */
 
 if (!defined('ABSPATH')) {
@@ -115,11 +115,17 @@ function gromore_warren_publish($request) {
     $post_id = absint($request->get_param('id'));
     $postarr = array(
         'post_type' => $type,
-        'post_title' => wp_strip_all_tags((string) $request->get_param('title')),
-        'post_content' => wp_kses_post((string) $request->get_param('content')),
-        'post_excerpt' => sanitize_textarea_field((string) $request->get_param('excerpt')),
         'post_status' => $status,
     );
+    if ($request->get_param('title') !== null) {
+        $postarr['post_title'] = wp_strip_all_tags((string) $request->get_param('title'));
+    }
+    if ($request->get_param('content') !== null) {
+        $postarr['post_content'] = wp_kses_post((string) $request->get_param('content'));
+    }
+    if ($request->get_param('excerpt') !== null) {
+        $postarr['post_excerpt'] = sanitize_textarea_field((string) $request->get_param('excerpt'));
+    }
 
     $slug = sanitize_title((string) $request->get_param('slug'));
     if ($slug) {
@@ -183,7 +189,7 @@ add_action('rest_api_init', function () {
     ));
 });
 
-function gromore_warren_ajax_publish() {
+function gromore_warren_publish_from_post_payload() {
     $auth = gromore_warren_authenticate_request(null);
     if (is_wp_error($auth)) {
         $payload = gromore_warren_error_payload($auth);
@@ -215,5 +221,25 @@ function gromore_warren_ajax_publish() {
     wp_send_json_success($response->get_data());
 }
 
+function gromore_warren_ajax_publish() {
+    gromore_warren_publish_from_post_payload();
+}
+
 add_action('wp_ajax_gromore_warren_publish', 'gromore_warren_ajax_publish');
 add_action('wp_ajax_nopriv_gromore_warren_publish', 'gromore_warren_ajax_publish');
+
+function gromore_warren_front_publish() {
+    if (!isset($_GET['gromore_warren_publish'])) {
+        return;
+    }
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        wp_send_json_error(array(
+            'ok' => false,
+            'code' => 'gromore_method_not_allowed',
+            'message' => 'Use POST for GroMore publishing.',
+        ), 405);
+    }
+    gromore_warren_publish_from_post_payload();
+}
+
+add_action('init', 'gromore_warren_front_publish');
