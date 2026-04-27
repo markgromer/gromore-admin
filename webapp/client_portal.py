@@ -11185,6 +11185,12 @@ def _publish_via_warren_ajax_endpoint(brand, payload):
         data = resp.json() or {}
     except Exception:
         data = {}
+    if not data and (resp.text or "").strip() in {"0", "-1"}:
+        return {
+            "ok": False,
+            "error": "GroMore/Warren WordPress helper plugin is not installed or is older than version 1.1.0.",
+            "missing_endpoint": True,
+        }
     if data.get("success") is True and isinstance(data.get("data"), dict):
         data = data["data"]
     if data.get("ok") is False or data.get("success") is False:
