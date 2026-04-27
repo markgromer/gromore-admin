@@ -13,7 +13,7 @@ os.environ.setdefault("SECRET_KEY", "test-secret")
 os.environ.setdefault("APP_URL", "http://localhost:5000")
 
 from webapp.app import create_app
-from webapp.client_portal import _publish_to_wp
+from webapp.client_portal import _publish_to_wp, _publish_wp_page
 
 
 class BlogSchedulingTests(unittest.TestCase):
@@ -233,6 +233,66 @@ class BlogSchedulingTests(unittest.TestCase):
             or "security challenge" in result["error"].lower()
         )
         self.assertIn("siteground", result["error"].lower())
+
+    @patch("requests.post")
+    def test_publish_uses_warren_endpoint_fallback_when_waf_blocks_posts_route(self, mock_post):
+        mock_post.side_effect = [
+            Mock(
+                status_code=202,
+                text='<html><head><meta http-equiv="refresh" content="0;/.well-known/sgcaptcha/?r=2"></head></html>',
+            ),
+            Mock(status_code=201, json=lambda: {"ok": True, "id": 777, "link": "https://example.com/blog/fallback/"}, text=""),
+        ]
+
+        result = _publish_to_wp(
+            {
+                "wp_site_url": "https://example.com",
+                "wp_username": "editor",
+                "wp_app_password": "app-password",
+            },
+            "Fallback Post",
+            "<p>Scheduled content</p>",
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["wp_post_id"], 777)
+        self.assertEqual(result["wp_post_url"], "https://example.com/blog/fallback/")
+        self.assertEqual(mock_post.call_args_list[1].args[0], "https://example.com/wp-json/warren/v1/publish")
+        self.assertEqual(mock_post.call_args_list[1].kwargs["json"]["type"], "post")
+
+    @patch("webapp.client_portal.time.sleep")
+    @patch("requests.post")
+    def test_site_builder_page_publish_splits_large_payload(self, mock_post, _mock_sleep):
+        mock_post.side_effect = [
+            Mock(status_code=201, json=lambda: {"id": 321, "link": "https://example.com/?page_id=321"}, text=""),
+            Mock(status_code=200, json=lambda: {"id": 321, "link": "https://example.com/?page_id=321"}, text=""),
+            Mock(status_code=200, json=lambda: {"id": 321, "link": "https://example.com/service/"}, text=""),
+        ]
+
+        result = _publish_wp_page(
+            {
+                "wp_site_url": "https://example.com",
+                "wp_username": "editor",
+                "wp_app_password": "app-password",
+            },
+            "Service Page",
+            '<section onclick="bad()"><h1>Service</h1><script>alert("x")</script></section>',
+            slug="service",
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(mock_post.call_count, 3)
+        self.assertEqual(mock_post.call_args_list[0].args[0], "https://example.com/wp-json/wp/v2/pages")
+        self.assertEqual(mock_post.call_args_list[0].kwargs["json"], {
+            "title": "Service Page",
+            "status": "draft",
+            "slug": "service",
+        })
+        self.assertNotIn("content", mock_post.call_args_list[0].kwargs["json"])
+        self.assertEqual(mock_post.call_args_list[1].args[0], "https://example.com/wp-json/wp/v2/pages/321")
+        self.assertNotIn("<script", mock_post.call_args_list[1].kwargs["json"]["content"].lower())
+        self.assertNotIn("onclick", mock_post.call_args_list[1].kwargs["json"]["content"].lower())
+        self.assertEqual(mock_post.call_args_list[2].kwargs["json"], {"status": "publish"})
 
 
 if __name__ == "__main__":

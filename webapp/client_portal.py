@@ -11107,6 +11107,75 @@ def _wp_publish_delay(seconds=0.35):
         pass
 
 
+def _wp_security_challenge_error(status_code, response_text, action_label="Publish"):
+    body = (response_text or "")[:500]
+    body_lower = body.lower()
+    prefix = f"{action_label} failed"
+    if "sgcaptcha" in body_lower or "/.well-known/sgcaptcha" in body_lower or (status_code == 202 and "captcha" in body_lower):
+        return (
+            f"{prefix}: SiteGround's server-level bot protection returned a CAPTCHA challenge (HTTP 202) "
+            "instead of allowing the REST API request through. This is not a WordPress plugin - it's a "
+            "SiteGround hosting setting. Fix: Go to SiteGround Site Tools > Security > Bot Protection and "
+            "either lower the protection level or whitelist the GroMore server. Alternatively, go to "
+            "Security > Blocked IPs and make sure the server IP is not blocked."
+        )
+    if status_code == 202:
+        return (
+            f"{prefix}: the site returned HTTP 202 instead of creating the post. This usually means "
+            "a server-level security layer (WAF, bot protection, or firewall) intercepted the request before "
+            "WordPress could process it. On SiteGround: go to Site Tools > Security > Bot Protection and "
+            "lower the protection level, or whitelist the GroMore server IP."
+        )
+    if status_code == 401:
+        return f"{prefix}: WordPress returned 401. The application password may be expired or the user lacks permission to create posts. Re-enter your app password in Settings, or check that the WordPress user has an Editor/Administrator role."
+    if status_code == 403:
+        return f"{prefix}: WordPress returned 403 Forbidden. A security plugin or hosting firewall may be blocking REST API access."
+    return f"WordPress API error {status_code}: {body[:200]}"
+
+
+def _wp_should_try_custom_endpoint(status_code, response_text):
+    body_lower = (response_text or "").lower()
+    if "sgcaptcha" in body_lower or "/.well-known/sgcaptcha" in body_lower or "captcha" in body_lower:
+        return True
+    return int(status_code or 0) in {202, 403, 406, 418, 429}
+
+
+def _wp_custom_publish_url(brand):
+    wp_url = (brand.get("wp_site_url") or "").strip().rstrip("/")
+    return f"{wp_url}/wp-json/warren/v1/publish"
+
+
+def _publish_via_warren_wp_endpoint(brand, payload):
+    """Optional fallback for sites with a GroMore/Warren mu-plugin installed."""
+    import requests as req_lib
+
+    headers = _wp_browser_json_headers(brand)
+    try:
+        resp = req_lib.post(
+            _wp_custom_publish_url(brand),
+            json=payload,
+            headers=headers,
+            timeout=60,
+        )
+    except Exception as exc:
+        return {"ok": False, "error": f"Warren WordPress endpoint failed: {str(exc)[:160]}", "missing_endpoint": False}
+
+    if resp.status_code not in (200, 201):
+        missing_endpoint = resp.status_code == 404
+        return {
+            "ok": False,
+            "error": _wp_security_challenge_error(resp.status_code, resp.text, "Warren endpoint publish"),
+            "missing_endpoint": missing_endpoint,
+        }
+
+    data = resp.json() or {}
+    wp_id = data.get("id") or data.get("wp_post_id") or data.get("wp_page_id") or 0
+    wp_url = data.get("link") or data.get("url") or data.get("wp_post_url") or data.get("wp_page_url") or ""
+    if not wp_id:
+        return {"ok": False, "error": "Warren WordPress endpoint did not return a post/page id.", "missing_endpoint": False}
+    return {"ok": True, "wp_id": wp_id, "wp_url": wp_url}
+
+
 def _delete_wp_page(brand, wp_page_id, force=True):
     """Delete a published site-builder page from WordPress."""
     import requests as req_lib
@@ -11330,29 +11399,38 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
     if meta:
         update_data["meta"] = meta
 
-    def _describe_wp_error(status_code, response_text):
-        body = (response_text or "")[:500]
-        body_lower = body.lower()
-        if "sgcaptcha" in body_lower or "/.well-known/sgcaptcha" in body_lower or (status_code == 202 and "captcha" in body_lower):
-            return (
-                "Publish failed: SiteGround's server-level bot protection returned a CAPTCHA challenge (HTTP 202) "
-                "instead of allowing the REST API request through. This is not a WordPress plugin - it's a "
-                "SiteGround hosting setting. Fix: Go to SiteGround Site Tools > Security > Bot Protection and "
-                "either lower the protection level or whitelist the GroMore server. Alternatively, go to "
-                "Security > Blocked IPs and make sure the server IP is not blocked."
-            )
-        if status_code == 202:
-            return (
-                "Publish failed: the site returned HTTP 202 instead of creating the post. This usually means "
-                "a server-level security layer (WAF, bot protection, or firewall) intercepted the request before "
-                "WordPress could process it. On SiteGround: go to Site Tools > Security > Bot Protection and "
-                "lower the protection level, or whitelist the GroMore server IP."
-            )
-        if status_code == 401:
-            return "Publish failed: WordPress returned 401. The application password may be expired or the user lacks permission to create posts. Re-enter your app password in Settings, or check that the WordPress user has an Editor/Administrator role."
-        if status_code == 403:
-            return "Publish failed: WordPress returned 403 Forbidden. A security plugin may be blocking REST API access."
-        return f"WordPress API error {status_code}: {body[:200]}"
+    warren_payload = {
+        "type": "post",
+        "title": create_data["title"],
+        "content": sanitized_content,
+        "excerpt": excerpt,
+        "slug": slug,
+        "status": final_status or "draft",
+        "meta": meta,
+    }
+    if update_data.get("featured_media"):
+        warren_payload["featured_media"] = update_data["featured_media"]
+
+    def _fallback_or_error(status_code, response_text):
+        original_error = _wp_security_challenge_error(status_code, response_text, "Publish")
+        if not _wp_should_try_custom_endpoint(status_code, response_text):
+            return {"ok": False, "error": original_error}
+
+        custom_result = _publish_via_warren_wp_endpoint(brand, warren_payload)
+        if custom_result.get("ok"):
+            return {
+                "ok": True,
+                "wp_post_id": custom_result["wp_id"],
+                "wp_post_url": custom_result.get("wp_url", ""),
+                "wp_media_id": update_data.get("featured_media", 0),
+            }
+
+        extra = ""
+        if custom_result.get("missing_endpoint"):
+            extra = " Install the GroMore/Warren WordPress helper endpoint, or ask SiteGround to whitelist /wp-json/*."
+        elif custom_result.get("error"):
+            extra = f" Warren endpoint fallback also failed: {custom_result['error']}"
+        return {"ok": False, "error": f"{original_error}{extra}"}
 
     try:
         import logging
@@ -11372,12 +11450,13 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
                 resp_headers = {}
             _wp_log.warning("[WP-PUBLISH:create] status=%d headers=%s body=%s",
                             create_resp.status_code, dict(resp_headers), create_resp.text[:500])
-            return {"ok": False, "error": _describe_wp_error(create_resp.status_code, create_resp.text)}
+            return _fallback_or_error(create_resp.status_code, create_resp.text)
 
         wp_post = create_resp.json() or {}
         wp_post_id = int(wp_post.get("id") or 0)
         if not wp_post_id:
             return {"ok": False, "error": "WordPress created a draft but did not return a post id."}
+        warren_payload["id"] = wp_post_id
 
         _wp_publish_delay()
 
@@ -11394,7 +11473,7 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
                 resp_headers = {}
             _wp_log.warning("[WP-PUBLISH:update] status=%d headers=%s body=%s",
                             update_resp.status_code, dict(resp_headers), update_resp.text[:500])
-            return {"ok": False, "error": _describe_wp_error(update_resp.status_code, update_resp.text)}
+            return _fallback_or_error(update_resp.status_code, update_resp.text)
 
         wp_post = update_resp.json() or wp_post
 
@@ -11412,7 +11491,7 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
                     resp_headers = {}
                 _wp_log.warning("[WP-PUBLISH:status] status=%d headers=%s body=%s",
                                 publish_resp.status_code, dict(resp_headers), publish_resp.text[:500])
-                return {"ok": False, "error": _describe_wp_error(publish_resp.status_code, publish_resp.text)}
+                return _fallback_or_error(publish_resp.status_code, publish_resp.text)
             wp_post = publish_resp.json() or wp_post
 
         return {
@@ -11891,6 +11970,8 @@ def client_blog_test_connection():
 
     try:
         probe = req_lib.get(f"{wp_url}/wp-json/", headers=ua_headers, timeout=15)
+        if _wp_should_try_custom_endpoint(probe.status_code, probe.text):
+            return jsonify(ok=False, error=_wp_security_challenge_error(probe.status_code, probe.text, "WordPress connection test"))
         if probe.status_code == 404:
             return jsonify(ok=False, error=f"REST API not found at {wp_url}/wp-json/. Verify the site URL is correct and that the REST API is not disabled by a security plugin (e.g. Wordfence, iThemes).")
         if probe.status_code >= 500:
@@ -11957,6 +12038,8 @@ def client_blog_test_connection():
         elif resp.status_code == 403:
             return jsonify(ok=False, error="User authenticated but forbidden (403). A security plugin may be blocking REST API access, or your hosting provider may block the Authorization header. Check Wordfence, Sucuri, or .htaccess rules.")
         else:
+            if _wp_should_try_custom_endpoint(resp.status_code, resp.text):
+                return jsonify(ok=False, error=_wp_security_challenge_error(resp.status_code, resp.text, "WordPress connection test"))
             return jsonify(ok=False, error=f"WordPress returned HTTP {resp.status_code}. Response: {resp.text[:150]}")
     except Exception as e:
         return jsonify(ok=False, error=str(e)[:150])
@@ -12079,51 +12162,105 @@ def _publish_wp_page(brand, title, content, excerpt="", slug="",
                      seo_title="", seo_description="", status="publish", parent_id=0):
     """Publish a *page* (not post) to WordPress via REST API."""
     import requests as req_lib
-    import base64
 
     wp_url = brand["wp_site_url"].strip().rstrip("/")
-    wp_user = brand["wp_username"].strip()
-    wp_pass = brand["wp_app_password"].strip()
-
     api_url = f"{wp_url}/wp-json/wp/v2/pages"
-    token = base64.b64encode(f"{wp_user}:{wp_pass}".encode()).decode()
-    headers = {
-        "Authorization": f"Basic {token}",
-        "X-GM-Auth": f"Basic {token}",
-        "User-Agent": "GroMore/1.0 (WordPress Site Builder; +https://gromore.com)",
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-    }
+    headers = _wp_browser_json_headers(brand)
 
-    page_data = {
+    final_status = (status or "publish").strip().lower()
+    if final_status == "published":
+        final_status = "publish"
+    create_data = {
         "title": seo_title or title,
-        "content": content,
-        "excerpt": excerpt,
-        "status": status,
+        "status": "draft",
     }
     if slug:
-        page_data["slug"] = slug
+        create_data["slug"] = slug
     if parent_id:
-        page_data["parent"] = int(parent_id)
+        create_data["parent"] = int(parent_id)
+
+    update_data = {
+        "content": _sanitize_wp_post_content(content),
+        "excerpt": excerpt,
+    }
     meta = {}
     if seo_title:
         meta["_yoast_wpseo_title"] = seo_title
     if seo_description:
         meta["_yoast_wpseo_metadesc"] = seo_description
     if meta:
-        page_data["meta"] = meta
+        update_data["meta"] = meta
 
-    try:
-        resp = req_lib.post(api_url, json=page_data, headers=headers, timeout=30)
-        if resp.status_code in (200, 201):
-            wp_page = resp.json()
+    warren_payload = {
+        "type": "page",
+        "title": create_data["title"],
+        "content": update_data["content"],
+        "excerpt": excerpt,
+        "slug": slug,
+        "status": final_status or "draft",
+        "meta": meta,
+        "parent": int(parent_id or 0),
+    }
+
+    def _fallback_or_error(status_code, response_text):
+        original_error = _wp_security_challenge_error(status_code, response_text, "Page publish")
+        if not _wp_should_try_custom_endpoint(status_code, response_text):
+            return {"ok": False, "error": original_error}
+
+        custom_result = _publish_via_warren_wp_endpoint(brand, warren_payload)
+        if custom_result.get("ok"):
             return {
                 "ok": True,
-                "wp_page_id": wp_page.get("id", 0),
-                "wp_page_url": wp_page.get("link", ""),
+                "wp_page_id": custom_result["wp_id"],
+                "wp_page_url": custom_result.get("wp_url", ""),
             }
-        return {"ok": False, "error": f"WordPress API error {resp.status_code}: {resp.text[:200]}"}
+
+        extra = ""
+        if custom_result.get("missing_endpoint"):
+            extra = " Install the GroMore/Warren WordPress helper endpoint, or ask SiteGround to whitelist /wp-json/*."
+        elif custom_result.get("error"):
+            extra = f" Warren endpoint fallback also failed: {custom_result['error']}"
+        return {"ok": False, "error": f"{original_error}{extra}"}
+
+    try:
+        create_resp = req_lib.post(api_url, json=create_data, headers=headers, timeout=30)
+        if create_resp.status_code not in (200, 201):
+            return _fallback_or_error(create_resp.status_code, create_resp.text)
+
+        wp_page = create_resp.json() or {}
+        wp_page_id = int(wp_page.get("id") or 0)
+        if not wp_page_id:
+            return {"ok": False, "error": "WordPress created a draft page but did not return a page id."}
+        warren_payload["id"] = wp_page_id
+
+        _wp_publish_delay()
+        update_resp = req_lib.post(f"{api_url}/{wp_page_id}", json=update_data, headers=headers, timeout=45)
+        if update_resp.status_code not in (200, 201):
+            return _fallback_or_error(update_resp.status_code, update_resp.text)
+        wp_page = update_resp.json() or wp_page
+
+        if final_status and final_status != "draft":
+            _wp_publish_delay()
+            publish_resp = req_lib.post(f"{api_url}/{wp_page_id}", json={"status": final_status}, headers=headers, timeout=30)
+            if publish_resp.status_code not in (200, 201):
+                return _fallback_or_error(publish_resp.status_code, publish_resp.text)
+            wp_page = publish_resp.json() or wp_page
+
+        return {
+            "ok": True,
+            "wp_page_id": wp_page_id,
+            "wp_page_url": wp_page.get("link", ""),
+        }
     except Exception as e:
+        # If the default REST route is blocked by a network/security layer after
+        # the request is opened, the custom endpoint is still worth one try.
+        custom_result = _publish_via_warren_wp_endpoint(brand, warren_payload)
+        if custom_result.get("ok"):
+            return {
+                "ok": True,
+                "wp_page_id": custom_result["wp_id"],
+                "wp_page_url": custom_result.get("wp_url", ""),
+            }
         return {"ok": False, "error": str(e)[:200]}
 
 
