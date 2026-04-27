@@ -1,18 +1,18 @@
 <?php
 /**
  * Plugin Name: GroMore Warren Publisher Endpoint
- * Description: Adds a small authenticated REST endpoint for GroMore/Warren publishing on hosts that block default WordPress REST post routes.
- * Version: 1.0.0
+ * Description: Adds authenticated GroMore/Warren publishing endpoints for hosts that block default WordPress REST post routes.
+ * Version: 1.1.0
  */
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-function gromore_warren_basic_auth_header($request) {
+function gromore_warren_basic_auth_header($request = null) {
     $headers = array(
-        $request->get_header('authorization'),
-        $request->get_header('x_gm_auth'),
+        $request instanceof WP_REST_Request ? $request->get_header('authorization') : '',
+        $request instanceof WP_REST_Request ? $request->get_header('x_gm_auth') : '',
         isset($_SERVER['HTTP_AUTHORIZATION']) ? $_SERVER['HTTP_AUTHORIZATION'] : '',
         isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION']) ? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] : '',
         isset($_SERVER['HTTP_X_GM_AUTH']) ? $_SERVER['HTTP_X_GM_AUTH'] : '',
@@ -28,7 +28,7 @@ function gromore_warren_basic_auth_header($request) {
     return '';
 }
 
-function gromore_warren_authenticate_request($request) {
+function gromore_warren_authenticate_request($request = null) {
     if (is_user_logged_in() && current_user_can('edit_posts')) {
         return true;
     }
@@ -41,25 +41,31 @@ function gromore_warren_authenticate_request($request) {
         );
     }
 
+    $username = '';
+    $password = '';
     $encoded = gromore_warren_basic_auth_header($request);
-    if (!$encoded) {
-        return new WP_Error(
-            'gromore_missing_auth',
-            'Missing WordPress Application Password authentication.',
-            array('status' => 401)
-        );
+    if ($encoded) {
+        $decoded = base64_decode($encoded);
+        if (!$decoded || strpos($decoded, ':') === false) {
+            return new WP_Error(
+                'gromore_bad_auth',
+                'Invalid authentication header.',
+                array('status' => 401)
+            );
+        }
+        list($username, $password) = explode(':', $decoded, 2);
+    } else {
+        $username = isset($_POST['gm_user']) ? sanitize_text_field(wp_unslash($_POST['gm_user'])) : '';
+        $password = isset($_POST['gm_app_password']) ? sanitize_text_field(wp_unslash($_POST['gm_app_password'])) : '';
+        if (!$username || !$password) {
+            return new WP_Error(
+                'gromore_missing_auth',
+                'Missing WordPress Application Password authentication.',
+                array('status' => 401)
+            );
+        }
     }
 
-    $decoded = base64_decode($encoded);
-    if (!$decoded || strpos($decoded, ':') === false) {
-        return new WP_Error(
-            'gromore_bad_auth',
-            'Invalid authentication header.',
-            array('status' => 401)
-        );
-    }
-
-    list($username, $password) = explode(':', $decoded, 2);
     $user = wp_authenticate_application_password(null, $username, $password);
     if (is_wp_error($user)) {
         return new WP_Error(
@@ -79,6 +85,19 @@ function gromore_warren_authenticate_request($request) {
     }
 
     return true;
+}
+
+function gromore_warren_error_payload($error) {
+    $data = $error->get_error_data();
+    $status = is_array($data) && isset($data['status']) ? absint($data['status']) : 400;
+    return array(
+        'status' => $status ?: 400,
+        'body' => array(
+            'ok' => false,
+            'code' => $error->get_error_code(),
+            'message' => $error->get_error_message(),
+        ),
+    );
 }
 
 function gromore_warren_publish($request) {
@@ -163,3 +182,38 @@ add_action('rest_api_init', function () {
         'permission_callback' => 'gromore_warren_authenticate_request',
     ));
 });
+
+function gromore_warren_ajax_publish() {
+    $auth = gromore_warren_authenticate_request(null);
+    if (is_wp_error($auth)) {
+        $payload = gromore_warren_error_payload($auth);
+        wp_send_json_error($payload['body'], $payload['status']);
+    }
+
+    $raw_payload = isset($_POST['payload']) ? wp_unslash($_POST['payload']) : '';
+    $payload = json_decode((string) $raw_payload, true);
+    if (!is_array($payload)) {
+        wp_send_json_error(array(
+            'ok' => false,
+            'code' => 'gromore_bad_payload',
+            'message' => 'Invalid publish payload.',
+        ), 400);
+    }
+
+    $request = new WP_REST_Request('POST', '/warren/v1/publish');
+    foreach ($payload as $key => $value) {
+        $request->set_param($key, $value);
+    }
+
+    $result = gromore_warren_publish($request);
+    if (is_wp_error($result)) {
+        $payload = gromore_warren_error_payload($result);
+        wp_send_json_error($payload['body'], $payload['status']);
+    }
+
+    $response = rest_ensure_response($result);
+    wp_send_json_success($response->get_data());
+}
+
+add_action('wp_ajax_gromore_warren_publish', 'gromore_warren_ajax_publish');
+add_action('wp_ajax_nopriv_gromore_warren_publish', 'gromore_warren_ajax_publish');

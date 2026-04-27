@@ -1,5 +1,6 @@
 import os
 import io
+import json
 import unittest
 import uuid
 from pathlib import Path
@@ -257,8 +258,13 @@ class BlogSchedulingTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["wp_post_id"], 777)
         self.assertEqual(result["wp_post_url"], "https://example.com/blog/fallback/")
-        self.assertEqual(mock_post.call_args_list[1].args[0], "https://example.com/wp-json/warren/v1/publish")
-        self.assertEqual(mock_post.call_args_list[1].kwargs["json"]["type"], "post")
+        self.assertEqual(mock_post.call_args_list[1].args[0], "https://example.com/wp-admin/admin-ajax.php")
+        fallback_form = mock_post.call_args_list[1].kwargs["data"]
+        fallback_payload = json.loads(fallback_form["payload"])
+        self.assertEqual(fallback_form["action"], "gromore_warren_publish")
+        self.assertEqual(fallback_form["gm_user"], "editor")
+        self.assertEqual(fallback_form["gm_app_password"], "app-password")
+        self.assertEqual(fallback_payload["type"], "post")
 
     @patch("webapp.client_portal.time.sleep")
     @patch("requests.post")
