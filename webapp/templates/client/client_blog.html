@@ -146,7 +146,7 @@
                     {% elif post.status == 'scheduled' %}
                         Scheduled for {{ post.scheduled_at[:16] if post.scheduled_at else 'TBD' }}
                     {% elif post.status == 'wp_pull_queued' %}
-                        Queued for WordPress helper pull
+                        Queued for WordPress helper. It publishes when the helper runs in WordPress, usually within 5 minutes if WP-Cron is active.
                     {% else %}
                         Last edited {{ post.updated_at[:16] if post.updated_at else post.created_at[:16] }}
                     {% endif %}

@@ -11144,7 +11144,8 @@ def _wp_pull_queue_result(message=""):
         "queued_for_pull": True,
         "error": message or (
             "Publish queued for WordPress pull. The site blocks inbound publish requests from GroMore, "
-            "so the GroMore WordPress helper plugin must pull and publish this post from WordPress."
+            "so the GroMore WordPress helper plugin must pull and publish this post from WordPress. "
+            "Open WordPress > Settings > GroMore Publisher and click Pull Queued Post Now, or wait for the helper's five-minute WP-Cron pull."
         ),
     }
 
@@ -11820,7 +11821,7 @@ def client_blog_save():
                         flash(f"Facebook post skipped: {fb_err[:80]}", "warning")
         else:
             if result.get("queued_for_pull"):
-                flash("Post queued for WordPress pull. Open the GroMore Publisher helper inside WordPress to publish queued posts.", "warning")
+                flash("Post queued for WordPress helper pull. Open WordPress > Settings > GroMore Publisher and click Pull Queued Post Now, or wait for the helper's five-minute WP-Cron pull.", "warning")
                 fields["status"] = "wp_pull_queued"
             else:
                 flash(f"Publish failed: {result['error']}", "error")

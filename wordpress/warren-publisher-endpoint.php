@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GroMore Warren Publisher Endpoint
  * Description: Adds authenticated GroMore/Warren publishing endpoints and pull publishing for hosts that block inbound publish requests.
- * Version: 1.3.1
+ * Version: 1.3.2
  */
 
 if (!defined('ABSPATH')) {
@@ -405,12 +405,17 @@ function gromore_warren_settings_page() {
     }
 
     $opts = gromore_warren_pull_options();
+    $next_run = wp_next_scheduled('gromore_warren_pull_cron');
     ?>
     <div class="wrap">
         <h1>GroMore Publisher</h1>
         <?php if ($message) : ?>
             <div class="notice notice-info"><p><?php echo esc_html($message); ?></p></div>
         <?php endif; ?>
+        <p>Queued GroMore posts publish when this helper pulls them from GroMore. Automatic pulls are scheduled every 5 minutes through WP-Cron, but WP-Cron only runs when this WordPress site receives traffic. For immediate publishing, save these settings and click <strong>Pull Queued Post Now</strong>.</p>
+        <p><strong>Next automatic pull:</strong>
+            <?php echo $next_run ? esc_html(date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $next_run)) : 'Not scheduled yet'; ?>
+        </p>
         <form method="post">
             <?php wp_nonce_field('gromore_warren_settings', 'gromore_warren_settings_nonce'); ?>
             <table class="form-table" role="presentation">
