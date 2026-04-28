@@ -229,11 +229,8 @@ class BlogSchedulingTests(unittest.TestCase):
         )
 
         self.assertFalse(result["ok"])
-        self.assertTrue(
-            "captcha challenge" in result["error"].lower()
-            or "security challenge" in result["error"].lower()
-        )
-        self.assertIn("server-to-site publishing is blocked", result["error"].lower())
+        self.assertTrue(result.get("queued_for_pull"))
+        self.assertIn("wordpress helper plugin", result["error"].lower())
 
     @patch("requests.post")
     def test_publish_uses_warren_endpoint_fallback_when_waf_blocks_posts_route(self, mock_post):
@@ -268,6 +265,45 @@ class BlogSchedulingTests(unittest.TestCase):
         self.assertEqual(fallback_payload["type"], "post")
         self.assertEqual(fallback_payload["status"], "draft")
         self.assertNotIn("content", fallback_payload)
+
+    def test_wordpress_pull_endpoint_serves_queued_post_and_marks_complete(self):
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "wp_username", "editor")
+            self.app.db.update_brand_text_field(self.brand_id, "wp_app_password", "app-password")
+            post_id = self.app.db.save_blog_post(
+                self.brand_id,
+                "Queued Pull Post",
+                '<p onclick="bad()">Safe</p><script>alert("x")</script>',
+                excerpt="Short summary",
+                status="wp_pull_queued",
+                seo_title="SEO Pull Title",
+                seo_description="SEO pull description",
+            )
+
+        auth = {
+            "brand_id": self.brand_id,
+            "wp_user": "editor",
+            "wp_app_password": "app-password",
+        }
+        response = self.client.post("/api/wordpress/pull/next", data=auth)
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["post"]["id"], post_id)
+        self.assertEqual(data["post"]["title"], "SEO Pull Title")
+        self.assertIn("<p>Safe</p>", data["post"]["content"])
+        self.assertNotIn("<script", data["post"]["content"].lower())
+        self.assertNotIn("onclick", data["post"]["content"].lower())
+
+        complete = dict(auth, post_id=post_id, status="published", wp_post_id=999, wp_post_url="https://example.com/pull/")
+        response = self.client.post("/api/wordpress/pull/complete", data=complete)
+        self.assertEqual(response.status_code, 200)
+
+        with self.app.app_context():
+            post = self.app.db.get_blog_post(post_id)
+        self.assertEqual(post["status"], "published")
+        self.assertEqual(post["wp_post_id"], 999)
+        self.assertEqual(post["wp_post_url"], "https://example.com/pull/")
 
     @patch("webapp.client_portal.time.sleep")
     @patch("requests.post")

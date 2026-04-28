@@ -11136,6 +11136,17 @@ def _wp_should_try_custom_endpoint(status_code, response_text):
     return int(status_code or 0) in {202, 403, 406, 418, 429}
 
 
+def _wp_pull_queue_result(message=""):
+    return {
+        "ok": False,
+        "queued_for_pull": True,
+        "error": message or (
+            "Publish queued for WordPress pull. The site blocks inbound publish requests from GroMore, "
+            "so the GroMore WordPress helper plugin must pull and publish this post from WordPress."
+        ),
+    }
+
+
 def _wp_custom_publish_url(brand):
     wp_url = (brand.get("wp_site_url") or "").strip().rstrip("/")
     return f"{wp_url}/wp-json/warren/v1/publish"
@@ -11580,14 +11591,7 @@ def _publish_to_wp(brand, title, content, excerpt="", slug="",
             }
 
         if custom_result.get("blocked_by_waf"):
-            return {
-                "ok": False,
-                "error": (
-                    "Publish failed: the site's hosting/firewall returned a CAPTCHA challenge before WordPress "
-                    "could process either the normal publish request or the GroMore helper fallback. Server-to-site "
-                    "publishing is blocked for this domain."
-                ),
-            }
+            return _wp_pull_queue_result()
         extra = ""
         if custom_result.get("missing_endpoint"):
             extra = " Install or update the GroMore/Warren WordPress helper plugin on this site."
@@ -11704,7 +11708,7 @@ def client_blog():
                     featured_image_url=bp.get("featured_image_url", ""),
                 )
             else:
-                db.update_blog_post(bp["id"], status="failed")
+                db.update_blog_post(bp["id"], status="wp_pull_queued" if result.get("queued_for_pull") else "failed")
         # Refresh list after publishing
         if due:
             posts = db.get_blog_posts(brand_id)
@@ -11813,8 +11817,12 @@ def client_blog_save():
                     if fb_err:
                         flash(f"Facebook post skipped: {fb_err[:80]}", "warning")
         else:
-            flash(f"Publish failed: {result['error']}", "error")
-            fields["status"] = "draft"
+            if result.get("queued_for_pull"):
+                flash("Post queued for WordPress pull. Open the GroMore Publisher helper inside WordPress to publish queued posts.", "warning")
+                fields["status"] = "wp_pull_queued"
+            else:
+                flash(f"Publish failed: {result['error']}", "error")
+                fields["status"] = "draft"
     elif action == "schedule":
         if not scheduled_at:
             flash("Pick a date and time to schedule.", "error")
@@ -11882,6 +11890,106 @@ def client_blog_delete(post_id):
     if not post or post["brand_id"] != brand_id:
         return jsonify(ok=False, error="Post not found"), 404
     db.delete_blog_post(post_id)
+    return jsonify(ok=True)
+
+
+def _wordpress_pull_request_data():
+    if request.is_json:
+        return request.get_json(silent=True) or {}
+    return request.form or {}
+
+
+def _authenticate_wordpress_pull_brand(db):
+    import hmac
+
+    data = _wordpress_pull_request_data()
+    try:
+        brand_id = int(data.get("brand_id") or 0)
+    except (TypeError, ValueError):
+        brand_id = 0
+    wp_user = (data.get("wp_user") or data.get("gm_user") or "").strip()
+    wp_pass = (data.get("wp_app_password") or data.get("gm_app_password") or "").strip()
+    if not brand_id or not wp_user or not wp_pass:
+        return None, jsonify(ok=False, error="Missing brand_id, wp_user, or wp_app_password."), 401
+
+    brand = db.get_brand(brand_id) or {}
+    stored_user = (brand.get("wp_username") or "").strip()
+    stored_pass = (brand.get("wp_app_password") or "").strip()
+    if not brand or not hmac.compare_digest(wp_user, stored_user) or not hmac.compare_digest(wp_pass, stored_pass):
+        return None, jsonify(ok=False, error="Invalid GroMore WordPress pull credentials."), 403
+    return brand, None, None
+
+
+def _absolute_public_url(value):
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith(("http://", "https://")):
+        return raw
+    return urljoin(request.host_url, raw.lstrip("/"))
+
+
+@client_public_bp.route("/api/wordpress/pull/next", methods=["POST"])
+def wordpress_pull_next_post():
+    db = _get_db()
+    brand, error_resp, status_code = _authenticate_wordpress_pull_brand(db)
+    if error_resp:
+        return error_resp, status_code
+
+    queued = db.get_blog_posts(int(brand["id"]), status="wp_pull_queued", limit=1)
+    if not queued:
+        return jsonify(ok=True, post=None)
+
+    post = queued[0]
+    slug = (post.get("slug") or "").strip()
+    if not slug:
+        slug = re.sub(r"[^a-z0-9]+", "-", (post.get("title") or "").lower()).strip("-")[:80]
+    return jsonify(
+        ok=True,
+        post={
+            "id": post["id"],
+            "title": post.get("seo_title") or post.get("title") or "Untitled Post",
+            "content": _sanitize_wp_post_content(post.get("content") or ""),
+            "excerpt": post.get("excerpt") or "",
+            "slug": slug,
+            "status": "publish",
+            "featured_image_url": _absolute_public_url(post.get("featured_image_url") or ""),
+            "meta": {
+                "_yoast_wpseo_title": post.get("seo_title") or "",
+                "_yoast_wpseo_metadesc": post.get("seo_description") or "",
+            },
+        },
+    )
+
+
+@client_public_bp.route("/api/wordpress/pull/complete", methods=["POST"])
+def wordpress_pull_complete():
+    db = _get_db()
+    brand, error_resp, status_code = _authenticate_wordpress_pull_brand(db)
+    if error_resp:
+        return error_resp, status_code
+
+    data = _wordpress_pull_request_data()
+    try:
+        post_id = int(data.get("post_id") or 0)
+    except (TypeError, ValueError):
+        post_id = 0
+    post = db.get_blog_post(post_id) if post_id else None
+    if not post or int(post.get("brand_id") or 0) != int(brand["id"]):
+        return jsonify(ok=False, error="Queued post not found."), 404
+
+    status = (data.get("status") or "").strip().lower()
+    if status == "published":
+        db.update_blog_post(
+            post_id,
+            status="published",
+            wp_post_id=int(data.get("wp_post_id") or 0),
+            wp_post_url=(data.get("wp_post_url") or "").strip(),
+            published_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        )
+        return jsonify(ok=True)
+
+    db.update_blog_post(post_id, status="failed")
     return jsonify(ok=True)
 
 
@@ -11990,6 +12098,7 @@ def client_blog_import_csv():
     imported = 0
     published = 0
     scheduled = 0
+    queued = 0
     fb_posts = 0
     errors = 0
     error_details = []
@@ -12046,9 +12155,13 @@ def client_blog_import_csv():
                 wp_post_url = result["wp_post_url"]
                 published += 1
             else:
-                fields["status"] = "draft"
-                error_details.append(f"Row {idx + 1} '{title[:40]}': Publish failed - {result['error'][:80]}")
-                errors += 1
+                if result.get("queued_for_pull"):
+                    fields["status"] = "wp_pull_queued"
+                    queued += 1
+                else:
+                    fields["status"] = "draft"
+                    error_details.append(f"Row {idx + 1} '{title[:40]}': Publish failed - {result['error'][:80]}")
+                    errors += 1
         elif action == "schedule" and sched_at:
             fields["status"] = "scheduled"
             fields["scheduled_at"] = sched_at
@@ -12105,7 +12218,7 @@ def client_blog_import_csv():
 
     return jsonify(
         ok=True, imported=imported, published=published,
-        scheduled=scheduled, fb_posts=fb_posts,
+        scheduled=scheduled, queued=queued, fb_posts=fb_posts,
         errors=errors, error_details=error_details[:20],
     )
 
@@ -12383,14 +12496,9 @@ def _publish_wp_page(brand, title, content, excerpt="", slug="",
             }
 
         if custom_result.get("blocked_by_waf"):
-            return {
-                "ok": False,
-                "error": (
-                    "Page publish failed: the site's hosting/firewall returned a CAPTCHA challenge before "
-                    "WordPress could process either the normal publish request or the GroMore helper fallback. "
-                    "Server-to-site publishing is blocked for this domain."
-                ),
-            }
+            return _wp_pull_queue_result(
+                "Page publish queued for WordPress pull. The site blocks inbound publish requests from GroMore."
+            )
         extra = ""
         if custom_result.get("missing_endpoint"):
             extra = " Install or update the GroMore/Warren WordPress helper plugin on this site."

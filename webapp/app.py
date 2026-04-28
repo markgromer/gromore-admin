@@ -320,6 +320,10 @@ def create_app():
     csrf.exempt("client.public_assess")
     csrf.exempt("client_public.public_lead_form")
     csrf.exempt("webapp.client_portal.public_lead_form")
+    csrf.exempt("client_public.wordpress_pull_next_post")
+    csrf.exempt("webapp.client_portal.wordpress_pull_next_post")
+    csrf.exempt("client_public.wordpress_pull_complete")
+    csrf.exempt("webapp.client_portal.wordpress_pull_complete")
 
     # Exempt React SPA JSON API endpoints from CSRF
     csrf.exempt("client.api_login")

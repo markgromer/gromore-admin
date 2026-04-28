@@ -41,6 +41,7 @@
     .status-draft { background: #f1f5f9; color: #475569; }
     .status-scheduled { background: #dbeafe; color: #1e40af; }
     .status-published { background: #dcfce7; color: #166534; }
+    .status-wp_pull_queued { background: #fef3c7; color: #92400e; }
     .status-failed { background: #fee2e2; color: #991b1b; }
 
     .tab-filter {
@@ -125,6 +126,7 @@
         <button class="active" data-filter="all">All ({{ posts|length }})</button>
         <button data-filter="draft">Drafts ({{ posts|selectattr('status','equalto','draft')|list|length }})</button>
         <button data-filter="scheduled">Scheduled ({{ posts|selectattr('status','equalto','scheduled')|list|length }})</button>
+        <button data-filter="wp_pull_queued">Queued ({{ posts|selectattr('status','equalto','wp_pull_queued')|list|length }})</button>
         <button data-filter="published">Published ({{ posts|selectattr('status','equalto','published')|list|length }})</button>
     </div>
 </div>
@@ -143,13 +145,15 @@
                         - <a href="{{ post.wp_post_url }}" target="_blank" rel="noopener" onclick="event.stopPropagation();">View on site <i class="bi bi-box-arrow-up-right" style="font-size:.7rem;"></i></a>
                     {% elif post.status == 'scheduled' %}
                         Scheduled for {{ post.scheduled_at[:16] if post.scheduled_at else 'TBD' }}
+                    {% elif post.status == 'wp_pull_queued' %}
+                        Queued for WordPress helper pull
                     {% else %}
                         Last edited {{ post.updated_at[:16] if post.updated_at else post.created_at[:16] }}
                     {% endif %}
                 </div>
             </div>
             <div class="d-flex align-items-center gap-2">
-                <span class="status-pill status-{{ post.status }}">{{ post.status|capitalize }}</span>
+                <span class="status-pill status-{{ post.status }}">{{ 'Queued' if post.status == 'wp_pull_queued' else post.status|capitalize }}</span>
             </div>
         </div>
         {% if post.excerpt %}
@@ -515,6 +519,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 if (data.scheduled > 0) {
                     html += '<div class="text-center"><div class="fw-bold" style="font-size:1.5rem; color:#1e40af;">' + data.scheduled + '</div><div class="text-muted" style="font-size:.82rem;">Scheduled</div></div>';
+                }
+                if (data.queued > 0) {
+                    html += '<div class="text-center"><div class="fw-bold" style="font-size:1.5rem; color:#92400e;">' + data.queued + '</div><div class="text-muted" style="font-size:.82rem;">Queued</div></div>';
                 }
                 if (data.fb_posts > 0) {
                     html += '<div class="text-center"><div class="fw-bold" style="font-size:1.5rem; color:#1877f2;">' + data.fb_posts + '</div><div class="text-muted" style="font-size:.82rem;">FB Posts</div></div>';
