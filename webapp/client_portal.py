@@ -12440,11 +12440,7 @@ def _php_single_quoted(value) -> str:
     return str(value or "").replace("\\", "\\\\").replace("'", "\\'")
 
 
-@client_bp.route("/settings/wordpress/helper-plugin.zip")
-@client_login_required
-def client_download_wordpress_helper_plugin():
-    """Download a brand-prefilled WordPress helper plugin zip."""
-    brand_id = int(session["client_brand_id"])
+def _build_wordpress_helper_plugin_code(brand_id: int) -> str:
     plugin_path = Path(current_app.root_path).parent / "wordpress" / "warren-publisher-endpoint.php"
     if not plugin_path.exists():
         abort(404)
@@ -12463,6 +12459,27 @@ def client_download_wordpress_helper_plugin():
     )
     if marker in plugin_code:
         plugin_code = plugin_code.replace(marker, prefill, 1)
+    return plugin_code
+
+
+@client_bp.route("/settings/wordpress/helper-plugin.php")
+@client_login_required
+def client_download_wordpress_helper_php():
+    """Open a brand-prefilled WordPress helper plugin PHP file for copy/paste."""
+    brand_id = int(session["client_brand_id"])
+    response = make_response(_build_wordpress_helper_plugin_code(brand_id))
+    response.headers["Content-Type"] = "text/plain; charset=utf-8"
+    response.headers["Content-Disposition"] = f'inline; filename="gromore-warren-publisher-brand-{brand_id}.php"'
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@client_bp.route("/settings/wordpress/helper-plugin.zip")
+@client_login_required
+def client_download_wordpress_helper_plugin():
+    """Download a brand-prefilled WordPress helper plugin zip."""
+    brand_id = int(session["client_brand_id"])
+    plugin_code = _build_wordpress_helper_plugin_code(brand_id)
 
     readme = (
         "GroMore Publisher helper\n\n"

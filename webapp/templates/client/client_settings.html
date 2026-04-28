@@ -496,7 +496,10 @@
             <div class="mt-3 d-flex align-items-center gap-2">
                 <button class="btn btn-primary" type="submit">Save WordPress Settings</button>
                 <a class="btn btn-outline-secondary" href="{{ url_for('client.client_download_wordpress_helper_plugin') }}">
-                    <i class="bi bi-download me-1"></i> Download Helper Plugin
+                    <i class="bi bi-download me-1"></i> Download Helper Zip
+                </a>
+                <a class="btn btn-outline-secondary" href="{{ url_for('client.client_download_wordpress_helper_php') }}" target="_blank" rel="noopener">
+                    <i class="bi bi-code-slash me-1"></i> Open Helper PHP
                 </a>
                 {% if brand.wp_site_url and brand.wp_username and brand.wp_app_password %}
                 <button class="btn btn-outline-primary" type="button" id="wpTestBtn">

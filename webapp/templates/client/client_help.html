@@ -926,7 +926,27 @@
 
             <h5>When Direct Publishing Is Blocked</h5>
             <p>Most WordPress sites publish directly with the Site URL, username, and Application Password above. Some hosts return a CAPTCHA or firewall page before WordPress sees the request. On those sites, install or update the <strong>GroMore Publisher</strong> helper plugin once, then configure it inside WordPress under <strong>Settings > GroMore Publisher</strong>.</p>
-            <p><a class="btn btn-outline-primary btn-sm" href="{{ url_for('client.client_download_wordpress_helper_plugin') }}"><i class="bi bi-download me-1"></i>Download helper plugin</a></p>
+            <p class="d-flex flex-wrap gap-2">
+                <a class="btn btn-outline-primary btn-sm" href="{{ url_for('client.client_download_wordpress_helper_plugin') }}"><i class="bi bi-download me-1"></i>Download helper plugin zip</a>
+                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('client.client_download_wordpress_helper_php') }}" target="_blank" rel="noopener"><i class="bi bi-code-slash me-1"></i>Open copy-paste PHP</a>
+            </p>
+            <h6>Option A: Upload the plugin zip</h6>
+            <ol>
+                <li>Click <strong>Download helper plugin zip</strong> above</li>
+                <li>In WordPress, go to <strong>Plugins > Add New > Upload Plugin</strong></li>
+                <li>Upload the downloaded zip, install it, and activate it</li>
+                <li>Go to <strong>Settings > GroMore Publisher</strong></li>
+            </ol>
+            <h6>Option B: Paste the PHP manually</h6>
+            <ol>
+                <li>Click <strong>Open copy-paste PHP</strong> above and copy the full PHP file contents</li>
+                <li>In your WordPress files, create this folder: <code>wp-content/plugins/gromore-warren-publisher</code></li>
+                <li>Create this file: <code>wp-content/plugins/gromore-warren-publisher/gromore-warren-publisher.php</code></li>
+                <li>Paste the copied PHP into that file and save it</li>
+                <li>In WordPress, go to <strong>Plugins</strong> and activate <strong>GroMore Warren Publisher Endpoint</strong></li>
+                <li>Go to <strong>Settings > GroMore Publisher</strong></li>
+            </ol>
+            <h6>Helper plugin settings</h6>
             <ol>
                 <li>Confirm the prefilled GroMore App URL and Brand ID in the plugin settings</li>
                 <li>Enter the same WordPress username and Application Password used on the GroMore Connections page</li>
