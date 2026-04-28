@@ -341,7 +341,7 @@
                     {% if brand.google_maps_api_key and brand.google_place_id %}<span class="badge bg-success rounded-pill px-3 py-2">Ready</span>{% elif brand.google_maps_api_key %}<span class="badge bg-warning text-dark rounded-pill px-3 py-2">Add your Place ID</span>{% else %}<span class="badge bg-secondary rounded-pill px-3 py-2">Not configured</span>{% endif %}
                 </div>
 
-                <div class="connection-panel-note mt-3">Use a server-safe Google Maps key with Places API (New), Geocoding API, and Maps JavaScript API enabled. The Place ID ties scans to the exact Google Business Profile listing.</div>
+                <div class="connection-panel-note mt-3">Use a server-safe Google Maps key with Places API (New), Places API, Geocoding API, and Maps JavaScript API enabled. The Place ID ties scans to the exact Google Business Profile listing.</div>
 
                 <div class="connection-panel-shell card mt-3 mb-0" style="box-shadow:none;">
                     <div class="card-body">
@@ -662,7 +662,7 @@
                 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
                     <div>
                         <h5 class="fw-semibold mb-1">WordPress</h5>
-                        <p class="text-muted mb-0">Store your site credentials so blog content can publish directly from the client app.</p>
+                        <p class="text-muted mb-0">Store your site credentials so blog content can publish directly from the client app, or be pulled by the helper plugin on hosts that block outside publish requests.</p>
                     </div>
                     {% if brand.wp_site_url and brand.wp_username and brand.wp_app_password %}<span class="badge bg-success rounded-pill px-3 py-2">Connected</span>{% else %}<span class="badge bg-secondary rounded-pill px-3 py-2">Not connected</span>{% endif %}
                 </div>
@@ -693,6 +693,7 @@
                 </form>
                 <div id="wpTestResult" class="mt-2" style="display:none;"></div>
                 <div class="connection-panel-actions">
+                    <a href="{{ url_for('client.client_download_wordpress_helper_plugin') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-download me-1"></i>Download helper plugin</a>
                     <a href="{{ url_for('client.client_help', guide='connections') }}#wordpress" class="btn btn-outline-secondary btn-sm"><i class="bi bi-question-circle me-1"></i>WordPress guide</a>
                 </div>
             </div>

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GroMore Warren Publisher Endpoint
  * Description: Adds authenticated GroMore/Warren publishing endpoints and pull publishing for hosts that block inbound publish requests.
- * Version: 1.3.0
+ * Version: 1.3.1
  */
 
 if (!defined('ABSPATH')) {
@@ -248,9 +248,12 @@ function gromore_warren_front_publish() {
 add_action('init', 'gromore_warren_front_publish');
 
 function gromore_warren_pull_options() {
+    $default_app_url = defined('GROMORE_WARREN_DEFAULT_APP_URL') ? GROMORE_WARREN_DEFAULT_APP_URL : '';
+    $default_brand_id = defined('GROMORE_WARREN_DEFAULT_BRAND_ID') ? GROMORE_WARREN_DEFAULT_BRAND_ID : 0;
+
     return array(
-        'app_url' => trim((string) get_option('gromore_warren_app_url', '')),
-        'brand_id' => absint(get_option('gromore_warren_brand_id', 0)),
+        'app_url' => trim((string) get_option('gromore_warren_app_url', $default_app_url)),
+        'brand_id' => absint(get_option('gromore_warren_brand_id', $default_brand_id)),
         'wp_user' => trim((string) get_option('gromore_warren_wp_user', '')),
         'wp_app_password' => trim((string) get_option('gromore_warren_wp_app_password', '')),
     );

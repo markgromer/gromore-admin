@@ -678,10 +678,12 @@
                 <li>Go to the <a href="https://console.cloud.google.com/" target="_blank" rel="noopener" class="ext-link">Google Cloud Console <i class="bi bi-box-arrow-up-right"></i></a> and sign in with your Google account</li>
                 <li>Create a new project (or select an existing one). Name it something like "GroMore Maps"</li>
                 <li>Go to "APIs & Services" > "Library" in the left sidebar</li>
-                <li>Search for and enable these two APIs:
+                <li>Search for and enable these APIs:
                     <ul>
-                        <li><strong>Places API</strong> - required for rank checking and place lookups</li>
-                        <li><strong>Maps JavaScript API</strong> - required for rendering the heatmap</li>
+                        <li><strong>Places API (New)</strong> - required for current place search and business lookup requests</li>
+                        <li><strong>Places API</strong> - required as the compatibility fallback for place lookups</li>
+                        <li><strong>Geocoding API</strong> - required to turn searched addresses, cities, and scan centers into map coordinates</li>
+                        <li><strong>Maps JavaScript API</strong> - required for rendering the heatmap and interactive map views</li>
                     </ul>
                 </li>
                 <li>Go to "APIs & Services" > "Credentials"</li>
@@ -713,9 +715,12 @@
             <p>For security, restrict your API key so it can only be used by your dashboard:</p>
             <ol>
                 <li>In the Cloud Console, go to "Credentials" and click on your API key</li>
-                <li>Under "API restrictions," select "Restrict key" and check only "Places API" and "Maps JavaScript API"</li>
+                <li>Under "API restrictions," select "Restrict key" and check only <strong>Places API (New)</strong>, <strong>Places API</strong>, <strong>Geocoding API</strong>, and <strong>Maps JavaScript API</strong></li>
                 <li>Click "Save"</li>
             </ol>
+            <div class="tip-box">
+                <i class="bi bi-lightbulb me-1"></i> <strong>Tip:</strong> After saving the key in GroMore, use <strong>Test Google Maps Key</strong> on the Connections page. The test checks Places API (New), Places API, and Geocoding so you can see exactly which service still needs to be enabled.
+            </div>
         </div>
 
         <!-- Google Drive -->
@@ -895,6 +900,7 @@
                 <li>A self-hosted WordPress site (wordpress.org, not wordpress.com free tier)</li>
                 <li>WordPress REST API must be enabled (it is by default on most hosts)</li>
                 <li>An Application Password (built into WordPress 5.6+)</li>
+                <li>The GroMore Publisher helper plugin only if your host blocks outside publish requests before WordPress can process them</li>
             </ul>
 
             <h5>Creating an Application Password</h5>
@@ -916,6 +922,18 @@
             </ol>
             <div class="warning-box">
                 <i class="bi bi-exclamation-triangle me-1"></i> <strong>Not seeing "Application Passwords"?</strong> Some security plugins (like Wordfence or iThemes) can disable this feature. Check your security plugin settings, or ask your web host for help enabling it.
+            </div>
+
+            <h5>When Direct Publishing Is Blocked</h5>
+            <p>Most WordPress sites publish directly with the Site URL, username, and Application Password above. Some hosts return a CAPTCHA or firewall page before WordPress sees the request. On those sites, install or update the <strong>GroMore Publisher</strong> helper plugin once, then configure it inside WordPress under <strong>Settings > GroMore Publisher</strong>.</p>
+            <p><a class="btn btn-outline-primary btn-sm" href="{{ url_for('client.client_download_wordpress_helper_plugin') }}"><i class="bi bi-download me-1"></i>Download helper plugin</a></p>
+            <ol>
+                <li>Confirm the prefilled GroMore App URL and Brand ID in the plugin settings</li>
+                <li>Enter the same WordPress username and Application Password used on the GroMore Connections page</li>
+                <li>Save settings, then click <strong>Pull Queued Post Now</strong> to publish any queued posts</li>
+            </ol>
+            <div class="tip-box">
+                <i class="bi bi-lightbulb me-1"></i> <strong>How this helps:</strong> The helper pulls queued posts from GroMore from inside WordPress, so the host firewall no longer has to allow GroMore to push into the site. Sites where direct publishing already works do not need the helper.
             </div>
         </div>
 

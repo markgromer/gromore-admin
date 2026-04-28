@@ -13,6 +13,8 @@ import time
 import threading
 import logging
 import uuid
+import zipfile
+from io import BytesIO
 from functools import wraps
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -12433,6 +12435,58 @@ def client_save_wordpress():
 
 
 # ── Site Builder ──
+
+def _php_single_quoted(value) -> str:
+    return str(value or "").replace("\\", "\\\\").replace("'", "\\'")
+
+
+@client_bp.route("/settings/wordpress/helper-plugin.zip")
+@client_login_required
+def client_download_wordpress_helper_plugin():
+    """Download a brand-prefilled WordPress helper plugin zip."""
+    brand_id = int(session["client_brand_id"])
+    plugin_path = Path(current_app.root_path).parent / "wordpress" / "warren-publisher-endpoint.php"
+    if not plugin_path.exists():
+        abort(404)
+
+    plugin_code = plugin_path.read_text(encoding="utf-8")
+    marker = "if (!defined('ABSPATH')) {\n    exit;\n}\n"
+    prefill = (
+        marker
+        + "\n"
+        + "if (!defined('GROMORE_WARREN_DEFAULT_APP_URL')) {\n"
+        + f"    define('GROMORE_WARREN_DEFAULT_APP_URL', '{_php_single_quoted(_external_app_url())}');\n"
+        + "}\n"
+        + "if (!defined('GROMORE_WARREN_DEFAULT_BRAND_ID')) {\n"
+        + f"    define('GROMORE_WARREN_DEFAULT_BRAND_ID', {brand_id});\n"
+        + "}\n"
+    )
+    if marker in plugin_code:
+        plugin_code = plugin_code.replace(marker, prefill, 1)
+
+    readme = (
+        "GroMore Publisher helper\n\n"
+        "Install this zip from WordPress > Plugins > Add New > Upload Plugin.\n"
+        "Then open Settings > GroMore Publisher, add your WordPress username and Application Password, "
+        "save, and use Pull Queued Post Now if a post is waiting.\n"
+        "This helper is only needed on hosts that block direct GroMore-to-WordPress publishing.\n"
+    )
+
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("gromore-warren-publisher/gromore-warren-publisher.php", plugin_code)
+        zf.writestr("gromore-warren-publisher/readme.txt", readme)
+    buffer.seek(0)
+
+    response = send_file(
+        buffer,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=f"gromore-publisher-helper-brand-{brand_id}.zip",
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
 
 def _publish_wp_page(brand, title, content, excerpt="", slug="",
                      seo_title="", seo_description="", status="publish", parent_id=0):
