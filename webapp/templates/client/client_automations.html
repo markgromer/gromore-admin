@@ -552,13 +552,14 @@
                         client:client_payment_declined<br>
                         client:invoice_finalized<br>
                         client:subscription_canceled<br>
-                        client:subscription_paused<br><br>
-                        <span class="text-muted">Recovery events: client:client_payment_accepted and client:subscription_unpaused.</span>
+                        client:subscription_paused<br>
+                        client:free_quote_created / quote:created<br><br>
+                        <span class="text-muted">Recovery events include payment accepted, subscription unpaused, and client/subscription activation events.</span>
                     </div>
                 </div>
             </div>
 
-            {% for rule_key in ['failed_payment', 'invoice_finalized', 'subscription_canceled', 'subscription_paused'] %}
+            {% for rule_key in ['failed_payment', 'invoice_finalized', 'subscription_canceled', 'subscription_paused', 'quote_not_signed_up'] %}
             {% set rule = crm_event_rules.rules.get(rule_key, {}) %}
             {% set rule_def = crm_event_rule_definitions.get(rule_key, {}) %}
             <div class="border rounded-4 p-4 mb-3" style="background:#f8fafc; border-color:#dbeafe !important;">
@@ -619,7 +620,7 @@
                 <div class="mt-3">
                     <label class="form-label fw-medium" style="font-size:.82rem;">Client message template</label>
                     <textarea class="form-control form-control-sm" name="crm_rule_{{ rule_key }}_template" rows="4">{{ rule.template or '' }}</textarea>
-                    <small class="text-muted d-block mt-2">Available placeholders: {brand_name}, {client_name}, {client_id}, {client_email}, {client_phone}, {payment_id}, {invoice_id}, {subscription_id}, {status}, {event_type}, {attempt_number}</small>
+                    <small class="text-muted d-block mt-2">Available placeholders: {brand_name}, {client_name}, {client_id}, {client_email}, {client_phone}, {payment_id}, {invoice_id}, {subscription_id}, {quote_id}, {quote_amount}, {quote_service}, {quote_address}, {status}, {event_type}, {attempt_number}</small>
                 </div>
             </div>
 

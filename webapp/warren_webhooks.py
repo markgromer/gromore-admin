@@ -340,6 +340,9 @@ def _extract_sng_summary(payload, event_type):
     payment = payload.get("payment") if isinstance(payload, dict) and isinstance(payload.get("payment"), dict) else {}
     invoice = payload.get("invoice") if isinstance(payload, dict) and isinstance(payload.get("invoice"), dict) else {}
     subscription = payload.get("subscription") if isinstance(payload, dict) and isinstance(payload.get("subscription"), dict) else {}
+    quote = payload.get("quote") if isinstance(payload, dict) and isinstance(payload.get("quote"), dict) else {}
+    free_quote = payload.get("free_quote") if isinstance(payload, dict) and isinstance(payload.get("free_quote"), dict) else {}
+    quote_block = quote or free_quote
     summary = {
         "event_type": event_type,
         "client_id": _sng_find_first(payload, "client_id", "clientid") or _stringify_webhook_value(client.get("id")),
@@ -349,6 +352,10 @@ def _extract_sng_summary(payload, event_type):
         "payment_id": _sng_find_first(payload, "payment_id", "paymentid") or _stringify_webhook_value(payment.get("id")),
         "invoice_id": _sng_find_first(payload, "invoice_id", "invoiceid") or _stringify_webhook_value(invoice.get("id")),
         "subscription_id": _sng_find_first(payload, "subscription_id", "subscriptionid") or _stringify_webhook_value(subscription.get("id")),
+        "quote_id": _sng_find_first(payload, "quote_id", "quoteid", "free_quote_id", "freequoteid") or _stringify_webhook_value(quote_block.get("id")),
+        "quote_amount": _sng_find_first(payload, "quote_amount", "quoteamount", "amount", "total", "price") or _stringify_webhook_value(quote_block.get("amount") or quote_block.get("total") or quote_block.get("price")),
+        "quote_service": _sng_find_first(payload, "service", "service_type", "service_name", "quote_service") or _stringify_webhook_value(quote_block.get("service") or quote_block.get("service_type") or quote_block.get("service_name")),
+        "quote_address": _sng_find_first(payload, "address", "service_address", "property_address") or _stringify_webhook_value(quote_block.get("address") or quote_block.get("service_address")),
         "status": _sng_find_first(payload, "status", "payment_status", "paymentstatus") or _stringify_webhook_value(payment.get("status") or invoice.get("status") or subscription.get("status")),
     }
     return {key: value for key, value in summary.items() if value}

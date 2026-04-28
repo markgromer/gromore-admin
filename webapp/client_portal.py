@@ -14,7 +14,8 @@ import threading
 import logging
 import uuid
 import zipfile
-from io import BytesIO
+import csv
+from io import BytesIO, StringIO
 from functools import wraps
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -13572,6 +13573,157 @@ def _get_client_commercial_threads(db, brand_id, limit=60):
         })
     return items
 
+
+def _normalize_lead_csv_header(value):
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").strip().lower())
+
+
+def _lead_csv_value(row, *aliases):
+    normalized = {
+        _normalize_lead_csv_header(key): (value or "").strip()
+        for key, value in (row or {}).items()
+        if key is not None
+    }
+    for alias in aliases:
+        value = normalized.get(_normalize_lead_csv_header(alias))
+        if value:
+            return value
+    return ""
+
+
+def _lead_csv_status(value):
+    status = (value or "").strip().lower()
+    if any(token in status for token in ("won", "customer", "client", "converted", "closed won")):
+        return "won"
+    if any(token in status for token in ("lost", "dead", "disqualified", "closed lost")):
+        return "lost"
+    if "book" in status or "appointment" in status:
+        return "booked"
+    if "qualif" in status:
+        return "qualified"
+    if "quote" in status:
+        return "quoted"
+    if any(token in status for token in ("contact", "engaged", "replied", "conversation")):
+        return "engaged"
+    return "new"
+
+
+def _import_ghl_lead_csv(db, brand_id, file_storage, row_limit=2000):
+    raw = file_storage.read()
+    if not raw:
+        raise ValueError("The CSV file was empty.")
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw.decode("latin-1")
+
+    reader = csv.DictReader(StringIO(text))
+    if not reader.fieldnames:
+        raise ValueError("The CSV needs a header row.")
+
+    imported = 0
+    skipped = 0
+    thread_ids = []
+
+    for index, row in enumerate(reader, start=1):
+        if index > row_limit:
+            skipped += 1
+            continue
+
+        first_name = _lead_csv_value(row, "first name", "first_name", "firstname", "contact first name")
+        last_name = _lead_csv_value(row, "last name", "last_name", "lastname", "contact last name")
+        full_name = _lead_csv_value(row, "name", "full name", "full_name", "contact name", "contact")
+        lead_name = full_name or " ".join(part for part in (first_name, last_name) if part).strip()
+        email = _lead_csv_value(row, "email", "email address", "email_address", "contact email").lower()
+        phone = _normalize_client_phone_number(_lead_csv_value(
+            row,
+            "phone",
+            "phone number",
+            "mobile",
+            "mobile phone",
+            "cell phone",
+            "contact phone",
+        ))
+        if not any((lead_name, email, phone)):
+            skipped += 1
+            continue
+
+        ghl_id = _lead_csv_value(row, "id", "contact id", "contact_id", "ghl id", "go high level id")
+        source = _lead_csv_value(row, "source", "lead source", "utm source") or "ghl_csv_import"
+        original_status = _lead_csv_value(row, "status", "stage", "pipeline stage", "opportunity status")
+        service_needed = _lead_csv_value(row, "service", "service needed", "interested in", "tags")
+        notes = _lead_csv_value(row, "notes", "note", "message", "description")
+        address = _lead_csv_value(row, "address", "street address", "address1", "full address")
+        city = _lead_csv_value(row, "city")
+        state = _lead_csv_value(row, "state", "province")
+        postal_code = _lead_csv_value(row, "zip", "zip code", "postal code")
+
+        identity = ghl_id or email or phone or lead_name
+        external_thread_id = "ghl_csv:" + uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"{brand_id}:{identity}".lower(),
+        ).hex
+
+        summary_parts = ["Imported from GoHighLevel CSV"]
+        if original_status:
+            summary_parts.append(f"Original status: {original_status}")
+        if service_needed:
+            summary_parts.append(f"Interest: {service_needed}")
+        if notes:
+            summary_parts.append(notes[:500])
+
+        import_payload = {
+            "source_details_json": {
+                "import_type": "ghl_csv",
+                "source": source,
+                "ghl_id": ghl_id,
+                "original_status": original_status,
+                "row_number": index,
+            },
+            "service_needed": service_needed,
+            "service_address": address,
+            "city": city,
+            "state": state,
+            "postal_code": postal_code,
+            "notes": notes,
+        }
+        thread_id = db.upsert_lead_thread(
+            brand_id,
+            "lead_form",
+            external_thread_id,
+            {
+                "lead_name": lead_name,
+                "lead_email": email,
+                "lead_phone": phone,
+                "source": "ghl_csv_import",
+                "status": _lead_csv_status(original_status),
+                "summary": " | ".join(part for part in summary_parts if part),
+                "commercial_data_json": json.dumps(import_payload),
+            },
+        )
+        if not db.get_lead_events(brand_id, thread_id, event_type="ghl_csv_imported", limit=1):
+            db.add_lead_message(
+                thread_id,
+                "inbound",
+                "system",
+                "Lead imported from GoHighLevel CSV.",
+                channel="lead_form",
+                external_message_id=f"{external_thread_id}:import",
+                metadata={"source": "ghl_csv_import", "row_number": index},
+            )
+            db.add_lead_event(
+                brand_id,
+                thread_id,
+                "ghl_csv_imported",
+                email or phone or lead_name,
+                {"row_number": index, "source": source, "original_status": original_status},
+            )
+        imported += 1
+        thread_ids.append(thread_id)
+
+    return {"imported": imported, "skipped": skipped, "thread_ids": thread_ids}
+
+
 @client_bp.route("/crm")
 @client_login_required
 def client_crm():
@@ -13583,14 +13735,55 @@ def client_crm():
 
     crm_type = (brand.get("crm_type") or "").strip().lower()
     crm_connected = crm_type in ("sweepandgo", "gohighlevel", "jobber") and bool(brand.get("crm_api_key"))
+    imported_leads = [
+        thread for thread in db.get_lead_threads(brand_id, limit=40)
+        if (thread.get("source") or "") == "ghl_csv_import"
+    ][:8]
 
     return render_template(
         "client_crm.html",
         brand=brand,
         crm_connected=crm_connected,
         crm_type=crm_type,
+        imported_leads=imported_leads,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
+
+
+@client_bp.route("/crm/import-leads-csv", methods=["POST"])
+@client_login_required
+def client_crm_import_leads_csv():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    upload = request.files.get("leads_csv")
+    if not upload or not upload.filename:
+        flash("Choose a CSV file to import.", "warning")
+        return redirect(url_for("client.client_crm"))
+
+    if not upload.filename.lower().endswith(".csv"):
+        flash("Upload a .csv file exported from GoHighLevel.", "warning")
+        return redirect(url_for("client.client_crm"))
+
+    try:
+        result = _import_ghl_lead_csv(db, brand_id, upload)
+    except ValueError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("client.client_crm"))
+    except Exception as exc:
+        log.exception("Failed to import GHL lead CSV for brand %s", brand_id)
+        flash(f"Lead CSV import failed: {exc}", "error")
+        return redirect(url_for("client.client_crm"))
+
+    flash(
+        f"Imported {result['imported']} lead row{'s' if result['imported'] != 1 else ''}"
+        + (f"; skipped {result['skipped']} row{'s' if result['skipped'] != 1 else ''}." if result["skipped"] else "."),
+        "success",
+    )
+    return redirect(url_for("client.client_crm"))
 
 
 @client_bp.route("/lead-assistant")
@@ -15313,7 +15506,7 @@ def client_crm_data():
     if not brand:
         return jsonify(error="Brand not found"), 404
 
-    if brand.get("crm_type") != "sweepandgo" or not brand.get("crm_api_key"):
+    if (brand.get("crm_type") or "").strip().lower() != "sweepandgo" or not brand.get("crm_api_key"):
         return jsonify(error="Sweep and Go not connected"), 400
 
     from webapp.crm_bridge import (

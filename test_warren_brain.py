@@ -1012,6 +1012,109 @@ class WarrenContactPolicyTests(unittest.TestCase):
         mock_process_and_respond.assert_not_called()
         mock_send_reply.assert_not_called()
 
+    @patch("webapp.crm_bridge.push_lead", return_value=(True, "SNG client onboarded successfully"))
+    @patch("webapp.warren_brain.lookup_contact_policy", return_value={"suppress_marketing": False, "is_active_client": False})
+    @patch("webapp.warren_brain.generate_response")
+    def test_process_and_respond_pushes_booked_lead_to_sng_from_closing_setting(self, mock_generate_response, mock_lookup_contact_policy, mock_push_lead):
+        from webapp.warren_brain import process_and_respond
+
+        mock_generate_response.return_value = {
+            "reply": "You're all set. We'll get you started.",
+            "action": "qualify",
+            "confidence": 0.95,
+            "quote_low": None,
+            "quote_high": None,
+            "stage_suggestion": "booked",
+            "handoff_reason": None,
+            "closing_action": None,
+            "internal_notes": "Lead confirmed they want weekly service.",
+            "info_collected": {
+                "name": "Jordan Client",
+                "phone": "+15551112222",
+                "email": "jordan@example.com",
+                "address": "123 Main St",
+                "service_needed": "Weekly cleanup",
+            },
+            "objection_detected": None,
+        }
+
+        with self.app.app_context():
+            self.db.update_brand_text_field(self.brand_id, "crm_type", "sweepandgo")
+            self.db.update_brand_text_field(self.brand_id, "crm_api_key", "sng-test-token")
+            self.db.update_brand_text_field(self.brand_id, "sales_bot_closing_action", "push_crm")
+            thread_id = self.db.create_lead_thread(self.brand_id, {
+                "channel": "sms",
+                "source": "openphone",
+                "status": "engaged",
+            })
+            self.db.add_lead_message(
+                thread_id,
+                "inbound",
+                "lead",
+                "Yes, sign me up. I'm Jordan, 123 Main St, jordan@example.com, +15551112222.",
+                channel="sms",
+            )
+
+            result = process_and_respond(self.db, self.brand_id, thread_id, channel="sms")
+            thread = self.db.get_lead_thread(thread_id)
+            events = self.db.get_lead_events(self.brand_id, thread_id, event_type="crm_push")
+
+        self.assertEqual(result["closing_action"], "push_crm")
+        self.assertTrue(result["crm_push"]["success"])
+        self.assertEqual(thread["status"], "booked")
+        self.assertEqual(thread["lead_name"], "Jordan Client")
+        self.assertEqual(thread["lead_phone"], "+15551112222")
+        self.assertEqual(thread["lead_email"], "jordan@example.com")
+        self.assertEqual(len(events), 1)
+        pushed_payload = mock_push_lead.call_args.args[1]
+        self.assertEqual(pushed_payload["first_name"], "Jordan")
+        self.assertEqual(pushed_payload["last_name"], "Client")
+        self.assertEqual(pushed_payload["phone"], "+15551112222")
+        self.assertEqual(pushed_payload["email"], "jordan@example.com")
+        self.assertEqual(pushed_payload["address"], "123 Main St")
+        self.assertIn("Weekly cleanup", pushed_payload["notes"])
+
+    @patch("webapp.crm_bridge.push_lead", return_value=(True, "SNG client onboarded successfully"))
+    @patch("webapp.warren_brain.lookup_contact_policy", return_value={"suppress_marketing": False, "is_active_client": False})
+    @patch("webapp.warren_brain.generate_response")
+    def test_process_and_respond_does_not_push_same_thread_twice(self, mock_generate_response, mock_lookup_contact_policy, mock_push_lead):
+        from webapp.warren_brain import process_and_respond
+
+        mock_generate_response.return_value = {
+            "reply": "Booked.",
+            "action": "reply",
+            "confidence": 0.95,
+            "quote_low": None,
+            "quote_high": None,
+            "stage_suggestion": "booked",
+            "handoff_reason": None,
+            "closing_action": "push_crm",
+            "internal_notes": "Lead confirmed booking.",
+            "info_collected": {},
+            "objection_detected": None,
+        }
+
+        with self.app.app_context():
+            self.db.update_brand_text_field(self.brand_id, "crm_type", "sweepandgo")
+            self.db.update_brand_text_field(self.brand_id, "crm_api_key", "sng-test-token")
+            thread_id = self.db.create_lead_thread(self.brand_id, {
+                "lead_name": "Repeat Client",
+                "lead_phone": "+15553334444",
+                "channel": "sms",
+                "source": "openphone",
+                "status": "engaged",
+            })
+            self.db.add_lead_message(thread_id, "inbound", "lead", "Book it.", channel="sms")
+
+            first = process_and_respond(self.db, self.brand_id, thread_id, channel="sms")
+            second = process_and_respond(self.db, self.brand_id, thread_id, channel="sms")
+            events = self.db.get_lead_events(self.brand_id, thread_id, event_type="crm_push")
+
+        self.assertTrue(first["crm_push"]["success"])
+        self.assertTrue(second["crm_push"]["skipped"])
+        self.assertEqual(mock_push_lead.call_count, 1)
+        self.assertEqual(len(events), 1)
+
 
 class WarrenWebhookSTOPTests(unittest.TestCase):
     """Test that STOP/START keywords are handled at the webhook level."""
@@ -1142,6 +1245,31 @@ class WarrenBrainPromptTests(unittest.TestCase):
         prompt = _build_system_prompt(brand)
         self.assertNotIn("OBJECTION HANDLING", prompt)
         self.assertNotIn("MESSAGE TEMPLATES", prompt)
+
+
+class SweepAndGoPushTests(unittest.TestCase):
+    @patch("webapp.crm_bridge._sng_api", return_value=({"success": True}, None))
+    def test_sng_push_splits_full_name_when_first_last_missing(self, mock_sng_api):
+        from webapp.crm_bridge import _push_sweepandgo
+
+        ok, detail = _push_sweepandgo(
+            {"crm_api_key": "token", "crm_pipeline_id": "org"},
+            {
+                "name": "Taylor Client",
+                "email": "taylor@example.com",
+                "phone": "+15554443333",
+                "address": "123 Main St",
+                "source": "warren_sms",
+            },
+        )
+
+        self.assertTrue(ok)
+        self.assertIn("onboarded", detail.lower())
+        payload = mock_sng_api.call_args.kwargs["json_body"]
+        self.assertEqual(payload["first_name"], "Taylor")
+        self.assertEqual(payload["last_name"], "Client")
+        self.assertEqual(payload["cell_phone_number"], "+15554443333")
+        self.assertEqual(payload["home_address"], "123 Main St")
 
 
 if __name__ == "__main__":

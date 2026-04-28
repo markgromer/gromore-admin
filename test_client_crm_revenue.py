@@ -218,6 +218,7 @@ class ClientCrmRevenueTests(unittest.TestCase):
         self.assertEqual(payload["crm_snapshot"]["panel_mode"], "opportunity")
         self.assertEqual(payload["crm_snapshot"]["subscribed_clients"], 9)
         self.assertEqual(payload["crm_snapshot"]["follow_up_queue"], 12)
+
         self.assertEqual(payload["crm_snapshot"]["warm_pipeline_total"], 9)
         self.assertEqual(payload["crm_snapshot"]["growth_surface_total"], 17)
         self.assertEqual(payload["crm_snapshot"]["subscription_coverage_pct"], 75)
@@ -228,6 +229,18 @@ class ClientCrmRevenueTests(unittest.TestCase):
         self.assertEqual(len(payload["crm_snapshot"]["priorities"]), 3)
         self.assertEqual(payload["crm_snapshot"]["priorities"][0]["count"], 3)
         mock_sync.assert_not_called()
+
+    def test_ghl_crm_page_uses_import_workspace_without_sng_loader(self):
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "crm_type", "gohighlevel")
+            self.app.db.update_brand_text_field(self.brand_id, "crm_api_key", "test-ghl-token")
+
+        response = self.client.get("/client/crm")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Import GoHighLevel Leads", response.data)
+        self.assertIn(b"CRM import workspace", response.data)
+        self.assertNotIn(b"Pulling data from Sweep and Go", response.data)
 
 
 if __name__ == "__main__":

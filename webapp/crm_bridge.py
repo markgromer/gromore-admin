@@ -946,10 +946,17 @@ def _sng_api(brand, method, path, json_body=None, params=None):
 def _push_sweepandgo(brand, lead_data):
     """Onboard a new residential client in Sweep and Go via Open API."""
     org_slug = (brand.get("crm_pipeline_id") or "").strip()
+    first_name = (lead_data.get("first_name") or "").strip()
+    last_name = (lead_data.get("last_name") or "").strip()
+    if not first_name and not last_name:
+        name_parts = str(lead_data.get("name") or "").strip().split()
+        if name_parts:
+            first_name = name_parts[0]
+            last_name = " ".join(name_parts[1:])
 
     payload = {
-        "first_name": lead_data.get("first_name", ""),
-        "last_name": lead_data.get("last_name", ""),
+        "first_name": first_name,
+        "last_name": last_name,
         "email": lead_data.get("email", ""),
         "cell_phone_number": lead_data.get("phone", ""),
         "home_address": lead_data.get("address", ""),

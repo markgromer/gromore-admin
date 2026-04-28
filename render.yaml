@@ -79,3 +79,22 @@ services:
           name: agency-analytics
           property: host
           prefix: https://
+
+  - type: cron
+    name: warren-crm-event-actions
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    schedule: "*/10 * * * *"
+    startCommand: python -c "import os,requests;token=os.environ.get('CRON_SECRET') or os.environ['SECRET_KEY'];response=requests.post(os.environ['RENDER_EXTERNAL_URL']+'/jobs/cron/warren-crm-event-actions',headers={'Authorization':'Bearer '+token},timeout=300);response.raise_for_status()"
+    envVars:
+      - key: SECRET_KEY
+        fromService:
+          type: web
+          name: agency-analytics
+          envVarKey: SECRET_KEY
+      - key: RENDER_EXTERNAL_URL
+        fromService:
+          type: web
+          name: agency-analytics
+          property: host
+          prefix: https://

@@ -23,6 +23,18 @@ log = logging.getLogger(__name__)
 DEFAULT_MODEL = "gpt-4o-mini"
 
 
+def _safe_json_object(raw_value):
+    if isinstance(raw_value, dict):
+        return dict(raw_value)
+    if not raw_value:
+        return {}
+    try:
+        parsed = json.loads(raw_value)
+    except Exception:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 def _parse_phone_list(raw_value):
     cleaned = []
     seen = set()
@@ -40,6 +52,120 @@ def _parse_phone_list(raw_value):
         seen.add(phone)
         cleaned.append(phone)
     return cleaned
+
+
+def _split_lead_name(name):
+    parts = str(name or "").strip().split()
+    if not parts:
+        return "", ""
+    return parts[0], " ".join(parts[1:])
+
+
+def _has_successful_crm_push(db, brand_id, thread_id):
+    for event in db.get_lead_events(brand_id, thread_id, event_type="crm_push", limit=20):
+        metadata = _safe_json_object(event.get("metadata_json"))
+        status = str(metadata.get("status") or event.get("event_value") or "").strip().lower()
+        if status in {"success", "auto", "sent", "pushed"} or metadata.get("success") is True:
+            return True
+    return False
+
+
+def _brand_wants_crm_push(brand, response):
+    explicit_action = (response.get("closing_action") or "").strip().lower()
+    if explicit_action in {"push_crm", "both"}:
+        return explicit_action
+
+    configured_action = (brand.get("sales_bot_closing_action") or "none").strip().lower()
+    stage_suggestion = (response.get("stage_suggestion") or "").strip().lower()
+    action = (response.get("action") or "").strip().lower()
+    if configured_action in {"push_crm", "both"} and (stage_suggestion == "booked" or action == "qualify"):
+        return configured_action
+
+    if brand.get("sales_bot_auto_push_crm") and stage_suggestion == "booked":
+        return "push_crm"
+    return ""
+
+
+def _build_crm_lead_payload(thread, response, channel):
+    first_name, last_name = _split_lead_name(thread.get("lead_name", ""))
+    info = response.get("info_collected") or {}
+    profile = _safe_json_object(thread.get("commercial_data_json"))
+    quote = response.get("_quote") or {}
+    notes = []
+    if response.get("internal_notes"):
+        notes.append(response["internal_notes"])
+    if thread.get("summary"):
+        notes.append(f"Thread summary: {thread['summary']}")
+    if quote:
+        amount_low = quote.get("amount_low") or 0
+        amount_high = quote.get("amount_high") or 0
+        if amount_low or amount_high:
+            notes.append(f"Warren quote range: ${amount_low:g}-${amount_high:g}")
+    service_needed = info.get("service_needed") or profile.get("service_needed") or ""
+    if service_needed:
+        notes.append(f"Service needed: {service_needed}")
+
+    return {
+        "name": thread.get("lead_name", ""),
+        "first_name": first_name,
+        "last_name": last_name,
+        "phone": thread.get("lead_phone", ""),
+        "email": thread.get("lead_email", ""),
+        "address": info.get("address") or profile.get("service_address") or profile.get("address") or "",
+        "source": f"warren_{channel}",
+        "notes": "\n".join(part for part in notes if part).strip(),
+    }
+
+
+def _maybe_push_thread_to_crm(db, brand, brand_id, thread_id, response, channel, contact_policy):
+    closing_action = _brand_wants_crm_push(brand, response)
+    if not closing_action or contact_policy.get("suppress_marketing"):
+        return None
+    if _has_successful_crm_push(db, brand_id, thread_id):
+        return {"success": True, "detail": "already_pushed", "skipped": True, "closing_action": closing_action}
+
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread:
+        return {"success": False, "detail": "thread_not_found", "closing_action": closing_action}
+
+    lead_data = _build_crm_lead_payload(thread, response, channel)
+    if not (lead_data.get("phone") or lead_data.get("email")):
+        detail = "missing_phone_or_email"
+        db.add_lead_event(
+            brand_id,
+            thread_id,
+            "crm_push_failed",
+            event_value=detail,
+            metadata={"closing_action": closing_action, "crm_type": brand.get("crm_type") or ""},
+        )
+        return {"success": False, "detail": detail, "closing_action": closing_action}
+
+    try:
+        from webapp.crm_bridge import push_lead
+
+        success, detail = push_lead(brand, lead_data)
+    except Exception as exc:
+        success, detail = False, str(exc)
+
+    event_type = "crm_push" if success else "crm_push_failed"
+    db.add_lead_event(
+        brand_id,
+        thread_id,
+        event_type,
+        event_value="success" if success else str(detail)[:200],
+        metadata={
+            "success": bool(success),
+            "detail": str(detail)[:500],
+            "closing_action": closing_action,
+            "crm_type": brand.get("crm_type") or "",
+            "source": f"warren_{channel}",
+        },
+    )
+    if success:
+        log.info("Warren auto-pushed lead %s to CRM: %s", thread_id, detail)
+    else:
+        log.warning("Warren CRM push returned failure for thread %s: %s", thread_id, detail)
+    return {"success": bool(success), "detail": str(detail), "closing_action": closing_action}
 
 
 def _build_owner_handoff_alert(thread, reason, channel):
@@ -617,8 +743,20 @@ def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=
             update_data["lead_phone"] = info["phone"]
         if info.get("email") and not thread.get("lead_email"):
             update_data["lead_email"] = info["email"]
+        profile = _safe_json_object(thread.get("commercial_data_json"))
+        profile_changed = False
+        if info.get("address") and not (profile.get("service_address") or profile.get("address")):
+            profile["service_address"] = info["address"]
+            profile_changed = True
+        if info.get("service_needed") and not profile.get("service_needed"):
+            profile["service_needed"] = info["service_needed"]
+            profile_changed = True
+        if profile_changed:
+            db.update_lead_thread_commercial_data(thread_id, brand_id, json.dumps(profile, separators=(",", ":")))
+            thread["commercial_data_json"] = json.dumps(profile, separators=(",", ":"))
         if update_data:
-            db.upsert_lead_thread(brand_id, channel, thread.get("external_thread_id", ""), data=update_data)
+            db.update_lead_thread_profile_fields(thread_id, brand_id, **update_data)
+            thread.update(update_data)
             log.info("Warren collected info for thread %s: %s", thread_id, update_data)
 
     # Log any objection detected
@@ -660,7 +798,7 @@ def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=
 
     # Handle quoting
     if action == "quote" and not contact_policy.get("suppress_marketing") and (response.get("quote_low") or response.get("quote_high")):
-        db.upsert_lead_quote(
+        quote = db.upsert_lead_quote(
             brand_id, thread_id,
             status="sent" if should_send else "draft",
             quote_mode=brand.get("sales_bot_quote_mode", "hybrid"),
@@ -670,6 +808,7 @@ def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=
             follow_up_text=reply_text,
             sent_at=datetime.now().isoformat() if should_send else "",
         )
+        response["_quote"] = quote
         advance_stage(db, thread_id, brand_id, "quote_sent")
 
     # Handle handoff
@@ -687,28 +826,19 @@ def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=
     # Stage suggestion from AI
     stage_suggestion = response.get("stage_suggestion")
     if stage_suggestion and not contact_policy.get("suppress_marketing"):
-        advance_stage(db, thread_id, brand_id, f"lead_{stage_suggestion}" if stage_suggestion != "engaged" else "warren_replied")
+        stage_event_map = {
+            "engaged": "warren_replied",
+            "quoted": "quote_sent",
+            "qualified": "lead_confirmed",
+            "booked": "appointment_set",
+        }
+        stage_event = stage_event_map.get(str(stage_suggestion or "").strip().lower())
+        if stage_event:
+            advance_stage(db, thread_id, brand_id, stage_event)
 
     # Handle closing actions (CRM push / onboarding link)
-    closing_action = response.get("closing_action")
-    if closing_action in ("push_crm", "both") and not contact_policy.get("suppress_marketing"):
-        try:
-            from webapp.crm_bridge import push_lead
-            lead_data = {
-                "name": thread.get("lead_name", ""),
-                "phone": thread.get("lead_phone", ""),
-                "email": thread.get("lead_email", ""),
-                "source": f"warren_{channel}",
-                "notes": response.get("internal_notes", ""),
-            }
-            success, detail = push_lead(brand, lead_data)
-            if success:
-                db.add_lead_event(brand_id, thread_id, "crm_push", event_value="auto")
-                log.info("Warren auto-pushed lead %s to CRM: %s", thread_id, detail)
-            else:
-                log.warning("Warren CRM push returned failure for thread %s: %s", thread_id, detail)
-        except Exception as exc:
-            log.warning("Warren CRM push failed for thread %s: %s", thread_id, exc)
+    crm_push_result = _maybe_push_thread_to_crm(db, brand, brand_id, thread_id, response, channel, contact_policy)
+    closing_action = (crm_push_result or {}).get("closing_action") or response.get("closing_action")
 
     return {
         "reply": reply_text,
@@ -717,5 +847,6 @@ def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=
         "should_send": should_send,
         "handoff_reason": response.get("handoff_reason"),
         "closing_action": closing_action,
+        "crm_push": crm_push_result,
         "confidence": confidence,
     }

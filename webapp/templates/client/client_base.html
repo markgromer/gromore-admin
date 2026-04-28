@@ -88,7 +88,7 @@
             <div class="nav-section-group collapsed" data-section="pipeline">
             {% if feature_on('crm') %}
             <a href="{{ url_for('client.client_crm') }}" class="{% if endpoint in ('client.client_crm',) %}active{% endif %}">
-                <i class="bi bi-people"></i> <span class="nav-link-label">Leads</span>
+                <i class="bi bi-diagram-3"></i> <span class="nav-link-label">CRM</span>
             </a>
             <a href="{{ url_for('client.client_lead_assistant') }}" class="{% if endpoint in ('client.client_lead_assistant',) %}active{% endif %}">
                 <i class="bi bi-chat-dots"></i> <span class="nav-link-label">Lead Follow-Up</span>

@@ -395,9 +395,10 @@ def cron_warren_crm_event_actions():
 
     stats = process_pending_crm_event_actions(current_app.db, current_app.config, limit=250)
     logger.info(
-        "Warren CRM event actions: %d sent, %d failed, %d deferred across queued events",
+        "Warren CRM event actions: %d sent, %d failed, %d deferred, %d resolved across queued events",
         stats.get("sent", 0),
         stats.get("failed", 0),
         stats.get("deferred", 0),
+        stats.get("resolved", 0),
     )
     return jsonify({"ok": True, **stats})

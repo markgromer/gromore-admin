@@ -92,7 +92,7 @@
     <div class="d-flex justify-content-between gap-3 align-items-start flex-wrap">
         <div>
             <h3><i class="bi bi-people me-2"></i>CRM Dashboard</h3>
-            <p>Live data from your Sweep and Go account</p>
+            <p>{% if crm_type == 'sweepandgo' %}Live data from your Sweep and Go account{% else %}Import and organize leads from your connected CRM{% endif %}</p>
         </div>
         <div class="d-flex gap-2 flex-wrap">
             {% if feature_on('commercial') %}
@@ -107,14 +107,75 @@
     </div>
 </div>
 
+<div class="crm-section">
+    <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+        <div>
+            <h5 class="mb-1"><i class="bi bi-upload text-primary"></i> Import GoHighLevel Leads</h5>
+            <p class="text-muted mb-0" style="font-size:.86rem;">Upload a GHL contact export to add those contacts to the Lead Follow-Up pipeline.</p>
+        </div>
+        <a href="{{ url_for('client.client_lead_assistant') }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-chat-dots me-1"></i> View Lead Follow-Up
+        </a>
+    </div>
+    <form class="mt-3" method="post" enctype="multipart/form-data" action="{{ url_for('client.client_crm_import_leads_csv') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-7">
+                <label class="form-label fw-semibold">GHL CSV file</label>
+                <input class="form-control" type="file" name="leads_csv" accept=".csv,text/csv" required>
+                <small class="text-muted">Recognizes common columns like name, first name, last name, email, phone, address, source, stage, and notes.</small>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-semibold">Destination</label>
+                <div class="form-control bg-light">Lead Follow-Up pipeline</div>
+            </div>
+            <div class="col-md-2 d-grid">
+                <button class="btn btn-primary" type="submit">
+                    <i class="bi bi-upload me-1"></i> Import
+                </button>
+            </div>
+        </div>
+    </form>
+    {% if imported_leads %}
+    <div class="mt-3">
+        <div class="fw-semibold mb-2" style="font-size:.84rem;">Recent CSV imports</div>
+        <div class="table-responsive">
+            <table class="table crm-table mb-0">
+                <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for lead in imported_leads %}
+                    <tr>
+                        <td class="fw-medium">{{ lead.lead_name or '-' }}</td>
+                        <td>{{ lead.lead_email or '-' }}</td>
+                        <td>{{ lead.lead_phone or '-' }}</td>
+                        <td><span class="badge bg-primary bg-opacity-10 text-primary">{{ lead.status or 'new' }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
 {% if not crm_connected %}
 <!-- Not connected state -->
 <div class="crm-section text-center py-5">
     <i class="bi bi-plug" style="font-size: 3rem; color: #cbd5e1;"></i>
-    <h5 class="mt-3 fw-bold">Connect Sweep and Go</h5>
-    <p class="text-muted mb-3">Add your SNG API token in Connections to see your CRM data here.</p>
+    <h5 class="mt-3 fw-bold">Connect your CRM</h5>
+    <p class="text-muted mb-3">Add your CRM credentials in Connections for live data. CSV import is available now.</p>
     <a href="{{ url_for('client.client_settings') }}" class="btn btn-primary">
         <i class="bi bi-gear me-1"></i> Go to Connections
+    </a>
+</div>
+
+{% elif crm_type != 'sweepandgo' %}
+<div class="crm-section text-center py-5">
+    <i class="bi bi-database-check" style="font-size: 3rem; color: #94a3b8;"></i>
+    <h5 class="mt-3 fw-bold">CRM import workspace</h5>
+    <p class="text-muted mb-3">Live dashboard tables are currently built for Sweep and Go. For GoHighLevel, use the CSV importer above to bring leads into Warren.</p>
+    <a href="{{ url_for('client.client_lead_assistant') }}" class="btn btn-primary">
+        <i class="bi bi-chat-dots me-1"></i> Open Lead Follow-Up
     </a>
 </div>
 
@@ -563,7 +624,7 @@
 
 {% endif %}
 
-{% if crm_connected %}
+{% if crm_connected and crm_type == 'sweepandgo' %}
 <script>
 var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 

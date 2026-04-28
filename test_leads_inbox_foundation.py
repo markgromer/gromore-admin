@@ -2,6 +2,7 @@ import json
 import os
 import unittest
 import uuid
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -439,6 +440,32 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertIn(b"Test Google Maps Key", response.data)
         self.assertIn(b"Find Place ID", response.data)
         self.assertIn(b"#google-maps", response.data)
+
+    def test_client_can_import_ghl_csv_leads(self):
+        csv_body = (
+            "First Name,Last Name,Email,Phone,Stage,Source,Notes\n"
+            "Jamie,Prospect,jamie@example.com,(555) 555-0199,New Lead,GoHighLevel,Asked about weekly service\n"
+        )
+
+        response = self.client.post(
+            "/client/crm/import-leads-csv",
+            data={"leads_csv": (BytesIO(csv_body.encode("utf-8")), "ghl-leads.csv")},
+            content_type="multipart/form-data",
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/client/crm"))
+
+        with self.app.app_context():
+            threads = self.app.db.get_lead_threads(self.brand_id, limit=10)
+            imported = [t for t in threads if t["source"] == "ghl_csv_import"]
+
+        self.assertEqual(len(imported), 1)
+        self.assertEqual(imported[0]["lead_name"], "Jamie Prospect")
+        self.assertEqual(imported[0]["lead_email"], "jamie@example.com")
+        self.assertEqual(imported[0]["lead_phone"], "+15555550199")
+        self.assertEqual(imported[0]["status"], "new")
 
     def test_automations_page_shows_appointment_reminder_reports(self):
         with self.app.app_context():
