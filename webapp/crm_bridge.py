@@ -1750,6 +1750,29 @@ def _jobber_create_request(brand, client_id, title, details=""):
     return result, error
 
 
+def jobber_test_connection(brand):
+    """Verify the Jobber token can reach the GraphQL API."""
+    query = """
+    query JobberConnectionTest {
+        clients(first: 1) {
+            totalCount
+            nodes {
+                id
+            }
+        }
+    }
+    """
+    result, error = _jobber_graphql(brand, query)
+    if error:
+        return "", error
+
+    clients = result.get("clients") if isinstance(result, dict) else {}
+    total = (clients or {}).get("totalCount")
+    if total is None:
+        return "Connected to Jobber.", None
+    return f"Connected - {total} client record{'s' if int(total or 0) != 1 else ''} accessible.", None
+
+
 def pull_jobber_revenue(brand, month=None):
     """Pull completed invoice revenue from Jobber for a given month.
     Returns (revenue, invoice_count, error_or_None)."""

@@ -13535,6 +13535,44 @@ def client_ghl_test():
     return jsonify(ok=True, message=message)
 
 
+# ── Jobber Settings ──
+
+@client_bp.route("/settings/jobber", methods=["POST"])
+@client_login_required
+def client_save_jobber():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    api_key = request.form.get("jobber_api_key", "").strip()
+
+    db.update_brand_text_field(brand_id, "crm_type", "jobber")
+    if api_key:
+        db.update_brand_text_field(brand_id, "crm_api_key", api_key)
+
+    flash("Jobber settings saved.", "success")
+    return redirect(url_for("client.client_settings"))
+
+
+@client_bp.route("/crm/jobber/test", methods=["POST"])
+@client_login_required
+def client_jobber_test():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    if brand.get("crm_type") != "jobber" or not brand.get("crm_api_key"):
+        return jsonify(ok=False, error="Jobber not configured. Save your access token first.")
+
+    from webapp.crm_bridge import jobber_test_connection
+    message, error = jobber_test_connection(brand)
+    if error:
+        return jsonify(ok=False, error=error)
+
+    return jsonify(ok=True, message=message)
+
+
 # ── CRM Dashboard Tab ──
 
 

@@ -1,5 +1,5 @@
 {% extends "client_base.html" %}
-{% block title %}Connections{% endblock %}
+{% block title %}Settings{% endblock %}
 
 {% block content %}
 <style>
@@ -156,8 +156,8 @@
 
 <div class="page-title-bar d-flex flex-wrap justify-content-between align-items-start gap-3">
     <div>
-        <h5><i class="bi bi-plug"></i>Connections</h5>
-        <p>Each connection card tells you what it powers, whether it is ready, and lets you open just that setup area.</p>
+        <h5><i class="bi bi-plug"></i>Settings</h5>
+        <p>Connection settings live here. Each card tells you what it powers, whether it is ready, and lets you open just that setup area.</p>
     </div>
     <div class="d-flex gap-2">
         <a href="{{ url_for('client.client_automations') }}" class="btn btn-dark">
@@ -230,6 +230,16 @@
         <div class="connection-summary-power">Powers: pipeline sync, lead push</div>
     </button>
 
+    <button type="button" class="connection-summary-card" data-panel-target="jobber" data-panel-label="Jobber" data-help-href="{{ url_for('client.client_help', guide='connections') }}#crm-jobber">
+        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#0f766e,#38bdf8);"><i class="bi bi-briefcase-fill"></i></span>
+        <div class="connection-summary-label">
+            <strong>Jobber</strong>
+            {% if brand.crm_type == 'jobber' and brand.crm_api_key %}<span class="badge bg-success">Connected</span>{% else %}<span class="badge bg-secondary">Not connected</span>{% endif %}
+        </div>
+        <div class="connection-summary-meta">Field-service CRM connection for revenue sync and pushing booked Warren leads into Jobber.</div>
+        <div class="connection-summary-power">Powers: client creation, requests, revenue</div>
+    </button>
+
     <button type="button" class="connection-summary-card" data-panel-target="wordpress" data-panel-label="WordPress" data-help-href="{{ url_for('client.client_help', guide='connections') }}#wordpress">
         <span class="connection-summary-icon" style="background:linear-gradient(135deg,#0f172a,#475569);"><i class="bi bi-wordpress"></i></span>
         <div class="connection-summary-label">
@@ -248,6 +258,16 @@
         </div>
         <div class="connection-summary-meta">Your OpenAI key and quality tier. This powers the assistant, generation tools, and higher-level automation logic.</div>
         <div class="connection-summary-power">Powers: AI chat, content, workflows</div>
+    </button>
+
+    <button type="button" class="connection-summary-card" data-panel-target="warren" data-panel-label="Lead Webhooks" data-help-href="{{ url_for('client.client_help', guide='warren') }}">
+        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#4f46e5,#06b6d4);"><i class="bi bi-box-arrow-in-down"></i></span>
+        <div class="connection-summary-label">
+            <strong>Lead Webhooks</strong>
+            {% if warren_channel_readiness.lead_forms %}<span class="badge bg-success">Ready</span>{% else %}<span class="badge bg-secondary">Needs secret</span>{% endif %}
+        </div>
+        <div class="connection-summary-meta">Generic POST endpoint for quote tools, website forms, Zapier, Make, and other lead sources.</div>
+        <div class="connection-summary-power">Powers: inbound quote leads, partial quote capture</div>
     </button>
 
     <button type="button" class="connection-summary-card" data-panel-target="warren" data-panel-label="Warren Channels" data-help-href="{{ url_for('client.client_help', guide='warren') }}">
@@ -656,6 +676,55 @@
         </div>
     </section>
 
+    <section class="connection-panel" data-panel="jobber" id="connection-panel-jobber">
+        <div class="connection-panel-shell card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                    <div>
+                        <h5 class="fw-semibold mb-1">Jobber</h5>
+                        <p class="text-muted mb-0">Connect Jobber so Warren can push qualified leads, create clients/requests, and sync paid invoice revenue.</p>
+                    </div>
+                    {% if brand.crm_type == 'jobber' and brand.crm_api_key %}<span class="badge bg-success rounded-pill px-3 py-2">Connected</span>{% else %}<span class="badge bg-secondary rounded-pill px-3 py-2">Not connected</span>{% endif %}
+                </div>
+
+                <form method="POST" action="{{ url_for('client.client_save_jobber') }}" class="mt-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-3">
+                        <div class="col-lg-8">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Jobber Access Token</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" name="jobber_api_key" placeholder="{{ '••••••••' ~ brand.crm_api_key[-4:] if brand.crm_api_key and brand.crm_type == 'jobber' else 'Paste your Jobber OAuth access token' }}" autocomplete="off" id="jobberApiKeyInput">
+                                <button class="btn btn-outline-secondary" type="button" onclick="var i=document.getElementById('jobberApiKeyInput');i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=\'bi bi-eye\'></i>':'<i class=\'bi bi-eye-slash\'></i>'"><i class="bi bi-eye"></i></button>
+                            </div>
+                            <small class="text-muted">Leave blank to keep the current token. Jobber uses GraphQL at api.getjobber.com.</small>
+                        </div>
+                        <div class="col-lg-4 d-flex align-items-end">
+                            <button class="btn btn-primary w-100" type="submit">Save Jobber Settings</button>
+                        </div>
+                    </div>
+                    <div class="mt-3 d-flex align-items-center gap-2 flex-wrap">
+                        {% if brand.crm_type == 'jobber' and brand.crm_api_key %}<button class="btn btn-outline-primary" type="button" id="jobberTestBtn"><i class="bi bi-plug me-1"></i> Test Connection</button>{% endif %}
+                        <span class="text-muted" style="font-size:.84rem;">A valid token lets Warren create Jobber clients and requests when CRM auto-push is enabled.</span>
+                    </div>
+                </form>
+                <div id="jobberTestResult" class="mt-2" style="display:none;"></div>
+
+                <div class="mt-3 p-3" style="background:#ecfeff; border:1px solid #bae6fd; border-radius:12px;">
+                    <div class="d-flex align-items-start gap-2">
+                        <i class="bi bi-info-circle text-info mt-1"></i>
+                        <div>
+                            <div class="fw-medium" style="font-size:.88rem;">What this powers</div>
+                            <small class="text-muted">Lead Assistant CRM push can create a Jobber client and request. Finance sync can pull paid invoice revenue for reporting. Full OAuth app onboarding can be added later if you do not want to manually paste access tokens.</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="connection-panel-actions">
+                    <a href="{{ url_for('client.client_help', guide='connections') }}#crm-jobber" class="btn btn-outline-secondary btn-sm"><i class="bi bi-question-circle me-1"></i>Jobber guide</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <section class="connection-panel" data-panel="wordpress" id="connection-panel-wordpress">
         <div class="connection-panel-shell card">
             <div class="card-body">
@@ -758,6 +827,30 @@
                 </div>
 
                 <div class="connection-panel-note mt-3">Use this panel for channel credentials, webhook URLs, and callback wiring. Use Automations for what Warren should actually send.</div>
+
+                <div class="mt-3 p-3" style="background:#eef2ff; border:1px solid #c7d2fe; border-radius:12px;">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                        <div>
+                            <h6 class="fw-semibold mb-1"><i class="bi bi-box-arrow-in-down me-1 text-primary"></i>Generic Lead Webhook</h6>
+                            <p class="text-muted mb-0" style="font-size:.84rem;">Use this for quote tools, partial quote events, website forms, Zapier, Make, or any system that can POST lead data.</p>
+                        </div>
+                        {% if warren_channel_readiness.lead_forms %}<span class="badge bg-success rounded-pill px-3 py-2">Ready</span>{% else %}<span class="badge bg-secondary rounded-pill px-3 py-2">Needs secret</span>{% endif %}
+                    </div>
+                    <div class="row g-3 align-items-end">
+                        <div class="col-lg-7">
+                            <label class="form-label mb-1 fw-medium">Webhook URL</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control form-control-sm bg-light" readonly value="{{ request.url_root | replace('http://', 'https://') }}webhooks/leads/{{ brand.slug }}" id="incomingLeadWebhookUrlTop">
+                                <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('incomingLeadWebhookUrlTop')"><i class="bi bi-clipboard"></i></button>
+                            </div>
+                            <small class="text-muted d-block mt-2">Send the secret in <code>Authorization: Bearer ...</code> or <code>X-GroMore-Webhook-Secret</code>.</small>
+                        </div>
+                        <div class="col-lg-5">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Expected quote-tool fields</label>
+                            <div class="form-control bg-light" style="height:auto; min-height:38px; font-size:.82rem;">event_type, external_id, name, email, phone, service, address, quote_amount, message</div>
+                        </div>
+                    </div>
+                </div>
 
                 <div class="connection-readiness-grid mt-3">
                     <div class="connection-readiness-card">
@@ -1111,6 +1204,35 @@
                 .catch(function() {
                     ghlTestBtn.disabled = false;
                     ghlTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
+                    rd.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2">Network error</span>';
+                    rd.style.display = '';
+                });
+            });
+        }
+
+        var jobberTestBtn = document.getElementById('jobberTestBtn');
+        if (jobberTestBtn) {
+            jobberTestBtn.addEventListener('click', function() {
+                var rd = document.getElementById('jobberTestResult');
+                jobberTestBtn.disabled = true;
+                jobberTestBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
+                rd.style.display = 'none';
+                fetch('/client/crm/jobber/test', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    jobberTestBtn.disabled = false;
+                    jobberTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
+                    rd.innerHTML = data.ok
+                        ? '<span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i> ' + (data.message || 'Connected!') + '</span>'
+                        : '<span class="badge bg-danger rounded-pill px-3 py-2"><i class="bi bi-x-circle me-1"></i> ' + (data.error || 'Connection failed') + '</span>';
+                    rd.style.display = '';
+                })
+                .catch(function() {
+                    jobberTestBtn.disabled = false;
+                    jobberTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
                     rd.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2">Network error</span>';
                     rd.style.display = '';
                 });

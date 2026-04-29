@@ -227,6 +227,10 @@
                 <span class="nav-icon"><i class="bi bi-lightning-charge"></i></span>
                 GoHighLevel CRM
             </a>
+            <a href="#crm-jobber" class="{{ 'active' if active_topic == 'crm-jobber' }}">
+                <span class="nav-icon"><i class="bi bi-briefcase"></i></span>
+                Jobber CRM
+            </a>
             <a href="#wordpress" class="{{ 'active' if active_topic == 'wordpress' }}">
                 <span class="nav-icon"><i class="bi bi-wordpress"></i></span>
                 WordPress
@@ -353,12 +357,17 @@
                     <tr>
                         <td><i class="bi bi-people me-1 text-secondary"></i> <strong>CRM (Sweep and Go)</strong></td>
                         <td>API token + org slug</td>
-                        <td>Pull client and revenue data from your CRM. Enables revenue-based reporting and ROI calculations. Currently supports Sweep and Go. Enter your API token and organization slug on the Connections page. <a href="#crm-sng">Full setup guide below.</a></td>
+                        <td>Pull client and revenue data from your CRM. Enables revenue-based reporting and ROI calculations. Enter your API token and organization slug on the Settings page. <a href="#crm-sng">Full setup guide below.</a></td>
                     </tr>
                     <tr>
                         <td><i class="bi bi-lightning-charge me-1 text-warning"></i> <strong>CRM (GoHighLevel)</strong></td>
                         <td>API key or PIT + location ID</td>
-                        <td>Connect your GoHighLevel sub-account so the platform can read pipeline activity and push leads into the right workflow. Add your key, location ID, and optional pipeline on the Connections page. <a href="#crm-ghl">Full setup guide below.</a></td>
+                        <td>Connect your GoHighLevel sub-account so the platform can read pipeline activity and push leads into the right workflow. Add your key, location ID, and optional pipeline on the Settings page. <a href="#crm-ghl">Full setup guide below.</a></td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-briefcase me-1 text-info"></i> <strong>CRM (Jobber)</strong></td>
+                        <td>OAuth access token</td>
+                        <td>Connect Jobber so Warren can create clients and requests, and so finance sync can pull paid invoice revenue. Add your Jobber access token on the Settings page. <a href="#crm-jobber">Full setup guide below.</a></td>
                     </tr>
                 </tbody>
             </table>
@@ -880,6 +889,29 @@
 
             <div class="warning-box">
                 <i class="bi bi-exclamation-triangle me-1"></i> <strong>Keep the token scoped correctly:</strong> If your token points at the wrong sub-account, the test may pass but the data and lead pushes will go to the wrong place.
+            </div>
+        </div>
+
+        <div class="help-topic" id="crm-jobber">
+            <h4><i class="bi bi-briefcase text-info"></i> Jobber CRM</h4>
+            <p class="topic-desc">Connect Jobber so Warren can push qualified leads into Jobber and finance sync can use paid invoice revenue.</p>
+
+            <h5>What You Need</h5>
+            <ul>
+                <li>A Jobber OAuth access token with access to clients, requests, and invoices</li>
+                <li>Permission in Jobber to create clients and requests if you want Warren CRM auto-push enabled</li>
+            </ul>
+
+            <h5>Setup</h5>
+            <ol>
+                <li>Create or obtain a Jobber API access token from your Jobber app/OAuth setup</li>
+                <li>Open <a href="{{ url_for('client.client_settings') }}">Settings</a> and choose the Jobber card</li>
+                <li>Paste the token and save</li>
+                <li>Run the Jobber test connection before enabling automated CRM push</li>
+            </ol>
+
+            <div class="step-callout">
+                <strong>Why it matters:</strong> Jobber is a major field-service CRM. This connection lets Warren move booked or qualified leads into the operation system instead of leaving them only in the lead inbox.
             </div>
         </div>
 

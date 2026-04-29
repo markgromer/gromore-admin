@@ -389,6 +389,7 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
     def test_settings_page_shows_generic_lead_webhook_url(self):
         response = self.client.get("/client/settings")
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Lead Webhooks", response.data)
         self.assertIn(b"Generic Incoming Lead Webhook URL", response.data)
         self.assertIn(b"/webhooks/leads/", response.data)
 
@@ -425,11 +426,30 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"#crm-sng", response.data)
         self.assertIn(b"#crm-ghl", response.data)
+        self.assertIn(b"Jobber", response.data)
+        self.assertIn(b"Save Jobber Settings", response.data)
 
         help_response = self.client.get("/client/help?guide=connections")
         self.assertEqual(help_response.status_code, 200)
         self.assertIn(b"Sweep and Go CRM", help_response.data)
         self.assertIn(b"GoHighLevel CRM", help_response.data)
+        self.assertIn(b"Jobber CRM", help_response.data)
+
+    def test_client_can_save_jobber_settings(self):
+        response = self.client.post(
+            "/client/settings/jobber",
+            data={"jobber_api_key": "jobber-token-123"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/client/settings"))
+
+        with self.app.app_context():
+            brand = self.app.db.get_brand(self.brand_id)
+
+        self.assertEqual(brand["crm_type"], "jobber")
+        self.assertEqual(brand["crm_api_key"], "jobber-token-123")
 
     def test_connections_page_includes_google_maps_and_place_id_setup(self):
         response = self.client.get("/client/settings")
