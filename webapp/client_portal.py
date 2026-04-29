@@ -279,6 +279,255 @@ _INTEGRATION_CATALOG = [
 
 _INTEGRATION_CATALOG_BY_KEY = {item["key"]: item for item in _INTEGRATION_CATALOG}
 
+_INTEGRATION_LIVE_TEST_PROVIDERS = {
+    "callrail",
+    "calendly",
+    "mailchimp",
+    "twilio",
+    "quickbooks",
+    "housecallpro",
+    "zapier",
+    "make",
+}
+
+_INTEGRATION_READINESS_META = {
+    "quickbooks": {
+        "mode": "oauth",
+        "mode_label": "OAuth accounting",
+        "required_fields": ("client_id", "client_secret", "realm_id", "access_token", "refresh_token"),
+        "fields": [
+            {"key": "client_id", "label": "OAuth Client ID", "type": "text", "placeholder": "Intuit app client ID"},
+            {"key": "client_secret", "label": "OAuth Client Secret", "type": "password", "secret": True, "placeholder": "Intuit app secret"},
+            {"key": "environment", "label": "Environment", "type": "text", "placeholder": "sandbox or production"},
+            {"key": "webhook_verifier_token", "label": "Webhook Verifier Token", "type": "password", "secret": True, "placeholder": "Optional Intuit webhook token"},
+        ],
+        "capabilities": ("invoice sync", "paid revenue", "customer revenue", "accounting webhooks"),
+        "requirements": ("Intuit developer app", "OAuth redirect/tokens", "QuickBooks company realm ID"),
+    },
+    "callrail": {
+        "mode": "api_key",
+        "mode_label": "API + webhooks",
+        "required_fields": ("api_key", "account_id"),
+        "fields": [
+            {"key": "company_id", "label": "Company ID", "type": "text", "placeholder": "Optional CallRail company ID"},
+            {"key": "webhook_secret", "label": "Webhook Secret", "type": "password", "secret": True, "placeholder": "Optional webhook signature secret"},
+            {"key": "tracking_number", "label": "Default Tracking Number", "type": "text", "placeholder": "Optional source number"},
+        ],
+        "capabilities": ("call attribution", "missed-call follow-up", "recording links", "source reporting"),
+        "requirements": ("API key", "account ID", "webhook endpoint for real-time call events"),
+    },
+    "housecallpro": {
+        "mode": "api_key",
+        "mode_label": "API key CRM",
+        "required_fields": ("api_key",),
+        "fields": [
+            {"key": "company_id", "label": "Company ID", "type": "text", "placeholder": "Optional internal/company ID"},
+            {"key": "webhook_secret", "label": "Webhook Secret", "type": "password", "secret": True, "placeholder": "Optional webhook secret"},
+        ],
+        "capabilities": ("customers", "jobs", "estimates", "revenue"),
+        "requirements": ("Housecall Pro API access", "admin-generated API key"),
+    },
+    "servicetitan": {
+        "mode": "partner",
+        "mode_label": "Partner API",
+        "required_fields": ("environment", "tenant_id", "app_key", "client_id", "client_secret"),
+        "fields": [
+            {"key": "environment", "label": "Environment", "type": "text", "placeholder": "integration or production"},
+            {"key": "business_unit_id", "label": "Business Unit ID", "type": "text", "placeholder": "Optional default BU"},
+            {"key": "webhook_secret", "label": "Webhook Secret", "type": "password", "secret": True, "placeholder": "Optional webhook secret"},
+        ],
+        "capabilities": ("customers", "jobs", "bookings", "revenue", "business units"),
+        "requirements": ("ServiceTitan app key", "tenant ID", "tenant-approved client ID and secret"),
+    },
+    "zapier": {
+        "mode": "webhook",
+        "mode_label": "Webhook bridge",
+        "required_fields": ("webhook_url",),
+        "capabilities": ("inbound leads", "outbound events", "custom automations"),
+        "requirements": ("Catch Hook URL", "Zap enabled after testing"),
+    },
+    "make": {
+        "mode": "webhook",
+        "mode_label": "Webhook bridge",
+        "required_fields": ("webhook_url",),
+        "capabilities": ("inbound leads", "outbound events", "custom automations"),
+        "requirements": ("Make webhook URL", "Scenario enabled after testing"),
+    },
+    "google_calendar": {
+        "mode": "existing_oauth",
+        "mode_label": "Google OAuth",
+        "required_fields": ("calendar_id",),
+        "fields": [
+            {"key": "sync_direction", "label": "Sync Direction", "type": "text", "placeholder": "read, write, or both"},
+            {"key": "webhook_channel_id", "label": "Webhook Channel ID", "type": "text", "placeholder": "Optional push channel ID"},
+        ],
+        "capabilities": ("appointment context", "reminders", "calendar-based follow-up"),
+        "requirements": ("Connected Google OAuth", "Calendar ID", "calendar scope"),
+    },
+    "outlook_calendar": {
+        "mode": "oauth",
+        "mode_label": "Microsoft OAuth",
+        "required_fields": ("tenant_id", "client_id", "client_secret", "refresh_token", "calendar_id"),
+        "fields": [
+            {"key": "client_id", "label": "Azure Client ID", "type": "text", "placeholder": "Microsoft app client ID"},
+            {"key": "client_secret", "label": "Azure Client Secret", "type": "password", "secret": True, "placeholder": "Microsoft app secret"},
+            {"key": "refresh_token", "label": "Refresh Token", "type": "password", "secret": True, "placeholder": "OAuth refresh token"},
+            {"key": "calendar_id", "label": "Calendar ID", "type": "text", "placeholder": "primary calendar/user calendar ID"},
+        ],
+        "capabilities": ("appointment context", "reminders", "calendar sync"),
+        "requirements": ("Azure app registration", "OAuth consent", "calendar ID"),
+    },
+    "calendly": {
+        "mode": "api_key",
+        "mode_label": "API + webhooks",
+        "required_fields": ("api_key",),
+        "fields": [
+            {"key": "organization_uri", "label": "Organization URI", "type": "text", "placeholder": "Optional Calendly org URI"},
+            {"key": "webhook_signing_key", "label": "Webhook Signing Key", "type": "password", "secret": True, "placeholder": "Optional webhook signing key"},
+        ],
+        "capabilities": ("scheduled events", "invitee intake", "booking handoff"),
+        "requirements": ("Personal access token or OAuth app", "event webhooks for live updates"),
+    },
+    "mailchimp": {
+        "mode": "api_key",
+        "mode_label": "Marketing API",
+        "required_fields": ("api_key", "audience_id"),
+        "fields": [
+            {"key": "server_prefix", "label": "Server Prefix", "type": "text", "placeholder": "Optional, e.g. us21"},
+            {"key": "webhook_secret", "label": "Webhook Secret", "type": "password", "secret": True, "placeholder": "Optional webhook secret"},
+        ],
+        "capabilities": ("audience sync", "tags", "campaign segments", "reactivation lists"),
+        "requirements": ("Marketing API key", "audience/list ID"),
+    },
+    "constant_contact": {
+        "mode": "oauth",
+        "mode_label": "OAuth marketing",
+        "required_fields": ("client_id", "client_secret", "access_token", "refresh_token"),
+        "fields": [
+            {"key": "client_id", "label": "OAuth Client ID", "type": "text", "placeholder": "Constant Contact client ID"},
+            {"key": "client_secret", "label": "OAuth Client Secret", "type": "password", "secret": True, "placeholder": "Constant Contact secret"},
+            {"key": "refresh_token", "label": "Refresh Token", "type": "password", "secret": True, "placeholder": "OAuth refresh token"},
+            {"key": "list_id", "label": "Default List ID", "type": "text", "placeholder": "Optional list ID"},
+        ],
+        "capabilities": ("contact sync", "lists", "campaign audiences"),
+        "requirements": ("OAuth app", "access and refresh tokens"),
+    },
+    "twilio": {
+        "mode": "api_key",
+        "mode_label": "SMS/voice API",
+        "required_fields": ("account_sid", "auth_token"),
+        "fields": [
+            {"key": "messaging_service_sid", "label": "Messaging Service SID", "type": "text", "placeholder": "Optional MG..."},
+            {"key": "status_callback_url", "label": "Status Callback URL", "type": "url", "placeholder": "Optional delivery webhook"},
+        ],
+        "capabilities": ("SMS fallback", "voice workflows", "delivery status"),
+        "requirements": ("Account SID", "auth token", "phone number or messaging service"),
+    },
+    "google_lsa": {
+        "mode": "partner",
+        "mode_label": "Google lead source",
+        "required_fields": ("account_id",),
+        "fields": [
+            {"key": "customer_id", "label": "Google Ads Customer ID", "type": "text", "placeholder": "Optional MCC/customer ID"},
+            {"key": "lead_form_webhook_secret", "label": "Webhook Secret", "type": "password", "secret": True, "placeholder": "Optional lead webhook secret"},
+        ],
+        "capabilities": ("lead attribution", "booking source", "lead quality reporting"),
+        "requirements": ("Google account access", "LSA account ID", "lead ingestion path"),
+    },
+    "thumbtack": {
+        "mode": "email_forward",
+        "mode_label": "Forwarding intake",
+        "required_fields": ("forwarding_email",),
+        "fields": [{"key": "webhook_url", "label": "Webhook URL", "type": "url", "placeholder": "Optional marketplace webhook"}],
+        "capabilities": ("marketplace leads", "Warren follow-up", "source tagging"),
+        "requirements": ("Forwarding email or webhook", "lead parsing rules"),
+    },
+    "angi": {
+        "mode": "email_forward",
+        "mode_label": "Forwarding intake",
+        "required_fields": ("forwarding_email",),
+        "fields": [{"key": "webhook_url", "label": "Webhook URL", "type": "url", "placeholder": "Optional marketplace webhook"}],
+        "capabilities": ("marketplace leads", "Warren follow-up", "source tagging"),
+        "requirements": ("Forwarding email or webhook", "lead parsing rules"),
+    },
+    "yelp": {
+        "mode": "email_forward",
+        "mode_label": "Forwarding intake",
+        "required_fields": ("forwarding_email",),
+        "fields": [{"key": "webhook_url", "label": "Webhook URL", "type": "url", "placeholder": "Optional marketplace webhook"}],
+        "capabilities": ("message intake", "Warren follow-up", "source tagging"),
+        "requirements": ("Forwarding email or webhook", "lead parsing rules"),
+    },
+    "service_fusion": {
+        "mode": "api_key",
+        "mode_label": "API key CRM",
+        "required_fields": ("api_key",),
+        "fields": [
+            {"key": "base_url", "label": "API Base URL", "type": "url", "placeholder": "Optional API base URL"},
+            {"key": "account_id", "label": "Account ID", "type": "text", "placeholder": "Optional account/company ID"},
+            {"key": "webhook_secret", "label": "Webhook Secret", "type": "password", "secret": True, "placeholder": "Optional webhook secret"},
+        ],
+        "capabilities": ("customers", "jobs", "estimates", "revenue"),
+        "requirements": ("API key", "account/company context for multi-location accounts"),
+    },
+    "service_autopilot": {
+        "mode": "api_key",
+        "mode_label": "API key CRM",
+        "required_fields": ("api_key",),
+        "fields": [
+            {"key": "account_id", "label": "Account ID", "type": "text", "placeholder": "Optional account/company ID"},
+            {"key": "webhook_secret", "label": "Webhook Secret", "type": "password", "secret": True, "placeholder": "Optional webhook secret"},
+        ],
+        "capabilities": ("clients", "jobs", "recurring services", "revenue"),
+        "requirements": ("API key", "account/company context"),
+    },
+    "aspire": {
+        "mode": "api_key",
+        "mode_label": "API key CRM",
+        "required_fields": ("base_url", "api_key"),
+        "fields": [
+            {"key": "account_id", "label": "Account ID", "type": "text", "placeholder": "Optional account/company ID"},
+            {"key": "webhook_secret", "label": "Webhook Secret", "type": "password", "secret": True, "placeholder": "Optional webhook secret"},
+        ],
+        "capabilities": ("opportunities", "jobs", "landscape revenue", "accounts"),
+        "requirements": ("API base URL", "API key", "account context if required"),
+    },
+    "lmn": {
+        "mode": "api_key",
+        "mode_label": "API key CRM",
+        "required_fields": ("api_key",),
+        "fields": [
+            {"key": "account_id", "label": "Account ID", "type": "text", "placeholder": "Optional account/company ID"},
+            {"key": "webhook_secret", "label": "Webhook Secret", "type": "password", "secret": True, "placeholder": "Optional webhook secret"},
+        ],
+        "capabilities": ("estimates", "jobs", "landscape revenue"),
+        "requirements": ("API key", "account/company context"),
+    },
+    "jobnimbus": {
+        "mode": "api_key",
+        "mode_label": "API key CRM",
+        "required_fields": ("api_key",),
+        "fields": [
+            {"key": "account_id", "label": "Account ID", "type": "text", "placeholder": "Optional account/company ID"},
+            {"key": "webhook_secret", "label": "Webhook Secret", "type": "password", "secret": True, "placeholder": "Optional webhook secret"},
+        ],
+        "capabilities": ("contacts", "jobs", "roofing revenue", "lead push"),
+        "requirements": ("API key", "account/company context"),
+    },
+    "buildops": {
+        "mode": "partner",
+        "mode_label": "Partner/API CRM",
+        "required_fields": ("api_key",),
+        "fields": [
+            {"key": "base_url", "label": "API Base URL", "type": "url", "placeholder": "Optional API base URL"},
+            {"key": "account_id", "label": "Account ID", "type": "text", "placeholder": "Optional account/company ID"},
+            {"key": "webhook_secret", "label": "Webhook Secret", "type": "password", "secret": True, "placeholder": "Optional webhook secret"},
+        ],
+        "capabilities": ("commercial accounts", "jobs", "revenue", "dispatch context"),
+        "requirements": ("API or partner access", "account/company context"),
+    },
+}
+
 _HEATMAP_ASYNC_POINT_THRESHOLD = 25
 
 _SITE_BUILDER_MAX_CONTENT_BYTES = 1024 * 1024
@@ -9623,19 +9872,137 @@ JSON only, no markdown."""
         return None
 
 
+def _integration_meta(provider_def):
+    return _INTEGRATION_READINESS_META.get((provider_def or {}).get("key"), {})
+
+
+def _integration_fields(provider_def):
+    fields = []
+    seen = set()
+    for field in list((provider_def or {}).get("fields") or []) + list(_integration_meta(provider_def).get("fields") or []):
+        key = field.get("key")
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        fields.append(field)
+    return fields
+
+
+def _integration_missing_required(provider_def, config):
+    config = config or {}
+    required = tuple(_integration_meta(provider_def).get("required_fields") or ())
+    if not required:
+        return []
+    return [key for key in required if not (config.get(key) or "").strip()]
+
+
+def _integration_field_label(provider_def, field_key):
+    for field in _integration_fields(provider_def):
+        if field.get("key") == field_key:
+            return field.get("label") or field_key.replace("_", " ").title()
+    return field_key.replace("_", " ").title()
+
+
 def _integration_config_is_ready(provider_def, config):
     config = config or {}
-    required = {
-        "quickbooks": ("realm_id", "access_token"),
-        "callrail": ("api_key", "account_id"),
-        "servicetitan": ("client_id", "client_secret", "tenant_id", "app_key"),
-        "twilio": ("account_sid", "auth_token"),
-        "zapier": ("webhook_url",),
-        "make": ("webhook_url",),
-    }.get(provider_def.get("key"))
+    required = tuple(_integration_meta(provider_def).get("required_fields") or ())
     if required:
-        return all((config.get(key) or "").strip() for key in required)
-    return any((config.get(field["key"]) or "").strip() for field in provider_def.get("fields", []))
+        return not _integration_missing_required(provider_def, config)
+    return any((config.get(field["key"]) or "").strip() for field in _integration_fields(provider_def))
+
+
+def _integration_readiness(provider_def, config, row):
+    meta = _integration_meta(provider_def)
+    mode = meta.get("mode") or "api_key"
+    missing = _integration_missing_required(provider_def, config)
+    status = (row or {}).get("status") or ""
+    is_configured = any((config.get(field["key"]) or "").strip() for field in _integration_fields(provider_def))
+
+    if missing:
+        missing_labels = ", ".join(_integration_field_label(provider_def, key) for key in missing[:3])
+        if len(missing) > 3:
+            missing_labels += f", +{len(missing) - 3} more"
+        if mode in ("oauth", "existing_oauth"):
+            label = "Needs OAuth setup"
+            badge_class = "bg-warning text-dark"
+        elif mode == "partner":
+            label = "Needs partner access"
+            badge_class = "bg-warning text-dark"
+        elif mode == "webhook":
+            label = "Needs webhook"
+            badge_class = "bg-secondary"
+        else:
+            label = "Needs credentials"
+            badge_class = "bg-secondary"
+        return {
+            "state": "missing_required",
+            "label": label,
+            "badge_class": badge_class,
+            "message": f"Missing: {missing_labels}.",
+            "missing": missing,
+        }
+
+    if status == "connected":
+        return {
+            "state": "live_ready",
+            "label": "Live/Tested",
+            "badge_class": "bg-success",
+            "message": "Required credentials are present and the live test passed.",
+            "missing": [],
+        }
+
+    if status == "test_failed":
+        return {
+            "state": "test_failed",
+            "label": "Check settings",
+            "badge_class": "bg-danger",
+            "message": (row or {}).get("last_test_result") or "The last connection test failed.",
+            "missing": [],
+        }
+
+    if mode == "partner":
+        return {
+            "state": "partner_pending",
+            "label": "Ready for adapter",
+            "badge_class": "bg-info text-dark",
+            "message": "Credentials are stored; live sync still depends on provider API access and adapter wiring.",
+            "missing": [],
+        }
+
+    if mode == "webhook":
+        return {
+            "state": "webhook_ready",
+            "label": "Webhook ready",
+            "badge_class": "bg-primary",
+            "message": "Webhook settings are present. Use Test to verify the receiving workflow.",
+            "missing": [],
+        }
+
+    if mode == "email_forward":
+        return {
+            "state": "forwarding_ready",
+            "label": "Forwarding ready",
+            "badge_class": "bg-primary",
+            "message": "Forwarding details are present; lead parsing rules complete the intake path.",
+            "missing": [],
+        }
+
+    if is_configured:
+        return {
+            "state": "configured",
+            "label": "Configured",
+            "badge_class": "bg-primary",
+            "message": "Required setup values are saved. Run a live test where supported.",
+            "missing": [],
+        }
+
+    return {
+        "state": "not_configured",
+        "label": "Not configured",
+        "badge_class": "bg-secondary",
+        "message": "Add the required setup values to enable this connector.",
+        "missing": [],
+    }
 
 
 def _mask_secret(value):
@@ -9651,18 +10018,26 @@ def _prepared_integration_catalog(config_rows):
         row = (config_rows or {}).get(item["key"]) or {}
         config = row.get("config") or {}
         fields = []
-        for field in item.get("fields", []):
+        for field in _integration_fields(item):
             value = config.get(field["key"], "")
             field_item = dict(field)
             field_item["value"] = "" if field_item.get("secret") else value
             field_item["saved_hint"] = _mask_secret(value) if field_item.get("secret") and value else ""
             fields.append(field_item)
+        meta = _integration_meta(item)
+        readiness = _integration_readiness(item, config, row)
         prepared.append({
             **item,
             "fields": fields,
             "config": config,
             "status": row.get("status") or ("configured" if _integration_config_is_ready(item, config) else "not_configured"),
             "is_configured": _integration_config_is_ready(item, config),
+            "has_any_config": any((config.get(field["key"]) or "").strip() for field in _integration_fields(item)),
+            "test_supported": item["key"] in _INTEGRATION_LIVE_TEST_PROVIDERS,
+            "readiness": readiness,
+            "mode_label": meta.get("mode_label") or "Connector",
+            "capabilities": list(meta.get("capabilities") or ()),
+            "requirements": list(meta.get("requirements") or ()),
             "last_tested_at": row.get("last_tested_at") or "",
             "last_test_result": row.get("last_test_result") or "",
         })
@@ -9775,7 +10150,7 @@ def _test_generic_integration(provider, config):
     except Exception as exc:
         return False, f"Test failed: {str(exc)[:180]}"
 
-    return True, "Configuration saved. This provider needs partner/OAuth access before a live API test is available."
+    return False, "Live API test is not implemented for this provider yet."
 
 
 @client_bp.route("/settings")
@@ -14089,7 +14464,7 @@ def client_save_external_integration(provider):
     existing = db.get_brand_integration_config(brand_id, provider) or {}
     config = dict(existing.get("config") or {})
 
-    for field in provider_def.get("fields", []):
+    for field in _integration_fields(provider_def):
         key = field["key"]
         value = (request.form.get(key) or "").strip()
         if field.get("secret") and not value:
@@ -14115,6 +14490,12 @@ def client_external_integration_test(provider):
     row = db.get_brand_integration_config(brand_id, provider)
     if not row:
         return jsonify(ok=False, error=f"{provider_def['name']} is not configured yet."), 400
+
+    if provider not in _INTEGRATION_LIVE_TEST_PROVIDERS:
+        return jsonify(
+            ok=False,
+            error=f"{provider_def['name']} settings are saved, but a live API test is not implemented for this connector yet.",
+        ), 400
 
     ok, message = _test_generic_integration(provider, row.get("config") or {})
     db.update_brand_integration_test_result(brand_id, provider, ok, message)
