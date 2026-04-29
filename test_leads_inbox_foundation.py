@@ -487,6 +487,92 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertEqual(imported[0]["lead_phone"], "+15555550199")
         self.assertEqual(imported[0]["status"], "new")
 
+    def test_bulk_messages_preview_dedupes_warren_groups(self):
+        with self.app.app_context():
+            self.app.db.create_lead_thread(
+                self.brand_id,
+                {
+                    "lead_name": "Active Lead",
+                    "lead_email": "active@example.com",
+                    "lead_phone": "+15555550123",
+                    "channel": "sms",
+                    "status": "engaged",
+                },
+            )
+            self.app.db.create_lead_thread(
+                self.brand_id,
+                {
+                    "lead_name": "Won Client",
+                    "lead_email": "won@example.com",
+                    "lead_phone": "+15555550124",
+                    "channel": "sms",
+                    "status": "won",
+                },
+            )
+
+        response = self.client.post(
+            "/client/bulk-messages/preview",
+            json={"groups": ["warren_active_leads", "warren_won_clients"], "channels": ["sms", "email"]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["preview"]["total"], 2)
+        self.assertEqual(payload["preview"]["sms_count"], 2)
+        self.assertEqual(payload["preview"]["email_count"], 2)
+
+    def test_bulk_messages_page_loads(self):
+        response = self.client.get("/client/bulk-messages")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Bulk Message Groups", response.data)
+        self.assertIn(b"Warren Active Leads", response.data)
+
+    @patch("webapp.warren_bulk_messages.send_transactional_sms")
+    def test_bulk_messages_send_sms_skips_opted_out_numbers(self, send_sms):
+        send_sms.return_value = (True, "sent")
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "quo_api_key", "quo-key")
+            self.app.db.update_brand_text_field(self.brand_id, "quo_phone_number", "+15555550000")
+            self.app.db.create_lead_thread(
+                self.brand_id,
+                {
+                    "lead_name": "Active One",
+                    "lead_phone": "+15555550123",
+                    "channel": "sms",
+                    "status": "engaged",
+                },
+            )
+            self.app.db.create_lead_thread(
+                self.brand_id,
+                {
+                    "lead_name": "Active Two",
+                    "lead_phone": "+15555550124",
+                    "channel": "sms",
+                    "status": "new",
+                },
+            )
+            self.app.db.record_opt_out(self.brand_id, "+15555550124")
+
+        response = self.client.post(
+            "/client/bulk-messages/send",
+            data={
+                "groups": ["warren_active_leads"],
+                "channels": ["sms"],
+                "body": "Weather delay today.",
+                "confirm_send": "1",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(send_sms.call_count, 1)
+        with self.app.app_context():
+            runs = self.app.db.get_warren_bulk_message_runs(self.brand_id)
+        self.assertEqual(runs[0]["sent_sms"], 1)
+        self.assertEqual(runs[0]["skipped"], 1)
+
     def test_automations_page_shows_appointment_reminder_reports(self):
         with self.app.app_context():
             self.app.db.record_appointment_reminder_run(

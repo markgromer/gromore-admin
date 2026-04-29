@@ -9,6 +9,7 @@
 - **Appointment Reminder System** - Day-ahead Sweep and Go reminder automation with enable/disable controls, send-time window, channel routing, dedupe protection, and manual run support
 - **Reminder Run Reporting** - Per-brand run logs with waiting/completed/failed states, reasons, counts, and local-time summary metadata
 - **Cron Auth Hardening** - Locked down appointment reminder cron endpoint auth flow and Render cron integration
+- **Bulk Client Message Groups** - Warren can send one-off SMS/email broadcasts to selected client and lead groups such as active clients, past clients, open leads, and quote follow-up pools
 - **Legacy Schedule Compatibility** - Accepts legacy reminder settings like AM/PM send times and timezone aliases (for example, Central Time labels)
 - **Timezone-Aware Day-Ahead Date Selection** - Calculates tomorrow in each brand's configured local timezone before querying SNG dispatch data
 - **Active Client Marketing Safety** - Prevents active clients from being enrolled into Warren marketing flows unintentionally
@@ -90,6 +91,7 @@
 
 ### Follow-Up & Nurture Engine
 - **Automated Follow-Ups by Temperature** - Hot leads (2hr wait, 3 attempts), Warm leads (24hr, 2 attempts), Cold leads (48hr, 2 attempts)
+- **Bulk Audience Messaging** - Build reusable client/lead groups from Warren, Sweep & Go, and Jobber data and send SMS or email to one or multiple groups at once
 - **Spouse/Partner Check Detection** - Recognizes "let me check with my spouse" patterns, sends low-pressure follow-up
 - **Soft Close Detection** - Catches leads going quiet mid-conversation, asks if they want to continue
 - **Ghost Detection** - Marks leads as lost after configurable hours (default 72) with no response

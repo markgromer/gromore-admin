@@ -1,0 +1,239 @@
+{% extends "client_base.html" %}
+{% block title %}Bulk Messages{% endblock %}
+
+{% block content %}
+<style>
+    .bulk-hero {
+        background: #0f172a;
+        border-radius: 16px;
+        padding: 1.5rem 1.75rem;
+        margin-bottom: 1.25rem;
+        color: #fff;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    .bulk-hero h3 { font-size: 1.25rem; font-weight: 800; margin: 0 0 .25rem; color: #fff !important; }
+    .bulk-hero p { margin: 0; color: rgba(255,255,255,.72); font-size: .88rem; }
+    .bulk-grid { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 1rem; align-items: start; }
+    .bulk-panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.15rem; }
+    .bulk-panel-title { font-size: .9rem; font-weight: 800; margin-bottom: .75rem; display: flex; align-items: center; gap: .45rem; }
+    .group-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: .65rem; }
+    .group-option { border: 1px solid #e2e8f0; border-radius: 10px; padding: .75rem; display: flex; gap: .65rem; align-items: flex-start; min-height: 82px; }
+    .group-option:hover { border-color: #94a3b8; }
+    .group-option input { margin-top: .15rem; }
+    .group-label { font-size: .84rem; font-weight: 800; color: #0f172a; line-height: 1.25; }
+    .group-source { font-size: .72rem; color: #64748b; margin-top: .2rem; }
+    .channel-row { display: flex; flex-wrap: wrap; gap: .65rem; }
+    .channel-option { display: inline-flex; align-items: center; gap: .5rem; border: 1px solid #e2e8f0; border-radius: 10px; padding: .65rem .8rem; font-size: .84rem; font-weight: 800; min-width: 130px; }
+    .channel-option.disabled { opacity: .52; background: #f8fafc; }
+    .composer-grid { display: grid; gap: .8rem; margin-top: 1rem; }
+    .composer-grid label { font-size: .76rem; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: .04em; }
+    .composer-grid textarea { min-height: 150px; resize: vertical; }
+    .preview-metric { border: 1px solid #e2e8f0; border-radius: 10px; padding: .8rem; margin-bottom: .65rem; background: #f8fafc; }
+    .preview-metric .value { font-size: 1.35rem; line-height: 1; font-weight: 900; color: #0f172a; }
+    .preview-metric .label { font-size: .72rem; color: #64748b; font-weight: 700; margin-top: .25rem; }
+    .recipient-sample { display: grid; gap: .45rem; margin-top: .7rem; max-height: 245px; overflow: auto; }
+    .recipient-row { border-bottom: 1px solid #f1f5f9; padding-bottom: .45rem; }
+    .recipient-row:last-child { border-bottom: 0; }
+    .recipient-name { font-size: .8rem; font-weight: 800; color: #0f172a; }
+    .recipient-meta { font-size: .72rem; color: #64748b; word-break: break-word; }
+    .history-table { font-size: .8rem; }
+    .history-table th { font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: #64748b; }
+    @media (max-width: 980px) {
+        .bulk-grid { grid-template-columns: 1fr; }
+    }
+</style>
+
+<div class="bulk-hero">
+    <div>
+        <h3><i class="bi bi-send me-2"></i>Bulk Message Groups</h3>
+        <p>Send client updates and reactivation messages through Warren email or SMS.</p>
+    </div>
+    <a href="{{ url_for('client.client_inbox') }}" class="btn btn-light btn-sm fw-bold">
+        <i class="bi bi-inbox me-1"></i> Conversations
+    </a>
+</div>
+
+<form method="post" action="{{ url_for('client.client_bulk_messages_send') }}" id="bulkMessageForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="bulk-grid">
+        <div>
+            <div class="bulk-panel mb-3">
+                <div class="bulk-panel-title"><i class="bi bi-people"></i> Groups</div>
+                <div class="group-grid">
+                    {% for group in groups %}
+                    <label class="group-option">
+                        <input class="form-check-input audience-input" type="checkbox" name="groups" value="{{ group.key }}" {% if group.key in default_group_keys %}checked{% endif %}>
+                        <span>
+                            <span class="group-label">{{ group.label }}</span>
+                            <span class="group-source">{{ group.source }}</span>
+                        </span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="bulk-panel mb-3">
+                <div class="bulk-panel-title"><i class="bi bi-broadcast"></i> Channels</div>
+                <div class="channel-row">
+                    <label class="channel-option {% if not sms_ready %}disabled{% endif %}">
+                        <input class="form-check-input audience-input" type="checkbox" name="channels" value="sms" {% if sms_ready %}checked{% else %}disabled{% endif %}>
+                        <i class="bi bi-chat-left-text"></i> SMS
+                    </label>
+                    <label class="channel-option {% if not smtp_ready %}disabled{% endif %}">
+                        <input class="form-check-input audience-input" type="checkbox" name="channels" value="email" {% if not smtp_ready %}disabled{% endif %}>
+                        <i class="bi bi-envelope"></i> Email
+                    </label>
+                </div>
+                {% if not sms_ready or not smtp_ready %}
+                <div class="text-muted mt-2" style="font-size:.78rem;">
+                    {% if not sms_ready %}SMS needs Quo/OpenPhone settings. {% endif %}
+                    {% if not smtp_ready %}Email needs SMTP settings. {% endif %}
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="bulk-panel">
+                <div class="bulk-panel-title"><i class="bi bi-pencil-square"></i> Message</div>
+                <div class="composer-grid">
+                    <div>
+                        <label class="form-label" for="bulkSubject">Email subject</label>
+                        <input class="form-control" id="bulkSubject" type="text" name="subject" maxlength="200" placeholder="Weather delay for this week">
+                    </div>
+                    <div>
+                        <label class="form-label" for="bulkBody">Message body</label>
+                        <textarea class="form-control" id="bulkBody" name="body" maxlength="2000" required placeholder="Hi, quick update from {{ brand.display_name }}..."></textarea>
+                    </div>
+                    <label class="form-check d-flex align-items-start gap-2">
+                        <input class="form-check-input" type="checkbox" name="confirm_send" value="1" required>
+                        <span class="form-check-label fw-semibold" style="font-size:.84rem;">Confirm this message is ready to send to the selected groups.</span>
+                    </label>
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary fw-bold">
+                            <i class="bi bi-send me-1"></i> Send Bulk Message
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <aside class="bulk-panel">
+            <div class="bulk-panel-title"><i class="bi bi-clipboard-data"></i> Preview</div>
+            <div class="preview-metric">
+                <div class="value" id="previewTotal">{{ preview.total }}</div>
+                <div class="label">Unique recipients</div>
+            </div>
+            <div class="row g-2">
+                <div class="col-6">
+                    <div class="preview-metric">
+                        <div class="value" id="previewSms">{{ preview.sendable_sms }}</div>
+                        <div class="label">SMS ready</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="preview-metric">
+                        <div class="value" id="previewEmail">{{ preview.email_count }}</div>
+                        <div class="label">Email ready</div>
+                    </div>
+                </div>
+            </div>
+            <div id="previewWarnings" class="text-warning fw-semibold mb-2" style="font-size:.76rem;"></div>
+            <div class="recipient-sample" id="recipientSample">
+                {% for recipient in preview.recipients[:8] %}
+                <div class="recipient-row">
+                    <div class="recipient-name">{{ recipient.name }}</div>
+                    <div class="recipient-meta">{{ recipient.phone or '' }}{% if recipient.phone and recipient.email %} · {% endif %}{{ recipient.email or '' }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </aside>
+    </div>
+</form>
+
+{% if runs %}
+<div class="bulk-panel mt-3">
+    <div class="bulk-panel-title"><i class="bi bi-clock-history"></i> Recent Sends</div>
+    <div class="table-responsive">
+        <table class="table history-table align-middle mb-0">
+            <thead><tr><th>Sent</th><th>Channels</th><th>Recipients</th><th>Delivered</th><th>Skipped</th><th>Failed</th></tr></thead>
+            <tbody>
+                {% for run in runs %}
+                <tr>
+                    <td>{{ run.created_at }}</td>
+                    <td>{{ run.channels|join(', ') }}</td>
+                    <td>{{ run.recipient_count }}</td>
+                    <td>{{ run.sent_sms }} SMS / {{ run.sent_email }} email</td>
+                    <td>{{ run.skipped }}</td>
+                    <td>{{ run.failed }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<script>
+(function() {
+    const form = document.getElementById('bulkMessageForm');
+    if (!form) return;
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+    function selected(name) {
+        return Array.from(form.querySelectorAll('input[name="' + name + '"]:checked')).map(input => input.value);
+    }
+
+    function renderPreview(preview) {
+        document.getElementById('previewTotal').textContent = preview.total || 0;
+        document.getElementById('previewSms').textContent = preview.sendable_sms || 0;
+        document.getElementById('previewEmail').textContent = preview.email_count || 0;
+        const warning = document.getElementById('previewWarnings');
+        const errorKeys = Object.keys(preview.errors || {});
+        const pieces = [];
+        if (preview.opted_out_sms) pieces.push(preview.opted_out_sms + ' opted out of SMS');
+        if (errorKeys.length) pieces.push(errorKeys.length + ' group error' + (errorKeys.length === 1 ? '' : 's'));
+        warning.textContent = pieces.join(' · ');
+
+        const sample = document.getElementById('recipientSample');
+        sample.innerHTML = '';
+        (preview.recipients || []).slice(0, 8).forEach(recipient => {
+            const row = document.createElement('div');
+            row.className = 'recipient-row';
+            const name = document.createElement('div');
+            name.className = 'recipient-name';
+            name.textContent = recipient.name || 'Customer';
+            const meta = document.createElement('div');
+            meta.className = 'recipient-meta';
+            meta.textContent = [recipient.phone, recipient.email].filter(Boolean).join(' · ');
+            row.appendChild(name);
+            row.appendChild(meta);
+            sample.appendChild(row);
+        });
+    }
+
+    let previewTimer = null;
+    function refreshPreview() {
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(() => {
+            fetch('{{ url_for("client.client_bulk_messages_preview") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                body: JSON.stringify({ groups: selected('groups'), channels: selected('channels') })
+            })
+            .then(resp => resp.json())
+            .then(data => {
+                if (data && data.preview) renderPreview(data.preview);
+            })
+            .catch(() => {});
+        }, 180);
+    }
+
+    form.querySelectorAll('.audience-input').forEach(input => {
+        input.addEventListener('change', refreshPreview);
+    });
+})();
+</script>
+{% endblock %}

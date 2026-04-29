@@ -4002,6 +4002,9 @@ _ENDPOINT_FEATURE_MAP = {
     "client_crm_data":             "crm",
     "client_lead_assistant":       "crm",
     "client_save_lead_assistant_profile": "crm",
+    "client_bulk_messages":        "crm",
+    "client_bulk_messages_preview": "crm",
+    "client_bulk_messages_send":   "crm",
     "client_commercial_prospecting": "commercial",
     "client_commercial_search":    "commercial",
     "client_commercial_import":    "commercial",
@@ -15194,6 +15197,116 @@ def client_commercial_thread_delete(thread_id):
 
 
 # ── Warren Inbox ──
+
+# Warren bulk messaging
+
+@client_bp.route("/bulk-messages")
+@client_login_required
+def client_bulk_messages():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    from webapp.warren_bulk_messages import group_catalog, preview_bulk_message
+
+    groups = group_catalog(brand)
+    default_keys = [groups[0]["key"]] if groups else []
+    preview = preview_bulk_message(db, brand, default_keys, ["sms"])
+    runs = db.get_warren_bulk_message_runs(brand_id, limit=12) if hasattr(db, "get_warren_bulk_message_runs") else []
+
+    return render_template(
+        "client_bulk_messages.html",
+        brand=brand,
+        groups=groups,
+        default_group_keys=default_keys,
+        preview=preview,
+        runs=runs,
+        sms_ready=bool((brand.get("quo_api_key") or "").strip() and (brand.get("quo_phone_number") or "").strip()),
+        smtp_ready=bool(current_app.config.get("SMTP_USER") and current_app.config.get("SMTP_PASSWORD")),
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/bulk-messages/preview", methods=["POST"])
+@client_login_required
+def client_bulk_messages_preview():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(error="Brand not found"), 404
+
+    data = request.get_json(silent=True) or {}
+
+    from webapp.warren_bulk_messages import preview_bulk_message
+
+    return jsonify(ok=True, preview=preview_bulk_message(
+        db,
+        brand,
+        data.get("groups") or [],
+        data.get("channels") or [],
+    ))
+
+
+@client_bp.route("/bulk-messages/send", methods=["POST"])
+@client_login_required
+def client_bulk_messages_send():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    groups = request.form.getlist("groups")
+    channels = request.form.getlist("channels")
+    subject = (request.form.get("subject") or "").strip()
+    body = (request.form.get("body") or "").strip()
+    if request.form.get("confirm_send") != "1":
+        flash("Confirm the send before broadcasting.", "warning")
+        return redirect(url_for("client.client_bulk_messages"))
+
+    if "sms" in channels and not ((brand.get("quo_api_key") or "").strip() and (brand.get("quo_phone_number") or "").strip()):
+        flash("SMS is not configured for this brand.", "warning")
+        return redirect(url_for("client.client_bulk_messages"))
+
+    if "email" in channels and not (current_app.config.get("SMTP_USER") and current_app.config.get("SMTP_PASSWORD")):
+        flash("Email SMTP is not configured.", "warning")
+        return redirect(url_for("client.client_bulk_messages"))
+
+    try:
+        from webapp.warren_bulk_messages import send_bulk_message
+
+        result = send_bulk_message(
+            db,
+            current_app.config,
+            brand,
+            groups,
+            channels,
+            subject,
+            body,
+            sent_by=session.get("client_name") or session.get("client_email") or "client",
+        )
+    except ValueError as exc:
+        flash(str(exc), "warning")
+        return redirect(url_for("client.client_bulk_messages"))
+    except Exception as exc:
+        log.exception("Warren bulk message failed for brand %s", brand_id)
+        flash(f"Bulk message failed: {exc}", "error")
+        return redirect(url_for("client.client_bulk_messages"))
+
+    parts = []
+    if "sms" in channels:
+        parts.append(f"{result['sent_sms']} SMS")
+    if "email" in channels:
+        parts.append(f"{result['sent_email']} email")
+    suffix = f"; {result['skipped']} skipped" if result.get("skipped") else ""
+    if result.get("failed"):
+        suffix += f"; {result['failed']} failed"
+    flash(f"Bulk message sent to {result['recipient_count']} recipient(s): {', '.join(parts)}{suffix}.", "success")
+    return redirect(url_for("client.client_bulk_messages"))
+
 
 @client_bp.route("/inbox")
 @client_login_required

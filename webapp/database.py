@@ -1349,6 +1349,32 @@ class WebDB:
             ON email_broadcast_recipients(token);
         """)
 
+        # ── Warren bulk message history ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS warren_bulk_message_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                subject TEXT DEFAULT '',
+                body_text TEXT DEFAULT '',
+                groups_json TEXT DEFAULT '[]',
+                channels_json TEXT DEFAULT '[]',
+                sent_by TEXT DEFAULT '',
+                recipient_count INTEGER DEFAULT 0,
+                sent_sms INTEGER DEFAULT 0,
+                sent_email INTEGER DEFAULT 0,
+                skipped INTEGER DEFAULT 0,
+                failed INTEGER DEFAULT 0,
+                detail TEXT DEFAULT '',
+                errors_json TEXT DEFAULT '{}',
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_warren_bulk_message_runs_brand_created
+            ON warren_bulk_message_runs(brand_id, created_at DESC, id DESC);
+        """)
+
         # ── AI Agent activity table ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS agent_activity (
@@ -7929,3 +7955,72 @@ class WebDB:
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
+    # ── Warren Bulk Messages ──
+
+    def record_warren_bulk_message_run(
+        self,
+        brand_id,
+        *,
+        subject="",
+        body_text="",
+        groups=None,
+        channels=None,
+        sent_by="",
+        recipient_count=0,
+        sent_sms=0,
+        sent_email=0,
+        skipped=0,
+        failed=0,
+        detail="",
+        errors=None,
+    ):
+        conn = self._conn()
+        cur = conn.execute(
+            """
+            INSERT INTO warren_bulk_message_runs (
+                brand_id, subject, body_text, groups_json, channels_json, sent_by,
+                recipient_count, sent_sms, sent_email, skipped, failed, detail, errors_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                brand_id,
+                subject or "",
+                body_text or "",
+                json.dumps(groups or []),
+                json.dumps(channels or []),
+                sent_by or "",
+                int(recipient_count or 0),
+                int(sent_sms or 0),
+                int(sent_email or 0),
+                int(skipped or 0),
+                int(failed or 0),
+                detail or "",
+                json.dumps(errors or {}),
+            ),
+        )
+        conn.commit()
+        run_id = cur.lastrowid
+        conn.close()
+        return run_id
+
+    def get_warren_bulk_message_runs(self, brand_id, limit=20):
+        conn = self._conn()
+        rows = conn.execute(
+            """
+            SELECT * FROM warren_bulk_message_runs
+            WHERE brand_id = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
+            (brand_id, int(limit or 20)),
+        ).fetchall()
+        conn.close()
+        runs = []
+        for row in rows:
+            item = dict(row)
+            item["groups"] = self._safe_json_list(item.get("groups_json"))
+            item["channels"] = self._safe_json_list(item.get("channels_json"))
+            item["errors"] = self._safe_json_object(item.get("errors_json"))
+            runs.append(item)
+        return runs

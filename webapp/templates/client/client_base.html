@@ -46,7 +46,7 @@
         </div>
         <div class="nav-links">
             {% set endpoint = request.endpoint|default('') %}
-            {% set pipeline_active = endpoint in ('client.client_crm', 'client.client_lead_assistant', 'client.client_inbox', 'client.client_va_services') or 'client.client_commercial' in endpoint %}
+            {% set pipeline_active = endpoint in ('client.client_crm', 'client.client_lead_assistant', 'client.client_bulk_messages', 'client.client_inbox', 'client.client_va_services') or 'client.client_commercial' in endpoint %}
             <div style="padding:0 .35rem .85rem;">
                 <button
                     type="button"
@@ -92,6 +92,9 @@
             </a>
             <a href="{{ url_for('client.client_lead_assistant') }}" class="{% if endpoint in ('client.client_lead_assistant',) %}active{% endif %}">
                 <i class="bi bi-chat-dots"></i> <span class="nav-link-label">Lead Follow-Up</span>
+            </a>
+            <a href="{{ url_for('client.client_bulk_messages') }}" class="{% if endpoint in ('client.client_bulk_messages',) %}active{% endif %}">
+                <i class="bi bi-send"></i> <span class="nav-link-label">Bulk Messages</span>
             </a>
             {% endif %}
             {% if feature_on('commercial') %}
