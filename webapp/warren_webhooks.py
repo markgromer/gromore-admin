@@ -110,6 +110,11 @@ def _payload_value(payload, *keys):
     return ""
 
 
+def _payload_block(payload, key):
+    value = (payload or {}).get(key)
+    return value if isinstance(value, dict) else {}
+
+
 def _merge_nested_fields(target, value):
     if isinstance(value, str):
         raw = value.strip()
@@ -128,30 +133,77 @@ def _merge_nested_fields(target, value):
 
 def _extract_generic_form_submission(payload, raw_body):
     payload = payload or {}
+    lead_block = _payload_block(payload, "lead")
+    service_block = _payload_block(payload, "service")
+    metadata_block = _payload_block(payload, "metadata")
+    original_payload = _payload_block(payload, "original_payload")
 
-    lead_name = _payload_value(payload, "name", "full_name")
+    lead_name = (
+        _payload_value(payload, "name", "full_name", "lead_name") or
+        _payload_value(lead_block, "name", "full_name", "lead_name") or
+        _payload_value(original_payload, "lead_name", "name", "full_name")
+    )
     if not lead_name:
-        first_name = _payload_value(payload, "first_name", "firstname")
-        last_name = _payload_value(payload, "last_name", "lastname")
+        first_name = (
+            _payload_value(payload, "first_name", "firstname") or
+            _payload_value(lead_block, "first_name", "firstname") or
+            _payload_value(original_payload, "first_name", "firstname")
+        )
+        last_name = (
+            _payload_value(payload, "last_name", "lastname") or
+            _payload_value(lead_block, "last_name", "lastname") or
+            _payload_value(original_payload, "last_name", "lastname")
+        )
         lead_name = " ".join(part for part in (first_name, last_name) if part).strip()
 
-    lead_email = _payload_value(payload, "email", "email_address")
-    lead_phone = _payload_value(payload, "phone_number", "phone", "mobile", "cell", "cellphone")
-    message_text = _payload_value(payload, "message", "notes", "note", "details", "description", "comments", "inquiry", "text")
-    source = _payload_value(payload, "source", "form_name", "form", "page", "campaign") or "incoming_webhook"
-    external_id = _payload_value(payload, "external_id", "submission_id", "lead_id", "entry_id", "id")
+    lead_email = (
+        _payload_value(payload, "email", "email_address") or
+        _payload_value(lead_block, "email", "email_address") or
+        _payload_value(original_payload, "email", "email_address")
+    )
+    lead_phone = (
+        _payload_value(payload, "phone_e164", "phone_number", "phone", "mobile", "cell", "cellphone") or
+        _payload_value(lead_block, "phone_e164", "phone_number", "phone", "mobile", "cell", "cellphone") or
+        _payload_value(original_payload, "phone_e164", "phone_number", "phone", "mobile", "cell", "cellphone")
+    )
+    message_text = (
+        _payload_value(payload, "message", "notes", "note", "details", "description", "comments", "inquiry", "text") or
+        _payload_value(lead_block, "message", "notes", "note", "details", "description", "comments", "inquiry", "text") or
+        _payload_value(original_payload, "message", "notes", "note", "details", "description", "comments", "inquiry", "text")
+    )
+    source = (
+        _payload_value(payload, "source", "form_name", "form", "page", "campaign") or
+        _payload_value(metadata_block, "source", "form_name", "form", "page", "campaign") or
+        "incoming_webhook"
+    )
+    external_id = (
+        _payload_value(payload, "external_id", "submission_id", "lead_id", "entry_id", "id") or
+        _payload_value(lead_block, "external_id", "submission_id", "lead_id", "entry_id", "id") or
+        _payload_value(metadata_block, "external_id", "submission_id", "lead_id", "entry_id", "id") or
+        _payload_value(original_payload, "external_id", "submission_id", "lead_id", "entry_id", "id")
+    )
 
     extra_fields = {}
     for nested_key in ("fields", "custom_fields", "metadata"):
         _merge_nested_fields(extra_fields, payload.get(nested_key))
+    for nested_key, nested_payload in (
+        ("lead", lead_block),
+        ("service", service_block),
+        ("metadata", metadata_block),
+        ("original", original_payload),
+    ):
+        for key, value in nested_payload.items():
+            text = _stringify_webhook_value(value)
+            if text:
+                extra_fields[f"{nested_key}_{str(key).strip()}"] = text
 
     reserved = {
         "name", "full_name", "first_name", "firstname", "last_name", "lastname",
-        "email", "email_address", "phone_number", "phone", "mobile", "cell", "cellphone",
+        "lead_name", "email", "email_address", "phone_e164", "phone_number", "phone", "mobile", "cell", "cellphone",
         "message", "notes", "note", "details", "description", "comments", "inquiry", "text",
         "source", "form_name", "form", "page", "campaign",
         "external_id", "submission_id", "lead_id", "entry_id", "id",
-        "fields", "custom_fields", "metadata",
+        "fields", "custom_fields", "metadata", "lead", "service", "original_payload",
         "secret", "webhook_secret",
     }
     for key, value in payload.items():
@@ -160,6 +212,18 @@ def _extract_generic_form_submission(payload, raw_body):
         text = _stringify_webhook_value(value)
         if text:
             extra_fields[str(key).strip()] = text
+
+    if not external_id:
+        event_name = _payload_value(payload, "event", "event_type", "type")
+        submitted_at = _payload_value(payload, "submitted_at", "created_at", "timestamp")
+        organization = _payload_value(metadata_block, "organization", "org", "brand", "brand_slug")
+        if (
+            "titan" in source.lower() or
+            str(event_name or "").strip().lower() in {"partial_quote", "quote_started", "quote_not_signed_up"}
+        ) and (submitted_at or lead_phone or lead_email):
+            external_id = ":".join(
+                part for part in ("titan", organization, event_name, submitted_at, lead_phone or lead_email) if part
+            )[:255]
 
     if not external_id:
         payload_bytes = raw_body or json.dumps(payload, sort_keys=True).encode("utf-8")

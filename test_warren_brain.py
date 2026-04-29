@@ -454,6 +454,67 @@ class WarrenWebhookTests(unittest.TestCase):
             self.assertEqual(deliveries[0]["status"], "accepted")
             self.assertEqual(deliveries[0]["thread_id"], data["thread_id"])
 
+    def test_generic_lead_webhook_extracts_nested_titan_quote_payload(self):
+        body = json.dumps({
+            "source": "titan-quote-tool",
+            "event": "partial_quote",
+            "submitted_at": "2026-04-29 18:56:35",
+            "lead": {
+                "name": "",
+                "phone": "5202763660",
+                "phone_e164": "+15202763660",
+            },
+            "service": {
+                "zip": "85756",
+                "number_of_dogs": 1,
+                "clean_up_frequency": "once_a_week",
+                "frequency_label": "Once A Week",
+                "price_per_cleanup": 20.77,
+                "monthly_price": 90,
+                "last_time_cleaned": "one_week",
+            },
+            "metadata": {
+                "consent": True,
+                "organization": "scoop-doggy-logs-1fful",
+            },
+            "original_payload": {
+                "organization": "scoop-doggy-logs-1fful",
+                "zip": "85756",
+                "number_of_dogs": 1,
+                "frequency": "once_a_week",
+                "phone": "5202763660",
+                "lead_name": "",
+                "consent": True,
+            },
+        }, separators=(",", ":")).encode("utf-8")
+        secret = "incoming-secret-123"
+        signature = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+
+        with self.app.app_context():
+            self.db.update_brand_number_field(self.brand_id, "sales_bot_enabled", 0)
+            self.db.update_brand_text_field(self.brand_id, "sales_bot_incoming_webhook_secret", secret)
+
+        resp = self.client.post(
+            "/webhooks/leads/warren_webhook_test",
+            data=body,
+            content_type="application/json",
+            headers={
+                "X-TQT-Signature": signature,
+                "X-TQT-Signature-Version": "1",
+            },
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        with self.app.app_context():
+            thread = self.db.get_lead_thread(data["thread_id"])
+            self.assertEqual(thread["lead_phone"], "+15202763660")
+            self.assertEqual(thread["source"], "incoming_webhook:titan-quote-tool")
+            self.assertIn("Service Monthly Price: 90", thread["summary"])
+            self.assertIn("Service Number Of Dogs: 1", thread["summary"])
+            messages = self.db.get_lead_messages(data["thread_id"])
+            self.assertTrue(any("+15202763660" in message["content"] for message in messages))
+
     def test_generic_lead_webhook_without_slug_uses_matching_signature_secret(self):
         body = json.dumps({
             "name": "No Slug Quote Lead",
