@@ -2877,6 +2877,32 @@ class WebDB:
         conn.close()
         return [dict(r) for r in rows]
 
+    def update_lead_message_metadata(self, message_id, metadata_updates):
+        if not message_id or not isinstance(metadata_updates, dict):
+            return False
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT metadata_json FROM lead_messages WHERE id = ?",
+            (message_id,),
+        ).fetchone()
+        if not row:
+            conn.close()
+            return False
+        try:
+            metadata = json.loads(row["metadata_json"] or "{}")
+            if not isinstance(metadata, dict):
+                metadata = {}
+        except Exception:
+            metadata = {}
+        metadata.update(metadata_updates)
+        conn.execute(
+            "UPDATE lead_messages SET metadata_json = ? WHERE id = ?",
+            (json.dumps(metadata), message_id),
+        )
+        conn.commit()
+        conn.close()
+        return True
+
     def add_lead_event(self, brand_id, thread_id, event_type, event_value="", metadata=None):
         conn = self._conn()
         cur = conn.execute(

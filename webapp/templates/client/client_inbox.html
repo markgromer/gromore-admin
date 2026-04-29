@@ -358,6 +358,30 @@
         });
     }
 
+    function parseMessageMetadata(msg) {
+        if (!msg || !msg.metadata_json) return {};
+        try {
+            const parsed = JSON.parse(msg.metadata_json);
+            return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch (err) {
+            return {};
+        }
+    }
+
+    function deliveryLabel(meta) {
+        const status = String(meta.delivery_status || '').toLowerCase();
+        if (!status) return '';
+        const channel = String(meta.delivery_channel || '').toUpperCase();
+        const detail = meta.delivery_detail ? ` - ${String(meta.delivery_detail).slice(0, 120)}` : '';
+        if (status === 'sent') return `${channel || 'Message'} sent`;
+        if (status === 'failed') return `${channel || 'Message'} failed${detail}`;
+        if (status === 'held') return `${channel || 'Message'} held${detail}`;
+        if (status === 'blocked') return `${channel || 'Message'} blocked${detail}`;
+        if (status === 'pending') return `${channel || 'Message'} send pending`;
+        if (status === 'draft') return 'Draft saved';
+        return `${channel || 'Message'} ${status}${detail}`;
+    }
+
     // ── Thread list click ──
     document.getElementById('threadListContainer').addEventListener('click', function(e) {
         const item = e.target.closest('.thread-item');
@@ -463,7 +487,9 @@
                 const time = document.createElement('div');
                 time.className = 'msg-time';
                 const label = msg.role === 'assistant' ? 'Warren - ' : '';
-                time.textContent = label + (msg.created_at || '').replace('T', ' ').slice(0, 16);
+                const meta = parseMessageMetadata(msg);
+                const delivery = msg.direction === 'outbound' ? deliveryLabel(meta) : '';
+                time.textContent = label + (msg.created_at || '').replace('T', ' ').slice(0, 16) + (delivery ? ` - ${delivery}` : '');
                 div.appendChild(time);
 
                 area.appendChild(div);

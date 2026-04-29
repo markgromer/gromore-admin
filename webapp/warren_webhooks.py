@@ -16,6 +16,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 import threading
 import base64
 
@@ -256,6 +257,12 @@ def _build_lead_submission_summary(lead_name, lead_email, lead_phone, message_te
     return "\n".join(summary_parts).strip()
 
 
+def _normalize_profile_key(key):
+    text = str(key or "").strip()
+    text = re.sub(r"^(service|metadata|original|lead)_", "", text)
+    return text
+
+
 def _ingest_lead_submission(
     db,
     brand_id,
@@ -291,6 +298,13 @@ def _ingest_lead_submission(
             "lead_phone": lead_phone,
             "source": source,
             "summary": summary,
+            "commercial_data_json": json.dumps({
+                "incoming_webhook_fields": {
+                    _normalize_profile_key(key): value
+                    for key, value in (extra_fields or {}).items()
+                    if str(value or "").strip()
+                }
+            }, separators=(",", ":")),
         },
     )
 
@@ -320,7 +334,14 @@ def _ingest_lead_submission(
                 allow_auto_send=allow_auto_send,
             )
             if result and result.get("should_send") and result.get("reply") and lead_phone:
-                send_reply(db, brand, thread_id, result["reply"], channel="sms")
+                send_reply(
+                    db,
+                    brand,
+                    thread_id,
+                    result["reply"],
+                    channel="sms",
+                    logged_message_id=result.get("outbound_message_id"),
+                )
 
     return thread_id
 
@@ -884,7 +905,14 @@ def quo_sms_webhook(brand_slug):
 
             result = process_and_respond(db, brand_id, thread_id, channel="sms")
             if result and result.get("should_send") and result.get("reply"):
-                send_reply(db, brand, thread_id, result["reply"], channel="sms")
+                send_reply(
+                    db,
+                    brand,
+                    thread_id,
+                    result["reply"],
+                    channel="sms",
+                    logged_message_id=result.get("outbound_message_id"),
+                )
 
     threading.Thread(target=_process, daemon=True).start()
 
@@ -1190,8 +1218,16 @@ def meta_messenger_webhook():
 
                         result = process_and_respond(db, bid, tid, channel="messenger")
                         if result and result.get("should_send") and result.get("reply"):
-                            send_reply(db, br, tid, result["reply"], channel="messenger",
-                                       recipient_id=sid, page_id=pid)
+                            send_reply(
+                                db,
+                                br,
+                                tid,
+                                result["reply"],
+                                channel="messenger",
+                                recipient_id=sid,
+                                page_id=pid,
+                                logged_message_id=result.get("outbound_message_id"),
+                            )
 
                 threading.Thread(target=_process, daemon=True).start()
 

@@ -701,8 +701,9 @@ def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=
                 "contact_policy": contact_policy,
             },
         )
+        outbound_message_id = None
         if reply_text:
-            db.add_lead_message(
+            outbound_message_id = db.add_lead_message(
                 thread_id,
                 direction="outbound",
                 role="assistant",
@@ -711,7 +712,9 @@ def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=
                 metadata={
                     "action": "reply",
                     "confidence": 1.0,
-                    "auto_sent": should_send,
+                    "auto_sent": False,
+                    "auto_send_requested": should_send,
+                    "delivery_status": "pending" if should_send else "draft",
                     "internal_notes": "Active CRM client detected. Routed away from sales automation.",
                     "contact_policy_reason": contact_policy.get("reason") or "active_client",
                 },
@@ -721,6 +724,7 @@ def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=
             "action": "reply",
             "thread_id": thread_id,
             "should_send": should_send,
+            "outbound_message_id": outbound_message_id,
             "handoff_reason": "active_client",
             "closing_action": None,
             "confidence": 1.0,
@@ -780,8 +784,9 @@ def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=
         response["closing_action"] = None
 
     # Log Warren's response as an outbound message
+    outbound_message_id = None
     if reply_text:
-        db.add_lead_message(
+        outbound_message_id = db.add_lead_message(
             thread_id,
             direction="outbound",
             role="assistant",
@@ -790,7 +795,9 @@ def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=
             metadata={
                 "action": action,
                 "confidence": confidence,
-                "auto_sent": should_send,
+                "auto_sent": False,
+                "auto_send_requested": should_send,
+                "delivery_status": "pending" if should_send else "draft",
                 "internal_notes": response.get("internal_notes", ""),
                 "contact_policy_reason": contact_policy.get("reason") or "",
             },
@@ -845,6 +852,7 @@ def process_and_respond(db, brand_id, thread_id, channel="sms", allow_auto_send=
         "action": action,
         "thread_id": thread_id,
         "should_send": should_send,
+        "outbound_message_id": outbound_message_id,
         "handoff_reason": response.get("handoff_reason"),
         "closing_action": closing_action,
         "crm_push": crm_push_result,

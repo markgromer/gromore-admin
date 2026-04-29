@@ -538,16 +538,22 @@ def _process_sng_quote_nurture_action(db, brand, action, now_iso):
             build_crm_event_template_context(brand, summary, action.get("source_event_type", "")),
         )
 
-    ok, detail = send_reply(db, brand, thread_id, message_text, channel="sms")
+    message_id = db.add_lead_message(
+        thread_id,
+        direction="outbound",
+        role="assistant",
+        content=message_text,
+        channel="sms",
+        metadata={
+            "source": "sng_quote_nurture",
+            "action_id": action.get("id"),
+            "delivery_status": "pending",
+            "auto_send_requested": True,
+            "auto_sent": False,
+        },
+    )
+    ok, detail = send_reply(db, brand, thread_id, message_text, channel="sms", logged_message_id=message_id)
     if ok:
-        db.add_lead_message(
-            thread_id,
-            direction="outbound",
-            role="assistant",
-            content=message_text,
-            channel="sms",
-            metadata={"source": "sng_quote_nurture", "action_id": action.get("id")},
-        )
         db.add_lead_event(
             brand["id"],
             thread_id,

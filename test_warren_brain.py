@@ -512,6 +512,11 @@ class WarrenWebhookTests(unittest.TestCase):
             self.assertEqual(thread["source"], "incoming_webhook:titan-quote-tool")
             self.assertIn("Service Monthly Price: 90", thread["summary"])
             self.assertIn("Service Number Of Dogs: 1", thread["summary"])
+            profile_data = json.loads(thread["commercial_data_json"])
+            fields = profile_data["incoming_webhook_fields"]
+            self.assertEqual(fields["monthly_price"], "90")
+            self.assertEqual(fields["number_of_dogs"], "1")
+            self.assertEqual(fields["clean_up_frequency"], "once_a_week")
             messages = self.db.get_lead_messages(data["thread_id"])
             self.assertTrue(any("+15202763660" in message["content"] for message in messages))
 
@@ -680,6 +685,41 @@ class WarrenInboxTests(unittest.TestCase):
         self.assertEqual(data["profile"]["waiting_on"], "Waiting on quote approval")
         self.assertGreaterEqual(data["profile"]["closeability_pct"], 40)
         self.assertTrue(len(data["profile"]["closeability_drivers"]) >= 1)
+
+    def test_sms_delivery_failure_updates_logged_message(self):
+        with self.app.app_context():
+            self.db.update_brand_text_field(self.brand_id, "quo_api_key", "bad-key")
+            self.db.update_brand_text_field(self.brand_id, "quo_phone_number", "+15550000000")
+            message_id = self.db.add_lead_message(
+                self.thread_id,
+                "outbound",
+                "assistant",
+                "Testing delivery status.",
+                channel="sms",
+                metadata={"delivery_status": "pending", "auto_send_requested": True},
+            )
+            brand = self.db.get_brand(self.brand_id)
+
+            from webapp.warren_sender import send_reply
+            with patch("webapp.quo_sms.send_sms", return_value=(False, "HTTP 401: invalid key")):
+                ok, detail = send_reply(
+                    self.db,
+                    brand,
+                    self.thread_id,
+                    "Testing delivery status.",
+                    channel="sms",
+                    skip_dnd=True,
+                    logged_message_id=message_id,
+                )
+
+            self.assertFalse(ok)
+            self.assertIn("invalid key", detail)
+            messages = self.db.get_lead_messages(self.thread_id)
+            logged = next(message for message in messages if message["id"] == message_id)
+            metadata = json.loads(logged["metadata_json"])
+            self.assertEqual(metadata["delivery_status"], "failed")
+            self.assertEqual(metadata["delivery_channel"], "sms")
+            self.assertFalse(metadata["auto_sent"])
 
     def test_inbox_profile_override_can_be_saved(self):
         self._login()

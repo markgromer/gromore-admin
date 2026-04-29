@@ -452,14 +452,28 @@ def _send_nurture(db, brand, thread, rule, messages=None):
     # Send if confidence is high enough
     if result.get("should_send"):
         if channel == "sms":
-            success, _ = send_reply(db, brand, thread_id, result["reply"], channel="sms")
+            success, _ = send_reply(
+                db,
+                brand,
+                thread_id,
+                result["reply"],
+                channel="sms",
+                logged_message_id=result.get("outbound_message_id"),
+            )
             return success
         elif channel == "messenger":
             recipient_id = thread.get("external_thread_id", "")
             page_id = (brand.get("facebook_page_id") or "").strip()
-            success, _ = send_reply(db, brand, thread_id, result["reply"],
-                                     channel="messenger", recipient_id=recipient_id,
-                                     page_id=page_id)
+            success, _ = send_reply(
+                db,
+                brand,
+                thread_id,
+                result["reply"],
+                channel="messenger",
+                recipient_id=recipient_id,
+                page_id=page_id,
+                logged_message_id=result.get("outbound_message_id"),
+            )
             return success
 
     return False

@@ -7,7 +7,7 @@ and logging the delivery status.
 import json
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import requests
 
 log = logging.getLogger(__name__)
@@ -39,7 +39,23 @@ def _messenger_response_window_open(thread, now=None):
     return now - last_inbound <= timedelta(hours=24)
 
 
-def send_reply(db, brand, thread_id, message_text, channel="sms", recipient_id=None, page_id=None, skip_dnd=False):
+def _mark_delivery(db, message_id, *, status, channel="", detail="", recipient="", auto_sent=False):
+    if not message_id:
+        return
+    db.update_lead_message_metadata(
+        message_id,
+        {
+            "delivery_status": status,
+            "delivery_channel": channel,
+            "delivery_detail": str(detail or "")[:500],
+            "delivery_recipient": recipient or "",
+            "delivery_checked_at": datetime.now(timezone.utc).isoformat(),
+            "auto_sent": bool(auto_sent),
+        },
+    )
+
+
+def send_reply(db, brand, thread_id, message_text, channel="sms", recipient_id=None, page_id=None, skip_dnd=False, logged_message_id=None):
     """Send an outbound reply through the appropriate channel.
 
     If DND is active and skip_dnd is False, the message is logged but NOT sent.
@@ -59,6 +75,7 @@ def send_reply(db, brand, thread_id, message_text, channel="sms", recipient_id=N
     """
     thread = db.get_lead_thread(thread_id)
     if not thread:
+        _mark_delivery(db, logged_message_id, status="failed", channel=channel, detail="Thread not found")
         return False, "Thread not found"
 
     # Messenger policy guard: only send RESPONSE messages inside the 24-hour response window.
@@ -70,17 +87,21 @@ def send_reply(db, brand, thread_id, message_text, channel="sms", recipient_id=N
             metadata={"reason": "outside_24h_response_window"},
         )
         log.info("Blocked Messenger send outside 24h response window: brand=%s thread=%s", brand.get("id"), thread_id)
+        _mark_delivery(db, logged_message_id, status="blocked", channel=channel, detail="outside_24h_response_window")
         return False, "outside_24h_response_window"
 
     # DND check (automated sends only)
     if not skip_dnd:
         from webapp.warren_nurture import _is_dnd
         if _is_dnd(brand):
-            db.add_lead_message(
-                thread_id, "outbound", "assistant", message_text,
-                channel=channel,
-                metadata={"dnd_held": True, "held_at": datetime.utcnow().isoformat()},
-            )
+            if logged_message_id:
+                _mark_delivery(db, logged_message_id, status="held", channel=channel, detail="dnd_held")
+            else:
+                db.add_lead_message(
+                    thread_id, "outbound", "assistant", message_text,
+                    channel=channel,
+                    metadata={"dnd_held": True, "held_at": datetime.now(timezone.utc).isoformat(), "delivery_status": "held"},
+                )
             log.info("DND active for brand %s - message held for thread %s", brand.get("id"), thread_id)
             return False, "dnd_held"
 
@@ -90,11 +111,14 @@ def send_reply(db, brand, thread_id, message_text, channel="sms", recipient_id=N
         if to_phone and db.is_opted_out(brand.get("id"), to_phone):
             if not skip_dnd:
                 log.info("Blocked SMS to opted-out phone %s for brand %s", to_phone, brand.get("id"))
-                db.add_lead_message(
-                    thread_id, "outbound", "assistant", message_text,
-                    channel=channel,
-                    metadata={"blocked_opted_out": True},
-                )
+                if logged_message_id:
+                    _mark_delivery(db, logged_message_id, status="blocked", channel=channel, detail="opted_out", recipient=to_phone)
+                else:
+                    db.add_lead_message(
+                        thread_id, "outbound", "assistant", message_text,
+                        channel=channel,
+                        metadata={"blocked_opted_out": True, "delivery_status": "blocked", "delivery_detail": "opted_out"},
+                    )
                 return False, "opted_out"
             else:
                 log.warning("Manual send to opted-out phone %s - allowed but flagged", to_phone)
@@ -109,15 +133,16 @@ def send_reply(db, brand, thread_id, message_text, channel="sms", recipient_id=N
             time.sleep(delay_seconds)
 
     if channel == "sms":
-        return _send_sms(db, brand, thread_id, message_text)
+        return _send_sms(db, brand, thread_id, message_text, logged_message_id=logged_message_id)
     elif channel == "messenger":
-        return _send_messenger(db, brand, thread_id, message_text, recipient_id, page_id)
+        return _send_messenger(db, brand, thread_id, message_text, recipient_id, page_id, logged_message_id=logged_message_id)
     else:
         log.warning("Warren sender: unsupported channel '%s'", channel)
+        _mark_delivery(db, logged_message_id, status="failed", channel=channel, detail=f"Unsupported channel: {channel}")
         return False, f"Unsupported channel: {channel}"
 
 
-def _send_sms(db, brand, thread_id, message_text):
+def _send_sms(db, brand, thread_id, message_text, logged_message_id=None):
     """Send SMS via Quo/OpenPhone."""
     from webapp.quo_sms import send_sms
 
@@ -126,11 +151,13 @@ def _send_sms(db, brand, thread_id, message_text):
 
     if not api_key or not from_number:
         log.warning("Warren sender: Quo not configured for brand %s", brand.get("id"))
+        _mark_delivery(db, logged_message_id, status="failed", channel="sms", detail="Quo SMS not configured (missing API key or phone number)")
         return False, "Quo SMS not configured (missing API key or phone number)"
 
     # Get the lead's phone number from the thread
     thread = db.get_lead_thread(thread_id)
     if not thread:
+        _mark_delivery(db, logged_message_id, status="failed", channel="sms", detail="Thread not found")
         return False, "Thread not found"
 
     to_phone = (thread.get("lead_phone") or "").strip()
@@ -148,6 +175,7 @@ def _send_sms(db, brand, thread_id, message_text):
                 pass
 
     if not to_phone:
+        _mark_delivery(db, logged_message_id, status="failed", channel="sms", detail="No phone number found for lead")
         return False, "No phone number found for lead"
 
     # Append opt-out footer for A2P compliance
@@ -158,6 +186,15 @@ def _send_sms(db, brand, thread_id, message_text):
         full_text = message_text
 
     success, detail = send_sms(api_key, from_number, to_phone, full_text)
+    _mark_delivery(
+        db,
+        logged_message_id,
+        status="sent" if success else "failed",
+        channel="sms",
+        detail=detail,
+        recipient=to_phone,
+        auto_sent=success,
+    )
 
     # Log delivery event
     db.add_lead_event(
@@ -175,7 +212,7 @@ def _send_sms(db, brand, thread_id, message_text):
     return success, str(detail)
 
 
-def _send_messenger(db, brand, thread_id, message_text, recipient_id=None, page_id=None):
+def _send_messenger(db, brand, thread_id, message_text, recipient_id=None, page_id=None, logged_message_id=None):
     """Send a reply via Facebook Messenger."""
     if not recipient_id:
         # Try to get from thread/messages
@@ -184,6 +221,7 @@ def _send_messenger(db, brand, thread_id, message_text, recipient_id=None, page_
             recipient_id = thread["external_thread_id"]
 
     if not recipient_id:
+        _mark_delivery(db, logged_message_id, status="failed", channel="messenger", detail="No Messenger recipient ID")
         return False, "No Messenger recipient ID"
 
     # Get page access token
@@ -191,10 +229,12 @@ def _send_messenger(db, brand, thread_id, message_text, recipient_id=None, page_
         page_id = (brand.get("facebook_page_id") or "").strip()
 
     if not page_id:
+        _mark_delivery(db, logged_message_id, status="failed", channel="messenger", detail="No Facebook Page ID configured", recipient=recipient_id)
         return False, "No Facebook Page ID configured"
 
     page_token = _get_page_token(db, brand, page_id)
     if not page_token:
+        _mark_delivery(db, logged_message_id, status="failed", channel="messenger", detail="Could not get Facebook Page token", recipient=recipient_id)
         return False, "Could not get Facebook Page token"
 
     try:
@@ -211,6 +251,15 @@ def _send_messenger(db, brand, thread_id, message_text, recipient_id=None, page_
 
         success = resp.status_code == 200
         detail = resp.json() if success else resp.text[:300]
+        _mark_delivery(
+            db,
+            logged_message_id,
+            status="sent" if success else "failed",
+            channel="messenger",
+            detail=detail,
+            recipient=recipient_id,
+            auto_sent=success,
+        )
 
         # Log delivery event
         db.add_lead_event(
@@ -229,6 +278,7 @@ def _send_messenger(db, brand, thread_id, message_text, recipient_id=None, page_
 
     except Exception as exc:
         log.exception("Warren Messenger error: %s", exc)
+        _mark_delivery(db, logged_message_id, status="failed", channel="messenger", detail=str(exc), recipient=recipient_id)
         db.add_lead_event(
             brand["id"], thread_id, "messenger_failed",
             event_value=str(exc)[:200],
@@ -278,19 +328,20 @@ def send_manual_reply(db, brand_id, thread_id, message_text, channel=None):
         page_id = (brand.get("facebook_page_id") or "").strip()
 
     # Log the manual message
-    db.add_lead_message(
+    message_id = db.add_lead_message(
         thread_id,
         direction="outbound",
         role="user",
         content=message_text,
         channel=channel,
-        metadata={"manual": True},
+        metadata={"manual": True, "delivery_status": "pending"},
     )
 
     # Send it (manual sends bypass DND)
     success, detail = send_reply(db, brand, thread_id, message_text,
                                   channel=channel, recipient_id=recipient_id,
-                                  page_id=page_id, skip_dnd=True)
+                                  page_id=page_id, skip_dnd=True,
+                                  logged_message_id=message_id)
 
     return success, detail
 

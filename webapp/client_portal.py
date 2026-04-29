@@ -1925,6 +1925,25 @@ def _build_lead_profile(db, thread):
     objections = []
     known_items = []
 
+    def add_known_item(key, value):
+        nonlocal dog_count
+        key_text = str(key or "").strip()
+        value_text = str(value or "").strip()
+        if not key_text or not value_text:
+            return
+        normalized_key = key_text.lower()
+        normalized_key = re.sub(r"^(service|metadata|original|lead)_", "", normalized_key)
+        if dog_count is None and ("dog" in normalized_key or "pet" in normalized_key):
+            dog_count = _parse_dog_count(value_text)
+        label = re.sub(r"^(service|metadata|original|lead)_", "", key_text)
+        label = label.replace("_", " ").strip().title()
+        known_items.append((label, value_text))
+
+    profile_payload = _safe_json_object(thread.get("commercial_data_json"))
+    webhook_fields = _safe_json_object(profile_payload.get("incoming_webhook_fields"))
+    for key, value in webhook_fields.items():
+        add_known_item(key, value)
+
     for message in messages:
         metadata = _safe_json_object(message.get("metadata_json"))
         fields = _safe_json_object(metadata.get("fields"))
@@ -1939,7 +1958,7 @@ def _build_lead_profile(db, thread):
                 name = value_text
             elif key_text in {"email", "email_address"} and not email:
                 email = value_text.lower()
-            elif key_text in {"phone", "phone_number", "mobile", "cell"} and not phone:
+            elif key_text in {"phone", "phone_e164", "phone_number", "mobile", "cell"} and not phone:
                 phone = value_text
 
             if dog_count is None and ("dog" in key_text or "pet" in key_text):
@@ -1949,8 +1968,7 @@ def _build_lead_profile(db, thread):
                 objections.extend(_extract_objections(value_text) or [value_text.lower()])
 
             if key_text not in {"from", "conversation_id", "sender_psid", "page_id", "image_urls", "opted_out", "fields"}:
-                label = str(key).replace("_", " ").strip().title()
-                known_items.append((label, value_text))
+                add_known_item(key, value_text)
 
         if message.get("direction") == "inbound":
             content = message.get("content") or ""
@@ -2008,7 +2026,7 @@ def _build_lead_profile(db, thread):
         "waiting_on": waiting_on,
         "closeability_pct": closeability,
         "closeability_drivers": closeability_drivers,
-        "known_items": deduped_known_items[:6],
+        "known_items": deduped_known_items[:18],
         "last_message_at": thread.get("last_message_at") or "",
         "profile_notes": (override or {}).get("profile_notes") or "",
     }
