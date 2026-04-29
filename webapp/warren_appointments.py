@@ -148,6 +148,23 @@ def _friendly_date(value):
     return str(value or "")
 
 
+def _normalize_phone(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith("+"):
+        digits = re.sub(r"\D", "", raw[1:])
+        return f"+{digits}" if digits else ""
+    digits = re.sub(r"\D", "", raw)
+    if len(digits) == 10:
+        return f"+1{digits}"
+    if len(digits) == 11 and digits.startswith("1"):
+        return f"+{digits}"
+    if len(digits) > 11:
+        return f"+{digits}"
+    return digits
+
+
 def _build_default_message(brand, candidate, channel):
     brand_name = (brand.get("display_name") or brand.get("name") or "our team").strip()
     client_name = (candidate.get("client_name") or "there").strip()
@@ -336,6 +353,8 @@ def process_appointment_reminders(
 
                 for channel in _candidate_channels(brand, candidate, configured_channels):
                     recipient = candidate.get("client_phone") if channel == "sms" else candidate.get("client_email")
+                    if channel == "sms":
+                        recipient = _normalize_phone(recipient)
                     if not recipient:
                         stats["skipped"] += 1
                         brand_stats["skipped"] += 1
@@ -347,6 +366,7 @@ def process_appointment_reminders(
                         "assigned_to_name": candidate.get("assigned_to_name") or "",
                         "address": candidate.get("address") or "",
                         "preferred_channel": candidate.get("preferred_channel") or "",
+                        "recipient_dedupe_key": recipient if channel == "sms" else "",
                     }
                     pending_detail = json.dumps({"state": "pending", **detail_payload}, separators=(",", ":"))[:500]
                     claimed = db.try_claim_client_billing_reminder(
@@ -357,6 +377,7 @@ def process_appointment_reminders(
                         recipient=recipient,
                         detail=pending_detail,
                         reminder_type=reminder_type,
+                        dedupe_recipient=channel == "sms",
                     )
                     if not claimed:
                         stats["skipped"] += 1
@@ -368,7 +389,7 @@ def process_appointment_reminders(
                             _send_email_reminder(app_config, brand, candidate)
                             ok, detail = True, "sent"
                         else:
-                            ok, detail = send_transactional_sms(db, brand, candidate["client_phone"], _render_message(brand, candidate, "sms"))
+                            ok, detail = send_transactional_sms(db, brand, recipient, _render_message(brand, candidate, "sms"))
 
                         db.record_client_billing_reminder(
                             brand["id"],

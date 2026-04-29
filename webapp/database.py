@@ -3289,16 +3289,36 @@ class WebDB:
         recipient="",
         detail="",
         reminder_type="payment_due",
+        dedupe_recipient=False,
     ):
         """Atomically reserve a reminder row before sending.
 
         Returns True only for the caller that successfully claims the reminder.
         Existing sent or pending rows are treated as already in-flight/done.
         Failed rows can be reclaimed for a retry.
+        When dedupe_recipient is true, any sent or pending row for the same
+        brand/date/channel/type/recipient blocks a new claim even if the
+        external client/job ID differs.
         """
         conn = self._conn()
         try:
             conn.execute("BEGIN IMMEDIATE")
+            normalized_recipient = (recipient or "").strip()
+            if dedupe_recipient and normalized_recipient:
+                recipient_row = conn.execute(
+                    """
+                    SELECT id, status FROM client_billing_reminders
+                    WHERE brand_id = ? AND due_date = ? AND channel = ?
+                      AND reminder_type = ? AND recipient = ?
+                      AND status IN ('sent', 'pending')
+                    LIMIT 1
+                    """,
+                    (brand_id, due_date, channel, reminder_type, normalized_recipient),
+                ).fetchone()
+                if recipient_row:
+                    conn.rollback()
+                    return False
+
             row = conn.execute(
                 """
                 SELECT id, status FROM client_billing_reminders
