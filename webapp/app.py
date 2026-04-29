@@ -1229,6 +1229,15 @@ def create_app():
                 db.update_brand_text_field(brand_id, "crm_webhook_url", request.form.get("crm_webhook_url", ""))
                 db.update_brand_text_field(brand_id, "crm_pipeline_id", request.form.get("crm_pipeline_id", ""))
                 db.update_brand_text_field(brand_id, "crm_server_url", request.form.get("crm_server_url", ""))
+                db.update_brand_text_field(brand_id, "payment_provider", request.form.get("payment_provider", ""))
+                payment_api_key = request.form.get("payment_api_key", "").strip()
+                if payment_api_key:
+                    db.update_brand_text_field(brand_id, "payment_api_key", payment_api_key)
+                payment_webhook_secret = request.form.get("payment_webhook_secret", "").strip()
+                if payment_webhook_secret:
+                    db.update_brand_text_field(brand_id, "payment_webhook_secret", payment_webhook_secret)
+                db.update_brand_text_field(brand_id, "payment_location_id", request.form.get("payment_location_id", ""))
+                db.update_brand_text_field(brand_id, "payment_account_id", request.form.get("payment_account_id", ""))
                 flash("CRM settings saved", "success")
             elif section == "features":
                 brand_feature_access = {}
@@ -1350,7 +1359,7 @@ def create_app():
     @app.route("/brands/<int:brand_id>/crm-sync/revenue", methods=["POST"])
     @login_required
     def crm_sync_revenue(brand_id):
-        """Pull revenue from Sweep and Go or Jobber and save it."""
+        """Pull revenue from a connected CRM or standalone payment provider and save it."""
         brand = db.get_brand(brand_id)
         if not brand:
             return jsonify({"ok": False, "error": "Brand not found"}), 404
@@ -1391,6 +1400,22 @@ def create_app():
                 "source": "jobber",
             })
 
+        elif crm_type == "razorsync":
+            from webapp.crm_bridge import pull_razorsync_revenue
+            revenue, payment_count, error = pull_razorsync_revenue(brand, target_month)
+            if error:
+                return jsonify({"ok": False, "error": error}), 400
+            db.upsert_brand_month_finance(brand_id, target_month, revenue, payment_count,
+                                          f"RazorSync sync: {payment_count} payments")
+            db.mark_brand_webhook_received(brand_id)
+            return jsonify({
+                "ok": True,
+                "month": target_month,
+                "closed_revenue": revenue,
+                "closed_deals": payment_count,
+                "source": "razorsync",
+            })
+
         elif crm_type == "gohighlevel":
             from webapp.crm_bridge import pull_gohighlevel_revenue
             revenue, deal_count, error = pull_gohighlevel_revenue(brand, target_month)
@@ -1407,8 +1432,25 @@ def create_app():
                 "source": "gohighlevel",
             })
 
+        elif (brand.get("payment_provider") or "").strip():
+            from webapp.crm_bridge import pull_payment_provider_revenue
+            provider = (brand.get("payment_provider") or "").strip().lower()
+            revenue, payment_count, error = pull_payment_provider_revenue(brand, target_month)
+            if error:
+                return jsonify({"ok": False, "error": error}), 400
+            db.upsert_brand_month_finance(brand_id, target_month, revenue, payment_count,
+                                          f"{provider.title()} payment sync: {payment_count} payments")
+            db.mark_brand_webhook_received(brand_id)
+            return jsonify({
+                "ok": True,
+                "month": target_month,
+                "closed_revenue": revenue,
+                "closed_deals": payment_count,
+                "source": provider,
+            })
+
         else:
-            return jsonify({"ok": False, "error": f"Revenue pull not supported for CRM type: {crm_type}"}), 400
+            return jsonify({"ok": False, "error": f"Revenue pull not supported for CRM type: {crm_type or 'none'}"}), 400
 
     @app.route("/brands/<int:brand_id>/delete", methods=["POST"])
     @login_required

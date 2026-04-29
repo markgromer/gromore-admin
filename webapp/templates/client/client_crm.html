@@ -172,11 +172,15 @@
 {% elif crm_type != 'sweepandgo' %}
 <div class="crm-section text-center py-5">
     <i class="bi bi-database-check" style="font-size: 3rem; color: #94a3b8;"></i>
-    <h5 class="mt-3 fw-bold">CRM import workspace</h5>
-    <p class="text-muted mb-3">Live dashboard tables are currently built for Sweep and Go. For GoHighLevel, use the CSV importer above to bring leads into Warren.</p>
-    <a href="{{ url_for('client.client_lead_assistant') }}" class="btn btn-primary">
+    <h5 class="mt-3 fw-bold">Revenue connection workspace</h5>
+    <p class="text-muted mb-3">Sweep and Go has the full client table dashboard. This connection can still sync revenue into reporting and Warren insights.</p>
+    <button type="button" class="btn btn-primary" id="externalRevenueSyncBtn">
+        <i class="bi bi-arrow-repeat me-1"></i> Sync Revenue
+    </button>
+    <a href="{{ url_for('client.client_lead_assistant') }}" class="btn btn-outline-primary ms-2">
         <i class="bi bi-chat-dots me-1"></i> Open Lead Follow-Up
     </a>
+    <div id="externalRevenueSyncResult" class="mt-3 text-muted" style="font-size:.9rem;"></div>
 </div>
 
 {% else %}
@@ -976,6 +980,37 @@ document.getElementById('couponForm').addEventListener('submit', function(e) {
 
 // Load data on page load
 loadCrmData();
+</script>
+{% elif crm_connected %}
+<script>
+var externalRevenueSyncBtn = document.getElementById('externalRevenueSyncBtn');
+if (externalRevenueSyncBtn) {
+    externalRevenueSyncBtn.addEventListener('click', function() {
+        var result = document.getElementById('externalRevenueSyncResult');
+        var original = externalRevenueSyncBtn.innerHTML;
+        externalRevenueSyncBtn.disabled = true;
+        externalRevenueSyncBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Syncing...';
+        result.textContent = 'Pulling payment data...';
+        fetch('{{ url_for("client.client_crm_data") }}?sync=1')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                externalRevenueSyncBtn.disabled = false;
+                externalRevenueSyncBtn.innerHTML = original;
+                if (data.error) {
+                    result.innerHTML = '<span class="text-danger">' + data.error + '</span>';
+                    return;
+                }
+                var rev = data.revenue || {};
+                var amount = parseFloat(rev.closed_revenue || rev.mrr || 0).toLocaleString('en-US', {style:'currency', currency:'USD'});
+                result.innerHTML = '<span class="badge bg-success rounded-pill px-3 py-2">Synced ' + amount + ' from ' + (rev.payment_count || rev.closed_deals || 0) + ' records.</span>';
+            })
+            .catch(function(err) {
+                externalRevenueSyncBtn.disabled = false;
+                externalRevenueSyncBtn.innerHTML = original;
+                result.innerHTML = '<span class="text-danger">Sync failed: ' + err.message + '</span>';
+            });
+    });
+}
 </script>
 {% endif %}
 {% endblock %}

@@ -1,10 +1,12 @@
 """
 CRM integration bridge - pushes lead/conversion events to external CRMs.
-Supports GoHighLevel, HubSpot, Sweep and Go, Jobber, and generic webhooks.
+Supports GoHighLevel, HubSpot, Sweep and Go, Jobber, RazorSync, generic
+webhooks, and standalone payment-provider revenue pulls.
 """
 
 import json
 import logging
+import re
 from collections import Counter
 from datetime import date, datetime, timedelta
 
@@ -59,6 +61,50 @@ def _parse_ts_ms(value):
             return 0
 
     return 0
+
+
+def _month_bounds(month_prefix=None):
+    month_prefix = (month_prefix or "").strip() or datetime.now().strftime("%Y-%m")
+    start = datetime.strptime(month_prefix + "-01", "%Y-%m-%d")
+    if start.month == 12:
+        end = start.replace(year=start.year + 1, month=1)
+    else:
+        end = start.replace(month=start.month + 1)
+    return month_prefix, start, end
+
+
+def _parse_razorsync_date(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    text = str(value or "").strip()
+    if not text:
+        return None
+    match = re.search(r"/Date\((-?\d+)", text)
+    if match:
+        try:
+            return datetime.fromtimestamp(int(match.group(1)) / 1000)
+        except (ValueError, OSError, OverflowError):
+            return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
+def _money_to_float(value):
+    if value is None:
+        return 0.0
+    if isinstance(value, dict):
+        for key in ("amount", "Amount", "value", "Value"):
+            if key in value:
+                return _money_to_float(value.get(key))
+        return 0.0
+    try:
+        return float(str(value).replace("$", "").replace(",", "").strip() or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _sng_extract_payments(result_dict):
@@ -750,6 +796,7 @@ def push_lead(brand, lead_data):
         "hubspot": _push_hubspot,
         "sweepandgo": _push_sweepandgo,
         "jobber": _push_jobber,
+        "razorsync": _push_razorsync,
         "webhook": _push_webhook,
     }
 
@@ -900,6 +947,318 @@ def _push_webhook(brand, lead_data):
         return False, f"Webhook returned {resp.status_code}: {resp.text[:200]}"
 
     return True, f"Webhook delivered ({resp.status_code})"
+
+
+def _razorsync_server_name(brand):
+    raw = (brand.get("crm_server_url") or brand.get("crm_pipeline_id") or "").strip()
+    raw = re.sub(r"^https?://", "", raw, flags=re.I)
+    raw = raw.split("/")[0].strip()
+    raw = raw.replace(".0.razorsync.com", "").replace(".razorsync.com", "")
+    return raw
+
+
+def _razorsync_base_url(brand):
+    server_name = _razorsync_server_name(brand)
+    if not server_name:
+        return ""
+    return f"https://{server_name}.0.razorsync.com/ApiService.svc"
+
+
+def _razorsync_api(brand, method, path, json_body=None, params=None):
+    token = (brand.get("crm_api_key") or "").strip()
+    server_name = _razorsync_server_name(brand)
+    base_url = _razorsync_base_url(brand)
+    if not token:
+        return None, "RazorSync API token not configured"
+    if not server_name or not base_url:
+        return None, "RazorSync portal/server name not configured"
+
+    headers = {
+        "Token": token,
+        "ServerName": server_name,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    url = f"{base_url}/{str(path or '').lstrip('/')}"
+    try:
+        resp = requests.request(method, url, json=json_body, params=params, headers=headers, timeout=TIMEOUT)
+    except requests.RequestException as exc:
+        return None, f"RazorSync API request failed: {str(exc)[:150]}"
+
+    if resp.status_code not in (200, 201, 204):
+        return None, f"RazorSync API returned {resp.status_code}: {resp.text[:300]}"
+    if resp.status_code == 204:
+        return {}, None
+    try:
+        return resp.json(), None
+    except ValueError:
+        return {"raw": resp.text[:500]}, None
+
+
+def razorsync_test_connection(brand):
+    result, error = _razorsync_api(brand, "GET", "Settings")
+    if error:
+        return "", error
+    portal = ""
+    if isinstance(result, dict):
+        portal = result.get("PortalName") or result.get("PortalId") or result.get("CompanyName") or ""
+    server = _razorsync_server_name(brand)
+    label = f" ({portal})" if portal else (f" portal {server}" if server else "")
+    return f"Connected to RazorSync{label}.", None
+
+
+def _push_razorsync(brand, lead_data):
+    name = (lead_data.get("name") or "").strip()
+    first_name = (lead_data.get("first_name") or "").strip()
+    last_name = (lead_data.get("last_name") or "").strip()
+    if not (first_name or last_name) and name:
+        parts = name.split()
+        first_name = parts[0]
+        last_name = " ".join(parts[1:])
+    if not name:
+        name = f"{first_name} {last_name}".strip() or "New Lead"
+
+    notes = lead_data.get("notes") or lead_data.get("summary") or ""
+    customer_payload = {
+        "FullName": name,
+        "FirstName": first_name or name,
+        "LastName": last_name,
+        "CompanyName": lead_data.get("company") or lead_data.get("company_name") or "",
+        "Email": lead_data.get("email") or "",
+        "Phone": lead_data.get("phone") or "",
+        "AddressLine1": lead_data.get("address") or lead_data.get("street") or "",
+        "City": lead_data.get("city") or "",
+        "State": lead_data.get("state") or "",
+        "Zip": lead_data.get("zip") or lead_data.get("postal_code") or "",
+        "Notes": notes,
+        "Source": lead_data.get("source") or "GroMore WARREN",
+    }
+    customer_payload = {k: v for k, v in customer_payload.items() if v not in (None, "")}
+
+    result, error = _razorsync_api(brand, "POST", "Customer/Create", json_body=customer_payload)
+    if error:
+        return False, error
+
+    customer_id = ""
+    if isinstance(result, dict):
+        customer_id = str(
+            result.get("Id")
+            or result.get("ID")
+            or result.get("CustomerId")
+            or result.get("customer_id")
+            or ""
+        ).strip()
+
+    if customer_id and (notes or lead_data.get("service") or lead_data.get("price")):
+        quote_payload = {
+            "CustomerId": customer_id,
+            "Title": lead_data.get("source") or "New Warren lead",
+            "Summary": lead_data.get("service") or lead_data.get("service_needed") or "",
+            "Description": notes,
+            "Amount": _money_to_float(lead_data.get("price") or lead_data.get("monthly_price")),
+        }
+        quote_payload = {k: v for k, v in quote_payload.items() if v not in (None, "", 0)}
+        _, quote_error = _razorsync_api(brand, "POST", "Quote/Create", json_body=quote_payload)
+        if quote_error:
+            log.info("RazorSync quote create skipped/failed for customer %s: %s", customer_id, quote_error)
+
+    return True, f"RazorSync customer created{f': {customer_id}' if customer_id else ''}"
+
+
+def _razorsync_records(payload):
+    if isinstance(payload, list):
+        return payload
+    if not isinstance(payload, dict):
+        return []
+    for key in ("data", "Data", "items", "Items", "Invoices", "Payments", "results", "Results"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            return value
+        if isinstance(value, dict):
+            nested = _razorsync_records(value)
+            if nested:
+                return nested
+    return []
+
+
+def pull_razorsync_revenue(brand, month=None):
+    month_prefix, start, end = _month_bounds(month)
+    invoices_payload, error = _razorsync_api(brand, "GET", "Invoice/List")
+    if error:
+        return 0, 0, error
+
+    total = 0.0
+    payment_count = 0
+    invoices = _razorsync_records(invoices_payload)
+    for invoice in invoices[:500]:
+        if not isinstance(invoice, dict):
+            continue
+        invoice_id = invoice.get("Id") or invoice.get("ID") or invoice.get("InvoiceId") or invoice.get("invoice_id")
+        invoice_date = _parse_razorsync_date(
+            invoice.get("PaidDate") or invoice.get("PaymentDate") or invoice.get("DatePaid") or invoice.get("CreatedDate")
+        )
+        status = str(invoice.get("Status") or invoice.get("PaymentStatus") or "").lower()
+        invoice_amount = _money_to_float(
+            invoice.get("AmountPaid") or invoice.get("PaidAmount") or invoice.get("Total") or invoice.get("Amount")
+        )
+        if invoice_date and start <= invoice_date < end and invoice_amount and status in ("", "paid", "settled", "complete", "completed", "success"):
+            total += invoice_amount
+            payment_count += 1
+            continue
+
+        if not invoice_id:
+            continue
+        payments_payload, payment_error = _razorsync_api(brand, "GET", f"Payment/List/{invoice_id}")
+        if payment_error:
+            log.info("RazorSync payment list failed for invoice %s: %s", invoice_id, payment_error)
+            continue
+        for payment in _razorsync_records(payments_payload):
+            if not isinstance(payment, dict):
+                continue
+            paid_at = _parse_razorsync_date(payment.get("PaymentDate") or payment.get("Date") or payment.get("CreatedDate"))
+            if not paid_at or not (start <= paid_at < end):
+                continue
+            status = str(payment.get("Status") or payment.get("PaymentStatus") or "").lower()
+            if status and status not in ("paid", "settled", "complete", "completed", "success"):
+                continue
+            total += _money_to_float(payment.get("Amount") or payment.get("PaymentAmount") or payment.get("Total"))
+            payment_count += 1
+
+    if not invoices:
+        return 0, 0, f"No RazorSync invoice records returned for {month_prefix}"
+    return round(total, 2), payment_count, None
+
+
+def _payment_provider(brand):
+    return (brand.get("payment_provider") or "").strip().lower()
+
+
+def stripe_payment_test_connection(brand):
+    api_key = (brand.get("payment_api_key") or "").strip()
+    if not api_key:
+        return "", "Stripe secret key not configured"
+    try:
+        resp = requests.get("https://api.stripe.com/v1/account", auth=(api_key, ""), timeout=TIMEOUT)
+    except requests.RequestException as exc:
+        return "", f"Stripe request failed: {str(exc)[:150]}"
+    if resp.status_code != 200:
+        return "", f"Stripe returned {resp.status_code}: {resp.text[:200]}"
+    data = resp.json()
+    account_id = data.get("id") or ""
+    return f"Connected to Stripe account {account_id}.", None
+
+
+def pull_stripe_payment_revenue(brand, month=None):
+    api_key = (brand.get("payment_api_key") or "").strip()
+    if not api_key:
+        return 0, 0, "Stripe secret key not configured"
+    _month, start, end = _month_bounds(month)
+    params = {
+        "limit": 100,
+        "created[gte]": int(start.timestamp()),
+        "created[lt]": int(end.timestamp()),
+    }
+    total = 0.0
+    count = 0
+    while True:
+        try:
+            resp = requests.get("https://api.stripe.com/v1/charges", auth=(api_key, ""), params=params, timeout=TIMEOUT)
+        except requests.RequestException as exc:
+            return 0, 0, f"Stripe request failed: {str(exc)[:150]}"
+        if resp.status_code != 200:
+            return 0, 0, f"Stripe returned {resp.status_code}: {resp.text[:200]}"
+        payload = resp.json()
+        rows = payload.get("data") or []
+        for charge in rows:
+            if not charge.get("paid") or charge.get("refunded"):
+                continue
+            amount = int(charge.get("amount") or 0) - int(charge.get("amount_refunded") or 0)
+            total += max(amount, 0) / 100.0
+            count += 1
+        if not payload.get("has_more") or not rows:
+            break
+        params["starting_after"] = rows[-1].get("id")
+    return round(total, 2), count, None
+
+
+def _square_headers(brand):
+    token = (brand.get("payment_api_key") or "").strip()
+    return {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+
+def square_payment_test_connection(brand):
+    api_key = (brand.get("payment_api_key") or "").strip()
+    if not api_key:
+        return "", "Square access token not configured"
+    try:
+        resp = requests.get("https://connect.squareup.com/v2/locations", headers=_square_headers(brand), timeout=TIMEOUT)
+    except requests.RequestException as exc:
+        return "", f"Square request failed: {str(exc)[:150]}"
+    if resp.status_code != 200:
+        return "", f"Square returned {resp.status_code}: {resp.text[:200]}"
+    locations = (resp.json() or {}).get("locations") or []
+    return f"Connected to Square - {len(locations)} location{'s' if len(locations) != 1 else ''} accessible.", None
+
+
+def pull_square_payment_revenue(brand, month=None):
+    api_key = (brand.get("payment_api_key") or "").strip()
+    if not api_key:
+        return 0, 0, "Square access token not configured"
+    _month, start, end = _month_bounds(month)
+    params = {
+        "begin_time": start.isoformat() + "Z",
+        "end_time": end.isoformat() + "Z",
+        "limit": 100,
+    }
+    location_id = (brand.get("payment_location_id") or "").strip()
+    if location_id:
+        params["location_id"] = location_id
+
+    total = 0.0
+    count = 0
+    while True:
+        try:
+            resp = requests.get("https://connect.squareup.com/v2/payments", headers=_square_headers(brand), params=params, timeout=TIMEOUT)
+        except requests.RequestException as exc:
+            return 0, 0, f"Square request failed: {str(exc)[:150]}"
+        if resp.status_code != 200:
+            return 0, 0, f"Square returned {resp.status_code}: {resp.text[:200]}"
+        payload = resp.json() or {}
+        for payment in payload.get("payments") or []:
+            if str(payment.get("status") or "").upper() != "COMPLETED":
+                continue
+            total_money = payment.get("total_money") or {}
+            refunded_money = payment.get("refunded_money") or {}
+            amount = int(total_money.get("amount") or 0) - int(refunded_money.get("amount") or 0)
+            total += max(amount, 0) / 100.0
+            count += 1
+        cursor = payload.get("cursor")
+        if not cursor:
+            break
+        params["cursor"] = cursor
+    return round(total, 2), count, None
+
+
+def payment_provider_test_connection(brand):
+    provider = _payment_provider(brand)
+    if provider == "stripe":
+        return stripe_payment_test_connection(brand)
+    if provider == "square":
+        return square_payment_test_connection(brand)
+    return "", "Choose Stripe or Square first."
+
+
+def pull_payment_provider_revenue(brand, month=None):
+    provider = _payment_provider(brand)
+    if provider == "stripe":
+        return pull_stripe_payment_revenue(brand, month)
+    if provider == "square":
+        return pull_square_payment_revenue(brand, month)
+    return 0, 0, "No supported payment provider configured"
 
 
 # ──────────────────────────────────────────────

@@ -128,6 +128,7 @@ RotoRooter">{{ brand.competitors or '' }}</textarea>
                             <option value="" {% if not brand.crm_type %}selected{% endif %}>None</option>
                             <option value="sweepandgo" {% if brand.crm_type == 'sweepandgo' %}selected{% endif %}>Sweep and Go</option>
                             <option value="jobber" {% if brand.crm_type == 'jobber' %}selected{% endif %}>Jobber</option>
+                            <option value="razorsync" {% if brand.crm_type == 'razorsync' %}selected{% endif %}>RazorSync</option>
                             <option value="gohighlevel" {% if brand.crm_type == 'gohighlevel' %}selected{% endif %}>GoHighLevel</option>
                             <option value="hubspot" {% if brand.crm_type == 'hubspot' %}selected{% endif %}>HubSpot</option>
                             <option value="webhook" {% if brand.crm_type == 'webhook' %}selected{% endif %}>Custom Webhook</option>
@@ -141,12 +142,13 @@ RotoRooter">{{ brand.competitors or '' }}</textarea>
                         <small class="text-muted" id="crmApiKeyHelp">Leave blank to keep current key</small>
                     </div>
 
-                    <div class="mb-3" id="crmServerUrlGroup" style="display:{{ 'block' if brand.crm_type == 'sweepandgo' else 'none' }};">
-                        <label class="form-label">MCP Server URL</label>
-                        <input type="url" name="crm_server_url" class="form-control"
+                    <div class="mb-3" id="crmServerUrlGroup" style="display:{{ 'block' if brand.crm_type in ('sweepandgo', 'razorsync') else 'none' }};">
+                        <label class="form-label" id="crmServerUrlLabel">MCP Server URL</label>
+                        <input type="text" name="crm_server_url" class="form-control"
                                value="{{ brand.crm_server_url or '' }}"
+                               id="crmServerUrlInput"
                                placeholder="https://your-sng-mcp-server.onrender.com/mcp">
-                        <small class="text-muted">Full URL to your Sweep and Go MCP server endpoint</small>
+                        <small class="text-muted" id="crmServerUrlHelp">Full URL to your Sweep and Go MCP server endpoint</small>
                     </div>
 
                     <div class="mb-3" id="crmWebhookUrlGroup">
@@ -178,9 +180,40 @@ RotoRooter">{{ brand.competitors or '' }}</textarea>
                     <button type="submit" class="btn btn-primary w-100">
                         <i class="bi bi-check-lg"></i> Save CRM
                     </button>
-                    {% if brand.crm_type in ('sweepandgo', 'jobber') %}
+                    <hr>
+                    <div class="small fw-semibold mb-2">Standalone Payment Revenue</div>
+                    <div class="mb-3">
+                        <label class="form-label">Payment Provider</label>
+                        <select name="payment_provider" class="form-select">
+                            <option value="" {% if not brand.payment_provider %}selected{% endif %}>None</option>
+                            <option value="stripe" {% if brand.payment_provider == 'stripe' %}selected{% endif %}>Stripe</option>
+                            <option value="square" {% if brand.payment_provider == 'square' %}selected{% endif %}>Square</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Payment API Key / Access Token</label>
+                        <input type="password" name="payment_api_key" class="form-control"
+                               placeholder="{{ '******  (saved)' if brand.payment_api_key else 'Stripe secret key or Square access token' }}">
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Square Location ID</label>
+                            <input type="text" name="payment_location_id" class="form-control" value="{{ brand.payment_location_id or '' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Payment Account ID</label>
+                            <input type="text" name="payment_account_id" class="form-control" value="{{ brand.payment_account_id or '' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Webhook Secret</label>
+                            <input type="password" name="payment_webhook_secret" class="form-control"
+                                   placeholder="{{ '******  (saved)' if brand.payment_webhook_secret else 'Optional' }}">
+                        </div>
+                    </div>
+
+                    {% if brand.crm_type in ('sweepandgo', 'jobber', 'razorsync', 'gohighlevel') or brand.payment_provider %}
                     <button type="button" class="btn btn-outline-info w-100 mt-2" onclick="syncCrmRevenue({{ brand.id }})">
-                        <i class="bi bi-arrow-repeat"></i> Pull Revenue from {{ brand.crm_type|title }}
+                        <i class="bi bi-arrow-repeat"></i> Pull Revenue
                     </button>
                     <span id="crm-sync-result" class="small d-block mt-1 text-muted"></span>
                     {% endif %}
@@ -205,6 +238,9 @@ RotoRooter">{{ brand.competitors or '' }}</textarea>
                 (function() {
                     var sel = document.getElementById('crmTypeSelect');
                     var serverGroup = document.getElementById('crmServerUrlGroup');
+                    var serverLabel = document.getElementById('crmServerUrlLabel');
+                    var serverInput = document.getElementById('crmServerUrlInput');
+                    var serverHelp = document.getElementById('crmServerUrlHelp');
                     var webhookGroup = document.getElementById('crmWebhookUrlGroup');
                     var apiKeyLabel = document.getElementById('crmApiKeyLabel');
                     var apiKeyHelp = document.getElementById('crmApiKeyHelp');
@@ -215,9 +251,13 @@ RotoRooter">{{ brand.competitors or '' }}</textarea>
 
                     function updateFields() {
                         var v = sel.value;
-                        serverGroup.style.display = (v === 'sweepandgo') ? 'block' : 'none';
+                        serverGroup.style.display = (v === 'sweepandgo' || v === 'razorsync') ? 'block' : 'none';
 
                         if (v === 'sweepandgo') {
+                            serverLabel.textContent = 'MCP Server URL';
+                            serverInput.type = 'url';
+                            serverInput.placeholder = 'https://your-sng-mcp-server.onrender.com/mcp';
+                            serverHelp.textContent = 'Full URL to your Sweep and Go MCP server endpoint';
                             apiKeyLabel.textContent = 'SNG API Key';
                             apiKeyHelp.textContent = 'Value for the x-sng-api-key header (leave blank to keep current)';
                             webhookHelp.textContent = 'Optional: SNG can also POST completed-job data to the inbound webhook below';
@@ -231,6 +271,17 @@ RotoRooter">{{ brand.competitors or '' }}</textarea>
                             pipelineLabel.textContent = 'Pipeline/List ID';
                             pipelineInput.placeholder = 'Optional pipeline or list identifier';
                             pipelineHelp.textContent = 'Optional identifier';
+                        } else if (v === 'razorsync') {
+                            serverLabel.textContent = 'RazorSync Portal / Server Name';
+                            serverInput.type = 'text';
+                            serverInput.placeholder = 'your-portal-name';
+                            serverHelp.textContent = 'Use the RazorSync portal name, not the full login URL';
+                            apiKeyLabel.textContent = 'RazorSync API Token';
+                            apiKeyHelp.textContent = 'Leave blank to keep current token';
+                            webhookHelp.textContent = 'Optional webhook URL for inbound RazorSync events';
+                            pipelineLabel.textContent = 'Portal / Server Name';
+                            pipelineInput.placeholder = 'Optional duplicate of portal name';
+                            pipelineHelp.textContent = 'Optional; client settings will save the same value here';
                         } else if (v === 'gohighlevel') {
                             apiKeyLabel.textContent = 'GoHighLevel API Key';
                             apiKeyHelp.textContent = 'Leave blank to keep current key';

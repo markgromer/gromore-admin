@@ -13604,6 +13604,93 @@ def client_jobber_test():
 # ── CRM Dashboard Tab ──
 
 
+@client_bp.route("/settings/razorsync", methods=["POST"])
+@client_login_required
+def client_save_razorsync():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    api_key = request.form.get("razorsync_api_key", "").strip()
+    server_name = request.form.get("razorsync_server_name", "").strip()
+
+    db.update_brand_text_field(brand_id, "crm_type", "razorsync")
+    if api_key:
+        db.update_brand_text_field(brand_id, "crm_api_key", api_key)
+    db.update_brand_text_field(brand_id, "crm_server_url", server_name)
+    db.update_brand_text_field(brand_id, "crm_pipeline_id", server_name)
+
+    flash("RazorSync settings saved.", "success")
+    return redirect(url_for("client.client_settings"))
+
+
+@client_bp.route("/crm/razorsync/test", methods=["POST"])
+@client_login_required
+def client_razorsync_test():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    if brand.get("crm_type") != "razorsync" or not brand.get("crm_api_key"):
+        return jsonify(ok=False, error="RazorSync not configured. Save your API token first.")
+
+    from webapp.crm_bridge import razorsync_test_connection
+    message, error = razorsync_test_connection(brand)
+    if error:
+        return jsonify(ok=False, error=error)
+
+    return jsonify(ok=True, message=message)
+
+
+@client_bp.route("/settings/payment-provider", methods=["POST"])
+@client_login_required
+def client_save_payment_provider():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    provider = (request.form.get("payment_provider") or "").strip().lower()
+    if provider not in ("", "stripe", "square"):
+        flash("Choose Stripe or Square as the payment provider.", "error")
+        return redirect(url_for("client.client_settings"))
+
+    api_key = request.form.get("payment_api_key", "").strip()
+    webhook_secret = request.form.get("payment_webhook_secret", "").strip()
+    location_id = request.form.get("payment_location_id", "").strip()
+    account_id = request.form.get("payment_account_id", "").strip()
+
+    db.update_brand_text_field(brand_id, "payment_provider", provider)
+    if api_key:
+        db.update_brand_text_field(brand_id, "payment_api_key", api_key)
+    if webhook_secret:
+        db.update_brand_text_field(brand_id, "payment_webhook_secret", webhook_secret)
+    db.update_brand_text_field(brand_id, "payment_location_id", location_id)
+    db.update_brand_text_field(brand_id, "payment_account_id", account_id)
+
+    flash("Payment provider settings saved.", "success")
+    return redirect(url_for("client.client_settings"))
+
+
+@client_bp.route("/payment-provider/test", methods=["POST"])
+@client_login_required
+def client_payment_provider_test():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    if not (brand.get("payment_provider") or "").strip() or not brand.get("payment_api_key"):
+        return jsonify(ok=False, error="Payment provider not configured. Save the provider and API key first.")
+
+    from webapp.crm_bridge import payment_provider_test_connection
+    message, error = payment_provider_test_connection(brand)
+    if error:
+        return jsonify(ok=False, error=error)
+
+    return jsonify(ok=True, message=message)
+
+
 def _build_client_commercial_payload(thread):
     payload = _normalize_client_commercial_payload(_safe_json_object(thread.get("commercial_data_json")))
     payload["name"] = payload.get("name") or (thread.get("lead_name") or "").strip() or payload.get("business_name") or "Commercial Prospect"
@@ -13800,7 +13887,10 @@ def client_crm():
         abort(404)
 
     crm_type = (brand.get("crm_type") or "").strip().lower()
-    crm_connected = crm_type in ("sweepandgo", "gohighlevel", "jobber") and bool(brand.get("crm_api_key"))
+    crm_connected = (
+        crm_type in ("sweepandgo", "gohighlevel", "jobber", "razorsync")
+        and bool(brand.get("crm_api_key"))
+    ) or bool((brand.get("payment_provider") or "").strip() and brand.get("payment_api_key"))
     imported_leads = [
         thread for thread in db.get_lead_threads(brand_id, limit=40)
         if (thread.get("source") or "") == "ghl_csv_import"
@@ -15682,8 +15772,67 @@ def client_crm_data():
     if not brand:
         return jsonify(error="Brand not found"), 404
 
-    if (brand.get("crm_type") or "").strip().lower() != "sweepandgo" or not brand.get("crm_api_key"):
-        return jsonify(error="Sweep and Go not connected"), 400
+    crm_type = (brand.get("crm_type") or "").strip().lower()
+    payment_provider = (brand.get("payment_provider") or "").strip().lower()
+    if crm_type != "sweepandgo" or not brand.get("crm_api_key"):
+        has_crm_revenue_source = crm_type in ("gohighlevel", "jobber", "razorsync") and bool(brand.get("crm_api_key"))
+        has_payment_revenue_source = payment_provider in ("stripe", "square") and bool(brand.get("payment_api_key"))
+        if not has_crm_revenue_source and not has_payment_revenue_source:
+            return jsonify(error="Connect Sweep and Go, Jobber, GoHighLevel, RazorSync, Stripe, or Square first."), 400
+
+        month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+        data = {"kpis": {}, "clients": [], "inactive": [], "no_subscription": [],
+                "leads": [], "free_quotes": [], "revenue": {}, "crm_snapshot": {}}
+        do_sync = request.args.get("sync") == "1"
+        revenue = 0.0
+        count = 0
+        source = payment_provider if has_payment_revenue_source and not has_crm_revenue_source else crm_type
+        error = None
+
+        if do_sync:
+            if crm_type == "jobber":
+                from webapp.crm_bridge import pull_jobber_revenue
+                revenue, count, error = pull_jobber_revenue(brand, month)
+            elif crm_type == "gohighlevel":
+                from webapp.crm_bridge import pull_gohighlevel_revenue
+                revenue, count, error = pull_gohighlevel_revenue(brand, month)
+            elif crm_type == "razorsync":
+                from webapp.crm_bridge import pull_razorsync_revenue
+                revenue, count, error = pull_razorsync_revenue(brand, month)
+            elif has_payment_revenue_source:
+                from webapp.crm_bridge import pull_payment_provider_revenue
+                revenue, count, error = pull_payment_provider_revenue(brand, month)
+            if error:
+                return jsonify(error=error), 400
+            db.upsert_brand_month_finance(brand_id, month, revenue, count, f"{source.title()} sync: {count} records")
+            db.mark_brand_webhook_received(brand_id)
+        else:
+            finance = db.get_brand_month_finance(brand_id, month) or {}
+            revenue = float(finance.get("closed_revenue") or 0)
+            count = int(finance.get("closed_deals") or 0)
+
+        data["revenue"] = {
+            "mrr": revenue,
+            "closed_revenue": revenue,
+            "closed_deals": count,
+            "payment_count": count,
+            "revenue_month": month,
+            "source": source,
+            "synced_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S") if do_sync else "",
+            "availability": {
+                "status": "available" if revenue or count else "limited",
+                "message": f"{source.title()} revenue sync is available. Use Sync Revenue to refresh this month.",
+            },
+        }
+        data["crm_snapshot"] = {
+            "title": f"{source.title()} revenue",
+            "summary": f"{count} payment/deal records for {month}",
+            "cards": [
+                {"label": "Revenue", "value": revenue},
+                {"label": "Records", "value": count},
+            ],
+        }
+        return jsonify(data)
 
     from webapp.crm_bridge import (
         sng_count_active_clients, sng_count_happy_clients,

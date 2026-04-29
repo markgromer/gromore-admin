@@ -240,6 +240,12 @@
     <button type="button" class="settings-quick-link" data-panel-target="jobber" data-panel-label="Jobber" data-help-href="{{ url_for('client.client_help', guide='connections') }}#crm-jobber">
         <i class="bi bi-briefcase"></i> Jobber
     </button>
+    <button type="button" class="settings-quick-link" data-panel-target="razorsync" data-panel-label="RazorSync">
+        <i class="bi bi-truck"></i> RazorSync
+    </button>
+    <button type="button" class="settings-quick-link" data-panel-target="payments" data-panel-label="Payments">
+        <i class="bi bi-credit-card-2-front"></i> Stripe / Square
+    </button>
 </div>
 
 <div class="connection-summary-grid">
@@ -311,6 +317,26 @@
         </div>
         <div class="connection-summary-meta">Field-service CRM connection for revenue sync and pushing booked Warren leads into Jobber.</div>
         <div class="connection-summary-power">Powers: client creation, requests, revenue</div>
+    </button>
+
+    <button type="button" class="connection-summary-card" data-panel-target="razorsync" data-panel-label="RazorSync">
+        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#2563eb,#14b8a6);"><i class="bi bi-truck"></i></span>
+        <div class="connection-summary-label">
+            <strong>RazorSync</strong>
+            {% if brand.crm_type == 'razorsync' and brand.crm_api_key %}<span class="badge bg-success">Connected</span>{% else %}<span class="badge bg-secondary">Not connected</span>{% endif %}
+        </div>
+        <div class="connection-summary-meta">Field-service CRM connection for pushing Warren leads and syncing paid work back into revenue reporting.</div>
+        <div class="connection-summary-power">Powers: lead push, CRM revenue</div>
+    </button>
+
+    <button type="button" class="connection-summary-card" data-panel-target="payments" data-panel-label="Payments">
+        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#16a34a,#f59e0b);"><i class="bi bi-credit-card-2-front-fill"></i></span>
+        <div class="connection-summary-label">
+            <strong>Payments</strong>
+            {% if brand.payment_provider and brand.payment_api_key %}<span class="badge bg-success">Connected</span>{% else %}<span class="badge bg-secondary">Not connected</span>{% endif %}
+        </div>
+        <div class="connection-summary-meta">Standalone Stripe or Square revenue sync for businesses that collect payments outside a connected CRM.</div>
+        <div class="connection-summary-power">Powers: finance dashboard, revenue attribution</div>
     </button>
 
     <button type="button" class="connection-summary-card" data-panel-target="wordpress" data-panel-label="WordPress" data-help-href="{{ url_for('client.client_help', guide='connections') }}#wordpress">
@@ -793,6 +819,121 @@
                 </div>
                 <div class="connection-panel-actions">
                     <a href="{{ url_for('client.client_help', guide='connections') }}#crm-jobber" class="btn btn-outline-secondary btn-sm"><i class="bi bi-question-circle me-1"></i>Jobber guide</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="connection-panel" data-panel="razorsync" id="connection-panel-razorsync">
+        <div class="connection-panel-shell card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                    <div>
+                        <h5 class="fw-semibold mb-1">RazorSync</h5>
+                        <p class="text-muted mb-0">Connect RazorSync so Warren can push qualified leads and finance sync can pull paid work into reporting.</p>
+                    </div>
+                    {% if brand.crm_type == 'razorsync' and brand.crm_api_key %}<span class="badge bg-success rounded-pill px-3 py-2">Connected</span>{% else %}<span class="badge bg-secondary rounded-pill px-3 py-2">Not connected</span>{% endif %}
+                </div>
+
+                <form method="POST" action="{{ url_for('client.client_save_razorsync') }}" class="mt-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-3">
+                        <div class="col-lg-5">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Portal / Server Name</label>
+                            <input type="text" class="form-control" name="razorsync_server_name" value="{{ (brand.crm_server_url or brand.crm_pipeline_id or '') if brand.crm_type == 'razorsync' else '' }}" placeholder="your-portal-name">
+                            <small class="text-muted">Use the RazorSync portal name, not the full login URL.</small>
+                        </div>
+                        <div class="col-lg-7">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">RazorSync API Token</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" name="razorsync_api_key" placeholder="{{ '••••••••' ~ brand.crm_api_key[-4:] if brand.crm_api_key and brand.crm_type == 'razorsync' else 'Paste your RazorSync API token' }}" autocomplete="off" id="razorsyncApiKeyInput">
+                                <button class="btn btn-outline-secondary" type="button" onclick="var i=document.getElementById('razorsyncApiKeyInput');i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=\'bi bi-eye\'></i>':'<i class=\'bi bi-eye-slash\'></i>'"><i class="bi bi-eye"></i></button>
+                            </div>
+                            <small class="text-muted">Leave blank to keep the current token.</small>
+                        </div>
+                    </div>
+                    <div class="mt-3 d-flex align-items-center gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Save RazorSync Settings</button>
+                        {% if brand.crm_type == 'razorsync' and brand.crm_api_key %}<button class="btn btn-outline-primary" type="button" id="razorsyncTestBtn"><i class="bi bi-plug me-1"></i> Test Connection</button>{% endif %}
+                    </div>
+                </form>
+                <div id="razorsyncTestResult" class="mt-2" style="display:none;"></div>
+
+                <div class="mt-3 p-3" style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px;">
+                    <div class="d-flex align-items-start gap-2">
+                        <i class="bi bi-info-circle text-primary mt-1"></i>
+                        <div>
+                            <div class="fw-medium" style="font-size:.88rem;">What this powers</div>
+                            <small class="text-muted">Lead Assistant CRM push can create a RazorSync customer and a best-effort quote/request. Finance sync can pull paid invoice/payment revenue when RazorSync exposes those records to the token.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="connection-panel" data-panel="payments" id="connection-panel-payments">
+        <div class="connection-panel-shell card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                    <div>
+                        <h5 class="fw-semibold mb-1">Standalone Payments</h5>
+                        <p class="text-muted mb-0">Use Stripe or Square revenue when the business takes payments outside its CRM, or when the CRM does not expose a useful API.</p>
+                    </div>
+                    {% if brand.payment_provider and brand.payment_api_key %}<span class="badge bg-success rounded-pill px-3 py-2">Connected</span>{% else %}<span class="badge bg-secondary rounded-pill px-3 py-2">Not connected</span>{% endif %}
+                </div>
+
+                <form method="POST" action="{{ url_for('client.client_save_payment_provider') }}" class="mt-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Provider</label>
+                            <select class="form-select" name="payment_provider">
+                                <option value="">Choose provider</option>
+                                <option value="stripe" {% if brand.payment_provider == 'stripe' %}selected{% endif %}>Stripe</option>
+                                <option value="square" {% if brand.payment_provider == 'square' %}selected{% endif %}>Square</option>
+                            </select>
+                            <small class="text-muted">Use this for payment revenue only; CRM lead push stays separate.</small>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">API Key / Access Token</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" name="payment_api_key" placeholder="{{ '••••••••' ~ brand.payment_api_key[-4:] if brand.payment_api_key else 'Paste Stripe secret key or Square access token' }}" autocomplete="off" id="paymentApiKeyInput">
+                                <button class="btn btn-outline-secondary" type="button" onclick="var i=document.getElementById('paymentApiKeyInput');i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=\'bi bi-eye\'></i>':'<i class=\'bi bi-eye-slash\'></i>'"><i class="bi bi-eye"></i></button>
+                            </div>
+                            <small class="text-muted">Leave blank to keep the current key.</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Square Location ID</label>
+                            <input type="text" class="form-control" name="payment_location_id" value="{{ brand.payment_location_id or '' }}" placeholder="Optional">
+                            <small class="text-muted">Optional. Leave blank to include all Square locations.</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Account ID</label>
+                            <input type="text" class="form-control" name="payment_account_id" value="{{ brand.payment_account_id or '' }}" placeholder="Optional label/reference">
+                            <small class="text-muted">Optional internal reference for support.</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Webhook Secret</label>
+                            <input type="password" class="form-control" name="payment_webhook_secret" placeholder="{{ '••••••••' ~ brand.payment_webhook_secret[-4:] if brand.payment_webhook_secret else 'Optional for future payment webhooks' }}" autocomplete="off">
+                            <small class="text-muted">Optional now; used later for real-time payment events.</small>
+                        </div>
+                    </div>
+                    <div class="mt-3 d-flex align-items-center gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Save Payment Settings</button>
+                        {% if brand.payment_provider and brand.payment_api_key %}<button class="btn btn-outline-primary" type="button" id="paymentProviderTestBtn"><i class="bi bi-plug me-1"></i> Test Connection</button>{% endif %}
+                    </div>
+                </form>
+                <div id="paymentProviderTestResult" class="mt-2" style="display:none;"></div>
+
+                <div class="mt-3 p-3" style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:12px;">
+                    <div class="d-flex align-items-start gap-2">
+                        <i class="bi bi-info-circle text-success mt-1"></i>
+                        <div>
+                            <div class="fw-medium" style="font-size:.88rem;">Yardbook fallback</div>
+                            <small class="text-muted">Yardbook does not expose the kind of API we need for a direct CRM sync, so Stripe/Square can still give Warren and reports a real revenue source.</small>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1360,6 +1501,64 @@
                 .catch(function() {
                     jobberTestBtn.disabled = false;
                     jobberTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
+                    rd.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2">Network error</span>';
+                    rd.style.display = '';
+                });
+            });
+        }
+
+        var razorsyncTestBtn = document.getElementById('razorsyncTestBtn');
+        if (razorsyncTestBtn) {
+            razorsyncTestBtn.addEventListener('click', function() {
+                var rd = document.getElementById('razorsyncTestResult');
+                razorsyncTestBtn.disabled = true;
+                razorsyncTestBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
+                rd.style.display = 'none';
+                fetch('/client/crm/razorsync/test', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    razorsyncTestBtn.disabled = false;
+                    razorsyncTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
+                    rd.innerHTML = data.ok
+                        ? '<span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i> ' + (data.message || 'Connected!') + '</span>'
+                        : '<span class="badge bg-danger rounded-pill px-3 py-2"><i class="bi bi-x-circle me-1"></i> ' + (data.error || 'Connection failed') + '</span>';
+                    rd.style.display = '';
+                })
+                .catch(function() {
+                    razorsyncTestBtn.disabled = false;
+                    razorsyncTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
+                    rd.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2">Network error</span>';
+                    rd.style.display = '';
+                });
+            });
+        }
+
+        var paymentProviderTestBtn = document.getElementById('paymentProviderTestBtn');
+        if (paymentProviderTestBtn) {
+            paymentProviderTestBtn.addEventListener('click', function() {
+                var rd = document.getElementById('paymentProviderTestResult');
+                paymentProviderTestBtn.disabled = true;
+                paymentProviderTestBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
+                rd.style.display = 'none';
+                fetch('/client/payment-provider/test', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    paymentProviderTestBtn.disabled = false;
+                    paymentProviderTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
+                    rd.innerHTML = data.ok
+                        ? '<span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i> ' + (data.message || 'Connected!') + '</span>'
+                        : '<span class="badge bg-danger rounded-pill px-3 py-2"><i class="bi bi-x-circle me-1"></i> ' + (data.error || 'Connection failed') + '</span>';
+                    rd.style.display = '';
+                })
+                .catch(function() {
+                    paymentProviderTestBtn.disabled = false;
+                    paymentProviderTestBtn.innerHTML = '<i class="bi bi-plug me-1"></i> Test Connection';
                     rd.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2">Network error</span>';
                     rd.style.display = '';
                 });
