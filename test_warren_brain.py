@@ -520,6 +520,59 @@ class WarrenWebhookTests(unittest.TestCase):
             messages = self.db.get_lead_messages(data["thread_id"])
             self.assertTrue(any("+15202763660" in message["content"] for message in messages))
 
+    def test_generic_quote_webhook_uses_configured_automation_template(self):
+        body = json.dumps({
+            "source": "titan-quote-tool",
+            "event": "partial_quote",
+            "lead": {
+                "name": "Riley Quote",
+                "phone_e164": "+15550004444",
+            },
+            "service": {
+                "number_of_dogs": 2,
+                "frequency_label": "Twice A Week",
+                "monthly_price": 120,
+                "zip": "85756",
+            },
+        }, separators=(",", ":")).encode("utf-8")
+        secret = "incoming-secret-123"
+        signature = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+        template = "Configured quote follow-up for {client_name}: {number_of_dogs} dogs, {quote_service}, {monthly_price}/mo."
+
+        with self.app.app_context():
+            self.db.update_brand_number_field(self.brand_id, "sales_bot_enabled", 1)
+            self.db.update_brand_text_field(self.brand_id, "sales_bot_incoming_webhook_secret", secret)
+            self.db.update_brand_text_field(self.brand_id, "sales_bot_crm_event_rules", json.dumps({
+                "quote_not_signed_up": {
+                    "enabled": True,
+                    "channels": ["sms"],
+                    "delay_minutes": 0,
+                    "retry_days": 0,
+                    "max_attempts": 1,
+                    "respect_dnd": True,
+                    "owner_alert": False,
+                    "template": template,
+                }
+            }))
+
+        with patch("webapp.warren_sender.send_reply", return_value=(True, "sent")) as mock_send, \
+             patch("webapp.warren_brain.process_and_respond") as mock_ai:
+            resp = self.client.post(
+                "/webhooks/leads/warren_webhook_test",
+                data=body,
+                content_type="application/json",
+                headers={"X-TQT-Signature": signature},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        expected = "Configured quote follow-up for Riley Quote: 2 dogs, Twice A Week, 120/mo."
+        self.assertEqual(mock_send.call_args.args[3], expected)
+        mock_ai.assert_not_called()
+        with self.app.app_context():
+            messages = self.db.get_lead_messages(data["thread_id"])
+            self.assertTrue(any(message["content"] == expected for message in messages))
+
     def test_generic_lead_webhook_without_slug_uses_matching_signature_secret(self):
         body = json.dumps({
             "name": "No Slug Quote Lead",

@@ -90,8 +90,11 @@ RULE_DEFINITIONS = {
             "client:quote_generated",
             "free_quote:created",
             "free_quote.created",
+            "partial_quote",
             "quote:created",
             "quote.created",
+            "quote_not_signed_up",
+            "quote_started",
             "quote:sent",
         },
         "resolution_event_types": {
@@ -267,6 +270,13 @@ def build_crm_event_template_context(brand, summary, event_type, *, attempt_numb
         "attempt_number": str(attempt_number),
     }
     context["event_label"] = RULE_DEFINITIONS.get(EVENT_TYPE_TO_RULE_KEY.get(event_type, ""), {}).get("label", event_type or "CRM event")
+    for key, value in (summary or {}).items():
+        normalized_key = str(key or "").strip()
+        if not normalized_key or normalized_key in context:
+            continue
+        if isinstance(value, (dict, list, tuple, set)):
+            continue
+        context[normalized_key] = str(value or "")
     return context
 
 

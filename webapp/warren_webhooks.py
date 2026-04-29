@@ -263,6 +263,138 @@ def _normalize_profile_key(key):
     return text
 
 
+def _extract_generic_event_type(payload):
+    payload = payload or {}
+    for key in ("event_type", "event", "type", "topic", "name"):
+        value = payload.get(key)
+        if isinstance(value, dict):
+            nested = _payload_value(value, "event_type", "type", "topic", "name")
+            if nested:
+                return nested[:255]
+            continue
+        text = _stringify_webhook_value(value)
+        if text and text.lower() != "event":
+            return text[:255]
+    return ""
+
+
+def _extra_field_lookup(extra_fields, *keys):
+    normalized_fields = {}
+    for raw_key, value in (extra_fields or {}).items():
+        if not str(value or "").strip():
+            continue
+        normalized_fields[str(raw_key or "").strip().lower()] = value
+        normalized_fields[_normalize_profile_key(raw_key).strip().lower()] = value
+
+    for key in keys:
+        text = str(key or "").strip().lower()
+        if text in normalized_fields:
+            return str(normalized_fields[text] or "").strip()
+    return ""
+
+
+def _build_generic_automation_summary(submission, event_type):
+    extra_fields = submission.get("extra_fields") or {}
+    quote_amount = _extra_field_lookup(
+        extra_fields,
+        "monthly_price",
+        "quote_amount",
+        "price",
+        "total",
+        "price_per_cleanup",
+        "per_cleanup",
+    )
+    if quote_amount and not quote_amount.startswith("$") and re.fullmatch(r"\d+(?:\.\d+)?", quote_amount):
+        quote_amount = f"${quote_amount}"
+
+    summary = {
+        "event_type": event_type,
+        "client_name": submission.get("lead_name") or "",
+        "client_email": submission.get("lead_email") or "",
+        "client_phone": submission.get("lead_phone") or "",
+        "quote_id": submission.get("external_id") or "",
+        "quote_amount": quote_amount,
+        "quote_service": _extra_field_lookup(extra_fields, "frequency_label", "clean_up_frequency", "frequency", "service", "service_name"),
+        "quote_address": _extra_field_lookup(extra_fields, "service_address", "address", "zip", "zipcode", "postal_code"),
+        "status": event_type,
+    }
+    for key, value in extra_fields.items():
+        normalized_key = _normalize_profile_key(key)
+        if normalized_key and str(value or "").strip() and normalized_key not in summary:
+            summary[normalized_key] = str(value).strip()
+    return {key: value for key, value in summary.items() if str(value or "").strip()}
+
+
+def _maybe_send_generic_automation_reply(db, brand, thread_id, submission, event_type):
+    if not event_type or not brand.get("sales_bot_enabled"):
+        return False
+
+    from webapp.warren_crm_events import build_crm_event_template_context, get_rule_key_for_event_type, load_crm_event_rules, render_template_string
+    from webapp.warren_sender import send_reply
+
+    rule_key = get_rule_key_for_event_type(event_type)
+    if not rule_key:
+        return False
+
+    rules_config = load_crm_event_rules(brand)
+    rule = (rules_config.get("rules") or {}).get(rule_key) or {}
+    if not rule.get("enabled"):
+        return False
+
+    channels = {str(channel or "").strip().lower() for channel in (rule.get("channels") or [])}
+    if "sms" not in channels:
+        db.add_lead_event(
+            brand["id"],
+            thread_id,
+            "incoming_webhook_automation_skipped",
+            event_value="sms_channel_disabled",
+            metadata={"event_type": event_type, "rule_key": rule_key},
+        )
+        return True
+
+    lead_phone = (submission.get("lead_phone") or "").strip()
+    if not lead_phone:
+        db.add_lead_event(
+            brand["id"],
+            thread_id,
+            "incoming_webhook_automation_skipped",
+            event_value="missing_phone",
+            metadata={"event_type": event_type, "rule_key": rule_key},
+        )
+        return True
+
+    summary = _build_generic_automation_summary(submission, event_type)
+    context = build_crm_event_template_context(brand, summary, event_type)
+    message_text = render_template_string(rule.get("template"), context)
+    if not message_text:
+        return False
+
+    message_id = db.add_lead_message(
+        thread_id,
+        direction="outbound",
+        role="assistant",
+        content=message_text,
+        channel="sms",
+        metadata={
+            "source": "incoming_webhook_automation",
+            "event_type": event_type,
+            "rule_key": rule_key,
+            "delivery_status": "pending",
+            "auto_send_requested": True,
+            "auto_sent": False,
+        },
+    )
+    ok, detail = send_reply(db, brand, thread_id, message_text, channel="sms", logged_message_id=message_id)
+    db.add_lead_event(
+        brand["id"],
+        thread_id,
+        "incoming_webhook_automation_sms_sent" if ok else "incoming_webhook_automation_sms_failed",
+        event_value=message_text[:200] if ok else str(detail or "")[:200],
+        metadata={"event_type": event_type, "rule_key": rule_key, "to": lead_phone, "detail": str(detail or "")[:500]},
+    )
+    return True
+
+
 def _ingest_lead_submission(
     db,
     brand_id,
@@ -278,6 +410,7 @@ def _ingest_lead_submission(
     message_header="Lead Submission",
     external_message_id="",
     allow_auto_send=True,
+    automation_event_type="",
 ):
     extra_fields = extra_fields or {}
     summary = _build_lead_submission_summary(
@@ -323,6 +456,24 @@ def _ingest_lead_submission(
     if brand.get("sales_bot_enabled"):
         thread = db.get_lead_thread(thread_id, brand_id=brand_id)
         if not (thread and thread.get("is_private")):
+            handled_by_automation = _maybe_send_generic_automation_reply(
+                db,
+                brand,
+                thread_id,
+                {
+                    "external_id": external_id,
+                    "source": source,
+                    "lead_name": lead_name,
+                    "lead_email": lead_email,
+                    "lead_phone": lead_phone,
+                    "message_text": message_text,
+                    "extra_fields": extra_fields,
+                },
+                automation_event_type,
+            )
+            if handled_by_automation:
+                return thread_id
+
             from webapp.warren_brain import process_and_respond
             from webapp.warren_sender import send_reply
 
@@ -581,6 +732,7 @@ def _handle_generic_lead_webhook(brand_slug=None):
         return jsonify({"error": "Expected a JSON or form-encoded payload."}), 400
 
     submission = _extract_generic_form_submission(payload, raw_body)
+    automation_event_type = _extract_generic_event_type(payload)
     thread_id = _ingest_lead_submission(
         db,
         brand["id"],
@@ -593,6 +745,7 @@ def _handle_generic_lead_webhook(brand_slug=None):
         message_text=submission["message_text"],
         extra_fields=submission["extra_fields"],
         message_header="Inbound Lead Submission",
+        automation_event_type=automation_event_type,
     )
     _record_lead_webhook_delivery(
         db,

@@ -131,6 +131,48 @@
     background: #f8fafc;
     padding: 14px;
 }
+.settings-quick-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0 0 18px;
+    padding: 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+}
+.settings-quick-label {
+    display: inline-flex;
+    align-items: center;
+    min-height: 38px;
+    color: #475569;
+    font-size: .8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.settings-quick-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 38px;
+    padding: 8px 12px;
+    border: 1px solid #dbeafe;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #0f172a;
+    text-decoration: none;
+    font-size: .84rem;
+    font-weight: 700;
+}
+.settings-quick-link:hover,
+.settings-quick-link:focus,
+.settings-quick-link.active {
+    border-color: #93c5fd;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
 @keyframes connectionPanelIn {
     from {
         opacity: 0;
@@ -167,6 +209,37 @@
             <i class="bi bi-question-circle me-1"></i> Help
         </a>
     </div>
+</div>
+
+<div class="settings-quick-links" aria-label="Settings quick links">
+    <span class="settings-quick-label">Jump to</span>
+    <a class="settings-quick-link" href="{{ url_for('client.client_automations') }}#lead-assistant">
+        <i class="bi bi-chat-dots"></i> Lead Assistant
+    </a>
+    <a class="settings-quick-link" href="{{ url_for('client.client_automations') }}#crm-rule-quote-not-signed-up">
+        <i class="bi bi-reply-all"></i> Partial Quote Follow-Up
+    </a>
+    <a class="settings-quick-link" href="{{ url_for('client.client_automations') }}#billing">
+        <i class="bi bi-credit-card"></i> Billing Reminders
+    </a>
+    <a class="settings-quick-link" href="{{ url_for('client.client_automations') }}#appointments">
+        <i class="bi bi-calendar2-event"></i> Appointment Reminders
+    </a>
+    <a class="settings-quick-link" href="{{ url_for('client.client_automations') }}#follow-up">
+        <i class="bi bi-alarm"></i> Follow-Up Cadence
+    </a>
+    <button type="button" class="settings-quick-link" data-panel-target="warren" data-panel-label="Warren Channels" data-help-href="{{ url_for('client.client_help', guide='warren') }}">
+        <i class="bi bi-box-arrow-in-down"></i> Lead Webhook Setup
+    </button>
+    <button type="button" class="settings-quick-link" data-panel-target="warren" data-panel-label="OpenPhone + Webhooks" data-help-href="{{ url_for('client.client_help', guide='warren') }}">
+        <i class="bi bi-phone"></i> OpenPhone SMS
+    </button>
+    <button type="button" class="settings-quick-link" data-panel-target="sng" data-panel-label="Sweep and Go" data-help-href="{{ url_for('client.client_help', guide='connections') }}#crm-sng">
+        <i class="bi bi-recycle"></i> Sweep and Go
+    </button>
+    <button type="button" class="settings-quick-link" data-panel-target="jobber" data-panel-label="Jobber" data-help-href="{{ url_for('client.client_help', guide='connections') }}#crm-jobber">
+        <i class="bi bi-briefcase"></i> Jobber
+    </button>
 </div>
 
 <div class="connection-summary-grid">
@@ -827,6 +900,12 @@
                 </div>
 
                 <div class="connection-panel-note mt-3">Use this panel for channel credentials, webhook URLs, and callback wiring. Use Automations for what Warren should actually send.</div>
+
+                <div class="connection-panel-actions">
+                    <a href="{{ url_for('client.client_automations') }}#lead-assistant" class="btn btn-outline-dark btn-sm"><i class="bi bi-chat-dots me-1"></i>Lead Assistant settings</a>
+                    <a href="{{ url_for('client.client_automations') }}#crm-rule-quote-not-signed-up" class="btn btn-outline-dark btn-sm"><i class="bi bi-reply-all me-1"></i>Partial quote follow-up</a>
+                    <a href="{{ url_for('client.client_automations') }}#crm-events" class="btn btn-outline-dark btn-sm"><i class="bi bi-broadcast me-1"></i>CRM event messages</a>
+                </div>
 
                 <div class="mt-3 p-3" style="background:#eef2ff; border:1px solid #c7d2fe; border-radius:12px;">
                     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
