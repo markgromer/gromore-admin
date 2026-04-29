@@ -450,6 +450,55 @@ class WarrenWebhookTests(unittest.TestCase):
             thread = self.db.get_lead_thread(data["thread_id"])
             self.assertEqual(thread["lead_name"], "Partial Quote Lead")
             self.assertEqual(thread["source"], "incoming_webhook:titan_quote_tool")
+            deliveries = self.db.get_lead_webhook_deliveries(self.brand_id, limit=5)
+            self.assertEqual(deliveries[0]["status"], "accepted")
+            self.assertEqual(deliveries[0]["thread_id"], data["thread_id"])
+
+    def test_generic_lead_webhook_without_slug_uses_matching_signature_secret(self):
+        body = json.dumps({
+            "name": "No Slug Quote Lead",
+            "phone": "+15550003333",
+            "message": "Partial quote URL was missing the brand slug.",
+            "source": "titan_quote_tool",
+            "event_type": "partial_quote",
+            "external_id": "partial-no-slug-001",
+        }, separators=(",", ":")).encode("utf-8")
+        secret = "incoming-secret-no-slug"
+        signature = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+
+        with self.app.app_context():
+            self.db.update_brand_number_field(self.brand_id, "sales_bot_enabled", 0)
+            self.db.update_brand_text_field(self.brand_id, "sales_bot_incoming_webhook_secret", secret)
+
+        resp = self.client.post(
+            "/webhooks/leads/",
+            data=body,
+            content_type="application/json",
+            headers={"X-TQT-Signature": signature},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        with self.app.app_context():
+            thread = self.db.get_lead_thread(data["thread_id"])
+            self.assertEqual(thread["lead_name"], "No Slug Quote Lead")
+            self.assertEqual(thread["source"], "incoming_webhook:titan_quote_tool")
+
+    def test_generic_lead_webhook_logs_rejected_secret(self):
+        with self.app.app_context():
+            self.db.update_brand_text_field(self.brand_id, "sales_bot_incoming_webhook_secret", "expected-secret")
+
+        resp = self.client.post(
+            "/webhooks/leads/warren_webhook_test",
+            json={"name": "Rejected Lead", "message": "hello"},
+            headers={"X-GroMore-Webhook-Secret": "wrong-secret"},
+        )
+
+        self.assertEqual(resp.status_code, 401)
+        with self.app.app_context():
+            deliveries = self.db.get_lead_webhook_deliveries(self.brand_id, limit=5)
+            self.assertEqual(deliveries[0]["status"], "rejected")
+            self.assertEqual(deliveries[0]["http_status"], 401)
 
 
 class WarrenInboxTests(unittest.TestCase):

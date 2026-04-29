@@ -387,11 +387,27 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertEqual(brand["sales_bot_incoming_webhook_secret"], "incoming-secret")
 
     def test_settings_page_shows_generic_lead_webhook_url(self):
+        with self.app.app_context():
+            self.app.db.record_lead_webhook_delivery(
+                self.brand_id,
+                brand_slug="settings-brand",
+                endpoint="/webhooks/leads/settings-brand",
+                status="accepted",
+                http_status=200,
+                reason="Lead added to Warren.",
+                source="titan_quote_tool",
+                lead_name="Webhook Lead",
+                thread_id=123,
+                signature_present=True,
+            )
+
         response = self.client.get("/client/settings")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Lead Webhooks", response.data)
         self.assertIn(b"Generic Incoming Lead Webhook URL", response.data)
         self.assertIn(b"/webhooks/leads/", response.data)
+        self.assertIn(b"Recent lead webhook deliveries", response.data)
+        self.assertIn(b"Webhook Lead", response.data)
 
     def test_settings_page_shows_connection_workspace_and_automations_link(self):
         response = self.client.get("/client/settings")

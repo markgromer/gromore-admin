@@ -852,6 +852,35 @@
                     </div>
                 </div>
 
+                <div class="mt-3 p-3" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+                    <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
+                        <div class="fw-semibold" style="font-size:.88rem;"><i class="bi bi-activity me-1"></i>Recent lead webhook deliveries</div>
+                        <span class="text-muted" style="font-size:.76rem;">Shows whether the quote tool reached GroMore</span>
+                    </div>
+                    {% if lead_webhook_deliveries %}
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0" style="font-size:.78rem;">
+                            <thead><tr><th>Received</th><th>Status</th><th>HTTP</th><th>Source</th><th>Lead</th><th>Thread</th><th>Reason</th></tr></thead>
+                            <tbody>
+                                {% for delivery in lead_webhook_deliveries %}
+                                <tr>
+                                    <td class="text-muted">{{ delivery.received_at }}</td>
+                                    <td><span class="badge bg-{{ delivery.status_badge }}">{{ delivery.status }}</span></td>
+                                    <td>{{ delivery.http_status or '-' }}</td>
+                                    <td>{{ delivery.source or '-' }}</td>
+                                    <td>{{ delivery.lead_name or delivery.lead_phone or delivery.lead_email or '-' }}</td>
+                                    <td>{% if delivery.thread_id %}<a href="{{ url_for('client.client_inbox') }}">#{{ delivery.thread_id }}</a>{% else %}-{% endif %}</td>
+                                    <td>{{ delivery.reason or '-' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-muted" style="font-size:.82rem;">No generic lead webhook posts received yet. After the quote tool fires, accepted or rejected deliveries will appear here.</div>
+                    {% endif %}
+                </div>
+
                 <div class="connection-readiness-grid mt-3">
                     <div class="connection-readiness-card">
                         <div class="d-flex justify-content-between align-items-center gap-2 mb-2">

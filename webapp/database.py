@@ -360,6 +360,29 @@ class WebDB:
             CREATE INDEX IF NOT EXISTS idx_sng_webhook_events_brand_received
             ON sng_webhook_events(brand_id, received_at DESC);
 
+            CREATE TABLE IF NOT EXISTS lead_webhook_deliveries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER DEFAULT NULL,
+                brand_slug TEXT DEFAULT '',
+                endpoint TEXT DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'received',
+                http_status INTEGER DEFAULT 0,
+                reason TEXT DEFAULT '',
+                source TEXT DEFAULT '',
+                lead_name TEXT DEFAULT '',
+                lead_email TEXT DEFAULT '',
+                lead_phone TEXT DEFAULT '',
+                thread_id INTEGER DEFAULT NULL,
+                signature_present INTEGER DEFAULT 0,
+                payload_preview TEXT DEFAULT '',
+                remote_addr TEXT DEFAULT '',
+                received_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_lead_webhook_deliveries_brand_received
+            ON lead_webhook_deliveries(brand_id, received_at DESC, id DESC);
+
             CREATE TABLE IF NOT EXISTS crm_event_actions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand_id INTEGER NOT NULL,
@@ -3409,6 +3432,69 @@ class WebDB:
             LIMIT ?
             """,
             (brand_id, limit),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def record_lead_webhook_delivery(
+        self,
+        brand_id=None,
+        *,
+        brand_slug="",
+        endpoint="",
+        status="received",
+        http_status=0,
+        reason="",
+        source="",
+        lead_name="",
+        lead_email="",
+        lead_phone="",
+        thread_id=None,
+        signature_present=False,
+        payload_preview="",
+        remote_addr="",
+    ):
+        conn = self._conn()
+        cur = conn.execute(
+            """
+            INSERT INTO lead_webhook_deliveries (
+                brand_id, brand_slug, endpoint, status, http_status, reason, source,
+                lead_name, lead_email, lead_phone, thread_id, signature_present,
+                payload_preview, remote_addr
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                brand_id,
+                str(brand_slug or "")[:120],
+                str(endpoint or "")[:255],
+                str(status or "received")[:50],
+                int(http_status or 0),
+                str(reason or "")[:500],
+                str(source or "")[:120],
+                str(lead_name or "")[:200],
+                str(lead_email or "")[:255],
+                str(lead_phone or "")[:100],
+                thread_id,
+                1 if signature_present else 0,
+                str(payload_preview or "")[:2000],
+                str(remote_addr or "")[:120],
+            ),
+        )
+        conn.commit()
+        row_id = cur.lastrowid
+        conn.close()
+        return row_id
+
+    def get_lead_webhook_deliveries(self, brand_id, limit=20):
+        conn = self._conn()
+        rows = conn.execute(
+            """
+            SELECT * FROM lead_webhook_deliveries
+            WHERE brand_id = ?
+            ORDER BY received_at DESC, id DESC
+            LIMIT ?
+            """,
+            (brand_id, int(limit or 20)),
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]

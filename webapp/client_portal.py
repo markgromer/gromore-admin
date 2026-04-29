@@ -9435,6 +9435,12 @@ def client_settings():
                 "ignored": "secondary",
                 "failed": "danger",
             }.get((event.get("status") or "").strip().lower(), "secondary")
+        lead_webhook_deliveries = db.get_lead_webhook_deliveries(brand_id, limit=10)
+        for delivery in lead_webhook_deliveries:
+            delivery["status_badge"] = {
+                "accepted": "success",
+                "rejected": "danger",
+            }.get((delivery.get("status") or "").strip().lower(), "secondary")
 
         return render_template(
             "client_connections.html",
@@ -9452,6 +9458,7 @@ def client_settings():
             warren_status_state=warren_status_state,
             sng_webhook_url=sng_webhook_url,
             sng_webhook_events=sng_webhook_events,
+            lead_webhook_deliveries=lead_webhook_deliveries,
             brand_name=session.get("client_brand_name", brand.get("display_name", "")),
         )
     except Exception:

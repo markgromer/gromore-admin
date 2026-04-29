@@ -299,6 +299,49 @@ def _incoming_webhook_auth_valid(configured_secret, raw_body):
     return False
 
 
+def _request_signature_present():
+    return bool((request.headers.get("X-TQT-Signature") or "").strip())
+
+
+def _payload_preview(raw_body, payload=None):
+    if isinstance(payload, dict) and payload:
+        try:
+            return json.dumps(payload, separators=(",", ":"), sort_keys=True)[:2000]
+        except Exception:
+            pass
+    try:
+        return (raw_body or b"").decode("utf-8", errors="replace")[:2000]
+    except Exception:
+        return ""
+
+
+def _record_lead_webhook_delivery(db, brand=None, **kwargs):
+    try:
+        db.record_lead_webhook_delivery(
+            (brand or {}).get("id"),
+            brand_slug=(brand or {}).get("slug") or kwargs.pop("brand_slug", ""),
+            endpoint=request.path,
+            signature_present=_request_signature_present(),
+            remote_addr=request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip(),
+            **kwargs,
+        )
+    except Exception:
+        log.exception("Failed to record lead webhook delivery")
+
+
+def _resolve_brand_from_incoming_webhook_secret(db, raw_body):
+    presented_secret = _extract_incoming_webhook_secret()
+    for brand in db.get_all_brands():
+        configured_secret = (brand.get("sales_bot_incoming_webhook_secret") or "").strip()
+        if not configured_secret:
+            continue
+        if presented_secret and hmac.compare_digest(presented_secret, configured_secret):
+            return brand
+        if _request_signature_present() and _incoming_webhook_auth_valid(configured_secret, raw_body):
+            return brand
+    return None
+
+
 def _sng_find_first(payload, *keys):
     key_set = {str(key).strip().lower() for key in keys if str(key).strip()}
     if not key_set:
@@ -398,26 +441,58 @@ def _build_sng_event_detail(event_type, summary):
     return " - ".join(part for part in parts if part)[:1000]
 
 
-@webhooks_bp.route("/leads/<brand_slug>", methods=["POST"])
-def generic_lead_webhook(brand_slug):
-    """Accept generic lead form submissions from websites and middleware tools."""
+def _handle_generic_lead_webhook(brand_slug=None):
     db = _get_db()
-    brand = db.get_brand_by_slug(brand_slug)
+    raw_body = request.get_data() or b""
+    brand = db.get_brand_by_slug(brand_slug) if brand_slug else _resolve_brand_from_incoming_webhook_secret(db, raw_body)
     if not brand:
-        abort(404)
+        _record_lead_webhook_delivery(
+            db,
+            brand_slug=brand_slug or "",
+            status="rejected",
+            http_status=404 if brand_slug else 401,
+            reason="Unknown brand slug." if brand_slug else "No brand matched the webhook secret/signature.",
+            payload_preview=_payload_preview(raw_body),
+        )
+        if brand_slug:
+            abort(404)
+        return jsonify({"error": "No brand matched the webhook secret/signature. Use /webhooks/leads/<brand_slug> or verify the secret."}), 401
 
     configured_secret = (brand.get("sales_bot_incoming_webhook_secret") or "").strip()
     if not configured_secret:
+        _record_lead_webhook_delivery(
+            db,
+            brand,
+            status="rejected",
+            http_status=409,
+            reason="Incoming lead webhook is not configured for this brand.",
+            payload_preview=_payload_preview(raw_body),
+        )
         return jsonify({"error": "Incoming lead webhook is not configured for this brand."}), 409
 
-    raw_body = request.get_data() or b""
     if not _incoming_webhook_auth_valid(configured_secret, raw_body):
-        abort(401)
+        _record_lead_webhook_delivery(
+            db,
+            brand,
+            status="rejected",
+            http_status=401,
+            reason="Secret/signature did not match.",
+            payload_preview=_payload_preview(raw_body),
+        )
+        return jsonify({"error": "Webhook secret/signature did not match."}), 401
 
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         payload = request.form.to_dict(flat=True)
     if not isinstance(payload, dict) or not payload:
+        _record_lead_webhook_delivery(
+            db,
+            brand,
+            status="rejected",
+            http_status=400,
+            reason="Expected a JSON or form-encoded payload.",
+            payload_preview=_payload_preview(raw_body, payload),
+        )
         return jsonify({"error": "Expected a JSON or form-encoded payload."}), 400
 
     submission = _extract_generic_form_submission(payload, raw_body)
@@ -434,7 +509,33 @@ def generic_lead_webhook(brand_slug):
         extra_fields=submission["extra_fields"],
         message_header="Inbound Lead Submission",
     )
+    _record_lead_webhook_delivery(
+        db,
+        brand,
+        status="accepted",
+        http_status=200,
+        reason="Lead added to Warren.",
+        source=submission["source"],
+        lead_name=submission["lead_name"],
+        lead_email=submission["lead_email"],
+        lead_phone=submission["lead_phone"],
+        thread_id=thread_id,
+        payload_preview=_payload_preview(raw_body, payload),
+    )
     return jsonify({"ok": True, "thread_id": thread_id}), 200
+
+
+@webhooks_bp.route("/leads", methods=["POST"])
+@webhooks_bp.route("/leads/", methods=["POST"])
+def generic_lead_webhook_without_slug():
+    """Accept generic lead submissions when the shared secret identifies the brand."""
+    return _handle_generic_lead_webhook()
+
+
+@webhooks_bp.route("/leads/<brand_slug>", methods=["POST"])
+def generic_lead_webhook(brand_slug):
+    """Accept generic lead form submissions from websites and middleware tools."""
+    return _handle_generic_lead_webhook(brand_slug)
 
 
 @webhooks_bp.route("/sng/<brand_slug>/<secret>", methods=["POST"])
