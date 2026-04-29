@@ -149,6 +149,20 @@ class WebDB:
                 FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS brand_integration_configs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                provider TEXT NOT NULL,
+                config_json TEXT DEFAULT '{}',
+                status TEXT DEFAULT 'not_configured',
+                last_tested_at TEXT DEFAULT '',
+                last_test_result TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(brand_id, provider),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS contacts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand_id INTEGER NOT NULL,
@@ -2411,6 +2425,66 @@ class WebDB:
         for r in rows:
             result[r["platform"]] = dict(r)
         return result
+
+    def get_brand_integration_configs(self, brand_id):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM brand_integration_configs WHERE brand_id = ?",
+            (brand_id,),
+        ).fetchall()
+        conn.close()
+        result = {}
+        for row in rows:
+            item = dict(row)
+            item["config"] = self._safe_json_object(item.get("config_json"))
+            result[item["provider"]] = item
+        return result
+
+    def get_brand_integration_config(self, brand_id, provider):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM brand_integration_configs WHERE brand_id = ? AND provider = ?",
+            (brand_id, provider),
+        ).fetchone()
+        conn.close()
+        if not row:
+            return None
+        item = dict(row)
+        item["config"] = self._safe_json_object(item.get("config_json"))
+        return item
+
+    def upsert_brand_integration_config(self, brand_id, provider, config, status="configured"):
+        provider = (provider or "").strip().lower()
+        if not provider:
+            raise ValueError("Provider is required")
+        payload = json.dumps(config or {}, sort_keys=True)
+        conn = self._conn()
+        conn.execute(
+            """
+            INSERT INTO brand_integration_configs (brand_id, provider, config_json, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+            ON CONFLICT(brand_id, provider) DO UPDATE SET
+                config_json = excluded.config_json,
+                status = excluded.status,
+                updated_at = datetime('now')
+            """,
+            (brand_id, provider, payload, status or "configured"),
+        )
+        conn.commit()
+        conn.close()
+
+    def update_brand_integration_test_result(self, brand_id, provider, ok, message):
+        conn = self._conn()
+        conn.execute(
+            """
+            UPDATE brand_integration_configs
+            SET status = ?, last_tested_at = datetime('now'), last_test_result = ?, updated_at = datetime('now')
+            WHERE brand_id = ? AND provider = ?
+            """,
+            ("connected" if ok else "test_failed", (message or "")[:500], brand_id, provider),
+        )
+        conn.commit()
+        conn.close()
 
     def upsert_connection(self, brand_id, platform, token_data):
         conn = self._conn()

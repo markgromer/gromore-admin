@@ -15,6 +15,7 @@ import logging
 import uuid
 import zipfile
 import csv
+import requests
 from io import BytesIO, StringIO
 from functools import wraps
 from datetime import datetime, timedelta, timezone
@@ -52,6 +53,231 @@ client_public_bp = Blueprint(
 
 
 log = logging.getLogger(__name__)
+
+_INTEGRATION_CATALOG = [
+    {
+        "key": "quickbooks",
+        "name": "QuickBooks Online",
+        "category": "Accounting",
+        "icon": "bi-journal-richtext",
+        "summary": "Invoice and paid-revenue truth when the CRM is incomplete.",
+        "powers": "finance dashboard, ROAS, customer revenue",
+        "fields": [
+            {"key": "realm_id", "label": "Company / Realm ID", "type": "text", "placeholder": "QuickBooks company ID"},
+            {"key": "access_token", "label": "Access Token", "type": "password", "secret": True, "placeholder": "OAuth access token"},
+            {"key": "refresh_token", "label": "Refresh Token", "type": "password", "secret": True, "placeholder": "OAuth refresh token"},
+        ],
+    },
+    {
+        "key": "callrail",
+        "name": "CallRail",
+        "category": "Attribution",
+        "icon": "bi-telephone-inbound",
+        "summary": "Call tracking, missed-call follow-up, recordings, and campaign source attribution.",
+        "powers": "phone lead attribution, Warren call follow-up",
+        "fields": [
+            {"key": "api_key", "label": "API Key", "type": "password", "secret": True, "placeholder": "CallRail API key"},
+            {"key": "account_id", "label": "Account ID", "type": "text", "placeholder": "CallRail account ID"},
+        ],
+    },
+    {
+        "key": "housecallpro",
+        "name": "Housecall Pro",
+        "category": "CRM",
+        "icon": "bi-house-check",
+        "summary": "Field-service CRM option for customers, jobs, estimates, and revenue.",
+        "powers": "lead push, CRM sync, revenue",
+        "fields": [{"key": "api_key", "label": "API Key", "type": "password", "secret": True, "placeholder": "Housecall Pro API key"}],
+    },
+    {
+        "key": "servicetitan",
+        "name": "ServiceTitan",
+        "category": "CRM",
+        "icon": "bi-building-gear",
+        "summary": "Enterprise home-service CRM with job, customer, booking, and revenue APIs.",
+        "powers": "job sync, booked revenue, enterprise lead routing",
+        "fields": [
+            {"key": "client_id", "label": "Client ID", "type": "text", "placeholder": "ServiceTitan client ID"},
+            {"key": "client_secret", "label": "Client Secret", "type": "password", "secret": True, "placeholder": "ServiceTitan secret"},
+            {"key": "tenant_id", "label": "Tenant ID", "type": "text", "placeholder": "Tenant ID"},
+            {"key": "app_key", "label": "App Key", "type": "password", "secret": True, "placeholder": "App key"},
+        ],
+    },
+    {
+        "key": "zapier",
+        "name": "Zapier",
+        "category": "Automation",
+        "icon": "bi-diagram-3",
+        "summary": "No-code bridge for apps without direct integrations.",
+        "powers": "inbound leads, outbound workflow handoffs",
+        "fields": [{"key": "webhook_url", "label": "Catch Hook URL", "type": "url", "placeholder": "https://hooks.zapier.com/..."}],
+    },
+    {
+        "key": "make",
+        "name": "Make.com",
+        "category": "Automation",
+        "icon": "bi-node-plus",
+        "summary": "Scenario automation bridge for CRMs, forms, spreadsheets, and custom flows.",
+        "powers": "inbound leads, CRM events, custom automations",
+        "fields": [{"key": "webhook_url", "label": "Webhook URL", "type": "url", "placeholder": "https://hook.us1.make.com/..."}],
+    },
+    {
+        "key": "google_calendar",
+        "name": "Google Calendar",
+        "category": "Scheduling",
+        "icon": "bi-calendar2-check",
+        "summary": "Booking and appointment context for reminders and Warren scheduling.",
+        "powers": "appointment reminders, scheduling context",
+        "fields": [{"key": "calendar_id", "label": "Calendar ID", "type": "text", "placeholder": "primary or calendar ID"}],
+    },
+    {
+        "key": "outlook_calendar",
+        "name": "Outlook Calendar",
+        "category": "Scheduling",
+        "icon": "bi-microsoft",
+        "summary": "Microsoft calendar support for appointment context.",
+        "powers": "appointment reminders, scheduling context",
+        "fields": [{"key": "tenant_id", "label": "Tenant ID", "type": "text", "placeholder": "Microsoft tenant ID"}],
+    },
+    {
+        "key": "calendly",
+        "name": "Calendly",
+        "category": "Scheduling",
+        "icon": "bi-calendar-plus",
+        "summary": "Lightweight booking links and scheduled-event intake.",
+        "powers": "bookings, Warren handoff, appointment context",
+        "fields": [{"key": "api_key", "label": "Personal Access Token", "type": "password", "secret": True, "placeholder": "Calendly token"}],
+    },
+    {
+        "key": "mailchimp",
+        "name": "Mailchimp",
+        "category": "Marketing",
+        "icon": "bi-envelope-paper",
+        "summary": "Audience sync and nurture handoff for leads and customers.",
+        "powers": "email lists, reactivation, nurture segments",
+        "fields": [
+            {"key": "api_key", "label": "Marketing API Key", "type": "password", "secret": True, "placeholder": "Mailchimp API key"},
+            {"key": "audience_id", "label": "Audience ID", "type": "text", "placeholder": "Optional default audience"},
+        ],
+    },
+    {
+        "key": "constant_contact",
+        "name": "Constant Contact",
+        "category": "Marketing",
+        "icon": "bi-envelope-at",
+        "summary": "Email marketing list and campaign sync.",
+        "powers": "customer lists, nurture, campaign audiences",
+        "fields": [{"key": "access_token", "label": "Access Token", "type": "password", "secret": True, "placeholder": "OAuth access token"}],
+    },
+    {
+        "key": "twilio",
+        "name": "Twilio",
+        "category": "Phone/SMS",
+        "icon": "bi-chat-square-text",
+        "summary": "Fallback SMS/voice provider, call tracking, and custom phone workflows.",
+        "powers": "SMS, call tracking, phone workflows",
+        "fields": [
+            {"key": "account_sid", "label": "Account SID", "type": "text", "placeholder": "AC..."},
+            {"key": "auth_token", "label": "Auth Token", "type": "password", "secret": True, "placeholder": "Twilio auth token"},
+            {"key": "phone_number", "label": "Phone Number", "type": "text", "placeholder": "+15551234567"},
+        ],
+    },
+    {
+        "key": "google_lsa",
+        "name": "Google Local Services Ads",
+        "category": "Lead Sources",
+        "icon": "bi-patch-check",
+        "summary": "High-intent local service leads and booking attribution.",
+        "powers": "lead source attribution, booked lead tracking",
+        "fields": [{"key": "account_id", "label": "LSA Account ID", "type": "text", "placeholder": "Optional account ID"}],
+    },
+    {
+        "key": "thumbtack",
+        "name": "Thumbtack",
+        "category": "Lead Sources",
+        "icon": "bi-pin-angle",
+        "summary": "Marketplace lead capture through email/webhook forwarding.",
+        "powers": "marketplace leads, Warren follow-up",
+        "fields": [{"key": "forwarding_email", "label": "Forwarding Email", "type": "email", "placeholder": "leads@..."}],
+    },
+    {
+        "key": "angi",
+        "name": "Angi",
+        "category": "Lead Sources",
+        "icon": "bi-tools",
+        "summary": "Marketplace lead capture through email/webhook forwarding.",
+        "powers": "marketplace leads, Warren follow-up",
+        "fields": [{"key": "forwarding_email", "label": "Forwarding Email", "type": "email", "placeholder": "leads@..."}],
+    },
+    {
+        "key": "yelp",
+        "name": "Yelp",
+        "category": "Lead Sources",
+        "icon": "bi-star",
+        "summary": "Yelp message and lead intake through forwarding or webhook flows.",
+        "powers": "marketplace leads, Warren follow-up",
+        "fields": [{"key": "forwarding_email", "label": "Forwarding Email", "type": "email", "placeholder": "leads@..."}],
+    },
+    {
+        "key": "service_fusion",
+        "name": "Service Fusion",
+        "category": "CRM",
+        "icon": "bi-wrench-adjustable",
+        "summary": "Field-service CRM adapter target for customers, jobs, and revenue.",
+        "powers": "CRM sync, revenue, lead push",
+        "fields": [{"key": "api_key", "label": "API Key", "type": "password", "secret": True, "placeholder": "Service Fusion API key"}],
+    },
+    {
+        "key": "service_autopilot",
+        "name": "Service Autopilot",
+        "category": "CRM",
+        "icon": "bi-signpost-split",
+        "summary": "Lawn and cleaning business CRM adapter target.",
+        "powers": "client sync, jobs, recurring service data",
+        "fields": [{"key": "api_key", "label": "API Key", "type": "password", "secret": True, "placeholder": "Service Autopilot API key"}],
+    },
+    {
+        "key": "aspire",
+        "name": "Aspire",
+        "category": "CRM",
+        "icon": "bi-flower1",
+        "summary": "Landscape operations CRM for larger maintenance and project teams.",
+        "powers": "landscape CRM sync, opportunities, revenue",
+        "fields": [
+            {"key": "base_url", "label": "API Base URL", "type": "url", "placeholder": "https://cloud-api.youraspire.com"},
+            {"key": "api_key", "label": "API Key", "type": "password", "secret": True, "placeholder": "Aspire API key"},
+        ],
+    },
+    {
+        "key": "lmn",
+        "name": "LMN",
+        "category": "CRM",
+        "icon": "bi-tree",
+        "summary": "Landscape Management Network adapter target for estimating and operations data.",
+        "powers": "landscape estimating, revenue, jobs",
+        "fields": [{"key": "api_key", "label": "API Key", "type": "password", "secret": True, "placeholder": "LMN API key"}],
+    },
+    {
+        "key": "jobnimbus",
+        "name": "JobNimbus",
+        "category": "CRM",
+        "icon": "bi-cloud-sun",
+        "summary": "Roofing and exterior-service CRM target.",
+        "powers": "roofing leads, jobs, revenue",
+        "fields": [{"key": "api_key", "label": "API Key", "type": "password", "secret": True, "placeholder": "JobNimbus API key"}],
+    },
+    {
+        "key": "buildops",
+        "name": "BuildOps",
+        "category": "CRM",
+        "icon": "bi-buildings",
+        "summary": "Commercial contractor CRM/field operations target.",
+        "powers": "commercial job sync, accounts, revenue",
+        "fields": [{"key": "api_key", "label": "API Key", "type": "password", "secret": True, "placeholder": "BuildOps API key"}],
+    },
+]
+
+_INTEGRATION_CATALOG_BY_KEY = {item["key"]: item for item in _INTEGRATION_CATALOG}
 
 _HEATMAP_ASYNC_POINT_THRESHOLD = 25
 
@@ -9397,6 +9623,161 @@ JSON only, no markdown."""
         return None
 
 
+def _integration_config_is_ready(provider_def, config):
+    config = config or {}
+    required = {
+        "quickbooks": ("realm_id", "access_token"),
+        "callrail": ("api_key", "account_id"),
+        "servicetitan": ("client_id", "client_secret", "tenant_id", "app_key"),
+        "twilio": ("account_sid", "auth_token"),
+        "zapier": ("webhook_url",),
+        "make": ("webhook_url",),
+    }.get(provider_def.get("key"))
+    if required:
+        return all((config.get(key) or "").strip() for key in required)
+    return any((config.get(field["key"]) or "").strip() for field in provider_def.get("fields", []))
+
+
+def _mask_secret(value):
+    text = str(value or "")
+    if not text:
+        return ""
+    return ("*" * 8) + text[-4:]
+
+
+def _prepared_integration_catalog(config_rows):
+    prepared = []
+    for item in _INTEGRATION_CATALOG:
+        row = (config_rows or {}).get(item["key"]) or {}
+        config = row.get("config") or {}
+        fields = []
+        for field in item.get("fields", []):
+            value = config.get(field["key"], "")
+            field_item = dict(field)
+            field_item["value"] = "" if field_item.get("secret") else value
+            field_item["saved_hint"] = _mask_secret(value) if field_item.get("secret") and value else ""
+            fields.append(field_item)
+        prepared.append({
+            **item,
+            "fields": fields,
+            "config": config,
+            "status": row.get("status") or ("configured" if _integration_config_is_ready(item, config) else "not_configured"),
+            "is_configured": _integration_config_is_ready(item, config),
+            "last_tested_at": row.get("last_tested_at") or "",
+            "last_test_result": row.get("last_test_result") or "",
+        })
+    return prepared
+
+
+def _test_generic_integration(provider, config):
+    provider = (provider or "").strip().lower()
+    config = config or {}
+    timeout = 12
+    try:
+        if provider == "callrail":
+            account_id = (config.get("account_id") or "").strip()
+            api_key = (config.get("api_key") or "").strip()
+            if not account_id or not api_key:
+                return False, "CallRail account ID and API key are required."
+            resp = requests.get(
+                f"https://api.callrail.com/v3/a/{account_id}/companies.json",
+                headers={"Authorization": f"Token token={api_key}", "Accept": "application/json"},
+                timeout=timeout,
+            )
+            if resp.status_code != 200:
+                return False, f"CallRail returned {resp.status_code}: {resp.text[:180]}"
+            return True, "Connected to CallRail."
+
+        if provider == "calendly":
+            token = (config.get("api_key") or "").strip()
+            if not token:
+                return False, "Calendly personal access token is required."
+            resp = requests.get(
+                "https://api.calendly.com/users/me",
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+                timeout=timeout,
+            )
+            if resp.status_code != 200:
+                return False, f"Calendly returned {resp.status_code}: {resp.text[:180]}"
+            data = resp.json() or {}
+            name = ((data.get("resource") or {}).get("name") or "").strip()
+            return True, f"Connected to Calendly{f' as {name}' if name else ''}."
+
+        if provider == "mailchimp":
+            api_key = (config.get("api_key") or "").strip()
+            if "-" not in api_key:
+                return False, "Mailchimp API key must include the data center suffix, like us21."
+            dc = api_key.rsplit("-", 1)[-1]
+            resp = requests.get(
+                f"https://{dc}.api.mailchimp.com/3.0/ping",
+                auth=("gromore", api_key),
+                timeout=timeout,
+            )
+            if resp.status_code != 200:
+                return False, f"Mailchimp returned {resp.status_code}: {resp.text[:180]}"
+            return True, "Connected to Mailchimp."
+
+        if provider == "twilio":
+            sid = (config.get("account_sid") or "").strip()
+            token = (config.get("auth_token") or "").strip()
+            if not sid or not token:
+                return False, "Twilio Account SID and auth token are required."
+            resp = requests.get(
+                f"https://api.twilio.com/2010-04-01/Accounts/{sid}.json",
+                auth=(sid, token),
+                timeout=timeout,
+            )
+            if resp.status_code != 200:
+                return False, f"Twilio returned {resp.status_code}: {resp.text[:180]}"
+            return True, "Connected to Twilio."
+
+        if provider == "quickbooks":
+            realm_id = (config.get("realm_id") or "").strip()
+            token = (config.get("access_token") or "").strip()
+            if not realm_id or not token:
+                return False, "QuickBooks realm ID and access token are required for a live test."
+            resp = requests.get(
+                f"https://quickbooks.api.intuit.com/v3/company/{realm_id}/companyinfo/{realm_id}",
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+                timeout=timeout,
+            )
+            if resp.status_code != 200:
+                return False, f"QuickBooks returned {resp.status_code}: {resp.text[:180]}"
+            return True, "Connected to QuickBooks Online."
+
+        if provider == "housecallpro":
+            api_key = (config.get("api_key") or "").strip()
+            if not api_key:
+                return False, "Housecall Pro API key is required."
+            resp = requests.get(
+                "https://api.housecallpro.com/customers?limit=1",
+                headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
+                timeout=timeout,
+            )
+            if resp.status_code != 200:
+                return False, f"Housecall Pro returned {resp.status_code}: {resp.text[:180]}"
+            return True, "Connected to Housecall Pro."
+
+        if provider in ("zapier", "make"):
+            webhook_url = (config.get("webhook_url") or "").strip()
+            if not webhook_url:
+                return False, "Webhook URL is required."
+            resp = requests.post(
+                webhook_url,
+                json={"source": "gromore", "event": "connection_test", "sent_at": datetime.utcnow().isoformat()},
+                timeout=timeout,
+            )
+            if resp.status_code not in (200, 201, 202, 204):
+                return False, f"Webhook returned {resp.status_code}: {resp.text[:180]}"
+            return True, "Webhook accepted the test event."
+    except requests.RequestException as exc:
+        return False, f"Network error: {str(exc)[:180]}"
+    except Exception as exc:
+        return False, f"Test failed: {str(exc)[:180]}"
+
+    return True, "Configuration saved. This provider needs partner/OAuth access before a live API test is available."
+
+
 @client_bp.route("/settings")
 @client_login_required
 def client_settings():
@@ -9408,6 +9789,8 @@ def client_settings():
     client_user = db.get_client_user(session.get("client_user_id"))
 
     connections = db.get_brand_connections(brand_id)
+    integration_configs = db.get_brand_integration_configs(brand_id)
+    integration_catalog = _prepared_integration_catalog(integration_configs)
     google_conn = connections.get("google", {})
     meta_conn = connections.get("meta", {})
     scopes = (google_conn.get("scopes") or "").lower()
@@ -9470,6 +9853,8 @@ def client_settings():
             chatbot_channels=chatbot_channels,
             google_conn=google_conn,
             meta_conn=meta_conn,
+            integration_catalog=integration_catalog,
+            integration_connected_count=sum(1 for item in integration_catalog if item.get("is_configured")),
             warren_channel_readiness=warren_channel_readiness,
             warren_ready_count=warren_ready_count,
             warren_total_count=warren_total_count,
@@ -13688,6 +14073,53 @@ def client_payment_provider_test():
     if error:
         return jsonify(ok=False, error=error)
 
+    return jsonify(ok=True, message=message)
+
+
+@client_bp.route("/settings/integration/<provider>", methods=["POST"])
+@client_login_required
+def client_save_external_integration(provider):
+    provider = (provider or "").strip().lower()
+    provider_def = _INTEGRATION_CATALOG_BY_KEY.get(provider)
+    if not provider_def:
+        abort(404)
+
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    existing = db.get_brand_integration_config(brand_id, provider) or {}
+    config = dict(existing.get("config") or {})
+
+    for field in provider_def.get("fields", []):
+        key = field["key"]
+        value = (request.form.get(key) or "").strip()
+        if field.get("secret") and not value:
+            continue
+        config[key] = value[:2000]
+
+    status = "configured" if _integration_config_is_ready(provider_def, config) else "not_configured"
+    db.upsert_brand_integration_config(brand_id, provider, config, status=status)
+    flash(f"{provider_def['name']} settings saved.", "success")
+    return redirect(url_for("client.client_settings") + "#connection-panel-integration-hub")
+
+
+@client_bp.route("/integration/<provider>/test", methods=["POST"])
+@client_login_required
+def client_external_integration_test(provider):
+    provider = (provider or "").strip().lower()
+    provider_def = _INTEGRATION_CATALOG_BY_KEY.get(provider)
+    if not provider_def:
+        return jsonify(ok=False, error="Unknown integration"), 404
+
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    row = db.get_brand_integration_config(brand_id, provider)
+    if not row:
+        return jsonify(ok=False, error=f"{provider_def['name']} is not configured yet."), 400
+
+    ok, message = _test_generic_integration(provider, row.get("config") or {})
+    db.update_brand_integration_test_result(brand_id, provider, ok, message)
+    if not ok:
+        return jsonify(ok=False, error=message)
     return jsonify(ok=True, message=message)
 
 

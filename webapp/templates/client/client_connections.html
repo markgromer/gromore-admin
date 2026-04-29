@@ -246,6 +246,9 @@
     <button type="button" class="settings-quick-link" data-panel-target="payments" data-panel-label="Payments">
         <i class="bi bi-credit-card-2-front"></i> Stripe / Square
     </button>
+    <button type="button" class="settings-quick-link" data-panel-target="integration-hub" data-panel-label="Integration Hub">
+        <i class="bi bi-grid-3x3-gap"></i> More Integrations
+    </button>
 </div>
 
 <div class="connection-summary-grid">
@@ -337,6 +340,16 @@
         </div>
         <div class="connection-summary-meta">Standalone Stripe or Square revenue sync for businesses that collect payments outside a connected CRM.</div>
         <div class="connection-summary-power">Powers: finance dashboard, revenue attribution</div>
+    </button>
+
+    <button type="button" class="connection-summary-card" data-panel-target="integration-hub" data-panel-label="Integration Hub">
+        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#7c3aed,#0ea5e9);"><i class="bi bi-grid-3x3-gap-fill"></i></span>
+        <div class="connection-summary-label">
+            <strong>More Integrations</strong>
+            {% if integration_connected_count %}<span class="badge bg-success">{{ integration_connected_count }} configured</span>{% else %}<span class="badge bg-secondary">Ready to configure</span>{% endif %}
+        </div>
+        <div class="connection-summary-meta">QuickBooks, CallRail, Housecall Pro, ServiceTitan, calendars, marketing tools, marketplaces, and niche CRMs.</div>
+        <div class="connection-summary-power">Powers: attribution, revenue truth, lead intake, scheduling</div>
     </button>
 
     <button type="button" class="connection-summary-card" data-panel-target="wordpress" data-panel-label="WordPress" data-help-href="{{ url_for('client.client_help', guide='connections') }}#wordpress">
@@ -933,6 +946,78 @@
                             <div class="fw-medium" style="font-size:.88rem;">Yardbook fallback</div>
                             <small class="text-muted">Yardbook does not expose the kind of API we need for a direct CRM sync, so Stripe/Square can still give Warren and reports a real revenue source.</small>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="connection-panel" data-panel="integration-hub" id="connection-panel-integration-hub">
+        <div class="connection-panel-shell card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                    <div>
+                        <h5 class="fw-semibold mb-1">Integration Hub</h5>
+                        <p class="text-muted mb-0">Configure additional CRMs, call tracking, accounting, scheduling, marketing, marketplace, and automation connections.</p>
+                    </div>
+                    <span class="badge bg-light text-dark rounded-pill px-3 py-2">{{ integration_catalog|length }} available</span>
+                </div>
+
+                <div class="row g-3 mt-1">
+                    {% for integration in integration_catalog %}
+                    <div class="col-xl-6">
+                        <div class="p-3 h-100" style="border:1px solid #e2e8f0; border-radius:12px; background:#fff;">
+                            <div class="d-flex justify-content-between align-items-start gap-3">
+                                <div class="d-flex gap-3">
+                                    <span class="connection-summary-icon" style="width:42px;height:42px;background:linear-gradient(135deg,#475569,#0ea5e9);"><i class="bi {{ integration.icon }}"></i></span>
+                                    <div>
+                                        <div class="fw-semibold">{{ integration.name }}</div>
+                                        <div class="text-muted" style="font-size:.82rem;">{{ integration.category }}</div>
+                                    </div>
+                                </div>
+                                {% if integration.status == 'connected' %}
+                                    <span class="badge bg-success">Tested</span>
+                                {% elif integration.is_configured %}
+                                    <span class="badge bg-primary">Configured</span>
+                                {% elif integration.status == 'test_failed' %}
+                                    <span class="badge bg-warning text-dark">Check settings</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Not configured</span>
+                                {% endif %}
+                            </div>
+                            <p class="text-muted mt-3 mb-2" style="font-size:.86rem;">{{ integration.summary }}</p>
+                            <div class="text-muted mb-3" style="font-size:.8rem;">Powers: {{ integration.powers }}</div>
+
+                            <form method="POST" action="{{ url_for('client.client_save_external_integration', provider=integration.key) }}" class="external-integration-form" data-provider="{{ integration.key }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="row g-2">
+                                    {% for field in integration.fields %}
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-medium" style="font-size:.8rem;">{{ field.label }}</label>
+                                        <input type="{{ field.type }}" class="form-control form-control-sm" name="{{ field.key }}" value="{{ field.value }}" placeholder="{{ field.saved_hint or field.placeholder or '' }}" autocomplete="off">
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                <div class="mt-3 d-flex align-items-center gap-2 flex-wrap">
+                                    <button class="btn btn-sm btn-primary" type="submit">Save</button>
+                                    {% if integration.is_configured %}
+                                    <button class="btn btn-sm btn-outline-primary externalIntegrationTestBtn" type="button" data-provider="{{ integration.key }}" data-name="{{ integration.name }}"><i class="bi bi-plug me-1"></i> Test</button>
+                                    {% endif %}
+                                    {% if integration.last_test_result %}
+                                    <span class="text-muted" style="font-size:.78rem;">Last: {{ integration.last_test_result }}</span>
+                                    {% endif %}
+                                </div>
+                                <div class="externalIntegrationTestResult mt-2" id="externalIntegrationTestResult-{{ integration.key }}" style="display:none;"></div>
+                            </form>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="mt-3 p-3" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+                    <div class="d-flex align-items-start gap-2">
+                        <i class="bi bi-info-circle text-primary mt-1"></i>
+                        <small class="text-muted">Some providers require partner approval or OAuth app setup before live data sync can run. Saving the credentials here makes the connection visible and gives us the config surface for the provider-specific adapter.</small>
                     </div>
                 </div>
             </div>
@@ -1564,6 +1649,38 @@
                 });
             });
         }
+
+        document.querySelectorAll('.externalIntegrationTestBtn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var provider = btn.getAttribute('data-provider');
+                var rd = document.getElementById('externalIntegrationTestResult-' + provider);
+                var original = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing...';
+                if (rd) rd.style.display = 'none';
+                fetch('/client/integration/' + encodeURIComponent(provider) + '/test', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    btn.disabled = false;
+                    btn.innerHTML = original;
+                    if (!rd) return;
+                    rd.innerHTML = data.ok
+                        ? '<span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i> ' + (data.message || 'Connected!') + '</span>'
+                        : '<span class="badge bg-danger rounded-pill px-3 py-2"><i class="bi bi-x-circle me-1"></i> ' + (data.error || 'Connection failed') + '</span>';
+                    rd.style.display = '';
+                })
+                .catch(function() {
+                    btn.disabled = false;
+                    btn.innerHTML = original;
+                    if (!rd) return;
+                    rd.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2">Network error</span>';
+                    rd.style.display = '';
+                });
+            });
+        });
 
         var wpTestBtn = document.getElementById('wpTestBtn');
         if (wpTestBtn) {
