@@ -843,7 +843,7 @@
                                 <input type="text" class="form-control form-control-sm bg-light" readonly value="{{ request.url_root | replace('http://', 'https://') }}webhooks/leads/{{ brand.slug }}" id="incomingLeadWebhookUrlTop">
                                 <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('incomingLeadWebhookUrlTop')"><i class="bi bi-clipboard"></i></button>
                             </div>
-                            <small class="text-muted d-block mt-2">Send the secret in <code>Authorization: Bearer ...</code> or <code>X-GroMore-Webhook-Secret</code>.</small>
+                            <small class="text-muted d-block mt-2">For the Titan Quote Tool / WP plugin, paste this URL into <strong>Partial quote webhook URL</strong> and paste the Incoming Lead Webhook Secret into <strong>Partial quote webhook secret</strong>. Other tools can send the secret in <code>Authorization: Bearer ...</code> or <code>X-GroMore-Webhook-Secret</code>.</small>
                         </div>
                         <div class="col-lg-5">
                             <label class="form-label fw-medium" style="font-size:.88rem;">Expected quote-tool fields</label>
@@ -938,6 +938,7 @@
                         <div class="col-lg-6">
                             <label class="form-label fw-medium" style="font-size:.88rem;">Incoming Lead Webhook Secret</label>
                             <input type="password" class="form-control" name="sales_bot_incoming_webhook_secret" placeholder="{{ '••••••' ~ brand.sales_bot_incoming_webhook_secret[-4:] if brand.sales_bot_incoming_webhook_secret else 'Required for generic lead webhook posts' }}" autocomplete="off">
+                            <small class="text-muted">Use this same value in the Titan Quote Tool <strong>Partial quote webhook secret</strong> field. Leave blank to keep the current secret.</small>
                         </div>
                     </div>
 

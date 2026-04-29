@@ -831,13 +831,14 @@
                                 <i class="bi bi-clipboard"></i>
                             </button>
                         </div>
-                        <small class="text-muted d-block mt-2">Use this for website forms, Zapier/Make, or any POST-based lead source. JSON and form-encoded payloads are both accepted.</small>
+                        <small class="text-muted d-block mt-2">For the Titan Quote Tool / WP plugin, paste this URL into <strong>Partial quote webhook URL</strong> and paste the Incoming Lead Webhook Secret into <strong>Partial quote webhook secret</strong>. Zapier/Make can still send the secret in <code>Authorization: Bearer ...</code> or <code>X-GroMore-Webhook-Secret</code>.</small>
                     </div>
                     <div class="col-lg-5">
                         <label class="form-label fw-medium" style="font-size:.88rem;">Incoming Lead Webhook Secret</label>
                         <input type="password" class="form-control" name="sales_bot_incoming_webhook_secret"
                                placeholder="{{ '••••••' ~ brand.sales_bot_incoming_webhook_secret[-4:] if brand.sales_bot_incoming_webhook_secret else 'Required for generic lead webhook posts' }}"
                                autocomplete="off">
+                        <small class="text-muted">Use this same value in the Titan Quote Tool <strong>Partial quote webhook secret</strong> field. Leave blank to keep the current secret.</small>
                     </div>
                 </div>
             </div>

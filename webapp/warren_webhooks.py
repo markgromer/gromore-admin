@@ -17,6 +17,7 @@ import hmac
 import json
 import logging
 import threading
+import base64
 
 from flask import Blueprint, request, jsonify, current_app, abort
 
@@ -273,6 +274,31 @@ def _extract_incoming_webhook_secret():
     ).strip()
 
 
+def _signature_candidates(secret, raw_body):
+    digest = hmac.new(secret.encode("utf-8"), raw_body or b"", hashlib.sha256).digest()
+    hex_digest = digest.hex()
+    return {
+        hex_digest,
+        f"sha256={hex_digest}",
+        base64.b64encode(digest).decode("ascii"),
+    }
+
+
+def _incoming_webhook_auth_valid(configured_secret, raw_body):
+    presented_secret = _extract_incoming_webhook_secret()
+    if presented_secret and hmac.compare_digest(presented_secret, configured_secret):
+        return True
+
+    # Titan Quote Tool / WP plugin compatibility: its partial quote webhook stores
+    # the shared secret and signs the raw JSON body instead of sending Bearer auth.
+    signature = (request.headers.get("X-TQT-Signature") or "").strip()
+    if signature:
+        for candidate in _signature_candidates(configured_secret, raw_body):
+            if hmac.compare_digest(signature, candidate):
+                return True
+    return False
+
+
 def _sng_find_first(payload, *keys):
     key_set = {str(key).strip().lower() for key in keys if str(key).strip()}
     if not key_set:
@@ -384,11 +410,10 @@ def generic_lead_webhook(brand_slug):
     if not configured_secret:
         return jsonify({"error": "Incoming lead webhook is not configured for this brand."}), 409
 
-    presented_secret = _extract_incoming_webhook_secret()
-    if not presented_secret or not hmac.compare_digest(presented_secret, configured_secret):
+    raw_body = request.get_data() or b""
+    if not _incoming_webhook_auth_valid(configured_secret, raw_body):
         abort(401)
 
-    raw_body = request.get_data() or b""
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         payload = request.form.to_dict(flat=True)

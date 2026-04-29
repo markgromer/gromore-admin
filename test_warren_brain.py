@@ -6,6 +6,8 @@ Tests for the Warren Brain system:
   - Nurture engine (stale thread detection, ghost detection)
 """
 import json
+import hmac
+import hashlib
 import os
 import re
 import sys
@@ -414,6 +416,40 @@ class WarrenWebhookTests(unittest.TestCase):
             headers={"X-GroMore-Webhook-Secret": "wrong-secret"},
         )
         self.assertEqual(resp.status_code, 401)
+
+    def test_generic_lead_webhook_accepts_titan_quote_signature(self):
+        body = json.dumps({
+            "name": "Partial Quote Lead",
+            "phone": "+15550002222",
+            "message": "Started a quote but did not sign up.",
+            "source": "titan_quote_tool",
+            "event_type": "partial_quote",
+            "external_id": "partial-001",
+        }, separators=(",", ":")).encode("utf-8")
+        secret = "incoming-secret-123"
+        signature = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+
+        with self.app.app_context():
+            self.db.update_brand_number_field(self.brand_id, "sales_bot_enabled", 0)
+            self.db.update_brand_text_field(self.brand_id, "sales_bot_incoming_webhook_secret", secret)
+
+        resp = self.client.post(
+            "/webhooks/leads/warren_webhook_test",
+            data=body,
+            content_type="application/json",
+            headers={
+                "X-TQT-Signature": signature,
+                "X-TQT-Signature-Version": "1",
+            },
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["ok"])
+        with self.app.app_context():
+            thread = self.db.get_lead_thread(data["thread_id"])
+            self.assertEqual(thread["lead_name"], "Partial Quote Lead")
+            self.assertEqual(thread["source"], "incoming_webhook:titan_quote_tool")
 
 
 class WarrenInboxTests(unittest.TestCase):
