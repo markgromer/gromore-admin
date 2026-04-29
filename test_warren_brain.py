@@ -566,6 +566,28 @@ class WarrenWebhookTests(unittest.TestCase):
             self.assertEqual(deliveries[0]["status"], "rejected")
             self.assertEqual(deliveries[0]["http_status"], 401)
 
+    def test_generic_lead_webhook_accepts_query_secret_for_no_header_tools(self):
+        with self.app.app_context():
+            self.db.update_brand_number_field(self.brand_id, "sales_bot_enabled", 0)
+            self.db.update_brand_text_field(self.brand_id, "sales_bot_incoming_webhook_secret", "query-secret-123")
+
+        resp = self.client.post(
+            "/webhooks/leads/warren_webhook_test?secret=query-secret-123",
+            json={
+                "source": "make.com",
+                "name": "Query Secret Lead",
+                "phone": "+15550004444",
+                "message": "Make can only send a URL.",
+            },
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        with self.app.app_context():
+            thread = self.db.get_lead_thread(data["thread_id"])
+            self.assertEqual(thread["lead_name"], "Query Secret Lead")
+            self.assertEqual(thread["source"], "incoming_webhook:make.com")
+
 
 class WarrenInboxTests(unittest.TestCase):
     """Test inbox UI routes."""

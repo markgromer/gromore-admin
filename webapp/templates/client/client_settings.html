@@ -832,6 +832,19 @@
                             </button>
                         </div>
                         <small class="text-muted d-block mt-2">For the Titan Quote Tool / WP plugin, paste this URL into <strong>Partial quote webhook URL</strong> and paste the Incoming Lead Webhook Secret into <strong>Partial quote webhook secret</strong>. Zapier/Make can still send the secret in <code>Authorization: Bearer ...</code> or <code>X-GroMore-Webhook-Secret</code>.</small>
+                        {% if brand.sales_bot_incoming_webhook_secret %}
+                        <label class="form-label mb-1 fw-medium mt-3">No-header incoming lead webhook URL</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control form-control-sm bg-light" readonly
+                                   value="{{ request.url_root | replace('http://', 'https://') }}webhooks/leads/{{ brand.slug }}?secret={{ brand.sales_bot_incoming_webhook_secret | urlencode }}" id="incomingLeadWebhookUrlSecret">
+                            <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('incomingLeadWebhookUrlSecret')">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                        <small class="text-muted d-block mt-2">Use this when Make, Jobber, SNG, or another source only gives you one webhook URL field and cannot send headers. Prefer the normal URL plus header/secret field when supported because query-string secrets can appear in third-party logs.</small>
+                        {% else %}
+                        <small class="text-muted d-block mt-2">Need a one-box URL for Make, Jobber, or SNG? Save an Incoming Lead Webhook Secret first, then this panel will show a copyable no-header URL with <code>?secret=...</code>.</small>
+                        {% endif %}
                     </div>
                     <div class="col-lg-5">
                         <label class="form-label fw-medium" style="font-size:.88rem;">Incoming Lead Webhook Secret</label>

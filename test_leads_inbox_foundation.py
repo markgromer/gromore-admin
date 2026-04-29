@@ -388,6 +388,11 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
 
     def test_settings_page_shows_generic_lead_webhook_url(self):
         with self.app.app_context():
+            self.app.db.update_brand_text_field(
+                self.brand_id,
+                "sales_bot_incoming_webhook_secret",
+                "incoming-secret",
+            )
             self.app.db.record_lead_webhook_delivery(
                 self.brand_id,
                 brand_slug="settings-brand",
@@ -406,6 +411,8 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertIn(b"Lead Webhooks", response.data)
         self.assertIn(b"Generic Incoming Lead Webhook URL", response.data)
         self.assertIn(b"/webhooks/leads/", response.data)
+        self.assertIn(b"No-header incoming lead webhook URL", response.data)
+        self.assertIn(b"?secret=incoming-secret", response.data)
         self.assertIn(b"Recent lead webhook deliveries", response.data)
         self.assertIn(b"Webhook Lead", response.data)
 
