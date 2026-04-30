@@ -147,9 +147,7 @@ def _cors_preflight():
 def _send_hiring_email(brand, recipient_email, recipient_name, subject, body_html):
     """Send an email using the app's SMTP config."""
     try:
-        from webapp.email_sender import send_report_email
-        # Build a minimal "report" dict so we can reuse send_report_email
-        # Actually, let's call SMTP directly for flexibility
+        from webapp.email_sender import apply_brand_email_identity, brand_email_identity
         import smtplib
         from email.mime.multipart import MIMEMultipart
         from email.mime.text import MIMEText
@@ -159,8 +157,8 @@ def _send_hiring_email(brand, recipient_email, recipient_name, subject, body_htm
         smtp_port = int(cfg.get("SMTP_PORT", 587))
         smtp_user = cfg.get("SMTP_USER", "")
         smtp_pass = cfg.get("SMTP_PASSWORD", "")
-        from_name = brand.get("display_name") or cfg.get("SMTP_FROM_NAME", "GroMore")
-        from_email = cfg.get("SMTP_FROM_EMAIL", smtp_user)
+        identity = brand_email_identity(cfg, brand, "GroMore")
+        from_email = identity["from_email"]
 
         if not smtp_user or not smtp_pass:
             log.warning("SMTP not configured, skipping hiring email to %s", recipient_email)
@@ -168,7 +166,7 @@ def _send_hiring_email(brand, recipient_email, recipient_name, subject, body_htm
 
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = f"{from_name} <{from_email}>"
+        apply_brand_email_identity(msg, cfg, brand, "GroMore")
         msg["To"] = recipient_email
         msg.attach(MIMEText(body_html, "html"))
 

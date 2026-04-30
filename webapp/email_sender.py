@@ -5,7 +5,51 @@ import html
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr, parseaddr
 from pathlib import Path
+
+
+def _clean_header_value(value, max_len=255):
+    return str(value or "").replace("\r", " ").replace("\n", " ").strip()[:max_len]
+
+
+def _valid_email(value):
+    email_address = parseaddr(_clean_header_value(value))[1]
+    return email_address if "@" in email_address and "." in email_address.rsplit("@", 1)[-1] else ""
+
+
+def brand_email_identity(app_config, brand=None, fallback_name="GroMore", sender_name=None, reply_to=None):
+    """Return the SMTP-safe From identity plus optional brand Reply-To."""
+    smtp_user = app_config.get("SMTP_USER", "")
+    from_email = _valid_email(app_config.get("SMTP_FROM_EMAIL", smtp_user)) or smtp_user
+    brand = brand or {}
+    resolved_name = (
+        _clean_header_value(sender_name, 120)
+        or _clean_header_value(brand.get("email_sender_name"), 120)
+        or _clean_header_value(brand.get("email_from_name"), 120)
+        or _clean_header_value(brand.get("display_name") or brand.get("name"), 120)
+        or _clean_header_value(app_config.get("SMTP_FROM_NAME", fallback_name), 120)
+        or fallback_name
+    )
+    resolved_reply_to = (
+        _valid_email(reply_to)
+        or _valid_email(brand.get("email_reply_to"))
+        or _valid_email(brand.get("reply_to_email"))
+    )
+    return {
+        "from_name": resolved_name,
+        "from_email": from_email,
+        "reply_to": resolved_reply_to,
+    }
+
+
+def apply_brand_email_identity(msg, app_config, brand=None, fallback_name="GroMore", sender_name=None, reply_to=None):
+    """Apply From and Reply-To headers while keeping SMTP envelope delivery-safe."""
+    identity = brand_email_identity(app_config, brand, fallback_name, sender_name, reply_to)
+    msg["From"] = formataddr((identity["from_name"], identity["from_email"]))
+    if identity["reply_to"] and identity["reply_to"].lower() != identity["from_email"].lower():
+        msg["Reply-To"] = formataddr((identity["from_name"], identity["reply_to"]))
+    return identity
 
 
 def send_report_email(app_config, brand, report, recipients):
@@ -21,8 +65,9 @@ def send_report_email(app_config, brand, report, recipients):
     smtp_port = app_config.get("SMTP_PORT", 587)
     smtp_user = app_config.get("SMTP_USER", "")
     smtp_password = app_config.get("SMTP_PASSWORD", "")
-    from_name = app_config.get("SMTP_FROM_NAME", "Agency Reports")
-    from_email = app_config.get("SMTP_FROM_EMAIL", smtp_user)
+    identity = brand_email_identity(app_config, brand, "Agency Reports")
+    from_name = identity["from_name"]
+    from_email = identity["from_email"]
 
     if not smtp_user or not smtp_password:
         raise ValueError("SMTP not configured. Set SMTP_USER and SMTP_PASSWORD environment variables.")
@@ -45,7 +90,7 @@ def send_report_email(app_config, brand, report, recipients):
         for contact in recipients:
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
-            msg["From"] = f"{from_name} <{from_email}>"
+            apply_brand_email_identity(msg, app_config, brand, "Agency Reports")
             msg["To"] = contact["email"]
 
             # Plain text fallback
@@ -435,14 +480,14 @@ def send_client_login_email(app_config, email, name, temp_password, login_url, b
         server.sendmail(from_email, email, msg.as_string())
 
 
-def send_simple_email(app_config, email, subject, text, html=None):
+def send_simple_email(app_config, email, subject, text, html=None, brand=None, sender_name=None, reply_to=None):
     """Send a simple transactional email with text and optional HTML."""
     smtp_host = app_config.get("SMTP_HOST", "smtp.gmail.com")
     smtp_port = app_config.get("SMTP_PORT", 587)
     smtp_user = app_config.get("SMTP_USER", "")
     smtp_password = app_config.get("SMTP_PASSWORD", "")
-    from_name = app_config.get("SMTP_FROM_NAME", "GroMore")
-    from_email = app_config.get("SMTP_FROM_EMAIL", smtp_user)
+    identity = brand_email_identity(app_config, brand, "GroMore", sender_name, reply_to)
+    from_email = identity["from_email"]
 
     if not smtp_user or not smtp_password:
         raise ValueError("SMTP not configured.")
@@ -455,7 +500,7 @@ def send_simple_email(app_config, email, subject, text, html=None):
 
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = f"{from_name} <{from_email}>"
+        apply_brand_email_identity(msg, app_config, brand, "GroMore", sender_name, reply_to)
         msg["To"] = email
         msg.attach(MIMEText(text, "plain"))
         msg.attach(MIMEText(html, "html"))
@@ -463,7 +508,8 @@ def send_simple_email(app_config, email, subject, text, html=None):
 
 
 def send_bulk_email(app_config, recipients, subject, text, html_body=None,
-                    tracking_base_url=None, token_map=None):
+                    tracking_base_url=None, token_map=None, brand=None,
+                    sender_name=None, reply_to=None):
     """Send one message to many recipients using the configured SMTP account.
     
     If tracking_base_url and token_map are provided, a 1x1 tracking pixel
@@ -473,8 +519,8 @@ def send_bulk_email(app_config, recipients, subject, text, html_body=None,
     smtp_port = app_config.get("SMTP_PORT", 587)
     smtp_user = app_config.get("SMTP_USER", "")
     smtp_password = app_config.get("SMTP_PASSWORD", "")
-    from_name = app_config.get("SMTP_FROM_NAME", "GroMore")
-    from_email = app_config.get("SMTP_FROM_EMAIL", smtp_user)
+    identity = brand_email_identity(app_config, brand, "GroMore", sender_name, reply_to)
+    from_email = identity["from_email"]
 
     if not smtp_user or not smtp_password:
         raise ValueError("SMTP not configured.")
@@ -504,7 +550,7 @@ def send_bulk_email(app_config, recipients, subject, text, html_body=None,
 
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
-            msg["From"] = f"{from_name} <{from_email}>"
+            apply_brand_email_identity(msg, app_config, brand, "GroMore", sender_name, reply_to)
             msg["To"] = email_address
             msg.attach(MIMEText(text, "plain"))
             msg.attach(MIMEText(recipient_html, "html"))

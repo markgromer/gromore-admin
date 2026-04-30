@@ -225,6 +225,9 @@
     <a class="settings-quick-link" href="{{ url_for('client.client_automations') }}#appointments">
         <i class="bi bi-calendar2-event"></i> Appointment Reminders
     </a>
+    <button type="button" class="settings-quick-link" data-panel-target="email" data-panel-label="Email Identity">
+        <i class="bi bi-envelope-at"></i> Email Sender
+    </button>
     <a class="settings-quick-link" href="{{ url_for('client.client_automations') }}#follow-up">
         <i class="bi bi-alarm"></i> Follow-Up Cadence
     </a>
@@ -290,6 +293,16 @@
         </div>
         <div class="connection-summary-meta">Choose where exports, reports, and sheets land so the team has a shared destination for generated assets.</div>
         <div class="connection-summary-power">Powers: exports, sheets, file delivery</div>
+    </button>
+
+    <button type="button" class="connection-summary-card" data-panel-target="email" data-panel-label="Email Identity">
+        <span class="connection-summary-icon" style="background:linear-gradient(135deg,#0f766e,#14b8a6);"><i class="bi bi-envelope-at-fill"></i></span>
+        <div class="connection-summary-label">
+            <strong>Email Identity</strong>
+            {% if brand.email_sender_name or brand.email_reply_to %}<span class="badge bg-success">Customized</span>{% else %}<span class="badge bg-secondary">Default</span>{% endif %}
+        </div>
+        <div class="connection-summary-meta">Sender name and reply-to handling for client-facing emails such as billing, appointment, outreach, and nurture messages.</div>
+        <div class="connection-summary-power">Powers: reminders, outreach, lead emails</div>
     </button>
 
     <button type="button" class="connection-summary-card" data-panel-target="sng" data-panel-label="Sweep and Go" data-help-href="{{ url_for('client.client_help', guide='connections') }}#crm-sng">
@@ -657,6 +670,44 @@
                 <div class="connection-panel-actions">
                     <a href="{{ url_for('client.client_help', guide='connections') }}#google-drive" class="btn btn-outline-secondary btn-sm"><i class="bi bi-question-circle me-1"></i>Drive sync guide</a>
                 </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="connection-panel" data-panel="email" id="connection-panel-email">
+        <div class="connection-panel-shell card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                    <div>
+                        <h5 class="fw-semibold mb-1">Email Identity</h5>
+                        <p class="text-muted mb-0">Control how client-facing emails identify this business and where replies should go.</p>
+                    </div>
+                    {% if brand.email_sender_name or brand.email_reply_to %}<span class="badge bg-success rounded-pill px-3 py-2">Customized</span>{% else %}<span class="badge bg-secondary rounded-pill px-3 py-2">Using platform default</span>{% endif %}
+                </div>
+
+                <div class="connection-panel-note mt-3">
+                    The authenticated SMTP account remains <strong>{{ config.SMTP_FROM_EMAIL or config.SMTP_USER or 'the platform mail account' }}</strong> for deliverability. These fields set the display name and Reply-To on billing reminders, appointment reminders, Warren bulk emails, commercial outreach, hiring emails, client reports, and brand-scoped drip sends.
+                </div>
+
+                <form method="POST" action="{{ url_for('client.client_save_email_identity') }}" class="mt-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Sender Name</label>
+                            <input type="text" class="form-control" name="email_sender_name" value="{{ brand.email_sender_name or '' }}" placeholder="{{ brand.display_name or brand.name or 'Business Name' }}" maxlength="120">
+                            <small class="text-muted">This is the name customers see in their inbox.</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Reply-To Email</label>
+                            <input type="email" class="form-control" name="email_reply_to" value="{{ brand.email_reply_to or '' }}" placeholder="office@yourbusiness.com" maxlength="255">
+                            <small class="text-muted">Replies go here even when the platform SMTP account sends the email.</small>
+                        </div>
+                    </div>
+                    <div class="mt-3 d-flex align-items-center gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Save Email Identity</button>
+                        <span class="text-muted" style="font-size:.85rem;">To send from their actual domain later, connect a verified SMTP/domain sending service.</span>
+                    </div>
+                </form>
             </div>
         </div>
     </section>
@@ -1618,6 +1669,9 @@
         try {
             initialPanel = localStorage.getItem('clientConnectionsPanel') || initialPanel;
         } catch (err) {}
+        if (window.location.hash && window.location.hash.indexOf('#connection-panel-') === 0) {
+            initialPanel = window.location.hash.replace('#connection-panel-', '');
+        }
         if (!document.querySelector('[data-panel-target="' + initialPanel + '"]')) {
             initialPanel = 'google';
         }

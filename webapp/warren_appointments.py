@@ -222,7 +222,7 @@ def _send_email_reminder(app_config, brand, candidate):
     subject = f"Appointment reminder for {_friendly_date(candidate.get('appointment_date_obj'))}"
     text = _render_message(brand, candidate, "email")
     html = "<div style=\"font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.6;\">%s</div>" % text.replace("\n", "<br>")
-    send_simple_email(app_config, candidate["client_email"], subject, text, html)
+    send_simple_email(app_config, candidate["client_email"], subject, text, html, brand=brand)
 
 
 def _candidate_channels(brand, candidate, configured_channels):

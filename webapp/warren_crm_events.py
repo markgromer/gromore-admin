@@ -654,7 +654,7 @@ def process_pending_crm_event_actions(db, app_config, brand_id=None, now=None, l
                 stats["sent" if ok else "failed"] += 1
             else:
                 html = "<div style=\"font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.6;\">%s</div>" % str(action.get("message_text") or "").replace("\n", "<br>")
-                send_simple_email(app_config, action.get("recipient"), action.get("subject") or "CRM Event Alert", action.get("message_text") or "", html)
+                send_simple_email(app_config, action.get("recipient"), action.get("subject") or "CRM Event Alert", action.get("message_text") or "", html, brand=brand)
                 ok, detail = True, "sent"
                 db.update_crm_event_action(
                     action["id"],

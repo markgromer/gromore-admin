@@ -23,6 +23,7 @@
 - **Inline Warren Console Transcript** - Added in-context transcript visibility inside dashboard workflow
 - **Navigation Simplification** - Cleaner client navigation and tab flow to reduce click friction
 - **Client Password Settings** - Added first-class password management inside client settings
+- **Brand Email Identity** - Client-facing emails can use a brand sender name and reply-to address while keeping SMTP delivery authenticated
 - **AI Provider Configuration** - Client AI settings now support OpenAI, OpenRouter, Gemini, xAI/Grok, BFL/FLUX, and custom OpenAI-compatible provider routing with per-purpose model fields
 - **Multi-Provider Token Vault** - Separate saved API tokens for each AI provider so clients can keep multiple provider credentials active at once
 - **AI Model Suggestions** - Connection settings show provider-aware model suggestions for quality, cost balance, and high-volume use cases
@@ -454,6 +455,7 @@
 ### Connections
 - **Google OAuth** - Connect Google Ads, Analytics, Search Console
 - **Meta OAuth** - Connect Facebook/Instagram ads and pages
+- **Email Identity** - Set brand sender name and reply-to email for client-facing reminders, reports, outreach, hiring, and drip messages
 - **CRM Connection** - GoHighLevel, HubSpot, Sweep & Go, or custom webhook
 - **WordPress** - Blog publishing credentials
 - **Google Maps** - API key for heatmap scanner

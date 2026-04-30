@@ -380,7 +380,7 @@ def send_bulk_message(db, app_config, brand, group_keys, channels, subject, body
                 "</div>"
             )
             try:
-                sent_email = send_bulk_email(app_config, email_recipients, subject, body, html_body=html_body)
+                sent_email = send_bulk_email(app_config, email_recipients, subject, body, html_body=html_body, brand=brand)
             except Exception as exc:
                 failed += len(email_recipients)
                 details.append(str(exc)[:300])

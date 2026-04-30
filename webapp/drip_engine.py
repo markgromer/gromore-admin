@@ -12,6 +12,8 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+from webapp.email_sender import apply_brand_email_identity, brand_email_identity
+
 
 def _log_client_commercial_drip_activity(db, pending_item, status, subject, body_text, detail=""):
     if (pending_item.get("lead_source") or "").strip() != "client_commercial":
@@ -75,14 +77,30 @@ def _merge(template, data):
     return result
 
 
+def _brand_for_pending_drip(db, pending_item, cache):
+    brand_id = pending_item.get("brand_id")
+    if not brand_id and (pending_item.get("lead_source") or "").strip() == "client_commercial":
+        thread = db.get_lead_thread(pending_item.get("lead_id")) if pending_item.get("lead_id") else None
+        brand_id = thread.get("brand_id") if thread else None
+    if not brand_id:
+        return {}
+    try:
+        brand_id = int(brand_id)
+    except (TypeError, ValueError):
+        return {}
+    if brand_id not in cache:
+        cache[brand_id] = db.get_brand(brand_id) or {}
+    return cache[brand_id]
+
+
 def process_pending_drips(app_config, db):
     """Check for due drip sends and fire them. Returns (sent, failed) counts."""
     smtp_host = app_config.get("SMTP_HOST", "smtp.gmail.com")
     smtp_port = app_config.get("SMTP_PORT", 587)
     smtp_user = app_config.get("SMTP_USER", "")
     smtp_password = app_config.get("SMTP_PASSWORD", "")
-    from_name = app_config.get("SMTP_FROM_NAME", "GroMore")
-    from_email = app_config.get("SMTP_FROM_EMAIL", smtp_user)
+    default_identity = brand_email_identity(app_config, None, "GroMore")
+    from_email = default_identity["from_email"]
     app_url = app_config.get("APP_URL", "https://gromore-admin.onrender.com")
 
     if not smtp_user or not smtp_password:
@@ -96,6 +114,7 @@ def process_pending_drips(app_config, db):
 
     sent = 0
     failed = 0
+    brand_cache = {}
 
     try:
         server = smtplib.SMTP(smtp_host, smtp_port)
@@ -120,6 +139,7 @@ def process_pending_drips(app_config, db):
         subject = _merge(p["subject"], merge_data)
         body_html = _merge(p["body_html"], merge_data)
         body_text = _merge(p.get("body_text") or "", merge_data)
+        brand = _brand_for_pending_drip(db, p, brand_cache)
 
         # Append unsubscribe footer
         unsub_link = merge_data["unsubscribe_url"]
@@ -135,7 +155,8 @@ def process_pending_drips(app_config, db):
         try:
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
-            msg["From"] = f"{from_name} <{from_email}>"
+            identity = apply_brand_email_identity(msg, app_config, brand, "GroMore")
+            from_email = identity["from_email"]
             msg["To"] = p["email"]
             msg["List-Unsubscribe"] = f"<{unsub_link}>"
 

@@ -4766,7 +4766,7 @@ def client_feature_upgrade_email_contacts(feature_key):
     try:
         from webapp.email_sender import send_bulk_email
 
-        send_bulk_email(current_app.config, recipients, subject, message)
+        send_bulk_email(current_app.config, recipients, subject, message, brand=brand)
         flash(f"Sent to {len(recipients)} contact(s).", "success")
     except Exception as exc:
         flash(f"Email failed: {exc}", "warning")
@@ -10740,6 +10740,26 @@ def client_change_password():
     return redirect(url_for("client.client_settings"))
 
 
+@client_bp.route("/settings/email-identity", methods=["POST"])
+@client_login_required
+def client_save_email_identity():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+
+    sender_name = (request.form.get("email_sender_name") or "").replace("\r", " ").replace("\n", " ").strip()[:120]
+    reply_to = (request.form.get("email_reply_to") or "").replace("\r", " ").replace("\n", " ").strip().lower()[:255]
+
+    if reply_to and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", reply_to):
+        flash("Reply-to email needs to be a valid email address.", "error")
+        return redirect(url_for("client.client_settings") + "#connection-panel-email")
+
+    db.update_brand_text_field(brand_id, "email_sender_name", sender_name)
+    db.update_brand_text_field(brand_id, "email_reply_to", reply_to)
+
+    flash("Email sender identity saved.", "success")
+    return redirect(url_for("client.client_settings") + "#connection-panel-email")
+
+
 def _load_client_automation_context(db, brand_id):
     chatbot_channels = set()
     brand = db.get_brand(brand_id) or {}
@@ -16133,6 +16153,7 @@ def client_commercial_thread_build_proposal(thread_id):
 def client_commercial_thread_send_email(thread_id):
     db = _get_db()
     brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id) or {}
     thread = db.get_lead_thread(thread_id, brand_id=brand_id)
     if not thread:
         abort(404)
@@ -16158,6 +16179,7 @@ def client_commercial_thread_send_email(thread_id):
             subject,
             message_text,
             html=_build_client_commercial_email_html(message_text),
+            brand=brand,
         )
     except Exception as exc:
         db.add_lead_event(
