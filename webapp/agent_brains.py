@@ -1881,6 +1881,8 @@ def _upsert_generated_task(db, brand_id: int, *, source_ref: str, title: str,
                WHERE id = ? AND brand_id = ?""",
             (title, description, steps_json, priority, existing["id"], brand_id),
         )
+        task_id = existing["id"]
+        event_type = "warren_plan_updated"
     else:
         conn.execute(
             """INSERT INTO brand_tasks
@@ -1888,8 +1890,33 @@ def _upsert_generated_task(db, brand_id: int, *, source_ref: str, title: str,
                VALUES (?, ?, ?, ?, ?, 'warren_plan', ?)""",
             (brand_id, title, description, steps_json, priority, source_ref),
         )
+        task_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        event_type = "warren_plan_created"
     conn.commit()
     conn.close()
+    try:
+        from webapp.google_drive import append_sheet_row
+        append_sheet_row(
+            db,
+            brand_id,
+            "Warren Tasks",
+            ["Updated At", "Event", "Task ID", "Status", "Priority", "Title", "Description", "Steps", "Completion Notes", "Source", "Source Ref"],
+            [
+                datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                event_type,
+                task_id,
+                "open",
+                priority,
+                title,
+                description,
+                "\n".join(f"[open] {step}" for step in steps),
+                "",
+                "warren_plan",
+                source_ref,
+            ],
+        )
+    except Exception as exc:
+        logger.warning("Failed to mirror Warren plan task to Google Sheet: %s", exc)
 
 
 def _publish_simplified_plan(db, brand_id: int, month: str,

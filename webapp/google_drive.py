@@ -9,6 +9,7 @@ import json
 import re
 import logging
 from datetime import datetime, timedelta
+from urllib.parse import quote
 
 import requests
 from flask import current_app
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 DRIVE_API = "https://www.googleapis.com/drive/v3"
 DRIVE_UPLOAD_API = "https://www.googleapis.com/upload/drive/v3"
+SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets"
 
 # Subfolders auto-created inside the brand's root Drive folder
 SUBFOLDER_NAMES = ["Creatives", "Ads", "Images", "Reports"]
@@ -374,6 +376,89 @@ def download_file(db, brand_id, file_id):
     if resp.status_code == 200:
         return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
     return None, None
+
+
+def _extract_sheet_id(raw):
+    """Extract a Google Sheet ID from a raw string or full spreadsheet URL."""
+    if not raw:
+        return ""
+    raw = raw.strip()
+    m = re.search(r"/spreadsheets/d/([a-zA-Z0-9_-]+)", raw)
+    if m:
+        return m.group(1)
+    return raw
+
+
+def append_sheet_row(db, brand_id, worksheet_name, headers, row_values):
+    """Append one row to the brand's configured Google Sheet.
+
+    Returns a small result dict. This is best-effort by design so Warren memory
+    and task updates still succeed if Sheets access is missing or temporarily down.
+    """
+    brand = db.get_brand(brand_id)
+    sheet_id = _extract_sheet_id((brand or {}).get("google_drive_sheet_id") or "")
+    if not sheet_id:
+        return {"ok": False, "error": "No Google Sheet ID configured."}
+
+    token = get_valid_access_token(db, brand_id)
+    if not token:
+        return {"ok": False, "error": "No valid Google token."}
+
+    worksheet = re.sub(r"[^A-Za-z0-9 _-]+", "", str(worksheet_name or "Warren Memory")).strip() or "Warren Memory"
+    headers = [str(value or "")[:120] for value in (headers or [])]
+    row_values = [str(value or "")[:50000] for value in (row_values or [])]
+    headers_len = max(len(headers), len(row_values), 1)
+    if len(headers) < headers_len:
+        headers += [f"Column {idx + 1}" for idx in range(len(headers), headers_len)]
+    if len(row_values) < headers_len:
+        row_values += [""] * (headers_len - len(row_values))
+
+    auth_headers = {**_drive_headers(token), "Content-Type": "application/json"}
+    header_range = f"'{worksheet}'!A1:Z1"
+    encoded_header_range = quote(header_range, safe="'!:")
+    append_range = quote(f"'{worksheet}'!A:Z", safe="'!:")
+    try:
+        header_resp = requests.get(
+            f"{SHEETS_API}/{sheet_id}/values/{encoded_header_range}",
+            headers=_drive_headers(token),
+            timeout=15,
+        )
+        header_is_empty = header_resp.status_code == 200 and not (header_resp.json().get("values") or [])
+        if header_resp.status_code == 400:
+            # The tab probably does not exist. Create it, then write headers.
+            requests.post(
+                f"{SHEETS_API}/{sheet_id}:batchUpdate",
+                headers=auth_headers,
+                json={"requests": [{"addSheet": {"properties": {"title": worksheet}}}]},
+                timeout=15,
+            )
+            header_is_empty = True
+        elif header_resp.status_code not in (200, 404):
+            logger.warning("Sheets header check failed (%s): %s", header_resp.status_code, header_resp.text[:300])
+
+        if header_is_empty:
+            requests.put(
+                f"{SHEETS_API}/{sheet_id}/values/{encoded_header_range}",
+                params={"valueInputOption": "USER_ENTERED"},
+                headers=auth_headers,
+                json={"values": [headers]},
+                timeout=15,
+            )
+
+        append_resp = requests.post(
+            f"{SHEETS_API}/{sheet_id}/values/{append_range}:append",
+            params={"valueInputOption": "USER_ENTERED", "insertDataOption": "INSERT_ROWS"},
+            headers=auth_headers,
+            json={"values": [row_values]},
+            timeout=20,
+        )
+        if append_resp.status_code in (200, 201):
+            return {"ok": True, "updatedRange": (append_resp.json() or {}).get("updates", {}).get("updatedRange", "")}
+        logger.warning("Sheets append failed (%s): %s", append_resp.status_code, append_resp.text[:300])
+        return {"ok": False, "error": append_resp.text[:300]}
+    except Exception as exc:
+        logger.warning("Sheets append failed for brand %s: %s", brand_id, exc)
+        return {"ok": False, "error": str(exc)[:300]}
 
 
 def setup_brand_drive(db, brand_id):

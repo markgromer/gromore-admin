@@ -1493,6 +1493,7 @@ class WebDB:
                 created_by INTEGER DEFAULT NULL,
                 due_date TEXT DEFAULT '',
                 completed_at TEXT DEFAULT '',
+                completion_notes TEXT DEFAULT '',
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now')),
                 FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
@@ -1504,6 +1505,10 @@ class WebDB:
             CREATE INDEX IF NOT EXISTS idx_brand_tasks_brand
             ON brand_tasks(brand_id, status, assigned_to);
         """)
+        brand_task_columns = {r[1] for r in conn.execute("PRAGMA table_info(brand_tasks)").fetchall()}
+        if "completion_notes" not in brand_task_columns:
+            self._safe_add_column(conn, "brand_tasks", "completion_notes", "TEXT DEFAULT ''")
+        conn.commit()
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS va_requests (
@@ -7315,7 +7320,7 @@ class WebDB:
     def update_brand_task(self, task_id, brand_id, **fields):
         conn = self._conn()
         allowed = {"title", "description", "steps_json", "status", "priority",
-                    "assigned_to", "due_date", "completed_at"}
+                    "assigned_to", "due_date", "completed_at", "completion_notes"}
         sets = []
         params = []
         for k, v in fields.items():

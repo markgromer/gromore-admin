@@ -6387,6 +6387,19 @@ def _client_assistant_chat_handler(payload):
         history = db.get_ai_chat_messages(brand_id, month, limit=50)
         trimmed = history[-25:] if len(history) > 25 else history
         messages = [{"role": m["role"], "content": m["content"]} for m in trimmed if m.get("content")]
+        recent_tasks = db.get_brand_tasks(brand_id, limit=20)
+        task_context = []
+        for task in recent_tasks[:12]:
+            task_context.append({
+                "id": task.get("id"),
+                "title": task.get("title"),
+                "status": task.get("status"),
+                "priority": task.get("priority"),
+                "source": task.get("source"),
+                "completion_notes": (task.get("completion_notes") or "")[:800],
+                "steps": _task_steps_summary(task)[:1200],
+                "completed_at": task.get("completed_at"),
+            })
 
         context = {
             "client_mode": True,
@@ -6415,6 +6428,7 @@ def _client_assistant_chat_handler(payload):
             "suggestions": suggestions,
             "analysis_error": analysis_error,
             "lead_intelligence": _build_warren_lead_intelligence(db, brand),
+            "task_context": task_context,
             "onboarding_profile": onboarding_interview.get("profile"),
             "attached_text": attached_text,
             "_user_image_upload": bool(attached_image),
@@ -18617,6 +18631,94 @@ def client_staff_toggle(user_id):
 # TASK SYSTEM
 # ═══════════════════════════════════════════════════════════
 
+def _parse_task_steps(task):
+    try:
+        steps = json.loads((task or {}).get("steps_json") or "[]")
+    except Exception:
+        steps = []
+    return steps if isinstance(steps, list) else []
+
+
+def _task_steps_summary(task):
+    steps = _parse_task_steps(task)
+    if not steps:
+        return ""
+    lines = []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        marker = "done" if step.get("done") else "open"
+        text = str(step.get("text") or "").strip()
+        if text:
+            lines.append(f"[{marker}] {text}")
+    return "\n".join(lines)
+
+
+def _append_task_sheet_row(db, brand_id, task, event_type, notes=""):
+    try:
+        from webapp.google_drive import append_sheet_row
+        append_sheet_row(
+            db,
+            brand_id,
+            "Warren Tasks",
+            [
+                "Updated At",
+                "Event",
+                "Task ID",
+                "Status",
+                "Priority",
+                "Title",
+                "Description",
+                "Steps",
+                "Completion Notes",
+                "Source",
+                "Source Ref",
+            ],
+            [
+                datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                event_type,
+                task.get("id") or "",
+                task.get("status") or "",
+                task.get("priority") or "",
+                task.get("title") or "",
+                task.get("description") or "",
+                _task_steps_summary(task),
+                notes or task.get("completion_notes") or "",
+                task.get("source") or "",
+                task.get("source_ref") or "",
+            ],
+        )
+    except Exception as exc:
+        log.warning("Failed to mirror task update to Google Sheet: %s", exc)
+
+
+def _record_task_completion_learning(db, brand_id, task, completion_notes):
+    notes = (completion_notes or task.get("completion_notes") or "").strip()
+    title = (task.get("title") or "Completed task").strip()
+    steps_summary = _task_steps_summary(task)
+    content = (
+        f"Task completed: {title}\n"
+        f"Source: {(task.get('source') or 'manual')} {task.get('source_ref') or ''}\n"
+        f"Priority: {task.get('priority') or 'normal'}\n"
+        f"Actions taken / owner notes: {notes or 'No notes provided.'}\n"
+        f"Checklist state:\n{steps_summary or 'No checklist steps.'}\n"
+        "Use this as operating history when recommending future missions, follow-up checks, or next actions."
+    )
+    try:
+        api_key = ((db.get_brand(brand_id) or {}).get("openai_api_key") or "").strip()
+        if api_key:
+            from webapp.ai_assistant import save_memory_with_embedding
+            save_memory_with_embedding(db, brand_id, "learning", f"Completed: {title[:80]}", content, api_key)
+        else:
+            db.add_warren_memory(brand_id, "learning", f"Completed: {title[:80]}", content, None)
+    except Exception as exc:
+        log.warning("Failed to save task completion memory: %s", exc)
+        try:
+            db.add_warren_memory(brand_id, "learning", f"Completed: {title[:80]}", content, None)
+        except Exception:
+            log.exception("Fallback task completion memory save failed")
+
+
 @client_bp.route("/tasks")
 @client_login_required
 def client_tasks():
@@ -18672,6 +18774,9 @@ def client_task_create():
         created_by=session["client_user_id"],
         due_date=data.get("due_date", ""),
     )
+    created_task = db.get_brand_task(task_id, brand_id)
+    if created_task:
+        _append_task_sheet_row(db, brand_id, created_task, "created")
     return jsonify({"success": True, "task_id": task_id})
 
 
@@ -18703,6 +18808,8 @@ def client_task_update(task_id):
         abort(404)
     role = session.get("client_role", "owner")
     data = request.get_json() or {}
+    old_status = (task.get("status") or "").strip().lower()
+    old_notes = (task.get("completion_notes") or "").strip()
 
     # Staff can only update status and check off steps on their own tasks
     if role == "staff":
@@ -18715,17 +18822,29 @@ def client_task_update(task_id):
                 allowed_fields["completed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         if "steps_json" in data:
             allowed_fields["steps_json"] = data["steps_json"]
+        if "completion_notes" in data:
+            allowed_fields["completion_notes"] = str(data.get("completion_notes") or "").strip()[:4000]
         if allowed_fields:
             db.update_brand_task(task_id, brand_id, **allowed_fields)
     else:
         fields = {}
-        for key in ("title", "description", "status", "priority", "assigned_to", "due_date", "steps_json"):
+        for key in ("title", "description", "status", "priority", "assigned_to", "due_date", "steps_json", "completion_notes"):
             if key in data:
-                fields[key] = data[key]
+                fields[key] = str(data[key] or "").strip()[:4000] if key == "completion_notes" else data[key]
         if data.get("status") == "done":
             fields["completed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         if fields:
             db.update_brand_task(task_id, brand_id, **fields)
+
+    updated_task = db.get_brand_task(task_id, brand_id)
+    if updated_task:
+        new_status = (updated_task.get("status") or "").strip().lower()
+        new_notes = (updated_task.get("completion_notes") or "").strip()
+        if new_status == "done" and (old_status != "done" or new_notes != old_notes):
+            _record_task_completion_learning(db, brand_id, updated_task, new_notes)
+            _append_task_sheet_row(db, brand_id, updated_task, "completed", new_notes)
+        elif "completion_notes" in data and new_notes != old_notes:
+            _append_task_sheet_row(db, brand_id, updated_task, "notes_updated", new_notes)
 
     return jsonify({"success": True})
 
@@ -18807,6 +18926,9 @@ def client_task_from_finding():
         created_by=session["client_user_id"],
         due_date=data.get("due_date", ""),
     )
+    created_task = db.get_brand_task(task_id, brand_id)
+    if created_task:
+        _append_task_sheet_row(db, brand_id, created_task, "created_from_finding")
     return jsonify({"success": True, "task_id": task_id})
 
 

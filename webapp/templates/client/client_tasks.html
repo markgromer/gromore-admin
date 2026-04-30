@@ -452,6 +452,21 @@ async function openTaskDetail(taskId) {
         html += `</ul>`;
     }
 
+    html += `<div class="mt-3">
+        <label class="form-label" style="font-size:.8rem;color:#94a3b8;">Notes for Warren</label>
+        ${canEdit ? `
+            <textarea class="form-control" id="completionNotes" rows="4" placeholder="Tell Warren what was done, what changed, links touched, blockers, and what to watch next.">${esc(t.completion_notes || "")}</textarea>
+            <div class="d-flex gap-2 flex-wrap mt-2">
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="saveCompletionNotes(${t.id})">
+                    <i class="bi bi-journal-text me-1"></i>Save Notes
+                </button>
+                <button type="button" class="btn btn-sm btn-success" onclick="completeTaskWithNotes(${t.id})">
+                    <i class="bi bi-check2-circle me-1"></i>Mark Done + Tell Warren
+                </button>
+            </div>
+        ` : `<div style="font-size:.9rem;color:#475569;white-space:pre-wrap;">${esc(t.completion_notes || "No completion notes yet.")}</div>`}
+    </div>`;
+
     // Source info
     if (t.source === "agent_finding") {
         html += `<div class="mt-3"><span class="source-badge">Created from Agent Finding</span></div>`;
@@ -481,6 +496,36 @@ async function updateTaskField(taskId, field, value) {
     // Update local data
     const t = allTasks.find(t => t.id === taskId);
     if (t) t[field] = value;
+    renderTasks();
+}
+
+async function saveCompletionNotes(taskId) {
+    const notesEl = document.getElementById("completionNotes");
+    const notes = notesEl ? notesEl.value.trim() : "";
+    await fetch(`/client/tasks/${taskId}/update`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({completion_notes: notes}),
+    });
+    const t = allTasks.find(t => t.id === taskId);
+    if (t) t.completion_notes = notes;
+    renderTasks();
+}
+
+async function completeTaskWithNotes(taskId) {
+    const notesEl = document.getElementById("completionNotes");
+    const notes = notesEl ? notesEl.value.trim() : "";
+    await fetch(`/client/tasks/${taskId}/update`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({status: "done", completion_notes: notes}),
+    });
+    const t = allTasks.find(t => t.id === taskId);
+    if (t) {
+        t.status = "done";
+        t.completion_notes = notes;
+    }
+    bootstrap.Modal.getInstance(document.getElementById("taskDetailModal")).hide();
     renderTasks();
 }
 

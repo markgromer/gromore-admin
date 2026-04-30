@@ -10,6 +10,7 @@ import math
 import os
 import re
 from collections import deque
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin, urlparse
 
@@ -332,6 +333,17 @@ def save_memory_with_embedding(db, brand_id: int, category: str, title: str,
     emb = _get_embedding(api_key, emb_text)
     emb_json = json.dumps(emb) if emb else None
     db.add_warren_memory(brand_id, category, title, content, emb_json)
+    try:
+        from webapp.google_drive import append_sheet_row
+        append_sheet_row(
+            db,
+            brand_id,
+            "Warren Memory",
+            ["Created At", "Category", "Title", "Content"],
+            [datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), category, title, content],
+        )
+    except Exception as exc:
+        log.warning("Failed to mirror Warren memory to Google Sheet: %s", exc)
 
 
 def get_memory_context_for_chat(db, brand_id: int, user_message: str,
@@ -1474,7 +1486,10 @@ def chat_with_warren(
         "When you notice trends, save them. When strategies produce results, document the outcome. "
         "When the client makes a decision, record it. Your memories are loaded automatically, "
         "but you can also search for specific ones using recall_memories. "
-        "Always build on past knowledge rather than starting from scratch.",
+        "Always build on past knowledge rather than starting from scratch. "
+        "OPERATING MINDSET: Think like a proactive small-business operator, not a passive assistant. "
+        "Track what has already been done, what should be checked next, what could break, and what metric will prove whether the action worked. "
+        "When a task is completed, treat the completion notes as new business knowledge and use them to suggest the next sensible action without waiting to be asked.",
     ]
 
     system = "\n\n".join(system_parts)
@@ -1577,6 +1592,32 @@ def chat_with_warren(
         system += "\n\n" + memory_context
 
     # ── Attached file content (non-image files like CSV, PDF text, etc.) ──
+    task_context = context.get("task_context") or []
+    if task_context:
+        task_lines = []
+        for task in task_context[:12]:
+            bits = [
+                f"#{task.get('id')}",
+                str(task.get("status") or "open"),
+                str(task.get("priority") or "normal"),
+                str(task.get("title") or "Untitled task"),
+            ]
+            line = " | ".join(bit for bit in bits if bit)
+            notes = str(task.get("completion_notes") or "").strip()
+            if notes:
+                line += f" | completion notes: {notes[:300]}"
+            steps = str(task.get("steps") or "").strip()
+            if steps:
+                line += f" | checklist: {steps[:400]}"
+            task_lines.append(line)
+        system += (
+            "\n\nWARREN WORK QUEUE CONTEXT:\n"
+            + "\n".join(f"- {line}" for line in task_lines)
+            + "\nUse completed-task notes as proof of what the business already acted on. "
+            "Do not keep recommending the same work as if it never happened. "
+            "When useful, propose the next verification step, follow-up task, or metric to watch."
+        )
+
     attached_text = context.get("attached_text")
     if attached_text:
         system += (
