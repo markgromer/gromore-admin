@@ -326,7 +326,7 @@ def _build_generic_automation_summary(submission, event_type):
 
 
 def _maybe_send_generic_automation_reply(db, brand, thread_id, submission, event_type):
-    if not event_type or not brand.get("sales_bot_enabled"):
+    if not event_type:
         return False
 
     from webapp.warren_crm_events import build_crm_event_template_context, get_rule_key_for_event_type, load_crm_event_rules, render_template_string
@@ -384,7 +384,15 @@ def _maybe_send_generic_automation_reply(db, brand, thread_id, submission, event
             "auto_sent": False,
         },
     )
-    ok, detail = send_reply(db, brand, thread_id, message_text, channel="sms", logged_message_id=message_id)
+    ok, detail = send_reply(
+        db,
+        brand,
+        thread_id,
+        message_text,
+        channel="sms",
+        skip_dnd=not bool(rule.get("respect_dnd", True)),
+        logged_message_id=message_id,
+    )
     db.add_lead_event(
         brand["id"],
         thread_id,
@@ -453,27 +461,29 @@ def _ingest_lead_submission(
     )
     db.update_lead_thread_status(thread_id, summary=summary)
 
-    if brand.get("sales_bot_enabled"):
-        thread = db.get_lead_thread(thread_id, brand_id=brand_id)
-        if not (thread and thread.get("is_private")):
-            handled_by_automation = _maybe_send_generic_automation_reply(
-                db,
-                brand,
-                thread_id,
-                {
-                    "external_id": external_id,
-                    "source": source,
-                    "lead_name": lead_name,
-                    "lead_email": lead_email,
-                    "lead_phone": lead_phone,
-                    "message_text": message_text,
-                    "extra_fields": extra_fields,
-                },
-                automation_event_type,
-            )
-            if handled_by_automation:
-                return thread_id
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not (thread and thread.get("is_private")):
+        handled_by_automation = _maybe_send_generic_automation_reply(
+            db,
+            brand,
+            thread_id,
+            {
+                "external_id": external_id,
+                "source": source,
+                "lead_name": lead_name,
+                "lead_email": lead_email,
+                "lead_phone": lead_phone,
+                "message_text": message_text,
+                "extra_fields": extra_fields,
+            },
+            automation_event_type,
+        )
+        if handled_by_automation:
+            return thread_id
 
+    if brand.get("sales_bot_enabled"):
+        thread = thread or db.get_lead_thread(thread_id, brand_id=brand_id)
+        if not (thread and thread.get("is_private")):
             from webapp.warren_brain import process_and_respond
             from webapp.warren_sender import send_reply
 

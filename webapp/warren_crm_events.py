@@ -504,7 +504,7 @@ def _ensure_sng_quote_lead_thread(db, brand, action, summary):
     return thread_id
 
 
-def _process_sng_quote_nurture_action(db, brand, action, now_iso):
+def _process_sng_quote_nurture_action(db, brand, action, now_iso, *, skip_dnd=False):
     summary = _load_sng_action_summary(db, action)
     contact_probe = {
         "lead_phone": summary.get("client_phone") or action.get("recipient", ""),
@@ -562,7 +562,7 @@ def _process_sng_quote_nurture_action(db, brand, action, now_iso):
             "auto_sent": False,
         },
     )
-    ok, detail = send_reply(db, brand, thread_id, message_text, channel="sms", logged_message_id=message_id)
+    ok, detail = send_reply(db, brand, thread_id, message_text, channel="sms", skip_dnd=skip_dnd, logged_message_id=message_id)
     if ok:
         db.add_lead_event(
             brand["id"],
@@ -635,7 +635,13 @@ def process_pending_crm_event_actions(db, app_config, brand_id=None, now=None, l
 
         try:
             if action.get("rule_key") == "quote_not_signed_up" or action.get("action_kind") == "sng_quote_nurture":
-                status, _detail = _process_sng_quote_nurture_action(db, brand, action, now_iso)
+                status, _detail = _process_sng_quote_nurture_action(
+                    db,
+                    brand,
+                    action,
+                    now_iso,
+                    skip_dnd=not bool(rule.get("respect_dnd", True)),
+                )
                 stats[status if status in stats else "processed"] += 1
             elif action.get("channel") == "sms":
                 ok, detail = send_transactional_sms(db, brand, action.get("recipient"), action.get("message_text"), append_opt_out_footer=True)
