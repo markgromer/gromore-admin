@@ -2276,7 +2276,6 @@ def pull_jobber_revenue(brand, month=None):
             nodes {
                 id
                 total
-                depositTotal
                 createdAt
             }
             totalCount
