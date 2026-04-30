@@ -402,6 +402,22 @@ def _sheet_range(worksheet, cells):
     return quote(f"'{escaped}'!{cells}", safe="'!:")
 
 
+def _sheet_column_name(index):
+    index = max(1, int(index or 1))
+    letters = []
+    while index:
+        index, remainder = divmod(index - 1, 26)
+        letters.append(chr(65 + remainder))
+    return "".join(reversed(letters))
+
+
+def _sheet_table_range(worksheet, width, row_count=None):
+    end_col = _sheet_column_name(width)
+    if row_count:
+        return _sheet_range(worksheet, f"A1:{end_col}{max(1, int(row_count))}")
+    return _sheet_range(worksheet, f"A:{end_col}")
+
+
 def _get_sheet_metadata(access_token, sheet_id):
     resp = requests.get(
         f"{SHEETS_API}/{sheet_id}",
@@ -537,10 +553,11 @@ def write_sheet_table(db, brand_id, worksheet_name, headers, rows):
 
     auth_headers = {**_drive_headers(token), "Content-Type": "application/json"}
     sheet_gid = _ensure_worksheet(token, sheet_id, worksheet)
-    table_range = _sheet_range(worksheet, "A:Z")
+    table_range = _sheet_table_range(worksheet, width, len(values))
+    clear_range = _sheet_table_range(worksheet, max(width, 26))
     try:
         clear_resp = requests.post(
-            f"{SHEETS_API}/{sheet_id}/values/{table_range}:clear",
+            f"{SHEETS_API}/{sheet_id}/values/{clear_range}:clear",
             headers=auth_headers,
             json={},
             timeout=15,
@@ -590,8 +607,8 @@ def append_sheet_row(db, brand_id, worksheet_name, headers, row_values):
         row_values += [""] * (headers_len - len(row_values))
 
     auth_headers = {**_drive_headers(token), "Content-Type": "application/json"}
-    encoded_header_range = _sheet_range(worksheet, "A1:Z1")
-    append_range = _sheet_range(worksheet, "A:Z")
+    encoded_header_range = _sheet_range(worksheet, f"A1:{_sheet_column_name(headers_len)}1")
+    append_range = _sheet_table_range(worksheet, headers_len)
     try:
         header_resp = requests.get(
             f"{SHEETS_API}/{sheet_id}/values/{encoded_header_range}",
