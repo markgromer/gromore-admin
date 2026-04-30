@@ -23,7 +23,8 @@
 - **Inline Warren Console Transcript** - Added in-context transcript visibility inside dashboard workflow
 - **Navigation Simplification** - Cleaner client navigation and tab flow to reduce click friction
 - **Client Password Settings** - Added first-class password management inside client settings
-- **AI Provider Configuration** - Client AI settings now support OpenAI, OpenRouter, and custom OpenAI-compatible provider routing with per-purpose model fields
+- **AI Provider Configuration** - Client AI settings now support OpenAI, OpenRouter, Gemini, xAI/Grok, BFL/FLUX, and custom OpenAI-compatible provider routing with per-purpose model fields
+- **Multi-Provider Token Vault** - Separate saved API tokens for each AI provider so clients can keep multiple provider credentials active at once
 
 ### Facebook Post Scheduler + Social Workflow
 - **Recurring Character Builder** - Persistent storytelling character controls for recurring social content
@@ -223,7 +224,7 @@
 
 - **Real-Time Chat** - Conversational AI that knows the business and its data
 - **Web Search** - Pull in live information from the web during conversations
-- **Image Generation** - Create ad images and visuals with DALL-E
+- **Image Generation** - Create ad images and visuals through configured image providers
 - **Long-Term Memory** - Saves and recalls important details across sessions
 - **Chat History** - Full conversation history with option to clear
 - **Proactive Suggestions** - Surfaces relevant tips based on current data
@@ -395,7 +396,7 @@
 ### Creative Canvas / Design Studio
 - **Ad Template Library** - Browse pre-built ad templates
 - **Visual Canvas Editor** - Draw, add text, shapes, and images
-- **AI Image Generation** - DALL-E integration for ad visuals
+- **AI Image Generation** - OpenAI, Gemini/Imagen, xAI/Grok Imagine, and BFL/FLUX integration for ad visuals
 - **Image Creator Tab** - Dedicated prompt-to-image workspace for brand-aware campaign, social, and website visuals
 - **Format Selection** - Templates for Facebook feed, Instagram Stories, and other formats
 - **Template Save/Load** - Save custom templates for reuse
@@ -441,10 +442,10 @@
 - **Reporting Notes** - Custom notes for reports
 
 ### AI Configuration
-- **Provider Selection** - Choose OpenAI, OpenRouter, or a custom OpenAI-compatible provider
+- **Provider Selection** - Choose OpenAI, OpenRouter, Gemini, xAI/Grok, or a custom OpenAI-compatible provider
 - **Model Selection** - Choose default and provider-specific AI models
 - **Model Override Per Purpose** - Different models for chat, images, analysis, ad building
-- **API Key Override** - Use a brand-specific provider API key
+- **Multi-Provider API Tokens** - Save separate brand-specific tokens for OpenAI, OpenRouter, Gemini, xAI/Grok, BFL/FLUX, and custom providers
 
 ### Connections
 - **Google OAuth** - Connect Google Ads, Analytics, Search Console
@@ -611,7 +612,7 @@
 - Generic Webhook - Custom CRM integration
 
 ### Other
-- OpenAI (GPT-4o, GPT-4o-mini, o3-mini, DALL-E) - AI assistant, ad generation, agent brains, Warren
+- AI Providers (OpenAI, OpenRouter, Gemini, xAI/Grok, BFL/FLUX) - AI assistant, ad generation, image creation, agent brains, Warren
 - Stripe - Subscription billing, customer management, payment processing
 - Quo/OpenPhone - SMS messaging for Warren
 - WordPress REST API - Report and blog publishing

@@ -7955,6 +7955,13 @@ _IMAGE_CREATOR_FORMATS = {
     "story": {"label": "Story", "size": "1024x1792", "hint": "vertical story/reel image"},
 }
 
+_IMAGE_PROVIDER_DEFAULT_MODELS = {
+    "openai": "gpt-image-2",
+    "gemini": "imagen-4.0-generate-001",
+    "xai": "grok-imagine-image",
+    "bfl": "flux-2-pro-preview",
+}
+
 
 def _image_creator_prompt(brand, user_prompt, style, format_key, include_brand_context=True):
     fmt = _IMAGE_CREATOR_FORMATS.get(format_key, _IMAGE_CREATOR_FORMATS["square"])
@@ -7985,21 +7992,21 @@ def _image_creator_prompt(brand, user_prompt, style, format_key, include_brand_c
 @client_bp.route("/image-creator")
 @client_login_required
 def client_image_creator():
-    from webapp.ai_provider import get_provider_config, provider_label
+    from webapp.ai_provider import get_image_provider_config, provider_label
 
     db = _get_db()
     brand_id = session["client_brand_id"]
     brand = db.get_brand(brand_id)
     if not brand:
         abort(404)
-    ai_config = get_provider_config(brand)
+    ai_config = get_image_provider_config(brand)
     return render_template(
         "client_image_creator.html",
         brand=brand,
         ai_provider_label=provider_label(ai_config.provider),
         ai_configured=bool(ai_config.api_key),
         image_supported=ai_config.supports_images,
-        image_model=brand.get("ai_image_generation_model") or "dall-e-3",
+        image_model=brand.get("ai_image_generation_model") or _IMAGE_PROVIDER_DEFAULT_MODELS.get(ai_config.provider, "gpt-image-2"),
         formats=_IMAGE_CREATOR_FORMATS,
     )
 
@@ -8007,7 +8014,7 @@ def client_image_creator():
 @client_bp.route("/image-creator/generate", methods=["POST"])
 @client_login_required
 def client_image_creator_generate():
-    from webapp.ai_provider import generate_image_bytes
+    from webapp.ai_provider import generate_image_bytes, get_image_provider_config
 
     db = _get_db()
     brand_id = session["client_brand_id"]
@@ -8025,9 +8032,14 @@ def client_image_creator_generate():
     style = (data.get("style") or "clean professional service-business ad").strip()[:240]
     include_brand_context = str(data.get("include_brand_context", "1")).lower() not in {"0", "false", "no", "off"}
     prompt = _image_creator_prompt(brand, user_prompt, style, format_key, include_brand_context)
-    image_model = (brand.get("ai_image_generation_model") or "dall-e-3").strip()
+    image_config = get_image_provider_config(brand)
+    selected_default = _IMAGE_PROVIDER_DEFAULT_MODELS.get(image_config.provider, "gpt-image-2")
+    image_model = (brand.get("ai_image_generation_model") or selected_default).strip()
+    known_defaults = set(_IMAGE_PROVIDER_DEFAULT_MODELS.values()) | {"dall-e-3", "gpt-image-1"}
+    if image_model in known_defaults and image_model != selected_default:
+        image_model = selected_default
     image_size = _IMAGE_CREATOR_FORMATS[format_key]["size"]
-    if image_model == "gpt-image-1":
+    if image_model.startswith("gpt-image") or image_model == "chatgpt-image-latest":
         image_size = {"square": "1024x1024", "wide": "1536x1024", "story": "1024x1536"}.get(format_key, "1024x1024")
 
     try:
@@ -10860,13 +10872,18 @@ def client_save_openai():
     brand_id = session["client_brand_id"]
 
     provider = normalize_provider(request.form.get("ai_provider", "openai"))
-    api_key = (
-        request.form.get("ai_provider_api_key", "").strip()
-        or request.form.get("openai_api_key", "").strip()
-    )
+    image_provider = normalize_provider(request.form.get("ai_image_provider", "openai"))
     custom_base_url = request.form.get("ai_provider_base_url", "").strip().rstrip("/")
     image_generation_model = request.form.get("ai_image_generation_model", "").strip()
     quality_tier = request.form.get("ai_quality_tier", "").strip().lower()
+    token_fields = {
+        "openai_api_key": request.form.get("openai_api_key", "").strip(),
+        "ai_openrouter_api_key": request.form.get("ai_openrouter_api_key", "").strip(),
+        "ai_gemini_api_key": request.form.get("ai_gemini_api_key", "").strip(),
+        "ai_xai_api_key": request.form.get("ai_xai_api_key", "").strip(),
+        "ai_bfl_api_key": request.form.get("ai_bfl_api_key", "").strip(),
+        "ai_custom_api_key": request.form.get("ai_custom_api_key", "").strip(),
+    }
 
     # Save quality tier
     if quality_tier in ("efficient", "balanced", "premium"):
@@ -10882,24 +10899,35 @@ def client_save_openai():
             for field, model_val in _tier_map[quality_tier].items():
                 db.update_brand_text_field(brand_id, field, model_val)
 
-    if provider in ("openrouter", "custom"):
+    if provider in ("openrouter", "gemini", "xai", "custom"):
         for field in ("openai_model_chat", "openai_model_analysis", "openai_model_ads"):
             value = request.form.get(field, "").strip()[:120]
             if value:
                 db.update_brand_text_field(brand_id, field, value)
 
-    if image_generation_model in ("dall-e-3", "gpt-image-1"):
-        db.update_brand_text_field(brand_id, "ai_image_generation_model", image_generation_model)
+    known_image_defaults = set(_IMAGE_PROVIDER_DEFAULT_MODELS.values()) | {"dall-e-3", "gpt-image-1"}
+    if image_generation_model in known_image_defaults and image_generation_model != _IMAGE_PROVIDER_DEFAULT_MODELS.get(image_provider, ""):
+        image_generation_model = ""
+    db.update_brand_text_field(brand_id, "ai_image_generation_model", image_generation_model[:120])
 
-    # Only update key if user actually entered something (don't blank it on empty submit)
-    if api_key:
-        if provider == "openai" and not api_key.startswith("sk-"):
+    for field, token in token_fields.items():
+        if not token:
+            continue
+        if field == "openai_api_key" and not token.startswith("sk-"):
             flash("Invalid API key format. OpenAI keys start with sk-", "error")
             return redirect(url_for("client.client_settings"))
-        if provider == "openai":
-            db.update_brand_text_field(brand_id, "openai_api_key", api_key)
-        else:
-            db.update_brand_text_field(brand_id, "ai_provider_api_key", api_key)
+        db.update_brand_text_field(brand_id, field, token)
+
+    # Keep the legacy single provider field populated for older call sites.
+    legacy_provider_token = {
+        "openrouter": token_fields["ai_openrouter_api_key"],
+        "gemini": token_fields["ai_gemini_api_key"],
+        "xai": token_fields["ai_xai_api_key"],
+        "bfl": token_fields["ai_bfl_api_key"],
+        "custom": token_fields["ai_custom_api_key"],
+    }.get(provider, "")
+    if legacy_provider_token:
+        db.update_brand_text_field(brand_id, "ai_provider_api_key", legacy_provider_token)
 
     if provider == "custom":
         if custom_base_url:
@@ -10911,6 +10939,8 @@ def client_save_openai():
         db.update_brand_text_field(brand_id, "ai_provider_base_url", "https://openrouter.ai/api/v1")
 
     db.update_brand_text_field(brand_id, "ai_provider", provider)
+    if image_provider in {"openai", "gemini", "xai", "bfl"}:
+        db.update_brand_text_field(brand_id, "ai_image_provider", image_provider)
 
     flash("AI settings saved.", "success")
     return redirect(url_for("client.client_settings"))

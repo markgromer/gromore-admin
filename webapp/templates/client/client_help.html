@@ -633,47 +633,46 @@
 
         <!-- OpenAI API Key -->
         <div class="help-topic" id="openai">
-            <h4><i class="bi bi-cpu" style="color:#6366f1;"></i> AI Provider API Key</h4>
-            <p class="topic-desc">Use your own OpenAI or OpenRouter API key to power AI features. OpenAI remains the best option for image generation, while OpenRouter can route text work across many OpenAI-compatible models.</p>
+            <h4><i class="bi bi-cpu" style="color:#6366f1;"></i> AI Provider Token Vault</h4>
+            <p class="topic-desc">Store separate API tokens for each provider you use, then choose the default text provider and Image Creator provider independently.</p>
 
             <h5>Provider Options</h5>
             <ul>
                 <li><strong>OpenAI</strong> - recommended default, supports text, structured outputs, and the Image Creator tab.</li>
                 <li><strong>OpenRouter</strong> - useful when you want one key for multiple text model families. Use OpenRouter model IDs such as <code>openai/gpt-4o-mini</code>.</li>
+                <li><strong>Google Gemini</strong> - supports Gemini text models and Imagen models for image generation.</li>
+                <li><strong>xAI / Grok</strong> - supports Grok text models and Grok Imagine image generation.</li>
+                <li><strong>BFL / FLUX</strong> - image-generation provider for FLUX models such as <code>flux-2-pro-preview</code>.</li>
                 <li><strong>Custom OpenAI-compatible</strong> - advanced HTTPS endpoint for providers that match the OpenAI chat API.</li>
             </ul>
 
-            <h5>Getting Your API Key</h5>
+            <h5>Saving Tokens</h5>
             <ol>
-                <li>Go to <a href="https://platform.openai.com/signup" target="_blank" rel="noopener" class="ext-link">platform.openai.com <i class="bi bi-box-arrow-up-right"></i></a> and create an account (or log in)</li>
-                <li>Click your profile icon (top-right) > "API Keys" or go directly to <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" class="ext-link">platform.openai.com/api-keys <i class="bi bi-box-arrow-up-right"></i></a></li>
-                <li>Click "Create new secret key", give it a name (e.g., "GroMore Dashboard"), and click "Create"</li>
-                <li>Copy the key immediately - it starts with <strong>sk-</strong> and is only shown once</li>
-                <li>Paste it into the AI Configuration section on your <a href="{{ url_for('client.client_settings') }}">Connections</a> page</li>
+                <li>Open the AI Configuration section on your <a href="{{ url_for('client.client_settings') }}">Connections</a> page.</li>
+                <li>Paste each provider token into its matching token field. Blank fields keep their saved token.</li>
+                <li>Choose the default AI Provider for text features and the Image Provider for the Image Creator tab.</li>
+                <li>Leave model fields blank to use provider defaults, or enter the provider's exact model ID.</li>
             </ol>
             <div class="warning-box">
-                <i class="bi bi-exclamation-triangle me-1"></i> <strong>Copy it now:</strong> OpenAI only shows the full key once. If you lose it, you will need to create a new one.
+                <i class="bi bi-exclamation-triangle me-1"></i> <strong>Copy keys when created:</strong> Most providers only show a full API token once. Saved tokens are not exposed back in full.
             </div>
 
-            <h5>Adding Billing to OpenAI</h5>
+            <h5>Provider Billing</h5>
             <ol>
-                <li>Go to <a href="https://platform.openai.com/account/billing" target="_blank" rel="noopener" class="ext-link">platform.openai.com/account/billing <i class="bi bi-box-arrow-up-right"></i></a></li>
-                <li>Click "Add payment method" and enter a credit card</li>
-                <li><strong>Add at least $10 in credits</strong> - this is enough to run the platform for weeks. Most users spend $2-5/month total.</li>
-                <li>Set a monthly usage limit to cap costs (e.g., $20/month is plenty for even heavy usage)</li>
+                <li>Open the billing page for the provider whose token you saved.</li>
+                <li>Add a payment method or prepaid credits if that provider requires it.</li>
+                <li>Set a monthly usage limit anywhere the provider supports spend caps.</li>
             </ol>
             <div class="tip-box">
-                <i class="bi bi-lightbulb me-1"></i> <strong>Cost breakdown:</strong> A single Ad Builder generation costs about $0.01-0.03. A full campaign plan with proofreading costs $0.02-0.05. A monthly report analysis costs $0.01-0.02. Even generating ads every day, you are unlikely to spend more than $5/month. The $10 starting credit gives you plenty of room.
+                <i class="bi bi-lightbulb me-1"></i> <strong>Cost note:</strong> Text features are usually inexpensive. Image generation costs vary more by provider, quality tier, and image size, so set provider-side limits before giving clients broad access.
             </div>
 
-            <h5>Choosing a Model</h5>
-            <p>When you configure your key on the <a href="{{ url_for('client.client_settings') }}">Connections</a> page, you can also pick your AI model:</p>
+            <h5>Choosing Models</h5>
+            <p>When you configure provider tokens on the <a href="{{ url_for('client.client_settings') }}">Connections</a> page, you can also enter exact model IDs:</p>
             <ul>
-                <li><strong>GPT-4o Mini</strong> - fast and affordable, great for most tasks. This is the default.</li>
-                <li><strong>GPT-4o</strong> - more capable, slightly higher cost. Good if you want more nuanced ad copy.</li>
-                <li><strong>GPT-4 Turbo</strong> - powerful model, handles long reports well.</li>
-                <li><strong>GPT-4.1 / GPT-4.1 Mini</strong> - latest generation models. Best quality and speed.</li>
-                <li><strong>o3-mini / o4-mini</strong> - reasoning models that "think" before answering. Best for complex analysis.</li>
+                <li><strong>Text models</strong> - examples include <code>gpt-4o-mini</code>, <code>openai/gpt-4o-mini</code>, <code>gemini-2.5-flash</code>, and <code>grok-4</code>.</li>
+                <li><strong>Image models</strong> - examples include <code>gpt-image-2</code>, <code>imagen-4.0-generate-001</code>, <code>grok-imagine-image</code>, and <code>flux-2-pro-preview</code>.</li>
+                <li><strong>Defaults</strong> - leave a model field blank when you want GroMore to use the selected provider's default.</li>
             </ul>
         </div>
 

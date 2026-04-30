@@ -367,8 +367,8 @@
         <div class="connection-summary-label">
             <strong>AI</strong>
             {% set ai_provider = brand.ai_provider or 'openai' %}
-            {% set ai_key_ready = brand.openai_api_key if ai_provider == 'openai' else brand.ai_provider_api_key %}
-            {% if ai_key_ready %}<span class="badge bg-success">{{ ai_provider|replace('openrouter', 'OpenRouter')|replace('openai', 'OpenAI')|replace('custom', 'Custom') }}</span>{% else %}<span class="badge bg-secondary">Not configured</span>{% endif %}
+            {% set ai_key_ready = brand.openai_api_key if ai_provider == 'openai' else brand.ai_openrouter_api_key if ai_provider == 'openrouter' else brand.ai_gemini_api_key if ai_provider == 'gemini' else brand.ai_xai_api_key if ai_provider == 'xai' else brand.ai_custom_api_key if ai_provider == 'custom' else brand.ai_provider_api_key %}
+            {% if ai_key_ready %}<span class="badge bg-success">{{ ai_provider|replace('openrouter', 'OpenRouter')|replace('openai', 'OpenAI')|replace('gemini', 'Gemini')|replace('xai', 'xAI')|replace('custom', 'Custom') }}</span>{% else %}<span class="badge bg-secondary">Not configured</span>{% endif %}
         </div>
         <div class="connection-summary-meta">Provider, key, and model routing for the assistant, generation tools, and higher-level automation logic.</div>
         <div class="connection-summary-power">Powers: AI chat, content, workflows</div>
@@ -1093,7 +1093,7 @@
                         <p class="text-muted mb-0">Choose the AI provider, key, and model routing for this brand.</p>
                     </div>
                     {% set current_provider = brand.ai_provider or 'openai' %}
-                    {% set current_ai_key = brand.openai_api_key if current_provider == 'openai' else brand.ai_provider_api_key %}
+                    {% set current_ai_key = brand.openai_api_key if current_provider == 'openai' else brand.ai_openrouter_api_key if current_provider == 'openrouter' else brand.ai_gemini_api_key if current_provider == 'gemini' else brand.ai_xai_api_key if current_provider == 'xai' else brand.ai_custom_api_key if current_provider == 'custom' else brand.ai_provider_api_key %}
                     {% if current_ai_key %}<span class="badge bg-success rounded-pill px-3 py-2">Provider configured</span>{% else %}<span class="badge bg-secondary rounded-pill px-3 py-2">No key yet</span>{% endif %}
                 </div>
 
@@ -1105,17 +1105,19 @@
                             <select class="form-select" name="ai_provider" id="aiProviderSelect">
                                 <option value="openai" {{ 'selected' if current_provider == 'openai' else '' }}>OpenAI</option>
                                 <option value="openrouter" {{ 'selected' if current_provider == 'openrouter' else '' }}>OpenRouter</option>
+                                <option value="gemini" {{ 'selected' if current_provider == 'gemini' else '' }}>Google Gemini</option>
+                                <option value="xai" {{ 'selected' if current_provider == 'xai' else '' }}>xAI / Grok</option>
                                 <option value="custom" {{ 'selected' if current_provider == 'custom' else '' }}>Custom OpenAI-compatible</option>
                             </select>
-                            <small class="text-muted d-block mt-2">OpenRouter unlocks many text models through one key. Image generation currently uses OpenAI.</small>
+                            <small class="text-muted d-block mt-2">Choose the default text provider. Tokens for every provider can be stored below.</small>
                         </div>
                         <div class="col-md-5">
-                            <label class="form-label fw-medium" style="font-size:.88rem;">API Key</label>
+                            <label class="form-label fw-medium" style="font-size:.88rem;">OpenAI API Key</label>
                             <div class="input-group">
-                                <input type="password" class="form-control" name="openai_api_key" id="aiProviderKey" placeholder="{% if current_ai_key %}Key saved ending {{ current_ai_key[-4:] }}{% elif current_provider == 'openrouter' %}sk-or-...{% else %}sk-...{% endif %}" autocomplete="off">
+                                <input type="password" class="form-control" name="openai_api_key" placeholder="{{ 'Key saved ending ' ~ brand.openai_api_key[-4:] if brand.openai_api_key else 'sk-...' }}" autocomplete="off">
                                 <button class="btn btn-outline-secondary" type="button" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=\'bi bi-eye\'></i>':'<i class=\'bi bi-eye-slash\'></i>'"><i class="bi bi-eye"></i></button>
                             </div>
-                            <small class="text-muted">Leave blank to keep the current key.</small>
+                            <small class="text-muted">Leave blank to keep the saved OpenAI key.</small>
                         </div>
                         <div class="col-md-3">
                             <label class="form-label fw-medium" style="font-size:.88rem;">AI Quality Tier</label>
@@ -1126,6 +1128,34 @@
                                 <option value="premium" {{ 'selected' if current_tier == 'premium' else '' }}>Premium</option>
                             </select>
                             <small class="text-muted d-block mt-2">OpenAI preset. Other providers keep the model IDs below.</small>
+                        </div>
+                        <div class="col-12">
+                            <div class="p-3" style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px;">
+                                <div class="fw-semibold mb-2" style="font-size:.9rem;">Provider Token Vault</div>
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-medium" style="font-size:.82rem;">OpenRouter API Key</label>
+                                        <input type="password" class="form-control" name="ai_openrouter_api_key" placeholder="{{ 'Key saved ending ' ~ brand.ai_openrouter_api_key[-4:] if brand.ai_openrouter_api_key else 'sk-or-...' }}" autocomplete="off">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-medium" style="font-size:.82rem;">Gemini API Key</label>
+                                        <input type="password" class="form-control" name="ai_gemini_api_key" placeholder="{{ 'Key saved ending ' ~ brand.ai_gemini_api_key[-4:] if brand.ai_gemini_api_key else 'AIza...' }}" autocomplete="off">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-medium" style="font-size:.82rem;">xAI / Grok API Key</label>
+                                        <input type="password" class="form-control" name="ai_xai_api_key" placeholder="{{ 'Key saved ending ' ~ brand.ai_xai_api_key[-4:] if brand.ai_xai_api_key else 'xai-...' }}" autocomplete="off">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-medium" style="font-size:.82rem;">BFL / FLUX API Key</label>
+                                        <input type="password" class="form-control" name="ai_bfl_api_key" placeholder="{{ 'Key saved ending ' ~ brand.ai_bfl_api_key[-4:] if brand.ai_bfl_api_key else 'BFL token' }}" autocomplete="off">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-medium" style="font-size:.82rem;">Custom Provider API Key</label>
+                                        <input type="password" class="form-control" name="ai_custom_api_key" placeholder="{{ 'Key saved ending ' ~ brand.ai_custom_api_key[-4:] if brand.ai_custom_api_key else 'Custom key' }}" autocomplete="off">
+                                    </div>
+                                </div>
+                                <small class="text-muted d-block mt-2">Only filled fields are updated. Saved keys stay available when you switch providers.</small>
+                            </div>
                         </div>
                         <div class="col-12" id="aiCustomBaseUrlWrap" style="display:{{ 'block' if current_provider == 'custom' else 'none' }};">
                             <label class="form-label fw-medium" style="font-size:.88rem;">Custom Base URL</label>
@@ -1145,13 +1175,20 @@
                             <input type="text" class="form-control" name="openai_model_ads" value="{{ brand.openai_model_ads or '' }}" placeholder="{{ 'openai/gpt-4o' if current_provider == 'openrouter' else 'gpt-4o' }}">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label fw-medium" style="font-size:.88rem;">Image Generation Model</label>
-                            {% set image_model = brand.ai_image_generation_model or 'dall-e-3' %}
-                            <select class="form-select" name="ai_image_generation_model">
-                                <option value="dall-e-3" {{ 'selected' if image_model == 'dall-e-3' else '' }}>dall-e-3</option>
-                                <option value="gpt-image-1" {{ 'selected' if image_model == 'gpt-image-1' else '' }}>gpt-image-1</option>
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Image Provider</label>
+                            {% set image_provider = brand.ai_image_provider or 'openai' %}
+                            <select class="form-select" name="ai_image_provider">
+                                <option value="openai" {{ 'selected' if image_provider == 'openai' else '' }}>OpenAI GPT Image</option>
+                                <option value="gemini" {{ 'selected' if image_provider == 'gemini' else '' }}>Google Imagen / Gemini</option>
+                                <option value="xai" {{ 'selected' if image_provider == 'xai' else '' }}>xAI Grok Imagine</option>
+                                <option value="bfl" {{ 'selected' if image_provider == 'bfl' else '' }}>BFL / FLUX</option>
                             </select>
-                            <small class="text-muted d-block mt-2">Used by the Image Creator tab when the provider is OpenAI.</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Image Generation Model</label>
+                            {% set image_model = brand.ai_image_generation_model or '' %}
+                            <input type="text" class="form-control" name="ai_image_generation_model" value="{{ image_model }}" placeholder="gpt-image-2, imagen-4.0-generate-001, grok-imagine-image, flux-2-pro-preview">
+                            <small class="text-muted d-block mt-2">Leave blank to use the selected image provider's default model.</small>
                         </div>
                     </div>
                     <div class="mt-3 d-flex align-items-center gap-3 flex-wrap">
@@ -2075,14 +2112,10 @@ function testMessengerConnection() {
 (function() {
     var providerSelect = document.getElementById('aiProviderSelect');
     var customWrap = document.getElementById('aiCustomBaseUrlWrap');
-    var keyInput = document.getElementById('aiProviderKey');
     function syncAiProviderFields() {
         if (!providerSelect) return;
         var provider = providerSelect.value || 'openai';
         if (customWrap) customWrap.style.display = provider === 'custom' ? 'block' : 'none';
-        if (keyInput && !keyInput.value) {
-            keyInput.placeholder = provider === 'openrouter' ? 'sk-or-...' : 'sk-...';
-        }
     }
     if (providerSelect) {
         providerSelect.addEventListener('change', syncAiProviderFields);

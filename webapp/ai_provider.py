@@ -7,6 +7,7 @@ OpenAI-compatible providers such as OpenRouter to be enabled per brand.
 import base64
 import json
 import os
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -17,12 +18,14 @@ from flask import current_app
 OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 OPENAI_IMAGES_URL = "https://api.openai.com/v1/images/generations"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+XAI_BASE_URL = "https://api.x.ai/v1"
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 OPENAI_MODELS_BY_PURPOSE = {
     "chat": "gpt-4o-mini",
     "analysis": "gpt-4o-mini",
     "ads": "gpt-4o",
-    "images": "dall-e-3",
+    "images": "gpt-image-2",
 }
 
 OPENROUTER_MODELS_BY_PURPOSE = {
@@ -30,6 +33,12 @@ OPENROUTER_MODELS_BY_PURPOSE = {
     "analysis": "openai/gpt-4o-mini",
     "ads": "openai/gpt-4o",
     "images": "",
+}
+
+PROVIDER_DEFAULT_MODELS = {
+    "gemini": {"chat": "gemini-2.5-flash", "analysis": "gemini-2.5-flash", "ads": "gemini-2.5-flash", "images": "imagen-4.0-generate-001"},
+    "xai": {"chat": "grok-4", "analysis": "grok-4", "ads": "grok-4", "images": "grok-imagine-image"},
+    "bfl": {"images": "flux-2-pro-preview"},
 }
 
 
@@ -43,7 +52,9 @@ class AIProviderConfig:
 
 def normalize_provider(provider: str) -> str:
     provider = (provider or "openai").strip().lower()
-    return provider if provider in {"openai", "openrouter", "custom"} else "openai"
+    aliases = {"grok": "xai", "google": "gemini", "flux": "bfl"}
+    provider = aliases.get(provider, provider)
+    return provider if provider in {"openai", "openrouter", "gemini", "xai", "bfl", "custom"} else "openai"
 
 
 def provider_label(provider: str) -> str:
@@ -51,6 +62,9 @@ def provider_label(provider: str) -> str:
     return {
         "openai": "OpenAI",
         "openrouter": "OpenRouter",
+        "gemini": "Google Gemini",
+        "xai": "xAI / Grok",
+        "bfl": "Black Forest Labs / FLUX",
         "custom": "Custom OpenAI-compatible",
     }.get(provider, "OpenAI")
 
@@ -76,19 +90,38 @@ def get_provider_config(brand: Optional[Dict[str, Any]]) -> AIProviderConfig:
 
     if provider == "openrouter":
         api_key = (
-            (brand.get("ai_provider_api_key") or "").strip()
+            (brand.get("ai_openrouter_api_key") or "").strip()
+            or (brand.get("ai_provider_api_key") or "").strip()
             or _app_setting("openrouter_api_key", "OPENROUTER_API_KEY")
         )
-        return AIProviderConfig(
-            provider=provider,
-            api_key=api_key,
-            base_url=OPENROUTER_BASE_URL,
-            supports_images=False,
+        return AIProviderConfig(provider=provider, api_key=api_key, base_url=OPENROUTER_BASE_URL, supports_images=False)
+
+    if provider == "gemini":
+        api_key = (
+            (brand.get("ai_gemini_api_key") or "").strip()
+            or _app_setting("gemini_api_key", "GEMINI_API_KEY")
+            or _app_setting("google_api_key", "GOOGLE_API_KEY")
         )
+        return AIProviderConfig(provider=provider, api_key=api_key, base_url=GEMINI_BASE_URL, supports_images=True)
+
+    if provider == "xai":
+        api_key = (
+            (brand.get("ai_xai_api_key") or "").strip()
+            or _app_setting("xai_api_key", "XAI_API_KEY")
+        )
+        return AIProviderConfig(provider=provider, api_key=api_key, base_url=XAI_BASE_URL, supports_images=True)
+
+    if provider == "bfl":
+        api_key = (
+            (brand.get("ai_bfl_api_key") or "").strip()
+            or _app_setting("bfl_api_key", "BFL_API_KEY")
+        )
+        return AIProviderConfig(provider=provider, api_key=api_key, base_url="https://api.bfl.ai", supports_images=True)
 
     if provider == "custom":
         api_key = (
-            (brand.get("ai_provider_api_key") or "").strip()
+            (brand.get("ai_custom_api_key") or "").strip()
+            or (brand.get("ai_provider_api_key") or "").strip()
             or _app_setting("ai_provider_api_key", "AI_PROVIDER_API_KEY")
         )
         base_url = (
@@ -112,6 +145,14 @@ def get_provider_config(brand: Optional[Dict[str, Any]]) -> AIProviderConfig:
         base_url="https://api.openai.com/v1",
         supports_images=True,
     )
+
+
+def get_image_provider_config(brand: Optional[Dict[str, Any]]) -> AIProviderConfig:
+    brand = brand or {}
+    image_provider = normalize_provider(brand.get("ai_image_provider") or brand.get("ai_provider") or "openai")
+    if image_provider == "openrouter":
+        image_provider = "openai"
+    return get_provider_config({**brand, "ai_provider": image_provider})
 
 
 def is_configured(brand: Optional[Dict[str, Any]]) -> bool:
@@ -144,6 +185,9 @@ def pick_model(brand: Optional[Dict[str, Any]], purpose: str = "chat") -> str:
     provider = normalize_provider(brand.get("ai_provider") or "openai")
     if provider == "openrouter":
         return OPENROUTER_MODELS_BY_PURPOSE.get(purpose) or OPENROUTER_MODELS_BY_PURPOSE["chat"]
+    if provider in PROVIDER_DEFAULT_MODELS:
+        defaults = PROVIDER_DEFAULT_MODELS[provider]
+        return defaults.get(purpose) or defaults.get("chat") or OPENAI_MODELS_BY_PURPOSE["chat"]
     return OPENAI_MODELS_BY_PURPOSE.get(purpose) or OPENAI_MODELS_BY_PURPOSE["chat"]
 
 
@@ -160,6 +204,8 @@ def normalize_model_for_provider(provider: str, model: str) -> str:
 def _chat_url(cfg: AIProviderConfig) -> str:
     if cfg.provider == "openai":
         return OPENAI_CHAT_URL
+    if cfg.provider == "xai":
+        return f"{XAI_BASE_URL}/chat/completions"
     return f"{cfg.base_url.rstrip('/')}/chat/completions"
 
 
@@ -174,6 +220,22 @@ def _headers(cfg: AIProviderConfig) -> Dict[str, str]:
             headers["HTTP-Referer"] = app_url
         headers["X-OpenRouter-Title"] = "GroMore"
     return headers
+
+
+def _gemini_contents(messages: List[Dict[str, Any]]) -> tuple[str, List[Dict[str, Any]]]:
+    system_parts: List[str] = []
+    contents: List[Dict[str, Any]] = []
+    for message in messages:
+        role = (message.get("role") or "user").strip().lower()
+        text = message.get("content") or ""
+        if role == "system":
+            system_parts.append(str(text))
+            continue
+        contents.append({
+            "role": "model" if role == "assistant" else "user",
+            "parts": [{"text": str(text)}],
+        })
+    return "\n\n".join(system_parts), contents or [{"role": "user", "parts": [{"text": ""}]}]
 
 
 def chat_completion(
@@ -191,6 +253,27 @@ def chat_completion(
         raise ValueError(f"{provider_label(cfg.provider)} API key is not configured.")
     if cfg.provider == "custom" and not cfg.base_url:
         raise ValueError("Custom AI provider base URL is not configured.")
+
+    if cfg.provider == "gemini":
+        model_name = model or pick_model(brand, purpose)
+        system_instruction, contents = _gemini_contents(messages)
+        payload: Dict[str, Any] = {
+            "contents": contents,
+            "generationConfig": {"temperature": temperature},
+        }
+        if system_instruction:
+            payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+        url = f"{GEMINI_BASE_URL}/models/{model_name}:generateContent"
+        resp = requests.post(url, params={"key": cfg.api_key}, json=payload, timeout=timeout)
+        if resp.status_code >= 400:
+            raise ValueError(f"{provider_label(cfg.provider)} request failed ({resp.status_code}): {resp.text[:300]}")
+        data = resp.json()
+        parts = (((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [])
+        text = "".join(part.get("text", "") for part in parts)
+        return {"choices": [{"message": {"content": text}}], "raw": data}
+
+    if cfg.provider == "bfl":
+        raise ValueError("Black Forest Labs is configured for image generation, not chat completions.")
 
     payload: Dict[str, Any] = {
         "model": normalize_model_for_provider(cfg.provider, model or pick_model(brand, purpose)),
@@ -262,14 +345,93 @@ def generate_image_bytes(
     size: str = "1024x1024",
     timeout: int = 120,
 ) -> bytes:
-    cfg = get_provider_config(brand)
-    if cfg.provider != "openai":
-        raise ValueError("Image generation is currently enabled for OpenAI image models. Text models can use OpenRouter or a custom provider.")
+    cfg = get_image_provider_config(brand)
     if not cfg.api_key:
-        raise ValueError("OpenAI API key is not configured.")
+        raise ValueError(f"{provider_label(cfg.provider)} API key is not configured.")
+
+    if cfg.provider == "xai":
+        aspect_ratio = {"1024x1024": "1:1", "1792x1024": "16:9", "1536x1024": "16:9", "1024x1792": "9:16", "1024x1536": "9:16"}.get(size, "1:1")
+        payload = {
+            "model": model or "grok-imagine-image",
+            "prompt": prompt,
+            "n": 1,
+            "aspect_ratio": aspect_ratio,
+        }
+        resp = requests.post(f"{XAI_BASE_URL}/images/generations", headers=_headers(cfg), json=payload, timeout=timeout)
+        if resp.status_code >= 400:
+            raise ValueError(f"xAI image request failed ({resp.status_code}): {resp.text[:300]}")
+        first = (resp.json().get("data") or [{}])[0]
+        if first.get("b64_json"):
+            return base64.b64decode(first["b64_json"])
+        if first.get("url"):
+            img_resp = requests.get(first["url"], timeout=timeout)
+            if img_resp.status_code >= 400:
+                raise ValueError(f"Generated image download failed ({img_resp.status_code}).")
+            return img_resp.content
+        raise ValueError("xAI image response did not include image data.")
+
+    if cfg.provider == "gemini":
+        aspect_ratio = {"1024x1024": "1:1", "1792x1024": "16:9", "1536x1024": "16:9", "1024x1792": "9:16", "1024x1536": "9:16"}.get(size, "1:1")
+        image_model = model or PROVIDER_DEFAULT_MODELS["gemini"]["images"]
+        url = f"{GEMINI_BASE_URL}/models/{image_model}:predict"
+        payload = {
+            "instances": [{"prompt": prompt}],
+            "parameters": {"sampleCount": 1, "aspectRatio": aspect_ratio},
+        }
+        resp = requests.post(url, params={"key": cfg.api_key}, json=payload, timeout=timeout)
+        if resp.status_code >= 400:
+            raise ValueError(f"Gemini image request failed ({resp.status_code}): {resp.text[:300]}")
+        data = resp.json()
+        first = (data.get("predictions") or data.get("generatedImages") or [{}])[0]
+        b64 = first.get("bytesBase64Encoded") or first.get("image", {}).get("bytesBase64Encoded") or first.get("imageBytes")
+        if b64:
+            return base64.b64decode(b64)
+        raise ValueError("Gemini image response did not include image data.")
+
+    if cfg.provider == "bfl":
+        width, height = {
+            "1024x1024": (1024, 1024),
+            "1536x1024": (1536, 1024),
+            "1792x1024": (1440, 1024),
+            "1024x1536": (1024, 1536),
+            "1024x1792": (1024, 1440),
+        }.get(size, (1024, 1024))
+        endpoint = (model or PROVIDER_DEFAULT_MODELS["bfl"]["images"]).strip().strip("/")
+        payload = {"prompt": prompt, "width": width, "height": height}
+        headers = {"accept": "application/json", "x-key": cfg.api_key, "Content-Type": "application/json"}
+        resp = requests.post(f"{cfg.base_url.rstrip('/')}/v1/{endpoint}", headers=headers, json=payload, timeout=timeout)
+        if resp.status_code >= 400:
+            raise ValueError(f"BFL image request failed ({resp.status_code}): {resp.text[:300]}")
+        data = resp.json()
+        polling_url = data.get("polling_url")
+        if not polling_url:
+            raise ValueError("BFL image response did not include a polling URL.")
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            poll = requests.get(polling_url, headers={"accept": "application/json", "x-key": cfg.api_key}, timeout=min(30, timeout))
+            if poll.status_code >= 400:
+                raise ValueError(f"BFL image polling failed ({poll.status_code}): {poll.text[:300]}")
+            poll_data = poll.json()
+            status = (poll_data.get("status") or "").strip().lower()
+            if status == "ready":
+                sample_url = ((poll_data.get("result") or {}).get("sample") or "").strip()
+                if not sample_url:
+                    raise ValueError("BFL image result did not include an image URL.")
+                img_resp = requests.get(sample_url, timeout=timeout)
+                if img_resp.status_code >= 400:
+                    raise ValueError(f"Generated image download failed ({img_resp.status_code}).")
+                return img_resp.content
+            if status in {"error", "failed"}:
+                raise ValueError(f"BFL image generation failed: {json.dumps(poll_data)[:300]}")
+            time.sleep(0.75)
+        raise ValueError("BFL image generation timed out before the image was ready.")
+
+    if cfg.provider != "openai":
+        raise ValueError(f"Image generation is not supported for {provider_label(cfg.provider)} yet.")
 
     payload = {
-        "model": model or pick_model(brand, "images") or "dall-e-3",
+        "model": model or pick_model(brand, "images") or "gpt-image-2",
         "prompt": prompt,
         "size": size,
         "n": 1,
