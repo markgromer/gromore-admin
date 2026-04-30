@@ -90,6 +90,21 @@ _INTEGRATION_CATALOG = [
         "fields": [{"key": "api_key", "label": "API Key", "type": "password", "secret": True, "placeholder": "Housecall Pro API key"}],
     },
     {
+        "key": "responsibid",
+        "name": "ResponsiBid",
+        "category": "CRM / Quoting",
+        "icon": "bi-calculator",
+        "summary": "Quote-tool connection for importing quote leads and future quote/status sync.",
+        "powers": "partial quote leads, quote follow-up, lead creation",
+        "fields": [
+            {"key": "api_key", "label": "API Key", "type": "password", "secret": True, "placeholder": "ResponsiBid API key"},
+            {"key": "api_base_url", "label": "API Base URL", "type": "url", "placeholder": "https://bids.responsibid.com/api"},
+            {"key": "account_id", "label": "Account / Location ID", "type": "text", "placeholder": "Optional account reference"},
+            {"key": "default_status", "label": "Default Status", "type": "text", "placeholder": "Exact ResponsiBid status"},
+            {"key": "webhook_secret", "label": "Webhook Secret", "type": "password", "secret": True, "placeholder": "Optional shared secret"},
+        ],
+    },
+    {
         "key": "servicetitan",
         "name": "ServiceTitan",
         "category": "CRM",
@@ -326,6 +341,19 @@ _INTEGRATION_READINESS_META = {
         ],
         "capabilities": ("customers", "jobs", "estimates", "revenue"),
         "requirements": ("Housecall Pro API access", "admin-generated API key"),
+    },
+    "responsibid": {
+        "mode": "api_key",
+        "mode_label": "Quote API",
+        "required_fields": ("api_key",),
+        "fields": [
+            {"key": "lead_webhook_endpoint", "label": "Lead Webhook Endpoint", "type": "url", "placeholder": "https://bids.responsibid.com/api/WebhookLeads/create.json"},
+            {"key": "lead_source", "label": "Default Lead Source", "type": "text", "placeholder": "GroMore / Warren"},
+            {"key": "statuses_endpoint", "label": "Statuses Endpoint", "type": "url", "placeholder": "https://bids.responsibid.com/api/WebhookLeads/statuses.json"},
+            {"key": "quote_status_webhook", "label": "Status Webhook URL", "type": "url", "placeholder": "Optional outbound status webhook"},
+        ],
+        "capabilities": ("quote leads", "partial quote follow-up", "quote status sync", "lead creation"),
+        "requirements": ("ResponsiBid API key", "lead webhook/API endpoint", "field mapping for lead and quote data", "exact status names when sending status"),
     },
     "servicetitan": {
         "mode": "partner",

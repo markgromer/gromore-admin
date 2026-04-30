@@ -1,5 +1,6 @@
 import json
 import logging
+import html as html_lib
 from datetime import UTC, datetime, timedelta
 
 from webapp.email_sender import send_simple_email
@@ -189,6 +190,74 @@ def _coerce_bounded_int(value, default, minimum, maximum):
     return max(minimum, min(maximum, numeric))
 
 
+def _default_quote_followups():
+    default_template = RULE_DEFINITIONS["quote_not_signed_up"]["default_template"]
+    return [
+        {
+            "enabled": True,
+            "channels": ["sms"],
+            "delay_minutes": 1440,
+            "template": default_template,
+        },
+        {
+            "enabled": False,
+            "channels": ["sms"],
+            "delay_minutes": 4320,
+            "template": (
+                "Hi {client_name}, this is {brand_name}. Just checking one more time on your quote. "
+                "Do you want us to hold a spot for service?"
+            ),
+        },
+        {
+            "enabled": False,
+            "channels": ["sms"],
+            "delay_minutes": 10080,
+            "template": (
+                "Hi {client_name}, no pressure at all. If you still want help with {quote_service}, "
+                "reply here and we can pick up where we left off."
+            ),
+        },
+        {
+            "enabled": False,
+            "channels": ["sms"],
+            "delay_minutes": 20160,
+            "template": (
+                "Hi {client_name}, this is {brand_name}. Should we close out your quote for now, "
+                "or would you still like help getting started?"
+            ),
+        },
+    ]
+
+
+def _normalize_quote_followups(raw_rule, fallback_rule):
+    defaults = _default_quote_followups()
+    raw_followups = raw_rule.get("followups") if isinstance(raw_rule, dict) else None
+    if not isinstance(raw_followups, list):
+        raw_followups = []
+
+    if not raw_followups and isinstance(raw_rule, dict):
+        legacy_template = str(raw_rule.get("template") or fallback_rule.get("template") or defaults[0]["template"]).strip()
+        raw_followups = [{
+            "enabled": bool(raw_rule.get("enabled", fallback_rule.get("enabled", False))) or True,
+            "channels": raw_rule.get("channels") or fallback_rule.get("channels") or defaults[0]["channels"],
+            "delay_minutes": raw_rule.get("delay_minutes", fallback_rule.get("delay_minutes", defaults[0]["delay_minutes"])),
+            "template": legacy_template,
+        }]
+
+    normalized = []
+    for index in range(4):
+        raw_step = raw_followups[index] if index < len(raw_followups) and isinstance(raw_followups[index], dict) else {}
+        default_step = defaults[index]
+        template = str(raw_step.get("template") or default_step["template"]).strip() or default_step["template"]
+        normalized.append({
+            "enabled": bool(raw_step.get("enabled", default_step["enabled"])),
+            "channels": _parse_channel_list(raw_step.get("channels"), default_step["channels"]),
+            "delay_minutes": _coerce_bounded_int(raw_step.get("delay_minutes", default_step["delay_minutes"]), default_step["delay_minutes"], 0, 43200),
+            "template": template,
+        })
+    return normalized
+
+
 def get_default_crm_event_rules():
     rules = {}
     for rule_key, definition in RULE_DEFINITIONS.items():
@@ -202,6 +271,8 @@ def get_default_crm_event_rules():
             "owner_alert": bool(definition.get("default_owner_alert", True)),
             "template": definition["default_template"],
         }
+        if rule_key == "quote_not_signed_up":
+            rules[rule_key]["followups"] = _default_quote_followups()
     return {
         "alert_emails": [],
         "rules": rules,
@@ -221,23 +292,31 @@ def load_crm_event_rules(brand):
         raw_rule = raw_rules.get(rule_key)
         if not isinstance(raw_rule, dict):
             continue
-        merged["rules"][rule_key] = {
+        merged_rule = {
             "enabled": bool(raw_rule.get("enabled")),
             "channels": _parse_channel_list(raw_rule.get("channels"), definition["channels"]),
-            "delay_minutes": _coerce_bounded_int(raw_rule.get("delay_minutes", definition["delay_minutes"]), definition["delay_minutes"], 0, 10080),
+            "delay_minutes": _coerce_bounded_int(raw_rule.get("delay_minutes", definition["delay_minutes"]), definition["delay_minutes"], 0, 43200 if rule_key == "quote_not_signed_up" else 10080),
             "retry_days": _coerce_bounded_int(raw_rule.get("retry_days", definition["retry_days"]), definition["retry_days"], 0, 30),
             "max_attempts": _coerce_bounded_int(raw_rule.get("max_attempts", definition["max_attempts"]), definition["max_attempts"], 1, 10),
             "respect_dnd": bool(raw_rule.get("respect_dnd", True)),
             "owner_alert": bool(raw_rule.get("owner_alert", True)),
             "template": str(raw_rule.get("template") or definition["template"]).strip() or definition["template"],
         }
+        if rule_key == "quote_not_signed_up":
+            merged_rule["followups"] = _normalize_quote_followups(raw_rule, definition)
+            first_enabled = next((step for step in merged_rule["followups"] if step.get("enabled")), merged_rule["followups"][0])
+            merged_rule["template"] = first_enabled["template"]
+            merged_rule["delay_minutes"] = first_enabled["delay_minutes"]
+            merged_rule["channels"] = first_enabled["channels"]
+            merged_rule["max_attempts"] = sum(1 for step in merged_rule["followups"] if step.get("enabled")) or 1
+        merged["rules"][rule_key] = merged_rule
     return merged
 
 
 def serialize_crm_event_rules(form_data):
     payload = {"alert_emails": _parse_email_list(form_data.get("sales_bot_crm_event_alert_emails", "")), "rules": {}}
     for rule_key, definition in RULE_DEFINITIONS.items():
-        payload["rules"][rule_key] = {
+        rule_payload = {
             "enabled": bool(form_data.get(f"crm_rule_{rule_key}_enabled")),
             "channels": _parse_channel_list(form_data.getlist(f"crm_rule_{rule_key}_channels"), definition["default_channels"]),
             "delay_minutes": _coerce_bounded_int(form_data.get(f"crm_rule_{rule_key}_delay_minutes"), definition["default_delay_minutes"], 0, 10080),
@@ -247,6 +326,29 @@ def serialize_crm_event_rules(form_data):
             "owner_alert": bool(form_data.get(f"crm_rule_{rule_key}_owner_alert")),
             "template": str(form_data.get(f"crm_rule_{rule_key}_template") or definition["default_template"]).strip() or definition["default_template"],
         }
+        if rule_key == "quote_not_signed_up":
+            followups = []
+            for index, default_step in enumerate(_default_quote_followups(), start=1):
+                template = str(form_data.get(f"crm_rule_{rule_key}_followup_{index}_template") or default_step["template"]).strip() or default_step["template"]
+                followups.append({
+                    "enabled": bool(form_data.get(f"crm_rule_{rule_key}_followup_{index}_enabled")),
+                    "channels": _parse_channel_list(form_data.getlist(f"crm_rule_{rule_key}_followup_{index}_channels"), default_step["channels"]),
+                    "delay_minutes": _coerce_bounded_int(
+                        form_data.get(f"crm_rule_{rule_key}_followup_{index}_delay_minutes"),
+                        default_step["delay_minutes"],
+                        0,
+                        43200,
+                    ),
+                    "template": template,
+                })
+            first_enabled = next((step for step in followups if step.get("enabled")), followups[0])
+            rule_payload["followups"] = followups
+            rule_payload["channels"] = first_enabled["channels"]
+            rule_payload["delay_minutes"] = first_enabled["delay_minutes"]
+            rule_payload["retry_days"] = 0
+            rule_payload["max_attempts"] = sum(1 for step in followups if step.get("enabled")) or 1
+            rule_payload["template"] = first_enabled["template"]
+        payload["rules"][rule_key] = rule_payload
     return payload
 
 
@@ -334,30 +436,45 @@ def _queue_rule_actions(db, brand, event_id, event_type, summary, rules_config, 
     context = build_crm_event_template_context(brand, summary, event_type)
 
     if rule_key == "quote_not_signed_up":
-        recipient = (
-            (summary.get("client_phone") or "").strip()
-            or (summary.get("client_email") or "").strip().lower()
+        recipients_by_channel = {
+            "sms": (summary.get("client_phone") or "").strip(),
+            "email": (summary.get("client_email") or "").strip().lower(),
+        }
+        fallback_recipient = (
+            recipients_by_channel["sms"]
+            or recipients_by_channel["email"]
             or (summary.get("client_id") or "").strip()
             or str(event_id or "").strip()
         )
-        action_id = db.queue_crm_event_action(
-            brand["id"],
-            source_event_id=event_id,
-            source_event_type=event_type,
-            rule_key=rule_key,
-            action_kind="sng_quote_nurture",
-            channel="sms",
-            recipient=recipient,
-            client_id=summary.get("client_id", ""),
-            subject=f"{rule_def['label']} - {context['client_name']}",
-            message_text=render_template_string(rule.get("template"), context),
-            attempt_number=1,
-            max_attempts=1,
-            scheduled_for=(now + timedelta(minutes=delay_minutes)).isoformat(),
-            detail=f"Queued quote follow-up eligibility check from {event_type}",
-        )
-        if action_id:
-            queued += 1
+        followups = rule.get("followups") or _normalize_quote_followups(rule, rule_def)
+        active_followups = [step for step in followups[:4] if step.get("enabled")]
+        for attempt_number, followup in enumerate(active_followups, start=1):
+            followup_context = build_crm_event_template_context(brand, summary, event_type, attempt_number=attempt_number)
+            followup_delay = max(0, int(followup.get("delay_minutes") or 0))
+            for channel in _parse_channel_list(followup.get("channels"), rule_def["default_channels"]):
+                recipient = recipients_by_channel.get(channel) or fallback_recipient
+                if channel == "sms" and not recipients_by_channel["sms"]:
+                    continue
+                if channel == "email" and not recipients_by_channel["email"]:
+                    continue
+                action_id = db.queue_crm_event_action(
+                    brand["id"],
+                    source_event_id=event_id,
+                    source_event_type=event_type,
+                    rule_key=rule_key,
+                    action_kind="sng_quote_nurture",
+                    channel=channel,
+                    recipient=recipient,
+                    client_id=summary.get("client_id", ""),
+                    subject=f"{rule_def['label']} follow-up {attempt_number} - {context['client_name']}",
+                    message_text=render_template_string(followup.get("template"), followup_context),
+                    attempt_number=attempt_number,
+                    max_attempts=1,
+                    scheduled_for=(now + timedelta(minutes=followup_delay)).isoformat(),
+                    detail=f"Queued quote follow-up {attempt_number} eligibility check from {event_type}",
+                )
+                if action_id:
+                    queued += 1
     else:
         recipients_by_channel = {
             "sms": (summary.get("client_phone") or "").strip(),
@@ -463,6 +580,15 @@ def _build_sng_quote_lead_summary(summary):
 
 
 def _ensure_sng_quote_lead_thread(db, brand, action, summary):
+    existing_thread_id = summary.get("thread_id")
+    if existing_thread_id:
+        try:
+            existing_thread_id = int(existing_thread_id)
+        except (TypeError, ValueError):
+            existing_thread_id = 0
+        if existing_thread_id and db.get_lead_thread(existing_thread_id, brand_id=brand["id"]):
+            return existing_thread_id
+
     external_id = (
         f"sng_quote:{summary.get('quote_id')}"
         if summary.get("quote_id")
@@ -504,7 +630,7 @@ def _ensure_sng_quote_lead_thread(db, brand, action, summary):
     return thread_id
 
 
-def _process_sng_quote_nurture_action(db, brand, action, now_iso, *, skip_dnd=False):
+def _process_sng_quote_nurture_action(db, app_config, brand, action, now_iso, *, skip_dnd=False):
     summary = _load_sng_action_summary(db, action)
     contact_probe = {
         "lead_phone": summary.get("client_phone") or action.get("recipient", ""),
@@ -535,12 +661,6 @@ def _process_sng_quote_nurture_action(db, brand, action, now_iso, *, skip_dnd=Fa
     thread_id = _ensure_sng_quote_lead_thread(db, brand, action, summary)
     thread = db.get_lead_thread(thread_id, brand_id=brand["id"])
 
-    phone = (summary.get("client_phone") or thread.get("lead_phone") or "").strip()
-    if not phone:
-        db.update_crm_event_action(action["id"], status="failed", detail="Lead imported, but SNG did not provide an SMS phone number.")
-        db.add_lead_event(brand["id"], thread_id, "sng_quote_nurture_failed", event_value="missing_phone")
-        return "failed", "missing_phone"
-
     message_text = (action.get("message_text") or "").strip()
     if not message_text:
         message_text = render_template_string(
@@ -548,37 +668,83 @@ def _process_sng_quote_nurture_action(db, brand, action, now_iso, *, skip_dnd=Fa
             build_crm_event_template_context(brand, summary, action.get("source_event_type", "")),
         )
 
-    message_id = db.add_lead_message(
-        thread_id,
-        direction="outbound",
-        role="assistant",
-        content=message_text,
-        channel="sms",
-        metadata={
-            "source": "sng_quote_nurture",
-            "action_id": action.get("id"),
-            "delivery_status": "pending",
-            "auto_send_requested": True,
-            "auto_sent": False,
-        },
-    )
-    ok, detail = send_reply(db, brand, thread_id, message_text, channel="sms", skip_dnd=skip_dnd, logged_message_id=message_id)
-    if ok:
+    channel = (action.get("channel") or "sms").strip().lower()
+    if channel == "email":
+        email = (summary.get("client_email") or thread.get("lead_email") or action.get("recipient") or "").strip().lower()
+        if not email or "@" not in email:
+            db.update_crm_event_action(action["id"], status="failed", detail="Lead imported, but no email address was available.")
+            db.add_lead_event(brand["id"], thread_id, "sng_quote_nurture_failed", event_value="missing_email")
+            return "failed", "missing_email"
+
+        db.add_lead_message(
+            thread_id,
+            direction="outbound",
+            role="assistant",
+            content=message_text,
+            channel="email",
+            metadata={
+                "source": "sng_quote_nurture",
+                "action_id": action.get("id"),
+                "auto_send_requested": True,
+                "auto_sent": True,
+                "subject": action.get("subject") or "Following up on your quote",
+            },
+        )
+        html = "<div style=\"font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.6;\">%s</div>" % html_lib.escape(message_text).replace("\n", "<br>")
+        send_simple_email(
+            app_config,
+            email,
+            action.get("subject") or "Following up on your quote",
+            message_text,
+            html,
+            brand=brand,
+        )
+        ok, detail = True, "sent"
         db.add_lead_event(
             brand["id"],
             thread_id,
-            "sng_quote_nurture_sms_sent",
+            "sng_quote_nurture_email_sent",
             event_value=message_text[:200],
-            metadata={"to": phone, "detail": str(detail)[:500]},
+            metadata={"to": email, "detail": detail},
         )
     else:
-        db.add_lead_event(
-            brand["id"],
+        phone = (summary.get("client_phone") or thread.get("lead_phone") or "").strip()
+        if not phone:
+            db.update_crm_event_action(action["id"], status="failed", detail="Lead imported, but SNG did not provide an SMS phone number.")
+            db.add_lead_event(brand["id"], thread_id, "sng_quote_nurture_failed", event_value="missing_phone")
+            return "failed", "missing_phone"
+
+        message_id = db.add_lead_message(
             thread_id,
-            "sng_quote_nurture_sms_failed",
-            event_value=str(detail)[:200],
-            metadata={"to": phone},
+            direction="outbound",
+            role="assistant",
+            content=message_text,
+            channel="sms",
+            metadata={
+                "source": "sng_quote_nurture",
+                "action_id": action.get("id"),
+                "delivery_status": "pending",
+                "auto_send_requested": True,
+                "auto_sent": False,
+            },
         )
+        ok, detail = send_reply(db, brand, thread_id, message_text, channel="sms", skip_dnd=skip_dnd, logged_message_id=message_id)
+        if ok:
+            db.add_lead_event(
+                brand["id"],
+                thread_id,
+                "sng_quote_nurture_sms_sent",
+                event_value=message_text[:200],
+                metadata={"to": phone, "detail": str(detail)[:500]},
+            )
+        else:
+            db.add_lead_event(
+                brand["id"],
+                thread_id,
+                "sng_quote_nurture_sms_failed",
+                event_value=str(detail)[:200],
+                metadata={"to": phone},
+            )
 
     db.update_crm_event_action(
         action["id"],
@@ -637,6 +803,7 @@ def process_pending_crm_event_actions(db, app_config, brand_id=None, now=None, l
             if action.get("rule_key") == "quote_not_signed_up" or action.get("action_kind") == "sng_quote_nurture":
                 status, _detail = _process_sng_quote_nurture_action(
                     db,
+                    app_config,
                     brand,
                     action,
                     now_iso,

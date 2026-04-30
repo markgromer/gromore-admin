@@ -15,6 +15,7 @@
 - **Active Client Marketing Safety** - Prevents active clients from being enrolled into Warren marketing flows unintentionally
 - **Sweep and Go Event Foundation** - Webhook/event ingestion layer for CRM-triggered Warren automations
 - **CRM Event Automations** - Triggered Warren workflows for CRM lifecycle events
+- **Manual Partial Quote Follow-Up Sequences** - Quote-not-signed-up automation supports up to four owner-written follow-up snippets with custom cadence and channel controls
 
 ### Client Portal + Dashboard UX
 - **Connections/Automations Split** - Broke out client connections and automations into clearer dedicated flows
@@ -615,6 +616,7 @@
 - HubSpot - Lead and revenue sync
 - Sweep & Go (SNG) - Revenue, clients, billing integration
 - Jobber - Invoice sync
+- ResponsiBid - Quote-tool API credentials and quote lead connection setup
 - Generic Webhook - Custom CRM integration
 
 ### Other

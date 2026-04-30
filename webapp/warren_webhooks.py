@@ -329,8 +329,7 @@ def _maybe_send_generic_automation_reply(db, brand, thread_id, submission, event
     if not event_type:
         return False
 
-    from webapp.warren_crm_events import build_crm_event_template_context, get_rule_key_for_event_type, load_crm_event_rules, render_template_string
-    from webapp.warren_sender import send_reply
+    from webapp.warren_crm_events import get_rule_key_for_event_type, load_crm_event_rules, process_incoming_sng_event
 
     rule_key = get_rule_key_for_event_type(event_type)
     if not rule_key:
@@ -341,64 +340,41 @@ def _maybe_send_generic_automation_reply(db, brand, thread_id, submission, event
     if not rule.get("enabled"):
         return False
 
-    channels = {str(channel or "").strip().lower() for channel in (rule.get("channels") or [])}
-    if "sms" not in channels:
-        db.add_lead_event(
-            brand["id"],
-            thread_id,
-            "incoming_webhook_automation_skipped",
-            event_value="sms_channel_disabled",
-            metadata={"event_type": event_type, "rule_key": rule_key},
-        )
-        return True
-
-    lead_phone = (submission.get("lead_phone") or "").strip()
-    if not lead_phone:
-        db.add_lead_event(
-            brand["id"],
-            thread_id,
-            "incoming_webhook_automation_skipped",
-            event_value="missing_phone",
-            metadata={"event_type": event_type, "rule_key": rule_key},
-        )
-        return True
-
     summary = _build_generic_automation_summary(submission, event_type)
-    context = build_crm_event_template_context(brand, summary, event_type)
-    message_text = render_template_string(rule.get("template"), context)
-    if not message_text:
-        return False
-
-    message_id = db.add_lead_message(
-        thread_id,
-        direction="outbound",
-        role="assistant",
-        content=message_text,
-        channel="sms",
-        metadata={
-            "source": "incoming_webhook_automation",
-            "event_type": event_type,
-            "rule_key": rule_key,
-            "delivery_status": "pending",
-            "auto_send_requested": True,
-            "auto_sent": False,
+    summary["thread_id"] = str(thread_id)
+    event_id = summary.get("quote_id") or submission.get("external_id") or f"incoming_webhook:{thread_id}:{event_type}"
+    db.record_sng_webhook_event(
+        brand["id"],
+        event_id,
+        event_type=event_type,
+        status="received",
+        detail=f"Incoming lead webhook automation event for {event_type}",
+        summary=summary,
+        payload={
+            "source": submission.get("source", ""),
+            "lead_name": submission.get("lead_name", ""),
+            "lead_email": submission.get("lead_email", ""),
+            "lead_phone": submission.get("lead_phone", ""),
+            "message_text": submission.get("message_text", ""),
+            "extra_fields": submission.get("extra_fields") or {},
+            "thread_id": thread_id,
         },
     )
-    ok, detail = send_reply(
+    result = process_incoming_sng_event(
         db,
+        current_app.config,
         brand,
-        thread_id,
-        message_text,
-        channel="sms",
-        skip_dnd=not bool(rule.get("respect_dnd", True)),
-        logged_message_id=message_id,
+        event_id,
+        event_type,
+        summary,
+        base_detail="Incoming lead webhook automation event",
     )
     db.add_lead_event(
         brand["id"],
         thread_id,
-        "incoming_webhook_automation_sms_sent" if ok else "incoming_webhook_automation_sms_failed",
-        event_value=message_text[:200] if ok else str(detail or "")[:200],
-        metadata={"event_type": event_type, "rule_key": rule_key, "to": lead_phone, "detail": str(detail or "")[:500]},
+        "incoming_webhook_automation_queued" if result.get("queued") else "incoming_webhook_automation_skipped",
+        event_value=f"queued {result.get('queued', 0)} action(s)",
+        metadata={"event_type": event_type, "rule_key": rule_key, "result": result},
     )
     return True
 

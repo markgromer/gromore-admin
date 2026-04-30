@@ -587,6 +587,66 @@
                     </div>
                 </div>
 
+                {% if rule_key == 'quote_not_signed_up' %}
+                <div class="automation-note mt-3">
+                    <strong>Manual follow-up sequence:</strong> Warren will only send these exact snippets if the lead is still not an active client when each step comes due. No AI-written reply is generated for these scheduled quote nudges.
+                </div>
+
+                <div class="row g-3 mt-1 align-items-end">
+                    <div class="col-lg-8">
+                        <div class="text-muted" style="font-size:.82rem;">Use delay minutes from when the partial quote event arrives. Examples: 30 minutes, 1440 for 1 day, 4320 for 3 days, 10080 for 7 days.</div>
+                    </div>
+                    <div class="col-lg-4">
+                        <div class="d-flex justify-content-lg-end gap-3 flex-wrap">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="crm_rule_{{ rule_key }}_owner_alert" id="crmRule{{ rule_key }}OwnerAlert" value="1" {{ 'checked' if rule.owner_alert }}>
+                                <label class="form-check-label" for="crmRule{{ rule_key }}OwnerAlert">Owner alert</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="crm_rule_{{ rule_key }}_respect_dnd" id="crmRule{{ rule_key }}RespectDnd" value="1" {{ 'checked' if rule.respect_dnd }}>
+                                <label class="form-check-label" for="crmRule{{ rule_key }}RespectDnd">Respect quiet hours</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {% set quote_followups = rule.followups or [] %}
+                <div class="row g-3 mt-1">
+                    {% for slot in range(1, 5) %}
+                    {% set step = quote_followups[slot - 1] if quote_followups|length >= slot else {} %}
+                    <div class="col-xl-6">
+                        <div class="border rounded-3 p-3 h-100" style="background:#fff;">
+                            <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                                <div class="fw-semibold" style="font-size:.9rem;">Follow-up {{ slot }}</div>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" name="crm_rule_{{ rule_key }}_followup_{{ slot }}_enabled" id="crmRule{{ rule_key }}Followup{{ slot }}Enabled" value="1" {{ 'checked' if step.enabled }}>
+                                    <label class="form-check-label" for="crmRule{{ rule_key }}Followup{{ slot }}Enabled">Use</label>
+                                </div>
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-5">
+                                    <label class="form-label fw-medium" style="font-size:.78rem;">Send after</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" class="form-control" name="crm_rule_{{ rule_key }}_followup_{{ slot }}_delay_minutes" min="0" max="43200" step="5" value="{{ step.delay_minutes|default(1440) }}">
+                                        <span class="input-group-text">min</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-7">
+                                    <label class="form-label fw-medium" style="font-size:.78rem;">Channels</label>
+                                    <div class="d-flex gap-3 flex-wrap pt-1">
+                                        <label class="form-check-label d-flex align-items-center gap-2"><input class="form-check-input" type="checkbox" name="crm_rule_{{ rule_key }}_followup_{{ slot }}_channels" value="sms" {{ 'checked' if 'sms' in (step.channels or []) }}> <span>SMS</span></label>
+                                        <label class="form-check-label d-flex align-items-center gap-2"><input class="form-check-input" type="checkbox" name="crm_rule_{{ rule_key }}_followup_{{ slot }}_channels" value="email" {{ 'checked' if 'email' in (step.channels or []) }}> <span>Email</span></label>
+                                    </div>
+                                </div>
+                            </div>
+                            <label class="form-label fw-medium" style="font-size:.78rem;">Exact snippet</label>
+                            <textarea class="form-control form-control-sm" name="crm_rule_{{ rule_key }}_followup_{{ slot }}_template" rows="4">{{ step.template or '' }}</textarea>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <small class="text-muted d-block mt-2">Available placeholders: {brand_name}, {client_name}, {client_id}, {client_email}, {client_phone}, {quote_id}, {quote_amount}, {quote_service}, {quote_address}, {event_type}, {attempt_number}. Incoming quote webhooks can also use submitted field names like {number_of_dogs}, {monthly_price}, and {frequency_label}.</small>
+                {% else %}
                 <div class="row g-3 mt-1">
                     <div class="col-lg-4">
                         <label class="form-label fw-medium" style="font-size:.82rem;">Client-facing channels</label>
@@ -632,6 +692,7 @@
                     <textarea class="form-control form-control-sm" name="crm_rule_{{ rule_key }}_template" rows="4">{{ rule.template or '' }}</textarea>
                     <small class="text-muted d-block mt-2">Available placeholders: {brand_name}, {client_name}, {client_id}, {client_email}, {client_phone}, {payment_id}, {invoice_id}, {subscription_id}, {quote_id}, {quote_amount}, {quote_service}, {quote_address}, {status}, {event_type}, {attempt_number}. Incoming lead webhooks can also use submitted field names like {number_of_dogs}, {monthly_price}, and {frequency_label}.</small>
                 </div>
+                {% endif %}
             </div>
 
             {% endfor %}
