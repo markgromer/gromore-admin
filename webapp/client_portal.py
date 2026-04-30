@@ -6387,19 +6387,32 @@ def _client_assistant_chat_handler(payload):
         history = db.get_ai_chat_messages(brand_id, month, limit=50)
         trimmed = history[-25:] if len(history) > 25 else history
         messages = [{"role": m["role"], "content": m["content"]} for m in trimmed if m.get("content")]
-        recent_tasks = db.get_brand_tasks(brand_id, limit=20)
+        operating_brain = {}
         task_context = []
-        for task in recent_tasks[:12]:
-            task_context.append({
-                "id": task.get("id"),
-                "title": task.get("title"),
-                "status": task.get("status"),
-                "priority": task.get("priority"),
-                "source": task.get("source"),
-                "completion_notes": (task.get("completion_notes") or "")[:800],
-                "steps": _task_steps_summary(task)[:1200],
-                "completed_at": task.get("completed_at"),
-            })
+        try:
+            from webapp.warren_operating_brain import build_warren_operating_brain, sanitize_operating_brain_for_prompt
+            raw_operating_brain = build_warren_operating_brain(db, brand_id, task_limit=80, memory_limit=24)
+            operating_brain = sanitize_operating_brain_for_prompt(raw_operating_brain)
+            task_context = operating_brain.get("open_tasks", [])[:8] + operating_brain.get("completed_tasks", [])[:4]
+        except Exception as exc:
+            log.warning("Failed to build Warren operating brain for chat; using task fallback: %s", exc)
+            def _prompt_text(value, limit):
+                text = re.sub(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", "[email]", str(value or ""), flags=re.I)
+                text = re.sub(r"(?<!\d)(?:\+?1[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}(?!\d)", "[phone]", text)
+                return text.strip()[:limit]
+
+            recent_tasks = db.get_brand_tasks(brand_id, limit=20)
+            for task in recent_tasks[:12]:
+                task_context.append({
+                    "id": task.get("id"),
+                    "title": _prompt_text(task.get("title"), 160),
+                    "status": task.get("status"),
+                    "priority": task.get("priority"),
+                    "source": task.get("source"),
+                    "completion_notes": _prompt_text(task.get("completion_notes"), 500),
+                    "steps": _prompt_text(_task_steps_summary(task), 800),
+                    "completed_at": task.get("completed_at"),
+                })
 
         context = {
             "client_mode": True,
@@ -6428,6 +6441,7 @@ def _client_assistant_chat_handler(payload):
             "suggestions": suggestions,
             "analysis_error": analysis_error,
             "lead_intelligence": _build_warren_lead_intelligence(db, brand),
+            "operating_brain": operating_brain,
             "task_context": task_context,
             "onboarding_profile": onboarding_interview.get("profile"),
             "attached_text": attached_text,
@@ -18692,6 +18706,14 @@ def _append_task_sheet_row(db, brand_id, task, event_type, notes=""):
         log.warning("Failed to mirror task update to Google Sheet: %s", exc)
 
 
+def _sync_warren_brain_sheet(db, brand_id):
+    try:
+        from webapp.warren_operating_brain import sync_warren_brain_sheet
+        sync_warren_brain_sheet(db, brand_id)
+    except Exception as exc:
+        log.warning("Failed to refresh Warren operating brain Sheet tabs: %s", exc)
+
+
 def _record_task_completion_learning(db, brand_id, task, completion_notes):
     notes = (completion_notes or task.get("completion_notes") or "").strip()
     title = (task.get("title") or "Completed task").strip()
@@ -18777,6 +18799,7 @@ def client_task_create():
     created_task = db.get_brand_task(task_id, brand_id)
     if created_task:
         _append_task_sheet_row(db, brand_id, created_task, "created")
+        _sync_warren_brain_sheet(db, brand_id)
     return jsonify({"success": True, "task_id": task_id})
 
 
@@ -18843,8 +18866,12 @@ def client_task_update(task_id):
         if new_status == "done" and (old_status != "done" or new_notes != old_notes):
             _record_task_completion_learning(db, brand_id, updated_task, new_notes)
             _append_task_sheet_row(db, brand_id, updated_task, "completed", new_notes)
+            _sync_warren_brain_sheet(db, brand_id)
         elif "completion_notes" in data and new_notes != old_notes:
             _append_task_sheet_row(db, brand_id, updated_task, "notes_updated", new_notes)
+            _sync_warren_brain_sheet(db, brand_id)
+        elif data:
+            _sync_warren_brain_sheet(db, brand_id)
 
     return jsonify({"success": True})
 
@@ -18857,6 +18884,7 @@ def client_task_delete(task_id):
     db = _get_db()
     brand_id = session["client_brand_id"]
     db.delete_brand_task(task_id, brand_id)
+    _sync_warren_brain_sheet(db, brand_id)
     return jsonify({"success": True})
 
 
@@ -18929,6 +18957,7 @@ def client_task_from_finding():
     created_task = db.get_brand_task(task_id, brand_id)
     if created_task:
         _append_task_sheet_row(db, brand_id, created_task, "created_from_finding")
+        _sync_warren_brain_sheet(db, brand_id)
     return jsonify({"success": True, "task_id": task_id})
 
 

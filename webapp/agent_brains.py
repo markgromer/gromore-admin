@@ -1917,6 +1917,11 @@ def _upsert_generated_task(db, brand_id: int, *, source_ref: str, title: str,
         )
     except Exception as exc:
         logger.warning("Failed to mirror Warren plan task to Google Sheet: %s", exc)
+    try:
+        from webapp.warren_operating_brain import sync_warren_brain_sheet
+        sync_warren_brain_sheet(db, brand_id)
+    except Exception as exc:
+        logger.warning("Failed to refresh Warren operating brain after plan task sync: %s", exc)
 
 
 def _publish_simplified_plan(db, brand_id: int, month: str,

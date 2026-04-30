@@ -389,6 +389,182 @@ def _extract_sheet_id(raw):
     return raw
 
 
+def _sheet_title(value, fallback="Warren Memory"):
+    title = str(value or fallback).strip()
+    title = re.sub(r"[\[\]\:\*\?\/\\]+", " ", title)
+    title = re.sub(r"[\x00-\x1f\x7f]+", " ", title)
+    title = re.sub(r"\s+", " ", title).strip()
+    return (title or fallback)[:100]
+
+
+def _sheet_range(worksheet, cells):
+    escaped = str(worksheet or "").replace("'", "''")
+    return quote(f"'{escaped}'!{cells}", safe="'!:")
+
+
+def _get_sheet_metadata(access_token, sheet_id):
+    resp = requests.get(
+        f"{SHEETS_API}/{sheet_id}",
+        params={"fields": "sheets(properties(sheetId,title))"},
+        headers=_drive_headers(access_token),
+        timeout=15,
+    )
+    if resp.status_code != 200:
+        logger.warning("Sheets metadata failed (%s): %s", resp.status_code, resp.text[:300])
+        return {}
+    sheets = (resp.json() or {}).get("sheets") or []
+    return {
+        ((sheet.get("properties") or {}).get("title") or ""): (sheet.get("properties") or {}).get("sheetId")
+        for sheet in sheets
+    }
+
+
+def _ensure_worksheet(access_token, sheet_id, worksheet):
+    worksheet = _sheet_title(worksheet)
+    metadata = _get_sheet_metadata(access_token, sheet_id)
+    if worksheet in metadata:
+        return metadata[worksheet]
+
+    auth_headers = {**_drive_headers(access_token), "Content-Type": "application/json"}
+    resp = requests.post(
+        f"{SHEETS_API}/{sheet_id}:batchUpdate",
+        headers=auth_headers,
+        json={"requests": [{"addSheet": {"properties": {"title": worksheet}}}]},
+        timeout=15,
+    )
+    if resp.status_code not in (200, 201):
+        logger.warning("Sheets add tab failed (%s): %s", resp.status_code, resp.text[:300])
+        return None
+    replies = (resp.json() or {}).get("replies") or []
+    try:
+        return replies[0]["addSheet"]["properties"]["sheetId"]
+    except Exception:
+        metadata = _get_sheet_metadata(access_token, sheet_id)
+        return metadata.get(worksheet)
+
+
+def _format_sheet_table(access_token, sheet_id, sheet_gid, column_count, row_count=1):
+    if sheet_gid is None:
+        return
+    requests_payload = [
+        {
+            "updateSheetProperties": {
+                "properties": {"sheetId": sheet_gid, "gridProperties": {"frozenRowCount": 1}},
+                "fields": "gridProperties.frozenRowCount",
+            }
+        },
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_gid,
+                    "startRowIndex": 0,
+                    "endRowIndex": 1,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": max(1, int(column_count or 1)),
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "textFormat": {"bold": True},
+                        "backgroundColor": {"red": 0.92, "green": 0.95, "blue": 1.0},
+                    }
+                },
+                "fields": "userEnteredFormat(textFormat,backgroundColor)",
+            }
+        },
+        {
+            "setBasicFilter": {
+                "filter": {
+                    "range": {
+                        "sheetId": sheet_gid,
+                        "startRowIndex": 0,
+                        "endRowIndex": max(1, int(row_count or 1)),
+                        "startColumnIndex": 0,
+                        "endColumnIndex": max(1, int(column_count or 1)),
+                    }
+                }
+            }
+        },
+        {
+            "autoResizeDimensions": {
+                "dimensions": {
+                    "sheetId": sheet_gid,
+                    "dimension": "COLUMNS",
+                    "startIndex": 0,
+                    "endIndex": max(1, int(column_count or 1)),
+                }
+            }
+        },
+    ]
+    try:
+        requests.post(
+            f"{SHEETS_API}/{sheet_id}:batchUpdate",
+            headers={**_drive_headers(access_token), "Content-Type": "application/json"},
+            json={"requests": requests_payload},
+            timeout=15,
+        )
+    except Exception as exc:
+        logger.warning("Sheets table formatting failed: %s", exc)
+
+
+def write_sheet_table(db, brand_id, worksheet_name, headers, rows):
+    """Replace a worksheet with a rectangular table.
+
+    This is used for Warren's current operating brain tables where the latest
+    state matters more than an append-only event log.
+    """
+    brand = db.get_brand(brand_id)
+    sheet_id = _extract_sheet_id((brand or {}).get("google_drive_sheet_id") or "")
+    if not sheet_id:
+        return {"ok": False, "error": "No Google Sheet ID configured."}
+
+    token = get_valid_access_token(db, brand_id)
+    if not token:
+        return {"ok": False, "error": "No valid Google token."}
+
+    worksheet = _sheet_title(worksheet_name, "Warren Brain")
+    headers = [str(value or "")[:120] for value in (headers or [])]
+    rows = rows or []
+    width = max([len(headers)] + [len(row or []) for row in rows] + [1])
+    if len(headers) < width:
+        headers += [f"Column {idx + 1}" for idx in range(len(headers), width)]
+
+    values = [headers]
+    for row in rows:
+        cleaned = [str(value or "")[:50000] for value in (row or [])]
+        if len(cleaned) < width:
+            cleaned += [""] * (width - len(cleaned))
+        values.append(cleaned[:width])
+
+    auth_headers = {**_drive_headers(token), "Content-Type": "application/json"}
+    sheet_gid = _ensure_worksheet(token, sheet_id, worksheet)
+    table_range = _sheet_range(worksheet, "A:Z")
+    try:
+        clear_resp = requests.post(
+            f"{SHEETS_API}/{sheet_id}/values/{table_range}:clear",
+            headers=auth_headers,
+            json={},
+            timeout=15,
+        )
+        if clear_resp.status_code not in (200, 204):
+            logger.warning("Sheets clear failed (%s): %s", clear_resp.status_code, clear_resp.text[:300])
+
+        update_resp = requests.put(
+            f"{SHEETS_API}/{sheet_id}/values/{table_range}",
+            params={"valueInputOption": "USER_ENTERED"},
+            headers=auth_headers,
+            json={"values": values},
+            timeout=20,
+        )
+        if update_resp.status_code not in (200, 201):
+            logger.warning("Sheets table update failed (%s): %s", update_resp.status_code, update_resp.text[:300])
+            return {"ok": False, "error": update_resp.text[:300]}
+        _format_sheet_table(token, sheet_id, sheet_gid, width, len(values))
+        return {"ok": True, "updatedRange": (update_resp.json() or {}).get("updatedRange", "")}
+    except Exception as exc:
+        logger.warning("Sheets table write failed for brand %s: %s", brand_id, exc)
+        return {"ok": False, "error": str(exc)[:300]}
+
+
 def append_sheet_row(db, brand_id, worksheet_name, headers, row_values):
     """Append one row to the brand's configured Google Sheet.
 
@@ -404,7 +580,7 @@ def append_sheet_row(db, brand_id, worksheet_name, headers, row_values):
     if not token:
         return {"ok": False, "error": "No valid Google token."}
 
-    worksheet = re.sub(r"[^A-Za-z0-9 _-]+", "", str(worksheet_name or "Warren Memory")).strip() or "Warren Memory"
+    worksheet = _sheet_title(worksheet_name, "Warren Memory")
     headers = [str(value or "")[:120] for value in (headers or [])]
     row_values = [str(value or "")[:50000] for value in (row_values or [])]
     headers_len = max(len(headers), len(row_values), 1)
@@ -414,9 +590,8 @@ def append_sheet_row(db, brand_id, worksheet_name, headers, row_values):
         row_values += [""] * (headers_len - len(row_values))
 
     auth_headers = {**_drive_headers(token), "Content-Type": "application/json"}
-    header_range = f"'{worksheet}'!A1:Z1"
-    encoded_header_range = quote(header_range, safe="'!:")
-    append_range = quote(f"'{worksheet}'!A:Z", safe="'!:")
+    encoded_header_range = _sheet_range(worksheet, "A1:Z1")
+    append_range = _sheet_range(worksheet, "A:Z")
     try:
         header_resp = requests.get(
             f"{SHEETS_API}/{sheet_id}/values/{encoded_header_range}",
@@ -426,12 +601,7 @@ def append_sheet_row(db, brand_id, worksheet_name, headers, row_values):
         header_is_empty = header_resp.status_code == 200 and not (header_resp.json().get("values") or [])
         if header_resp.status_code == 400:
             # The tab probably does not exist. Create it, then write headers.
-            requests.post(
-                f"{SHEETS_API}/{sheet_id}:batchUpdate",
-                headers=auth_headers,
-                json={"requests": [{"addSheet": {"properties": {"title": worksheet}}}]},
-                timeout=15,
-            )
+            _ensure_worksheet(token, sheet_id, worksheet)
             header_is_empty = True
         elif header_resp.status_code not in (200, 404):
             logger.warning("Sheets header check failed (%s): %s", header_resp.status_code, header_resp.text[:300])

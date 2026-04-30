@@ -344,6 +344,11 @@ def save_memory_with_embedding(db, brand_id: int, category: str, title: str,
         )
     except Exception as exc:
         log.warning("Failed to mirror Warren memory to Google Sheet: %s", exc)
+    try:
+        from webapp.warren_operating_brain import sync_warren_brain_sheet
+        sync_warren_brain_sheet(db, brand_id)
+    except Exception as exc:
+        log.warning("Failed to refresh Warren operating brain after memory save: %s", exc)
 
 
 def get_memory_context_for_chat(db, brand_id: int, user_message: str,
@@ -1591,8 +1596,18 @@ def chat_with_warren(
     if memory_context:
         system += "\n\n" + memory_context
 
+    operating_brain = context.get("operating_brain")
+    if operating_brain:
+        try:
+            from webapp.warren_operating_brain import brain_prompt_text
+            brain_context = brain_prompt_text(operating_brain)
+            if brain_context:
+                system += "\n\n" + brain_context
+        except Exception as exc:
+            log.warning("Failed to render Warren operating brain context: %s", exc)
+
     # ── Attached file content (non-image files like CSV, PDF text, etc.) ──
-    task_context = context.get("task_context") or []
+    task_context = [] if operating_brain else (context.get("task_context") or [])
     if task_context:
         task_lines = []
         for task in task_context[:12]:
