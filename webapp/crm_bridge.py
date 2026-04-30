@@ -1986,6 +1986,7 @@ def pull_sweepandgo_customers(brand, page=1):
 
 JOBBER_TOKEN_URL = "https://api.getjobber.com/api/oauth/token"
 JOBBER_GRAPHQL_URL = "https://api.getjobber.com/api/graphql"
+JOBBER_GRAPHQL_VERSION = "2025-04-16"
 
 
 def _current_db():
@@ -2076,7 +2077,7 @@ def _jobber_graphql_request(api_key, query, variables=None):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        "X-JOBBER-GRAPHQL-VERSION": "2024-01-08",
+        "X-JOBBER-GRAPHQL-VERSION": JOBBER_GRAPHQL_VERSION,
     }
 
     payload = {"query": query}
