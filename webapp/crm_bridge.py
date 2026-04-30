@@ -7,10 +7,12 @@ webhooks, and standalone payment-provider revenue pulls.
 import json
 import logging
 import re
+import base64
 from collections import Counter
 from datetime import date, datetime, timedelta
 
 import requests
+from flask import current_app
 
 log = logging.getLogger(__name__)
 
@@ -1982,30 +1984,136 @@ def pull_sweepandgo_customers(brand, page=1):
 # Jobber (GraphQL API)
 # ──────────────────────────────────────────────
 
-def _jobber_graphql(brand, query, variables=None):
-    """Execute a Jobber GraphQL query."""
-    api_key = (brand.get("crm_api_key") or "").strip()
-    if not api_key:
-        return None, "Jobber API key not configured"
+JOBBER_TOKEN_URL = "https://api.getjobber.com/api/oauth/token"
+JOBBER_GRAPHQL_URL = "https://api.getjobber.com/api/graphql"
 
+
+def _current_db():
+    try:
+        return current_app.db
+    except RuntimeError:
+        return None
+
+
+def jobber_access_token_expires_at(access_token):
+    """Return the JWT exp timestamp as UTC ISO text when Jobber includes one."""
+    token = (access_token or "").strip()
+    try:
+        payload_part = token.split(".")[1]
+        padding = "=" * (-len(payload_part) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(f"{payload_part}{padding}").decode("utf-8"))
+        exp = int(payload.get("exp") or 0)
+        if exp > 0:
+            return datetime.utcfromtimestamp(exp).isoformat()
+    except Exception:
+        pass
+    return ""
+
+
+def _jobber_token_should_refresh(brand):
+    raw = (brand.get("jobber_token_expires_at") or "").strip()
+    if not raw:
+        return False
+    try:
+        expires_at = datetime.fromisoformat(raw.replace("Z", "+00:00")).replace(tzinfo=None)
+    except ValueError:
+        return False
+    return expires_at <= datetime.utcnow() + timedelta(minutes=5)
+
+
+def _update_jobber_brand_tokens(brand, access_token, refresh_token=""):
+    brand["crm_api_key"] = access_token
+    if refresh_token:
+        brand["jobber_refresh_token"] = refresh_token
+    expires_at = jobber_access_token_expires_at(access_token)
+    brand["jobber_token_expires_at"] = expires_at
+
+    db = _current_db()
+    brand_id = brand.get("id")
+    if db and brand_id:
+        db.update_brand_text_field(brand_id, "crm_api_key", access_token)
+        db.update_brand_text_field(brand_id, "jobber_token_expires_at", expires_at)
+        if refresh_token:
+            db.update_brand_text_field(brand_id, "jobber_refresh_token", refresh_token)
+
+
+def _refresh_jobber_access_token(brand):
+    client_id = (brand.get("jobber_client_id") or "").strip()
+    client_secret = (brand.get("jobber_client_secret") or "").strip()
+    refresh_token = (brand.get("jobber_refresh_token") or "").strip()
+    if not client_id or not client_secret or not refresh_token:
+        return False, "Jobber refresh token flow is not configured. Reconnect Jobber OAuth or paste a fresh access token."
+
+    try:
+        resp = requests.post(
+            JOBBER_TOKEN_URL,
+            data={
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+            },
+            headers={"Accept": "application/json"},
+            timeout=TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        return False, f"Jobber token refresh failed: {str(exc)[:150]}"
+
+    if resp.status_code != 200:
+        return False, f"Jobber token refresh returned {resp.status_code}: {resp.text[:180]}"
+
+    data = resp.json()
+    access_token = (data.get("access_token") or "").strip()
+    new_refresh_token = (data.get("refresh_token") or refresh_token).strip()
+    if not access_token:
+        return False, "Jobber token refresh did not return an access token."
+
+    _update_jobber_brand_tokens(brand, access_token, new_refresh_token)
+    return True, None
+
+
+def _jobber_graphql_request(api_key, query, variables=None):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
+        "X-JOBBER-GRAPHQL-VERSION": "2024-01-08",
     }
 
     payload = {"query": query}
     if variables:
         payload["variables"] = variables
 
+    return requests.post(
+        JOBBER_GRAPHQL_URL,
+        json=payload,
+        headers=headers,
+        timeout=TIMEOUT,
+    )
+
+
+def _jobber_graphql(brand, query, variables=None):
+    """Execute a Jobber GraphQL query."""
+    if _jobber_token_should_refresh(brand):
+        _refresh_jobber_access_token(brand)
+
+    api_key = (brand.get("crm_api_key") or "").strip()
+    if not api_key:
+        return None, "Jobber API key not configured"
+
     try:
-        resp = requests.post(
-            "https://api.getjobber.com/api/graphql",
-            json=payload,
-            headers=headers,
-            timeout=TIMEOUT,
-        )
+        resp = _jobber_graphql_request(api_key, query, variables)
     except Exception as e:
         return None, f"Jobber request failed: {str(e)[:150]}"
+
+    if resp.status_code == 401 and (brand.get("jobber_refresh_token") or "").strip():
+        refreshed, refresh_error = _refresh_jobber_access_token(brand)
+        if refreshed:
+            try:
+                resp = _jobber_graphql_request((brand.get("crm_api_key") or "").strip(), query, variables)
+            except Exception as e:
+                return None, f"Jobber request failed after token refresh: {str(e)[:150]}"
+        elif refresh_error:
+            return None, refresh_error
 
     if resp.status_code != 200:
         return None, f"Jobber returned {resp.status_code}: {resp.text[:200]}"
@@ -2016,6 +2124,27 @@ def _jobber_graphql(brand, query, variables=None):
         return None, f"Jobber GraphQL error: {msg[:200]}"
 
     return data.get("data", {}), None
+
+
+def jobber_account_label(brand):
+    """Return the connected Jobber account label when the token has account access."""
+    query = """
+    query JobberAccountLabel {
+        account {
+            id
+            name
+        }
+    }
+    """
+    result, error = _jobber_graphql(brand, query)
+    if error:
+        return "", error
+    account = (result or {}).get("account") or {}
+    name = (account.get("name") or "").strip()
+    account_id = (account.get("id") or "").strip()
+    if name and account_id:
+        return f"{name} ({account_id})", None
+    return name or account_id or "", None
 
 
 def _push_jobber(brand, lead_data):

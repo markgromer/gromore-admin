@@ -855,31 +855,74 @@
                 <form method="POST" action="{{ url_for('client.client_save_jobber') }}" class="mt-3">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="row g-3">
-                        <div class="col-lg-8">
-                            <label class="form-label fw-medium" style="font-size:.88rem;">Jobber Access Token</label>
+                        <div class="col-lg-6">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">OAuth Client ID</label>
+                            <input type="text" class="form-control" name="jobber_client_id" value="{{ brand.jobber_client_id or '' }}" placeholder="Jobber app client ID" autocomplete="off">
+                            <small class="text-muted">Use the Client ID from your Jobber Developer Center app.</small>
+                        </div>
+                        <div class="col-lg-6">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">OAuth Client Secret</label>
                             <div class="input-group">
-                                <input type="password" class="form-control" name="jobber_api_key" placeholder="{{ '••••••••' ~ brand.crm_api_key[-4:] if brand.crm_api_key and brand.crm_type == 'jobber' else 'Paste your Jobber OAuth access token' }}" autocomplete="off" id="jobberApiKeyInput">
+                                <input type="password" class="form-control" name="jobber_client_secret" placeholder="{{ 'Saved - leave blank to keep' if brand.jobber_client_secret else 'Jobber app client secret' }}" autocomplete="off" id="jobberClientSecretInput">
+                                <button class="btn btn-outline-secondary" type="button" onclick="var i=document.getElementById('jobberClientSecretInput');i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=\'bi bi-eye\'></i>':'<i class=\'bi bi-eye-slash\'></i>'"><i class="bi bi-eye"></i></button>
+                            </div>
+                            <small class="text-muted">Leave blank to keep the saved secret. Jobber also uses this to sign webhooks.</small>
+                        </div>
+                        <div class="col-lg-6">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">OAuth Callback URL</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="jobberCallbackUrl" value="{{ jobber_oauth_callback_url }}" readonly>
+                                <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('jobberCallbackUrl')"><i class="bi bi-clipboard"></i></button>
+                            </div>
+                            <small class="text-muted">Paste this into the Callback URL field in Jobber.</small>
+                        </div>
+                        <div class="col-lg-6">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Webhook URL</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="jobberWebhookUrl" value="{{ jobber_webhook_url }}" readonly>
+                                <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('jobberWebhookUrl')"><i class="bi bi-clipboard"></i></button>
+                            </div>
+                            <small class="text-muted">Use this for Jobber app webhooks such as app disconnects and client/request updates.</small>
+                        </div>
+                        <div class="col-lg-6">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Fallback Webhook Secret</label>
+                            <input type="password" class="form-control" name="jobber_webhook_secret" placeholder="{{ 'Saved - leave blank to keep' if brand.jobber_webhook_secret else 'Optional shared secret' }}" autocomplete="off">
+                            <small class="text-muted">Optional. Official Jobber webhooks are verified with the OAuth client secret HMAC header.</small>
+                        </div>
+                        <div class="col-lg-6">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Manual Access Token Fallback</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" name="jobber_api_key" placeholder="{{ 'Saved ending in ' ~ brand.crm_api_key[-4:] if brand.crm_api_key and brand.crm_type == 'jobber' else 'Paste a temporary Jobber access token' }}" autocomplete="off" id="jobberApiKeyInput">
                                 <button class="btn btn-outline-secondary" type="button" onclick="var i=document.getElementById('jobberApiKeyInput');i.type=i.type==='password'?'text':'password';this.innerHTML=i.type==='password'?'<i class=\'bi bi-eye\'></i>':'<i class=\'bi bi-eye-slash\'></i>'"><i class="bi bi-eye"></i></button>
                             </div>
-                            <small class="text-muted">Leave blank to keep the current token. Jobber uses GraphQL at api.getjobber.com.</small>
-                        </div>
-                        <div class="col-lg-4 d-flex align-items-end">
-                            <button class="btn btn-primary w-100" type="submit">Save Jobber Settings</button>
+                            <small class="text-muted">Fallback only. OAuth connection stores a refresh token and keeps Jobber working automatically.</small>
                         </div>
                     </div>
                     <div class="mt-3 d-flex align-items-center gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Save Jobber Settings</button>
+                        {% if brand.jobber_client_id and brand.jobber_client_secret %}<a class="btn btn-outline-primary" href="{{ url_for('client.client_jobber_oauth_connect') }}"><i class="bi bi-box-arrow-up-right me-1"></i> Connect Jobber OAuth</a>{% endif %}
                         {% if brand.crm_type == 'jobber' and brand.crm_api_key %}<button class="btn btn-outline-primary" type="button" id="jobberTestBtn"><i class="bi bi-plug me-1"></i> Test Connection</button>{% endif %}
-                        <span class="text-muted" style="font-size:.84rem;">A valid token lets Warren create Jobber clients and requests when CRM auto-push is enabled.</span>
                     </div>
                 </form>
                 <div id="jobberTestResult" class="mt-2" style="display:none;"></div>
+                {% if (brand.crm_type == 'jobber' and brand.crm_api_key) or brand.jobber_account_label or brand.jobber_refresh_token or brand.jobber_token_expires_at %}
+                    <div class="mt-2 d-flex align-items-center gap-2 flex-wrap" style="font-size:.84rem;">
+                        {% if brand.jobber_account_label %}<span class="badge bg-light text-dark border">Account: {{ brand.jobber_account_label }}</span>{% endif %}
+                        {% if brand.jobber_refresh_token %}<span class="badge bg-success-subtle text-success border border-success-subtle">Refresh enabled</span>{% endif %}
+                        {% if brand.jobber_token_expires_at %}<span class="badge bg-light text-dark border">Access token expires {{ brand.jobber_token_expires_at }}</span>{% endif %}
+                    </div>
+                    <form method="POST" action="{{ url_for('client.client_jobber_disconnect') }}" class="mt-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-x-circle me-1"></i> Disconnect Jobber</button>
+                    </form>
+                {% endif %}
 
                 <div class="mt-3 p-3" style="background:#ecfeff; border:1px solid #bae6fd; border-radius:12px;">
                     <div class="d-flex align-items-start gap-2">
                         <i class="bi bi-info-circle text-info mt-1"></i>
                         <div>
                             <div class="fw-medium" style="font-size:.88rem;">What this powers</div>
-                            <small class="text-muted">Lead Assistant CRM push can create a Jobber client and request. Finance sync can pull paid invoice revenue for reporting. Full OAuth app onboarding can be added later if you do not want to manually paste access tokens.</small>
+                            <small class="text-muted">Lead Assistant CRM push can create a Jobber client and request. Finance sync can pull paid invoice revenue for reporting. OAuth keeps tokens fresh, while webhooks let GroMore react to Jobber app disconnects and future real-time CRM events.</small>
                         </div>
                     </div>
                 </div>

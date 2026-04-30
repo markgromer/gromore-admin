@@ -20,7 +20,7 @@ from io import BytesIO, StringIO
 from functools import wraps
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlparse, urljoin, quote_plus
+from urllib.parse import urlencode, urlparse, urljoin, quote_plus
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 from flask import (
@@ -2675,6 +2675,18 @@ def _build_public_drive_download_url(brand_id, file_id):
         "file_id": str(file_id or "").strip(),
     })
     return f"{_external_app_url()}{url_for('client_public.public_drive_download', token=token)}"
+
+
+def _jobber_oauth_serializer():
+    return URLSafeTimedSerializer(current_app.secret_key, salt="client-jobber-oauth")
+
+
+def _jobber_oauth_callback_url():
+    return f"{_external_app_url()}{url_for('client.client_jobber_oauth_callback')}"
+
+
+def _jobber_webhook_url(brand):
+    return f"{_external_app_url()}{url_for('webhooks.jobber_webhook', brand_slug=brand['slug'])}"
 
 
 def _extract_drive_download_file_id(image_url):
@@ -10724,6 +10736,8 @@ def client_settings():
             warren_total_count=warren_total_count,
             warren_status_state=warren_status_state,
             sng_webhook_url=sng_webhook_url,
+            jobber_oauth_callback_url=_jobber_oauth_callback_url(),
+            jobber_webhook_url=_jobber_webhook_url(brand),
             sng_webhook_events=sng_webhook_events,
             lead_webhook_deliveries=lead_webhook_deliveries,
             ai_model_recommendations=_ai_recommendations_for_brand(brand),
@@ -14954,15 +14968,154 @@ def client_ghl_test():
 def client_save_jobber():
     db = _get_db()
     brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
 
     api_key = request.form.get("jobber_api_key", "").strip()
+    client_id = request.form.get("jobber_client_id", "").strip()
+    client_secret = request.form.get("jobber_client_secret", "").strip()
+    webhook_secret = request.form.get("jobber_webhook_secret", "").strip()
 
     db.update_brand_text_field(brand_id, "crm_type", "jobber")
+    db.update_brand_text_field(brand_id, "jobber_client_id", client_id)
+    db.update_brand_text_field(brand_id, "crm_webhook_url", _jobber_webhook_url(brand))
+    if client_secret:
+        db.update_brand_text_field(brand_id, "jobber_client_secret", client_secret)
+    if webhook_secret:
+        db.update_brand_text_field(brand_id, "jobber_webhook_secret", webhook_secret)
     if api_key:
         db.update_brand_text_field(brand_id, "crm_api_key", api_key)
+        db.update_brand_text_field(brand_id, "jobber_token_expires_at", "")
 
     flash("Jobber settings saved.", "success")
-    return redirect(url_for("client.client_settings"))
+    return redirect(url_for("client.client_settings") + "#connection-panel-jobber")
+
+
+@client_bp.route("/settings/jobber/connect")
+@client_login_required
+def client_jobber_oauth_connect():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    client_id = (brand.get("jobber_client_id") or "").strip()
+    client_secret = (brand.get("jobber_client_secret") or "").strip()
+    if not client_id or not client_secret:
+        flash("Save your Jobber OAuth client ID and client secret before connecting.", "error")
+        return redirect(url_for("client.client_settings") + "#connection-panel-jobber")
+
+    state = _jobber_oauth_serializer().dumps({
+        "brand_id": int(brand_id),
+        "client_user_id": int(session.get("client_user_id") or 0),
+        "nonce": uuid.uuid4().hex,
+    })
+    params = urlencode({
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": _jobber_oauth_callback_url(),
+        "state": state,
+    })
+    return redirect(f"https://api.getjobber.com/api/oauth/authorize?{params}")
+
+
+@client_bp.route("/settings/jobber/callback")
+def client_jobber_oauth_callback():
+    db = _get_db()
+    error = (request.args.get("error") or "").strip()
+    if error:
+        flash(f"Jobber authorization failed: {error}", "error")
+        return redirect(url_for("client.client_settings") + "#connection-panel-jobber")
+
+    code = (request.args.get("code") or "").strip()
+    state = (request.args.get("state") or "").strip()
+    brand_id = 0
+    if state:
+        try:
+            payload = _jobber_oauth_serializer().loads(state, max_age=30 * 60)
+            brand_id = int(payload.get("brand_id") or 0)
+        except BadSignature:
+            flash("Jobber authorization state expired or was invalid. Start the connection again.", "error")
+            return redirect(url_for("client.client_settings") + "#connection-panel-jobber")
+    else:
+        brand_id = int(session.get("client_brand_id") or 0)
+
+    if not code or brand_id <= 0:
+        flash("Jobber did not return a usable authorization code. Start from the Jobber connection panel.", "error")
+        return redirect(url_for("client.client_settings"))
+
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    client_id = (brand.get("jobber_client_id") or "").strip()
+    client_secret = (brand.get("jobber_client_secret") or "").strip()
+    if not client_id or not client_secret:
+        flash("Jobber OAuth credentials are missing. Save them and connect again.", "error")
+        return redirect(url_for("client.client_settings") + "#connection-panel-jobber")
+
+    try:
+        resp = requests.post(
+            "https://api.getjobber.com/api/oauth/token",
+            data={
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": _jobber_oauth_callback_url(),
+            },
+            headers={"Accept": "application/json"},
+            timeout=15,
+        )
+    except requests.RequestException as exc:
+        flash(f"Could not reach Jobber to finish authorization: {str(exc)[:180]}", "error")
+        return redirect(url_for("client.client_settings") + "#connection-panel-jobber")
+
+    if resp.status_code != 200:
+        flash(f"Jobber returned {resp.status_code} while authorizing: {resp.text[:180]}", "error")
+        return redirect(url_for("client.client_settings") + "#connection-panel-jobber")
+
+    token_payload = resp.json()
+    access_token = (token_payload.get("access_token") or "").strip()
+    refresh_token = (token_payload.get("refresh_token") or "").strip()
+    if not access_token or not refresh_token:
+        flash("Jobber did not return both access and refresh tokens.", "error")
+        return redirect(url_for("client.client_settings") + "#connection-panel-jobber")
+
+    from webapp.crm_bridge import jobber_access_token_expires_at, jobber_account_label
+
+    db.update_brand_text_field(brand_id, "crm_type", "jobber")
+    db.update_brand_text_field(brand_id, "crm_api_key", access_token)
+    db.update_brand_text_field(brand_id, "jobber_refresh_token", refresh_token)
+    db.update_brand_text_field(brand_id, "jobber_token_expires_at", jobber_access_token_expires_at(access_token))
+    db.update_brand_text_field(brand_id, "crm_webhook_url", _jobber_webhook_url(brand))
+
+    connected_brand = db.get_brand(brand_id) or brand
+    label, label_error = jobber_account_label(connected_brand)
+    if label:
+        db.update_brand_text_field(brand_id, "jobber_account_label", label)
+
+    if label_error:
+        flash(f"Jobber connected. Account lookup could not run yet: {label_error}", "warning")
+    else:
+        flash("Jobber connected. Tokens will refresh automatically.", "success")
+    return redirect(url_for("client.client_settings") + "#connection-panel-jobber")
+
+
+@client_bp.route("/settings/jobber/disconnect", methods=["POST"])
+@client_login_required
+def client_jobber_disconnect():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    for field in ("crm_api_key", "jobber_refresh_token", "jobber_token_expires_at", "jobber_account_label"):
+        db.update_brand_text_field(brand_id, field, "")
+    brand = db.get_brand(brand_id) or {}
+    if brand.get("crm_type") == "jobber":
+        db.update_brand_text_field(brand_id, "crm_type", "")
+    flash("Jobber disconnected in GroMore.", "success")
+    return redirect(url_for("client.client_settings") + "#connection-panel-jobber")
 
 
 @client_bp.route("/crm/jobber/test", methods=["POST"])
@@ -14975,7 +15128,7 @@ def client_jobber_test():
         return jsonify(ok=False, error="Brand not found"), 404
 
     if brand.get("crm_type") != "jobber" or not brand.get("crm_api_key"):
-        return jsonify(ok=False, error="Jobber not configured. Save your access token first.")
+        return jsonify(ok=False, error="Jobber not configured. Connect OAuth or save an access token first.")
 
     from webapp.crm_bridge import jobber_test_connection
     message, error = jobber_test_connection(brand)

@@ -25,6 +25,7 @@
 - **Navigation Simplification** - Cleaner client navigation and tab flow to reduce click friction
 - **Client Password Settings** - Added first-class password management inside client settings
 - **Brand Email Identity** - Client-facing emails can use a brand sender name and reply-to address while keeping SMTP delivery authenticated
+- **Jobber OAuth + Webhook Setup** - Jobber connection now supports OAuth client credentials, callback URL copy, refresh token storage, webhook URL copy, HMAC-verified inbound webhooks, and manual token fallback
 - **AI Provider Configuration** - Client AI settings now support OpenAI, OpenRouter, Gemini, xAI/Grok, BFL/FLUX, and custom OpenAI-compatible provider routing with per-purpose model fields
 - **Multi-Provider Token Vault** - Separate saved API tokens for each AI provider so clients can keep multiple provider credentials active at once
 - **AI Model Suggestions** - Connection settings show provider-aware model suggestions for quality, cost balance, and high-volume use cases
@@ -615,7 +616,7 @@
 - GoHighLevel - Lead and revenue sync
 - HubSpot - Lead and revenue sync
 - Sweep & Go (SNG) - Revenue, clients, billing integration
-- Jobber - Invoice sync
+- Jobber - Invoice sync, OAuth callback, token refresh, and app webhooks
 - ResponsiBid - Quote-tool API credentials and quote lead connection setup
 - Generic Webhook - Custom CRM integration
 

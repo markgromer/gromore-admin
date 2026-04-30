@@ -366,8 +366,8 @@
                     </tr>
                     <tr>
                         <td><i class="bi bi-briefcase me-1 text-info"></i> <strong>CRM (Jobber)</strong></td>
-                        <td>OAuth access token</td>
-                        <td>Connect Jobber so Warren can create clients and requests, and so finance sync can pull paid invoice revenue. Add your Jobber access token on the Settings page. <a href="#crm-jobber">Full setup guide below.</a></td>
+                        <td>OAuth app credentials</td>
+                        <td>Connect Jobber so Warren can create clients and requests, finance sync can pull paid invoice revenue, and app webhooks can report disconnects. Add your Jobber OAuth app details on the Settings page. <a href="#crm-jobber">Full setup guide below.</a></td>
                     </tr>
                 </tbody>
             </table>
@@ -905,16 +905,26 @@
 
             <h5>What You Need</h5>
             <ul>
-                <li>A Jobber OAuth access token with access to clients, requests, and invoices</li>
+                <li>A Jobber Developer Center app with clients, requests, and invoices scopes</li>
+                <li>The OAuth client ID and client secret from that app</li>
                 <li>Permission in Jobber to create clients and requests if you want Warren CRM auto-push enabled</li>
             </ul>
 
             <h5>Setup</h5>
             <ol>
-                <li>Create or obtain a Jobber API access token from your Jobber app/OAuth setup</li>
                 <li>Open <a href="{{ url_for('client.client_settings') }}">Settings</a> and choose the Jobber card</li>
-                <li>Paste the token and save</li>
+                <li>Copy the GroMore OAuth callback URL into the Jobber app's Callback URL field</li>
+                <li>Copy the GroMore webhook URL into the Jobber app's Webhook URL field for app events</li>
+                <li>Save the Jobber client ID and client secret in GroMore</li>
+                <li>Click Connect Jobber OAuth and approve access in Jobber</li>
                 <li>Run the Jobber test connection before enabling automated CRM push</li>
+            </ol>
+
+            <h5>Manual Fallback</h5>
+            <ol>
+                <li>Open <a href="{{ url_for('client.client_settings') }}">Settings</a> and choose the Jobber card</li>
+                <li>Paste a temporary Jobber access token in the fallback token field</li>
+                <li>Use this only when OAuth app setup is not available, because pasted access tokens do not refresh automatically</li>
             </ol>
 
             <div class="step-callout">

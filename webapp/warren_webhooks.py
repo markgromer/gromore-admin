@@ -4,6 +4,7 @@ Warren Webhooks - inbound message receivers for Quo (OpenPhone) and Meta.
 Endpoints:
     POST /webhooks/leads/<brand_slug>             - Generic inbound lead form submissions
     POST /webhooks/sng/<brand_slug>/<secret>      - Sweep and Go inbound events
+    POST /webhooks/jobber/<brand_slug>            - Jobber app webhooks
     POST /webhooks/quo/sms/<brand_slug>           - Quo/OpenPhone inbound SMS
     POST /webhooks/meta/leadgen                   - Meta Lead Form submissions
     POST /webhooks/meta/messenger                 - Meta Messenger inbound messages
@@ -817,6 +818,108 @@ def sng_webhook(brand_slug, secret):
 # ─────────────────────────────────────────────
 # Quo / OpenPhone SMS Webhook
 # ─────────────────────────────────────────────
+
+def _verify_jobber_webhook(brand, raw_body):
+    client_secret = (brand.get("jobber_client_secret") or "").strip()
+    hmac_header = (request.headers.get("X-Jobber-Hmac-SHA256") or "").strip()
+    if client_secret and hmac_header:
+        digest = hmac.new(client_secret.encode("utf-8"), raw_body, hashlib.sha256).digest()
+        expected = base64.b64encode(digest).decode("utf-8")
+        return hmac.compare_digest(expected, hmac_header)
+
+    fallback_secret = (brand.get("jobber_webhook_secret") or "").strip()
+    if fallback_secret:
+        provided = (
+            request.headers.get("X-GroMore-Webhook-Secret")
+            or request.headers.get("X-Jobber-Webhook-Secret")
+            or request.args.get("secret")
+            or ""
+        ).strip()
+        return bool(provided and hmac.compare_digest(provided, fallback_secret))
+
+    return not client_secret
+
+
+def _jobber_payload_from_request():
+    parsed = request.get_json(silent=True)
+    if isinstance(parsed, dict):
+        return parsed
+    if isinstance(parsed, list):
+        return {"items": parsed}
+    if request.form:
+        return {key: request.form.get(key) for key in request.form.keys()}
+    return {}
+
+
+def _jobber_event_object(payload):
+    data = payload.get("data") if isinstance(payload, dict) else {}
+    event = (data or {}).get("webHookEvent") if isinstance(data, dict) else None
+    return event if isinstance(event, dict) else (payload if isinstance(payload, dict) else {})
+
+
+def _extract_jobber_event(payload, raw_body):
+    event = _jobber_event_object(payload)
+    event_type = (
+        event.get("topic")
+        or payload.get("topic")
+        or payload.get("event")
+        or payload.get("event_type")
+        or "JOBBER_WEBHOOK"
+    )
+    account_id = event.get("accountId") or payload.get("accountId") or ""
+    item_id = event.get("itemId") or payload.get("itemId") or ""
+    occurred_at = event.get("occurredAt") or event.get("occuredAt") or payload.get("occurredAt") or ""
+    fallback_bytes = json.dumps(payload, sort_keys=True).encode("utf-8")
+    raw_hash = hashlib.sha256(raw_body or fallback_bytes).hexdigest()[:16]
+    event_id = event.get("id") or payload.get("id") or f"jobber:{account_id}:{event_type}:{item_id}:{occurred_at}:{raw_hash}"
+    summary = {
+        "source": "jobber",
+        "event_type": event_type,
+        "account_id": account_id,
+        "item_id": item_id,
+        "occurred_at": occurred_at,
+        "app_id": event.get("appId") or payload.get("appId") or "",
+    }
+    return str(event_type), str(event_id), {key: value for key, value in summary.items() if str(value or "").strip()}
+
+
+@webhooks_bp.route("/jobber/<brand_slug>", methods=["POST"])
+def jobber_webhook(brand_slug):
+    db = _get_db()
+    brand = db.get_brand_by_slug(brand_slug)
+    if not brand:
+        abort(404)
+
+    raw_body = request.get_data() or b""
+    if not _verify_jobber_webhook(brand, raw_body):
+        abort(401)
+
+    payload = _jobber_payload_from_request()
+    if not payload:
+        return jsonify({"error": "Expected a Jobber webhook payload."}), 400
+
+    event_type, event_id, summary = _extract_jobber_event(payload, raw_body)
+    status = "received"
+    detail = f"Jobber webhook received: {event_type}"
+    if event_type == "APP_DISCONNECT":
+        for field in ("crm_api_key", "jobber_refresh_token", "jobber_token_expires_at", "jobber_account_label"):
+            db.update_brand_text_field(brand["id"], field, "")
+        if brand.get("crm_type") == "jobber":
+            db.update_brand_text_field(brand["id"], "crm_type", "")
+        status = "processed"
+        detail = "Jobber app disconnect received; local Jobber tokens cleared."
+
+    db.record_sng_webhook_event(
+        brand["id"],
+        event_id,
+        event_type=event_type,
+        status=status,
+        detail=detail,
+        summary=summary,
+        payload=payload,
+    )
+    return jsonify({"ok": True, "event_type": event_type, "event_id": event_id}), 200
+
 
 def _verify_quo_signature(payload_bytes, signature, secret):
     """Verify Quo webhook signature using HMAC-SHA256.
