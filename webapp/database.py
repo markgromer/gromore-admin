@@ -779,6 +779,11 @@ class WebDB:
                 platform TEXT NOT NULL DEFAULT 'facebook',
                 post_type TEXT DEFAULT '',
                 message TEXT NOT NULL DEFAULT '',
+                first_comment TEXT DEFAULT '',
+                first_comment_status TEXT DEFAULT '',
+                first_comment_id TEXT DEFAULT '',
+                first_comment_error TEXT DEFAULT '',
+                first_commented_at TEXT DEFAULT NULL,
                 image_url TEXT DEFAULT '',
                 link_url TEXT DEFAULT '',
                 scheduled_at TEXT NOT NULL,
@@ -1960,6 +1965,11 @@ class WebDB:
         scheduled_post_columns = {r[1] for r in conn.execute("PRAGMA table_info(scheduled_posts)").fetchall()}
         new_scheduled_post_cols = [
             ("post_type", "TEXT DEFAULT ''"),
+            ("first_comment", "TEXT DEFAULT ''"),
+            ("first_comment_status", "TEXT DEFAULT ''"),
+            ("first_comment_id", "TEXT DEFAULT ''"),
+            ("first_comment_error", "TEXT DEFAULT ''"),
+            ("first_commented_at", "TEXT DEFAULT NULL"),
         ]
         for col_name, col_def in new_scheduled_post_cols:
             if col_name not in scheduled_post_columns:
@@ -5271,13 +5281,16 @@ class WebDB:
     # ── Scheduled Posts ─────────────────────────────────────────────
 
     def save_scheduled_post(self, brand_id, platform, message, scheduled_at,
-                            image_url="", link_url="", post_type=""):
+                            image_url="", link_url="", post_type="", first_comment=""):
         conn = self._conn()
         conn.execute(
             """INSERT INTO scheduled_posts
-               (brand_id, platform, post_type, message, image_url, link_url, scheduled_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (brand_id, platform, post_type, message, image_url, link_url, scheduled_at),
+               (brand_id, platform, post_type, message, first_comment, first_comment_status, image_url, link_url, scheduled_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                brand_id, platform, post_type, message, first_comment,
+                "pending" if first_comment else "", image_url, link_url, scheduled_at,
+            ),
         )
         conn.commit()
         row_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -5286,14 +5299,15 @@ class WebDB:
 
     def save_scheduled_posts_bulk(self, posts):
         """Insert multiple posts. Each item: dict with brand_id, platform,
-        message, scheduled_at, image_url, link_url, post_type."""
+        message, scheduled_at, image_url, link_url, post_type, first_comment."""
         conn = self._conn()
         for p in posts:
             conn.execute(
                 """INSERT INTO scheduled_posts
-                   (brand_id, platform, post_type, message, image_url, link_url, scheduled_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                   (brand_id, platform, post_type, message, first_comment, first_comment_status, image_url, link_url, scheduled_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (p["brand_id"], p.get("platform", "facebook"), p.get("post_type", ""), p["message"],
+                 p.get("first_comment", ""), "pending" if p.get("first_comment") else "",
                  p.get("image_url", ""), p.get("link_url", ""), p["scheduled_at"]),
             )
         conn.commit()
@@ -5337,6 +5351,26 @@ class WebDB:
             conn.execute(
                 "UPDATE scheduled_posts SET status = ? WHERE id = ?",
                 (status, post_id),
+            )
+        conn.commit()
+        conn.close()
+
+    def update_scheduled_post_first_comment(self, post_id, status, comment_id="", error_message=""):
+        conn = self._conn()
+        if status == "posted":
+            conn.execute(
+                """UPDATE scheduled_posts
+                   SET first_comment_status = ?, first_comment_id = ?, first_comment_error = '',
+                       first_commented_at = datetime('now')
+                   WHERE id = ?""",
+                (status, comment_id, post_id),
+            )
+        else:
+            conn.execute(
+                """UPDATE scheduled_posts
+                   SET first_comment_status = ?, first_comment_error = ?
+                   WHERE id = ?""",
+                (status, error_message, post_id),
             )
         conn.commit()
         conn.close()

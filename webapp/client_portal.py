@@ -2707,6 +2707,41 @@ def _format_facebook_proof_timestamp(value):
         return raw.replace("T", " ")[:19]
 
 
+def _maybe_post_facebook_first_comment(db, post, page_token):
+    first_comment = _format_facebook_first_comment(post.get("first_comment") or "")
+    if not first_comment:
+        return
+    status = str(post.get("first_comment_status") or "").strip().lower()
+    if status == "posted":
+        return
+    fb_post_id = str(post.get("fb_post_id") or "").strip()
+    if not fb_post_id:
+        return
+
+    try:
+        import requests as req_lib
+        resp = req_lib.post(
+            f"https://graph.facebook.com/v21.0/{fb_post_id}/comments",
+            data={"access_token": page_token, "message": first_comment},
+            timeout=20,
+        )
+        payload = resp.json() if resp.content else {}
+        comment_id = str((payload or {}).get("id") or "").strip()
+        if resp.status_code == 200 and comment_id:
+            db.update_scheduled_post_first_comment(post["id"], "posted", comment_id=comment_id)
+            post["first_comment_status"] = "posted"
+            post["first_comment_id"] = comment_id
+        else:
+            error_msg = ((payload or {}).get("error") or {}).get("message") or resp.text[:300]
+            db.update_scheduled_post_first_comment(post["id"], "failed", error_message=error_msg[:300])
+            post["first_comment_status"] = "failed"
+            post["first_comment_error"] = error_msg[:300]
+    except Exception as exc:
+        db.update_scheduled_post_first_comment(post["id"], "failed", error_message=str(exc)[:300])
+        post["first_comment_status"] = "failed"
+        post["first_comment_error"] = str(exc)[:300]
+
+
 def _load_facebook_published_post_proof(db, brand, brand_id, posts, limit=12):
     page_id = str((brand or {}).get("facebook_page_id") or "").strip()
     candidates = [post for post in posts or [] if str(post.get("fb_post_id") or "").strip()]
@@ -2762,6 +2797,7 @@ def _load_facebook_published_post_proof(db, brand, brand_id, posts, limit=12):
             if post.get("status") != "published":
                 db.update_scheduled_post_status(post["id"], "published", fb_post_id=fb_post_id)
                 post["status"] = "published"
+            _maybe_post_facebook_first_comment(db, post, page_token)
 
             proofs.append(
                 {
@@ -3869,9 +3905,10 @@ Rules:
 - Write like a competent local business owner or operator, not a social media guru.
 - Keep the post {length_profile['single_post_words'] if length_profile else 'between 70 and 180 words'}.
 - Make it specific to the service, audience, or local market when possible.
-- Format the post for readability in-feed, not as one dense block of text.
-- Use intentional line breaks between the hook, the body, and the CTA when it helps clarity.
+- Format the post for readability in-feed. Do not return one dense paragraph.
+- Use blank lines between the hook, the body, and the CTA when it helps clarity.
 - Prefer this flow when it fits the idea: opening hook, supporting body, closing CTA.
+- Include a first comment when it adds useful context, a link tease, a question, or a soft prompt for replies. Leave it empty if it would feel forced.
 - Include a clear next step, but do not sound pushy.
 - Avoid cliches, forced inspiration, and vague filler.
 - Do NOT use em dashes.
@@ -3884,6 +3921,7 @@ Rules:
 
 Return a JSON object with these exact keys:
 - message: the Facebook post body
+- first_comment: a short first comment to add after the post goes live, or an empty string
 - image_hint: a short suggestion for what image or photo would fit this post
 - link_url: either an empty string or a relevant website URL if a link would genuinely help this type of post
 """
@@ -3939,8 +3977,10 @@ Rules:
 - Write one post for each planned slot and keep the same order.
 - Each post should be {length_profile['calendar_words'] if length_profile else 'between 70 and 170 words'}.
 - Make each post specific to the business, service mix, audience, or local market.
+- Format every post with readable line breaks, not one dense paragraph.
 - Vary the opening lines so the calendar does not sound repetitive.
 - Keep calls to action clear but not pushy.
+- Include first_comment when it can naturally add useful detail, a link tease, a question, or a soft prompt for replies. Leave it empty when it would feel forced.
 - Avoid cliches, vague filler, and generic motivational language.
 - Do NOT use em dashes.
 - Use at most 2 hashtags per post, and only when they fit naturally.
@@ -3956,6 +3996,7 @@ Return a JSON object with this exact shape:
         {{
             "post_type": "value",
             "message": "...",
+            "first_comment": "",
             "image_hint": "...",
             "link_url": ""
         }}
@@ -3963,6 +4004,46 @@ Return a JSON object with this exact shape:
 }}
 """
     return system_prompt, user_prompt
+
+
+def _normalize_facebook_generated_text(value, *, limit=5000):
+    text = str(value or "").replace("—", "-").replace("â€”", "-").replace("\r\n", "\n").replace("\r", "\n").strip()
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = re.sub(r"[ \t]+\n", "\n", text)
+    return text[:limit].strip()
+
+
+def _format_facebook_post_message(message):
+    text = _normalize_facebook_generated_text(message, limit=5000)
+    if not text:
+        return ""
+    if "\n\n" in text:
+        return text
+
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+    if len(lines) >= 3:
+        return "\n\n".join([lines[0], "\n".join(lines[1:-1]), lines[-1]]).strip()
+    if len(lines) >= 2:
+        return "\n\n".join(lines).strip()
+
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    sentences = [sentence.strip() for sentence in sentences if sentence.strip()]
+    if len(sentences) < 3:
+        return text
+
+    hook = sentences[0]
+    cta = sentences[-1]
+    body = " ".join(sentences[1:-1])
+    if len(hook) <= 140 and len(cta) <= 180:
+        return f"{hook}\n\n{body}\n\n{cta}".strip()
+    return text
+
+
+def _format_facebook_first_comment(value):
+    text = _normalize_facebook_generated_text(value, limit=1000)
+    if not text:
+        return ""
+    return text[:700].strip()
 
 
 def _build_warren_lead_intelligence(db, brand):
@@ -17026,10 +17107,11 @@ def client_generate_facebook_post():
             max_tokens=700,
         )
         result = _extract_json_object(resp.choices[0].message.content)
-        message = str(result.get("message") or "").replace("—", "-").strip()
+        message = _format_facebook_post_message(result.get("message") or "")
         if not message:
             return jsonify(ok=False, error="AI returned an empty message. Try again."), 400
-        image_hint = str(result.get("image_hint") or "").replace("—", "-").strip()
+        first_comment = _format_facebook_first_comment(result.get("first_comment") or "")
+        image_hint = _normalize_facebook_generated_text(result.get("image_hint") or "", limit=160)
         link_url = str(result.get("link_url") or "").strip() or _default_post_link_url(brand, post_type)
         _log_agent("spark", "Generated Facebook post", f"{_facebook_post_type_label(post_type)} for {brand.get('display_name') or brand.get('name') or ''}".strip())
         return jsonify(
@@ -17037,6 +17119,7 @@ def client_generate_facebook_post():
             post_type=post_type,
             post_type_label=_facebook_post_type_label(post_type),
             message=message[:5000],
+            first_comment=first_comment[:700],
             image_hint=image_hint[:160],
             link_url=link_url[:500],
         )
@@ -17065,6 +17148,7 @@ def client_generate_facebook_calendar():
         data = request.get_json(silent=True) or {}
         weeks = 4 if _coerce_int(data.get("weeks"), 2, minimum=2, maximum=4) >= 4 else 2
         posts_per_week = _coerce_int(data.get("posts_per_week"), 3, minimum=2, maximum=7)
+        demo_mode = bool(data.get("demo") or data.get("sample"))
         brief = (data.get("brief") or "").strip()[:1200]
         content_mix = _normalize_facebook_content_mix(data.get("content_mix"))
         selected_types = _normalize_facebook_post_type_list(data.get("post_types") or [])
@@ -17079,6 +17163,8 @@ def client_generate_facebook_calendar():
         calendar_plan = _build_facebook_calendar_plan(start_date, weeks, posts_per_week, selected_types, content_mix)
         if not calendar_plan:
             return jsonify(ok=False, error="Could not build a content calendar plan."), 400
+        if demo_mode:
+            calendar_plan = calendar_plan[: min(3, len(calendar_plan))]
 
         last_date = datetime.fromisoformat(calendar_plan[-1]["scheduled_at"]).replace(tzinfo=timezone.utc)
         if last_date > now_utc + timedelta(days=75):
@@ -17101,7 +17187,7 @@ def client_generate_facebook_calendar():
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.9,
-            max_tokens=4500,
+            max_tokens=1300 if demo_mode else 4500,
         )
         result = _extract_json_object(resp.choices[0].message.content)
         raw_posts = result.get("posts") or []
@@ -17112,10 +17198,11 @@ def client_generate_facebook_calendar():
         for slot, raw_post in zip(calendar_plan, raw_posts):
             raw_post = raw_post or {}
             post_type = _normalize_facebook_post_type(raw_post.get("post_type") or slot["post_type"], default=slot["post_type"])
-            message = str(raw_post.get("message") or "").replace("—", "-").strip()
+            message = _format_facebook_post_message(raw_post.get("message") or "")
             if not message:
                 return jsonify(ok=False, error="AI returned an empty post in the calendar. Try again."), 400
-            image_hint = str(raw_post.get("image_hint") or "").replace("—", "-").strip()
+            first_comment = _format_facebook_first_comment(raw_post.get("first_comment") or "")
+            image_hint = _normalize_facebook_generated_text(raw_post.get("image_hint") or "", limit=160)
             link_url = str(raw_post.get("link_url") or "").strip() or _default_post_link_url(brand, post_type)
             posts.append(
                 {
@@ -17123,6 +17210,7 @@ def client_generate_facebook_calendar():
                     "post_type_label": _facebook_post_type_label(post_type),
                     "scheduled_at": slot["scheduled_at"],
                     "message": message[:5000],
+                    "first_comment": first_comment[:700],
                     "image_hint": image_hint[:160],
                     "link_url": link_url[:500],
                     "character_name": (slot.get("character_name") or "")[:120],
@@ -17141,6 +17229,7 @@ def client_generate_facebook_calendar():
             weeks=weeks,
             posts_per_week=posts_per_week,
             total_posts=len(posts),
+            demo=demo_mode,
             posts=posts,
         )
     except json.JSONDecodeError:
@@ -17163,7 +17252,8 @@ def client_schedule_post():
         return jsonify(ok=False, error="Brand not found"), 404
 
     data = request.get_json(silent=True) or {}
-    message = (data.get("message") or "").strip()
+    message = _format_facebook_post_message(data.get("message") or "")
+    first_comment = _format_facebook_first_comment(data.get("first_comment") or "")
     scheduled_at = (data.get("scheduled_at") or "").strip()
     link_url = (data.get("link_url") or "").strip()
     image_url = (data.get("image_url") or "").strip()
@@ -17242,7 +17332,8 @@ def client_schedule_post():
         resp_data = resp.json()
     except Exception as exc:
         db.save_scheduled_post(brand_id, "facebook", message, scheduled_at,
-                               image_url=image_url, link_url=link_url, post_type=post_type)
+                               image_url=image_url, link_url=link_url, post_type=post_type,
+                               first_comment=first_comment)
         db.update_scheduled_post_status(
             db.get_scheduled_posts(brand_id, status="pending")[-1]["id"],
             "failed", error_message=str(exc))
@@ -17252,13 +17343,15 @@ def client_schedule_post():
 
     if resp.status_code == 200 and fb_post_id:
         post_id = db.save_scheduled_post(brand_id, "facebook", message, scheduled_at,
-                                         image_url=image_url, link_url=link_url, post_type=post_type)
+                                         image_url=image_url, link_url=link_url, post_type=post_type,
+                                         first_comment=first_comment)
         db.update_scheduled_post_status(post_id, "scheduled", fb_post_id=fb_post_id)
         return jsonify(ok=True, post_id=post_id, fb_post_id=fb_post_id, post_type=post_type)
     else:
         error_msg = resp_data.get("error", {}).get("message", resp.text[:300])
         post_id = db.save_scheduled_post(brand_id, "facebook", message, scheduled_at,
-                                         image_url=image_url, link_url=link_url, post_type=post_type)
+                                         image_url=image_url, link_url=link_url, post_type=post_type,
+                                         first_comment=first_comment)
         db.update_scheduled_post_status(post_id, "failed", error_message=error_msg)
         return jsonify(ok=False, error=f"Facebook rejected the post: {error_msg}"), 400
 
@@ -17307,7 +17400,8 @@ def client_schedule_posts_bulk():
     errors = 0
 
     for post in posts:
-        message = (post.get("message") or "").strip()
+        message = _format_facebook_post_message(post.get("message") or "")
+        first_comment = _format_facebook_first_comment(post.get("first_comment") or "")
         scheduled_at = (post.get("scheduled_at") or "").strip()
         image_url = (post.get("image_url") or "").strip()
         link_url = (post.get("link_url") or "").strip()
@@ -17359,7 +17453,8 @@ def client_schedule_posts_bulk():
             fb_post_id = resp_data.get("id") or resp_data.get("post_id") or ""
 
             post_id = db.save_scheduled_post(brand_id, "facebook", message, scheduled_at,
-                                             image_url=image_url, link_url=link_url, post_type=post_type)
+                                             image_url=image_url, link_url=link_url, post_type=post_type,
+                                             first_comment=first_comment)
             if resp.status_code == 200 and fb_post_id:
                 db.update_scheduled_post_status(post_id, "scheduled", fb_post_id=fb_post_id)
                 scheduled += 1
@@ -17369,7 +17464,8 @@ def client_schedule_posts_bulk():
                 errors += 1
         except Exception as exc:
             post_id = db.save_scheduled_post(brand_id, "facebook", message, scheduled_at,
-                                             image_url=image_url, link_url=link_url, post_type=post_type)
+                                             image_url=image_url, link_url=link_url, post_type=post_type,
+                                             first_comment=first_comment)
             db.update_scheduled_post_status(post_id, "failed", error_message=str(exc))
             errors += 1
 
