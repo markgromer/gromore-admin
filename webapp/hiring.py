@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import time
+from difflib import SequenceMatcher
 from datetime import datetime, timedelta
 from urllib.parse import quote_plus, urlparse
 
@@ -433,6 +434,8 @@ For other types, set "choices" to an empty array [].
 - If you spot a red flag, probe it with ONE follow-up. Don't belabor it.
 - Adapt based on their answers. Strong candidate? Push harder. Weak? Confirm the pattern quick and wrap up.
 - Mix question types. Never do the same type twice in a row.
+- Never repeat a question or scenario that already appears in asked_questions or asked_question_topics.
+- If a prior answer was too short, ask a different follow-up about the gap instead of re-asking the same setup.
 - For the FINAL question (is_final: true), also include:
   "final_evaluation": "2-3 sentence honest assessment of this candidate. Be specific about what you saw.",
   "recommendation": "interview|waitlist|reject",
@@ -454,6 +457,165 @@ For other types, set "choices" to an empty array [].
 - No em dashes. No corporate fluff."""
 
 
+_INTERVIEW_TOPIC_PATTERNS = [
+    ("vehicle_problem", ("vehicle", "car", "truck", "break", "broke", "mechanic", "flat tire", "on the way")),
+    ("forgot_equipment", ("forgot", "equipment", "supplies", "tools")),
+    ("unhappy_customer", ("unhappy", "satisfied", "complain", "customer is upset", "not happy")),
+    ("short_notice_route", ("short notice", "cover", "route")),
+    ("customer_denies_booking", ("never booked", "appointment", "job site")),
+    ("aggressive_dog", ("dog", "barking", "aggressive")),
+    ("work_history", ("worst job", "leave", "quit", "longest", "one job")),
+    ("schedule_habits", ("wake up", "naturally wake", "morning", "late")),
+    ("priority_ranking", ("rank", "most important", "least")),
+    ("independent_work", ("independently", "supervisor", "boss", "hand holding")),
+    ("quality_vs_speed", ("quality", "speed", "fast", "rushing")),
+    ("customer_property", ("gate", "key", "access", "property")),
+    ("weather_conditions", ("weather", "heat", "rain", "cold")),
+    ("coworker_issue", ("coworker", "team member", "cutting corners")),
+]
+
+_INTERVIEW_FALLBACK_QUESTIONS = [
+    {
+        "topic": "attendance_reliability",
+        "question_type": "scenario",
+        "question": "You wake up feeling rough but you are scheduled for a full route. What do you do in the first 10 minutes after realizing you may not be at 100%?",
+        "choices": [],
+        "question_targets": ["reliability", "communication_clarity"],
+    },
+    {
+        "topic": "quality_vs_speed",
+        "question_type": "pick_one",
+        "question": "Which is closer to how you work when nobody is watching?",
+        "choices": ["A) Move fast and keep the route on schedule", "B) Slow down enough to make sure the job is done right", "C) Ask for help whenever the decision is not obvious"],
+        "question_targets": ["work_ethic", "ownership"],
+    },
+    {
+        "topic": "directions_unclear",
+        "question_type": "scenario",
+        "question": "You get route notes that are unclear and the customer is not answering. What do you do before you decide to skip or improvise?",
+        "choices": [],
+        "question_targets": ["ownership", "communication_clarity"],
+    },
+    {
+        "topic": "weather_conditions",
+        "question_type": "real_talk",
+        "question": "Real talk: this job can be repetitive and uncomfortable in bad weather. What part of that would be hardest for you to stick with?",
+        "choices": [],
+        "question_targets": ["work_ethic", "communication_clarity"],
+    },
+    {
+        "topic": "customer_property",
+        "question_type": "scenario",
+        "question": "A gate code does not work and the customer is not responding, but the stop is on your route. What steps do you take?",
+        "choices": [],
+        "question_targets": ["ownership", "reliability"],
+    },
+    {
+        "topic": "coworker_issue",
+        "question_type": "scenario",
+        "question": "You notice another worker skipping part of the process to finish faster. What do you do?",
+        "choices": [],
+        "question_targets": ["ownership", "work_ethic"],
+    },
+    {
+        "topic": "communication_style",
+        "question_type": "rapid_fire",
+        "question": "Quick round: How early is early enough for a shift? What is one thing a supervisor should never have to remind you about? How do you prefer to get feedback?",
+        "choices": [],
+        "question_targets": ["reliability", "communication_clarity"],
+    },
+    {
+        "topic": "schedule_conflict",
+        "question_type": "pick_one",
+        "question": "You realize you have a personal conflict with a scheduled shift. What is the first move?",
+        "choices": ["A) Tell the supervisor as soon as possible", "B) Try to trade shifts yourself first", "C) Wait until you know for sure you cannot make it"],
+        "question_targets": ["reliability", "communication_clarity"],
+    },
+]
+
+
+def _normalize_interview_question(text):
+    text = re.sub(r"\s+", " ", str(text or "").lower()).strip()
+    text = re.sub(r"[^a-z0-9\s]", "", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _interview_question_topic(text):
+    normalized = _normalize_interview_question(text)
+    if not normalized:
+        return ""
+    for topic, needles in _INTERVIEW_TOPIC_PATTERNS:
+        hits = sum(1 for needle in needles if needle in normalized)
+        if hits >= 2 or (len(needles) <= 3 and hits >= 1):
+            return topic
+    return ""
+
+
+def _asked_interview_questions(messages):
+    questions = []
+    for message in messages or []:
+        if message.get("direction") != "outbound":
+            continue
+        content = str(message.get("content") or "").strip()
+        if not content:
+            continue
+        if message.get("is_question") or content.endswith("?") or "?" in content:
+            questions.append(content)
+    return questions
+
+
+def _is_repeated_interview_question(next_question, prior_questions):
+    next_norm = _normalize_interview_question(next_question)
+    if not next_norm:
+        return False
+    next_topic = _interview_question_topic(next_question)
+    for prior in prior_questions or []:
+        prior_norm = _normalize_interview_question(prior)
+        if not prior_norm:
+            continue
+        if next_norm == prior_norm:
+            return True
+        if SequenceMatcher(None, next_norm, prior_norm).ratio() >= 0.84:
+            return True
+        if next_topic and next_topic == _interview_question_topic(prior):
+            return True
+    return False
+
+
+def _repair_repeated_interview_question(result, prior_questions, current_question_number):
+    if not result or result.get("is_final"):
+        return result
+    next_question = str(result.get("next_question") or "").strip()
+    if next_question and not _is_repeated_interview_question(next_question, prior_questions):
+        return result
+
+    used_topics = {_interview_question_topic(q) for q in prior_questions or []}
+    used_topics.discard("")
+    for fallback in _INTERVIEW_FALLBACK_QUESTIONS:
+        if fallback["topic"] in used_topics:
+            continue
+        if _is_repeated_interview_question(fallback["question"], prior_questions):
+            continue
+        repaired = dict(result)
+        repaired["next_question"] = fallback["question"]
+        repaired["question_type"] = fallback["question_type"]
+        repaired["choices"] = fallback["choices"]
+        repaired["question_targets"] = fallback["question_targets"]
+        repaired.setdefault("evaluation_notes", "")
+        repaired["evaluation_notes"] = (
+            str(repaired.get("evaluation_notes") or "").strip()
+            + f" Server replaced a repeated question before question {current_question_number}."
+        ).strip()
+        return repaired
+
+    repaired = dict(result)
+    repaired["next_question"] = "Give me one specific example from a past job where something went wrong and you had to decide what to do next."
+    repaired["question_type"] = "real_talk"
+    repaired["choices"] = []
+    repaired["question_targets"] = ["ownership", "communication_clarity"]
+    return repaired
+
+
 def conduct_interview_step(interview, messages, job, candidate, brand):
     """Run one step of the WARREN interview.
 
@@ -472,6 +634,8 @@ def conduct_interview_step(interview, messages, job, candidate, brand):
             entry["response_time_sec"] = m["response_time_sec"]
         conversation.append(entry)
 
+    asked_questions = _asked_interview_questions(messages)
+    asked_topics = sorted({_interview_question_topic(q) for q in asked_questions if _interview_question_topic(q)})
     context = {
         "job_title": job.get("title", ""),
         "job_description": job.get("description", ""),
@@ -483,6 +647,9 @@ def conduct_interview_step(interview, messages, job, candidate, brand):
         "current_question_number": interview.get("current_question", 0),
         "avg_response_time_sec": candidate.get("response_time_avg_sec", 0),
         "gate_answers": interview.get("gate_answers", "{}"),
+        "asked_questions": asked_questions,
+        "asked_question_topics": asked_topics,
+        "disallowed_next_questions": asked_questions[-8:],
     }
 
     model = brand.get("openai_model_chat") or brand.get("openai_model") or "gpt-4o-mini"
@@ -494,7 +661,11 @@ def conduct_interview_step(interview, messages, job, candidate, brand):
         temperature=0.5,
         timeout=45,
     )
-    return result
+    return _repair_repeated_interview_question(
+        result,
+        asked_questions,
+        int(interview.get("current_question", 0) or 0) + 1,
+    )
 
 
 def generate_first_question(job, candidate, brand):
