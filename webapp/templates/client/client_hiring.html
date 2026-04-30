@@ -214,6 +214,26 @@
             </div>
         </div>
 
+        <h5 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:.9rem;color:var(--text, #e2e2f0);">WARREN Interview Guidance</h5>
+        <div class="form-row">
+            <div class="full">
+                <label>Focus On</label>
+                <textarea name="interview_focus" rows="2" placeholder="Examples: reliability under pressure, customer communication, independent route judgment">{{ screening.interview_focus if screening else '' }}</textarea>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="full">
+                <label>Questions or Topics WARREN Should Ask</label>
+                <textarea name="interview_questions" rows="3" placeholder="Examples: Ask how they handle aggressive dogs. Ask about early morning availability. Ask what they do when supplies are missing.">{{ screening.interview_questions if screening else '' }}</textarea>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="full">
+                <label>Things WARREN Should Avoid</label>
+                <textarea name="interview_avoid" rows="2" placeholder="Examples: Avoid personal family questions. Avoid salary negotiation. Do not ask about medical history.">{{ screening.interview_avoid if screening else '' }}</textarea>
+            </div>
+        </div>
+
         <!-- Gate Question Picker -->
         <h5 style="margin-top:1.5rem;margin-bottom:.25rem;font-size:.9rem;color:var(--text, #e2e2f0);">
             <i class="bi bi-funnel"></i> Gate Questions (Pre-Screening)
@@ -516,6 +536,26 @@
             <div class="full">
                 <label>Physical Requirements</label>
                 <textarea name="physical_requirements" id="fPhysical" rows="2" placeholder="Able to lift 30 lbs, works outdoors rain or shine..."></textarea>
+            </div>
+        </div>
+
+        <h5 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:.9rem;color:var(--text, #e2e2f0);">WARREN Interview Guidance</h5>
+        <div class="form-row">
+            <div class="full">
+                <label>Focus On</label>
+                <textarea name="interview_focus" id="fInterviewFocus" rows="2" placeholder="Reliability under pressure, customer communication, independent route judgment..."></textarea>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="full">
+                <label>Questions or Topics WARREN Should Ask</label>
+                <textarea name="interview_questions" id="fInterviewQuestions" rows="3" placeholder="Ask how they handle aggressive dogs. Ask about early morning availability. Ask what they do when supplies are missing."></textarea>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="full">
+                <label>Things WARREN Should Avoid</label>
+                <textarea name="interview_avoid" id="fInterviewAvoid" rows="2" placeholder="Avoid personal family questions. Avoid salary negotiation. Do not ask about medical history."></textarea>
             </div>
         </div>
 

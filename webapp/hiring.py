@@ -365,6 +365,41 @@ def generate_gate_questions(job, brand):
     return _ai_call(api_key, GATE_QUESTION_PROMPT, json.dumps(context), model=model, temperature=0.5)
 
 
+def _load_screening_criteria(job_or_text):
+    """Return the editable hiring screening JSON as a dict."""
+    raw = job_or_text
+    if isinstance(job_or_text, dict):
+        raw = job_or_text.get("screening_criteria", "{}")
+    if isinstance(raw, dict):
+        return raw
+    try:
+        parsed = json.loads(raw or "{}")
+        return parsed if isinstance(parsed, dict) else {}
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def _screening_criteria_from_form(data):
+    return json.dumps({
+        "must_haves": data.get("must_haves", ""),
+        "dealbreakers": data.get("dealbreakers", ""),
+        "culture_notes": data.get("culture_notes", ""),
+        "physical_requirements": data.get("physical_requirements", ""),
+        "interview_focus": data.get("interview_focus", ""),
+        "interview_questions": data.get("interview_questions", ""),
+        "interview_avoid": data.get("interview_avoid", ""),
+    })
+
+
+def _interview_guidance_from_job(job):
+    criteria = _load_screening_criteria(job)
+    return {
+        "focus_on": str(criteria.get("interview_focus") or "").strip(),
+        "ask_or_cover": str(criteria.get("interview_questions") or "").strip(),
+        "avoid": str(criteria.get("interview_avoid") or "").strip(),
+    }
+
+
 INTERVIEW_SYSTEM_PROMPT = """You are WARREN, an AI screening engine for hiring.
 You run interactive, quiz-style screening interviews. Not boring Q&A. Think fast-paced assessment.
 
@@ -401,6 +436,7 @@ Score this candidate on 5 signals (each 0-20, total 0-100):
 
 ## WHAT YOU RECEIVE
 - Job description, requirements, screening criteria
+- Interview guidance from the hiring manager, including what to focus on, questions/topics to ask, and topics/language to avoid
 - Full conversation so far (all messages + response times)
 - Current question number
 - Gate question answers (if available)
@@ -436,6 +472,9 @@ For other types, set "choices" to an empty array [].
 - Mix question types. Never do the same type twice in a row.
 - Never repeat a question or scenario that already appears in asked_questions or asked_question_topics.
 - If a prior answer was too short, ask a different follow-up about the gap instead of re-asking the same setup.
+- Treat interview_guidance.focus_on as priority signals to probe during the interview.
+- Work interview_guidance.ask_or_cover into the interview when it is relevant, without dumping all questions at once.
+- Respect interview_guidance.avoid. Do not ask about avoided topics, do not use avoided phrasing, and do not create scenarios that conflict with it.
 - For the FINAL question (is_final: true), also include:
   "final_evaluation": "2-3 sentence honest assessment of this candidate. Be specific about what you saw.",
   "recommendation": "interview|waitlist|reject",
@@ -534,6 +573,27 @@ _INTERVIEW_FALLBACK_QUESTIONS = [
 ]
 
 
+def _avoid_terms_from_guidance(guidance):
+    avoid_text = str((guidance or {}).get("avoid") or "").lower()
+    pieces = re.split(r"[\n,;]+", avoid_text)
+    terms = []
+    for piece in pieces:
+        cleaned = _normalize_interview_question(piece)
+        if len(cleaned) >= 4:
+            terms.append(cleaned)
+    return terms
+
+
+def _question_conflicts_with_guidance(question, guidance):
+    normalized = _normalize_interview_question(question)
+    if not normalized:
+        return False
+    for term in _avoid_terms_from_guidance(guidance):
+        if term in normalized or SequenceMatcher(None, normalized, term).ratio() >= 0.82:
+            return True
+    return False
+
+
 def _normalize_interview_question(text):
     text = re.sub(r"\s+", " ", str(text or "").lower()).strip()
     text = re.sub(r"[^a-z0-9\s]", "", text)
@@ -582,11 +642,15 @@ def _is_repeated_interview_question(next_question, prior_questions):
     return False
 
 
-def _repair_repeated_interview_question(result, prior_questions, current_question_number):
+def _repair_repeated_interview_question(result, prior_questions, current_question_number, guidance=None):
     if not result or result.get("is_final"):
         return result
     next_question = str(result.get("next_question") or "").strip()
-    if next_question and not _is_repeated_interview_question(next_question, prior_questions):
+    if (
+        next_question
+        and not _is_repeated_interview_question(next_question, prior_questions)
+        and not _question_conflicts_with_guidance(next_question, guidance)
+    ):
         return result
 
     used_topics = {_interview_question_topic(q) for q in prior_questions or []}
@@ -595,6 +659,8 @@ def _repair_repeated_interview_question(result, prior_questions, current_questio
         if fallback["topic"] in used_topics:
             continue
         if _is_repeated_interview_question(fallback["question"], prior_questions):
+            continue
+        if _question_conflicts_with_guidance(fallback["question"], guidance):
             continue
         repaired = dict(result)
         repaired["next_question"] = fallback["question"]
@@ -610,6 +676,28 @@ def _repair_repeated_interview_question(result, prior_questions, current_questio
 
     repaired = dict(result)
     repaired["next_question"] = "Give me one specific example from a past job where something went wrong and you had to decide what to do next."
+    repaired["question_type"] = "real_talk"
+    repaired["choices"] = []
+    repaired["question_targets"] = ["ownership", "communication_clarity"]
+    return repaired
+
+
+def _repair_first_interview_question(result, guidance=None):
+    if not result:
+        return result
+    first_question = str(result.get("first_question") or "").strip()
+    if first_question and not _question_conflicts_with_guidance(first_question, guidance):
+        return result
+    repaired = dict(result)
+    for fallback in _INTERVIEW_FALLBACK_QUESTIONS:
+        if _question_conflicts_with_guidance(fallback["question"], guidance):
+            continue
+        repaired["first_question"] = fallback["question"]
+        repaired["question_type"] = fallback["question_type"]
+        repaired["choices"] = fallback["choices"]
+        repaired["question_targets"] = fallback["question_targets"]
+        return repaired
+    repaired["first_question"] = "Tell me about a time a job did not go according to plan. What did you do next?"
     repaired["question_type"] = "real_talk"
     repaired["choices"] = []
     repaired["question_targets"] = ["ownership", "communication_clarity"]
@@ -636,11 +724,13 @@ def conduct_interview_step(interview, messages, job, candidate, brand):
 
     asked_questions = _asked_interview_questions(messages)
     asked_topics = sorted({_interview_question_topic(q) for q in asked_questions if _interview_question_topic(q)})
+    interview_guidance = _interview_guidance_from_job(job)
     context = {
         "job_title": job.get("title", ""),
         "job_description": job.get("description", ""),
         "job_requirements": job.get("requirements", "[]"),
-        "screening_criteria": job.get("screening_criteria", "{}"),
+        "screening_criteria": _load_screening_criteria(job),
+        "interview_guidance": interview_guidance,
         "candidate_name": candidate.get("name", ""),
         "cover_letter": candidate.get("cover_letter", ""),
         "conversation": conversation,
@@ -665,6 +755,7 @@ def conduct_interview_step(interview, messages, job, candidate, brand):
         result,
         asked_questions,
         int(interview.get("current_question", 0) or 0) + 1,
+        interview_guidance,
     )
 
 
@@ -674,10 +765,12 @@ def generate_first_question(job, candidate, brand):
     if not api_key:
         return None
 
+    interview_guidance = _interview_guidance_from_job(job)
     context = {
         "job_title": job.get("title", ""),
         "job_description": job.get("description", ""),
-        "screening_criteria": job.get("screening_criteria", "{}"),
+        "screening_criteria": _load_screening_criteria(job),
+        "interview_guidance": interview_guidance,
         "candidate_name": candidate.get("name", ""),
     }
 
@@ -685,6 +778,7 @@ def generate_first_question(job, candidate, brand):
 Generate a brief, friendly welcome (1-2 sentences) and your first question.
 Make it feel like a quick, interactive assessment, not a boring interview.
 Start with a scenario question to ease them in.
+Respect interview_guidance. If focus_on is provided, make the opening scenario relevant to it. If ask_or_cover is provided, use it when it fits naturally. Do not ask about anything in avoid.
 No em dashes.
 
 Return JSON:
@@ -697,7 +791,8 @@ Return JSON:
 }"""
 
     model = brand.get("openai_model_chat") or brand.get("openai_model") or "gpt-4o-mini"
-    return _ai_call(api_key, system, json.dumps(context), model=model, temperature=0.6)
+    result = _ai_call(api_key, system, json.dumps(context), model=model, temperature=0.6)
+    return _repair_first_interview_question(result, interview_guidance)
 
 
 # ---------------------------------------------------------------------------
@@ -778,12 +873,7 @@ def create_job():
 
     if request.method == "POST":
         data = request.form
-        screening = json.dumps({
-            "must_haves": data.get("must_haves", ""),
-            "dealbreakers": data.get("dealbreakers", ""),
-            "culture_notes": data.get("culture_notes", ""),
-            "physical_requirements": data.get("physical_requirements", ""),
-        })
+        screening = _screening_criteria_from_form(data)
         def _parse_salary(val):
             """Parse salary from free text: '45000', '45,000', '18/hr', '$52k'."""
             if not val:
@@ -907,12 +997,7 @@ def update_job(job_id):
     if "salary_max" in data:
         fields["salary_max"] = float(data["salary_max"] or 0)
     if "must_haves" in data:
-        fields["screening_criteria"] = json.dumps({
-            "must_haves": data.get("must_haves", ""),
-            "dealbreakers": data.get("dealbreakers", ""),
-            "culture_notes": data.get("culture_notes", ""),
-            "physical_requirements": data.get("physical_requirements", ""),
-        })
+        fields["screening_criteria"] = _screening_criteria_from_form(data)
     if "gate_questions" in data:
         fields["gate_questions"] = data["gate_questions"]
 
