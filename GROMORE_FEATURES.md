@@ -25,6 +25,7 @@
 - **Client Password Settings** - Added first-class password management inside client settings
 - **AI Provider Configuration** - Client AI settings now support OpenAI, OpenRouter, Gemini, xAI/Grok, BFL/FLUX, and custom OpenAI-compatible provider routing with per-purpose model fields
 - **Multi-Provider Token Vault** - Separate saved API tokens for each AI provider so clients can keep multiple provider credentials active at once
+- **AI Model Suggestions** - Connection settings show provider-aware model suggestions for quality, cost balance, and high-volume use cases
 
 ### Facebook Post Scheduler + Social Workflow
 - **Recurring Character Builder** - Persistent storytelling character controls for recurring social content
@@ -398,6 +399,9 @@
 - **Visual Canvas Editor** - Draw, add text, shapes, and images
 - **AI Image Generation** - OpenAI, Gemini/Imagen, xAI/Grok Imagine, and BFL/FLUX integration for ad visuals
 - **Image Creator Tab** - Dedicated prompt-to-image workspace for brand-aware campaign, social, and website visuals
+- **Provider-Aware Image Model Picker** - Image Creator can select current image models per connected provider, including GPT Image, Gemini/Nano Banana, Imagen, Grok Imagine, and FLUX options
+- **Smart Ad Image Builder** - Image Creator supports asset type, tone, exact ad text fields, production notes, and no-extra-text guardrails for finished ad images
+- **Generated Image Drive Save** - One-click save from Image Creator into the brand's Google Drive Creatives folder
 - **Format Selection** - Templates for Facebook feed, Instagram Stories, and other formats
 - **Template Save/Load** - Save custom templates for reuse
 - **Template Export** - Export finished designs

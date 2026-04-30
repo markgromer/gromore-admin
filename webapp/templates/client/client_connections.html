@@ -1174,6 +1174,34 @@
                             <label class="form-label fw-medium" style="font-size:.88rem;">Ads/Content Model</label>
                             <input type="text" class="form-control" name="openai_model_ads" value="{{ brand.openai_model_ads or '' }}" placeholder="{{ 'openai/gpt-4o' if current_provider == 'openrouter' else 'gpt-4o' }}">
                         </div>
+                        <div class="col-12">
+                            <div class="p-3" style="background:#fff; border:1px solid #e5e7eb; border-radius:8px;">
+                                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                                    <div>
+                                        <div class="fw-semibold" style="font-size:.9rem;">Model Suggestions</div>
+                                        <div class="text-muted" style="font-size:.82rem;">Shown for providers with saved tokens. OpenRouter suggestions favor strong quality-to-cost options.</div>
+                                    </div>
+                                </div>
+                                <div class="row g-2">
+                                    {% for group in ai_model_recommendations %}
+                                        <div class="col-lg-6">
+                                            <div class="border rounded p-2 h-100">
+                                                <div class="fw-semibold text-uppercase text-muted mb-2" style="font-size:.72rem; letter-spacing:.02em;">{{ group.provider|replace('openrouter', 'OpenRouter')|replace('openai', 'OpenAI')|replace('gemini', 'Gemini')|replace('xai', 'xAI / Grok')|replace('custom', 'Custom') }}</div>
+                                                {% for suggestion in group.suggestions %}
+                                                    <div class="d-flex justify-content-between align-items-start gap-2 py-1">
+                                                        <div>
+                                                            <div class="fw-semibold" style="font-size:.84rem;">{{ suggestion.label }} <code>{{ suggestion.id }}</code></div>
+                                                            <div class="text-muted" style="font-size:.78rem;">{{ suggestion.use }} · {{ suggestion.cost }}</div>
+                                                        </div>
+                                                        <button type="button" class="btn btn-outline-primary btn-sm py-0 ai-model-fill" data-model="{{ suggestion.id }}" title="Use this model for chat, analysis, and ads">Use</button>
+                                                    </div>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
                         <div class="col-md-4">
                             <label class="form-label fw-medium" style="font-size:.88rem;">Image Provider</label>
                             {% set image_provider = brand.ai_image_provider or 'openai' %}
@@ -2121,6 +2149,15 @@ function testMessengerConnection() {
         providerSelect.addEventListener('change', syncAiProviderFields);
         syncAiProviderFields();
     }
+    document.querySelectorAll('.ai-model-fill').forEach(function(button) {
+        button.addEventListener('click', function() {
+            var model = button.getAttribute('data-model') || '';
+            ['openai_model_chat', 'openai_model_analysis', 'openai_model_ads'].forEach(function(name) {
+                var input = document.querySelector('[name="' + name + '"]');
+                if (input) input.value = model;
+            });
+        });
+    });
 })();
 </script>
 {% endblock %}

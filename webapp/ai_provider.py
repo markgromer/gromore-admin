@@ -36,8 +36,8 @@ OPENROUTER_MODELS_BY_PURPOSE = {
 }
 
 PROVIDER_DEFAULT_MODELS = {
-    "gemini": {"chat": "gemini-2.5-flash", "analysis": "gemini-2.5-flash", "ads": "gemini-2.5-flash", "images": "imagen-4.0-generate-001"},
-    "xai": {"chat": "grok-4", "analysis": "grok-4", "ads": "grok-4", "images": "grok-imagine-image"},
+    "gemini": {"chat": "gemini-3-flash-preview", "analysis": "gemini-3-flash-preview", "ads": "gemini-3-flash-preview", "images": "gemini-3.1-flash-image-preview"},
+    "xai": {"chat": "grok-4.20", "analysis": "grok-4.20", "ads": "grok-4.20", "images": "grok-imagine-image"},
     "bfl": {"images": "flux-2-pro-preview"},
 }
 
@@ -373,6 +373,21 @@ def generate_image_bytes(
     if cfg.provider == "gemini":
         aspect_ratio = {"1024x1024": "1:1", "1792x1024": "16:9", "1536x1024": "16:9", "1024x1792": "9:16", "1024x1536": "9:16"}.get(size, "1:1")
         image_model = model or PROVIDER_DEFAULT_MODELS["gemini"]["images"]
+        if image_model.startswith("gemini-"):
+            ratio_note = f"\nRequested aspect ratio: {aspect_ratio}."
+            payload = {"contents": [{"parts": [{"text": prompt + ratio_note}]}]}
+            url = f"{GEMINI_BASE_URL}/models/{image_model}:generateContent"
+            resp = requests.post(url, params={"key": cfg.api_key}, json=payload, timeout=timeout)
+            if resp.status_code >= 400:
+                raise ValueError(f"Gemini image request failed ({resp.status_code}): {resp.text[:300]}")
+            data = resp.json()
+            parts = (((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [])
+            for part in parts:
+                inline_data = part.get("inlineData") or part.get("inline_data") or {}
+                b64 = inline_data.get("data")
+                if b64:
+                    return base64.b64decode(b64)
+            raise ValueError("Gemini image response did not include image data.")
         url = f"{GEMINI_BASE_URL}/models/{image_model}:predict"
         payload = {
             "instances": [{"prompt": prompt}],

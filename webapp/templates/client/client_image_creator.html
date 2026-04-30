@@ -5,7 +5,7 @@
 <style>
     .image-creator-layout {
         display: grid;
-        grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+        grid-template-columns: minmax(320px, 460px) minmax(0, 1fr);
         gap: 1.25rem;
         align-items: start;
     }
@@ -59,6 +59,7 @@
         cursor: pointer;
         font-size: .8rem;
         color: #334155;
+        min-height: 68px;
     }
     .ic-format-option input { display: none; }
     .ic-format-option:has(input:checked) {
@@ -67,8 +68,15 @@
         color: #312e81;
         font-weight: 700;
     }
+    .ic-ad-fields {
+        display: none;
+        padding: .9rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        background: #f8fafc;
+    }
     .ic-preview-shell {
-        min-height: 520px;
+        min-height: 560px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -84,7 +92,7 @@
         overflow: hidden;
     }
     .ic-preview-empty {
-        max-width: 360px;
+        max-width: 380px;
         color: #64748b;
         text-align: center;
         font-size: .92rem;
@@ -92,7 +100,7 @@
     }
     .ic-preview-img {
         max-width: 100%;
-        max-height: 720px;
+        max-height: 760px;
         width: auto;
         height: auto;
         display: block;
@@ -104,6 +112,12 @@
         margin-top: .85rem;
     }
     .ic-alert { display: none; }
+    .ic-model-note {
+        min-height: 32px;
+        color: #64748b;
+        font-size: .82rem;
+        margin-top: .35rem;
+    }
     @media (max-width: 980px) {
         .image-creator-layout { grid-template-columns: 1fr; }
         .ic-preview-shell { min-height: 360px; }
@@ -115,7 +129,7 @@
 <div class="page-header mb-3">
     <div>
         <h1 class="h3 mb-1">Image Creator</h1>
-        <p class="text-muted mb-0">Generate usable campaign, social, and site visuals from brand-aware prompts.</p>
+        <p class="text-muted mb-0">Generate brand-aware visuals, ad images, and reusable creative assets.</p>
     </div>
 </div>
 
@@ -131,55 +145,121 @@
                 {% if image_supported and ai_configured %}
                     <span class="text-success"><i class="bi bi-check-circle"></i>Ready</span>
                 {% elif not image_supported %}
-                    <span class="text-warning"><i class="bi bi-exclamation-triangle"></i>OpenAI required for images</span>
+                    <span class="text-warning"><i class="bi bi-exclamation-triangle"></i>Image provider needed</span>
                 {% else %}
                     <span class="text-warning"><i class="bi bi-exclamation-triangle"></i>Key needed</span>
                 {% endif %}
             </div>
 
             {% if not image_supported %}
-                <div class="alert alert-warning py-2">This brand is set to {{ ai_provider_label }}. Text generation can use that provider, but image generation currently needs OpenAI in Settings.</div>
+                <div class="alert alert-warning py-2">Select OpenAI, Gemini, xAI, or BFL as the Image Provider in Connections.</div>
             {% elif not ai_configured %}
-                <div class="alert alert-warning py-2">Add an OpenAI key in Settings before generating images.</div>
+                <div class="alert alert-warning py-2">Add a {{ ai_provider_label }} token in Connections before generating images.</div>
             {% endif %}
 
             <form id="imageCreatorForm">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Prompt</label>
-                    <textarea class="form-control" id="icPrompt" rows="6" placeholder="Example: A clean, realistic service truck parked outside a freshly cleaned commercial property at sunrise, no text, professional ad photo style"></textarea>
-                </div>
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Image Model</label>
+                        <select class="form-select" id="icImageModel">
+                            {% for option in image_model_options %}
+                                <option value="{{ option.id }}" data-note="{{ option.note }}" {% if option.id == image_model %}selected{% endif %}>{{ option.label }} - {{ option.id }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="ic-model-note" id="icModelNote"></div>
+                    </div>
 
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Style</label>
-                    <select class="form-select" id="icStyle">
-                        <option value="realistic professional service-business ad, natural light">Realistic service ad</option>
-                        <option value="bright social media photo, friendly, candid, authentic">Organic social photo</option>
-                        <option value="premium website hero image, clean composition, depth of field">Website hero</option>
-                        <option value="bold paid ad visual, strong subject, high contrast, no text">Paid ad visual</option>
-                        <option value="simple product-style scene, clean background, brand-friendly">Clean product scene</option>
-                    </select>
-                </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Image Type</label>
+                        <select class="form-select" id="icAssetType">
+                            <option value="basic_visual">Basic visual</option>
+                            <option value="full_ad">Full ad image</option>
+                            <option value="social_graphic">Social graphic</option>
+                            <option value="website_hero">Website hero</option>
+                            <option value="service_proof">Service proof</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
 
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Format</label>
-                    <div class="ic-format-grid">
-                        {% for key, fmt in formats.items() %}
-                        <label class="ic-format-option">
-                            <input type="radio" name="icFormat" value="{{ key }}" {% if loop.first %}checked{% endif %}>
-                            <span class="d-block">{{ fmt.label }}</span>
-                            <small class="text-muted">{{ fmt.size }}</small>
-                        </label>
-                        {% endfor %}
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Tone</label>
+                        <select class="form-select" id="icTone">
+                            <option value="professional and trustworthy">Professional</option>
+                            <option value="friendly and local">Friendly local</option>
+                            <option value="premium and polished">Premium</option>
+                            <option value="urgent and conversion-focused">Urgent</option>
+                            <option value="clean and informative">Informative</option>
+                        </select>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Visual Direction</label>
+                        <textarea class="form-control" id="icPrompt" rows="5" placeholder="Example: A clean, realistic service truck parked outside a freshly cleaned commercial property at sunrise"></textarea>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Style</label>
+                        <select class="form-select" id="icStyle">
+                            <option value="realistic professional service-business ad, natural light">Realistic service ad</option>
+                            <option value="bright social media photo, friendly, candid, authentic">Organic social photo</option>
+                            <option value="premium website hero image, clean composition, depth of field">Website hero</option>
+                            <option value="bold paid ad visual, strong subject, high contrast">Paid ad visual</option>
+                            <option value="simple product-style scene, clean background, brand-friendly">Clean product scene</option>
+                            <option value="editorial marketing graphic, crisp hierarchy, restrained design">Editorial graphic</option>
+                        </select>
+                    </div>
+
+                    <div class="col-12 ic-ad-fields" id="icAdFields">
+                        <div class="row g-2">
+                            <div class="col-12">
+                                <label class="form-label fw-semibold">Exact Ad Text</label>
+                            </div>
+                            <div class="col-md-6">
+                                <input class="form-control" id="icHeadline" maxlength="90" placeholder="Headline">
+                            </div>
+                            <div class="col-md-6">
+                                <input class="form-control" id="icSubheadline" maxlength="140" placeholder="Subheadline">
+                            </div>
+                            <div class="col-md-6">
+                                <input class="form-control" id="icOffer" maxlength="90" placeholder="Offer">
+                            </div>
+                            <div class="col-md-6">
+                                <input class="form-control" id="icCta" maxlength="60" placeholder="CTA">
+                            </div>
+                            <div class="col-12">
+                                <input class="form-control" id="icFinePrint" maxlength="120" placeholder="Fine print">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Format</label>
+                        <div class="ic-format-grid">
+                            {% for key, fmt in formats.items() %}
+                            <label class="ic-format-option">
+                                <input type="radio" name="icFormat" value="{{ key }}" {% if loop.first %}checked{% endif %}>
+                                <span class="d-block">{{ fmt.label }}</span>
+                                <small class="text-muted">{{ fmt.size }}</small>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Production Notes</label>
+                        <textarea class="form-control" id="icCustomInstructions" rows="3" placeholder="Optional: camera angle, must avoid, composition notes, brand color usage"></textarea>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="icBrandContext" checked>
+                            <label class="form-check-label" for="icBrandContext">Use brand context</label>
+                        </div>
                     </div>
                 </div>
 
-                <div class="form-check mb-3">
-                    <input class="form-check-input" type="checkbox" id="icBrandContext" checked>
-                    <label class="form-check-label" for="icBrandContext">Use brand context</label>
-                </div>
-
-                <button type="submit" class="btn btn-primary w-100" id="icGenerateBtn" {% if not image_supported or not ai_configured %}disabled{% endif %}>
+                <button type="submit" class="btn btn-primary w-100 mt-3" id="icGenerateBtn" {% if not image_supported or not ai_configured %}disabled{% endif %}>
                     <i class="bi bi-stars me-1"></i>Generate Image
                 </button>
             </form>
@@ -195,12 +275,13 @@
         <div class="ic-panel-body">
             <div class="ic-preview-shell" id="icPreview">
                 <div class="ic-preview-empty">
-                    Your generated image will appear here. Generated files are saved to this brand's uploads so they can be reused in campaigns or creative work.
+                    Generated files are saved to this brand's uploads and can be pushed to Google Drive for reuse in Creative Studio.
                 </div>
             </div>
             <div class="ic-result-actions" id="icResultActions">
                 <a class="btn btn-outline-primary btn-sm" id="icOpenImage" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right me-1"></i>Open image</a>
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="icCopyUrl"><i class="bi bi-link-45deg me-1"></i>Copy URL</button>
+                <button type="button" class="btn btn-outline-success btn-sm" id="icSaveDrive"><i class="bi bi-google me-1"></i>Save to Drive</button>
             </div>
         </div>
     </section>
@@ -215,13 +296,33 @@
     const actions = document.getElementById('icResultActions');
     const openLink = document.getElementById('icOpenImage');
     const copyBtn = document.getElementById('icCopyUrl');
+    const saveDriveBtn = document.getElementById('icSaveDrive');
+    const assetType = document.getElementById('icAssetType');
+    const adFields = document.getElementById('icAdFields');
+    const modelSelect = document.getElementById('icImageModel');
+    const modelNote = document.getElementById('icModelNote');
     let currentUrl = '';
+    let currentFilename = '';
 
     function showAlert(type, message) {
         alertBox.className = 'alert ic-alert mt-3 mb-0 alert-' + type;
         alertBox.textContent = message;
         alertBox.style.display = 'block';
     }
+
+    function syncAssetType() {
+        adFields.style.display = assetType.value === 'full_ad' ? 'block' : 'none';
+    }
+
+    function syncModelNote() {
+        const selected = modelSelect.options[modelSelect.selectedIndex];
+        modelNote.textContent = selected ? (selected.getAttribute('data-note') || '') : '';
+    }
+
+    assetType.addEventListener('change', syncAssetType);
+    modelSelect.addEventListener('change', syncModelNote);
+    syncAssetType();
+    syncModelNote();
 
     form.addEventListener('submit', function(e) {
         e.preventDefault();
@@ -230,8 +331,17 @@
         const payload = {
             prompt: document.getElementById('icPrompt').value.trim(),
             style: document.getElementById('icStyle').value,
+            image_model: modelSelect.value,
+            asset_type: assetType.value,
+            tone: document.getElementById('icTone').value,
             format: checkedFormat ? checkedFormat.value : 'square',
-            include_brand_context: document.getElementById('icBrandContext').checked ? '1' : '0'
+            include_brand_context: document.getElementById('icBrandContext').checked ? '1' : '0',
+            custom_instructions: document.getElementById('icCustomInstructions').value.trim(),
+            headline: document.getElementById('icHeadline').value.trim(),
+            subheadline: document.getElementById('icSubheadline').value.trim(),
+            offer: document.getElementById('icOffer').value.trim(),
+            cta: document.getElementById('icCta').value.trim(),
+            fine_print: document.getElementById('icFinePrint').value.trim()
         };
         if (payload.prompt.length < 8) {
             showAlert('warning', 'Describe the image you want in a little more detail.');
@@ -257,8 +367,11 @@
                 throw new Error(result.data.error || 'Image generation failed.');
             }
             currentUrl = result.data.image_url;
+            currentFilename = result.data.filename || '';
             preview.innerHTML = '<img class="ic-preview-img" src="' + currentUrl + '" alt="Generated image">';
             openLink.href = currentUrl;
+            saveDriveBtn.disabled = false;
+            saveDriveBtn.innerHTML = '<i class="bi bi-google me-1"></i>Save to Drive';
             actions.style.display = 'flex';
             showAlert('success', 'Image generated and saved.');
         })
@@ -276,6 +389,36 @@
         if (!currentUrl || !navigator.clipboard) return;
         navigator.clipboard.writeText(window.location.origin + currentUrl).then(function() {
             showAlert('success', 'Image URL copied.');
+        });
+    });
+
+    saveDriveBtn.addEventListener('click', function() {
+        if (!currentFilename || saveDriveBtn.disabled) return;
+        saveDriveBtn.disabled = true;
+        saveDriveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+        fetch("{{ url_for('client.client_image_creator_save_drive') }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify({ filename: currentFilename })
+        })
+        .then(function(resp) { return resp.json().then(function(data) { return {ok: resp.ok, data: data}; }); })
+        .then(function(result) {
+            if (!result.ok || !result.data.ok) {
+                throw new Error(result.data.error || 'Drive save failed.');
+            }
+            saveDriveBtn.innerHTML = '<i class="bi bi-check2 me-1"></i>Saved to Drive';
+            if (result.data.drive_link) {
+                openLink.href = result.data.drive_link;
+            }
+            showAlert('success', 'Saved to Google Drive.');
+        })
+        .catch(function(err) {
+            saveDriveBtn.disabled = false;
+            saveDriveBtn.innerHTML = '<i class="bi bi-google me-1"></i>Save to Drive';
+            showAlert('danger', err.message || 'Drive save failed.');
         });
     });
 })();

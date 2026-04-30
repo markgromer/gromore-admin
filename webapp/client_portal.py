@@ -4599,6 +4599,7 @@ _ENDPOINT_FEATURE_MAP = {
     "client_creative_generate":    "creative",
     "client_image_creator":        "creative",
     "client_image_creator_generate": "creative",
+    "client_image_creator_save_drive": "creative",
     "client_creative_templates_list":  "creative",
     "client_creative_templates_save":  "creative",
     "client_creative_template_load":   "creative",
@@ -7957,21 +7958,144 @@ _IMAGE_CREATOR_FORMATS = {
 
 _IMAGE_PROVIDER_DEFAULT_MODELS = {
     "openai": "gpt-image-2",
-    "gemini": "imagen-4.0-generate-001",
+    "gemini": "gemini-3.1-flash-image-preview",
     "xai": "grok-imagine-image",
     "bfl": "flux-2-pro-preview",
 }
 
+_AI_TEXT_MODEL_RECOMMENDATIONS = {
+    "openai": [
+        {"id": "gpt-5.4", "label": "Best quality", "use": "High-stakes strategy, analysis, and client-facing thinking", "cost": "Premium"},
+        {"id": "gpt-5-mini", "label": "Best balance", "use": "Most chat, ads, summaries, and automation work", "cost": "Balanced"},
+        {"id": "gpt-5-nano", "label": "Lowest cost", "use": "Fast drafts, classification, and lightweight helper calls", "cost": "Low"},
+    ],
+    "openrouter": [
+        {"id": "openai/gpt-5.4", "label": "Best quality", "use": "Top OpenAI model through OpenRouter", "cost": "Premium"},
+        {"id": "anthropic/claude-sonnet-4.6", "label": "Writing + reasoning", "use": "Strong long-form copy, interviews, and nuanced review", "cost": "Premium"},
+        {"id": "google/gemini-3-flash-preview", "label": "Best value", "use": "High-volume content and analysis with strong cost control", "cost": "Value"},
+        {"id": "deepseek/deepseek-v3.2", "label": "Low-cost volume", "use": "Bulk drafts, rewrites, and non-critical analysis", "cost": "Low"},
+    ],
+    "gemini": [
+        {"id": "gemini-3.1-pro-preview", "label": "Best quality", "use": "Complex analysis and multimodal reasoning", "cost": "Premium"},
+        {"id": "gemini-3-flash-preview", "label": "Best balance", "use": "Everyday chat, content, and automation", "cost": "Balanced"},
+        {"id": "gemini-2.5-flash-lite", "label": "Lowest cost", "use": "Simple drafts and fast helper calls", "cost": "Low"},
+    ],
+    "xai": [
+        {"id": "grok-4.20", "label": "Best current quality", "use": "Strategy, research-style reasoning, and fresh content", "cost": "Premium"},
+        {"id": "grok-4.20-multi-agent", "label": "Research heavy", "use": "Multi-step research and synthesis", "cost": "Premium"},
+    ],
+    "custom": [
+        {"id": "provider-specific-model-id", "label": "Custom provider", "use": "Use the exact model ID from your provider docs", "cost": "Varies"},
+    ],
+}
 
-def _image_creator_prompt(brand, user_prompt, style, format_key, include_brand_context=True):
+_IMAGE_MODEL_OPTIONS = {
+    "openai": [
+        {"id": "gpt-image-2", "label": "GPT Image 2", "note": "Latest OpenAI image model; best default for ads and text-aware images."},
+        {"id": "gpt-image-1.5", "label": "GPT Image 1.5", "note": "Strong previous-generation option."},
+        {"id": "gpt-image-1-mini", "label": "GPT Image 1 Mini", "note": "Lower-cost option for drafts."},
+        {"id": "chatgpt-image-latest", "label": "ChatGPT Image Latest", "note": "Tracks the image model used in ChatGPT."},
+        {"id": "gpt-image-1", "label": "GPT Image 1", "note": "Legacy compatibility option."},
+    ],
+    "gemini": [
+        {"id": "gemini-3-pro-image-preview", "label": "Nano Banana Pro", "note": "Google's professional native image model for high-fidelity text and layouts."},
+        {"id": "gemini-3.1-flash-image-preview", "label": "Nano Banana 2", "note": "Latest high-efficiency native image model for fast production work."},
+        {"id": "gemini-2.5-flash-image", "label": "Nano Banana", "note": "Fast native image model for high-volume creative workflows."},
+        {"id": "imagen-4.0-ultra-generate-001", "label": "Imagen 4 Ultra", "note": "Highest-quality Imagen option."},
+        {"id": "imagen-4.0-generate-001", "label": "Imagen 4", "note": "Balanced default for Gemini image generation."},
+        {"id": "imagen-4.0-fast-generate-001", "label": "Imagen 4 Fast", "note": "Faster image drafts."},
+    ],
+    "xai": [
+        {"id": "grok-imagine-image", "label": "Grok Imagine", "note": "xAI image generation model."},
+    ],
+    "bfl": [
+        {"id": "flux-2-max", "label": "FLUX.2 Max", "note": "Highest-quality FLUX.2 endpoint."},
+        {"id": "flux-2-pro-preview", "label": "FLUX.2 Pro Preview", "note": "Latest FLUX.2 Pro preview; good production default."},
+        {"id": "flux-2-pro", "label": "FLUX.2 Pro", "note": "Pinned FLUX.2 Pro snapshot."},
+        {"id": "flux-2-flex", "label": "FLUX.2 Flex", "note": "Fine-grained FLUX.2 control endpoint."},
+        {"id": "flux-2-klein-4b", "label": "FLUX.2 Klein", "note": "Fast lower-cost FLUX.2 option."},
+    ],
+}
+
+
+def _configured_ai_providers(brand):
+    brand = brand or {}
+    providers = []
+    provider_fields = {
+        "openai": "openai_api_key",
+        "openrouter": "ai_openrouter_api_key",
+        "gemini": "ai_gemini_api_key",
+        "xai": "ai_xai_api_key",
+        "bfl": "ai_bfl_api_key",
+        "custom": "ai_custom_api_key",
+    }
+    for provider, field in provider_fields.items():
+        if (brand.get(field) or "").strip():
+            providers.append(provider)
+    return providers
+
+
+def _ai_recommendations_for_brand(brand):
+    configured = set(_configured_ai_providers(brand))
+    rows = []
+    for provider, suggestions in _AI_TEXT_MODEL_RECOMMENDATIONS.items():
+        if provider == "bfl":
+            continue
+        if provider in configured or provider == (brand or {}).get("ai_provider"):
+            rows.append({"provider": provider, "suggestions": suggestions})
+    if not rows:
+        rows.append({"provider": "openai", "suggestions": _AI_TEXT_MODEL_RECOMMENDATIONS["openai"]})
+    return rows
+
+
+def _image_model_options_for_provider(provider):
+    return _IMAGE_MODEL_OPTIONS.get(provider) or _IMAGE_MODEL_OPTIONS["openai"]
+
+
+def _image_creator_prompt(
+    brand,
+    user_prompt,
+    style,
+    format_key,
+    include_brand_context=True,
+    asset_type="basic_visual",
+    tone="professional",
+    text_sections=None,
+    custom_instructions="",
+):
     fmt = _IMAGE_CREATOR_FORMATS.get(format_key, _IMAGE_CREATOR_FORMATS["square"])
+    text_sections = text_sections or {}
+    asset_labels = {
+        "basic_visual": "a clean visual asset with no readable text",
+        "full_ad": "a finished advertising image with only the provided text",
+        "social_graphic": "a social media graphic",
+        "website_hero": "a website hero image",
+        "service_proof": "a service proof or before/after-style visual",
+        "custom": "a custom marketing image",
+    }
     parts = [
         f"Create a polished marketing image for {brand.get('display_name') or 'this business'}.",
+        f"Asset type: {asset_labels.get(asset_type, asset_labels['basic_visual'])}.",
         f"Format: {fmt['hint']}.",
         f"Creative direction: {user_prompt}.",
         f"Visual style: {style or 'clean, practical, professional'}.",
+        f"Tone: {tone or 'professional'}.",
         "Avoid text-heavy layouts, distorted hands, illegible signage, watermarks, logos from other brands, and generic stock-photo composition.",
     ]
+    if asset_type == "full_ad":
+        allowed_text = [(label, (text_sections.get(label) or "").strip()) for label in ("headline", "subheadline", "offer", "cta", "fine_print")]
+        allowed_text = [(label, value) for label, value in allowed_text if value]
+        if allowed_text:
+            parts.append("This is a finished ad image. Include ONLY these exact text strings, with no extra words, misspellings, invented phone numbers, URLs, badges, or labels:")
+            for label, value in allowed_text:
+                parts.append(f"- {label.replace('_', ' ').title()}: {value}")
+            parts.append("If the model cannot render text perfectly, prioritize clean layout and leave uncertain text out rather than inventing or altering words.")
+        else:
+            parts.append("This is an ad-style image, but no exact text was provided. Do not render readable text.")
+    else:
+        parts.append("Do not render readable text unless exact text sections are provided.")
+    if custom_instructions:
+        parts.append(f"Custom production notes: {custom_instructions}")
     if include_brand_context:
         context_bits = []
         for label, field in (
@@ -8000,13 +8124,23 @@ def client_image_creator():
     if not brand:
         abort(404)
     ai_config = get_image_provider_config(brand)
+    image_provider = ai_config.provider
+    image_options = _image_model_options_for_provider(image_provider)
+    option_ids = {item["id"] for item in image_options}
+    selected_default = _IMAGE_PROVIDER_DEFAULT_MODELS.get(image_provider, "gpt-image-2")
+    image_model = (brand.get("ai_image_generation_model") or selected_default).strip()
+    known_defaults = set(_IMAGE_PROVIDER_DEFAULT_MODELS.values()) | {"dall-e-3", "gpt-image-1"}
+    if (image_model in known_defaults and image_model != selected_default) or image_model not in option_ids:
+        image_model = selected_default
     return render_template(
         "client_image_creator.html",
         brand=brand,
         ai_provider_label=provider_label(ai_config.provider),
+        image_provider=image_provider,
         ai_configured=bool(ai_config.api_key),
         image_supported=ai_config.supports_images,
-        image_model=brand.get("ai_image_generation_model") or _IMAGE_PROVIDER_DEFAULT_MODELS.get(ai_config.provider, "gpt-image-2"),
+        image_model=image_model,
+        image_model_options=image_options,
         formats=_IMAGE_CREATOR_FORMATS,
     )
 
@@ -8030,11 +8164,35 @@ def client_image_creator_generate():
     if format_key not in _IMAGE_CREATOR_FORMATS:
         format_key = "square"
     style = (data.get("style") or "clean professional service-business ad").strip()[:240]
+    asset_type = (data.get("asset_type") or "basic_visual").strip().lower()
+    if asset_type not in {"basic_visual", "full_ad", "social_graphic", "website_hero", "service_proof", "custom"}:
+        asset_type = "basic_visual"
+    tone = (data.get("tone") or "professional").strip()[:120]
+    custom_instructions = (data.get("custom_instructions") or "").strip()[:600]
+    text_sections = {
+        "headline": (data.get("headline") or "").strip()[:90],
+        "subheadline": (data.get("subheadline") or "").strip()[:140],
+        "offer": (data.get("offer") or "").strip()[:90],
+        "cta": (data.get("cta") or "").strip()[:60],
+        "fine_print": (data.get("fine_print") or "").strip()[:120],
+    }
     include_brand_context = str(data.get("include_brand_context", "1")).lower() not in {"0", "false", "no", "off"}
-    prompt = _image_creator_prompt(brand, user_prompt, style, format_key, include_brand_context)
+    prompt = _image_creator_prompt(
+        brand,
+        user_prompt,
+        style,
+        format_key,
+        include_brand_context,
+        asset_type=asset_type,
+        tone=tone,
+        text_sections=text_sections,
+        custom_instructions=custom_instructions,
+    )
     image_config = get_image_provider_config(brand)
     selected_default = _IMAGE_PROVIDER_DEFAULT_MODELS.get(image_config.provider, "gpt-image-2")
-    image_model = (brand.get("ai_image_generation_model") or selected_default).strip()
+    requested_model = (data.get("image_model") or "").strip()[:120]
+    allowed_models = {item["id"] for item in _image_model_options_for_provider(image_config.provider)}
+    image_model = requested_model if requested_model in allowed_models else (brand.get("ai_image_generation_model") or selected_default).strip()
     known_defaults = set(_IMAGE_PROVIDER_DEFAULT_MODELS.values()) | {"dall-e-3", "gpt-image-1"}
     if image_model in known_defaults and image_model != selected_default:
         image_model = selected_default
@@ -8068,6 +8226,43 @@ def client_image_creator_generate():
         "format": format_key,
         "model": image_model,
         "prompt_used": prompt,
+    })
+
+
+@client_bp.route("/image-creator/save-drive", methods=["POST"])
+@client_login_required
+def client_image_creator_save_drive():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    data = request.get_json(silent=True) or request.form
+    filename = (data.get("filename") or "").strip()
+    if not filename.startswith("ai_image_") or "/" in filename or "\\" in filename:
+        return jsonify({"ok": False, "error": "Invalid generated image reference."}), 400
+
+    upload_root = Path(current_app.config.get("UPLOADS_DIR", "data/uploads")) / "ai_images" / str(brand_id)
+    image_path = upload_root / filename
+    try:
+        resolved = image_path.resolve()
+        allowed_root = upload_root.resolve()
+        if allowed_root not in resolved.parents:
+            return jsonify({"ok": False, "error": "Invalid generated image path."}), 400
+    except Exception:
+        return jsonify({"ok": False, "error": "Invalid generated image path."}), 400
+    if not image_path.exists():
+        return jsonify({"ok": False, "error": "Generated image file was not found."}), 404
+
+    try:
+        from webapp.google_drive import upload_file as drive_upload
+        result = drive_upload(db, brand_id, "Creatives", filename, image_path.read_bytes(), "image/png")
+    except Exception as exc:
+        log.warning("Image creator Drive save failed for brand %s: %s", brand_id, exc)
+        result = None
+    if not result:
+        return jsonify({"ok": False, "error": "Drive save failed. Check Google Drive connection and folder access."}), 500
+    return jsonify({
+        "ok": True,
+        "drive_file": result,
+        "drive_link": result.get("webViewLink"),
     })
 
 
@@ -10503,6 +10698,8 @@ def client_settings():
             sng_webhook_url=sng_webhook_url,
             sng_webhook_events=sng_webhook_events,
             lead_webhook_deliveries=lead_webhook_deliveries,
+            ai_model_recommendations=_ai_recommendations_for_brand(brand),
+            image_model_options_by_provider=_IMAGE_MODEL_OPTIONS,
             brand_name=session.get("client_brand_name", brand.get("display_name", "")),
         )
     except Exception:
