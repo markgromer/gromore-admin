@@ -5256,7 +5256,7 @@ def _auto_warren_status(label, state, detail="", icon="bi-circle", href="", sour
 
 def _auto_warren_action(key, title, why, evidence, outcome, href="", cta="Do this with WARREN",
                         icon="bi-stars", source="Connected data", confidence="medium",
-                        urgency="normal"):
+                        urgency="normal", completable=True):
     return {
         "key": key,
         "title": title,
@@ -5269,6 +5269,7 @@ def _auto_warren_action(key, title, why, evidence, outcome, href="", cta="Do thi
         "source": source,
         "confidence": confidence,
         "urgency": urgency,
+        "completable": bool(completable),
     }
 
 
@@ -5392,8 +5393,13 @@ def _build_auto_warren_context(db, brand, brand_id, month, client_user_id=None):
 
     if tasks and len(actions) < 4:
         actions.append(_auto_warren_action("open_work_queue", f"Clear {len(tasks)} open work item{'s' if len(tasks) != 1 else ''}", "Owner growth gets easier when the work queue does not disappear into memory or text threads.", f"Warren sees {len(tasks)} open task{'s' if len(tasks) != 1 else ''} assigned in the Work Queue.", "Goal: finish, assign, or update the next open task.", _auto_warren_url("client.client_tasks"), "Open work queue", "bi-list-task", "Brand tasks", "medium", "normal"))
+
+    actions = [action for action in actions if action.get("key") not in dismissed]
     if not actions:
-        actions.append(_auto_warren_action("daily_check_in", "Ask Warren for a simple check-in", "Nothing urgent is standing out from the connected data right now.", f"Warren reviewed {len(data_sources)} active data source{'s' if len(data_sources) != 1 else ''} for {month}.", "Goal: understand what is working and keep the next step simple.", "#", "Ask Warren", "bi-chat-dots-fill", "Connected account snapshot", "medium", "normal"))
+        if "daily_check_in" not in dismissed:
+            actions.append(_auto_warren_action("daily_check_in", "Ask Warren for a simple check-in", "Nothing urgent is standing out from the connected data right now.", f"Warren reviewed {len(data_sources)} active data source{'s' if len(data_sources) != 1 else ''} for {month}.", "Goal: understand what is working and keep the next step simple.", "#", "Ask Warren", "bi-chat-dots-fill", "Connected account snapshot", "medium", "normal"))
+        else:
+            actions.append(_auto_warren_action("all_caught_up", "No checked-off work is being repeated", "Everything Warren had queued for this view has been marked done for the selected month.", "Your completed Auto WARREN items are being honored before the focus card is chosen.", "Goal: keep watching connected data for a new signal instead of repeating old work.", "", "Caught up", "bi-check2-circle", "Completed Auto WARREN history", "high", "normal", completable=False))
 
     focus_action = actions[0]
     action_queue = actions[1:4]

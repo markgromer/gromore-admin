@@ -235,6 +235,17 @@
         gap: .55rem;
         align-items: center;
     }
+    .auto-done-btn {
+        border-color: #bbf7d0;
+        color: #047857;
+        background: #f0fdf4;
+        font-weight: 750;
+    }
+    .auto-done-btn:hover {
+        background: #dcfce7;
+        border-color: #86efac;
+        color: #065f46;
+    }
     .source-note {
         display: inline-flex;
         align-items: center;
@@ -260,6 +271,12 @@
         grid-template-columns: 32px minmax(0, 1fr) auto;
         gap: .72rem;
         align-items: center;
+    }
+    .queue-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        white-space: nowrap;
     }
     .queue-item .mini-icon,
     .status-item .mini-icon {
@@ -448,6 +465,11 @@
                             <i class="bi bi-chat-dots me-1"></i>{{ focus.cta }}
                         </button>
                         {% endif %}
+                        {% if focus.completable %}
+                        <button type="button" class="btn btn-sm auto-done-btn" data-auto-warren-done="{{ focus.key }}">
+                            <i class="bi bi-check2 me-1"></i>Mark done
+                        </button>
+                        {% endif %}
                         <span class="source-note"><i class="bi bi-database"></i>{{ focus.source }}</span>
                     </div>
                 </div>
@@ -467,11 +489,18 @@
                             <div class="queue-title">{{ action.title }}</div>
                             <div class="queue-meta">{{ action.evidence }}</div>
                         </div>
+                        <div class="queue-actions">
                         {% if action.href and action.href != '#' %}
                         <a href="{{ action.href }}" class="btn btn-sm btn-outline-secondary">{{ action.cta }}</a>
                         {% else %}
                         <button type="button" class="btn btn-sm btn-outline-secondary" data-warren-auto-prompt="{{ action.title }}. Explain this in simple terms and tell me the first step.">Ask</button>
                         {% endif %}
+                        {% if action.completable %}
+                        <button type="button" class="btn btn-sm auto-done-btn" data-auto-warren-done="{{ action.key }}">
+                            <i class="bi bi-check2"></i>
+                        </button>
+                        {% endif %}
+                        </div>
                     </div>
                     {% endfor %}
                 </div>
@@ -557,6 +586,32 @@ document.addEventListener('click', function(event) {
     var prompt = trigger.getAttribute('data-warren-auto-prompt') || '';
     if (window.gromorePrimeWarrenPrompt) {
         window.gromorePrimeWarrenPrompt(prompt);
+    }
+});
+
+document.addEventListener('click', async function(event) {
+    var trigger = event.target.closest('[data-auto-warren-done]');
+    if (!trigger) return;
+    var actionKey = trigger.getAttribute('data-auto-warren-done') || '';
+    if (!actionKey) return;
+    var originalHtml = trigger.innerHTML;
+    trigger.disabled = true;
+    trigger.innerHTML = '<i class="bi bi-check2 me-1"></i>Done';
+    try {
+        var resp = await fetch('{{ url_for("client.client_actions_dismiss") }}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({action_key: actionKey, month: '{{ month }}'})
+        });
+        var data = await resp.json();
+        if (!resp.ok || !data.ok) {
+            throw new Error(data.error || 'Could not mark done');
+        }
+        window.location.reload();
+    } catch (err) {
+        trigger.disabled = false;
+        trigger.innerHTML = originalHtml;
+        alert(err.message || 'Could not mark done');
     }
 });
 </script>
