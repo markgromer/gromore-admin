@@ -965,6 +965,24 @@ function showXpPopup(xp) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    async function postActionState(url, payload) {
+        var resp = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify(payload)
+        });
+        var contentType = resp.headers.get('content-type') || '';
+        var data = contentType.indexOf('application/json') !== -1 ? await resp.json() : {};
+        if (!resp.ok || data.error) {
+            throw new Error(data.error || 'The action could not be updated. Refresh the page and try again.');
+        }
+        return data;
+    }
+
     function safeParseMessages(value) {
         if (!value) return null;
         try {
@@ -1070,18 +1088,15 @@ document.addEventListener('DOMContentLoaded', function() {
             card.style.opacity = '0.3';
             card.style.pointerEvents = 'none';
 
-            fetch('/client/actions/dismiss', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-                body: JSON.stringify({action_key: key, month: month})
-            }).then(function(r) {
-                if (r.ok) {
+            postActionState('/client/actions/dismiss', {action_key: key, month: month})
+                .then(function() {
                     setTimeout(function() { location.reload(); }, 800);
-                } else {
+                })
+                .catch(function(err) {
                     card.style.opacity = '1';
                     card.style.pointerEvents = '';
-                }
-            });
+                    alert(err.message || 'The action could not be marked complete.');
+                });
         });
     });
 
@@ -1091,14 +1106,12 @@ document.addEventListener('DOMContentLoaded', function() {
             var month = this.dataset.month;
             var badge = this.closest('.done-mission');
             badge.style.opacity = '0.3';
-            fetch('/client/actions/restore', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-                body: JSON.stringify({action_key: key, month: month})
-            }).then(function(r) {
-                if (r.ok) location.reload();
-                else badge.style.opacity = '1';
-            });
+            postActionState('/client/actions/restore', {action_key: key, month: month})
+                .then(function() { location.reload(); })
+                .catch(function(err) {
+                    badge.style.opacity = '1';
+                    alert(err.message || 'The action could not be restored.');
+                });
         });
     });
 });

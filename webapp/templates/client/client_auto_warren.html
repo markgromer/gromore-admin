@@ -594,18 +594,24 @@ document.addEventListener('click', async function(event) {
     if (!trigger) return;
     var actionKey = trigger.getAttribute('data-auto-warren-done') || '';
     if (!actionKey) return;
+    var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
     var originalHtml = trigger.innerHTML;
     trigger.disabled = true;
     trigger.innerHTML = '<i class="bi bi-check2 me-1"></i>Done';
     try {
         var resp = await fetch('{{ url_for("client.client_actions_dismiss") }}', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+                'X-Requested-With': 'XMLHttpRequest'
+            },
             body: JSON.stringify({action_key: actionKey, month: '{{ month }}'})
         });
-        var data = await resp.json();
+        var contentType = resp.headers.get('content-type') || '';
+        var data = contentType.indexOf('application/json') !== -1 ? await resp.json() : {};
         if (!resp.ok || !data.ok) {
-            throw new Error(data.error || 'Could not mark done');
+            throw new Error(data.error || 'Could not mark done. Refresh the page and try again.');
         }
         window.location.reload();
     } catch (err) {
