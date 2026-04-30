@@ -1,0 +1,283 @@
+{% extends "client_base.html" %}
+{% block title %}Image Creator{% endblock %}
+
+{% block head %}
+<style>
+    .image-creator-layout {
+        display: grid;
+        grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+        gap: 1.25rem;
+        align-items: start;
+    }
+    .ic-panel {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+    }
+    .ic-panel-header {
+        padding: 1rem 1.1rem .75rem;
+        border-bottom: 1px solid #eef2f7;
+    }
+    .ic-panel-header h2,
+    .ic-panel-header h3 {
+        margin: 0;
+        color: #0f172a;
+        font-weight: 800;
+    }
+    .ic-panel-header h2 { font-size: 1.15rem; }
+    .ic-panel-header h3 { font-size: .95rem; }
+    .ic-panel-body { padding: 1.1rem; }
+    .ic-status {
+        display: flex;
+        gap: .7rem;
+        flex-wrap: wrap;
+        margin-bottom: 1rem;
+    }
+    .ic-status span {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 999px;
+        padding: .38rem .7rem;
+        color: #475569;
+        font-size: .82rem;
+        background: #f8fafc;
+    }
+    .ic-format-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: .55rem;
+    }
+    .ic-format-option {
+        border: 1px solid #dbe3ef;
+        background: #fff;
+        border-radius: 8px;
+        padding: .65rem .5rem;
+        text-align: center;
+        cursor: pointer;
+        font-size: .8rem;
+        color: #334155;
+    }
+    .ic-format-option input { display: none; }
+    .ic-format-option:has(input:checked) {
+        border-color: #4f46e5;
+        background: #eef2ff;
+        color: #312e81;
+        font-weight: 700;
+    }
+    .ic-preview-shell {
+        min-height: 520px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background:
+            linear-gradient(45deg, #f8fafc 25%, transparent 25%),
+            linear-gradient(-45deg, #f8fafc 25%, transparent 25%),
+            linear-gradient(45deg, transparent 75%, #f8fafc 75%),
+            linear-gradient(-45deg, transparent 75%, #f8fafc 75%);
+        background-size: 24px 24px;
+        background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+        border: 1px dashed #cbd5e1;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    .ic-preview-empty {
+        max-width: 360px;
+        color: #64748b;
+        text-align: center;
+        font-size: .92rem;
+        line-height: 1.55;
+    }
+    .ic-preview-img {
+        max-width: 100%;
+        max-height: 720px;
+        width: auto;
+        height: auto;
+        display: block;
+    }
+    .ic-result-actions {
+        display: none;
+        gap: .5rem;
+        flex-wrap: wrap;
+        margin-top: .85rem;
+    }
+    .ic-alert { display: none; }
+    @media (max-width: 980px) {
+        .image-creator-layout { grid-template-columns: 1fr; }
+        .ic-preview-shell { min-height: 360px; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header mb-3">
+    <div>
+        <h1 class="h3 mb-1">Image Creator</h1>
+        <p class="text-muted mb-0">Generate usable campaign, social, and site visuals from brand-aware prompts.</p>
+    </div>
+</div>
+
+<div class="image-creator-layout">
+    <section class="ic-panel">
+        <div class="ic-panel-header">
+            <h2>Create Image</h2>
+        </div>
+        <div class="ic-panel-body">
+            <div class="ic-status">
+                <span><i class="bi bi-cpu"></i>{{ ai_provider_label }}</span>
+                <span><i class="bi bi-image"></i>{{ image_model }}</span>
+                {% if image_supported and ai_configured %}
+                    <span class="text-success"><i class="bi bi-check-circle"></i>Ready</span>
+                {% elif not image_supported %}
+                    <span class="text-warning"><i class="bi bi-exclamation-triangle"></i>OpenAI required for images</span>
+                {% else %}
+                    <span class="text-warning"><i class="bi bi-exclamation-triangle"></i>Key needed</span>
+                {% endif %}
+            </div>
+
+            {% if not image_supported %}
+                <div class="alert alert-warning py-2">This brand is set to {{ ai_provider_label }}. Text generation can use that provider, but image generation currently needs OpenAI in Settings.</div>
+            {% elif not ai_configured %}
+                <div class="alert alert-warning py-2">Add an OpenAI key in Settings before generating images.</div>
+            {% endif %}
+
+            <form id="imageCreatorForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Prompt</label>
+                    <textarea class="form-control" id="icPrompt" rows="6" placeholder="Example: A clean, realistic service truck parked outside a freshly cleaned commercial property at sunrise, no text, professional ad photo style"></textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Style</label>
+                    <select class="form-select" id="icStyle">
+                        <option value="realistic professional service-business ad, natural light">Realistic service ad</option>
+                        <option value="bright social media photo, friendly, candid, authentic">Organic social photo</option>
+                        <option value="premium website hero image, clean composition, depth of field">Website hero</option>
+                        <option value="bold paid ad visual, strong subject, high contrast, no text">Paid ad visual</option>
+                        <option value="simple product-style scene, clean background, brand-friendly">Clean product scene</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Format</label>
+                    <div class="ic-format-grid">
+                        {% for key, fmt in formats.items() %}
+                        <label class="ic-format-option">
+                            <input type="radio" name="icFormat" value="{{ key }}" {% if loop.first %}checked{% endif %}>
+                            <span class="d-block">{{ fmt.label }}</span>
+                            <small class="text-muted">{{ fmt.size }}</small>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="icBrandContext" checked>
+                    <label class="form-check-label" for="icBrandContext">Use brand context</label>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100" id="icGenerateBtn" {% if not image_supported or not ai_configured %}disabled{% endif %}>
+                    <i class="bi bi-stars me-1"></i>Generate Image
+                </button>
+            </form>
+            <div class="alert ic-alert mt-3 mb-0" id="icAlert"></div>
+        </div>
+    </section>
+
+    <section class="ic-panel">
+        <div class="ic-panel-header d-flex justify-content-between align-items-center gap-2">
+            <h3>Preview</h3>
+            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('client.client_creative') }}"><i class="bi bi-palette me-1"></i>Creative Studio</a>
+        </div>
+        <div class="ic-panel-body">
+            <div class="ic-preview-shell" id="icPreview">
+                <div class="ic-preview-empty">
+                    Your generated image will appear here. Generated files are saved to this brand's uploads so they can be reused in campaigns or creative work.
+                </div>
+            </div>
+            <div class="ic-result-actions" id="icResultActions">
+                <a class="btn btn-outline-primary btn-sm" id="icOpenImage" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right me-1"></i>Open image</a>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="icCopyUrl"><i class="bi bi-link-45deg me-1"></i>Copy URL</button>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script>
+(function() {
+    const form = document.getElementById('imageCreatorForm');
+    const btn = document.getElementById('icGenerateBtn');
+    const alertBox = document.getElementById('icAlert');
+    const preview = document.getElementById('icPreview');
+    const actions = document.getElementById('icResultActions');
+    const openLink = document.getElementById('icOpenImage');
+    const copyBtn = document.getElementById('icCopyUrl');
+    let currentUrl = '';
+
+    function showAlert(type, message) {
+        alertBox.className = 'alert ic-alert mt-3 mb-0 alert-' + type;
+        alertBox.textContent = message;
+        alertBox.style.display = 'block';
+    }
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        if (!btn || btn.disabled) return;
+        const checkedFormat = document.querySelector('input[name="icFormat"]:checked');
+        const payload = {
+            prompt: document.getElementById('icPrompt').value.trim(),
+            style: document.getElementById('icStyle').value,
+            format: checkedFormat ? checkedFormat.value : 'square',
+            include_brand_context: document.getElementById('icBrandContext').checked ? '1' : '0'
+        };
+        if (payload.prompt.length < 8) {
+            showAlert('warning', 'Describe the image you want in a little more detail.');
+            return;
+        }
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating...';
+        alertBox.style.display = 'none';
+        preview.innerHTML = '<div class="ic-preview-empty"><span class="spinner-border spinner-border-sm me-2"></span>Generating image...</div>';
+        actions.style.display = 'none';
+
+        fetch("{{ url_for('client.client_image_creator_generate') }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(function(resp) { return resp.json().then(function(data) { return {ok: resp.ok, data: data}; }); })
+        .then(function(result) {
+            if (!result.ok || !result.data.ok) {
+                throw new Error(result.data.error || 'Image generation failed.');
+            }
+            currentUrl = result.data.image_url;
+            preview.innerHTML = '<img class="ic-preview-img" src="' + currentUrl + '" alt="Generated image">';
+            openLink.href = currentUrl;
+            actions.style.display = 'flex';
+            showAlert('success', 'Image generated and saved.');
+        })
+        .catch(function(err) {
+            preview.innerHTML = '<div class="ic-preview-empty">Generation failed.</div>';
+            showAlert('danger', err.message || 'Image generation failed.');
+        })
+        .finally(function() {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-stars me-1"></i>Generate Image';
+        });
+    });
+
+    copyBtn.addEventListener('click', function() {
+        if (!currentUrl || !navigator.clipboard) return;
+        navigator.clipboard.writeText(window.location.origin + currentUrl).then(function() {
+            showAlert('success', 'Image URL copied.');
+        });
+    });
+})();
+</script>
+{% endblock %}

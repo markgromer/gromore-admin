@@ -3098,6 +3098,15 @@ def _get_openai_api_key(brand):
         return ""
 
 
+def _valid_custom_ai_base_url(url):
+    parsed = urlparse((url or "").strip())
+    if parsed.scheme != "https" or not parsed.netloc:
+        return False
+    host = (parsed.hostname or "").lower()
+    blocked_hosts = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
+    return bool(host and host not in blocked_hosts and not host.endswith(".local"))
+
+
 def _assistant_month():
     month = (request.args.get("month") or request.form.get("month") or "").strip()
     if re.match(r"^\d{4}-\d{2}$", month):
@@ -4588,6 +4597,8 @@ _ENDPOINT_FEATURE_MAP = {
     "client_ad_builder_generate":  "ad_builder",
     "client_creative":             "creative",
     "client_creative_generate":    "creative",
+    "client_image_creator":        "creative",
+    "client_image_creator_generate": "creative",
     "client_creative_templates_list":  "creative",
     "client_creative_templates_save":  "creative",
     "client_creative_template_load":   "creative",
@@ -7938,6 +7949,116 @@ def client_serve_upload(filename):
 
 # ── Creative Center ──
 
+_IMAGE_CREATOR_FORMATS = {
+    "square": {"label": "Square", "size": "1024x1024", "hint": "single square social/ad image"},
+    "wide": {"label": "Wide", "size": "1792x1024", "hint": "wide landscape ad image"},
+    "story": {"label": "Story", "size": "1024x1792", "hint": "vertical story/reel image"},
+}
+
+
+def _image_creator_prompt(brand, user_prompt, style, format_key, include_brand_context=True):
+    fmt = _IMAGE_CREATOR_FORMATS.get(format_key, _IMAGE_CREATOR_FORMATS["square"])
+    parts = [
+        f"Create a polished marketing image for {brand.get('display_name') or 'this business'}.",
+        f"Format: {fmt['hint']}.",
+        f"Creative direction: {user_prompt}.",
+        f"Visual style: {style or 'clean, practical, professional'}.",
+        "Avoid text-heavy layouts, distorted hands, illegible signage, watermarks, logos from other brands, and generic stock-photo composition.",
+    ]
+    if include_brand_context:
+        context_bits = []
+        for label, field in (
+            ("Industry", "industry"),
+            ("Services", "primary_services"),
+            ("Service area", "service_area"),
+            ("Brand voice", "brand_voice"),
+            ("Colors", "brand_colors"),
+        ):
+            value = (brand.get(field) or "").strip()
+            if value:
+                context_bits.append(f"{label}: {value}")
+        if context_bits:
+            parts.append("Brand context: " + "; ".join(context_bits[:5]) + ".")
+    return "\n".join(parts)
+
+
+@client_bp.route("/image-creator")
+@client_login_required
+def client_image_creator():
+    from webapp.ai_provider import get_provider_config, provider_label
+
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+    ai_config = get_provider_config(brand)
+    return render_template(
+        "client_image_creator.html",
+        brand=brand,
+        ai_provider_label=provider_label(ai_config.provider),
+        ai_configured=bool(ai_config.api_key),
+        image_supported=ai_config.supports_images,
+        image_model=brand.get("ai_image_generation_model") or "dall-e-3",
+        formats=_IMAGE_CREATOR_FORMATS,
+    )
+
+
+@client_bp.route("/image-creator/generate", methods=["POST"])
+@client_login_required
+def client_image_creator_generate():
+    from webapp.ai_provider import generate_image_bytes
+
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"ok": False, "error": "Brand not found."}), 404
+
+    data = request.get_json(silent=True) or request.form
+    user_prompt = (data.get("prompt") or "").strip()[:1200]
+    if len(user_prompt) < 8:
+        return jsonify({"ok": False, "error": "Describe the image you want in a little more detail."}), 400
+    format_key = (data.get("format") or "square").strip().lower()
+    if format_key not in _IMAGE_CREATOR_FORMATS:
+        format_key = "square"
+    style = (data.get("style") or "clean professional service-business ad").strip()[:240]
+    include_brand_context = str(data.get("include_brand_context", "1")).lower() not in {"0", "false", "no", "off"}
+    prompt = _image_creator_prompt(brand, user_prompt, style, format_key, include_brand_context)
+    image_model = (brand.get("ai_image_generation_model") or "dall-e-3").strip()
+    image_size = _IMAGE_CREATOR_FORMATS[format_key]["size"]
+    if image_model == "gpt-image-1":
+        image_size = {"square": "1024x1024", "wide": "1536x1024", "story": "1024x1536"}.get(format_key, "1024x1024")
+
+    try:
+        image_bytes = generate_image_bytes(
+            brand,
+            prompt,
+            model=image_model,
+            size=image_size,
+            timeout=150,
+        )
+    except Exception as exc:
+        log.warning("Image creator failed for brand %s: %s", brand_id, exc)
+        return jsonify({"ok": False, "error": str(exc)[:260]}), 500
+
+    output_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads")) / "ai_images" / str(brand_id)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_name = f"ai_image_{uuid.uuid4().hex[:10]}.png"
+    output_path = output_dir / output_name
+    output_path.write_bytes(image_bytes)
+    rel_path = f"ai_images/{brand_id}/{output_name}"
+    image_url = url_for("client.client_serve_upload", filename=rel_path)
+    return jsonify({
+        "ok": True,
+        "image_url": image_url,
+        "filename": output_name,
+        "format": format_key,
+        "model": image_model,
+        "prompt_used": prompt,
+    })
+
+
 @client_bp.route("/creative")
 @client_login_required
 def client_creative():
@@ -9964,15 +10085,6 @@ def _site_builder_reference_style_brief(reference_url, reference_mode="vibe", in
 
 
 def _suggest_creative_style(brand, prompt, ad_format):
-    api_key = (brand.get("openai_api_key") or "").strip()
-    if not api_key:
-        from flask import current_app
-        api_key = (current_app.config.get("OPENAI_API_KEY") or "").strip()
-    if not api_key:
-        return None
-
-    model = _pick_ai_model(brand, "images")
-
     ask = f"""You are selecting visual style settings for an ad creative.
 
 Brand voice: {brand.get('brand_voice', '')}
@@ -9990,22 +10102,16 @@ Return JSON only with:
 
 JSON only, no markdown."""
 
-    import requests as req
     try:
-        resp = req.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": model, "messages": [{"role": "user", "content": ask}], "temperature": 0.5},
+        from webapp.ai_provider import chat_json
+        data = chat_json(
+            brand,
+            "Return JSON only.",
+            ask,
+            purpose="chat",
+            temperature=0.5,
             timeout=20,
         )
-        if resp.status_code != 200:
-            return None
-        content = resp.json()["choices"][0]["message"]["content"].strip()
-        if content.startswith("```"):
-            content = content.split("\n", 1)[1] if "\n" in content else content[3:]
-            if content.endswith("```"):
-                content = content[:-3]
-        data = json.loads(content)
         if not isinstance(data, dict):
             return None
         return {
@@ -10748,31 +10854,63 @@ def client_save_facebook_page_id():
 @client_bp.route("/settings/openai", methods=["POST"])
 @client_login_required
 def client_save_openai():
+    from webapp.ai_provider import normalize_provider
+
     db = _get_db()
     brand_id = session["client_brand_id"]
 
-    api_key = request.form.get("openai_api_key", "").strip()
+    provider = normalize_provider(request.form.get("ai_provider", "openai"))
+    api_key = (
+        request.form.get("ai_provider_api_key", "").strip()
+        or request.form.get("openai_api_key", "").strip()
+    )
+    custom_base_url = request.form.get("ai_provider_base_url", "").strip().rstrip("/")
+    image_generation_model = request.form.get("ai_image_generation_model", "").strip()
     quality_tier = request.form.get("ai_quality_tier", "").strip().lower()
 
     # Save quality tier
     if quality_tier in ("efficient", "balanced", "premium"):
         db.update_brand_text_field(brand_id, "ai_quality_tier", quality_tier)
 
-        # Also update the per-purpose model fields so other features (chat, blog, etc.) pick them up
-        _tier_map = {
-            "efficient": {"openai_model": "gpt-4o-mini", "openai_model_chat": "gpt-4o-mini", "openai_model_images": "gpt-4o-mini", "openai_model_analysis": "gpt-4o-mini", "openai_model_ads": "gpt-4o-mini"},
-            "balanced":  {"openai_model": "gpt-4o-mini", "openai_model_chat": "gpt-4o-mini", "openai_model_images": "gpt-4o",      "openai_model_analysis": "gpt-4o-mini", "openai_model_ads": "gpt-4o"},
-            "premium":   {"openai_model": "gpt-4.1",     "openai_model_chat": "gpt-4.1",     "openai_model_images": "gpt-4o",      "openai_model_analysis": "gpt-4.1",     "openai_model_ads": "gpt-4.1"},
-        }
-        for field, model_val in _tier_map[quality_tier].items():
-            db.update_brand_text_field(brand_id, field, model_val)
+        # Quality tiers are OpenAI presets. Non-OpenAI providers keep owner-entered model IDs.
+        if provider == "openai":
+            _tier_map = {
+                "efficient": {"openai_model": "gpt-4o-mini", "openai_model_chat": "gpt-4o-mini", "openai_model_images": "gpt-4o-mini", "openai_model_analysis": "gpt-4o-mini", "openai_model_ads": "gpt-4o-mini"},
+                "balanced":  {"openai_model": "gpt-4o-mini", "openai_model_chat": "gpt-4o-mini", "openai_model_images": "gpt-4o",      "openai_model_analysis": "gpt-4o-mini", "openai_model_ads": "gpt-4o"},
+                "premium":   {"openai_model": "gpt-4.1",     "openai_model_chat": "gpt-4.1",     "openai_model_images": "gpt-4o",      "openai_model_analysis": "gpt-4.1",     "openai_model_ads": "gpt-4.1"},
+            }
+            for field, model_val in _tier_map[quality_tier].items():
+                db.update_brand_text_field(brand_id, field, model_val)
+
+    if provider in ("openrouter", "custom"):
+        for field in ("openai_model_chat", "openai_model_analysis", "openai_model_ads"):
+            value = request.form.get(field, "").strip()[:120]
+            if value:
+                db.update_brand_text_field(brand_id, field, value)
+
+    if image_generation_model in ("dall-e-3", "gpt-image-1"):
+        db.update_brand_text_field(brand_id, "ai_image_generation_model", image_generation_model)
 
     # Only update key if user actually entered something (don't blank it on empty submit)
     if api_key:
-        if not api_key.startswith("sk-"):
+        if provider == "openai" and not api_key.startswith("sk-"):
             flash("Invalid API key format. OpenAI keys start with sk-", "error")
             return redirect(url_for("client.client_settings"))
-        db.update_brand_text_field(brand_id, "openai_api_key", api_key)
+        if provider == "openai":
+            db.update_brand_text_field(brand_id, "openai_api_key", api_key)
+        else:
+            db.update_brand_text_field(brand_id, "ai_provider_api_key", api_key)
+
+    if provider == "custom":
+        if custom_base_url:
+            if not _valid_custom_ai_base_url(custom_base_url):
+                flash("Custom AI base URL must be a public HTTPS endpoint.", "error")
+                return redirect(url_for("client.client_settings"))
+            db.update_brand_text_field(brand_id, "ai_provider_base_url", custom_base_url)
+    elif provider == "openrouter":
+        db.update_brand_text_field(brand_id, "ai_provider_base_url", "https://openrouter.ai/api/v1")
+
+    db.update_brand_text_field(brand_id, "ai_provider", provider)
 
     flash("AI settings saved.", "success")
     return redirect(url_for("client.client_settings"))

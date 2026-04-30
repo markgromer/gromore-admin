@@ -97,6 +97,10 @@ def _require_client_login():
 
 
 def _get_api_key(brand=None):
+    provider_key = ((brand or {}).get("ai_provider_api_key") or "").strip()
+    provider = ((brand or {}).get("ai_provider") or "openai").strip().lower()
+    if provider in {"openrouter", "custom"} and provider_key:
+        return provider_key
     brand_key = ((brand or {}).get("openai_api_key") or "").strip()
     if brand_key:
         return brand_key
@@ -106,33 +110,19 @@ def _get_api_key(brand=None):
         return os.environ.get("OPENAI_API_KEY", "").strip()
 
 
-def _ai_call(api_key, system, user_content, model=None, temperature=0.5, timeout=60):
-    """Generic OpenAI chat completion returning parsed JSON or None."""
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
+def _ai_call(brand, system, user_content, model=None, temperature=0.5, timeout=60):
+    """Provider-aware chat completion returning parsed JSON or None."""
     try:
-        resp = _requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json={
-                "model": model or "gpt-4o-mini",
-                "temperature": temperature,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user_content},
-                ],
-                "response_format": {"type": "json_object"},
-            },
+        from webapp.ai_provider import chat_json
+        return chat_json(
+            brand,
+            system,
+            user_content,
+            purpose="chat",
+            model=model or "",
+            temperature=temperature,
             timeout=timeout,
         )
-        if resp.status_code != 200:
-            log.warning("Hiring AI failed (%s): %s", resp.status_code, resp.text[:300])
-            return None
-        data = resp.json()
-        content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
-        return json.loads(content)
     except Exception as exc:
         log.warning("Hiring AI error: %s", exc)
         return None
@@ -253,7 +243,7 @@ def prefill_job_draft(brand, title, location="", owner_notes=""):
         "industry": brand.get("industry", ""),
     }
     model = brand.get("openai_model_ads") or brand.get("openai_model") or "gpt-4o-mini"
-    return _ai_call(api_key, JOB_PREFILL_PROMPT, json.dumps(context), model=model, temperature=0.6)
+    return _ai_call(brand, JOB_PREFILL_PROMPT, json.dumps(context), model=model, temperature=0.6)
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +294,7 @@ def generate_job_posting(brand, criteria):
         **criteria,
     }
     model = brand.get("openai_model_ads") or brand.get("openai_model") or "gpt-4o-mini"
-    return _ai_call(api_key, JOB_GENERATION_PROMPT, json.dumps(context), model=model, temperature=0.7)
+    return _ai_call(brand, JOB_GENERATION_PROMPT, json.dumps(context), model=model, temperature=0.7)
 
 
 # ---------------------------------------------------------------------------
@@ -362,7 +352,7 @@ def generate_gate_questions(job, brand):
         "screening_criteria": job.get("screening_criteria", "{}"),
     }
     model = brand.get("openai_model_chat") or brand.get("openai_model") or "gpt-4o-mini"
-    return _ai_call(api_key, GATE_QUESTION_PROMPT, json.dumps(context), model=model, temperature=0.5)
+    return _ai_call(brand, GATE_QUESTION_PROMPT, json.dumps(context), model=model, temperature=0.5)
 
 
 def _load_screening_criteria(job_or_text):
@@ -744,7 +734,7 @@ def conduct_interview_step(interview, messages, job, candidate, brand):
 
     model = brand.get("openai_model_chat") or brand.get("openai_model") or "gpt-4o-mini"
     result = _ai_call(
-        api_key,
+        brand,
         INTERVIEW_SYSTEM_PROMPT,
         json.dumps(context),
         model=model,
@@ -791,7 +781,7 @@ Return JSON:
 }"""
 
     model = brand.get("openai_model_chat") or brand.get("openai_model") or "gpt-4o-mini"
-    result = _ai_call(api_key, system, json.dumps(context), model=model, temperature=0.6)
+    result = _ai_call(brand, system, json.dumps(context), model=model, temperature=0.6)
     return _repair_first_interview_question(result, interview_guidance)
 
 
@@ -2122,7 +2112,7 @@ Return JSON:
 
         user_msg = f"Candidate name: {name}\nJob applied for: {(db.get_hiring_job(candidate['job_id']) or {}).get('title', 'Unknown')}\nCompany: {brand.get('display_name', brand.get('name', 'Unknown'))}\n\nProfiles found:\n{profile_summary}"
 
-        ai_result = _ai_call(api_key, system_prompt, user_msg, temperature=0.3, timeout=30)
+        ai_result = _ai_call(brand, system_prompt, user_msg, temperature=0.3, timeout=30)
 
         if ai_result:
             scan_result = {

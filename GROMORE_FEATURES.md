@@ -1,5 +1,5 @@
 # GroMore Platform - Complete Feature Inventory
-> Last updated: April 24, 2026 - Audited against live codebase and commits through `41ecc48`
+> Last updated: April 30, 2026 - Audited against live codebase and recent WARREN, billing, AI provider, and image creation updates
 
 ---
 
@@ -23,6 +23,7 @@
 - **Inline Warren Console Transcript** - Added in-context transcript visibility inside dashboard workflow
 - **Navigation Simplification** - Cleaner client navigation and tab flow to reduce click friction
 - **Client Password Settings** - Added first-class password management inside client settings
+- **AI Provider Configuration** - Client AI settings now support OpenAI, OpenRouter, and custom OpenAI-compatible provider routing with per-purpose model fields
 
 ### Facebook Post Scheduler + Social Workflow
 - **Recurring Character Builder** - Persistent storytelling character controls for recurring social content
@@ -62,6 +63,7 @@
 - **Feature Flag Seed Race Condition Fix** - Eliminated duplicate-seed race with insert-ignore strategy
 - **Client Tab Loading Robustness** - Fixed client tab loading regressions tied to organic post count flows
 - **Appointment Reminder Time Display Accuracy** - Client automations/settings now show reminder run times in configured local timezone context
+- **Provider-Aware Hiring AI Calls** - WARREN hiring generation and interview flows can use the configured provider layer instead of only direct OpenAI calls
 
 ---
 
@@ -394,6 +396,7 @@
 - **Ad Template Library** - Browse pre-built ad templates
 - **Visual Canvas Editor** - Draw, add text, shapes, and images
 - **AI Image Generation** - DALL-E integration for ad visuals
+- **Image Creator Tab** - Dedicated prompt-to-image workspace for brand-aware campaign, social, and website visuals
 - **Format Selection** - Templates for Facebook feed, Instagram Stories, and other formats
 - **Template Save/Load** - Save custom templates for reuse
 - **Template Export** - Export finished designs
@@ -438,9 +441,10 @@
 - **Reporting Notes** - Custom notes for reports
 
 ### AI Configuration
-- **Model Selection** - Choose default AI model
+- **Provider Selection** - Choose OpenAI, OpenRouter, or a custom OpenAI-compatible provider
+- **Model Selection** - Choose default and provider-specific AI models
 - **Model Override Per Purpose** - Different models for chat, images, analysis, ad building
-- **API Key Override** - Use a custom OpenAI key
+- **API Key Override** - Use a brand-specific provider API key
 
 ### Connections
 - **Google OAuth** - Connect Google Ads, Analytics, Search Console

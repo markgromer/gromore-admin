@@ -633,8 +633,15 @@
 
         <!-- OpenAI API Key -->
         <div class="help-topic" id="openai">
-            <h4><i class="bi bi-cpu" style="color:#6366f1;"></i> OpenAI API Key</h4>
-            <p class="topic-desc">Use your own OpenAI API key to power the AI features: Ad Builder, Action Plans, report generation, and more. This gives you control over which model to use and lets costs go directly to your OpenAI billing.</p>
+            <h4><i class="bi bi-cpu" style="color:#6366f1;"></i> AI Provider API Key</h4>
+            <p class="topic-desc">Use your own OpenAI or OpenRouter API key to power AI features. OpenAI remains the best option for image generation, while OpenRouter can route text work across many OpenAI-compatible models.</p>
+
+            <h5>Provider Options</h5>
+            <ul>
+                <li><strong>OpenAI</strong> - recommended default, supports text, structured outputs, and the Image Creator tab.</li>
+                <li><strong>OpenRouter</strong> - useful when you want one key for multiple text model families. Use OpenRouter model IDs such as <code>openai/gpt-4o-mini</code>.</li>
+                <li><strong>Custom OpenAI-compatible</strong> - advanced HTTPS endpoint for providers that match the OpenAI chat API.</li>
+            </ul>
 
             <h5>Getting Your API Key</h5>
             <ol>

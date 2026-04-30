@@ -126,6 +126,9 @@
             <a href="{{ url_for('client.client_creative') }}" class="{% if request.endpoint in ('client.client_creative', 'client.client_creative_generate') %}active{% endif %}">
                 <i class="bi bi-palette"></i> <span class="nav-link-label">Creative</span>
             </a>
+            <a href="{{ url_for('client.client_image_creator') }}" class="{% if request.endpoint in ('client.client_image_creator', 'client.client_image_creator_generate') %}active{% endif %}">
+                <i class="bi bi-image"></i> <span class="nav-link-label">Image Creator</span>
+            </a>
             {% endif %}
             {% if feature_on('blog') %}
             <a href="{{ url_for('client.client_blog') }}" class="{% if request.endpoint in ('client.client_blog', 'client.client_blog_editor') %}active{% endif %}">
