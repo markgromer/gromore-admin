@@ -722,7 +722,7 @@ def sng_get_day_ahead_appointment_candidates(brand, target_date, max_jobs=None):
     return candidates, None
 
 
-def sng_get_payment_reminder_candidates(brand, billing_day, days_before=3, today=None, max_clients=None):
+def sng_get_payment_reminder_candidates(brand, billing_day, days_before=3, today=None, max_clients=None, force=False):
     today = today or datetime.utcnow().date()
     due_date = _next_uniform_billing_date(billing_day, today=today)
     if not due_date:
@@ -734,8 +734,9 @@ def sng_get_payment_reminder_candidates(brand, billing_day, days_before=3, today
         days_before = 3
 
     target_due_date = today + timedelta(days=days_before)
-    if due_date != target_due_date:
+    if not force and due_date != target_due_date:
         return [], None
+    effective_days_before = max(0, (due_date - today).days) if force else days_before
 
     candidates = []
     page = 1
@@ -763,7 +764,7 @@ def sng_get_payment_reminder_candidates(brand, billing_day, days_before=3, today
                 **contact,
                 "due_date": due_date.isoformat(),
                 "due_date_obj": due_date,
-                "days_before": days_before,
+                "days_before": effective_days_before,
                 "billing_day": int(billing_day),
             })
             if max_clients and len(candidates) >= max(0, int(max_clients)):

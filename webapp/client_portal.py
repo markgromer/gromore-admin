@@ -799,6 +799,39 @@ def _save_appointment_reminder_settings(db, brand_id, payload):
     )
 
 
+def _save_payment_reminder_settings(db, brand_id, payload):
+    valid_payment_channels = {"email", "sms"}
+    channels_raw = payload.get("sales_bot_payment_reminder_channels")
+    if isinstance(channels_raw, str):
+        selected_payment_channels = [channels_raw] if channels_raw in valid_payment_channels else []
+    else:
+        selected_payment_channels = [c for c in (channels_raw or []) if c in valid_payment_channels]
+    if not selected_payment_channels:
+        selected_payment_channels = ["email"]
+
+    db.update_brand_number_field(
+        brand_id,
+        "sales_bot_payment_reminders_enabled",
+        1 if str(payload.get("sales_bot_payment_reminders_enabled") or "").strip().lower() in {"1", "true", "yes", "on"} else 0,
+    )
+    try:
+        payment_days_before = max(0, min(21, int(float(payload.get("sales_bot_payment_reminder_days_before") or 3))))
+    except (ValueError, TypeError):
+        payment_days_before = 3
+    db.update_brand_number_field(brand_id, "sales_bot_payment_reminder_days_before", payment_days_before)
+    try:
+        payment_billing_day = max(1, min(31, int(float(payload.get("sales_bot_payment_reminder_billing_day") or 1))))
+    except (ValueError, TypeError):
+        payment_billing_day = 1
+    db.update_brand_number_field(brand_id, "sales_bot_payment_reminder_billing_day", payment_billing_day)
+    db.update_brand_text_field(brand_id, "sales_bot_payment_reminder_channels", json.dumps(selected_payment_channels))
+    db.update_brand_text_field(
+        brand_id,
+        "sales_bot_payment_reminder_template",
+        (payload.get("sales_bot_payment_reminder_template") or "").strip()[:2000],
+    )
+
+
 def _normalize_site_builder_text(value, field_label, max_length=None, trim=True):
     if value is None:
         return ""
@@ -10434,12 +10467,18 @@ def _load_client_automation_context(db, brand_id):
     billing_attempts = db.get_brand_client_billing_reminders(
         brand_id,
         reminder_type="payment_due",
-        limit=12,
+        limit=25,
     )
     for attempt in billing_attempts:
         attempt["detail_data"] = _safe_json_object(attempt.get("detail"))
         attempt["detail_summary"] = _summarize_delivery_detail(attempt.get("detail"))
+        attempt["client_label"] = attempt["detail_data"].get("client_name") or attempt.get("external_client_id") or "Client"
         attempt["updated_at_display"] = _format_timestamp_for_timezone(attempt.get("updated_at"), appointment_tz)
+        attempt["status_badge"] = {
+            "sent": "success",
+            "failed": "danger",
+            "pending": "secondary",
+        }.get((attempt.get("status") or "").strip().lower(), "secondary")
 
     sng_webhook_events = db.get_sng_webhook_events(brand_id, limit=10)
     for event in sng_webhook_events:
@@ -11056,6 +11095,42 @@ def client_run_appointment_reminders_now():
         "ok": True,
         "message": message,
         "run": latest_run,
+        "stats": stats,
+    })
+
+
+@client_bp.route("/api/warren/run-payment-reminders", methods=["POST"])
+@client_login_required
+def client_run_payment_reminders_now():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"ok": False, "error": "Brand not found."}), 404
+
+    payload = request.get_json(silent=True) or {}
+    _save_payment_reminder_settings(db, brand_id, payload)
+
+    from webapp.warren_billing import process_payment_reminders
+
+    stats = process_payment_reminders(
+        db,
+        current_app.config,
+        brand_ids=[brand_id],
+        include_disabled=True,
+        force=True,
+    )
+    if not stats.get("brands"):
+        error = (stats.get("errors") or ["Sweep and Go CRM is not connected for billing reminders."])[0]
+        return jsonify({"ok": False, "error": error, "stats": stats}), 400
+
+    message = (
+        f"Billing reminder send finished. {stats.get('sent', 0)} sent, "
+        f"{stats.get('failed', 0)} failed, {stats.get('skipped', 0)} skipped."
+    )
+    return jsonify({
+        "ok": True,
+        "message": message,
         "stats": stats,
     })
 

@@ -246,11 +246,15 @@
 
     {% set payment_reminder_channels = (brand.sales_bot_payment_reminder_channels or 'email').replace('[', '').replace(']', '').replace('"', '').replace(', ', ',').split(',') %}
     <section class="automation-section" id="billing">
-        <div class="automation-section-header">
-            <h5 class="mb-1 fw-semibold">Billing Reminders</h5>
-            <div class="text-muted" style="font-size:.85rem;">Monthly reminder timing, channels, and billing-specific message template.</div>
+        <div class="automation-section-header d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div>
+                <h5 class="mb-1 fw-semibold">Billing Reminders</h5>
+                <div class="text-muted" style="font-size:.85rem;">Monthly reminder timing, channels, and billing-specific message template.</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="runPaymentReminderBtn" onclick="runPaymentReminderSendNow()"><i class="bi bi-send me-1"></i>Send Now</button>
         </div>
         <div class="automation-section-body">
+            <div id="paymentReminderRunResult" class="mb-3" style="display:none;"></div>
             <div class="form-check form-switch mb-3">
                 <input class="form-check-input" type="checkbox" role="switch" id="paymentRemindersEnabled" name="sales_bot_payment_reminders_enabled" value="1" {{ 'checked' if brand.sales_bot_payment_reminders_enabled }}>
                 <label class="form-check-label fw-medium" for="paymentRemindersEnabled">Enable automated billing reminders</label>
@@ -282,22 +286,27 @@
             </div>
 
             <div class="mt-4">
-                <div class="fw-semibold mb-2">Recent billing reminder deliveries</div>
+                <div class="fw-semibold mb-1">Billing reminder send receipt</div>
+                <div class="text-muted mb-2" style="font-size:.8rem;">Each row is a recorded send attempt. Sent rows are the receipt that Warren accepted the reminder for delivery.</div>
                 {% if billing_reminder_attempts %}
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
                         <thead>
-                            <tr><th>When</th><th>Client</th><th>Recipient</th><th>Channel</th><th>Status</th><th>Provider detail</th></tr>
+                            <tr><th>When</th><th>Client</th><th>Billing date</th><th>Recipient</th><th>Channel</th><th>Status</th><th>Detail</th></tr>
                         </thead>
                         <tbody>
                             {% for attempt in billing_reminder_attempts %}
                             <tr>
                                 <td class="text-muted" style="font-size:.78rem;">{{ attempt.updated_at_display or (attempt.updated_at[:16] if attempt.updated_at else '') }}</td>
-                                <td style="font-size:.82rem;">{{ attempt.external_client_id }}</td>
+                                <td style="font-size:.82rem;">{{ attempt.client_label }}<br><span class="text-muted">{{ attempt.external_client_id }}</span></td>
+                                <td style="font-size:.82rem;">{{ attempt.due_date }}</td>
                                 <td style="font-size:.82rem;">{{ attempt.recipient or 'No recipient recorded' }}</td>
                                 <td class="text-capitalize" style="font-size:.82rem;">{{ attempt.channel }}</td>
-                                <td><span class="badge bg-{{ 'success' if attempt.status == 'sent' else 'danger' if attempt.status == 'failed' else 'secondary' }}{% if attempt.status not in ('sent', 'failed') %} text-dark{% endif %}">{{ (attempt.status or 'unknown')|title }}</span></td>
-                                <td style="font-size:.78rem; max-width:260px;">{{ attempt.detail_summary or '-' }}</td>
+                                <td><span class="badge bg-{{ attempt.status_badge }}{% if attempt.status_badge == 'secondary' %} text-dark{% endif %}">{{ (attempt.status or 'unknown')|title }}</span></td>
+                                <td style="font-size:.78rem; max-width:260px;">
+                                    {{ attempt.detail_summary or '-' }}
+                                    {% if attempt.detail_data.mode %}<br><span class="text-muted">{{ attempt.detail_data.mode|title }} send</span>{% endif %}
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -743,6 +752,67 @@ function runAppointmentReminderCheckNow() {
     .catch(function(err) {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-play-circle me-1"></i>Run Check Now';
+        resultDiv.style.display = '';
+        resultDiv.innerHTML = '<div class="alert alert-danger py-2 mb-0" style="font-size:.82rem;">Network error: ' + err + '</div>';
+    });
+}
+
+function runPaymentReminderSendNow() {
+    var btn = document.getElementById('runPaymentReminderBtn');
+    var resultDiv = document.getElementById('paymentReminderRunResult');
+    var csrfEl = document.querySelector('meta[name="csrf-token"]');
+    var csrfToken = csrfEl ? csrfEl.getAttribute('content') : '';
+
+    if (!btn || !resultDiv) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Sending...';
+    resultDiv.style.display = 'none';
+
+    var channels = Array.prototype.slice.call(document.querySelectorAll('input[name="sales_bot_payment_reminder_channels"]:checked')).map(function(el) {
+        return el.value;
+    });
+    var payload = {
+        sales_bot_payment_reminders_enabled: document.getElementById('paymentRemindersEnabled') && document.getElementById('paymentRemindersEnabled').checked ? 1 : 0,
+        sales_bot_payment_reminder_billing_day: (document.querySelector('input[name="sales_bot_payment_reminder_billing_day"]') || {}).value || '',
+        sales_bot_payment_reminder_days_before: (document.querySelector('input[name="sales_bot_payment_reminder_days_before"]') || {}).value || '',
+        sales_bot_payment_reminder_channels: channels,
+        sales_bot_payment_reminder_template: (document.querySelector('textarea[name="sales_bot_payment_reminder_template"]') || {}).value || ''
+    };
+
+    fetch('/client/api/warren/run-payment-reminders', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify(payload)
+    })
+    .then(function(r) {
+        return r.json().then(function(data) {
+            return {ok: r.ok, data: data};
+        });
+    })
+    .then(function(result) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send me-1"></i>Send Now';
+        resultDiv.style.display = '';
+
+        if (result.ok && result.data.ok) {
+            resultDiv.innerHTML = '<div class="alert alert-success py-2 mb-0" style="font-size:.82rem;">' +
+                '<i class="bi bi-check-circle me-1"></i>' + (result.data.message || 'Billing reminders sent.') +
+                '<br><small class="text-muted">Refreshing to show the latest receipt rows.</small>' +
+                '</div>';
+            setTimeout(function() {
+                window.location.reload();
+            }, 1200);
+            return;
+        }
+
+        resultDiv.innerHTML = '<div class="alert alert-danger py-2 mb-0" style="font-size:.82rem;">' +
+            '<i class="bi bi-x-circle me-1"></i>' + ((result.data && (result.data.error || result.data.message)) || 'Billing reminder send failed.') +
+            '</div>';
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send me-1"></i>Send Now';
         resultDiv.style.display = '';
         resultDiv.innerHTML = '<div class="alert alert-danger py-2 mb-0" style="font-size:.82rem;">Network error: ' + err + '</div>';
     });

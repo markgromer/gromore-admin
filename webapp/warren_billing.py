@@ -87,8 +87,30 @@ def _send_email_reminder(app_config, brand, candidate):
     send_simple_email(app_config, candidate["client_email"], subject, text, html)
 
 
-def process_payment_reminders(db, app_config, today=None):
+def _delivery_detail(detail, candidate, *, mode="scheduled"):
+    result = detail
+    if isinstance(result, dict):
+        result = {
+            key: result.get(key)
+            for key in ("id", "messageId", "message_id", "status", "state", "type", "error")
+            if result.get(key) is not None
+        } or str(detail)[:180]
+    elif result is not None:
+        result = str(result)[:180]
+    return json.dumps({
+        "result": result,
+        "client_name": candidate.get("client_name") or "",
+        "client_email": candidate.get("client_email") or "",
+        "client_phone": candidate.get("client_phone") or "",
+        "due_date": candidate.get("due_date") or "",
+        "days_before": candidate.get("days_before"),
+        "mode": mode,
+    }, separators=(",", ":"))
+
+
+def process_payment_reminders(db, app_config, today=None, brand_ids=None, include_disabled=False, force=False):
     today = today or datetime.utcnow().date()
+    brand_id_filter = {int(bid) for bid in brand_ids or [] if str(bid).strip().isdigit()}
     stats = {
         "brands": 0,
         "candidates": 0,
@@ -99,9 +121,13 @@ def process_payment_reminders(db, app_config, today=None):
     }
 
     for brand in db.get_all_brands():
-        if int(brand.get("sales_bot_payment_reminders_enabled") or 0) != 1:
+        if brand_id_filter and int(brand.get("id") or 0) not in brand_id_filter:
+            continue
+        if not include_disabled and int(brand.get("sales_bot_payment_reminders_enabled") or 0) != 1:
             continue
         if (brand.get("crm_type") or "").strip().lower() != "sweepandgo" or not (brand.get("crm_api_key") or "").strip():
+            if brand_id_filter:
+                stats["errors"].append("Sweep and Go CRM is not connected for billing reminders.")
             continue
 
         stats["brands"] += 1
@@ -112,6 +138,7 @@ def process_payment_reminders(db, app_config, today=None):
             billing_day=billing_day,
             days_before=days_before,
             today=today,
+            force=force,
         )
         if error:
             stats["errors"].append(str(error)[:200])
@@ -149,7 +176,7 @@ def process_payment_reminders(db, app_config, today=None):
                         channel,
                         recipient=recipient,
                         status="sent" if ok else "failed",
-                        detail=str(detail)[:500],
+                        detail=_delivery_detail(detail, candidate, mode="manual" if force else "scheduled"),
                     )
                     if ok:
                         stats["sent"] += 1
@@ -164,7 +191,7 @@ def process_payment_reminders(db, app_config, today=None):
                         channel,
                         recipient=recipient,
                         status="failed",
-                        detail=str(exc)[:500],
+                        detail=_delivery_detail({"error": str(exc)}, candidate, mode="manual" if force else "scheduled"),
                     )
                     stats["failed"] += 1
 
