@@ -1122,6 +1122,11 @@ function loadDriveFolder(folderId) {
     .then(data => {
         loadEl.style.display = 'none';
         renderBreadcrumb();
+        if (data.error) {
+            emptyEl.innerHTML = '<i class="bi bi-exclamation-triangle"></i><p class="mt-2">' + escHtml(data.error) + '</p>';
+            emptyEl.style.display = 'block';
+            return;
+        }
         if (data.folders && data.folders.length) {
             data.folders.forEach(f => {
                 const el = document.createElement('span');

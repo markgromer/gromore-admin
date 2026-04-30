@@ -2056,6 +2056,15 @@
         .then(r => r.json())
         .then(data => {
             let html = '';
+            if (data.error) {
+                grid.innerHTML = '';
+                const message = document.createElement('div');
+                message.className = 'text-warning';
+                message.style.cssText = 'font-size:.8rem;grid-column:1/-1';
+                message.textContent = data.error;
+                grid.appendChild(message);
+                return;
+            }
 
             // File type icon helper
             function fileIcon(mime) {

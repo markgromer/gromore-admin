@@ -1230,6 +1230,10 @@ function loadDriveImages() {
     fetch('/client/api/drive/all-images', {headers: {'X-CSRFToken': csrfToken}})
     .then(parseJsonResponse)
     .then(function(data) {
+        if (data.error) {
+            grid.innerHTML = '<div class="text-warning py-2" style="font-size:.88rem;">' + escapeHtml(data.error) + '</div>';
+            return;
+        }
         var files = data.files || [];
         if (!files.length) {
             grid.innerHTML = '<div class="text-muted py-2" style="font-size:.88rem;">No images found in your Google Drive folder.</div>';

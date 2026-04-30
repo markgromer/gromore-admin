@@ -1263,6 +1263,11 @@ function abLoadFolder(folderId) {
 
     fetch(url).then(r => r.json()).then(data => {
         loadingEl.style.display = 'none';
+        if (data.error) {
+            emptyEl.textContent = data.error;
+            emptyEl.style.display = '';
+            return;
+        }
         var files = data.files || data.images || [];
         var folders = (data.folders || []);
 

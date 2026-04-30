@@ -11186,15 +11186,42 @@ def client_drive_diagnose():
     return jsonify({"steps": steps})
 
 
+def _client_drive_preflight_error(db, brand_id):
+    """Return a user-facing Drive setup error, or None when Drive browsing can proceed."""
+    from webapp.google_drive import get_valid_access_token, _extract_folder_id
+
+    brand = db.get_brand(brand_id) or {}
+    folder_id = _extract_folder_id(brand.get("google_drive_folder_id") or "")
+    if not folder_id:
+        return "No Drive folder is configured. Open Connections and add your Google Drive folder URL."
+
+    conns = db.get_brand_connections(brand_id) or {}
+    google = conns.get("google") or {}
+    if not google or google.get("status") != "connected":
+        return "Google is not connected. Reconnect Google from Connections before browsing Drive."
+
+    scopes = (google.get("scopes") or "").lower()
+    if "drive" not in scopes:
+        return "Google is connected without Drive access. Reconnect Google with Drive access from Connections."
+
+    if not get_valid_access_token(db, brand_id):
+        return "Google Drive access expired. Reconnect Google from Connections, then try again."
+
+    return None
+
+
 @client_bp.route("/api/drive/all-images")
 @client_login_required
 def client_drive_all_images():
     """API: list image files from root folder and ALL subfolders."""
     db = _get_db()
     brand_id = session["client_brand_id"]
+    setup_error = _client_drive_preflight_error(db, brand_id)
+    if setup_error:
+        return jsonify({"ok": False, "files": [], "error": setup_error, "setup_required": True})
     from webapp.google_drive import list_all_images
     files = list_all_images(db, brand_id)
-    return jsonify({"files": files})
+    return jsonify({"ok": True, "files": files})
 
 
 @client_bp.route("/api/drive/browse")
@@ -11207,8 +11234,12 @@ def client_drive_browse():
     # Validate folder_id format (alphanumeric + dashes/underscores only)
     if folder_id and not all(c.isalnum() or c in "-_" for c in folder_id):
         return jsonify({"error": "Invalid folder ID"}), 400
+    setup_error = _client_drive_preflight_error(db, brand_id)
+    if setup_error:
+        return jsonify({"ok": False, "folders": [], "files": [], "folder_id": None, "error": setup_error, "setup_required": True})
     from webapp.google_drive import browse_folder
     result = browse_folder(db, brand_id, folder_id)
+    result["ok"] = True
     # Include granted scopes for debugging
     conns = db.get_brand_connections(brand_id)
     result["scopes"] = (conns.get("google", {}).get("scopes") or "")[-80:]
@@ -11226,26 +11257,16 @@ def client_drive_list_files(subfolder):
     brand_id = session["client_brand_id"]
 
     # Pre-flight checks with diagnostics
-    from webapp.google_drive import list_files, get_valid_access_token, _extract_folder_id
+    from webapp.google_drive import list_files, _extract_folder_id
+    setup_error = _client_drive_preflight_error(db, brand_id)
+    if setup_error:
+        return jsonify({"ok": False, "files": [], "debug": setup_error, "error": setup_error, "setup_required": True})
+
     brand = db.get_brand(brand_id)
     folder_id = _extract_folder_id(brand.get("google_drive_folder_id") or "")
-    if not folder_id:
-        return jsonify({"files": [], "debug": "No Drive folder ID configured. Go to Settings and enter your Google Drive folder URL."})
-
-    conns = db.get_brand_connections(brand_id)
-    google = conns.get("google", {})
-    scopes = google.get("scopes") or ""
-    if not google.get("access_token"):
-        return jsonify({"files": [], "debug": "No Google access token. Reconnect Google in Settings."})
-    if "drive" not in scopes.lower():
-        return jsonify({"files": [], "debug": f"Missing Drive scope. Current scopes: {scopes[:120]}. Reconnect Google With Drive Access in Settings."})
-
-    token = get_valid_access_token(db, brand_id)
-    if not token:
-        return jsonify({"files": [], "debug": "Could not refresh Google access token. Try reconnecting Google."})
 
     files = list_files(db, brand_id, None if subfolder == "Root" else subfolder)
-    return jsonify({"files": files, "debug": f"OK. folder_id={folder_id[:20]}, subfolder={subfolder}, found={len(files)} files"})
+    return jsonify({"ok": True, "files": files, "debug": f"OK. folder_id={folder_id[:20]}, subfolder={subfolder}, found={len(files)} files"})
 
 
 @client_bp.route("/api/drive/upload", methods=["POST"])
