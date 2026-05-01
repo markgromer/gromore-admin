@@ -248,6 +248,46 @@
         </div>
     </div>
 
+    <!-- Square OAuth -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong><i class="bi bi-square"></i> Square OAuth</strong></div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="section" value="square_oauth">
+                    <div class="mb-3">
+                        <label class="form-label">Square App ID</label>
+                        <input type="text" name="square_app_id" class="form-control"
+                               value="{{ config.SQUARE_APP_ID }}"
+                               placeholder="sq0idp-...">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Square App Secret</label>
+                        <input type="password" name="square_app_secret" class="form-control"
+                               placeholder="{{ '******  (saved)' if square_app_secret_configured else 'Square app secret' }}">
+                        <small class="text-muted">Leave blank to keep current.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Square API Version</label>
+                        <input type="text" name="square_api_version" class="form-control"
+                               value="{{ config.SQUARE_API_VERSION }}"
+                               placeholder="2026-01-22">
+                    </div>
+                    <div class="small text-muted mb-3">
+                        <div>OAuth redirect URI: {{ config.APP_URL.rstrip('/') }}/client/settings/payment-provider/square/callback</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Square OAuth Settings</button>
+                    {% if config.SQUARE_APP_ID and square_app_secret_configured %}
+                    <span class="badge bg-success ms-2">Configured</span>
+                    {% else %}
+                    <span class="badge bg-warning text-dark ms-2">Required for Square OAuth</span>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- OpenAI -->
     <div class="col-lg-6">
         <div class="card">

@@ -2444,6 +2444,18 @@ def create_app():
                     db.save_setting("stripe_webhook_secret", wh)
                     app.config["STRIPE_WEBHOOK_SECRET"] = wh
                 flash("Stripe settings saved", "success")
+            elif section == "square_oauth":
+                app_id = request.form.get("square_app_id", "").strip()
+                app_secret = request.form.get("square_app_secret", "").strip()
+                api_version = request.form.get("square_api_version", "").strip() or "2026-01-22"
+                db.save_setting("square_app_id", app_id)
+                if app_secret:
+                    db.save_setting("square_app_secret", app_secret)
+                db.save_setting("square_api_version", api_version)
+                app.config["SQUARE_APP_ID"] = app_id
+                app.config["SQUARE_APP_SECRET"] = db.get_setting("square_app_secret", app.config.get("SQUARE_APP_SECRET", ""))
+                app.config["SQUARE_API_VERSION"] = api_version
+                flash("Square OAuth settings saved", "success")
             elif section == "branding":
                 db.save_setting("agency_name", request.form.get("agency_name", "").strip())
                 db.save_setting("agency_logo_url", request.form.get("agency_logo_url", "").strip())
@@ -2480,6 +2492,7 @@ def create_app():
             openai_model=openai_model,
             openai_model_competitor=openai_model_competitor,
             meta_webhook_verify_token=db.get_setting("meta_webhook_verify_token", ""),
+            square_app_secret_configured=bool((db.get_setting("square_app_secret", "") or app.config.get("SQUARE_APP_SECRET", "") or "").strip()),
         )
 
     # ── Settings Test Endpoints ──

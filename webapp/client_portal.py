@@ -10761,6 +10761,11 @@ def client_settings():
             }.get((delivery.get("status") or "").strip().lower(), "secondary")
             delivery["can_retry"] = (delivery.get("status") or "").strip().lower() == "failed"
 
+        square_oauth_configured = bool(
+            (current_app.config.get("SQUARE_APP_ID") or "").strip()
+            and (current_app.config.get("SQUARE_APP_SECRET") or "").strip()
+        )
+
         return render_template(
             "client_connections.html",
             brand=brand,
@@ -10783,6 +10788,7 @@ def client_settings():
             jobber_webhook_url=_jobber_webhook_url(brand),
             square_oauth_callback_url=_square_oauth_callback_url(),
             square_webhook_url=_square_webhook_url(brand),
+            square_oauth_configured=square_oauth_configured,
             sng_webhook_events=sng_webhook_events,
             lead_webhook_deliveries=lead_webhook_deliveries,
             crm_push_deliveries=crm_push_deliveries,
@@ -15283,8 +15289,8 @@ def client_square_oauth_connect():
     app_id = (current_app.config.get("SQUARE_APP_ID") or "").strip()
     app_secret = (current_app.config.get("SQUARE_APP_SECRET") or "").strip()
     if not app_id or not app_secret:
-        flash("Square OAuth app ID and secret are not configured for this WARREN deployment.", "error")
-        return redirect(url_for("client.client_settings") + "#connection-panel-payments")
+        flash("Square OAuth app ID and secret are not configured in Admin Settings yet.", "error")
+        return redirect(url_for("client.client_settings") + "?square_oauth_missing=1#connection-panel-payments")
 
     brand_id = int(session["client_brand_id"])
     state = _square_oauth_serializer().dumps({

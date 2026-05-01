@@ -182,6 +182,23 @@ class EnterprisePaymentIntegrationTests(unittest.TestCase):
         self.assertIn(by_key["square"]["status"], {"warn", "ok"})
         self.assertIn("Square", by_key["square"]["label"])
 
+    def test_square_oauth_connect_explains_missing_platform_credentials(self):
+        self.app.config["SQUARE_APP_ID"] = ""
+        self.app.config["SQUARE_APP_SECRET"] = ""
+        with self.app.app_context():
+            client_user_id = self.app.db.create_client_user(self.brand_id, "owner@example.test", "Password123", "Owner")
+        with self.client.session_transaction() as session:
+            session["client_user_id"] = client_user_id
+            session["client_brand_id"] = self.brand_id
+            session["client_name"] = "Owner"
+            session["client_brand_name"] = "Square Brand"
+
+        response = self.client.get("/client/settings/payment-provider/square/connect", follow_redirects=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Square OAuth needs the platform App ID and App Secret", response.data)
+        self.assertIn(b"Square OAuth not configured", response.data)
+
 
 if __name__ == "__main__":
     unittest.main()
