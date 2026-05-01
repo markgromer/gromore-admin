@@ -296,12 +296,21 @@ def process_appointment_reminders(
                 "send_after": _format_minutes(send_after_minutes),
             }
 
-            if (brand.get("crm_type") or "").strip().lower() != "sweepandgo" or not (brand.get("crm_api_key") or "").strip():
+            sng_ready = (brand.get("crm_type") or "").strip().lower() == "sweepandgo" and bool((brand.get("crm_api_key") or "").strip())
+            try:
+                from webapp.teamup_calendar import teamup_config, teamup_missing_fields
+
+                teamup_cfg = teamup_config(db, brand["id"])
+                teamup_ready = bool(teamup_cfg) and not teamup_missing_fields(teamup_cfg)
+            except Exception:
+                teamup_ready = False
+
+            if not sng_ready and not teamup_ready:
                 db.record_appointment_reminder_run(
                     brand["id"],
                     target_date,
                     status="config_error",
-                    reason="Sweep and Go CRM is not fully configured for appointment reminders.",
+                    reason="No appointment source is fully configured. Connect Sweep and Go or Teamup Calendar for appointment reminders.",
                     summary=base_summary,
                 )
                 continue
@@ -314,22 +323,45 @@ def process_appointment_reminders(
 
             stats["brands"] += 1
             log.info(f"[Appointment] Brand {brand['id']}: Proceeding (current time {local_now.strftime('%H:%M')} >= send time {_format_minutes(send_after_minutes)})")
-            # Query SNG for day-ahead appointments using target_date (tomorrow in the brand's local timezone)
-            # NOTE: This assumes SNG's jobs_for_date endpoint interprets dates in the account's local context.
-            # If SNG always interprets dates as UTC regardless of account settings, we need to adjust this.
-            candidates, error = sng_get_day_ahead_appointment_candidates(
-                brand,
-                target_date=target_date,
-                max_jobs=max_per_brand,
-            )
-            if error:
-                stats["errors"].append(str(error)[:200])
+            candidates = []
+            source_errors = []
+            source_names = []
+            if sng_ready:
+                # Query SNG for day-ahead appointments using target_date (tomorrow in the brand's local timezone)
+                # NOTE: This assumes SNG's jobs_for_date endpoint interprets dates in the account's local context.
+                # If SNG always interprets dates as UTC regardless of account settings, we need to adjust this.
+                sng_candidates, error = sng_get_day_ahead_appointment_candidates(
+                    brand,
+                    target_date=target_date,
+                    max_jobs=max_per_brand,
+                )
+                if error:
+                    source_errors.append(str(error)[:200])
+                else:
+                    candidates.extend(sng_candidates)
+                    source_names.append("sweepandgo")
+            if teamup_ready:
+                from webapp.teamup_calendar import teamup_day_ahead_appointment_candidates
+
+                teamup_candidates, error = teamup_day_ahead_appointment_candidates(
+                    db,
+                    brand,
+                    target_date=target_date,
+                    max_events=max_per_brand,
+                )
+                if error:
+                    source_errors.append(str(error)[:200])
+                else:
+                    candidates.extend(teamup_candidates)
+                    source_names.append("teamup_calendar")
+            if source_errors and not candidates:
+                stats["errors"].extend(source_errors)
                 db.record_appointment_reminder_run(
                     brand["id"],
                     target_date,
                     status="failed",
-                    reason=str(error)[:500],
-                    summary=base_summary,
+                    reason="; ".join(source_errors)[:500],
+                    summary={**base_summary, "sources": source_names},
                 )
                 continue
 
@@ -362,6 +394,8 @@ def process_appointment_reminders(
 
                     detail_payload = {
                         "job_id": candidate.get("job_id") or "",
+                        "source": candidate.get("source") or "sweepandgo",
+                        "event_title": candidate.get("event_title") or "",
                         "status_name": candidate.get("status_name") or "",
                         "assigned_to_name": candidate.get("assigned_to_name") or "",
                         "address": candidate.get("address") or "",
@@ -434,7 +468,7 @@ def process_appointment_reminders(
                 else:
                     run_status = "completed"
                 if not brand_stats["candidates"]:
-                    run_reason = "No eligible Sweep and Go jobs were found for tomorrow."
+                    run_reason = "No eligible appointment candidates were found for tomorrow."
                 else:
                     run_reason = (
                         f"Processed {brand_stats['candidates']} appointment candidate(s): "
@@ -452,6 +486,8 @@ def process_appointment_reminders(
                     summary={
                         **base_summary,
                         "channels": configured_channels,
+                        "sources": source_names,
+                        "source_errors": source_errors,
                     },
                 )
         except Exception as exc:

@@ -173,6 +173,39 @@ def evaluate_brand_connection_health(db, brand, persist=True):
             "No Warren-to-CRM handoff attempts have been recorded yet.",
         ))
 
+    teamup_row = db.get_brand_integration_config(brand_id, "teamup_calendar")
+    teamup_config = (teamup_row or {}).get("config") or {}
+    if teamup_row or any((teamup_config.get(key) or "").strip() for key in ("calendar_key", "api_key", "subcalendar_id", "webhook_secret")):
+        missing = []
+        if not (teamup_config.get("calendar_key") or "").strip():
+            missing.append("calendar key")
+        if not (teamup_config.get("api_key") or "").strip():
+            missing.append("API key")
+        if missing:
+            items.append(_health_item("teamup_calendar", "Teamup Calendar", "fail", f"Missing: {', '.join(missing)}."))
+        else:
+            events = db.get_integration_webhook_events(brand_id, provider="teamup_calendar", limit=10)
+            webhook_secret = (teamup_config.get("webhook_secret") or "").strip()
+            if events:
+                items.append(_health_item(
+                    "teamup_calendar",
+                    "Teamup Calendar",
+                    "ok" if webhook_secret else "warn",
+                    f"API credentials are configured. Latest Teamup event webhook was {_age_label(events[0].get('received_at'), now)}."
+                    if webhook_secret else
+                    f"API credentials are configured, but no webhook secret is saved. Latest Teamup event webhook was {_age_label(events[0].get('received_at'), now)}.",
+                    {"latest_event_id": events[0].get("id")},
+                ))
+            else:
+                items.append(_health_item(
+                    "teamup_calendar",
+                    "Teamup Calendar",
+                    "warn",
+                    "API credentials are configured, but webhook intake is missing a secret."
+                    if not webhook_secret else
+                    "API credentials and webhook secret are configured. No Teamup event webhooks have been recorded yet.",
+                ))
+
     crm_type = (brand.get("crm_type") or "").strip().lower()
     if crm_type == "jobber":
         token_expiry = _parse_dt(brand.get("jobber_token_expires_at"))

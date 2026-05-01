@@ -1120,6 +1120,18 @@
                                 <div id="makeIncomingTestResult" class="mt-2" style="display:none;"></div>
                             </div>
                             {% endif %}
+                            {% if integration.key == 'teamup_calendar' %}
+                            <div class="mb-3 p-3" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;">
+                                <div class="fw-semibold mb-1" style="font-size:.86rem;"><i class="bi bi-calendar-event me-1 text-primary"></i>Direct API plus event intake</div>
+                                <div class="text-muted mb-2" style="font-size:.8rem;">WARREN can read and write Teamup events directly. For instant created, updated, or canceled event notifications, point Make or Zapier at this incoming endpoint.</div>
+                                <label class="form-label mb-1 fw-medium" style="font-size:.78rem;">Teamup Event Webhook URL</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control form-control-sm bg-light" readonly value="{{ teamup_webhook_url }}" id="teamupCalendarWebhookUrl">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('teamupCalendarWebhookUrl')"><i class="bi bi-clipboard"></i></button>
+                                </div>
+                                <div class="mt-2" style="font-size:.78rem; color:#475569;">Send the saved Webhook Secret as <code>Authorization: Bearer ...</code>, <code>X-Warren-Webhook-Secret</code>, or <code>X-Teamup-Webhook-Secret</code>.</div>
+                            </div>
+                            {% endif %}
                             <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
                                 <span class="badge bg-light text-dark border">{{ integration.mode_label }}</span>
                                 {% for capability in integration.capabilities[:4] %}

@@ -6,6 +6,7 @@ Endpoints:
     POST /webhooks/sng/<brand_slug>/<secret>      - Sweep and Go inbound events
     POST /webhooks/jobber/<brand_slug>            - Jobber app webhooks
     POST /webhooks/square/<brand_slug>            - Square payment webhooks
+    POST /webhooks/teamup/<brand_slug>            - Teamup Calendar event webhooks
     POST /webhooks/quo/sms/<brand_slug>           - Quo/OpenPhone inbound SMS
     POST /webhooks/meta/leadgen                   - Meta Lead Form submissions
     POST /webhooks/meta/messenger                 - Meta Messenger inbound messages
@@ -1048,6 +1049,110 @@ def square_webhook(brand_slug):
         "month": month,
         "synced": synced,
         "sync_error": sync_error,
+    }), 200
+
+
+def _teamup_webhook_secret_from_request(payload):
+    auth = request.headers.get("Authorization") or ""
+    if auth.lower().startswith("bearer "):
+        return auth.split(" ", 1)[1].strip()
+    for header in (
+        "X-Warren-Webhook-Secret",
+        "X-GroMore-Webhook-Secret",
+        "X-Teamup-Webhook-Secret",
+        "X-Webhook-Secret",
+    ):
+        value = request.headers.get(header)
+        if value:
+            return value.strip()
+    if isinstance(payload, dict):
+        return str(payload.get("webhook_secret") or payload.get("secret") or request.args.get("secret") or "").strip()
+    return str(request.args.get("secret") or "").strip()
+
+
+def _teamup_payload_event(payload):
+    if not isinstance(payload, dict):
+        return {}
+    for key in ("event", "calendar_event", "teamup_event", "data", "resource"):
+        value = payload.get(key)
+        if isinstance(value, dict):
+            return value
+    return payload
+
+
+def _teamup_event_id(payload, event):
+    for source in (payload, event):
+        if not isinstance(source, dict):
+            continue
+        for key in ("event_id", "eventId", "id", "external_event_id", "externalEventId"):
+            value = str(source.get(key) or "").strip()
+            if value:
+                return value
+    return hashlib.sha256(json.dumps(payload or {}, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+@webhooks_bp.route("/teamup/<brand_slug>", methods=["POST"])
+def teamup_calendar_webhook(brand_slug):
+    db = _get_db()
+    brand = db.get_brand_by_slug(brand_slug)
+    if not brand:
+        abort(404)
+
+    config_row = db.get_brand_integration_config(brand["id"], "teamup_calendar") or {}
+    config = config_row.get("config") or {}
+    expected_secret = str(config.get("webhook_secret") or "").strip()
+    payload = request.get_json(silent=True) or {}
+    provided_secret = _teamup_webhook_secret_from_request(payload)
+    if not expected_secret:
+        return jsonify({"ok": False, "error": "Teamup webhook secret is not configured for this brand."}), 400
+    if not provided_secret or not hmac.compare_digest(expected_secret, provided_secret):
+        return jsonify({"ok": False, "error": "Invalid Teamup webhook secret."}), 403
+
+    event = _teamup_payload_event(payload)
+    event_type = str(
+        payload.get("event_type")
+        or payload.get("eventType")
+        or payload.get("type")
+        or payload.get("action")
+        or "teamup.event"
+    ).strip()
+    external_event_id = _teamup_event_id(payload, event)
+    status = str(payload.get("status") or event.get("status") or "received").strip().lower()
+    title = str(event.get("title") or payload.get("title") or "").strip()
+    start_dt = str(event.get("start_dt") or event.get("startDate") or event.get("start") or "").strip()
+    end_dt = str(event.get("end_dt") or event.get("endDate") or event.get("end") or "").strip()
+    summary = {
+        "title": title,
+        "start_dt": start_dt,
+        "end_dt": end_dt,
+        "location": str(event.get("location") or "").strip(),
+        "who": str(event.get("who") or "").strip(),
+    }
+    detail_parts = [event_type or "Teamup event"]
+    if title:
+        detail_parts.append(title)
+    if start_dt:
+        detail_parts.append(start_dt)
+    db.record_integration_webhook_event(
+        brand["id"],
+        "teamup_calendar",
+        external_event_id,
+        event_type=event_type,
+        status=status or "received",
+        detail=" - ".join(detail_parts),
+        summary=summary,
+        payload=payload,
+    )
+    try:
+        db.mark_brand_webhook_received(brand["id"])
+    except Exception:
+        log.exception("Failed to mark Teamup webhook received for brand=%s", brand.get("id"))
+
+    return jsonify({
+        "ok": True,
+        "provider": "teamup_calendar",
+        "event_type": event_type,
+        "event_id": external_event_id,
     }), 200
 
 

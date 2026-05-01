@@ -165,6 +165,21 @@ _INTEGRATION_CATALOG = [
         "fields": [{"key": "api_key", "label": "Personal Access Token", "type": "password", "secret": True, "placeholder": "Calendly token"}],
     },
     {
+        "key": "teamup_calendar",
+        "name": "Teamup Calendar",
+        "category": "Scheduling",
+        "icon": "bi-calendar-week",
+        "summary": "Shared calendar events for appointment context, booking handoff, reminders, and automation-triggered updates.",
+        "powers": "appointment context, event create/update/cancel, reminder triggers",
+        "fields": [
+            {"key": "calendar_key", "label": "Calendar Key", "type": "text", "placeholder": "ks1234567890abcdef"},
+            {"key": "api_key", "label": "API Key", "type": "password", "secret": True, "placeholder": "Teamup API key"},
+            {"key": "subcalendar_id", "label": "Default Sub-calendar ID", "type": "text", "placeholder": "Optional default booking calendar"},
+            {"key": "webhook_secret", "label": "Webhook Secret", "type": "password", "secret": True, "placeholder": "Shared secret for Make/Zapier event posts"},
+            {"key": "base_url", "label": "API Base URL", "type": "url", "placeholder": "https://api.teamup.com"},
+        ],
+    },
+    {
         "key": "mailchimp",
         "name": "Mailchimp",
         "category": "Marketing",
@@ -304,6 +319,7 @@ _INTEGRATION_LIVE_TEST_PROVIDERS = {
     "housecallpro",
     "zapier",
     "make",
+    "teamup_calendar",
 }
 
 _INTEGRATION_READINESS_META = {
@@ -416,6 +432,13 @@ _INTEGRATION_READINESS_META = {
         ],
         "capabilities": ("scheduled events", "invitee intake", "booking handoff"),
         "requirements": ("Personal access token or OAuth app", "event webhooks for live updates"),
+    },
+    "teamup_calendar": {
+        "mode": "api_key",
+        "mode_label": "API + webhook intake",
+        "required_fields": ("calendar_key", "api_key"),
+        "capabilities": ("appointment context", "event creation", "event update/cancel", "reminder triggers", "Make/Zapier event intake"),
+        "requirements": ("Teamup API key", "Calendar key", "Sub-calendar ID for Warren-created events", "Webhook secret for automation-triggered updates"),
     },
     "mailchimp": {
         "mode": "api_key",
@@ -10669,6 +10692,11 @@ def _test_generic_integration(provider, config):
             if resp.status_code not in (200, 201, 202, 204):
                 return False, f"Webhook returned {resp.status_code}: {resp.text[:180]}"
             return True, "Webhook accepted the test event."
+
+        if provider == "teamup_calendar":
+            from webapp.teamup_calendar import teamup_test_connection
+
+            return teamup_test_connection(config)
     except requests.RequestException as exc:
         return False, f"Network error: {str(exc)[:180]}"
     except Exception as exc:
@@ -10788,6 +10816,7 @@ def client_settings():
             jobber_webhook_url=_jobber_webhook_url(brand),
             square_oauth_callback_url=_square_oauth_callback_url(),
             square_webhook_url=_square_webhook_url(brand),
+            teamup_webhook_url=f"{_external_app_url()}{url_for('webhooks.teamup_calendar_webhook', brand_slug=brand['slug'])}",
             square_oauth_configured=square_oauth_configured,
             sng_webhook_events=sng_webhook_events,
             lead_webhook_deliveries=lead_webhook_deliveries,

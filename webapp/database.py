@@ -407,6 +407,25 @@ class WebDB:
             CREATE INDEX IF NOT EXISTS idx_payment_webhook_events_brand_received
             ON payment_webhook_events(brand_id, received_at DESC, id DESC);
 
+            CREATE TABLE IF NOT EXISTS integration_webhook_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                provider TEXT NOT NULL DEFAULT '',
+                external_event_id TEXT NOT NULL DEFAULT '',
+                event_type TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'received',
+                detail TEXT DEFAULT '',
+                summary_json TEXT DEFAULT '{}',
+                payload_json TEXT DEFAULT '{}',
+                received_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(brand_id, provider, external_event_id),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_integration_webhook_events_brand_received
+            ON integration_webhook_events(brand_id, provider, received_at DESC, id DESC);
+
             CREATE TABLE IF NOT EXISTS lead_webhook_deliveries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand_id INTEGER DEFAULT NULL,
@@ -4079,6 +4098,76 @@ class WebDB:
             rows = conn.execute(
                 """
                 SELECT * FROM payment_webhook_events
+                WHERE brand_id = ?
+                ORDER BY received_at DESC, id DESC
+                LIMIT ?
+                """,
+                (brand_id, int(limit or 20)),
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def record_integration_webhook_event(
+        self,
+        brand_id,
+        provider,
+        external_event_id,
+        event_type="",
+        status="received",
+        detail="",
+        summary=None,
+        payload=None,
+    ):
+        summary_json = json.dumps(summary or {}, separators=(",", ":"))
+        payload_json = json.dumps(payload or {}, separators=(",", ":"))
+        if len(payload_json) > 20000:
+            payload_json = json.dumps({"truncated": True, "preview": payload_json[:19800]}, separators=(",", ":"))
+        conn = self._conn()
+        conn.execute(
+            """
+            INSERT INTO integration_webhook_events (
+                brand_id, provider, external_event_id, event_type, status,
+                detail, summary_json, payload_json, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(brand_id, provider, external_event_id)
+            DO UPDATE SET
+                event_type = excluded.event_type,
+                status = excluded.status,
+                detail = excluded.detail,
+                summary_json = excluded.summary_json,
+                payload_json = excluded.payload_json,
+                updated_at = datetime('now')
+            """,
+            (
+                brand_id,
+                str(provider or "")[:80],
+                str(external_event_id or "")[:255],
+                str(event_type or "")[:255],
+                str(status or "received")[:50],
+                str(detail or "")[:1000],
+                summary_json,
+                payload_json,
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_integration_webhook_events(self, brand_id, provider=None, limit=20):
+        conn = self._conn()
+        if provider:
+            rows = conn.execute(
+                """
+                SELECT * FROM integration_webhook_events
+                WHERE brand_id = ? AND provider = ?
+                ORDER BY received_at DESC, id DESC
+                LIMIT ?
+                """,
+                (brand_id, str(provider or "")[:80], int(limit or 20)),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT * FROM integration_webhook_events
                 WHERE brand_id = ?
                 ORDER BY received_at DESC, id DESC
                 LIMIT ?
