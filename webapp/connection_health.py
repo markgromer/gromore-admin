@@ -215,6 +215,58 @@ def evaluate_brand_connection_health(db, brand, persist=True):
                     "warn",
                     "API token is saved, but no SNG webhook events have been recorded yet.",
                 ))
+    elif crm_type == "razorsync":
+        missing = []
+        if not (brand.get("crm_api_key") or "").strip():
+            missing.append("API token")
+        if not ((brand.get("crm_server_url") or brand.get("crm_pipeline_id") or "").strip()):
+            missing.append("portal/server name")
+        if missing:
+            items.append(_health_item("razorsync", "RazorSync", "fail", f"Missing: {', '.join(missing)}."))
+        else:
+            items.append(_health_item(
+                "razorsync",
+                "RazorSync",
+                "ok",
+                "API token and portal/server name are configured. Use Test Connection to validate live RazorSync access.",
+            ))
+
+    payment_provider = (brand.get("payment_provider") or "").strip().lower()
+    if payment_provider == "square":
+        token_expiry = _parse_dt(brand.get("payment_token_expires_at"))
+        missing = []
+        if not (brand.get("payment_api_key") or "").strip():
+            missing.append("access token")
+        if not (brand.get("payment_refresh_token") or "").strip():
+            missing.append("refresh token")
+        if not (brand.get("payment_webhook_secret") or "").strip():
+            missing.append("webhook signature key")
+        if missing:
+            items.append(_health_item("square", "Square", "warn", f"Missing: {', '.join(missing)}."))
+        elif token_expiry and token_expiry <= now:
+            items.append(_health_item("square", "Square", "fail", f"Square access token expired at {token_expiry.isoformat()}; refresh token is saved."))
+        else:
+            events = db.get_payment_webhook_events(brand_id, provider="square", limit=10)
+            if events:
+                items.append(_health_item(
+                    "square",
+                    "Square",
+                    "ok",
+                    f"OAuth tokens and webhook signature key are configured. Latest Square webhook was {_age_label(events[0].get('received_at'), now)}.",
+                    {"latest_event_id": events[0].get("id")},
+                ))
+            else:
+                items.append(_health_item(
+                    "square",
+                    "Square",
+                    "warn",
+                    "OAuth tokens and webhook signature key are configured, but no Square webhook events have been recorded yet.",
+                ))
+    elif payment_provider == "stripe":
+        if not (brand.get("payment_api_key") or "").strip():
+            items.append(_health_item("stripe_payments", "Stripe Payments", "fail", "Stripe is selected, but no secret key is saved."))
+        else:
+            items.append(_health_item("stripe_payments", "Stripe Payments", "ok", "Stripe payment revenue sync is configured."))
 
     if (brand.get("quo_api_key") or "").strip() or (brand.get("quo_phone_number") or "").strip():
         missing = []

@@ -240,6 +240,11 @@ def create_app():
     app.config["STRIPE_SECRET_KEY"] = _cfg("stripe_secret_key", "STRIPE_SECRET_KEY")
     app.config["STRIPE_WEBHOOK_SECRET"] = _cfg("stripe_webhook_secret", "STRIPE_WEBHOOK_SECRET")
 
+    # Square OAuth / payments
+    app.config["SQUARE_APP_ID"] = _cfg("square_app_id", "SQUARE_APP_ID")
+    app.config["SQUARE_APP_SECRET"] = _cfg("square_app_secret", "SQUARE_APP_SECRET")
+    app.config["SQUARE_API_VERSION"] = _cfg("square_api_version", "SQUARE_API_VERSION", "2026-01-22")
+
     # Ensure admin user exists and password stays in sync with env var
     admin_pw = os.environ.get("ADMIN_PASSWORD", "").strip()
     if not db.get_users():

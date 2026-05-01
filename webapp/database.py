@@ -386,6 +386,27 @@ class WebDB:
             CREATE INDEX IF NOT EXISTS idx_sng_webhook_events_brand_received
             ON sng_webhook_events(brand_id, received_at DESC);
 
+            CREATE TABLE IF NOT EXISTS payment_webhook_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                provider TEXT NOT NULL DEFAULT '',
+                external_event_id TEXT NOT NULL DEFAULT '',
+                event_type TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'received',
+                amount REAL DEFAULT 0,
+                currency TEXT DEFAULT '',
+                month TEXT DEFAULT '',
+                detail TEXT DEFAULT '',
+                payload_json TEXT DEFAULT '{}',
+                received_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(brand_id, provider, external_event_id),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_payment_webhook_events_brand_received
+            ON payment_webhook_events(brand_id, received_at DESC, id DESC);
+
             CREATE TABLE IF NOT EXISTS lead_webhook_deliveries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand_id INTEGER DEFAULT NULL,
@@ -2095,6 +2116,10 @@ class WebDB:
             ("payment_webhook_secret", "TEXT DEFAULT ''"),
             ("payment_location_id", "TEXT DEFAULT ''"),
             ("payment_account_id", "TEXT DEFAULT ''"),
+            ("payment_refresh_token", "TEXT DEFAULT ''"),
+            ("payment_token_expires_at", "TEXT DEFAULT ''"),
+            ("payment_merchant_id", "TEXT DEFAULT ''"),
+            ("payment_account_label", "TEXT DEFAULT ''"),
             ("google_ads_customer_id", "TEXT DEFAULT ''"),
             ("openai_api_key", "TEXT DEFAULT ''"),
             ("openai_model", "TEXT DEFAULT ''"),
@@ -2713,6 +2738,7 @@ class WebDB:
             "jobber_client_id", "jobber_client_secret", "jobber_refresh_token",
             "jobber_token_expires_at", "jobber_account_label", "jobber_webhook_secret",
             "payment_provider", "payment_api_key", "payment_webhook_secret", "payment_location_id", "payment_account_id",
+            "payment_refresh_token", "payment_token_expires_at", "payment_merchant_id", "payment_account_label",
             "openai_api_key", "openai_model",
             "openai_model_chat", "openai_model_images", "openai_model_analysis", "openai_model_ads",
             "ai_provider", "ai_provider_api_key", "ai_provider_base_url",
@@ -3980,6 +4006,85 @@ class WebDB:
             """,
             (brand_id, limit),
         ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def record_payment_webhook_event(
+        self,
+        brand_id,
+        provider,
+        external_event_id,
+        event_type="",
+        status="received",
+        amount=0,
+        currency="",
+        month="",
+        detail="",
+        payload=None,
+    ):
+        try:
+            amount_value = float(amount or 0)
+        except (TypeError, ValueError):
+            amount_value = 0.0
+        payload_json = json.dumps(payload or {}, separators=(",", ":"))
+        if len(payload_json) > 20000:
+            payload_json = json.dumps({"truncated": True, "preview": payload_json[:19800]}, separators=(",", ":"))
+        conn = self._conn()
+        conn.execute(
+            """
+            INSERT INTO payment_webhook_events (
+                brand_id, provider, external_event_id, event_type, status,
+                amount, currency, month, detail, payload_json, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(brand_id, provider, external_event_id)
+            DO UPDATE SET
+                event_type = excluded.event_type,
+                status = excluded.status,
+                amount = excluded.amount,
+                currency = excluded.currency,
+                month = excluded.month,
+                detail = excluded.detail,
+                payload_json = excluded.payload_json,
+                updated_at = datetime('now')
+            """,
+            (
+                brand_id,
+                str(provider or "")[:80],
+                str(external_event_id or "")[:255],
+                str(event_type or "")[:255],
+                str(status or "received")[:50],
+                amount_value,
+                str(currency or "")[:20],
+                str(month or "")[:7],
+                str(detail or "")[:1000],
+                payload_json,
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_payment_webhook_events(self, brand_id, provider=None, limit=20):
+        conn = self._conn()
+        if provider:
+            rows = conn.execute(
+                """
+                SELECT * FROM payment_webhook_events
+                WHERE brand_id = ? AND provider = ?
+                ORDER BY received_at DESC, id DESC
+                LIMIT ?
+                """,
+                (brand_id, str(provider or "")[:80], int(limit or 20)),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT * FROM payment_webhook_events
+                WHERE brand_id = ?
+                ORDER BY received_at DESC, id DESC
+                LIMIT ?
+                """,
+                (brand_id, int(limit or 20)),
+            ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 

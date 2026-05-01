@@ -9,7 +9,7 @@ import logging
 import re
 import base64
 from collections import Counter
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import requests
 from flask import current_app
@@ -1136,6 +1136,106 @@ def _payment_provider(brand):
     return (brand.get("payment_provider") or "").strip().lower()
 
 
+def _square_api_version():
+    try:
+        configured = current_app.config.get("SQUARE_API_VERSION")
+    except RuntimeError:
+        configured = ""
+    return (configured or "2026-01-22").strip()
+
+
+def _square_oauth_config():
+    try:
+        app_id = current_app.config.get("SQUARE_APP_ID", "")
+        app_secret = current_app.config.get("SQUARE_APP_SECRET", "")
+    except RuntimeError:
+        app_id = app_secret = ""
+    return (app_id or "").strip(), (app_secret or "").strip()
+
+
+def _parse_square_expiry(value):
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _square_token_needs_refresh(brand, buffer_minutes=60):
+    expiry = _parse_square_expiry(brand.get("payment_token_expires_at"))
+    if not expiry:
+        return False
+    return expiry <= datetime.now(timezone.utc) + timedelta(minutes=buffer_minutes)
+
+
+def refresh_square_payment_token(brand):
+    refresh_token = (brand.get("payment_refresh_token") or "").strip()
+    if not refresh_token:
+        return False, "Square refresh token not configured"
+    app_id, app_secret = _square_oauth_config()
+    if not app_id or not app_secret:
+        return False, "Square OAuth app ID/secret not configured"
+    try:
+        resp = requests.post(
+            "https://connect.squareup.com/oauth2/token",
+            json={
+                "client_id": app_id,
+                "client_secret": app_secret,
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+            },
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "Square-Version": _square_api_version(),
+            },
+            timeout=TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        return False, f"Square token refresh failed: {str(exc)[:150]}"
+    if resp.status_code != 200:
+        return False, f"Square token refresh returned {resp.status_code}: {resp.text[:200]}"
+    payload = resp.json() or {}
+    access_token = (payload.get("access_token") or "").strip()
+    new_refresh = (payload.get("refresh_token") or refresh_token).strip()
+    if not access_token:
+        return False, "Square token refresh did not return an access token"
+
+    brand["payment_api_key"] = access_token
+    brand["payment_refresh_token"] = new_refresh
+    brand["payment_token_expires_at"] = (payload.get("expires_at") or "").strip()
+    brand["payment_merchant_id"] = (payload.get("merchant_id") or brand.get("payment_merchant_id") or "").strip()
+    try:
+        db = current_app.db
+        brand_id = brand.get("id")
+        if db and brand_id:
+            db.update_brand_text_field(brand_id, "payment_api_key", access_token)
+            db.update_brand_text_field(brand_id, "payment_refresh_token", new_refresh)
+            db.update_brand_text_field(brand_id, "payment_token_expires_at", brand["payment_token_expires_at"])
+            if brand["payment_merchant_id"]:
+                db.update_brand_text_field(brand_id, "payment_merchant_id", brand["payment_merchant_id"])
+    except RuntimeError:
+        pass
+    return True, None
+
+
+def _square_access_token(brand):
+    api_key = (brand.get("payment_api_key") or "").strip()
+    if not api_key:
+        return "", "Square access token not configured"
+    if _square_token_needs_refresh(brand):
+        ok, error = refresh_square_payment_token(brand)
+        if not ok:
+            return "", error
+        api_key = (brand.get("payment_api_key") or "").strip()
+    return api_key, None
+
+
 def stripe_payment_test_connection(brand):
     api_key = (brand.get("payment_api_key") or "").strip()
     if not api_key:
@@ -1185,32 +1285,62 @@ def pull_stripe_payment_revenue(brand, month=None):
 
 
 def _square_headers(brand):
-    token = (brand.get("payment_api_key") or "").strip()
+    token, _error = _square_access_token(brand)
     return {
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
         "Content-Type": "application/json",
+        "Square-Version": _square_api_version(),
     }
 
 
-def square_payment_test_connection(brand):
-    api_key = (brand.get("payment_api_key") or "").strip()
-    if not api_key:
-        return "", "Square access token not configured"
+def _square_get(brand, url, params=None):
     try:
-        resp = requests.get("https://connect.squareup.com/v2/locations", headers=_square_headers(brand), timeout=TIMEOUT)
+        resp = requests.get(url, headers=_square_headers(brand), params=params, timeout=TIMEOUT)
     except requests.RequestException as exc:
-        return "", f"Square request failed: {str(exc)[:150]}"
+        return None, f"Square request failed: {str(exc)[:150]}"
+    if resp.status_code in (401, 403) and (brand.get("payment_refresh_token") or "").strip():
+        ok, refresh_error = refresh_square_payment_token(brand)
+        if ok:
+            try:
+                resp = requests.get(url, headers=_square_headers(brand), params=params, timeout=TIMEOUT)
+            except requests.RequestException as exc:
+                return None, f"Square request failed after token refresh: {str(exc)[:150]}"
+        elif resp.status_code == 401:
+            return resp, refresh_error
+    return resp, None
+
+
+def square_payment_test_connection(brand):
+    api_key, token_error = _square_access_token(brand)
+    if token_error:
+        return "", token_error
+    resp, request_error = _square_get(brand, "https://connect.squareup.com/v2/locations")
+    if request_error:
+        return "", request_error
     if resp.status_code != 200:
         return "", f"Square returned {resp.status_code}: {resp.text[:200]}"
     locations = (resp.json() or {}).get("locations") or []
-    return f"Connected to Square - {len(locations)} location{'s' if len(locations) != 1 else ''} accessible.", None
+    payments_resp, payment_request_error = _square_get(brand, "https://connect.squareup.com/v2/payments", params={"limit": 1})
+    if payment_request_error:
+        return "", f"Square payments permission check failed: {payment_request_error}"
+    if payments_resp.status_code != 200:
+        return "", f"Square locations worked, but payments read failed ({payments_resp.status_code}): {payments_resp.text[:200]}"
+    location_label = f"{len(locations)} location{'s' if len(locations) != 1 else ''}"
+    try:
+        brand_id = brand.get("id")
+        if brand_id and locations and current_app.db:
+            names = [loc.get("name") for loc in locations if loc.get("name")]
+            current_app.db.update_brand_text_field(brand_id, "payment_account_label", ", ".join(names[:3])[:255])
+    except RuntimeError:
+        pass
+    return f"Connected to Square - {location_label} accessible and payment-read token accepted.", None
 
 
 def pull_square_payment_revenue(brand, month=None):
-    api_key = (brand.get("payment_api_key") or "").strip()
-    if not api_key:
-        return 0, 0, "Square access token not configured"
+    api_key, token_error = _square_access_token(brand)
+    if token_error:
+        return 0, 0, token_error
     _month, start, end = _month_bounds(month)
     params = {
         "begin_time": start.isoformat() + "Z",
@@ -1224,10 +1354,9 @@ def pull_square_payment_revenue(brand, month=None):
     total = 0.0
     count = 0
     while True:
-        try:
-            resp = requests.get("https://connect.squareup.com/v2/payments", headers=_square_headers(brand), params=params, timeout=TIMEOUT)
-        except requests.RequestException as exc:
-            return 0, 0, f"Square request failed: {str(exc)[:150]}"
+        resp, request_error = _square_get(brand, "https://connect.squareup.com/v2/payments", params=params)
+        if request_error:
+            return 0, 0, request_error
         if resp.status_code != 200:
             return 0, 0, f"Square returned {resp.status_code}: {resp.text[:200]}"
         payload = resp.json() or {}

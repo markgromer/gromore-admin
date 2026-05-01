@@ -5,6 +5,7 @@ Endpoints:
     POST /webhooks/leads/<brand_slug>             - Generic inbound lead form submissions
     POST /webhooks/sng/<brand_slug>/<secret>      - Sweep and Go inbound events
     POST /webhooks/jobber/<brand_slug>            - Jobber app webhooks
+    POST /webhooks/square/<brand_slug>            - Square payment webhooks
     POST /webhooks/quo/sms/<brand_slug>           - Quo/OpenPhone inbound SMS
     POST /webhooks/meta/leadgen                   - Meta Lead Form submissions
     POST /webhooks/meta/messenger                 - Meta Messenger inbound messages
@@ -20,8 +21,9 @@ import logging
 import re
 import threading
 import base64
+from datetime import datetime, timezone
 
-from flask import Blueprint, request, jsonify, current_app, abort
+from flask import Blueprint, request, jsonify, current_app, abort, url_for
 
 log = logging.getLogger(__name__)
 
@@ -102,6 +104,47 @@ def _stringify_webhook_value(value):
     if isinstance(value, dict):
         return json.dumps(value, sort_keys=True)
     return str(value).strip()
+
+
+def _external_app_url():
+    configured = (current_app.config.get("APP_URL") or "").strip().rstrip("/")
+    scheme = request.headers.get("X-Forwarded-Proto", request.scheme)
+    host = (request.headers.get("X-Forwarded-Host") or request.host or "").strip()
+    request_base = f"{scheme}://{host}" if host else request.host_url.rstrip("/")
+    if not configured or "localhost" in configured:
+        return request_base.rstrip("/")
+    return configured
+
+
+def _square_notification_url(brand_slug):
+    return f"{_external_app_url()}{url_for('webhooks.square_webhook', brand_slug=brand_slug)}"
+
+
+def _square_signature_is_valid(signature_key, notification_url, raw_body, signature_header):
+    key = (signature_key or "").strip()
+    signature = (signature_header or "").strip()
+    if not key or not notification_url or not raw_body or not signature:
+        return False
+    message = notification_url.encode("utf-8") + raw_body
+    digest = hmac.new(key.encode("utf-8"), message, hashlib.sha256).digest()
+    expected = base64.b64encode(digest).decode("utf-8")
+    return hmac.compare_digest(expected, signature)
+
+
+def _square_money_amount(money):
+    if not isinstance(money, dict):
+        return 0.0
+    try:
+        return int(money.get("amount") or 0) / 100.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _square_payment_month(payment):
+    raw = str((payment or {}).get("created_at") or (payment or {}).get("updated_at") or "").strip()
+    if re.match(r"^\d{4}-\d{2}", raw):
+        return raw[:7]
+    return datetime.now(timezone.utc).strftime("%Y-%m")
 
 
 def _payload_value(payload, *keys):
@@ -927,6 +970,85 @@ def jobber_webhook(brand_slug):
     except Exception:
         log.exception("Failed to mark Jobber webhook received for brand=%s", brand.get("id"))
     return jsonify({"ok": True, "event_type": event_type, "event_id": event_id}), 200
+
+
+@webhooks_bp.route("/square/<brand_slug>", methods=["POST"])
+def square_webhook(brand_slug):
+    db = _get_db()
+    brand = db.get_brand_by_slug(brand_slug)
+    if not brand:
+        abort(404)
+    if (brand.get("payment_provider") or "").strip().lower() != "square":
+        return jsonify({"ok": False, "error": "Square is not configured for this brand."}), 400
+
+    raw_body = request.get_data() or b""
+    signature = request.headers.get("x-square-hmacsha256-signature") or request.headers.get("X-Square-HmacSha256-Signature")
+    notification_url = _square_notification_url(brand_slug)
+    signature_key = (brand.get("payment_webhook_secret") or "").strip()
+    if not _square_signature_is_valid(signature_key, notification_url, raw_body, signature):
+        return jsonify({"ok": False, "error": "Invalid Square webhook signature."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    event_type = str(payload.get("type") or "").strip()
+    event_id = str(payload.get("event_id") or payload.get("id") or "").strip()
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    obj = data.get("object") if isinstance(data.get("object"), dict) else {}
+    payment = obj.get("payment") if isinstance(obj.get("payment"), dict) else obj if event_type.startswith("payment.") else {}
+    payment_id = str(payment.get("id") or "").strip()
+    if not event_id:
+        event_id = payment_id or hashlib.sha256(raw_body).hexdigest()
+
+    total = _square_money_amount(payment.get("total_money"))
+    refunded = _square_money_amount(payment.get("refunded_money"))
+    amount = max(total - refunded, 0)
+    currency = ""
+    if isinstance(payment.get("total_money"), dict):
+        currency = str(payment["total_money"].get("currency") or "").strip()
+    status = str(payment.get("status") or payload.get("status") or "received").strip().lower()
+    month = _square_payment_month(payment)
+    detail = f"Square {event_type or 'event'}"
+    if payment_id:
+        detail += f" payment={payment_id}"
+
+    db.record_payment_webhook_event(
+        brand["id"],
+        "square",
+        event_id,
+        event_type=event_type,
+        status=status or "received",
+        amount=amount,
+        currency=currency,
+        month=month,
+        detail=detail,
+        payload=payload,
+    )
+    db.mark_brand_webhook_received(brand["id"])
+
+    synced = False
+    sync_error = ""
+    if status.upper() == "COMPLETED" or status == "completed":
+        try:
+            from webapp.crm_bridge import pull_square_payment_revenue
+
+            revenue, count, error = pull_square_payment_revenue(dict(brand), month)
+            if error:
+                sync_error = error
+            else:
+                db.upsert_brand_month_finance(brand["id"], month, revenue, count, f"Square webhook refresh: {count} payments")
+                synced = True
+        except Exception as exc:
+            log.exception("Square webhook revenue refresh failed for brand=%s", brand.get("id"))
+            sync_error = str(exc)[:200]
+
+    return jsonify({
+        "ok": True,
+        "event_type": event_type,
+        "event_id": event_id,
+        "payment_id": payment_id,
+        "month": month,
+        "synced": synced,
+        "sync_error": sync_error,
+    }), 200
 
 
 def _verify_quo_signature(payload_bytes, signature, secret):

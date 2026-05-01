@@ -2682,8 +2682,20 @@ def _jobber_oauth_serializer():
     return URLSafeTimedSerializer(current_app.secret_key, salt="client-jobber-oauth")
 
 
+def _square_oauth_serializer():
+    return URLSafeTimedSerializer(current_app.secret_key, salt="client-square-oauth")
+
+
 def _jobber_oauth_callback_url():
     return f"{_external_app_url()}{url_for('client.client_jobber_oauth_callback')}"
+
+
+def _square_oauth_callback_url():
+    return f"{_external_app_url()}{url_for('client.client_square_oauth_callback')}"
+
+
+def _square_webhook_url(brand):
+    return f"{_external_app_url()}{url_for('webhooks.square_webhook', brand_slug=brand['slug'])}"
 
 
 def _jobber_webhook_url(brand):
@@ -10769,6 +10781,8 @@ def client_settings():
             sng_webhook_url=sng_webhook_url,
             jobber_oauth_callback_url=_jobber_oauth_callback_url(),
             jobber_webhook_url=_jobber_webhook_url(brand),
+            square_oauth_callback_url=_square_oauth_callback_url(),
+            square_webhook_url=_square_webhook_url(brand),
             sng_webhook_events=sng_webhook_events,
             lead_webhook_deliveries=lead_webhook_deliveries,
             crm_push_deliveries=crm_push_deliveries,
@@ -15231,6 +15245,9 @@ def client_save_payment_provider():
     db.update_brand_text_field(brand_id, "payment_provider", provider)
     if api_key:
         db.update_brand_text_field(brand_id, "payment_api_key", api_key)
+        if provider == "square":
+            db.update_brand_text_field(brand_id, "payment_refresh_token", "")
+            db.update_brand_text_field(brand_id, "payment_token_expires_at", "")
     if webhook_secret:
         db.update_brand_text_field(brand_id, "payment_webhook_secret", webhook_secret)
     db.update_brand_text_field(brand_id, "payment_location_id", location_id)
@@ -15258,6 +15275,144 @@ def client_payment_provider_test():
         return jsonify(ok=False, error=error)
 
     return jsonify(ok=True, message=message)
+
+
+@client_bp.route("/settings/payment-provider/square/connect")
+@client_login_required
+def client_square_oauth_connect():
+    app_id = (current_app.config.get("SQUARE_APP_ID") or "").strip()
+    app_secret = (current_app.config.get("SQUARE_APP_SECRET") or "").strip()
+    if not app_id or not app_secret:
+        flash("Square OAuth app ID and secret are not configured for this WARREN deployment.", "error")
+        return redirect(url_for("client.client_settings") + "#connection-panel-payments")
+
+    brand_id = int(session["client_brand_id"])
+    state = _square_oauth_serializer().dumps({
+        "brand_id": brand_id,
+        "client_user_id": int(session.get("client_user_id") or 0),
+        "nonce": uuid.uuid4().hex,
+    })
+    params = urlencode({
+        "client_id": app_id,
+        "response_type": "code",
+        "scope": "MERCHANT_PROFILE_READ PAYMENTS_READ",
+        "session": "false",
+        "state": state,
+        "redirect_uri": _square_oauth_callback_url(),
+    })
+    return redirect(f"https://connect.squareup.com/oauth2/authorize?{params}")
+
+
+@client_bp.route("/settings/payment-provider/square/callback")
+def client_square_oauth_callback():
+    db = _get_db()
+    error = (request.args.get("error") or "").strip()
+    if error:
+        flash(f"Square authorization failed: {error}", "error")
+        return redirect(url_for("client.client_settings") + "#connection-panel-payments")
+
+    code = (request.args.get("code") or "").strip()
+    state = (request.args.get("state") or "").strip()
+    try:
+        payload = _square_oauth_serializer().loads(state, max_age=30 * 60)
+        brand_id = int(payload.get("brand_id") or 0)
+    except BadSignature:
+        flash("Square authorization state expired or was invalid. Start the connection again.", "error")
+        return redirect(url_for("client.client_settings") + "#connection-panel-payments")
+
+    if not code or brand_id <= 0:
+        flash("Square did not return a usable authorization code.", "error")
+        return redirect(url_for("client.client_settings") + "#connection-panel-payments")
+
+    app_id = (current_app.config.get("SQUARE_APP_ID") or "").strip()
+    app_secret = (current_app.config.get("SQUARE_APP_SECRET") or "").strip()
+    if not app_id or not app_secret:
+        flash("Square OAuth app ID and secret are missing.", "error")
+        return redirect(url_for("client.client_settings") + "#connection-panel-payments")
+
+    try:
+        resp = requests.post(
+            "https://connect.squareup.com/oauth2/token",
+            json={
+                "client_id": app_id,
+                "client_secret": app_secret,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": _square_oauth_callback_url(),
+            },
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "Square-Version": current_app.config.get("SQUARE_API_VERSION", "2026-01-22"),
+            },
+            timeout=15,
+        )
+    except requests.RequestException as exc:
+        flash(f"Could not reach Square to finish authorization: {str(exc)[:180]}", "error")
+        return redirect(url_for("client.client_settings") + "#connection-panel-payments")
+
+    if resp.status_code != 200:
+        flash(f"Square returned {resp.status_code} while authorizing: {resp.text[:180]}", "error")
+        return redirect(url_for("client.client_settings") + "#connection-panel-payments")
+
+    token_payload = resp.json() or {}
+    access_token = (token_payload.get("access_token") or "").strip()
+    refresh_token = (token_payload.get("refresh_token") or "").strip()
+    if not access_token or not refresh_token:
+        flash("Square did not return both access and refresh tokens.", "error")
+        return redirect(url_for("client.client_settings") + "#connection-panel-payments")
+
+    db.update_brand_text_field(brand_id, "payment_provider", "square")
+    db.update_brand_text_field(brand_id, "payment_api_key", access_token)
+    db.update_brand_text_field(brand_id, "payment_refresh_token", refresh_token)
+    db.update_brand_text_field(brand_id, "payment_token_expires_at", token_payload.get("expires_at") or "")
+    db.update_brand_text_field(brand_id, "payment_merchant_id", token_payload.get("merchant_id") or "")
+
+    brand = db.get_brand(brand_id) or {}
+    from webapp.crm_bridge import square_payment_test_connection
+
+    message, test_error = square_payment_test_connection(brand)
+    if test_error:
+        flash(f"Square connected, but the permission test needs attention: {test_error}", "warning")
+    else:
+        flash(message or "Square connected. Tokens will refresh automatically.", "success")
+    return redirect(url_for("client.client_settings") + "#connection-panel-payments")
+
+
+@client_bp.route("/settings/payment-provider/square/disconnect", methods=["POST"])
+@client_login_required
+def client_square_disconnect():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id) or {}
+    token = (brand.get("payment_api_key") or "").strip()
+    app_id = (current_app.config.get("SQUARE_APP_ID") or "").strip()
+    app_secret = (current_app.config.get("SQUARE_APP_SECRET") or "").strip()
+    if token and app_id and app_secret:
+        try:
+            requests.post(
+                "https://connect.squareup.com/oauth2/revoke",
+                json={"client_id": app_id, "access_token": token},
+                headers={
+                    "Authorization": f"Client {app_secret}",
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "Square-Version": current_app.config.get("SQUARE_API_VERSION", "2026-01-22"),
+                },
+                timeout=10,
+            )
+        except requests.RequestException:
+            log.info("Square token revoke failed during disconnect", exc_info=True)
+    for field in (
+        "payment_api_key", "payment_refresh_token", "payment_token_expires_at",
+        "payment_merchant_id", "payment_account_label", "payment_location_id",
+        "payment_account_id",
+    ):
+        db.update_brand_text_field(brand_id, field, "")
+    if (brand.get("payment_provider") or "").strip().lower() == "square":
+        db.update_brand_text_field(brand_id, "payment_provider", "")
+    flash("Square disconnected in WARREN.", "success")
+    return redirect(url_for("client.client_settings") + "#connection-panel-payments")
 
 
 @client_bp.route("/crm/handoff/<int:delivery_id>/retry", methods=["POST"])
