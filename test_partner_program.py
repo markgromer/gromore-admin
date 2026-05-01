@@ -192,8 +192,9 @@ class PartnerProgramRouteTests(unittest.TestCase):
 
         response = self.client.get(f"/partners/demo/live/{demos[0]['demo_token']}")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"WARREN Demo", response.data)
-        self.assertIn(b"Live WARREN Inbox Preview", response.data)
+        self.assertIn(b"WARREN for Demo Plumbing", response.data)
+        self.assertIn(b"WARREN Inbox", response.data)
+        self.assertNotIn(b"No demo lead threads were seeded", response.data)
 
         demo_id = demos[0]["id"]
         response = self.client.post(
@@ -213,6 +214,49 @@ class PartnerProgramRouteTests(unittest.TestCase):
 
         self.assertEqual(demo["nurture_status"], "follow_up")
         self.assertTrue(any(event["event_type"] == "nurture" for event in events))
+
+    def test_live_demo_repairs_legacy_demo_without_brand(self):
+        with self.app.app_context():
+            snapshot = {
+                "metrics": {"monthly_leads": 18, "estimated_unfollowed_leads": 4, "projected_recovered_revenue": 1200},
+                "sample_leads": [
+                    {"name": "Legacy Lead", "source": "Facebook Lead Form", "need": "cleanup", "stage": "Hot", "value": 300, "warren_action": "Qualified the job and prepared a booking reply."}
+                ],
+                "connection_plan": [],
+            }
+            demo_id = self.app.db.create_partner_demo_session(
+                self.partner_id,
+                self.partner_user_id,
+                {
+                    "status": "demo_ready",
+                    "nurture_status": "new",
+                    "business_name": "Legacy Demo Co",
+                    "contact_name": "Legacy Owner",
+                    "contact_email": "legacy@example.test",
+                    "industry": "pet waste removal",
+                    "service_area": "Tucson",
+                    "primary_services": "Pet waste removal",
+                    "monthly_leads": 18,
+                    "avg_job_value": 300,
+                    "demo_snapshot": snapshot,
+                    "owner_intake": {"good_lead_definition": "Homeowner in service area"},
+                },
+            )
+            demo = self.app.db.get_partner_demo_session(demo_id, self.partner_id)
+
+        response = self.client.get(f"/partners/demo/live/{demo['demo_token']}")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Legacy Demo Co", response.data)
+        self.assertIn(b"Legacy Lead", response.data)
+
+        with self.app.app_context():
+            repaired = self.app.db.get_partner_demo_session(demo_id, self.partner_id)
+            brand = self.app.db.get_brand(repaired["demo_brand_id"])
+            threads = self.app.db.get_lead_threads(brand["id"])
+
+        self.assertIsNotNone(repaired["demo_brand_id"])
+        self.assertEqual(brand["is_demo"], 1)
+        self.assertGreaterEqual(len(threads), 1)
 
 
 if __name__ == "__main__":

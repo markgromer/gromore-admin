@@ -7,130 +7,303 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <style>
-        body { margin:0; background:#f4f7fb; color:#111827; font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
-        .demo-top { background:#0f172a; color:#fff; padding:18px 28px; display:flex; justify-content:space-between; align-items:center; gap:16px; }
-        .demo-shell { display:grid; grid-template-columns:300px 1fr 360px; min-height:calc(100vh - 68px); }
-        .sidebar { background:#111827; color:#cbd5e1; padding:22px; }
-        .main { padding:24px; overflow:auto; }
-        .right { background:#fff; border-left:1px solid #e5e7eb; padding:22px; overflow:auto; }
-        .metric { background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:16px; }
-        .metric strong { font-size:1.6rem; display:block; color:#0f172a; }
-        .panel { background:#fff; border:1px solid #e5e7eb; border-radius:8px; }
-        .lead-row { padding:14px 16px; border-bottom:1px solid #eef2f7; cursor:pointer; }
-        .lead-row:hover { background:#f8fafc; }
-        .lead-row.active { background:#e0f2fe; }
-        .message { max-width:84%; padding:10px 12px; border-radius:12px; margin-bottom:10px; font-size:.92rem; }
-        .message.inbound { background:#eef2ff; }
-        .message.outbound { background:#dcfce7; margin-left:auto; }
-        .badge-demo { background:#f59e0b; color:#111827; }
-        .action-item { border-left:3px solid #2563eb; padding:10px 12px; background:#f8fafc; margin-bottom:10px; }
-        .nav-pill { display:block; padding:10px 12px; border-radius:8px; color:#cbd5e1; text-decoration:none; margin-bottom:4px; }
-        .nav-pill.active, .nav-pill:hover { background:#1f2937; color:#fff; }
-        @media(max-width: 1100px){ .demo-shell{grid-template-columns:1fr;} .sidebar,.right{border:0;} }
+        :root {
+            --ink:#101828;
+            --muted:#667085;
+            --line:#d9e0ea;
+            --bg:#eef2f7;
+            --panel:#ffffff;
+            --blue:#2563eb;
+            --green:#059669;
+            --amber:#d97706;
+            --violet:#7c3aed;
+            --dark:#0f172a;
+        }
+        * { box-sizing:border-box; }
+        body { margin:0; background:var(--bg); color:var(--ink); font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+        .topbar { height:68px; background:var(--dark); color:#fff; display:flex; align-items:center; justify-content:space-between; padding:0 22px; gap:18px; }
+        .top-title { font-size:1rem; font-weight:800; line-height:1.2; }
+        .top-sub { color:#cbd5e1; font-size:.8rem; margin-top:3px; }
+        .status-pill { display:inline-flex; align-items:center; gap:8px; background:#f59e0b; color:#111827; padding:8px 12px; border-radius:999px; font-size:.78rem; font-weight:800; white-space:nowrap; }
+        .shell { min-height:calc(100vh - 68px); display:grid; grid-template-columns:248px minmax(0, 1fr) 340px; }
+        .nav { background:#111827; color:#cbd5e1; padding:22px 14px; }
+        .brand-card { padding:4px 0 20px; border-bottom:1px solid #253044; margin-bottom:18px; }
+        .brand-name { color:#fff; font-weight:800; font-size:1.02rem; }
+        .brand-meta { font-size:.78rem; color:#9ca3af; margin-top:5px; }
+        .nav a { display:flex; align-items:center; gap:10px; padding:10px 12px; color:#cbd5e1; border-radius:8px; text-decoration:none; font-size:.88rem; margin-bottom:4px; }
+        .nav a.active, .nav a:hover { background:#1f2937; color:#fff; }
+        .nav-section { color:#94a3b8; font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; margin:22px 12px 8px; font-weight:800; }
+        .nav-stat { padding:10px 12px; border-radius:8px; background:#172033; margin-bottom:8px; }
+        .nav-stat strong { display:block; color:#fff; font-size:1rem; }
+        .nav-stat span { color:#9ca3af; font-size:.76rem; }
+        .main { padding:20px; min-width:0; }
+        .right { background:#fff; border-left:1px solid var(--line); padding:20px; overflow:auto; }
+        .metric-grid { display:grid; grid-template-columns:repeat(4, minmax(130px, 1fr)); gap:12px; margin-bottom:14px; }
+        .metric { background:#fff; border:1px solid var(--line); border-radius:8px; padding:14px 16px; min-height:88px; }
+        .metric strong { display:block; font-size:1.55rem; line-height:1; margin-bottom:8px; }
+        .metric span { color:var(--muted); font-size:.82rem; }
+        .workbench { display:grid; grid-template-columns:330px minmax(0, 1fr); background:#fff; border:1px solid var(--line); border-radius:8px; overflow:hidden; min-height:560px; }
+        .lead-list { border-right:1px solid var(--line); background:#fff; }
+        .panel-head { min-height:62px; padding:14px 16px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:12px; }
+        .panel-title { font-weight:800; font-size:.95rem; }
+        .panel-sub { color:var(--muted); font-size:.76rem; margin-top:2px; }
+        .thread { display:flex; gap:11px; padding:13px 14px; border-bottom:1px solid #edf1f7; cursor:pointer; }
+        .thread:hover { background:#f8fafc; }
+        .thread.active { background:#eff6ff; border-left:3px solid var(--blue); padding-left:11px; }
+        .avatar { width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg,#2563eb,#7c3aed); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:900; flex:0 0 auto; }
+        .thread-main { min-width:0; flex:1; }
+        .thread-name { font-size:.88rem; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .thread-preview { color:var(--muted); font-size:.76rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+        .thread-meta { text-align:right; flex:0 0 auto; }
+        .stage { display:inline-flex; align-items:center; padding:3px 7px; border-radius:999px; font-size:.66rem; font-weight:800; text-transform:capitalize; }
+        .stage.qualified { background:#dcfce7; color:#047857; }
+        .stage.needs_review { background:#fef3c7; color:#92400e; }
+        .stage.nurture { background:#ede9fe; color:#6d28d9; }
+        .stage.new { background:#dbeafe; color:#1d4ed8; }
+        .conversation { display:flex; flex-direction:column; min-width:0; background:#f8fafc; }
+        .lead-summary { display:grid; grid-template-columns:repeat(4, minmax(120px, 1fr)); gap:10px; padding:12px 16px; background:#fff; border-bottom:1px solid var(--line); }
+        .summary-cell { border:1px solid #e8edf5; border-radius:8px; padding:10px; }
+        .summary-cell span { display:block; color:var(--muted); font-size:.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px; }
+        .summary-cell strong { font-size:.84rem; }
+        .messages { flex:1; padding:18px; overflow:auto; min-height:270px; }
+        .msg { max-width:74%; padding:11px 13px; border-radius:14px; margin-bottom:10px; box-shadow:0 1px 2px rgba(15,23,42,.04); font-size:.88rem; line-height:1.45; }
+        .msg.inbound { background:#fff; border:1px solid var(--line); border-bottom-left-radius:4px; }
+        .msg.outbound { margin-left:auto; background:linear-gradient(135deg,#2563eb,#7c3aed); color:#fff; border-bottom-right-radius:4px; }
+        .msg-label { font-size:.7rem; font-weight:900; margin-bottom:4px; opacity:.78; }
+        .composer { padding:14px 16px; border-top:1px solid var(--line); background:#fff; }
+        .draft { border:1px solid #c7d2fe; background:#eef2ff; border-radius:8px; padding:12px; margin-bottom:10px; }
+        .draft-head { color:#3730a3; font-size:.75rem; font-weight:900; text-transform:uppercase; letter-spacing:.04em; margin-bottom:5px; }
+        .actions { display:flex; flex-wrap:wrap; gap:8px; }
+        .action-btn { border:1px solid var(--line); border-radius:8px; background:#fff; padding:7px 10px; font-size:.78rem; font-weight:800; color:#344054; }
+        .action-btn.primary { background:var(--blue); color:#fff; border-color:var(--blue); }
+        .pipeline { display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-top:14px; }
+        .lane { background:#fff; border:1px solid var(--line); border-radius:8px; padding:12px; min-height:110px; }
+        .lane h6 { font-size:.78rem; font-weight:900; margin:0 0 8px; color:#475467; }
+        .lane-card { border-left:3px solid var(--blue); background:#f8fafc; padding:9px; border-radius:6px; font-size:.76rem; margin-bottom:7px; }
+        .intel-card { border:1px solid var(--line); border-radius:8px; padding:14px; margin-bottom:12px; background:#fff; }
+        .intel-card h5, .intel-card h6 { font-weight:900; margin:0 0 10px; }
+        .check { display:flex; gap:10px; padding:10px 0; border-bottom:1px solid #edf1f7; }
+        .check:last-child { border-bottom:0; }
+        .check i { color:var(--green); margin-top:2px; }
+        .check strong { display:block; font-size:.84rem; }
+        .check span { color:var(--muted); font-size:.76rem; }
+        .owner-field { margin-bottom:12px; }
+        .owner-field span { display:block; color:var(--muted); font-size:.72rem; font-weight:900; text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px; }
+        .owner-field div { font-size:.9rem; }
+        .alert-demo { background:#fff7ed; border:1px solid #fed7aa; color:#7c2d12; border-radius:8px; padding:12px; font-size:.82rem; }
+        @media(max-width: 1180px) {
+            .shell { grid-template-columns:220px minmax(0, 1fr); }
+            .right { grid-column:1 / -1; border-left:0; border-top:1px solid var(--line); }
+        }
+        @media(max-width: 900px) {
+            .topbar { height:auto; align-items:flex-start; padding:14px; flex-direction:column; }
+            .shell { display:block; }
+            .metric-grid, .lead-summary, .pipeline { grid-template-columns:1fr 1fr; }
+            .workbench { grid-template-columns:1fr; }
+            .lead-list { border-right:0; border-bottom:1px solid var(--line); }
+        }
     </style>
 </head>
 <body>
 {% set snapshot = demo.demo_snapshot or {} %}
 {% set metrics = snapshot.metrics or {} %}
-<div class="demo-top">
+{% set owner = demo.owner_intake or {} %}
+{% set first = threads[0] if threads else none %}
+<div class="topbar">
     <div>
-        <div class="fw-bold">WARREN Demo for {{ demo.business_name }}</div>
-        <div style="font-size:.85rem; color:#cbd5e1;">Sandbox mode until activated. No real messages, CRM pushes, or emails are sent.</div>
+        <div class="top-title">WARREN for {{ demo.business_name }}</div>
+        <div class="top-sub">Live demo workspace built from this owner intake. Outbound sending and CRM pushes stay disabled until activation.</div>
     </div>
-    <span class="badge badge-demo rounded-pill px-3 py-2">Demo until activated</span>
+    <span class="status-pill"><i class="bi bi-shield-lock-fill"></i> Demo until activated</span>
 </div>
 
-<div class="demo-shell">
-    <aside class="sidebar">
-        <div class="mb-4">
-            <div class="text-white fw-semibold mb-1">{{ demo.business_name }}</div>
-            <div style="font-size:.85rem;">{{ demo.industry or 'Home Services' }} / {{ demo.service_area or 'Local market' }}</div>
+<div class="shell">
+    <aside class="nav">
+        <div class="brand-card">
+            <div class="brand-name">{{ demo.business_name }}</div>
+            <div class="brand-meta">{{ demo.industry or 'Home Services' }} / {{ demo.service_area or 'Local market' }}</div>
         </div>
-        <a class="nav-pill active" href="#command"><i class="bi bi-inbox me-2"></i>Lead Command Center</a>
-        <a class="nav-pill" href="#warren"><i class="bi bi-lightning-charge me-2"></i>WARREN Actions</a>
-        <a class="nav-pill" href="#activation"><i class="bi bi-plug me-2"></i>Activation Plan</a>
-        <hr style="border-color:#334155;">
-        <div style="font-size:.82rem; color:#94a3b8;">Built from owner intake</div>
-        <div class="mt-2 small">{{ demo.pain_points or 'Follow-up, missed leads, and unclear lead quality.' }}</div>
+        <a class="active" href="#inbox"><i class="bi bi-inbox"></i> Conversations</a>
+        <a href="#pipeline"><i class="bi bi-diagram-3"></i> Pipeline</a>
+        <a href="#warren"><i class="bi bi-stars"></i> Warren Intelligence</a>
+        <a href="#activation"><i class="bi bi-plug"></i> Activation</a>
+        <div class="nav-section">Demo Impact</div>
+        <div class="nav-stat"><strong>{{ metrics.estimated_unfollowed_leads or 0 }}</strong><span>leads WARREN can recover monthly</span></div>
+        <div class="nav-stat"><strong>${{ "%.0f"|format(metrics.projected_recovered_revenue or 0) }}</strong><span>projected recovered revenue</span></div>
+        <div class="nav-section">Owner Pain</div>
+        <div class="px-2 small">{{ demo.pain_points or 'Missed leads, slow follow-up, and inconsistent handoff.' }}</div>
     </aside>
 
-    <main class="main" id="command">
-        <div class="row g-3 mb-4">
-            <div class="col-md-3"><div class="metric"><strong>{{ metrics.monthly_leads or 0 }}</strong><span>Monthly leads</span></div></div>
-            <div class="col-md-3"><div class="metric"><strong>{{ metrics.estimated_unfollowed_leads or 0 }}</strong><span>Recoverable</span></div></div>
-            <div class="col-md-3"><div class="metric"><strong>${{ "%.0f"|format(metrics.projected_recovered_revenue or 0) }}</strong><span>Recovered revenue</span></div></div>
-            <div class="col-md-3"><div class="metric"><strong>&lt;60s</strong><span>Target response</span></div></div>
+    <main class="main">
+        <div class="metric-grid">
+            <div class="metric"><strong>{{ metrics.monthly_leads or demo.monthly_leads or 0 }}</strong><span>Monthly lead volume</span></div>
+            <div class="metric"><strong>&lt;60s</strong><span>Target first response</span></div>
+            <div class="metric"><strong>{{ threads|length }}</strong><span>Demo conversations</span></div>
+            <div class="metric"><strong>0</strong><span>Real sends before activation</span></div>
         </div>
 
-        <div class="panel mb-4">
-            <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
-                <div>
-                    <div class="fw-semibold">Live WARREN Inbox Preview</div>
-                    <div class="text-muted small">This is seeded into a demo WARREN brand and becomes real after activation.</div>
-                </div>
-                <span class="badge bg-primary">Lead-facing assistant</span>
-            </div>
-            <div class="row g-0">
-                <div class="col-lg-5 border-end">
-                    {% for thread in threads %}
-                    <div class="lead-row {{ 'active' if loop.first }}">
-                        <div class="d-flex justify-content-between">
-                            <strong>{{ thread.lead_name }}</strong>
-                            <span class="badge bg-light text-dark border">{{ thread.status }}</span>
-                        </div>
-                        <div class="text-muted small">{{ thread.source }} / {{ thread.summary }}</div>
+        <section class="workbench" id="inbox">
+            <div class="lead-list">
+                <div class="panel-head">
+                    <div>
+                        <div class="panel-title">WARREN Inbox</div>
+                        <div class="panel-sub">Lead forms, calls, SMS, and web leads in one place</div>
                     </div>
-                    {% endfor %}
+                    <span class="stage new">demo</span>
                 </div>
-                <div class="col-lg-7 p-3">
-                    {% if threads %}
-                        {% for message in threads[0].messages %}
-                        <div class="message {{ message.direction }}">
-                            <div class="small fw-semibold mb-1">{{ 'Lead' if message.direction == 'inbound' else 'WARREN' }}</div>
+                {% for thread in threads %}
+                <div class="thread {{ 'active' if loop.first }}" data-thread-id="{{ thread.id }}">
+                    <div class="avatar">{{ (thread.lead_name or 'L')[:1] }}</div>
+                    <div class="thread-main">
+                        <div class="thread-name">{{ thread.lead_name or 'Unknown lead' }}</div>
+                        <div class="thread-preview">{{ thread.source }} / {{ thread.summary }}</div>
+                    </div>
+                    <div class="thread-meta">
+                        <span class="stage {{ thread.status }}">{{ thread.status|replace('_',' ') }}</span>
+                    </div>
+                </div>
+                {% else %}
+                <div class="p-4 text-muted">WARREN is creating the demo conversations. Refresh this page if they do not appear.</div>
+                {% endfor %}
+            </div>
+
+            <div class="conversation">
+                <div class="panel-head">
+                    <div>
+                        <div class="panel-title" id="activeLeadName">{{ first.lead_name if first else 'No lead selected' }}</div>
+                        <div class="panel-sub" id="activeLeadMeta">{{ first.source if first else 'Demo inbox' }}</div>
+                    </div>
+                    <div class="actions">
+                        <button class="action-btn"><i class="bi bi-person-up me-1"></i>Handoff</button>
+                        <button class="action-btn"><i class="bi bi-currency-dollar me-1"></i>Quote</button>
+                        <button class="action-btn primary"><i class="bi bi-send-fill me-1"></i>Approve Draft</button>
+                    </div>
+                </div>
+                <div class="lead-summary">
+                    <div class="summary-cell"><span>Need</span><strong id="leadNeed">{{ first.commercial_data.need if first else '-' }}</strong></div>
+                    <div class="summary-cell"><span>Est. Value</span><strong id="leadValue">${{ "%.0f"|format(first.commercial_data.estimated_value or 0) if first else '0' }}</strong></div>
+                    <div class="summary-cell"><span>Status</span><strong id="leadStatus">{{ first.status|replace('_',' ') if first else '-' }}</strong></div>
+                    <div class="summary-cell"><span>Owner Rule</span><strong>{{ owner.handoff_rules or 'Escalate urgent or irritated leads' }}</strong></div>
+                </div>
+                <div class="messages" id="messages">
+                    {% if first %}
+                        {% for message in first.messages %}
+                        <div class="msg {{ message.direction }}">
+                            <div class="msg-label">{{ 'Lead' if message.direction == 'inbound' else 'WARREN' }}</div>
                             {{ message.content }}
                         </div>
                         {% endfor %}
-                    {% else %}
-                    <div class="text-muted">No demo lead threads were seeded.</div>
                     {% endif %}
                 </div>
-            </div>
-        </div>
-
-        <div class="panel" id="warren">
-            <div class="p-3 border-bottom fw-semibold">What WARREN Is Already Set Up To Do</div>
-            <div class="p-3">
-                <div class="row g-3">
-                    <div class="col-md-6"><div class="action-item"><strong>Respond instantly</strong><br><span class="text-muted small">Facebook forms, website forms, and missed calls become lead threads with a first response ready.</span></div></div>
-                    <div class="col-md-6"><div class="action-item"><strong>Qualify like the owner</strong><br><span class="text-muted small">Good-lead rules, service area, profitable services, and handoff rules are already captured.</span></div></div>
-                    <div class="col-md-6"><div class="action-item"><strong>Nurture automatically</strong><br><span class="text-muted small">Unclosed leads get demo follow-up paths until live SMS/email is activated.</span></div></div>
-                    <div class="col-md-6"><div class="action-item"><strong>Push to CRM after activation</strong><br><span class="text-muted small">Demo CRM records become real Jobber/SNG/GHL handoffs when credentials are connected.</span></div></div>
+                <div class="composer">
+                    <div class="draft">
+                        <div class="draft-head"><i class="bi bi-stars me-1"></i>WARREN recommended next move</div>
+                        <div id="draftText">{{ first.summary if first else 'Qualify the lead, confirm service area, and prepare the next booking step.' }}</div>
+                    </div>
+                    <div class="actions">
+                        <button class="action-btn primary">Approve and send after activation</button>
+                        <button class="action-btn">Edit reply</button>
+                        <button class="action-btn">Set follow-up</button>
+                        <button class="action-btn">Push to CRM after activation</button>
+                    </div>
                 </div>
             </div>
-        </div>
+        </section>
+
+        <section class="pipeline" id="pipeline">
+            <div class="lane">
+                <h6>New</h6>
+                <div class="lane-card">Facebook form captured and routed to WARREN.</div>
+            </div>
+            <div class="lane">
+                <h6>Qualified</h6>
+                <div class="lane-card">Service area, need, and urgency confirmed.</div>
+            </div>
+            <div class="lane">
+                <h6>Needs Owner</h6>
+                <div class="lane-card">WARREN flags edge cases using owner handoff rules.</div>
+            </div>
+            <div class="lane">
+                <h6>Nurture</h6>
+                <div class="lane-card">Ghosted leads get scheduled follow-up until activated.</div>
+            </div>
+        </section>
     </main>
 
-    <aside class="right" id="activation">
-        <h5 class="mb-3">Activation Plan</h5>
-        {% for item in snapshot.connection_plan or [] %}
-        <div class="action-item">
-            <strong>{{ item.name }}</strong>
-            <div class="text-muted small">{{ item.impact }}</div>
+    <aside class="right" id="warren">
+        <div class="intel-card">
+            <h5>Warren Intelligence</h5>
+            <div class="check"><i class="bi bi-check-circle-fill"></i><div><strong>Business context captured</strong><span>{{ demo.primary_services or owner.profitable_services or 'Core services collected from intake' }}</span></div></div>
+            <div class="check"><i class="bi bi-check-circle-fill"></i><div><strong>Lead quality rules loaded</strong><span>{{ owner.good_lead_definition or 'WARREN will qualify fit, area, urgency, and service need.' }}</span></div></div>
+            <div class="check"><i class="bi bi-check-circle-fill"></i><div><strong>Handoff guardrails ready</strong><span>{{ owner.handoff_rules or 'Escalate urgent jobs, angry customers, and pricing objections.' }}</span></div></div>
         </div>
-        {% endfor %}
-        <hr>
-        <h6>Owner Intake Captured</h6>
-        <div class="small text-muted mb-2">Good leads</div>
-        <div class="mb-3">{{ (demo.owner_intake or {}).good_lead_definition or 'To be refined during activation.' }}</div>
-        <div class="small text-muted mb-2">Profitable services</div>
-        <div class="mb-3">{{ (demo.owner_intake or {}).profitable_services or demo.primary_services or 'To be refined during activation.' }}</div>
-        <div class="small text-muted mb-2">Handoff rules</div>
-        <div class="mb-3">{{ (demo.owner_intake or {}).handoff_rules or 'Urgent jobs and pricing objections go to the owner.' }}</div>
-        <hr>
-        <div class="alert alert-warning small mb-0">
-            This is a sandbox WARREN instance. Activation connects real lead sources, SMS, CRM, and billing without losing the setup captured here.
+
+        <div class="intel-card">
+            <h6>Owner Intake</h6>
+            <div class="owner-field"><span>Good leads</span><div>{{ owner.good_lead_definition or 'To be refined during activation.' }}</div></div>
+            <div class="owner-field"><span>Profitable services</span><div>{{ owner.profitable_services or demo.primary_services or 'To be refined during activation.' }}</div></div>
+            <div class="owner-field"><span>Goals</span><div>{{ demo.owner_goals or 'Book more profitable jobs and stop losing leads.' }}</div></div>
+        </div>
+
+        <div class="intel-card" id="activation">
+            <h6>Activation Plan</h6>
+            {% for item in snapshot.connection_plan or [] %}
+            <div class="check">
+                <i class="bi bi-plug-fill"></i>
+                <div><strong>{{ item.name }}</strong><span>{{ item.impact }}</span></div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="alert-demo">
+            <strong>Demo state:</strong> this is a real WARREN workspace with demo data. Activation connects real lead sources, SMS, CRM, and billing without losing the setup captured here.
         </div>
     </aside>
 </div>
+
+<script>
+const threads = {{ threads|tojson }};
+const byId = new Map(threads.map((thread) => [String(thread.id), thread]));
+const messagesEl = document.getElementById('messages');
+const nameEl = document.getElementById('activeLeadName');
+const metaEl = document.getElementById('activeLeadMeta');
+const needEl = document.getElementById('leadNeed');
+const valueEl = document.getElementById('leadValue');
+const statusEl = document.getElementById('leadStatus');
+const draftEl = document.getElementById('draftText');
+
+function esc(value) {
+    return String(value || '').replace(/[&<>"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+function money(value) {
+    const amount = Number(value || 0);
+    return '$' + amount.toLocaleString(undefined, {maximumFractionDigits: 0});
+}
+
+function renderThread(thread) {
+    if (!thread) return;
+    nameEl.textContent = thread.lead_name || 'Unknown lead';
+    metaEl.textContent = [thread.source, thread.lead_phone, thread.lead_email].filter(Boolean).join(' / ');
+    needEl.textContent = (thread.commercial_data && thread.commercial_data.need) || 'Service request';
+    valueEl.textContent = money(thread.commercial_data && thread.commercial_data.estimated_value);
+    statusEl.textContent = (thread.status || 'new').replace('_', ' ');
+    draftEl.textContent = thread.summary || 'WARREN qualified the lead and prepared the next step.';
+    messagesEl.innerHTML = (thread.messages || []).map((message) => `
+        <div class="msg ${esc(message.direction)}">
+            <div class="msg-label">${message.direction === 'inbound' ? 'Lead' : 'WARREN'}</div>
+            ${esc(message.content)}
+        </div>
+    `).join('');
+}
+
+document.querySelectorAll('.thread').forEach((row) => {
+    row.addEventListener('click', () => {
+        document.querySelectorAll('.thread').forEach((item) => item.classList.remove('active'));
+        row.classList.add('active');
+        renderThread(byId.get(String(row.dataset.threadId)));
+    });
+});
+</script>
 </body>
 </html>

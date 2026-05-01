@@ -639,11 +639,53 @@ def create_app():
                 lead.get("stage", ""),
                 {"demo": True, "estimated_value": lead.get("value", 0)},
             )
-            seeded.append({"thread_id": thread_id, **lead})
+            seeded.append({**lead, "thread_id": thread_id})
         snapshot["sample_leads"] = seeded
         snapshot["demo_brand_id"] = brand_id
         snapshot["activation_state"] = "Demo until activated: no real outbound communication is sent."
         return snapshot
+
+    def _demo_data_from_session(demo):
+        data = dict(demo or {})
+        data["owner_intake"] = demo.get("owner_intake") or {}
+        data["demo_snapshot"] = demo.get("demo_snapshot") or {}
+        return data
+
+    def _ensure_demo_warren_workspace(demo):
+        data = _demo_data_from_session(demo)
+        partner_id = demo["partner_id"]
+        brand = db.get_brand(demo.get("demo_brand_id")) if demo.get("demo_brand_id") else None
+        if not brand:
+            codes = db.get_partner_referral_codes(partner_id)
+            referral_code = codes[0]["code"] if codes else f"partner-{partner_id}"
+            if not codes:
+                db.create_partner_referral_code(partner_id, referral_code)
+            brand_id = _create_demo_warren_brand(partner_id, data, referral_code)
+            db.update_partner_demo_session(demo["id"], partner_id, demo_brand_id=brand_id)
+            db.update_brand_demo_fields(brand_id, demo_session_id=demo["id"])
+            brand = db.get_brand(brand_id)
+            demo["demo_brand_id"] = brand_id
+
+        threads = db.get_lead_threads(brand["id"], limit=10) if brand else []
+        if brand and not threads:
+            snapshot = data.get("demo_snapshot") or _build_partner_demo_snapshot(data)
+            if not snapshot.get("sample_leads"):
+                snapshot = _build_partner_demo_snapshot(data)
+            snapshot = _seed_demo_warren_leads(brand["id"], data, snapshot)
+            db.update_partner_demo_session(demo["id"], partner_id, demo_snapshot_json=snapshot)
+            demo["demo_snapshot"] = snapshot
+            threads = db.get_lead_threads(brand["id"], limit=10)
+        return brand, threads
+
+    def _decorate_demo_threads(threads):
+        decorated = []
+        for index, thread in enumerate(threads or []):
+            item = dict(thread)
+            item["messages"] = db.get_lead_messages(thread["id"], limit=12)
+            item["commercial_data"] = _safe_from_json(item.get("commercial_data_json") or "{}")
+            item["is_active"] = index == 0
+            decorated.append(item)
+        return decorated
 
     def _partner_demo_form_data():
         raw_avg = request.form.get("avg_job_value", "").strip()
@@ -806,13 +848,8 @@ def create_app():
         demo = db.get_partner_demo_session_by_token(demo_token)
         if not demo:
             abort(404)
-        brand = db.get_brand(demo.get("demo_brand_id")) if demo.get("demo_brand_id") else None
-        threads = []
-        if brand:
-            for thread in db.get_lead_threads(brand["id"], limit=10):
-                item = dict(thread)
-                item["messages"] = db.get_lead_messages(thread["id"], limit=8)
-                threads.append(item)
+        brand, raw_threads = _ensure_demo_warren_workspace(demo)
+        threads = _decorate_demo_threads(raw_threads)
         db.add_partner_demo_event(
             demo["id"],
             demo["partner_id"],
