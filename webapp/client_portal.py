@@ -18542,6 +18542,7 @@ def client_help():
     brand = db.get_brand(brand_id) or {}
     warren_onboarding = _build_warren_onboarding_context(db, brand, brand_id, session.get("client_user_id"))
     onboarding_interview = _build_warren_onboarding_interview(db, brand, brand_id, session.get("client_user_id"))
+    integration_catalog = _prepared_integration_catalog(db.get_brand_integration_configs(brand_id))
     if guide == "warren":
         return render_template(
             "client_help_warren.html",
@@ -18558,6 +18559,7 @@ def client_help():
         brand_name=session.get("client_brand_name", ""),
         warren_onboarding=warren_onboarding,
         onboarding_interview=onboarding_interview,
+        integration_catalog=integration_catalog,
     )
 
 

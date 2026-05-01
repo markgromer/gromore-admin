@@ -141,9 +141,47 @@
         color: #065f46;
         margin: .75rem 0;
     }
+    .connector-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .75rem;
+        margin: .9rem 0 1.1rem;
+    }
+    .connector-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: .85rem;
+        background: #fff;
+    }
+    .connector-card strong {
+        display: block;
+        color: #111827;
+        font-size: .92rem;
+        margin-bottom: .2rem;
+    }
+    .connector-card span {
+        display: block;
+        color: #6b7280;
+        font-size: .82rem;
+        line-height: 1.5;
+    }
+    .connection-path {
+        border: 1px solid #dbeafe;
+        background: #f8fbff;
+        border-radius: 10px;
+        padding: .85rem 1rem;
+        margin: .75rem 0;
+    }
+    .connection-path h6 {
+        margin: 0 0 .45rem;
+        font-size: .88rem;
+        font-weight: 700;
+        color: #1e40af;
+    }
 
     @media (max-width: 768px) {
         .help-sidebar { display: none; }
+        .connector-grid { grid-template-columns: 1fr; }
     }
 </style>
 {% endblock %}
@@ -230,6 +268,18 @@
             <a href="#crm-jobber" class="{{ 'active' if active_topic == 'crm-jobber' }}">
                 <span class="nav-icon"><i class="bi bi-briefcase"></i></span>
                 Jobber CRM
+            </a>
+            <a href="#crm-razorsync" class="{{ 'active' if active_topic == 'crm-razorsync' }}">
+                <span class="nav-icon"><i class="bi bi-truck"></i></span>
+                RazorSync
+            </a>
+            <a href="#payments" class="{{ 'active' if active_topic == 'payments' }}">
+                <span class="nav-icon"><i class="bi bi-credit-card"></i></span>
+                Payments
+            </a>
+            <a href="#integration-hub" class="{{ 'active' if active_topic == 'integration-hub' }}">
+                <span class="nav-icon"><i class="bi bi-plug"></i></span>
+                Integration Hub
             </a>
             <a href="#wordpress" class="{{ 'active' if active_topic == 'wordpress' }}">
                 <span class="nav-icon"><i class="bi bi-wordpress"></i></span>
@@ -368,6 +418,21 @@
                         <td><i class="bi bi-briefcase me-1 text-info"></i> <strong>CRM (Jobber)</strong></td>
                         <td>OAuth app credentials</td>
                         <td>Connect Jobber so Warren can create clients and requests, finance sync can pull paid invoice revenue, and app webhooks can report disconnects. Add your Jobber OAuth app details on the Settings page. <a href="#crm-jobber">Full setup guide below.</a></td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-truck me-1 text-primary"></i> <strong>CRM (RazorSync)</strong></td>
+                        <td>Portal/server + API token</td>
+                        <td>Connect RazorSync so Warren can create customers and requests and so finance sync can use paid work when the token exposes it. <a href="#crm-razorsync">Full setup guide below.</a></td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-credit-card me-1 text-success"></i> <strong>Payments (Stripe / Square)</strong></td>
+                        <td>API key or Square OAuth</td>
+                        <td>Use direct payment revenue when the CRM is incomplete or unavailable. Square supports OAuth, token refresh, and signed webhooks for real-time payment updates. <a href="#payments">Full setup guide below.</a></td>
+                    </tr>
+                    <tr>
+                        <td><i class="bi bi-plug me-1 text-secondary"></i> <strong>Integration Hub</strong></td>
+                        <td>Provider-specific credentials</td>
+                        <td>Configure QuickBooks, CallRail, Housecall Pro, ServiceTitan, Make, Zapier, Teamup Calendar, marketing tools, lead sources, and niche CRMs. <a href="#integration-hub">Full setup guide below.</a></td>
                     </tr>
                 </tbody>
             </table>
@@ -930,6 +995,164 @@
             <div class="step-callout">
                 <strong>Why it matters:</strong> Jobber is a major field-service CRM. This connection lets Warren move booked or qualified leads into the operation system instead of leaving them only in the lead inbox.
             </div>
+        </div>
+
+        <div class="help-topic" id="crm-razorsync">
+            <h4><i class="bi bi-truck text-primary"></i> RazorSync CRM</h4>
+            <p class="topic-desc">Connect RazorSync when the business runs operations there and Warren needs to push qualified leads into the field-service workflow.</p>
+
+            <h5>What This Connection Does</h5>
+            <ul>
+                <li>Lets Warren create a RazorSync customer from a qualified lead.</li>
+                <li>Creates a best-effort quote or request when the API token allows it.</li>
+                <li>Gives finance sync a direct revenue source when paid invoice or payment records are exposed to the token.</li>
+                <li>Shows up in Connection Health so missing credentials are not hidden.</li>
+            </ul>
+
+            <h5>What You Need</h5>
+            <ul>
+                <li>Your RazorSync portal or server name. Use the portal name, not the full login URL.</li>
+                <li>A RazorSync API token with access to customers, service requests, invoices, and payments if available.</li>
+                <li>Permission to create customers or requests if Warren CRM push will be enabled.</li>
+            </ul>
+
+            <h5>Setup</h5>
+            <ol>
+                <li>Open <a href="{{ url_for('client.client_settings') }}">Connections</a> and choose the RazorSync panel.</li>
+                <li>Enter the RazorSync portal or server name.</li>
+                <li>Paste the RazorSync API token.</li>
+                <li>Save the settings.</li>
+                <li>Run <strong>Test Connection</strong>. A valid token should confirm RazorSync access before you enable automatic lead push.</li>
+            </ol>
+
+            <div class="warning-box">
+                <i class="bi bi-exclamation-triangle me-1"></i> <strong>Common issue:</strong> using the full RazorSync login URL instead of the portal/server name. The field expects the short portal identifier used to build API requests.
+            </div>
+        </div>
+
+        <div class="help-topic" id="payments">
+            <h4><i class="bi bi-credit-card text-success"></i> Stripe / Square Payments</h4>
+            <p class="topic-desc">Use standalone payment integrations when revenue does not come cleanly from the CRM, or when the business collects payment through Stripe or Square outside the job system.</p>
+
+            <h5>When To Use Payments</h5>
+            <ul>
+                <li>The CRM does not expose paid revenue reliably.</li>
+                <li>The business collects payment through Square or Stripe even though jobs live elsewhere.</li>
+                <li>You need ROAS, revenue, and month-end reporting based on actual paid transactions.</li>
+                <li>You are using a lightweight CRM such as Yardbook that does not expose a strong direct API.</li>
+            </ul>
+
+            <h5>Square Setup</h5>
+            <ol>
+                <li>Open <a href="{{ url_for('client.client_settings') }}">Connections</a> and choose the Standalone Payments panel.</li>
+                <li>Select <strong>Square</strong> as the provider.</li>
+                <li>Use <strong>Connect Square OAuth</strong> if the button is available. This is preferred because Square tokens refresh automatically.</li>
+                <li>If OAuth is not available yet, a platform admin must add the Square App ID and App Secret in Admin Settings first.</li>
+                <li>Copy the Square webhook URL shown in the payment panel and add it in Square for payment events.</li>
+                <li>Paste the Square webhook signature key into the Webhook Signature Key field.</li>
+                <li>Save, then run the payment connection test.</li>
+            </ol>
+
+            <h5>Stripe Setup</h5>
+            <ol>
+                <li>Select <strong>Stripe</strong> in the Standalone Payments panel.</li>
+                <li>Paste a Stripe secret key with read access to charges, payments, or balance transactions.</li>
+                <li>Save and run the connection test before relying on revenue sync.</li>
+            </ol>
+
+            <div class="step-callout">
+                <strong>Enterprise rule:</strong> for Square, OAuth plus a webhook signature key is the preferred production path. Manual access tokens are useful for testing, but OAuth gives us refresh-token durability.
+            </div>
+        </div>
+
+        <div class="help-topic" id="integration-hub">
+            <h4><i class="bi bi-plug text-secondary"></i> Integration Hub</h4>
+            <p class="topic-desc">The Integration Hub is where the long-tail connectors live: accounting, attribution, no-code automation, calendars, marketing tools, lead sources, and niche CRMs.</p>
+
+            <h5>How To Connect Any Integration Hub Provider</h5>
+            <ol>
+                <li>Open <a href="{{ url_for('client.client_settings') }}">Connections</a>.</li>
+                <li>Click <strong>Integration Hub</strong>.</li>
+                <li>Find the provider card and read the setup requirements shown on that card.</li>
+                <li>Paste only credentials created for this business or account. Do not reuse another brand's token.</li>
+                <li>Save the provider card.</li>
+                <li>If the card has a <strong>Test</strong> button, run it immediately and fix any error before going live.</li>
+                <li>Check <strong>Connection Health</strong> after saving. Anything in warning or failure state needs attention before you trust automation.</li>
+            </ol>
+
+            <div class="connector-grid">
+                <div class="connector-card">
+                    <strong>Incoming lead sources</strong>
+                    <span>Use Make, Zapier, website forms, lead marketplaces, and quote tools to POST leads into Warren so they become lead threads.</span>
+                </div>
+                <div class="connector-card">
+                    <strong>Outbound handoffs</strong>
+                    <span>Use CRM and automation webhooks when Warren needs to push a qualified lead, booking, or status event out to another system.</span>
+                </div>
+                <div class="connector-card">
+                    <strong>Revenue truth</strong>
+                    <span>Use QuickBooks, Square, Stripe, Jobber, Sweep and Go, RazorSync, or another CRM/payment source so ROAS is based on paid work.</span>
+                </div>
+                <div class="connector-card">
+                    <strong>Appointment context</strong>
+                    <span>Use Teamup Calendar, Google Calendar, Outlook Calendar, or Calendly so reminders and scheduling context are tied to real events.</span>
+                </div>
+            </div>
+
+            <h5>Make.com And Zapier</h5>
+            <div class="connection-path">
+                <h6>Best first use: incoming leads into Warren</h6>
+                <ol class="mb-0">
+                    <li>In Connections, open the <strong>Lead Webhooks</strong> panel and save an Incoming Lead Webhook Secret.</li>
+                    <li>Copy the Warren incoming lead webhook URL.</li>
+                    <li>In Make or Zapier, trigger on Facebook lead forms, website forms, marketplace leads, or any lead source.</li>
+                    <li>POST to Warren with the secret as <code>Authorization: Bearer ...</code> or <code>X-GroMore-Webhook-Secret</code>.</li>
+                    <li>Send at least <code>external_id</code>, <code>name</code>, <code>email</code>, <code>phone</code>, <code>source</code>, <code>campaign</code>, and <code>message</code> when those fields exist.</li>
+                    <li>Use the <strong>Send Test Lead Into Warren</strong> button on the Make card to confirm the thread appears without sending real SMS.</li>
+                </ol>
+            </div>
+            <div class="connection-path">
+                <h6>Optional use: Warren out to Make or Zapier</h6>
+                <p class="mb-0">Only save the outgoing Make/Zapier webhook URL when Warren needs to trigger an automation scenario after something happens in Warren. Do not use the outgoing field for Facebook lead intake; lead intake should come into Warren first.</p>
+            </div>
+
+            <h5>Teamup Calendar</h5>
+            <ol>
+                <li>Create or copy a Teamup API key.</li>
+                <li>Copy the Teamup calendar key for the calendar Warren should use.</li>
+                <li>Copy the sub-calendar ID if Warren should create events into a specific booking calendar.</li>
+                <li>In Connections > Integration Hub, save those values on the Teamup Calendar card.</li>
+                <li>Save a Webhook Secret and copy the Teamup event webhook URL shown on the card.</li>
+                <li>Use Make or Zapier to POST Teamup created, updated, or canceled events into that Warren webhook URL.</li>
+                <li>Run the Teamup live test. Warren should be able to list sub-calendars or upcoming events.</li>
+            </ol>
+            <div class="tip-box">
+                <i class="bi bi-lightbulb me-1"></i> <strong>Why Teamup matters:</strong> Teamup events can feed appointment reminders, and Warren can read, create, update, and cancel events through the API when the token has permission.
+            </div>
+
+            <h5>Live-test Support</h5>
+            <p>These Integration Hub cards currently have live connection tests: CallRail, Calendly, Mailchimp, Twilio, QuickBooks, Housecall Pro, Zapier, Make, and Teamup Calendar. Other cards can still save credentials, but may show <strong>Live test pending adapter</strong> until their production API adapter is finished.</p>
+
+            {% if integration_catalog %}
+            <h5>Current Integration Hub Catalog</h5>
+            {% for group in integration_catalog|groupby('category') %}
+            <h6 class="mt-3">{{ group.grouper }}</h6>
+            <table class="table table-sm" style="font-size:.86rem;">
+                <thead>
+                    <tr><th style="width:24%;">Provider</th><th style="width:24%;">Setup Type</th><th>Use It For</th></tr>
+                </thead>
+                <tbody>
+                    {% for integration in group.list %}
+                    <tr>
+                        <td><i class="bi {{ integration.icon }} me-1"></i><strong>{{ integration.name }}</strong></td>
+                        <td>{{ integration.mode_label }}{% if integration.test_supported %}<br><span class="text-success">Live test available</span>{% endif %}</td>
+                        <td>{{ integration.summary }}{% if integration.requirements %}<br><span class="text-muted">Needs: {{ integration.requirements|join(', ') }}</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endfor %}
+            {% endif %}
         </div>
 
         <!-- WordPress -->
