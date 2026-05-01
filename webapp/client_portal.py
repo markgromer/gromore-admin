@@ -15,6 +15,7 @@ import logging
 import uuid
 import zipfile
 import csv
+import hashlib
 import requests
 from io import BytesIO, StringIO
 from functools import wraps
@@ -18598,6 +18599,7 @@ def beta_signup():
             flash("That email is already registered for the beta.", "info")
             return render_template("beta_signup.html", success=True)
 
+        attribution = _partner_attribution_from_request(db, request.form.to_dict(flat=True), source="beta_signup")
         data = {
             "name": name,
             "email": email,
@@ -18610,8 +18612,21 @@ def beta_signup():
             "meta_login_email": request.form.get("meta_login_email", "").strip().lower(),
             "google_business_email": request.form.get("google_business_email", "").strip().lower(),
             "facebook_page_id": request.form.get("facebook_page_id", "").strip(),
+            **attribution,
         }
-        db.create_beta_tester(data)
+        tester_id = db.create_beta_tester(data)
+        if tester_id and attribution.get("partner_id"):
+            db.record_partner_attribution_event(
+                partner_id=attribution["partner_id"],
+                beta_tester_id=tester_id,
+                referral_code=attribution.get("referral_code", ""),
+                source="beta_signup",
+                **{key: attribution["attribution"].get(key, "") for key in (
+                    "landing_url", "utm_source", "utm_medium", "utm_campaign",
+                    "utm_content", "utm_term", "ip_hash", "user_agent_hash"
+                )},
+                metadata={"email": email, "business_name": data["business_name"]},
+            )
         return render_template("beta_signup.html", success=True)
     return render_template("beta_signup.html")
 
@@ -19103,6 +19118,51 @@ h2{color:#1f2937;margin-bottom:8px;}p{color:#6b7280;}</style></head>
 
 # ── Public Signup (no auth, cross-origin JSON) ──
 
+def _hash_for_attribution(value):
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    return hashlib.sha256(raw.encode("utf-8", errors="ignore")).hexdigest()[:32]
+
+
+def _partner_attribution_from_request(db, payload=None, source="signup"):
+    payload = payload or {}
+    code = (
+        payload.get("referral_code")
+        or payload.get("ref")
+        or payload.get("partner")
+        or request.args.get("referral_code")
+        or request.args.get("ref")
+        or request.args.get("partner")
+        or request.cookies.get("gromore_ref")
+        or ""
+    )
+    resolved = db.resolve_partner_referral_code(code)
+    referral_code = (resolved or {}).get("code") or str(code or "").strip()
+    attribution = {
+        "source": source,
+        "referral_code": referral_code,
+        "landing_url": payload.get("landing_url") or request.referrer or request.url,
+        "utm_source": payload.get("utm_source") or request.args.get("utm_source", ""),
+        "utm_medium": payload.get("utm_medium") or request.args.get("utm_medium", ""),
+        "utm_campaign": payload.get("utm_campaign") or request.args.get("utm_campaign", ""),
+        "utm_content": payload.get("utm_content") or request.args.get("utm_content", ""),
+        "utm_term": payload.get("utm_term") or request.args.get("utm_term", ""),
+        "ip_hash": _hash_for_attribution(request.headers.get("X-Forwarded-For", request.remote_addr or "")),
+        "user_agent_hash": _hash_for_attribution(request.headers.get("User-Agent", "")),
+    }
+    return {
+        "partner_id": (resolved or {}).get("partner_id"),
+        "referral_code": referral_code,
+        "utm_source": attribution["utm_source"],
+        "utm_medium": attribution["utm_medium"],
+        "utm_campaign": attribution["utm_campaign"],
+        "utm_content": attribution["utm_content"],
+        "utm_term": attribution["utm_term"],
+        "attribution": attribution,
+    }
+
+
 @client_bp.route("/signup", methods=["POST", "OPTIONS"])
 def public_signup():
     """Normal signup intake form - saves lead for admin to build brand."""
@@ -19119,26 +19179,34 @@ def public_signup():
         return _cors_json({"ok": False, "error": "Name, email, business name, and industry are required."}, 400)
 
     db = _get_db()
-    db._conn().execute(
-        """INSERT INTO signup_leads
-           (name, email, phone, business_name, website, industry, service_area,
-            primary_services, monthly_budget, platforms, goals, referral_source)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        [
-            name, email,
-            (data.get("phone") or "").strip(),
-            business_name,
-            (data.get("website") or "").strip(),
-            industry,
-            (data.get("service_area") or "").strip(),
-            (data.get("primary_services") or "").strip(),
-            (data.get("monthly_budget") or "").strip(),
-            ",".join(data.get("platforms") or []) if isinstance(data.get("platforms"), list) else (data.get("platforms") or ""),
-            ",".join(data.get("goals") or []) if isinstance(data.get("goals"), list) else (data.get("goals") or ""),
-            (data.get("referral_source") or "").strip(),
-        ],
-    )
-    db._conn().commit()
+    attribution = _partner_attribution_from_request(db, data, source="public_signup")
+    lead_id = db.create_signup_lead({
+        "name": name,
+        "email": email,
+        "phone": (data.get("phone") or "").strip(),
+        "business_name": business_name,
+        "website": (data.get("website") or "").strip(),
+        "industry": industry,
+        "service_area": (data.get("service_area") or "").strip(),
+        "primary_services": (data.get("primary_services") or "").strip(),
+        "monthly_budget": (data.get("monthly_budget") or "").strip(),
+        "platforms": ",".join(data.get("platforms") or []) if isinstance(data.get("platforms"), list) else (data.get("platforms") or ""),
+        "goals": ",".join(data.get("goals") or []) if isinstance(data.get("goals"), list) else (data.get("goals") or ""),
+        "referral_source": (data.get("referral_source") or "").strip(),
+        **attribution,
+    })
+    if attribution.get("partner_id"):
+        db.record_partner_attribution_event(
+            partner_id=attribution["partner_id"],
+            signup_lead_id=lead_id,
+            referral_code=attribution.get("referral_code", ""),
+            source="public_signup",
+            **{key: attribution["attribution"].get(key, "") for key in (
+                "landing_url", "utm_source", "utm_medium", "utm_campaign",
+                "utm_content", "utm_term", "ip_hash", "user_agent_hash"
+            )},
+            metadata={"email": email, "business_name": business_name},
+        )
     return _cors_json({"ok": True})
 
 

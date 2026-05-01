@@ -37,6 +37,9 @@ def create_customer(db, brand):
             metadata={
                 "brand_id": str(brand["id"]),
                 "slug": brand.get("slug", ""),
+                "partner_id": str(brand.get("partner_id") or ""),
+                "agency_partner_id": str(brand.get("agency_partner_id") or ""),
+                "referral_code": brand.get("referral_code", ""),
             },
         )
         db.update_brand_stripe(brand["id"], stripe_customer_id=customer.id)
@@ -85,7 +88,12 @@ def create_subscription(db, brand, price_id, trial_days=None):
     params = {
         "customer": customer_id,
         "items": [{"price": price_id}],
-        "metadata": {"brand_id": str(brand["id"])},
+        "metadata": {
+            "brand_id": str(brand["id"]),
+            "partner_id": str(brand.get("partner_id") or ""),
+            "agency_partner_id": str(brand.get("agency_partner_id") or ""),
+            "referral_code": brand.get("referral_code", ""),
+        },
     }
     if trial_days:
         params["trial_period_days"] = trial_days
@@ -269,9 +277,18 @@ def handle_webhook(db, payload, sig_header):
                 stripe_mrr=0,
                 churned_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
             )
-    elif etype == "invoice.payment_succeeded":
+    elif etype in ("invoice.paid", "invoice.payment_succeeded"):
         if brand_id:
             db.update_brand_stripe(brand_id, stripe_status="active")
+            try:
+                db.create_partner_commissions_for_invoice(
+                    brand_id,
+                    data_obj,
+                    source_event_type="invoice.paid",
+                    source_event_id=event["id"],
+                )
+            except Exception:
+                log.exception("Partner commission creation failed for invoice event %s", event["id"])
     elif etype == "invoice.payment_failed":
         if brand_id:
             db.update_brand_stripe(brand_id, stripe_status="past_due")

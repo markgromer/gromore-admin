@@ -2382,6 +2382,15 @@ def create_app():
     @app.route("/crm/prospect/new", methods=["POST"])
     @login_required
     def agency_crm_new_prospect():
+        referral_code = request.form.get("referral_code", "").strip()
+        partner_ref = db.resolve_partner_referral_code(referral_code) if referral_code else None
+        attribution = {
+            "source": "admin_prospect",
+            "referral_code": (partner_ref or {}).get("code") or referral_code,
+            "utm_source": request.form.get("utm_source", "").strip(),
+            "utm_medium": request.form.get("utm_medium", "").strip(),
+            "utm_campaign": request.form.get("utm_campaign", "").strip(),
+        }
         pid = db.create_agency_prospect(
             name=request.form.get("name", "").strip(),
             email=request.form.get("email", "").strip(),
@@ -2393,7 +2402,24 @@ def create_app():
             source=request.form.get("source", "manual").strip(),
             monthly_budget=request.form.get("monthly_budget", "").strip(),
             notes=request.form.get("notes", "").strip(),
+            partner_id=(partner_ref or {}).get("partner_id"),
+            referral_code=attribution["referral_code"],
+            utm_source=attribution["utm_source"],
+            utm_medium=attribution["utm_medium"],
+            utm_campaign=attribution["utm_campaign"],
+            attribution_json=json.dumps(attribution, sort_keys=True),
         )
+        if partner_ref:
+            db.record_partner_attribution_event(
+                partner_id=partner_ref["partner_id"],
+                prospect_id=pid,
+                referral_code=partner_ref["code"],
+                source="admin_prospect",
+                utm_source=attribution["utm_source"],
+                utm_medium=attribution["utm_medium"],
+                utm_campaign=attribution["utm_campaign"],
+                metadata={"created_by": "admin"},
+            )
         flash(f"Prospect created.", "success")
         return redirect(url_for("agency_crm_detail", prospect_id=pid))
 
@@ -2616,17 +2642,47 @@ def create_app():
             abort(404)
 
         # Create the brand
-        brand_id = db.create_brand(
-            slug=(prospect.get("business_name") or prospect["name"]).lower().replace(" ", "_")[:30],
-            display_name=prospect.get("business_name") or prospect["name"],
-            industry=prospect.get("industry", ""),
-            service_area=prospect.get("service_area", ""),
-            website=prospect.get("website", ""),
-        )
+        attribution = {}
+        try:
+            attribution = json.loads(prospect.get("attribution_json") or "{}")
+        except Exception:
+            attribution = {}
+        if prospect.get("referral_code") and not attribution.get("referral_code"):
+            attribution["referral_code"] = prospect.get("referral_code")
+        attribution["source"] = attribution.get("source") or prospect.get("source") or "agency_crm"
+        brand_id = db.create_brand({
+            "slug": (prospect.get("business_name") or prospect["name"]).lower().replace(" ", "_")[:30],
+            "display_name": prospect.get("business_name") or prospect["name"],
+            "industry": prospect.get("industry", ""),
+            "service_area": prospect.get("service_area", ""),
+            "website": prospect.get("website", ""),
+            "partner_id": prospect.get("partner_id"),
+            "referral_code": prospect.get("referral_code") or "",
+            "attribution": attribution,
+            "partner_attributed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S") if prospect.get("partner_id") else "",
+        })
 
         db.update_agency_prospect(prospect_id, stage="won", converted_brand_id=brand_id)
         db.add_agency_prospect_note(prospect_id, f"Converted to brand #{brand_id}",
                                      note_type="system", created_by="admin")
+        if prospect.get("partner_id"):
+            db.assign_partner_to_brand(
+                prospect["partner_id"],
+                brand_id,
+                relationship="referred_by",
+                access_level="reporting",
+                billing_owner="brand",
+                first_touch=True,
+                attribution=attribution,
+            )
+            db.record_partner_attribution_event(
+                partner_id=prospect["partner_id"],
+                brand_id=brand_id,
+                prospect_id=prospect_id,
+                referral_code=prospect.get("referral_code") or "",
+                source="prospect_conversion",
+                metadata={"converted_brand_id": brand_id},
+            )
 
         # Stripe: create customer + subscription if price selected
         price_id = request.form.get("price_id", "").strip()
@@ -2639,8 +2695,7 @@ def create_app():
                 trial_days=int(trial_days) if trial_days else None,
             )
             if result:
-                from datetime import datetime
-                db.update_brand_stripe(brand_id, onboarded_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
+                db.update_brand_stripe(brand_id, onboarded_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                 flash(f"Brand created and Stripe subscription started.", "success")
             else:
                 flash(f"Brand created but Stripe subscription failed. Set it up manually.", "warning")
@@ -2661,6 +2716,104 @@ def create_app():
         plans = get_plans(db)
         return render_template("crm/billing.html",
                                revenue=revenue, brands=billing_brands, plans=plans)
+
+    @app.route("/crm/partners", methods=["GET", "POST"])
+    @login_required
+    def agency_partners():
+        if request.method == "POST":
+            partner_id = db.create_partner(
+                partner_type=request.form.get("partner_type", "affiliate").strip(),
+                status=request.form.get("status", "active").strip(),
+                name=request.form.get("name", "").strip(),
+                company_name=request.form.get("company_name", "").strip(),
+                email=request.form.get("email", "").strip(),
+                phone=request.form.get("phone", "").strip(),
+                website=request.form.get("website", "").strip(),
+                payout_email=request.form.get("payout_email", "").strip(),
+                notes=request.form.get("notes", "").strip(),
+                referral_code=request.form.get("referral_code", "").strip(),
+            )
+            if not request.form.get("referral_code", "").strip():
+                db.create_partner_referral_code(partner_id, f"partner-{partner_id}")
+            flash("Partner created.", "success")
+            return redirect(url_for("agency_partners"))
+
+        partners = db.get_partners()
+        codes_by_partner = {}
+        for code in db.get_partner_referral_codes():
+            codes_by_partner.setdefault(code["partner_id"], []).append(code)
+        return render_template(
+            "crm/partners.html",
+            partners=partners,
+            codes_by_partner=codes_by_partner,
+            summary=db.get_partner_program_summary(),
+            assignments=db.get_partner_brand_assignments(active_only=True),
+            commissions=db.get_partner_commissions(limit=100),
+            payout_batches=db.get_partner_payout_batches(limit=20),
+            plans=db.get_commission_plans(active_only=False),
+            brands=db.get_all_brands(),
+        )
+
+    @app.route("/crm/partners/<int:partner_id>/update", methods=["POST"])
+    @login_required
+    def agency_partner_update(partner_id):
+        db.update_partner(
+            partner_id,
+            partner_type=request.form.get("partner_type", "affiliate").strip(),
+            status=request.form.get("status", "active").strip(),
+            name=request.form.get("name", "").strip(),
+            company_name=request.form.get("company_name", "").strip(),
+            email=request.form.get("email", "").strip(),
+            phone=request.form.get("phone", "").strip(),
+            website=request.form.get("website", "").strip(),
+            payout_email=request.form.get("payout_email", "").strip(),
+            tax_status=request.form.get("tax_status", "not_collected").strip(),
+            kyc_status=request.form.get("kyc_status", "not_started").strip(),
+            notes=request.form.get("notes", "").strip(),
+        )
+        code = request.form.get("new_referral_code", "").strip()
+        if code:
+            db.create_partner_referral_code(partner_id, code)
+        flash("Partner updated.", "success")
+        return redirect(url_for("agency_partners"))
+
+    @app.route("/crm/partners/assign-brand", methods=["POST"])
+    @login_required
+    def agency_partner_assign_brand():
+        try:
+            partner_id = int(request.form.get("partner_id") or 0)
+            brand_id = int(request.form.get("brand_id") or 0)
+        except ValueError:
+            partner_id = brand_id = 0
+        if not partner_id or not brand_id:
+            flash("Select a partner and brand.", "error")
+            return redirect(url_for("agency_partners"))
+        db.assign_partner_to_brand(
+            partner_id,
+            brand_id,
+            relationship=request.form.get("relationship", "referred_by").strip(),
+            access_level=request.form.get("access_level", "reporting").strip(),
+            billing_owner=request.form.get("billing_owner", "brand").strip(),
+            attribution={"source": "admin_assignment", "referral_code": request.form.get("referral_code", "").strip()},
+        )
+        db.record_partner_attribution_event(
+            partner_id=partner_id,
+            brand_id=brand_id,
+            referral_code=request.form.get("referral_code", "").strip(),
+            source="admin_assignment",
+        )
+        flash("Partner assigned to brand.", "success")
+        return redirect(url_for("agency_partners"))
+
+    @app.route("/crm/partners/payout-batch", methods=["POST"])
+    @login_required
+    def agency_partner_create_payout_batch():
+        batch_id = db.create_partner_payout_batch(notes=request.form.get("notes", "").strip())
+        if batch_id:
+            flash(f"Payout batch #{batch_id} created.", "success")
+        else:
+            flash("No eligible commissions are ready for payout.", "info")
+        return redirect(url_for("agency_partners"))
 
     @app.route("/crm/brand/<int:brand_id>/stripe/create-customer", methods=["POST"])
     @login_required

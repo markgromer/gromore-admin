@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Partners{% endblock %}
+
+{% block content %}
+<div class="top-bar">
+    <div>
+        <h1 class="h3 mb-1">Partners</h1>
+        <p class="text-muted mb-0">Affiliate, agency, and reseller attribution, commission, and payout operations.</p>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="stat-card"><div class="stat-value">{{ summary.partner_counts.active or 0 }}</div><div class="stat-label">Active partners</div></div></div>
+    <div class="col-md-3"><div class="stat-card"><div class="stat-value">{{ summary.assigned_brands or 0 }}</div><div class="stat-label">Assigned brands</div></div></div>
+    <div class="col-md-3"><div class="stat-card"><div class="stat-value">${{ "%.0f"|format(summary.pending or 0) }}</div><div class="stat-label">Pending commission</div></div></div>
+    <div class="col-md-3"><div class="stat-card"><div class="stat-value">${{ "%.0f"|format(summary.paid or 0) }}</div><div class="stat-label">Paid commission</div></div></div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card mb-4">
+            <div class="card-header bg-white fw-semibold">Create Partner</div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('agency_partners') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label class="form-label">Type</label>
+                    <select name="partner_type" class="form-select mb-2">
+                        <option value="affiliate">Affiliate</option>
+                        <option value="agency">Agency</option>
+                        <option value="reseller">Reseller</option>
+                        <option value="strategic_partner">Strategic partner</option>
+                    </select>
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select mb-2">
+                        <option value="active">Active</option>
+                        <option value="pending">Pending</option>
+                        <option value="suspended">Suspended</option>
+                    </select>
+                    <input class="form-control mb-2" name="name" placeholder="Contact name" required>
+                    <input class="form-control mb-2" name="company_name" placeholder="Company">
+                    <input class="form-control mb-2" name="email" placeholder="Email">
+                    <input class="form-control mb-2" name="website" placeholder="Website">
+                    <input class="form-control mb-2" name="referral_code" placeholder="Referral code">
+                    <input class="form-control mb-2" name="payout_email" placeholder="Payout email">
+                    <textarea class="form-control mb-3" name="notes" rows="3" placeholder="Internal notes"></textarea>
+                    <button class="btn btn-primary w-100">Create partner</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header bg-white fw-semibold">Assign Brand</div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('agency_partner_assign_brand') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <select name="partner_id" class="form-select mb-2" required>
+                        <option value="">Partner</option>
+                        {% for p in partners %}<option value="{{ p.id }}">{{ p.name }}{% if p.company_name %} / {{ p.company_name }}{% endif %}</option>{% endfor %}
+                    </select>
+                    <select name="brand_id" class="form-select mb-2" required>
+                        <option value="">Brand</option>
+                        {% for b in brands %}<option value="{{ b.id }}">{{ b.display_name }}</option>{% endfor %}
+                    </select>
+                    <select name="relationship" class="form-select mb-2">
+                        <option value="referred_by">Referred by</option>
+                        <option value="managed_by">Managed by</option>
+                        <option value="resold_by">Resold by</option>
+                    </select>
+                    <select name="access_level" class="form-select mb-2">
+                        <option value="reporting">Reporting</option>
+                        <option value="manager">Manager</option>
+                        <option value="owner">Owner</option>
+                    </select>
+                    <input class="form-control mb-3" name="referral_code" placeholder="Referral code">
+                    <button class="btn btn-outline-primary w-100">Assign</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header bg-white fw-semibold">Partner Roster</div>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th>Partner</th><th>Status</th><th>Codes</th><th>Tax/KYC</th><th></th></tr></thead>
+                    <tbody>
+                    {% for p in partners %}
+                    <tr>
+                        <td>
+                            <div class="fw-semibold">{{ p.name }}</div>
+                            <div class="text-muted small">{{ p.partner_type }}{% if p.email %} · {{ p.email }}{% endif %}</div>
+                        </td>
+                        <td><span class="badge bg-{{ 'success' if p.status == 'active' else 'secondary' }}">{{ p.status }}</span></td>
+                        <td>
+                            {% for code in codes_by_partner.get(p.id, []) %}
+                            <span class="badge bg-light text-dark border">{{ code.code }}</span>
+                            {% endfor %}
+                        </td>
+                        <td><span class="small">{{ p.tax_status }} / {{ p.kyc_status }}</span></td>
+                        <td>
+                            <form method="POST" action="{{ url_for('agency_partner_update', partner_id=p.id) }}" class="d-flex gap-1">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="name" value="{{ p.name }}">
+                                <input type="hidden" name="partner_type" value="{{ p.partner_type }}">
+                                <input type="hidden" name="email" value="{{ p.email }}">
+                                <input type="hidden" name="company_name" value="{{ p.company_name }}">
+                                <input type="hidden" name="phone" value="{{ p.phone }}">
+                                <input type="hidden" name="website" value="{{ p.website }}">
+                                <input type="hidden" name="payout_email" value="{{ p.payout_email }}">
+                                <input type="hidden" name="tax_status" value="{{ p.tax_status }}">
+                                <input type="hidden" name="kyc_status" value="{{ p.kyc_status }}">
+                                <input type="hidden" name="notes" value="{{ p.notes }}">
+                                <input class="form-control form-control-sm" name="new_referral_code" placeholder="New code" style="width:110px;">
+                                <select name="status" class="form-select form-select-sm" style="width:110px;">
+                                    {% for status in ['active','pending','suspended','terminated'] %}
+                                    <option value="{{ status }}" {{ 'selected' if p.status == status }}>{{ status }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button class="btn btn-sm btn-outline-secondary">Save</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-muted">No partners yet.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header bg-white fw-semibold">Brand Assignments</div>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>Partner</th><th>Brand</th><th>Relationship</th><th>Access</th><th>Plan</th></tr></thead>
+                    <tbody>
+                    {% for a in assignments %}
+                    <tr><td>{{ a.partner_name }}</td><td>{{ a.brand_name }}</td><td>{{ a.relationship }}</td><td>{{ a.access_level }}</td><td>{{ a.commission_plan_name or '-' }}</td></tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-muted">No brand assignments yet.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <span class="fw-semibold">Commissions</span>
+                <form method="POST" action="{{ url_for('agency_partner_create_payout_batch') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-sm btn-outline-primary">Create payout batch</button>
+                </form>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>Created</th><th>Partner</th><th>Brand</th><th>Invoice</th><th>Status</th><th class="text-end">Commission</th></tr></thead>
+                    <tbody>
+                    {% for c in commissions %}
+                    <tr>
+                        <td class="text-muted">{{ c.created_at }}</td>
+                        <td>{{ c.partner_name }}</td>
+                        <td>{{ c.brand_name }}</td>
+                        <td><code>{{ c.stripe_invoice_id }}</code></td>
+                        <td><span class="badge bg-{{ 'success' if c.status == 'paid' else 'warning text-dark' if c.status in ('pending','approved') else 'secondary' }}">{{ c.status }}</span></td>
+                        <td class="text-end">${{ "%.2f"|format(c.commission_amount or 0) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-muted">No commission events yet.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header bg-white fw-semibold">Payout Batches</div>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>Batch</th><th>Status</th><th>Items</th><th>Total</th><th>Created</th></tr></thead>
+                    <tbody>
+                    {% for b in payout_batches %}
+                    <tr><td>#{{ b.id }}</td><td>{{ b.status }}</td><td>{{ b.item_count }}</td><td>${{ "%.2f"|format(b.total_amount or 0) }}</td><td>{{ b.created_at }}</td></tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-muted">No payout batches yet.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -129,9 +129,16 @@ class WebDB:
                 meta_ad_account_id TEXT DEFAULT '',
                 google_ads_customer_id TEXT DEFAULT '',
                 crm_last_webhook_at TEXT DEFAULT '',
+                partner_id INTEGER DEFAULT NULL,
+                agency_partner_id INTEGER DEFAULT NULL,
+                referral_code TEXT DEFAULT '',
+                attribution_json TEXT DEFAULT '{}',
+                partner_attributed_at TEXT DEFAULT '',
                 wp_category_id INTEGER DEFAULT 0,
                 created_at TEXT DEFAULT (datetime('now')),
-                updated_at TEXT DEFAULT (datetime('now'))
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE SET NULL,
+                FOREIGN KEY (agency_partner_id) REFERENCES partners(id) ON DELETE SET NULL
             );
 
             CREATE TABLE IF NOT EXISTS connections (
@@ -850,6 +857,14 @@ class WebDB:
                 monthly_ad_spend TEXT DEFAULT '',
                 platforms TEXT DEFAULT '',
                 referral_source TEXT DEFAULT '',
+                partner_id INTEGER DEFAULT NULL,
+                referral_code TEXT DEFAULT '',
+                utm_source TEXT DEFAULT '',
+                utm_medium TEXT DEFAULT '',
+                utm_campaign TEXT DEFAULT '',
+                utm_content TEXT DEFAULT '',
+                utm_term TEXT DEFAULT '',
+                attribution_json TEXT DEFAULT '{}',
                 status TEXT NOT NULL DEFAULT 'pending',
                 brand_id INTEGER DEFAULT NULL,
                 client_user_id INTEGER DEFAULT NULL,
@@ -857,6 +872,7 @@ class WebDB:
                 invite_sent_at TEXT DEFAULT '',
                 approved_at TEXT DEFAULT '',
                 created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE SET NULL,
                 FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE SET NULL,
                 FOREIGN KEY (client_user_id) REFERENCES client_users(id) ON DELETE SET NULL
             );
@@ -1205,8 +1221,17 @@ class WebDB:
                 platforms TEXT DEFAULT '',
                 goals TEXT DEFAULT '',
                 referral_source TEXT DEFAULT '',
+                partner_id INTEGER DEFAULT NULL,
+                referral_code TEXT DEFAULT '',
+                utm_source TEXT DEFAULT '',
+                utm_medium TEXT DEFAULT '',
+                utm_campaign TEXT DEFAULT '',
+                utm_content TEXT DEFAULT '',
+                utm_term TEXT DEFAULT '',
+                attribution_json TEXT DEFAULT '{}',
                 converted_to_brand_id INTEGER DEFAULT NULL,
                 created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE SET NULL,
                 FOREIGN KEY (converted_to_brand_id) REFERENCES brands(id) ON DELETE SET NULL
             );
         """)
@@ -1311,10 +1336,19 @@ class WebDB:
                 converted_brand_id INTEGER DEFAULT NULL,
                 assessment_lead_id INTEGER DEFAULT NULL,
                 signup_lead_id INTEGER DEFAULT NULL,
+                partner_id INTEGER DEFAULT NULL,
+                referral_code TEXT DEFAULT '',
+                utm_source TEXT DEFAULT '',
+                utm_medium TEXT DEFAULT '',
+                utm_campaign TEXT DEFAULT '',
+                utm_content TEXT DEFAULT '',
+                utm_term TEXT DEFAULT '',
+                attribution_json TEXT DEFAULT '{}',
                 last_contact_at TEXT DEFAULT '',
                 next_follow_up TEXT DEFAULT '',
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE SET NULL,
                 FOREIGN KEY (converted_brand_id) REFERENCES brands(id) ON DELETE SET NULL
             );
         """)
@@ -1383,6 +1417,188 @@ class WebDB:
                 completed_at TEXT DEFAULT '',
                 FOREIGN KEY (prospect_id) REFERENCES agency_prospects(id) ON DELETE CASCADE,
                 FOREIGN KEY (sequence_id) REFERENCES agency_nurture_sequences(id) ON DELETE CASCADE
+            );
+        """)
+
+        # ── Partners / affiliates / agency reseller program ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS commission_plans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                plan_type TEXT NOT NULL DEFAULT 'recurring_percent',
+                default_rate REAL DEFAULT 0.20,
+                flat_amount REAL DEFAULT 0,
+                duration_months INTEGER DEFAULT 12,
+                hold_days INTEGER DEFAULT 30,
+                payout_delay_days INTEGER DEFAULT 0,
+                is_active INTEGER DEFAULT 1,
+                notes TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS partners (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                partner_type TEXT NOT NULL DEFAULT 'affiliate',
+                status TEXT NOT NULL DEFAULT 'pending',
+                name TEXT NOT NULL,
+                company_name TEXT DEFAULT '',
+                email TEXT DEFAULT '',
+                phone TEXT DEFAULT '',
+                website TEXT DEFAULT '',
+                default_commission_plan_id INTEGER DEFAULT NULL,
+                payout_method TEXT DEFAULT 'manual',
+                payout_email TEXT DEFAULT '',
+                tax_status TEXT DEFAULT 'not_collected',
+                kyc_status TEXT DEFAULT 'not_started',
+                notes TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (default_commission_plan_id) REFERENCES commission_plans(id) ON DELETE SET NULL
+            );
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_partners_status_type ON partners(status, partner_type);")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS partner_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                partner_id INTEGER NOT NULL,
+                email TEXT NOT NULL,
+                display_name TEXT DEFAULT '',
+                role TEXT DEFAULT 'owner',
+                status TEXT DEFAULT 'active',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(partner_id, email),
+                FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS partner_referral_codes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                partner_id INTEGER NOT NULL,
+                code TEXT UNIQUE NOT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                landing_url TEXT DEFAULT '',
+                use_count INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_partner_referral_codes_partner ON partner_referral_codes(partner_id, status);")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS partner_brand_assignments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                partner_id INTEGER NOT NULL,
+                brand_id INTEGER NOT NULL,
+                relationship TEXT NOT NULL DEFAULT 'referred_by',
+                access_level TEXT NOT NULL DEFAULT 'reporting',
+                billing_owner TEXT NOT NULL DEFAULT 'brand',
+                commission_plan_id INTEGER DEFAULT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                first_touch INTEGER DEFAULT 1,
+                last_touch INTEGER DEFAULT 0,
+                attribution_json TEXT DEFAULT '{}',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(partner_id, brand_id, relationship),
+                FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE CASCADE,
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+                FOREIGN KEY (commission_plan_id) REFERENCES commission_plans(id) ON DELETE SET NULL
+            );
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_partner_brand_assignments_brand ON partner_brand_assignments(brand_id, status);")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS partner_attribution_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                partner_id INTEGER DEFAULT NULL,
+                referral_code TEXT DEFAULT '',
+                brand_id INTEGER DEFAULT NULL,
+                prospect_id INTEGER DEFAULT NULL,
+                signup_lead_id INTEGER DEFAULT NULL,
+                beta_tester_id INTEGER DEFAULT NULL,
+                source TEXT DEFAULT '',
+                landing_url TEXT DEFAULT '',
+                utm_source TEXT DEFAULT '',
+                utm_medium TEXT DEFAULT '',
+                utm_campaign TEXT DEFAULT '',
+                utm_content TEXT DEFAULT '',
+                utm_term TEXT DEFAULT '',
+                ip_hash TEXT DEFAULT '',
+                user_agent_hash TEXT DEFAULT '',
+                metadata_json TEXT DEFAULT '{}',
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE SET NULL,
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE SET NULL,
+                FOREIGN KEY (prospect_id) REFERENCES agency_prospects(id) ON DELETE SET NULL,
+                FOREIGN KEY (signup_lead_id) REFERENCES signup_leads(id) ON DELETE SET NULL,
+                FOREIGN KEY (beta_tester_id) REFERENCES beta_testers(id) ON DELETE SET NULL
+            );
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_partner_attribution_partner_created ON partner_attribution_events(partner_id, created_at DESC);")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS partner_commission_ledger (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                partner_id INTEGER NOT NULL,
+                brand_id INTEGER NOT NULL,
+                assignment_id INTEGER DEFAULT NULL,
+                commission_plan_id INTEGER DEFAULT NULL,
+                source_event_type TEXT DEFAULT '',
+                source_event_id TEXT DEFAULT '',
+                stripe_invoice_id TEXT DEFAULT '',
+                stripe_subscription_id TEXT DEFAULT '',
+                amount_gross REAL DEFAULT 0,
+                amount_net REAL DEFAULT 0,
+                commission_rate REAL DEFAULT 0,
+                commission_amount REAL DEFAULT 0,
+                currency TEXT DEFAULT 'usd',
+                status TEXT NOT NULL DEFAULT 'pending',
+                eligible_at TEXT DEFAULT '',
+                paid_at TEXT DEFAULT '',
+                payout_batch_id INTEGER DEFAULT NULL,
+                memo TEXT DEFAULT '',
+                metadata_json TEXT DEFAULT '{}',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(partner_id, stripe_invoice_id, source_event_type),
+                FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE CASCADE,
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+                FOREIGN KEY (assignment_id) REFERENCES partner_brand_assignments(id) ON DELETE SET NULL,
+                FOREIGN KEY (commission_plan_id) REFERENCES commission_plans(id) ON DELETE SET NULL
+            );
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_partner_commission_status ON partner_commission_ledger(status, eligible_at, partner_id);")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS partner_payout_batches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                status TEXT NOT NULL DEFAULT 'draft',
+                period_start TEXT DEFAULT '',
+                period_end TEXT DEFAULT '',
+                total_amount REAL DEFAULT 0,
+                currency TEXT DEFAULT 'usd',
+                item_count INTEGER DEFAULT 0,
+                exported_at TEXT DEFAULT '',
+                paid_at TEXT DEFAULT '',
+                reference TEXT DEFAULT '',
+                notes TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS partner_payout_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                payout_batch_id INTEGER NOT NULL,
+                commission_id INTEGER NOT NULL,
+                partner_id INTEGER NOT NULL,
+                amount REAL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'queued',
+                created_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(payout_batch_id, commission_id),
+                FOREIGN KEY (payout_batch_id) REFERENCES partner_payout_batches(id) ON DELETE CASCADE,
+                FOREIGN KEY (commission_id) REFERENCES partner_commission_ledger(id) ON DELETE CASCADE,
+                FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE CASCADE
             );
         """)
 
@@ -1925,6 +2141,12 @@ class WebDB:
             ("sales_bot_crm_event_rules", "TEXT DEFAULT '{}'"),
             ("sales_bot_crm_event_alert_emails", "TEXT DEFAULT ''"),
             ("hiring_design", "TEXT DEFAULT '{}'"),
+            # Partner attribution
+            ("partner_id", "INTEGER DEFAULT NULL"),
+            ("agency_partner_id", "INTEGER DEFAULT NULL"),
+            ("referral_code", "TEXT DEFAULT ''"),
+            ("attribution_json", "TEXT DEFAULT '{}'"),
+            ("partner_attributed_at", "TEXT DEFAULT ''"),
             # Stripe billing
             ("stripe_customer_id", "TEXT DEFAULT ''"),
             ("stripe_subscription_id", "TEXT DEFAULT ''"),
@@ -1986,10 +2208,34 @@ class WebDB:
             ("onboarding_completed_at", "TEXT DEFAULT ''"),
             ("activated_at", "TEXT DEFAULT ''"),
             ("temp_password", "TEXT DEFAULT ''"),
+            ("partner_id", "INTEGER DEFAULT NULL"),
+            ("referral_code", "TEXT DEFAULT ''"),
+            ("utm_source", "TEXT DEFAULT ''"),
+            ("utm_medium", "TEXT DEFAULT ''"),
+            ("utm_campaign", "TEXT DEFAULT ''"),
+            ("utm_content", "TEXT DEFAULT ''"),
+            ("utm_term", "TEXT DEFAULT ''"),
+            ("attribution_json", "TEXT DEFAULT '{}'"),
         ]
         for col_name, col_def in new_bt_cols:
             if col_name not in bt_columns:
                 self._safe_add_column(conn, "beta_testers", col_name, col_def)
+        conn.commit()
+
+        signup_columns = {r[1] for r in conn.execute("PRAGMA table_info(signup_leads)").fetchall()}
+        new_signup_cols = [
+            ("partner_id", "INTEGER DEFAULT NULL"),
+            ("referral_code", "TEXT DEFAULT ''"),
+            ("utm_source", "TEXT DEFAULT ''"),
+            ("utm_medium", "TEXT DEFAULT ''"),
+            ("utm_campaign", "TEXT DEFAULT ''"),
+            ("utm_content", "TEXT DEFAULT ''"),
+            ("utm_term", "TEXT DEFAULT ''"),
+            ("attribution_json", "TEXT DEFAULT '{}'"),
+        ]
+        for col_name, col_def in new_signup_cols:
+            if col_name not in signup_columns:
+                self._safe_add_column(conn, "signup_leads", col_name, col_def)
         conn.commit()
 
         # ── feedback_ai_runs migrations ──
@@ -2128,6 +2374,14 @@ class WebDB:
             ("audit_snapshot_json", "TEXT DEFAULT '{}'"),
             ("pain_points_json", "TEXT DEFAULT '[]'"),
             ("qualification_answers_json", "TEXT DEFAULT '{}'"),
+            ("partner_id", "INTEGER DEFAULT NULL"),
+            ("referral_code", "TEXT DEFAULT ''"),
+            ("utm_source", "TEXT DEFAULT ''"),
+            ("utm_medium", "TEXT DEFAULT ''"),
+            ("utm_campaign", "TEXT DEFAULT ''"),
+            ("utm_content", "TEXT DEFAULT ''"),
+            ("utm_term", "TEXT DEFAULT ''"),
+            ("attribution_json", "TEXT DEFAULT '{}'"),
         ]
         for col_name, col_def in new_ap_cols:
             if col_name not in ap_columns:
@@ -2315,13 +2569,19 @@ class WebDB:
         goals_json = json.dumps(data.get("goals", []))
         cur = conn.execute(
             """INSERT INTO brands (slug, display_name, industry, monthly_budget,
-               website, service_area, primary_services, goals)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+               website, service_area, primary_services, goals, partner_id,
+               agency_partner_id, referral_code, attribution_json, partner_attributed_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 data["slug"], data["display_name"], data.get("industry", "plumbing"),
                 data.get("monthly_budget", 0), data.get("website", ""),
                 data.get("service_area", ""), data.get("primary_services", ""),
                 goals_json,
+                data.get("partner_id"),
+                data.get("agency_partner_id"),
+                data.get("referral_code", ""),
+                json.dumps(data.get("attribution") or data.get("attribution_json") or {}),
+                data.get("partner_attributed_at", ""),
             ),
         )
         conn.commit()
@@ -5575,13 +5835,19 @@ class WebDB:
         try:
             conn.execute(
                 "INSERT INTO beta_testers (name, email, business_name, website, industry, "
-                "monthly_ad_spend, platforms, referral_source, meta_login_email, google_business_email, facebook_page_id) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "monthly_ad_spend, platforms, referral_source, partner_id, referral_code, "
+                "utm_source, utm_medium, utm_campaign, utm_content, utm_term, attribution_json, "
+                "meta_login_email, google_business_email, facebook_page_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     data["name"], data["email"], data.get("business_name", ""),
                     data.get("website", ""), data.get("industry", ""),
                     data.get("monthly_ad_spend", ""), data.get("platforms", ""),
-                    data.get("referral_source", ""),
+                    data.get("referral_source", ""), data.get("partner_id"),
+                    data.get("referral_code", ""), data.get("utm_source", ""),
+                    data.get("utm_medium", ""), data.get("utm_campaign", ""),
+                    data.get("utm_content", ""), data.get("utm_term", ""),
+                    json.dumps(data.get("attribution") or {}, sort_keys=True),
                     data.get("meta_login_email", ""), data.get("google_business_email", ""),
                     data.get("facebook_page_id", ""),
                 ),
@@ -8086,6 +8352,482 @@ class WebDB:
 
     # ── Agency CRM CRUD ──
 
+    def get_or_create_default_commission_plan(self):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM commission_plans WHERE name = ? ORDER BY id LIMIT 1",
+            ("Default Affiliate 20% x 12mo",),
+        ).fetchone()
+        if row:
+            conn.close()
+            return dict(row)
+        cur = conn.execute(
+            """INSERT INTO commission_plans
+               (name, plan_type, default_rate, duration_months, hold_days, notes)
+               VALUES (?, 'recurring_percent', 0.20, 12, 30, ?)""",
+            ("Default Affiliate 20% x 12mo", "Default launch plan for referred accounts."),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM commission_plans WHERE id = ?", (cur.lastrowid,)).fetchone()
+        conn.close()
+        return dict(row)
+
+    def create_commission_plan(self, **fields):
+        allowed = {
+            "name", "plan_type", "default_rate", "flat_amount", "duration_months",
+            "hold_days", "payout_delay_days", "is_active", "notes",
+        }
+        data = {k: fields[k] for k in allowed if k in fields}
+        if not data.get("name"):
+            data["name"] = "Partner commission plan"
+        conn = self._conn()
+        cols = ", ".join(data.keys())
+        placeholders = ", ".join("?" for _ in data)
+        cur = conn.execute(f"INSERT INTO commission_plans ({cols}) VALUES ({placeholders})", list(data.values()))
+        conn.commit()
+        plan_id = cur.lastrowid
+        conn.close()
+        return plan_id
+
+    def get_commission_plans(self, active_only=False):
+        conn = self._conn()
+        if active_only:
+            rows = conn.execute("SELECT * FROM commission_plans WHERE is_active = 1 ORDER BY name").fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM commission_plans ORDER BY is_active DESC, name").fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def create_partner(self, **fields):
+        default_plan = self.get_or_create_default_commission_plan()
+        allowed = {
+            "partner_type", "status", "name", "company_name", "email", "phone",
+            "website", "default_commission_plan_id", "payout_method",
+            "payout_email", "tax_status", "kyc_status", "notes",
+        }
+        data = {k: fields[k] for k in allowed if k in fields}
+        data["name"] = (data.get("name") or data.get("company_name") or data.get("email") or "Partner").strip()
+        data["partner_type"] = (data.get("partner_type") or "affiliate").strip().lower()
+        data["status"] = (data.get("status") or "pending").strip().lower()
+        data["email"] = self._normalize_email(data.get("email"))
+        data["default_commission_plan_id"] = data.get("default_commission_plan_id") or default_plan["id"]
+        if not data.get("payout_email") and data.get("email"):
+            data["payout_email"] = data["email"]
+        conn = self._conn()
+        cols = ", ".join(data.keys())
+        placeholders = ", ".join("?" for _ in data)
+        cur = conn.execute(f"INSERT INTO partners ({cols}) VALUES ({placeholders})", list(data.values()))
+        conn.commit()
+        partner_id = cur.lastrowid
+        conn.close()
+        code = (fields.get("referral_code") or "").strip()
+        if code:
+            self.create_partner_referral_code(partner_id, code)
+        return partner_id
+
+    def update_partner(self, partner_id, **fields):
+        allowed = {
+            "partner_type", "status", "name", "company_name", "email", "phone",
+            "website", "default_commission_plan_id", "payout_method",
+            "payout_email", "tax_status", "kyc_status", "notes",
+        }
+        sets, params = [], []
+        for key, value in fields.items():
+            if key not in allowed:
+                continue
+            if key == "email":
+                value = self._normalize_email(value)
+            sets.append(f"{key} = ?")
+            params.append(value)
+        if not sets:
+            return
+        sets.append("updated_at = datetime('now')")
+        params.append(partner_id)
+        conn = self._conn()
+        conn.execute(f"UPDATE partners SET {', '.join(sets)} WHERE id = ?", params)
+        conn.commit()
+        conn.close()
+
+    def get_partner(self, partner_id):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM partners WHERE id = ?", (partner_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_partners(self, status=None):
+        conn = self._conn()
+        if status:
+            rows = conn.execute(
+                "SELECT * FROM partners WHERE status = ? ORDER BY updated_at DESC, id DESC",
+                (status,),
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM partners ORDER BY updated_at DESC, id DESC").fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def create_partner_referral_code(self, partner_id, code, landing_url=""):
+        normalized = re.sub(r"[^a-zA-Z0-9_-]+", "", str(code or "").strip()).lower()
+        if not normalized:
+            normalized = f"partner-{partner_id}"
+        conn = self._conn()
+        cur = conn.execute(
+            """INSERT OR IGNORE INTO partner_referral_codes
+               (partner_id, code, landing_url)
+               VALUES (?, ?, ?)""",
+            (partner_id, normalized, landing_url or ""),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            row = conn.execute("SELECT id FROM partner_referral_codes WHERE code = ?", (normalized,)).fetchone()
+            code_id = row["id"] if row else None
+        else:
+            code_id = cur.lastrowid
+        conn.close()
+        return code_id
+
+    def get_partner_referral_codes(self, partner_id=None):
+        conn = self._conn()
+        if partner_id:
+            rows = conn.execute(
+                "SELECT * FROM partner_referral_codes WHERE partner_id = ? ORDER BY created_at DESC",
+                (partner_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM partner_referral_codes ORDER BY created_at DESC").fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def resolve_partner_referral_code(self, code):
+        normalized = re.sub(r"[^a-zA-Z0-9_-]+", "", str(code or "").strip()).lower()
+        if not normalized:
+            return None
+        conn = self._conn()
+        row = conn.execute(
+            """SELECT prc.*, p.name as partner_name, p.partner_type, p.status as partner_status
+               FROM partner_referral_codes prc
+               JOIN partners p ON p.id = prc.partner_id
+               WHERE lower(prc.code) = ? AND prc.status = 'active' AND p.status IN ('active', 'pending')
+               LIMIT 1""",
+            (normalized,),
+        ).fetchone()
+        if row:
+            conn.execute(
+                "UPDATE partner_referral_codes SET use_count = use_count + 1, updated_at = datetime('now') WHERE id = ?",
+                (row["id"],),
+            )
+            conn.commit()
+        conn.close()
+        return dict(row) if row else None
+
+    def create_signup_lead(self, data):
+        conn = self._conn()
+        cur = conn.execute(
+            """INSERT INTO signup_leads
+               (name, email, phone, business_name, website, industry, service_area,
+                primary_services, monthly_budget, platforms, goals, referral_source,
+                partner_id, referral_code, utm_source, utm_medium, utm_campaign,
+                utm_content, utm_term, attribution_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                data["name"],
+                self._normalize_email(data["email"]),
+                data.get("phone", ""),
+                data.get("business_name", ""),
+                data.get("website", ""),
+                data.get("industry", ""),
+                data.get("service_area", ""),
+                data.get("primary_services", ""),
+                data.get("monthly_budget", ""),
+                data.get("platforms", ""),
+                data.get("goals", ""),
+                data.get("referral_source", ""),
+                data.get("partner_id"),
+                data.get("referral_code", ""),
+                data.get("utm_source", ""),
+                data.get("utm_medium", ""),
+                data.get("utm_campaign", ""),
+                data.get("utm_content", ""),
+                data.get("utm_term", ""),
+                json.dumps(data.get("attribution") or {}, sort_keys=True),
+            ),
+        )
+        conn.commit()
+        lead_id = cur.lastrowid
+        conn.close()
+        return lead_id
+
+    def record_partner_attribution_event(self, **fields):
+        allowed = {
+            "partner_id", "referral_code", "brand_id", "prospect_id",
+            "signup_lead_id", "beta_tester_id", "source", "landing_url",
+            "utm_source", "utm_medium", "utm_campaign", "utm_content",
+            "utm_term", "ip_hash", "user_agent_hash",
+        }
+        data = {key: fields.get(key, "") for key in allowed}
+        for key in ("partner_id", "brand_id", "prospect_id", "signup_lead_id", "beta_tester_id"):
+            if data.get(key) in ("", 0, "0"):
+                data[key] = None
+        metadata = fields.get("metadata") or {}
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO partner_attribution_events
+               (partner_id, referral_code, brand_id, prospect_id, signup_lead_id,
+                beta_tester_id, source, landing_url, utm_source, utm_medium,
+                utm_campaign, utm_content, utm_term, ip_hash, user_agent_hash,
+                metadata_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                data.get("partner_id"), data.get("referral_code"), data.get("brand_id"),
+                data.get("prospect_id"), data.get("signup_lead_id"), data.get("beta_tester_id"),
+                data.get("source"), data.get("landing_url"), data.get("utm_source"),
+                data.get("utm_medium"), data.get("utm_campaign"), data.get("utm_content"),
+                data.get("utm_term"), data.get("ip_hash"), data.get("user_agent_hash"),
+                json.dumps(metadata, sort_keys=True),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+    def assign_partner_to_brand(
+        self,
+        partner_id,
+        brand_id,
+        *,
+        relationship="referred_by",
+        access_level="reporting",
+        billing_owner="brand",
+        commission_plan_id=None,
+        first_touch=True,
+        last_touch=False,
+        attribution=None,
+    ):
+        partner = self.get_partner(partner_id)
+        if not partner:
+            return None
+        commission_plan_id = commission_plan_id or partner.get("default_commission_plan_id")
+        attribution = attribution or {}
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO partner_brand_assignments
+               (partner_id, brand_id, relationship, access_level, billing_owner,
+                commission_plan_id, first_touch, last_touch, attribution_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(partner_id, brand_id, relationship) DO UPDATE SET
+                access_level = excluded.access_level,
+                billing_owner = excluded.billing_owner,
+                commission_plan_id = excluded.commission_plan_id,
+                status = 'active',
+                last_touch = excluded.last_touch,
+                attribution_json = excluded.attribution_json,
+                updated_at = datetime('now')""",
+            (
+                partner_id, brand_id, relationship, access_level, billing_owner,
+                commission_plan_id, 1 if first_touch else 0, 1 if last_touch else 0,
+                json.dumps(attribution, sort_keys=True),
+            ),
+        )
+        conn.execute(
+            """UPDATE brands
+               SET partner_id = COALESCE(partner_id, ?),
+                   agency_partner_id = CASE WHEN ? IN ('agency', 'reseller') THEN COALESCE(agency_partner_id, ?) ELSE agency_partner_id END,
+                   referral_code = COALESCE(NULLIF(referral_code, ''), ?),
+                   attribution_json = CASE WHEN attribution_json IS NULL OR attribution_json = '' OR attribution_json = '{}' THEN ? ELSE attribution_json END,
+                   partner_attributed_at = COALESCE(NULLIF(partner_attributed_at, ''), datetime('now')),
+                   updated_at = datetime('now')
+               WHERE id = ?""",
+            (
+                partner_id, partner.get("partner_type") or "", partner_id,
+                attribution.get("referral_code", ""), json.dumps(attribution, sort_keys=True), brand_id,
+            ),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT id FROM partner_brand_assignments WHERE partner_id = ? AND brand_id = ? AND relationship = ?",
+            (partner_id, brand_id, relationship),
+        ).fetchone()
+        conn.close()
+        return row["id"] if row else None
+
+    def get_partner_brand_assignments(self, brand_id=None, partner_id=None, active_only=True):
+        clauses, params = [], []
+        if brand_id is not None:
+            clauses.append("pba.brand_id = ?")
+            params.append(brand_id)
+        if partner_id is not None:
+            clauses.append("pba.partner_id = ?")
+            params.append(partner_id)
+        if active_only:
+            clauses.append("pba.status = 'active'")
+        where = "WHERE " + " AND ".join(clauses) if clauses else ""
+        conn = self._conn()
+        rows = conn.execute(
+            f"""SELECT pba.*, p.name as partner_name, p.partner_type, p.email as partner_email,
+                       b.display_name as brand_name, cp.name as commission_plan_name,
+                       cp.default_rate, cp.hold_days
+                FROM partner_brand_assignments pba
+                JOIN partners p ON p.id = pba.partner_id
+                JOIN brands b ON b.id = pba.brand_id
+                LEFT JOIN commission_plans cp ON cp.id = pba.commission_plan_id
+                {where}
+                ORDER BY pba.updated_at DESC, pba.id DESC""",
+            params,
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def create_partner_commissions_for_invoice(self, brand_id, invoice, source_event_type="invoice.paid", source_event_id=""):
+        invoice = invoice or {}
+        invoice_id = str(invoice.get("id") or "").strip()
+        if not brand_id or not invoice_id:
+            return {"created": 0, "skipped": 0, "amount": 0}
+        amount_cents = invoice.get("amount_paid")
+        if amount_cents is None:
+            amount_cents = invoice.get("amount_due") or invoice.get("total") or 0
+        try:
+            amount_gross = round(float(amount_cents or 0) / 100.0, 2)
+        except (TypeError, ValueError):
+            amount_gross = 0
+        if amount_gross <= 0:
+            return {"created": 0, "skipped": 1, "amount": 0}
+        currency = (invoice.get("currency") or "usd").lower()
+        subscription_id = str(invoice.get("subscription") or "").strip()
+        conn = self._conn()
+        assignments = conn.execute(
+            """SELECT pba.*, p.default_commission_plan_id,
+                      cp.default_rate, cp.flat_amount, cp.plan_type, cp.hold_days, cp.duration_months
+               FROM partner_brand_assignments pba
+               JOIN partners p ON p.id = pba.partner_id
+               LEFT JOIN commission_plans cp ON cp.id = COALESCE(pba.commission_plan_id, p.default_commission_plan_id)
+               WHERE pba.brand_id = ? AND pba.status = 'active' AND p.status = 'active'""",
+            (brand_id,),
+        ).fetchall()
+        created = 0
+        total_commission = 0.0
+        for row in assignments:
+            plan_type = row["plan_type"] or "recurring_percent"
+            rate = float(row["default_rate"] if row["default_rate"] is not None else 0.20)
+            flat_amount = float(row["flat_amount"] or 0)
+            commission_amount = flat_amount if plan_type == "flat_bounty" else round(amount_gross * rate, 2)
+            if commission_amount <= 0:
+                continue
+            hold_days = int(row["hold_days"] if row["hold_days"] is not None else 30)
+            eligible_at = (datetime.now(UTC) + timedelta(days=hold_days)).strftime("%Y-%m-%d %H:%M:%S")
+            cur = conn.execute(
+                """INSERT OR IGNORE INTO partner_commission_ledger
+                   (partner_id, brand_id, assignment_id, commission_plan_id,
+                    source_event_type, source_event_id, stripe_invoice_id,
+                    stripe_subscription_id, amount_gross, amount_net,
+                    commission_rate, commission_amount, currency, status,
+                    eligible_at, memo, metadata_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)""",
+                (
+                    row["partner_id"], brand_id, row["id"],
+                    row["commission_plan_id"] or row["default_commission_plan_id"],
+                    source_event_type, source_event_id, invoice_id, subscription_id,
+                    amount_gross, amount_gross, rate, commission_amount, currency,
+                    eligible_at, f"{source_event_type} {invoice_id}",
+                    json.dumps({"invoice": invoice}, sort_keys=True),
+                ),
+            )
+            if cur.rowcount:
+                created += 1
+                total_commission += commission_amount
+        conn.commit()
+        conn.close()
+        return {"created": created, "skipped": max(0, len(assignments) - created), "amount": round(total_commission, 2)}
+
+    def get_partner_commissions(self, partner_id=None, status=None, limit=200):
+        clauses, params = [], []
+        if partner_id is not None:
+            clauses.append("pcl.partner_id = ?")
+            params.append(partner_id)
+        if status:
+            clauses.append("pcl.status = ?")
+            params.append(status)
+        where = "WHERE " + " AND ".join(clauses) if clauses else ""
+        conn = self._conn()
+        rows = conn.execute(
+            f"""SELECT pcl.*, p.name as partner_name, b.display_name as brand_name
+                FROM partner_commission_ledger pcl
+                JOIN partners p ON p.id = pcl.partner_id
+                JOIN brands b ON b.id = pcl.brand_id
+                {where}
+                ORDER BY pcl.created_at DESC, pcl.id DESC
+                LIMIT ?""",
+            [*params, int(limit or 200)],
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_partner_program_summary(self):
+        conn = self._conn()
+        partner_counts = conn.execute("SELECT status, COUNT(*) as cnt FROM partners GROUP BY status").fetchall()
+        commission = conn.execute(
+            """SELECT
+                COALESCE(SUM(CASE WHEN status = 'pending' THEN commission_amount ELSE 0 END), 0) as pending,
+                COALESCE(SUM(CASE WHEN status = 'approved' THEN commission_amount ELSE 0 END), 0) as approved,
+                COALESCE(SUM(CASE WHEN status = 'paid' THEN commission_amount ELSE 0 END), 0) as paid,
+                COUNT(*) as commission_count
+               FROM partner_commission_ledger"""
+        ).fetchone()
+        assigned_brands = conn.execute(
+            "SELECT COUNT(DISTINCT brand_id) as cnt FROM partner_brand_assignments WHERE status = 'active'"
+        ).fetchone()
+        conn.close()
+        return {
+            "partner_counts": {r["status"]: r["cnt"] for r in partner_counts},
+            "assigned_brands": assigned_brands["cnt"] if assigned_brands else 0,
+            **(dict(commission) if commission else {"pending": 0, "approved": 0, "paid": 0, "commission_count": 0}),
+        }
+
+    def create_partner_payout_batch(self, notes=""):
+        now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
+        conn = self._conn()
+        rows = conn.execute(
+            """SELECT * FROM partner_commission_ledger
+               WHERE status IN ('pending', 'approved')
+                 AND COALESCE(NULLIF(eligible_at, ''), '9999-12-31') <= ?
+               ORDER BY partner_id, created_at""",
+            (now,),
+        ).fetchall()
+        if not rows:
+            conn.close()
+            return None
+        total = round(sum(float(r["commission_amount"] or 0) for r in rows), 2)
+        cur = conn.execute(
+            """INSERT INTO partner_payout_batches
+               (status, period_end, total_amount, currency, item_count, notes)
+               VALUES ('draft', ?, ?, 'usd', ?, ?)""",
+            (now, total, len(rows), notes or ""),
+        )
+        batch_id = cur.lastrowid
+        for row in rows:
+            conn.execute(
+                """INSERT OR IGNORE INTO partner_payout_items
+                   (payout_batch_id, commission_id, partner_id, amount)
+                   VALUES (?, ?, ?, ?)""",
+                (batch_id, row["id"], row["partner_id"], row["commission_amount"]),
+            )
+            conn.execute(
+                """UPDATE partner_commission_ledger
+                   SET status = 'approved', payout_batch_id = ?, updated_at = datetime('now')
+                   WHERE id = ?""",
+                (batch_id, row["id"]),
+            )
+        conn.commit()
+        conn.close()
+        return batch_id
+
+    def get_partner_payout_batches(self, limit=50):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM partner_payout_batches ORDER BY created_at DESC, id DESC LIMIT ?",
+            (int(limit or 50),),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
     def get_agency_prospects(self, stage=None, limit=200):
         conn = self._conn()
         if stage:
@@ -8141,6 +8883,8 @@ class WebDB:
             "property_count", "current_vendor_status", "outreach_angle",
             "proposal_status", "next_action", "source_details_json",
             "audit_snapshot_json", "pain_points_json", "qualification_answers_json",
+            "partner_id", "referral_code", "utm_source", "utm_medium",
+            "utm_campaign", "utm_content", "utm_term", "attribution_json",
         }
         data = {k: v for k, v in fields.items() if k in allowed and v}
         cols = ", ".join(data.keys())
@@ -8164,6 +8908,8 @@ class WebDB:
             "property_count", "current_vendor_status", "outreach_angle",
             "proposal_status", "next_action", "source_details_json",
             "audit_snapshot_json", "pain_points_json", "qualification_answers_json",
+            "partner_id", "referral_code", "utm_source", "utm_medium",
+            "utm_campaign", "utm_content", "utm_term", "attribution_json",
         }
         sets, params = [], []
         for k, v in fields.items():
@@ -8271,10 +9017,20 @@ class WebDB:
             conn.execute(
                 """INSERT INTO agency_prospects
                    (name, email, phone, business_name, website, industry, service_area,
-                    source, stage, monthly_budget)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 'signup', 'new', ?)""",
+                    source, stage, monthly_budget, signup_lead_id, partner_id,
+                    referral_code, utm_source, utm_medium, utm_campaign, utm_content,
+                    utm_term, attribution_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 'signup', 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (r["name"], r["email"], r["phone"], r["business_name"],
-                 r["website"], r["industry"], r["service_area"], r["monthly_budget"]),
+                 r["website"], r["industry"], r["service_area"], r["monthly_budget"],
+                 r["id"], r["partner_id"] if "partner_id" in r.keys() else None,
+                 r["referral_code"] if "referral_code" in r.keys() else "",
+                 r["utm_source"] if "utm_source" in r.keys() else "",
+                 r["utm_medium"] if "utm_medium" in r.keys() else "",
+                 r["utm_campaign"] if "utm_campaign" in r.keys() else "",
+                 r["utm_content"] if "utm_content" in r.keys() else "",
+                 r["utm_term"] if "utm_term" in r.keys() else "",
+                 r["attribution_json"] if "attribution_json" in r.keys() else "{}"),
             )
             imported += 1
         if imported:
