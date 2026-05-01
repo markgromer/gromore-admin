@@ -1,7 +1,10 @@
 import os
+import shutil
 import unittest
 import uuid
+from io import BytesIO
 from pathlib import Path
+from unittest.mock import patch
 
 _TEST_ROOT = Path(__file__).resolve().parent / ".tmp-test-artifacts"
 _TEST_ROOT.mkdir(exist_ok=True)
@@ -21,7 +24,8 @@ class CreativeCenterRouteTests(unittest.TestCase):
         os.environ["APP_URL"] = "http://localhost:5000"
 
         self.app = create_app()
-        self.app.config.update(TESTING=True, WTF_CSRF_ENABLED=False)
+        self.uploads_dir = _TEST_ROOT / f"creative-uploads-{uuid.uuid4().hex}"
+        self.app.config.update(TESTING=True, WTF_CSRF_ENABLED=False, UPLOADS_DIR=str(self.uploads_dir))
         self.client = self.app.test_client()
 
         with self.app.app_context():
@@ -57,6 +61,8 @@ class CreativeCenterRouteTests(unittest.TestCase):
             path = Path(str(self.db_file) + suffix)
             if path.exists():
                 path.unlink()
+        if self.uploads_dir.exists():
+            shutil.rmtree(self.uploads_dir)
 
     def test_creative_center_renders_canvas_and_asset_loader(self):
         response = self.client.get("/client/creative")
@@ -65,6 +71,48 @@ class CreativeCenterRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('id="fabricCanvas"', html)
         self.assertIn("window.__creativeCenterAssetsPromise", html)
+        self.assertIn("source_image", html)
+
+    def test_image_creator_renders_reference_upload_and_creative_handoff(self):
+        response = self.client.get("/client/image-creator")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="icReferenceImages"', html)
+        self.assertIn("Use in Creative Studio", html)
+
+    def test_image_creator_accepts_reference_uploads(self):
+        captured = {}
+
+        def fake_generate(brand, prompt, **kwargs):
+            captured["prompt"] = prompt
+            captured["reference_images"] = kwargs.get("reference_images") or []
+            return b"fake-image-bytes"
+
+        with patch("webapp.ai_provider.generate_image_bytes", side_effect=fake_generate):
+            response = self.client.post(
+                "/client/image-creator/generate",
+                data={
+                    "prompt": "Create a clean service ad based on this truck photo",
+                    "style": "realistic professional service-business ad, natural light",
+                    "asset_type": "basic_visual",
+                    "tone": "professional",
+                    "format": "square",
+                    "include_brand_context": "1",
+                    "image_model": "gpt-image-2",
+                    "reference_images": (BytesIO(b"fake-reference"), "truck-reference.png"),
+                },
+                content_type="multipart/form-data",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["reference_count"], 1)
+        self.assertEqual(len(captured["reference_images"]), 1)
+        self.assertIn("Reference images provided: 1", captured["prompt"])
+        generated = self.uploads_dir / "ai_images" / str(self.brand_id) / payload["filename"]
+        self.assertTrue(generated.exists())
 
 
 if __name__ == "__main__":

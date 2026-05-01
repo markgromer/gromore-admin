@@ -1124,6 +1124,26 @@
 
     // ── AI Image generation ──
 
+    function addImageUrlToCanvas(imageUrl, customType) {
+        if (!imageUrl) return;
+        fabric.Image.fromURL(imageUrl, function(img) {
+            const coverSc = Math.max(fullW / img.width, fullH / img.height);
+            img.set({
+                left: (fullW - img.width * coverSc) / 2,
+                top: (fullH - img.height * coverSc) / 2,
+                scaleX: coverSc,
+                scaleY: coverSc,
+                _customType: customType || 'image',
+            });
+            canvas.add(img);
+            canvas.sendToBack(img);
+            canvas.setActiveObject(img);
+            canvas.renderAll();
+            updateLayers();
+            ccToast('Image opened in Creative Center.', 'success');
+        }, { crossOrigin: 'anonymous' });
+    }
+
     window.generateAiImage = function() {
         const prompt = document.getElementById('aiImagePrompt').value.trim();
         if (!prompt) { ccToast('Describe the image you want to generate.', 'error'); return; }
@@ -2182,6 +2202,19 @@
     } catch (_) {}
 
     // ── Brand Colors ──
+
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const sourceImage = params.get('source_image') || '';
+        if (sourceImage) {
+            const sourceUrl = sourceImage.startsWith('/client/uploads/') ? sourceImage : '';
+            if (sourceUrl) {
+                setTimeout(() => addImageUrlToCanvas(sourceUrl, 'ai_image'), 250);
+            } else {
+                ccToast('That image source is not a valid Warren upload.', 'error');
+            }
+        }
+    } catch (_) {}
 
     (function parseBrandColors() {
         const raw = {{ (brand.get('brand_colors', '') or '')|tojson }};

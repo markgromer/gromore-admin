@@ -17,6 +17,7 @@ from flask import current_app
 
 OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 OPENAI_IMAGES_URL = "https://api.openai.com/v1/images/generations"
+OPENAI_IMAGE_EDITS_URL = "https://api.openai.com/v1/images/edits"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 XAI_BASE_URL = "https://api.x.ai/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -344,12 +345,16 @@ def generate_image_bytes(
     model: str = "",
     size: str = "1024x1024",
     timeout: int = 120,
+    reference_images: Optional[List[Dict[str, Any]]] = None,
 ) -> bytes:
     cfg = get_image_provider_config(brand)
     if not cfg.api_key:
         raise ValueError(f"{provider_label(cfg.provider)} API key is not configured.")
+    reference_images = [item for item in (reference_images or []) if item.get("bytes")]
 
     if cfg.provider == "xai":
+        if reference_images:
+            raise ValueError("Reference images are not supported for xAI image generation yet. Use OpenAI GPT Image or Gemini native image models for reference-based generation.")
         aspect_ratio = {"1024x1024": "1:1", "1792x1024": "16:9", "1536x1024": "16:9", "1024x1792": "9:16", "1024x1536": "9:16"}.get(size, "1:1")
         payload = {
             "model": model or "grok-imagine-image",
@@ -375,7 +380,16 @@ def generate_image_bytes(
         image_model = model or PROVIDER_DEFAULT_MODELS["gemini"]["images"]
         if image_model.startswith("gemini-"):
             ratio_note = f"\nRequested aspect ratio: {aspect_ratio}."
-            payload = {"contents": [{"parts": [{"text": prompt + ratio_note}]}]}
+            parts: List[Dict[str, Any]] = [{"text": prompt + ratio_note}]
+            for ref in reference_images[:4]:
+                mime_type = ref.get("mime_type") or "image/png"
+                parts.append({
+                    "inlineData": {
+                        "mimeType": mime_type,
+                        "data": base64.b64encode(ref["bytes"]).decode("ascii"),
+                    }
+                })
+            payload = {"contents": [{"parts": parts}]}
             url = f"{GEMINI_BASE_URL}/models/{image_model}:generateContent"
             resp = requests.post(url, params={"key": cfg.api_key}, json=payload, timeout=timeout)
             if resp.status_code >= 400:
@@ -388,6 +402,8 @@ def generate_image_bytes(
                 if b64:
                     return base64.b64decode(b64)
             raise ValueError("Gemini image response did not include image data.")
+        if reference_images:
+            raise ValueError("Reference images require Gemini native image models, not Imagen. Select a Gemini image-preview model.")
         url = f"{GEMINI_BASE_URL}/models/{image_model}:predict"
         payload = {
             "instances": [{"prompt": prompt}],
@@ -404,6 +420,8 @@ def generate_image_bytes(
         raise ValueError("Gemini image response did not include image data.")
 
     if cfg.provider == "bfl":
+        if reference_images:
+            raise ValueError("Reference images are not supported for the configured FLUX endpoint yet. Use OpenAI GPT Image or Gemini native image models for reference-based generation.")
         width, height = {
             "1024x1024": (1024, 1024),
             "1536x1024": (1536, 1024),
@@ -445,8 +463,56 @@ def generate_image_bytes(
     if cfg.provider != "openai":
         raise ValueError(f"Image generation is not supported for {provider_label(cfg.provider)} yet.")
 
+    selected_model = model or pick_model(brand, "images") or "gpt-image-2"
+    if reference_images:
+        if not selected_model.startswith("gpt-image") and selected_model != "chatgpt-image-latest":
+            raise ValueError("Reference images require a GPT Image model. Select GPT Image 1.5, GPT Image 1, or ChatGPT Image Latest.")
+        data = {
+            "model": selected_model,
+            "prompt": prompt,
+            "size": size,
+            "n": "1",
+        }
+        files = [
+            (
+                "image[]",
+                (
+                    ref.get("filename") or f"reference_{idx + 1}.png",
+                    ref["bytes"],
+                    ref.get("mime_type") or "image/png",
+                ),
+            )
+            for idx, ref in enumerate(reference_images[:4])
+        ]
+        edit_headers = {"Authorization": f"Bearer {cfg.api_key}"}
+        resp = requests.post(OPENAI_IMAGE_EDITS_URL, headers=edit_headers, data=data, files=files, timeout=timeout)
+        if resp.status_code >= 400:
+            files = [
+                (
+                    "image",
+                    (
+                        ref.get("filename") or f"reference_{idx + 1}.png",
+                        ref["bytes"],
+                        ref.get("mime_type") or "image/png",
+                    ),
+                )
+                for idx, ref in enumerate(reference_images[:4])
+            ]
+            resp = requests.post(OPENAI_IMAGE_EDITS_URL, headers=edit_headers, data=data, files=files, timeout=timeout)
+        if resp.status_code >= 400:
+            raise ValueError(f"OpenAI image edit request failed ({resp.status_code}): {resp.text[:300]}")
+        first = (resp.json().get("data") or [{}])[0]
+        if first.get("b64_json"):
+            return base64.b64decode(first["b64_json"])
+        if first.get("url"):
+            img_resp = requests.get(first["url"], timeout=timeout)
+            if img_resp.status_code >= 400:
+                raise ValueError(f"Generated image download failed ({img_resp.status_code}).")
+            return img_resp.content
+        raise ValueError("OpenAI image edit response did not include image data.")
+
     payload = {
-        "model": model or pick_model(brand, "images") or "gpt-image-2",
+        "model": selected_model,
         "prompt": prompt,
         "size": size,
         "n": 1,

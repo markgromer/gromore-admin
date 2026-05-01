@@ -8253,6 +8253,24 @@ def client_image_creator_generate():
         "fine_print": (data.get("fine_print") or "").strip()[:120],
     }
     include_brand_context = str(data.get("include_brand_context", "1")).lower() not in {"0", "false", "no", "off"}
+    reference_images = []
+    for upload in request.files.getlist("reference_images")[:4]:
+        if not upload or not upload.filename:
+            continue
+        mimetype = (upload.mimetype or "").lower()
+        ext = upload.filename.rsplit(".", 1)[-1].lower() if "." in upload.filename else ""
+        if mimetype not in {"image/png", "image/jpeg", "image/webp"} and ext not in {"png", "jpg", "jpeg", "webp"}:
+            return jsonify({"ok": False, "error": "Reference images must be PNG, JPG, or WebP."}), 400
+        upload.seek(0, 2)
+        size_bytes = upload.tell()
+        upload.seek(0)
+        if size_bytes > 15 * 1024 * 1024:
+            return jsonify({"ok": False, "error": "Each reference image must be under 15MB."}), 400
+        reference_images.append({
+            "filename": upload.filename[:160],
+            "mime_type": mimetype or ("image/jpeg" if ext in {"jpg", "jpeg"} else "image/webp" if ext == "webp" else "image/png"),
+            "bytes": upload.read(),
+        })
     prompt = _image_creator_prompt(
         brand,
         user_prompt,
@@ -8264,6 +8282,11 @@ def client_image_creator_generate():
         text_sections=text_sections,
         custom_instructions=custom_instructions,
     )
+    if reference_images:
+        prompt += (
+            f"\nReference images provided: {len(reference_images)}. Use them as visual references for subject, brand styling, "
+            "composition, product appearance, environment, or before/after context as applicable. Preserve the useful visual traits without copying unrelated artifacts, watermarks, or text."
+        )
     image_config = get_image_provider_config(brand)
     selected_default = _IMAGE_PROVIDER_DEFAULT_MODELS.get(image_config.provider, "gpt-image-2")
     requested_model = (data.get("image_model") or "").strip()[:120]
@@ -8283,6 +8306,7 @@ def client_image_creator_generate():
             model=image_model,
             size=image_size,
             timeout=150,
+            reference_images=reference_images,
         )
     except Exception as exc:
         log.warning("Image creator failed for brand %s: %s", brand_id, exc)
@@ -8301,6 +8325,7 @@ def client_image_creator_generate():
         "filename": output_name,
         "format": format_key,
         "model": image_model,
+        "reference_count": len(reference_images),
         "prompt_used": prompt,
     })
 
