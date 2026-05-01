@@ -1074,6 +1074,34 @@
                                 <span class="badge {{ integration.readiness.badge_class }}">{{ integration.readiness.label }}</span>
                             </div>
                             <p class="text-muted mt-3 mb-2" style="font-size:.86rem;">{{ integration.summary }}</p>
+                            {% if integration.key == 'make' %}
+                            <div class="mb-3 p-3" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;">
+                                <div class="fw-semibold mb-1" style="font-size:.86rem;"><i class="bi bi-box-arrow-in-down me-1 text-primary"></i>Recommended first path: Make into Warren</div>
+                                <div class="text-muted mb-2" style="font-size:.8rem;">Use this when Make catches Facebook lead forms, website form events, marketplace leads, or any source that should be processed and nurtured by Warren.</div>
+                                <label class="form-label mb-1 fw-medium" style="font-size:.78rem;">Warren Incoming Lead Webhook URL</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control form-control-sm bg-light" readonly value="{{ request.url_root | replace('http://', 'https://') }}webhooks/leads/{{ brand.slug }}" id="makeIncomingLeadWebhookUrl">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('makeIncomingLeadWebhookUrl')"><i class="bi bi-clipboard"></i></button>
+                                </div>
+                                {% if brand.sales_bot_incoming_webhook_secret %}
+                                <div class="mt-2">
+                                    <label class="form-label mb-1 fw-medium" style="font-size:.78rem;">No-header URL for Make</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control form-control-sm bg-light" readonly value="{{ request.url_root | replace('http://', 'https://') }}webhooks/leads/{{ brand.slug }}?secret={{ brand.sales_bot_incoming_webhook_secret | urlencode }}" id="makeIncomingLeadWebhookSecretUrl">
+                                        <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('makeIncomingLeadWebhookSecretUrl')"><i class="bi bi-clipboard"></i></button>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <div class="text-muted mt-2" style="font-size:.78rem;">Save an Incoming Lead Webhook Secret in the Lead Webhooks panel to unlock a one-box Make URL.</div>
+                                {% endif %}
+                                <div class="mt-2" style="font-size:.78rem; color:#475569;">For normal Make HTTP modules, send the secret as <code>Authorization: Bearer ...</code> or <code>X-GroMore-Webhook-Secret</code>. The optional field below is only for Warren-to-Make handoffs.</div>
+                                <div class="mt-3 d-flex align-items-center gap-2 flex-wrap">
+                                    <button class="btn btn-sm btn-outline-primary" type="button" id="makeIncomingTestBtn"><i class="bi bi-send-check me-1"></i>Send Test Lead Into Warren</button>
+                                    <span class="text-muted" style="font-size:.76rem;">Creates a no-send test thread and records the delivery.</span>
+                                </div>
+                                <div id="makeIncomingTestResult" class="mt-2" style="display:none;"></div>
+                            </div>
+                            {% endif %}
                             <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
                                 <span class="badge bg-light text-dark border">{{ integration.mode_label }}</span>
                                 {% for capability in integration.capabilities[:4] %}
@@ -1345,6 +1373,29 @@
                     <a href="{{ url_for('client.client_automations') }}#crm-events" class="btn btn-outline-dark btn-sm"><i class="bi bi-broadcast me-1"></i>CRM event messages</a>
                 </div>
 
+                {% if connection_health %}
+                <div class="mt-3 p-3" style="background:#fff; border:1px solid #e2e8f0; border-radius:12px;">
+                    <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
+                        <div class="fw-semibold" style="font-size:.88rem;"><i class="bi bi-heart-pulse me-1"></i>Connection health</div>
+                        <span class="text-muted" style="font-size:.76rem;">Derived from tokens, webhook deliveries, and handoff results</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0" style="font-size:.78rem;">
+                            <thead><tr><th>Connection</th><th>Status</th><th>Detail</th></tr></thead>
+                            <tbody>
+                                {% for item in connection_health %}
+                                <tr>
+                                    <td class="fw-medium">{{ item.label }}</td>
+                                    <td><span class="badge bg-{{ item.status_badge }}">{{ item.status }}</span></td>
+                                    <td>{{ item.detail }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+
                 <div class="mt-3 p-3" style="background:#eef2ff; border:1px solid #c7d2fe; border-radius:12px;">
                     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
                         <div>
@@ -1373,8 +1424,9 @@
                             {% endif %}
                         </div>
                         <div class="col-lg-5">
-                            <label class="form-label fw-medium" style="font-size:.88rem;">Expected quote-tool fields</label>
-                            <div class="form-control bg-light" style="height:auto; min-height:38px; font-size:.82rem;">event_type, external_id, name, email, phone, service, address, quote_amount, message</div>
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Recommended Make field map</label>
+                            <div class="form-control bg-light" style="height:auto; min-height:38px; font-size:.82rem;">event_type, external_id, name, email, phone, source, campaign, service, address, quote_amount, message</div>
+                            <small class="text-muted d-block mt-2">For Facebook lead forms, map Facebook's lead ID to <code>external_id</code> so repeat deliveries update the same Warren thread.</small>
                         </div>
                     </div>
                 </div>
@@ -1405,6 +1457,35 @@
                     </div>
                     {% else %}
                     <div class="text-muted" style="font-size:.82rem;">No generic lead webhook posts received yet. After the quote tool fires, accepted or rejected deliveries will appear here.</div>
+                    {% endif %}
+                </div>
+
+                <div class="mt-3 p-3" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+                    <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
+                        <div class="fw-semibold" style="font-size:.88rem;"><i class="bi bi-box-arrow-up-right me-1"></i>Recent CRM handoffs</div>
+                        <span class="text-muted" style="font-size:.76rem;">Shows Warren-to-CRM push attempts</span>
+                    </div>
+                    {% if crm_push_deliveries %}
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0" style="font-size:.78rem;">
+                            <thead><tr><th>Created</th><th>Status</th><th>CRM</th><th>Lead</th><th>Thread</th><th>Detail</th><th></th></tr></thead>
+                            <tbody>
+                                {% for delivery in crm_push_deliveries %}
+                                <tr>
+                                    <td class="text-muted">{{ delivery.created_at }}</td>
+                                    <td><span class="badge bg-{{ delivery.status_badge }}">{{ delivery.status }}</span></td>
+                                    <td>{{ delivery.crm_type or '-' }}</td>
+                                    <td>{{ delivery.lead_name or delivery.lead_phone or delivery.lead_email or '-' }}</td>
+                                    <td>{% if delivery.thread_id %}<a href="{{ url_for('client.client_inbox') }}">#{{ delivery.thread_id }}</a>{% else %}-{% endif %}</td>
+                                    <td>{{ delivery.detail or '-' }}</td>
+                                    <td>{% if delivery.can_retry %}<button type="button" class="btn btn-sm btn-outline-primary crmHandoffRetryBtn" data-delivery-id="{{ delivery.id }}"><i class="bi bi-arrow-repeat me-1"></i>Retry</button>{% endif %}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-muted" style="font-size:.82rem;">No Warren-to-CRM handoffs recorded yet. When Warren pushes to Jobber, Sweep and Go, GoHighLevel, RazorSync, or a custom webhook, attempts will appear here.</div>
                     {% endif %}
                 </div>
 
@@ -1507,6 +1588,7 @@
                                     <button class="btn btn-outline-secondary" type="button" onclick="copyWebhookUrl('incomingLeadWebhookUrl')"><i class="bi bi-clipboard"></i></button>
                                 </div>
                                 <small class="text-muted d-block mt-2">Use this for website forms, Zapier/Make, or any POST-based lead source. JSON and form-encoded payloads are both accepted.</small>
+                                <small class="text-muted d-block mt-1">For Make + Facebook lead forms, send <code>event_type</code>, <code>external_id</code>, <code>name</code>, <code>email</code>, <code>phone</code>, <code>source</code>, and any campaign/ad fields Make receives.</small>
                                 {% if brand.sales_bot_incoming_webhook_secret %}
                                 <label class="form-label mb-1 fw-medium mt-3">No-header incoming lead webhook URL</label>
                                 <div class="input-group input-group-sm">
@@ -1864,6 +1946,72 @@
                 });
             });
         }
+
+        var makeIncomingTestBtn = document.getElementById('makeIncomingTestBtn');
+        if (makeIncomingTestBtn) {
+            makeIncomingTestBtn.addEventListener('click', function() {
+                var rd = document.getElementById('makeIncomingTestResult');
+                var original = makeIncomingTestBtn.innerHTML;
+                makeIncomingTestBtn.disabled = true;
+                makeIncomingTestBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Sending...';
+                if (rd) rd.style.display = 'none';
+                fetch('/client/integration/make/incoming-test', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    makeIncomingTestBtn.disabled = false;
+                    makeIncomingTestBtn.innerHTML = original;
+                    if (!rd) return;
+                    rd.innerHTML = data.ok
+                        ? '<span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i> ' + (data.message || 'Test lead created.') + '</span>'
+                        : '<span class="badge bg-danger rounded-pill px-3 py-2"><i class="bi bi-x-circle me-1"></i> ' + (data.error || 'Make intake test failed') + '</span>';
+                    rd.style.display = '';
+                })
+                .catch(function() {
+                    makeIncomingTestBtn.disabled = false;
+                    makeIncomingTestBtn.innerHTML = original;
+                    if (!rd) return;
+                    rd.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2">Network error</span>';
+                    rd.style.display = '';
+                });
+            });
+        }
+
+        document.querySelectorAll('.crmHandoffRetryBtn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var deliveryId = btn.getAttribute('data-delivery-id');
+                var original = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+                fetch('/client/crm/handoff/' + encodeURIComponent(deliveryId) + '/retry', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken}
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    btn.disabled = false;
+                    btn.innerHTML = original;
+                    if (data.ok) {
+                        btn.classList.remove('btn-outline-primary');
+                        btn.classList.add('btn-outline-success');
+                        btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Retried';
+                    } else {
+                        btn.classList.remove('btn-outline-primary');
+                        btn.classList.add('btn-outline-danger');
+                        btn.innerHTML = 'Failed';
+                        btn.setAttribute('title', data.error || 'Retry failed');
+                    }
+                })
+                .catch(function() {
+                    btn.disabled = false;
+                    btn.classList.remove('btn-outline-primary');
+                    btn.classList.add('btn-outline-danger');
+                    btn.innerHTML = 'Error';
+                });
+            });
+        });
 
         document.querySelectorAll('.externalIntegrationTestBtn').forEach(function(btn) {
             btn.addEventListener('click', function() {

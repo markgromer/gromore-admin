@@ -157,6 +157,52 @@ class LeadsInboxDatabaseTests(unittest.TestCase):
         self.assertNotIn(lost_thread, contact_ids)
 
 
+class JobberCrmBridgeTests(unittest.TestCase):
+    @patch("webapp.crm_bridge._jobber_graphql")
+    def test_jobber_push_reuses_existing_client_by_email(self, mock_graphql):
+        def fake_graphql(_brand, query, _variables=None):
+            if "FindExistingJobberClient" in query:
+                return {
+                    "clients": {
+                        "nodes": [
+                            {
+                                "id": "jobber-client-1",
+                                "firstName": "Retry",
+                                "lastName": "Lead",
+                                "emails": [{"address": "retry@example.com", "primary": True}],
+                                "phones": [],
+                            }
+                        ],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    }
+                }, None
+            if "CreateRequest" in query:
+                return {"requestCreate": {"request": {"id": "jobber-request-1"}, "userErrors": []}}, None
+            return {}, "Unexpected query"
+
+        mock_graphql.side_effect = fake_graphql
+
+        from webapp.crm_bridge import _push_jobber
+
+        ok, detail = _push_jobber(
+            {"crm_api_key": "token"},
+            {
+                "first_name": "Retry",
+                "last_name": "Lead",
+                "email": "retry@example.com",
+                "phone": "+15555550123",
+                "source": "warren_test",
+                "notes": "Needs follow-up",
+            },
+        )
+
+        self.assertTrue(ok)
+        self.assertEqual(detail["external_ids"]["client_id"], "jobber-client-1")
+        self.assertEqual(detail["external_ids"]["request_id"], "jobber-request-1")
+        self.assertEqual(detail["external_ids"]["dedupe"], "email_or_phone")
+        self.assertFalse(any("clientCreate" in call.args[1] for call in mock_graphql.call_args_list))
+
+
 class LeadsAssistantSettingsRouteTests(unittest.TestCase):
     def setUp(self):
         self.db_file = _TEST_ROOT / f"leads-inbox-app-{uuid.uuid4().hex}.db"
@@ -405,6 +451,20 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
                 thread_id=123,
                 signature_present=True,
             )
+            thread_id = self.app.db.upsert_lead_thread(
+                self.brand_id,
+                "lead_form",
+                "crm-delivery-settings-test",
+                {"lead_name": "Webhook Lead", "lead_email": "webhook@example.com"},
+            )
+            self.app.db.record_crm_push_delivery(
+                self.brand_id,
+                thread_id=thread_id,
+                crm_type="jobber",
+                status="delivered",
+                detail="Jobber client created",
+                lead_name="Webhook Lead",
+            )
 
         response = self.client.get("/client/settings")
         self.assertEqual(response.status_code, 200)
@@ -415,6 +475,122 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         self.assertIn(b"?secret=incoming-secret", response.data)
         self.assertIn(b"Recent lead webhook deliveries", response.data)
         self.assertIn(b"Webhook Lead", response.data)
+        self.assertIn(b"Recent CRM handoffs", response.data)
+        self.assertIn(b"Jobber client created", response.data)
+        self.assertIn(b"Connection health", response.data)
+        self.assertIn(b"Lead Webhook Intake", response.data)
+
+    def test_make_incoming_test_creates_no_send_lead_and_delivery(self):
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(
+                self.brand_id,
+                "sales_bot_incoming_webhook_secret",
+                "incoming-secret",
+            )
+
+        response = self.client.post("/client/integration/make/incoming-test", json={})
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data["ok"])
+        thread_id = data["thread_id"]
+
+        with self.app.app_context():
+            thread = self.app.db.get_lead_thread(thread_id, brand_id=self.brand_id)
+            deliveries = self.app.db.get_lead_webhook_deliveries(self.brand_id, limit=5)
+
+        self.assertEqual(thread["lead_name"], "Make Test Lead")
+        self.assertTrue(any(d["thread_id"] == thread_id and d["status"] == "accepted" for d in deliveries))
+
+    @patch("webapp.crm_bridge.push_lead")
+    def test_failed_crm_handoff_can_be_retried(self, mock_push):
+        mock_push.return_value = (
+            True,
+            {
+                "message": "Jobber client created: jobber-client-1",
+                "external_ids": {"client_id": "jobber-client-1", "request_id": "jobber-request-1"},
+            },
+        )
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "crm_type", "jobber")
+            thread_id = self.app.db.upsert_lead_thread(
+                self.brand_id,
+                "lead_form",
+                "retry-crm-thread",
+                {
+                    "lead_name": "Retry Lead",
+                    "lead_email": "retry@example.com",
+                    "lead_phone": "+15555550123",
+                },
+            )
+            delivery_id = self.app.db.record_crm_push_delivery(
+                self.brand_id,
+                thread_id=thread_id,
+                crm_type="jobber",
+                status="failed",
+                detail="temporary error",
+                lead_name="Retry Lead",
+                lead_email="retry@example.com",
+                lead_phone="+15555550123",
+                payload_preview=json.dumps({
+                    "name": "Retry Lead",
+                    "first_name": "Retry",
+                    "last_name": "Lead",
+                    "email": "retry@example.com",
+                    "phone": "+15555550123",
+                    "source": "warren_test",
+                }),
+            )
+
+        response = self.client.post(f"/client/crm/handoff/{delivery_id}/retry", json={})
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data["ok"])
+
+        with self.app.app_context():
+            deliveries = self.app.db.get_crm_push_deliveries(self.brand_id, limit=5)
+            events = self.app.db.get_lead_events(self.brand_id, thread_id, event_type="crm_push_retry", limit=5)
+            thread = self.app.db.get_lead_thread(thread_id, brand_id=self.brand_id)
+            profile = json.loads(thread["commercial_data_json"])
+
+        self.assertTrue(any(d["status"] == "delivered" and d["retry_count"] == 1 for d in deliveries))
+        self.assertTrue(events)
+        self.assertEqual(profile["crm_links"]["jobber"]["client_id"], "jobber-client-1")
+
+    def test_connection_health_flags_latest_rejected_lead_webhook(self):
+        with self.app.app_context():
+            self.app.db.update_brand_text_field(self.brand_id, "sales_bot_incoming_webhook_secret", "incoming-secret")
+            self.app.db.record_lead_webhook_delivery(
+                self.brand_id,
+                brand_slug="settings-brand",
+                endpoint="/webhooks/leads/settings-brand",
+                status="rejected",
+                http_status=401,
+                reason="Secret/signature did not match.",
+            )
+
+            from webapp.connection_health import evaluate_brand_connection_health
+
+            items = evaluate_brand_connection_health(self.app.db, self.app.db.get_brand(self.brand_id), persist=True)
+            health = {item["key"]: item for item in items}
+            persisted = self.app.db.get_connection_health(self.brand_id)
+
+        self.assertEqual(health["lead_webhook_intake"]["status"], "fail")
+        self.assertTrue(any(item["health_key"] == "lead_webhook_intake" and item["status"] == "fail" for item in persisted))
+
+    def test_connection_health_cron_refreshes_snapshots(self):
+        response = self.client.post(
+            "/jobs/cron/connection-health",
+            headers={"Authorization": "Bearer test-secret"},
+            json={},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data["ok"])
+        self.assertGreaterEqual(data["brands"], 1)
+
+        with self.app.app_context():
+            persisted = self.app.db.get_connection_health(self.brand_id)
+        self.assertTrue(persisted)
 
     def test_settings_page_shows_connection_workspace_and_automations_link(self):
         response = self.client.get("/client/settings")
@@ -466,7 +642,7 @@ class LeadsAssistantSettingsRouteTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.headers["Location"].endswith("/client/settings"))
+        self.assertTrue(response.headers["Location"].endswith("/client/settings#connection-panel-jobber"))
 
         with self.app.app_context():
             brand = self.app.db.get_brand(self.brand_id)

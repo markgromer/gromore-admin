@@ -801,6 +801,10 @@ def sng_webhook(brand_slug, secret):
         payload=payload,
     )
     try:
+        db.mark_brand_webhook_received(brand["id"])
+    except Exception:
+        log.exception("Failed to mark SNG webhook received for brand=%s", brand.get("id"))
+    try:
         from webapp.warren_crm_events import process_incoming_sng_event
 
         process_incoming_sng_event(db, current_app.config, brand, event_id, event_type, summary, base_detail=detail)
@@ -918,6 +922,10 @@ def jobber_webhook(brand_slug):
         summary=summary,
         payload=payload,
     )
+    try:
+        db.mark_brand_webhook_received(brand["id"])
+    except Exception:
+        log.exception("Failed to mark Jobber webhook received for brand=%s", brand.get("id"))
     return jsonify({"ok": True, "event_type": event_type, "event_id": event_id}), 200
 
 

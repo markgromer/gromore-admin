@@ -397,6 +397,45 @@ class WebDB:
             CREATE INDEX IF NOT EXISTS idx_lead_webhook_deliveries_brand_received
             ON lead_webhook_deliveries(brand_id, received_at DESC, id DESC);
 
+            CREATE TABLE IF NOT EXISTS crm_push_deliveries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                thread_id INTEGER DEFAULT NULL,
+                crm_type TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'pending',
+                detail TEXT DEFAULT '',
+                lead_name TEXT DEFAULT '',
+                lead_email TEXT DEFAULT '',
+                lead_phone TEXT DEFAULT '',
+                payload_preview TEXT DEFAULT '',
+                response_preview TEXT DEFAULT '',
+                retry_count INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE,
+                FOREIGN KEY (thread_id) REFERENCES lead_threads(id) ON DELETE SET NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_crm_push_deliveries_brand_created
+            ON crm_push_deliveries(brand_id, created_at DESC, id DESC);
+
+            CREATE TABLE IF NOT EXISTS connection_health (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                health_key TEXT NOT NULL,
+                label TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'info',
+                detail TEXT DEFAULT '',
+                metadata_json TEXT DEFAULT '{}',
+                checked_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(brand_id, health_key),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_connection_health_brand_status
+            ON connection_health(brand_id, status, checked_at DESC);
+
             CREATE TABLE IF NOT EXISTS crm_event_actions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand_id INTEGER NOT NULL,
@@ -3662,6 +3701,130 @@ class WebDB:
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
+    def record_crm_push_delivery(
+        self,
+        brand_id,
+        *,
+        thread_id=None,
+        crm_type="",
+        status="pending",
+        detail="",
+        lead_name="",
+        lead_email="",
+        lead_phone="",
+        payload_preview="",
+        response_preview="",
+        retry_count=0,
+    ):
+        conn = self._conn()
+        try:
+            cur = conn.execute(
+                """
+                INSERT INTO crm_push_deliveries (
+                    brand_id, thread_id, crm_type, status, detail, lead_name,
+                    lead_email, lead_phone, payload_preview, response_preview, retry_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    brand_id,
+                    thread_id,
+                    str(crm_type or "")[:80],
+                    str(status or "pending")[:50],
+                    str(detail or "")[:500],
+                    str(lead_name or "")[:200],
+                    str(lead_email or "")[:255],
+                    str(lead_phone or "")[:100],
+                    str(payload_preview or "")[:2000],
+                    str(response_preview or "")[:2000],
+                    int(retry_count or 0),
+                ),
+            )
+            conn.commit()
+            return cur.lastrowid
+        finally:
+            conn.close()
+
+    def get_crm_push_deliveries(self, brand_id, limit=20):
+        conn = self._conn()
+        rows = conn.execute(
+            """
+            SELECT * FROM crm_push_deliveries
+            WHERE brand_id = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
+            (brand_id, int(limit or 20)),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_crm_push_delivery(self, delivery_id, brand_id=None):
+        conn = self._conn()
+        if brand_id is not None:
+            row = conn.execute(
+                "SELECT * FROM crm_push_deliveries WHERE id = ? AND brand_id = ?",
+                (delivery_id, brand_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT * FROM crm_push_deliveries WHERE id = ?",
+                (delivery_id,),
+            ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def upsert_connection_health(self, brand_id, health_key, label, status, detail="", metadata=None):
+        conn = self._conn()
+        conn.execute(
+            """
+            INSERT INTO connection_health (
+                brand_id, health_key, label, status, detail, metadata_json, checked_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            ON CONFLICT(brand_id, health_key) DO UPDATE SET
+                label = excluded.label,
+                status = excluded.status,
+                detail = excluded.detail,
+                metadata_json = excluded.metadata_json,
+                checked_at = datetime('now'),
+                updated_at = datetime('now')
+            """,
+            (
+                brand_id,
+                str(health_key or "")[:120],
+                str(label or "")[:200],
+                str(status or "info")[:30],
+                str(detail or "")[:1000],
+                json.dumps(metadata or {}, sort_keys=True),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_connection_health(self, brand_id):
+        conn = self._conn()
+        rows = conn.execute(
+            """
+            SELECT * FROM connection_health
+            WHERE brand_id = ?
+            ORDER BY
+                CASE status
+                    WHEN 'fail' THEN 0
+                    WHEN 'warn' THEN 1
+                    WHEN 'ok' THEN 2
+                    ELSE 3
+                END,
+                label COLLATE NOCASE
+            """,
+            (brand_id,),
+        ).fetchall()
+        conn.close()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["metadata"] = self._safe_json_object(item.get("metadata_json"))
+            result.append(item)
+        return result
 
     def queue_crm_event_action(
         self,

@@ -402,3 +402,22 @@ def cron_warren_crm_event_actions():
         stats.get("resolved", 0),
     )
     return jsonify({"ok": True, **stats})
+
+
+@jobs_bp.route("/cron/connection-health", methods=["POST"])
+def cron_connection_health():
+    """Recurring cron: refresh connection health snapshots for every brand."""
+    if not _verify_cron_secret():
+        return jsonify({"error": "unauthorized"}), 401
+
+    from webapp.connection_health import refresh_all_connection_health
+
+    stats = refresh_all_connection_health(current_app.db)
+    logger.info(
+        "Connection health: %d brands, %d items, %d fail, %d warn",
+        stats.get("brands", 0),
+        stats.get("items", 0),
+        stats.get("fail", 0),
+        stats.get("warn", 0),
+    )
+    return jsonify({"ok": True, **stats})

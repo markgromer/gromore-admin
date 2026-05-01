@@ -132,9 +132,9 @@ _INTEGRATION_CATALOG = [
         "name": "Make.com",
         "category": "Automation",
         "icon": "bi-node-plus",
-        "summary": "Scenario automation bridge for CRMs, forms, spreadsheets, and custom flows.",
-        "powers": "inbound leads, CRM events, custom automations",
-        "fields": [{"key": "webhook_url", "label": "Webhook URL", "type": "url", "placeholder": "https://hook.us1.make.com/..."}],
+        "summary": "Use Make as an intake bridge into Warren, and optionally as an outbound scenario receiver.",
+        "powers": "Facebook lead-form intake, custom lead sources, optional outbound handoffs",
+        "fields": [{"key": "webhook_url", "label": "Optional Outgoing Make Webhook URL", "type": "url", "placeholder": "https://hook.us1.make.com/..."}],
     },
     {
         "key": "google_calendar",
@@ -376,10 +376,10 @@ _INTEGRATION_READINESS_META = {
     },
     "make": {
         "mode": "webhook",
-        "mode_label": "Webhook bridge",
-        "required_fields": ("webhook_url",),
-        "capabilities": ("inbound leads", "outbound events", "custom automations"),
-        "requirements": ("Make webhook URL", "Scenario enabled after testing"),
+        "mode_label": "Incoming + optional outgoing",
+        "required_fields": (),
+        "capabilities": ("Facebook lead intake", "lead enrichment", "outbound handoffs", "custom automations"),
+        "requirements": ("Warren incoming lead webhook secret", "Make scenario with HTTP POST to Warren", "Optional Make webhook URL for outbound handoffs"),
     },
     "google_calendar": {
         "mode": "existing_oauth",
@@ -10414,6 +10414,7 @@ def _integration_config_is_ready(provider_def, config):
 
 def _integration_readiness(provider_def, config, row):
     meta = _integration_meta(provider_def)
+    provider_key = (provider_def or {}).get("key")
     mode = meta.get("mode") or "api_key"
     missing = _integration_missing_required(provider_def, config)
     status = (row or {}).get("status") or ""
@@ -10470,7 +10471,7 @@ def _integration_readiness(provider_def, config, row):
             "missing": [],
         }
 
-    if mode == "webhook":
+    if mode == "webhook" and is_configured:
         return {
             "state": "webhook_ready",
             "label": "Webhook ready",
@@ -10479,7 +10480,7 @@ def _integration_readiness(provider_def, config, row):
             "missing": [],
         }
 
-    if mode == "email_forward":
+    if mode == "email_forward" and is_configured:
         return {
             "state": "forwarding_ready",
             "label": "Forwarding ready",
@@ -10494,6 +10495,15 @@ def _integration_readiness(provider_def, config, row):
             "label": "Configured",
             "badge_class": "bg-primary",
             "message": "Required setup values are saved. Run a live test where supported.",
+            "missing": [],
+        }
+
+    if provider_key == "make":
+        return {
+            "state": "not_configured",
+            "label": "Optional outgoing",
+            "badge_class": "bg-secondary",
+            "message": "Facebook and form leads should enter through Warren's incoming lead webhook. Save an outgoing Make hook only when Warren needs to trigger a Make scenario.",
             "missing": [],
         }
 
@@ -10667,6 +10677,16 @@ def client_settings():
     connections = db.get_brand_connections(brand_id)
     integration_configs = db.get_brand_integration_configs(brand_id)
     integration_catalog = _prepared_integration_catalog(integration_configs)
+    from webapp.connection_health import evaluate_brand_connection_health
+
+    connection_health = evaluate_brand_connection_health(db, brand, persist=True)
+    for item in connection_health:
+        item["status_badge"] = {
+            "ok": "success",
+            "warn": "warning text-dark",
+            "fail": "danger",
+            "info": "secondary",
+        }.get((item.get("status") or "info").strip().lower(), "secondary")
     google_conn = connections.get("google", {})
     meta_conn = connections.get("meta", {})
     scopes = (google_conn.get("scopes") or "").lower()
@@ -10718,6 +10738,15 @@ def client_settings():
                 "accepted": "success",
                 "rejected": "danger",
             }.get((delivery.get("status") or "").strip().lower(), "secondary")
+        crm_push_deliveries = db.get_crm_push_deliveries(brand_id, limit=10)
+        for delivery in crm_push_deliveries:
+            delivery["status_badge"] = {
+                "delivered": "success",
+                "failed": "danger",
+                "skipped": "secondary",
+                "pending": "warning",
+            }.get((delivery.get("status") or "").strip().lower(), "secondary")
+            delivery["can_retry"] = (delivery.get("status") or "").strip().lower() == "failed"
 
         return render_template(
             "client_connections.html",
@@ -10731,6 +10760,7 @@ def client_settings():
             meta_conn=meta_conn,
             integration_catalog=integration_catalog,
             integration_connected_count=sum(1 for item in integration_catalog if item.get("is_configured")),
+            connection_health=connection_health,
             warren_channel_readiness=warren_channel_readiness,
             warren_ready_count=warren_ready_count,
             warren_total_count=warren_total_count,
@@ -10740,6 +10770,7 @@ def client_settings():
             jobber_webhook_url=_jobber_webhook_url(brand),
             sng_webhook_events=sng_webhook_events,
             lead_webhook_deliveries=lead_webhook_deliveries,
+            crm_push_deliveries=crm_push_deliveries,
             ai_model_recommendations=_ai_recommendations_for_brand(brand),
             image_model_options_by_provider=_IMAGE_MODEL_OPTIONS,
             brand_name=session.get("client_brand_name", brand.get("display_name", "")),
@@ -15228,6 +15259,88 @@ def client_payment_provider_test():
     return jsonify(ok=True, message=message)
 
 
+@client_bp.route("/crm/handoff/<int:delivery_id>/retry", methods=["POST"])
+@client_login_required
+def client_retry_crm_handoff(delivery_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    delivery = db.get_crm_push_delivery(delivery_id, brand_id=brand_id)
+    if not delivery:
+        return jsonify(ok=False, error="CRM handoff delivery not found."), 404
+    if (delivery.get("status") or "").strip().lower() != "failed":
+        return jsonify(ok=False, error="Only failed CRM handoffs can be retried."), 400
+
+    try:
+        lead_data = json.loads(delivery.get("payload_preview") or "{}")
+    except Exception:
+        lead_data = {}
+    if not isinstance(lead_data, dict):
+        lead_data = {}
+
+    thread_id = delivery.get("thread_id")
+    if (not lead_data or not (lead_data.get("phone") or lead_data.get("email"))) and thread_id:
+        thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+        if thread:
+            from webapp.warren_brain import _build_crm_lead_payload
+
+            lead_data = _build_crm_lead_payload(thread, {"info_collected": {}}, "retry")
+
+    if not lead_data or not (lead_data.get("phone") or lead_data.get("email")):
+        return jsonify(ok=False, error="The saved handoff payload is missing phone/email and cannot be retried."), 400
+
+    try:
+        from webapp.crm_bridge import push_lead
+
+        success, detail = push_lead(brand, lead_data)
+    except Exception as exc:
+        success, detail = False, str(exc)
+
+    detail_text = detail.get("message") if isinstance(detail, dict) else str(detail or "")
+    response_preview = (
+        json.dumps(detail, separators=(",", ":"), sort_keys=True)
+        if isinstance(detail, dict)
+        else detail_text
+    )
+    new_delivery_id = db.record_crm_push_delivery(
+        brand_id,
+        thread_id=thread_id,
+        crm_type=(brand.get("crm_type") or "").strip().lower(),
+        status="delivered" if success else "failed",
+        detail=detail_text[:500],
+        lead_name=lead_data.get("name", ""),
+        lead_email=lead_data.get("email", ""),
+        lead_phone=lead_data.get("phone", ""),
+        payload_preview=json.dumps(lead_data or {}, separators=(",", ":"), sort_keys=True),
+        response_preview=response_preview[:2000],
+        retry_count=int(delivery.get("retry_count") or 0) + 1,
+    )
+    if thread_id:
+        db.add_lead_event(
+            brand_id,
+            thread_id,
+            "crm_push_retry" if success else "crm_push_retry_failed",
+            event_value="success" if success else detail_text[:200],
+            metadata={
+                "source_delivery_id": delivery_id,
+                "new_delivery_id": new_delivery_id,
+                "crm_type": (brand.get("crm_type") or "").strip().lower(),
+                "detail": response_preview[:500],
+            },
+        )
+        if success and isinstance(detail, dict):
+            from webapp.warren_brain import _merge_crm_external_ids
+
+            _merge_crm_external_ids(db, brand_id, thread_id, (brand.get("crm_type") or "").strip().lower(), detail)
+
+    if not success:
+        return jsonify(ok=False, error=detail_text or "CRM handoff retry failed.", delivery_id=new_delivery_id)
+    return jsonify(ok=True, message=detail_text or "CRM handoff retry delivered.", delivery_id=new_delivery_id)
+
+
 @client_bp.route("/settings/integration/<provider>", methods=["POST"])
 @client_login_required
 def client_save_external_integration(provider):
@@ -15279,6 +15392,71 @@ def client_external_integration_test(provider):
     if not ok:
         return jsonify(ok=False, error=message)
     return jsonify(ok=True, message=message)
+
+
+@client_bp.route("/integration/make/incoming-test", methods=["POST"])
+@client_login_required
+def client_make_incoming_test():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    incoming_secret = (brand.get("sales_bot_incoming_webhook_secret") or "").strip()
+    if not incoming_secret:
+        return jsonify(ok=False, error="Save an Incoming Lead Webhook Secret before testing Make intake."), 400
+
+    external_id = f"make_test_{uuid.uuid4().hex[:12]}"
+    payload = {
+        "event_type": "make_connection_test",
+        "external_id": external_id,
+        "name": "Make Test Lead",
+        "email": "make-test@example.com",
+        "phone": "+15555550123",
+        "source": "make_connection_test",
+        "campaign": "Settings test",
+        "message": "This is a no-send Warren intake test from the Make.com settings card.",
+    }
+
+    from webapp.warren_webhooks import _extract_generic_form_submission, _ingest_lead_submission
+
+    raw_body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    submission = _extract_generic_form_submission(payload, raw_body)
+    test_brand = dict(brand)
+    test_brand["sales_bot_enabled"] = 0
+    thread_id = _ingest_lead_submission(
+        db,
+        brand_id,
+        test_brand,
+        external_id=submission["external_id"],
+        source=f"incoming_webhook:{submission['source']}",
+        lead_name=submission["lead_name"],
+        lead_email=submission["lead_email"],
+        lead_phone=submission["lead_phone"],
+        message_text=submission["message_text"],
+        extra_fields=submission["extra_fields"],
+        message_header="Make Intake Test",
+        allow_auto_send=False,
+        automation_event_type="",
+    )
+    db.record_lead_webhook_delivery(
+        brand_id,
+        brand_slug=brand.get("slug") or "",
+        endpoint=f"/webhooks/leads/{brand.get('slug') or ''}",
+        status="accepted",
+        http_status=200,
+        reason="Make intake test lead added to Warren. No SMS was sent.",
+        source=submission["source"],
+        lead_name=submission["lead_name"],
+        lead_email=submission["lead_email"],
+        lead_phone=submission["lead_phone"],
+        thread_id=thread_id,
+        signature_present=True,
+        payload_preview=raw_body.decode("utf-8"),
+        remote_addr=request.remote_addr or "",
+    )
+    return jsonify(ok=True, message=f"Make intake test created Warren lead thread #{thread_id}. No SMS was sent.", thread_id=thread_id)
 
 
 def _build_client_commercial_payload(thread):

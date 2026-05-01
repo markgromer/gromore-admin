@@ -13,7 +13,7 @@ import json
 import logging
 import re
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import current_app
 from webapp.warren_contact_policy import lookup_contact_policy
@@ -117,6 +117,50 @@ def _build_crm_lead_payload(thread, response, channel):
     }
 
 
+def _record_crm_push_delivery(db, brand, brand_id, thread_id, lead_data, status, detail):
+    if isinstance(detail, dict):
+        detail_text = detail.get("message") or detail.get("detail") or json.dumps(detail, separators=(",", ":"), sort_keys=True)
+        response_preview = json.dumps(detail, separators=(",", ":"), sort_keys=True)
+    else:
+        detail_text = str(detail or "")
+        response_preview = detail_text
+    try:
+        db.record_crm_push_delivery(
+            brand_id,
+            thread_id=thread_id,
+            crm_type=(brand.get("crm_type") or "").strip().lower(),
+            status=status,
+            detail=detail_text[:500],
+            lead_name=lead_data.get("name", ""),
+            lead_email=lead_data.get("email", ""),
+            lead_phone=lead_data.get("phone", ""),
+            payload_preview=json.dumps(lead_data or {}, separators=(",", ":"), sort_keys=True),
+            response_preview=response_preview[:2000],
+        )
+    except Exception:
+        log.exception("Failed to record CRM push delivery for thread %s", thread_id)
+
+
+def _merge_crm_external_ids(db, brand_id, thread_id, crm_type, detail):
+    if not isinstance(detail, dict) or not thread_id:
+        return
+    external_ids = detail.get("external_ids") if isinstance(detail.get("external_ids"), dict) else {}
+    if not external_ids:
+        return
+
+    thread = db.get_lead_thread(thread_id, brand_id=brand_id)
+    if not thread:
+        return
+    profile = _safe_json_object(thread.get("commercial_data_json"))
+    crm_links = profile.get("crm_links") if isinstance(profile.get("crm_links"), dict) else {}
+    crm_payload = crm_links.get(crm_type) if isinstance(crm_links.get(crm_type), dict) else {}
+    crm_payload.update({key: value for key, value in external_ids.items() if value})
+    crm_payload["last_synced_at"] = datetime.now(timezone.utc).isoformat()
+    crm_links[crm_type] = crm_payload
+    profile["crm_links"] = crm_links
+    db.update_lead_thread_commercial_data(thread_id, brand_id, json.dumps(profile, separators=(",", ":")))
+
+
 def _maybe_push_thread_to_crm(db, brand, brand_id, thread_id, response, channel, contact_policy):
     closing_action = _brand_wants_crm_push(brand, response)
     if not closing_action or contact_policy.get("suppress_marketing"):
@@ -131,6 +175,7 @@ def _maybe_push_thread_to_crm(db, brand, brand_id, thread_id, response, channel,
     lead_data = _build_crm_lead_payload(thread, response, channel)
     if not (lead_data.get("phone") or lead_data.get("email")):
         detail = "missing_phone_or_email"
+        _record_crm_push_delivery(db, brand, brand_id, thread_id, lead_data, "failed", detail)
         db.add_lead_event(
             brand_id,
             thread_id,
@@ -146,6 +191,24 @@ def _maybe_push_thread_to_crm(db, brand, brand_id, thread_id, response, channel,
         success, detail = push_lead(brand, lead_data)
     except Exception as exc:
         success, detail = False, str(exc)
+
+    _record_crm_push_delivery(
+        db,
+        brand,
+        brand_id,
+        thread_id,
+        lead_data,
+        "delivered" if success else "failed",
+        detail,
+    )
+    if success:
+        _merge_crm_external_ids(
+            db,
+            brand_id,
+            thread_id,
+            (brand.get("crm_type") or "").strip().lower(),
+            detail,
+        )
 
     event_type = "crm_push" if success else "crm_push_failed"
     db.add_lead_event(

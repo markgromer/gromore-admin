@@ -2148,10 +2148,81 @@ def jobber_account_label(brand):
     return name or account_id or "", None
 
 
+def _normalize_phone_digits(value):
+    return re.sub(r"\D+", "", str(value or ""))
+
+
+def _jobber_find_existing_client(brand, lead_data, max_pages=5):
+    """Find an existing Jobber client by exact email or phone match."""
+    target_email = (lead_data.get("email") or "").strip().lower()
+    target_phone = _normalize_phone_digits(lead_data.get("phone"))
+    if not target_email and not target_phone:
+        return None, None
+
+    query = """
+    query FindExistingJobberClient($first: Int!, $after: String) {
+      clients(first: $first, after: $after) {
+        nodes {
+          id
+          firstName
+          lastName
+          companyName
+          emails { address primary }
+          phones { number primary }
+        }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+    """
+    after = None
+    for _page in range(max(1, int(max_pages or 1))):
+        result, error = _jobber_graphql(brand, query, {"first": 100, "after": after})
+        if error:
+            return None, error
+        clients = ((result or {}).get("clients") or {})
+        for client in clients.get("nodes") or []:
+            emails = client.get("emails") or []
+            phones = client.get("phones") or []
+            if target_email and any((item.get("address") or "").strip().lower() == target_email for item in emails):
+                return client, None
+            if target_phone and any(_normalize_phone_digits(item.get("number")) == target_phone for item in phones):
+                return client, None
+        page_info = clients.get("pageInfo") or {}
+        if not page_info.get("hasNextPage"):
+            break
+        after = page_info.get("endCursor")
+        if not after:
+            break
+    return None, None
+
+
 def _push_jobber(brand, lead_data):
     """Create a client in Jobber, optionally create a request."""
     first_name = lead_data.get("first_name", "")
     last_name = lead_data.get("last_name", "")
+
+    existing_client, lookup_error = _jobber_find_existing_client(brand, lead_data)
+    if lookup_error:
+        log.warning("Jobber duplicate lookup failed, continuing with create: %s", lookup_error)
+    if existing_client:
+        client_id = existing_client.get("id", "")
+        request_id = ""
+        if client_id and (lead_data.get("source") or lead_data.get("notes")):
+            req_title = lead_data.get("source", "New Lead from Warren")
+            req_details = lead_data.get("notes", "")
+            request_result, request_error = _jobber_create_request(brand, client_id, req_title, req_details)
+            if request_error:
+                log.warning("Jobber request create for existing client failed: %s", request_error)
+            request_data = ((request_result or {}).get("requestCreate") or {}).get("request") or {}
+            request_id = request_data.get("id", "")
+        return True, {
+            "message": f"Jobber existing client matched: {client_id}",
+            "external_ids": {
+                "client_id": client_id,
+                "request_id": request_id,
+                "dedupe": "email_or_phone",
+            },
+        }
 
     # Build phones list
     phones = []
@@ -2201,12 +2272,24 @@ def _push_jobber(brand, lead_data):
     client_id = client.get("id", "")
 
     # Create a request (work order) if we have a source/notes
+    request_id = ""
     if client_id and (lead_data.get("source") or lead_data.get("notes")):
         req_title = lead_data.get("source", "New Lead from Ad Platform")
         req_details = lead_data.get("notes", "")
-        _jobber_create_request(brand, client_id, req_title, req_details)
+        request_result, request_error = _jobber_create_request(brand, client_id, req_title, req_details)
+        if request_error:
+            log.warning("Jobber request create failed: %s", request_error)
+        request_data = ((request_result or {}).get("requestCreate") or {}).get("request") or {}
+        request_id = request_data.get("id", "")
 
-    return True, f"Jobber client created: {client_id}"
+    return True, {
+        "message": f"Jobber client created: {client_id}",
+        "external_ids": {
+            "client_id": client_id,
+            "request_id": request_id,
+            "dedupe": "created",
+        },
+    }
 
 
 def _jobber_create_request(brand, client_id, title, details=""):
