@@ -338,6 +338,20 @@ def create_app():
             return f(*args, **kwargs)
         return decorated
 
+    def partner_login_required(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if "partner_user_id" not in session:
+                return redirect(url_for("partner_login"))
+            partner_user = db.get_partner_user(session["partner_user_id"])
+            if not partner_user or partner_user.get("status") != "active" or partner_user.get("partner_status") != "active":
+                session.pop("partner_user_id", None)
+                session.pop("partner_id", None)
+                flash("Partner session expired. Please sign in again.", "error")
+                return redirect(url_for("partner_login"))
+            return f(*args, **kwargs)
+        return decorated
+
     # Make it available to blueprints
     app.login_required = login_required
     app.csrf = csrf
@@ -461,6 +475,245 @@ def create_app():
     def logout():
         session.clear()
         return redirect(url_for("login"))
+
+    def _current_partner_user():
+        if "partner_user_id" not in session:
+            return None
+        return db.get_partner_user(session["partner_user_id"])
+
+    def _build_partner_demo_snapshot(data):
+        services = (data.get("primary_services") or "service calls, estimates, follow-up work").strip()
+        area = (data.get("service_area") or "the local service area").strip()
+        industry = (data.get("industry") or "home services").replace("_", " ").title()
+        avg_job = float(data.get("avg_job_value") or 450)
+        monthly_leads = int(data.get("monthly_leads") or 35)
+        recovered = max(3, round(monthly_leads * 0.18))
+        projected_revenue = round(recovered * avg_job, 2)
+        lead_sources = (data.get("lead_sources") or "Facebook lead forms, website forms, missed calls").strip()
+        crm_used = (data.get("crm_used") or "current CRM").strip()
+        return {
+            "demo_mode": True,
+            "industry": industry,
+            "headline": f"What WARREN would do for {data.get('business_name')}",
+            "metrics": {
+                "monthly_leads": monthly_leads,
+                "estimated_unfollowed_leads": recovered,
+                "avg_job_value": avg_job,
+                "projected_recovered_revenue": projected_revenue,
+                "speed_to_lead_target": "under 60 seconds",
+            },
+            "connection_plan": [
+                {"name": "Facebook Lead Forms", "status": "demo", "impact": "Instantly creates Warren lead threads from new form submissions."},
+                {"name": crm_used, "status": "demo", "impact": "Demo CRM jobs and customer records stand in for the live integration until connected."},
+                {"name": "OpenPhone / SMS", "status": "demo", "impact": "Shows two-way nurturing without sending real texts during the demo."},
+            ],
+            "sample_leads": [
+                {
+                    "name": "Morgan Taylor",
+                    "source": "Facebook Lead Form",
+                    "need": services.split(",")[0].strip(),
+                    "stage": "Hot",
+                    "value": avg_job,
+                    "warren_action": f"Asked two qualifying questions, confirmed {area}, and offered the next available appointment.",
+                },
+                {
+                    "name": "Casey Jordan",
+                    "source": "Missed Call",
+                    "need": "urgent quote",
+                    "stage": "Needs owner review",
+                    "value": round(avg_job * 1.4, 2),
+                    "warren_action": "Logged the missed call, sent a polite follow-up, and flagged it for same-day owner review.",
+                },
+                {
+                    "name": "Riley Parker",
+                    "source": "Website Form",
+                    "need": services.split(",")[-1].strip(),
+                    "stage": "Nurture",
+                    "value": round(avg_job * 0.8, 2),
+                    "warren_action": "Answered the first pricing question and scheduled a follow-up reminder.",
+                },
+            ],
+            "owner_recap": [
+                f"WARREN would watch {lead_sources} and centralize every lead.",
+                f"Demo data estimates {recovered} recoverable leads per month if follow-up improves.",
+                "Live connections replace demo records after onboarding, without changing the workflow shown here.",
+            ],
+        }
+
+    def _partner_demo_form_data():
+        raw_avg = request.form.get("avg_job_value", "").strip()
+        raw_leads = request.form.get("monthly_leads", "").strip()
+        try:
+            avg_job_value = float(raw_avg or 0)
+        except ValueError:
+            avg_job_value = 0
+        try:
+            monthly_leads = int(raw_leads or 0)
+        except ValueError:
+            monthly_leads = 0
+        return {
+            "business_name": request.form.get("business_name", "").strip(),
+            "contact_name": request.form.get("contact_name", "").strip(),
+            "contact_email": request.form.get("contact_email", "").strip().lower(),
+            "contact_phone": request.form.get("contact_phone", "").strip(),
+            "website": request.form.get("website", "").strip(),
+            "industry": request.form.get("industry", "").strip(),
+            "service_area": request.form.get("service_area", "").strip(),
+            "primary_services": request.form.get("primary_services", "").strip(),
+            "avg_job_value": avg_job_value,
+            "monthly_leads": monthly_leads,
+            "crm_used": request.form.get("crm_used", "").strip(),
+            "lead_sources": request.form.get("lead_sources", "").strip(),
+            "pain_points": request.form.get("pain_points", "").strip(),
+            "owner_goals": request.form.get("owner_goals", "").strip(),
+            "tone_preferences": request.form.get("tone_preferences", "").strip(),
+            "next_follow_up": request.form.get("next_follow_up", "").strip(),
+            "owner_intake": {
+                "good_lead_definition": request.form.get("good_lead_definition", "").strip(),
+                "profitable_services": request.form.get("profitable_services", "").strip(),
+                "bad_fit_leads": request.form.get("bad_fit_leads", "").strip(),
+                "handoff_rules": request.form.get("handoff_rules", "").strip(),
+            },
+        }
+
+    @app.route("/partners/login", methods=["GET", "POST"])
+    def partner_login():
+        if request.method == "POST":
+            email = request.form.get("email", "").strip().lower()
+            password = request.form.get("password", "")
+            partner_user = db.authenticate_partner_user(email, password)
+            if partner_user:
+                session.clear()
+                session["partner_user_id"] = partner_user["id"]
+                session["partner_id"] = partner_user["partner_id"]
+                session["partner_name"] = partner_user.get("partner_name", "")
+                return redirect(url_for("partner_dashboard"))
+            flash("Invalid affiliate login.", "error")
+        return render_template("partner/login.html")
+
+    @app.route("/partners/logout")
+    def partner_logout():
+        session.pop("partner_user_id", None)
+        session.pop("partner_id", None)
+        session.pop("partner_name", None)
+        return redirect(url_for("partner_login"))
+
+    @app.route("/partners")
+    @partner_login_required
+    def partner_dashboard():
+        partner_user = _current_partner_user()
+        partner_id = partner_user["partner_id"]
+        demos = db.get_partner_demo_sessions(partner_id, limit=100)
+        codes = db.get_partner_referral_codes(partner_id)
+        commissions = db.get_partner_commissions(partner_id=partner_id, limit=25)
+        assignments = db.get_partner_brand_assignments(partner_id=partner_id)
+        return render_template(
+            "partner/dashboard.html",
+            partner_user=partner_user,
+            demos=demos,
+            codes=codes,
+            commissions=commissions,
+            assignments=assignments,
+            summary=db.get_partner_demo_summary(partner_id),
+        )
+
+    @app.route("/partners/demo/new", methods=["GET", "POST"])
+    @partner_login_required
+    def partner_demo_new():
+        partner_user = _current_partner_user()
+        partner_id = partner_user["partner_id"]
+        if request.method == "POST":
+            data = _partner_demo_form_data()
+            if not data["business_name"] or not data["contact_name"] or not data["contact_email"]:
+                flash("Business name, owner/contact name, and email are required.", "error")
+                return render_template("partner/demo_form.html", partner_user=partner_user, data=data)
+
+            codes = db.get_partner_referral_codes(partner_id)
+            referral_code = codes[0]["code"] if codes else f"partner-{partner_id}"
+            if not codes:
+                db.create_partner_referral_code(partner_id, referral_code)
+            attribution = {"source": "affiliate_demo", "referral_code": referral_code}
+            note = "\n".join(
+                line for line in [
+                    "Affiliate demo created.",
+                    f"Pain points: {data['pain_points']}" if data.get("pain_points") else "",
+                    f"Owner goals: {data['owner_goals']}" if data.get("owner_goals") else "",
+                    f"Lead sources: {data['lead_sources']}" if data.get("lead_sources") else "",
+                ] if line
+            )
+            prospect_id = db.create_agency_prospect(
+                name=data["contact_name"],
+                email=data["contact_email"],
+                phone=data["contact_phone"],
+                business_name=data["business_name"],
+                website=data["website"],
+                industry=data["industry"],
+                service_area=data["service_area"],
+                source="affiliate_demo",
+                stage="new",
+                monthly_budget=str(data.get("avg_job_value") or ""),
+                notes=note,
+                partner_id=partner_id,
+                referral_code=referral_code,
+                attribution_json=json.dumps(attribution, sort_keys=True),
+                next_follow_up=data.get("next_follow_up", ""),
+            )
+            data["status"] = "demo_ready"
+            data["nurture_status"] = "new"
+            data["demo_snapshot"] = _build_partner_demo_snapshot(data)
+            demo_id = db.create_partner_demo_session(partner_id, partner_user["id"], data, prospect_id=prospect_id)
+            db.record_partner_attribution_event(
+                partner_id=partner_id,
+                prospect_id=prospect_id,
+                referral_code=referral_code,
+                source="affiliate_demo",
+                metadata={"demo_session_id": demo_id, "business_name": data["business_name"]},
+            )
+            flash("Demo workspace created.", "success")
+            return redirect(url_for("partner_demo_detail", demo_id=demo_id))
+        return render_template("partner/demo_form.html", partner_user=partner_user, data={})
+
+    @app.route("/partners/demo/<int:demo_id>")
+    @partner_login_required
+    def partner_demo_detail(demo_id):
+        partner_user = _current_partner_user()
+        demo = db.get_partner_demo_session(demo_id, partner_id=partner_user["partner_id"])
+        if not demo:
+            abort(404)
+        events = db.get_partner_demo_events(demo_id, partner_user["partner_id"])
+        return render_template("partner/demo_detail.html", partner_user=partner_user, demo=demo, events=events)
+
+    @app.route("/partners/demo/<int:demo_id>/nurture", methods=["POST"])
+    @partner_login_required
+    def partner_demo_nurture(demo_id):
+        partner_user = _current_partner_user()
+        demo = db.get_partner_demo_session(demo_id, partner_id=partner_user["partner_id"])
+        if not demo:
+            abort(404)
+        status = request.form.get("nurture_status", demo.get("nurture_status") or "follow_up").strip()
+        note = request.form.get("note", "").strip()
+        next_follow_up = request.form.get("next_follow_up", "").strip()
+        db.update_partner_demo_session(
+            demo_id,
+            partner_user["partner_id"],
+            nurture_status=status,
+            next_follow_up=next_follow_up,
+            last_contact_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        )
+        if demo.get("prospect_id"):
+            db.update_agency_prospect(demo["prospect_id"], next_follow_up=next_follow_up)
+            if note:
+                db.add_agency_prospect_note(demo["prospect_id"], note, note_type="partner_note", created_by=partner_user.get("email") or "partner")
+        db.add_partner_demo_event(
+            demo_id,
+            partner_user["partner_id"],
+            partner_user["id"],
+            "nurture",
+            note or f"Status changed to {status}.",
+            {"nurture_status": status, "next_follow_up": next_follow_up},
+        )
+        flash("Demo follow-up updated.", "success")
+        return redirect(url_for("partner_demo_detail", demo_id=demo_id))
 
     @app.route("/health")
     def health_check():
@@ -2733,6 +2986,14 @@ def create_app():
                 notes=request.form.get("notes", "").strip(),
                 referral_code=request.form.get("referral_code", "").strip(),
             )
+            portal_password = request.form.get("portal_password", "").strip()
+            if request.form.get("email", "").strip() and portal_password:
+                db.create_partner_user(
+                    partner_id,
+                    request.form.get("email", "").strip(),
+                    portal_password,
+                    request.form.get("name", "").strip() or request.form.get("company_name", "").strip(),
+                )
             if not request.form.get("referral_code", "").strip():
                 db.create_partner_referral_code(partner_id, f"partner-{partner_id}")
             flash("Partner created.", "success")
@@ -2752,6 +3013,7 @@ def create_app():
             payout_batches=db.get_partner_payout_batches(limit=20),
             plans=db.get_commission_plans(active_only=False),
             brands=db.get_all_brands(),
+            partner_users_by_partner={p["id"]: db.get_partner_users(p["id"]) for p in partners},
         )
 
     @app.route("/crm/partners/<int:partner_id>/update", methods=["POST"])
@@ -2774,6 +3036,15 @@ def create_app():
         code = request.form.get("new_referral_code", "").strip()
         if code:
             db.create_partner_referral_code(partner_id, code)
+        portal_password = request.form.get("portal_password", "").strip()
+        portal_email = request.form.get("portal_email", "").strip() or request.form.get("email", "").strip()
+        if portal_password and portal_email:
+            db.create_partner_user(
+                partner_id,
+                portal_email,
+                portal_password,
+                request.form.get("name", "").strip(),
+            )
         flash("Partner updated.", "success")
         return redirect(url_for("agency_partners"))
 

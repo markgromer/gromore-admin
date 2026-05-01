@@ -1,0 +1,98 @@
+{% extends "partner/base.html" %}
+{% block title %}Start Demo{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h1 class="h3 mb-1">Start Business Demo</h1>
+    <p class="text-muted mb-0">Capture enough detail to personalize the demo and continue follow-up if they do not close.</p>
+</div>
+
+<form method="POST" class="work-card p-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row g-3">
+        <div class="col-md-6">
+            <label class="form-label">Business name *</label>
+            <input class="form-control" name="business_name" value="{{ data.business_name or '' }}" required>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Website</label>
+            <input class="form-control" name="website" value="{{ data.website or '' }}">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">Owner/contact name *</label>
+            <input class="form-control" name="contact_name" value="{{ data.contact_name or '' }}" required>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">Owner email *</label>
+            <input class="form-control" type="email" name="contact_email" value="{{ data.contact_email or '' }}" required>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">Owner phone</label>
+            <input class="form-control" name="contact_phone" value="{{ data.contact_phone or '' }}">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">Industry</label>
+            <input class="form-control" name="industry" value="{{ data.industry or '' }}" placeholder="plumbing, HVAC, cleaning">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">Service area</label>
+            <input class="form-control" name="service_area" value="{{ data.service_area or '' }}" placeholder="Phoenix metro">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">CRM used</label>
+            <input class="form-control" name="crm_used" value="{{ data.crm_used or '' }}" placeholder="Jobber, Housecall Pro, none">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Primary services</label>
+            <input class="form-control" name="primary_services" value="{{ data.primary_services or '' }}" placeholder="Drain cleaning, water heaters, repipes">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Average job value</label>
+            <input class="form-control" type="number" step="1" name="avg_job_value" value="{{ data.avg_job_value or '' }}">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Monthly leads</label>
+            <input class="form-control" type="number" step="1" name="monthly_leads" value="{{ data.monthly_leads or '' }}">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Lead sources</label>
+            <textarea class="form-control" name="lead_sources" rows="3" placeholder="Facebook forms, website forms, calls, Google Ads">{{ data.lead_sources or '' }}</textarea>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Pain points</label>
+            <textarea class="form-control" name="pain_points" rows="3" placeholder="Slow follow-up, missed calls, bad leads, no CRM discipline">{{ data.pain_points or '' }}</textarea>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Owner goals</label>
+            <textarea class="form-control" name="owner_goals" rows="3" placeholder="Book more estimates, stop missing leads, improve close rate">{{ data.owner_goals or '' }}</textarea>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Tone/preferences</label>
+            <textarea class="form-control" name="tone_preferences" rows="3" placeholder="Friendly, direct, no discounts unless approved">{{ data.tone_preferences or '' }}</textarea>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">What counts as a good lead?</label>
+            <textarea class="form-control" name="good_lead_definition" rows="2">{{ (data.owner_intake or {}).good_lead_definition if data.owner_intake else '' }}</textarea>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Most profitable services</label>
+            <textarea class="form-control" name="profitable_services" rows="2">{{ (data.owner_intake or {}).profitable_services if data.owner_intake else '' }}</textarea>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Bad-fit leads</label>
+            <textarea class="form-control" name="bad_fit_leads" rows="2">{{ (data.owner_intake or {}).bad_fit_leads if data.owner_intake else '' }}</textarea>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">When should WARREN hand off?</label>
+            <textarea class="form-control" name="handoff_rules" rows="2">{{ (data.owner_intake or {}).handoff_rules if data.owner_intake else '' }}</textarea>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">Next follow-up</label>
+            <input class="form-control" type="date" name="next_follow_up" value="{{ data.next_follow_up or '' }}">
+        </div>
+    </div>
+    <div class="d-flex justify-content-end gap-2 mt-4">
+        <a class="btn btn-outline-secondary" href="{{ url_for('partner_dashboard') }}">Cancel</a>
+        <button class="btn btn-primary">Create demo workspace</button>
+    </div>
+</form>
+{% endblock %}

@@ -42,6 +42,7 @@
                     <input class="form-control mb-2" name="website" placeholder="Website">
                     <input class="form-control mb-2" name="referral_code" placeholder="Referral code">
                     <input class="form-control mb-2" name="payout_email" placeholder="Payout email">
+                    <input class="form-control mb-2" name="portal_password" placeholder="Initial portal password">
                     <textarea class="form-control mb-3" name="notes" rows="3" placeholder="Internal notes"></textarea>
                     <button class="btn btn-primary w-100">Create partner</button>
                 </form>
@@ -96,6 +97,9 @@
                             {% for code in codes_by_partner.get(p.id, []) %}
                             <span class="badge bg-light text-dark border">{{ code.code }}</span>
                             {% endfor %}
+                            {% for user in partner_users_by_partner.get(p.id, []) %}
+                            <div class="text-muted small mt-1">{{ user.email }}</div>
+                            {% endfor %}
                         </td>
                         <td><span class="small">{{ p.tax_status }} / {{ p.kyc_status }}</span></td>
                         <td>
@@ -112,6 +116,8 @@
                                 <input type="hidden" name="kyc_status" value="{{ p.kyc_status }}">
                                 <input type="hidden" name="notes" value="{{ p.notes }}">
                                 <input class="form-control form-control-sm" name="new_referral_code" placeholder="New code" style="width:110px;">
+                                <input class="form-control form-control-sm" name="portal_email" placeholder="Portal email" style="width:140px;">
+                                <input class="form-control form-control-sm" name="portal_password" placeholder="Password" style="width:110px;">
                                 <select name="status" class="form-select form-select-sm" style="width:110px;">
                                     {% for status in ['active','pending','suspended','terminated'] %}
                                     <option value="{{ status }}" {{ 'selected' if p.status == status }}>{{ status }}</option>

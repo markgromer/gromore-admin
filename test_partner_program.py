@@ -79,6 +79,12 @@ class PartnerProgramRouteTests(unittest.TestCase):
                 partner_type="agency",
                 referral_code="agencyref",
             )
+            self.partner_user_id = self.app.db.create_partner_user(
+                self.partner_id,
+                "agency@example.com",
+                "Password123",
+                "Agency User",
+            )
             admin = self.app.db.authenticate("admin", "changeme123")
             self.admin_id = admin["id"]
         with self.client.session_transaction() as session:
@@ -131,6 +137,70 @@ class PartnerProgramRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Partners", response.data)
         self.assertIn(b"Agency Partner", response.data)
+
+    def test_partner_can_create_demo_and_nurture_business(self):
+        response = self.client.post(
+            "/partners/login",
+            data={"email": "agency@example.com", "password": "Password123"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/partners"))
+
+        response = self.client.post(
+            "/partners/demo/new",
+            data={
+                "business_name": "Demo Plumbing",
+                "contact_name": "Demo Owner",
+                "contact_email": "owner@demoplumbing.test",
+                "contact_phone": "555-123-4567",
+                "website": "https://demoplumbing.test",
+                "industry": "plumbing",
+                "service_area": "Phoenix",
+                "primary_services": "Drain cleaning, water heaters",
+                "avg_job_value": "650",
+                "monthly_leads": "42",
+                "crm_used": "Jobber",
+                "lead_sources": "Facebook forms, missed calls",
+                "pain_points": "Slow follow-up",
+                "owner_goals": "Book more jobs",
+                "good_lead_definition": "Homeowner in service area",
+                "profitable_services": "Water heaters",
+                "next_follow_up": "2026-05-15",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/partners/demo/", response.headers["Location"])
+
+        with self.app.app_context():
+            demos = self.app.db.get_partner_demo_sessions(self.partner_id)
+            prospect = self.app.db.find_agency_prospect(email="owner@demoplumbing.test", website="", business_name="")
+
+        self.assertEqual(len(demos), 1)
+        self.assertEqual(demos[0]["business_name"], "Demo Plumbing")
+        self.assertEqual(demos[0]["demo_snapshot"]["metrics"]["monthly_leads"], 42)
+        self.assertEqual(prospect["partner_id"], self.partner_id)
+        self.assertEqual(prospect["source"], "affiliate_demo")
+
+        demo_id = demos[0]["id"]
+        response = self.client.post(
+            f"/partners/demo/{demo_id}/nurture",
+            data={
+                "nurture_status": "follow_up",
+                "next_follow_up": "2026-05-20",
+                "note": "Owner wants spouse to review recap.",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+
+        with self.app.app_context():
+            demo = self.app.db.get_partner_demo_session(demo_id, self.partner_id)
+            events = self.app.db.get_partner_demo_events(demo_id, self.partner_id)
+
+        self.assertEqual(demo["nurture_status"], "follow_up")
+        self.assertTrue(any(event["event_type"] == "nurture" for event in events))
 
 
 if __name__ == "__main__":

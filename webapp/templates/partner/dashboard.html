@@ -1,0 +1,84 @@
+{% extends "partner/base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <h1 class="h3 mb-1">{{ partner_user.partner_name }}</h1>
+        <p class="text-muted mb-0">Track demos, nurture business owners, and see converted accounts.</p>
+    </div>
+    <a class="btn btn-primary" href="{{ url_for('partner_demo_new') }}"><i class="bi bi-play-circle me-1"></i>Start business demo</a>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="metric-card"><div class="metric-value">{{ demos|length }}</div><div class="muted-small">Demo businesses</div></div></div>
+    <div class="col-md-3"><div class="metric-card"><div class="metric-value">{{ summary.nurture_counts.follow_up or 0 }}</div><div class="muted-small">Needs follow-up</div></div></div>
+    <div class="col-md-3"><div class="metric-card"><div class="metric-value">{{ assignments|length }}</div><div class="muted-small">Converted/assigned brands</div></div></div>
+    <div class="col-md-3"><div class="metric-card"><div class="metric-value">${{ "%.0f"|format(commissions|sum(attribute='commission_amount') or 0) }}</div><div class="muted-small">Recent commission</div></div></div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="work-card">
+            <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
+                <div class="fw-semibold">Demo Pipeline</div>
+                <span class="muted-small">Every demo is saved for nurture even if they do not close today.</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th>Business</th><th>Owner</th><th>Status</th><th>Follow-up</th><th></th></tr></thead>
+                    <tbody>
+                    {% for demo in demos %}
+                    <tr>
+                        <td>
+                            <div class="fw-semibold">{{ demo.business_name }}</div>
+                            <div class="muted-small">{{ demo.industry or 'Business' }} · {{ demo.service_area or 'No service area' }}</div>
+                        </td>
+                        <td>
+                            <div>{{ demo.contact_name }}</div>
+                            <div class="muted-small">{{ demo.contact_email }}</div>
+                        </td>
+                        <td><span class="badge bg-{{ 'success' if demo.nurture_status == 'closed' else 'warning text-dark' if demo.nurture_status in ('follow_up','proposal') else 'secondary' }}">{{ demo.nurture_status }}</span></td>
+                        <td class="muted-small">{{ demo.next_follow_up or '-' }}</td>
+                        <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('partner_demo_detail', demo_id=demo.id) }}">Open</a></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-muted p-4">No demos yet. Start one before or during a business visit.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="work-card mb-4">
+            <div class="p-3 border-bottom fw-semibold">Referral Codes</div>
+            <div class="p-3">
+                {% for code in codes %}
+                <div class="d-flex justify-content-between border-bottom py-2">
+                    <code>{{ code.code }}</code>
+                    <span class="muted-small">{{ code.use_count }} uses</span>
+                </div>
+                {% else %}
+                <div class="text-muted">No referral codes assigned yet.</div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="work-card">
+            <div class="p-3 border-bottom fw-semibold">Recent Commissions</div>
+            <div class="p-3">
+                {% for c in commissions[:8] %}
+                <div class="d-flex justify-content-between border-bottom py-2">
+                    <div>
+                        <div>{{ c.brand_name }}</div>
+                        <div class="muted-small">{{ c.status }}</div>
+                    </div>
+                    <strong>${{ "%.2f"|format(c.commission_amount or 0) }}</strong>
+                </div>
+                {% else %}
+                <div class="text-muted">Commissions appear after referred clients pay invoices.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

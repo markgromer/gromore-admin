@@ -1464,9 +1464,11 @@ class WebDB:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 partner_id INTEGER NOT NULL,
                 email TEXT NOT NULL,
+                password_hash TEXT DEFAULT '',
                 display_name TEXT DEFAULT '',
                 role TEXT DEFAULT 'owner',
                 status TEXT DEFAULT 'active',
+                last_login TEXT DEFAULT '',
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now')),
                 UNIQUE(partner_id, email),
@@ -1569,6 +1571,57 @@ class WebDB:
             );
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_partner_commission_status ON partner_commission_ledger(status, eligible_at, partner_id);")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS partner_demo_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                partner_id INTEGER NOT NULL,
+                partner_user_id INTEGER DEFAULT NULL,
+                prospect_id INTEGER DEFAULT NULL,
+                demo_token TEXT UNIQUE NOT NULL,
+                status TEXT NOT NULL DEFAULT 'draft',
+                nurture_status TEXT NOT NULL DEFAULT 'new',
+                business_name TEXT NOT NULL,
+                contact_name TEXT DEFAULT '',
+                contact_email TEXT DEFAULT '',
+                contact_phone TEXT DEFAULT '',
+                website TEXT DEFAULT '',
+                industry TEXT DEFAULT '',
+                service_area TEXT DEFAULT '',
+                primary_services TEXT DEFAULT '',
+                avg_job_value REAL DEFAULT 0,
+                monthly_leads INTEGER DEFAULT 0,
+                crm_used TEXT DEFAULT '',
+                lead_sources TEXT DEFAULT '',
+                pain_points TEXT DEFAULT '',
+                owner_goals TEXT DEFAULT '',
+                tone_preferences TEXT DEFAULT '',
+                next_follow_up TEXT DEFAULT '',
+                last_contact_at TEXT DEFAULT '',
+                owner_intake_json TEXT DEFAULT '{}',
+                demo_snapshot_json TEXT DEFAULT '{}',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE CASCADE,
+                FOREIGN KEY (partner_user_id) REFERENCES partner_users(id) ON DELETE SET NULL,
+                FOREIGN KEY (prospect_id) REFERENCES agency_prospects(id) ON DELETE SET NULL
+            );
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_partner_demo_sessions_partner_status ON partner_demo_sessions(partner_id, status, updated_at DESC);")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS partner_demo_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                demo_session_id INTEGER NOT NULL,
+                partner_id INTEGER NOT NULL,
+                partner_user_id INTEGER DEFAULT NULL,
+                event_type TEXT NOT NULL DEFAULT 'note',
+                content TEXT DEFAULT '',
+                metadata_json TEXT DEFAULT '{}',
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (demo_session_id) REFERENCES partner_demo_sessions(id) ON DELETE CASCADE,
+                FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE CASCADE,
+                FOREIGN KEY (partner_user_id) REFERENCES partner_users(id) ON DELETE SET NULL
+            );
+        """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS partner_payout_batches (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2361,6 +2414,16 @@ class WebDB:
         conn.commit()
 
         # ── agency_prospects migrations ──
+        pu_columns = {r[1] for r in conn.execute("PRAGMA table_info(partner_users)").fetchall()}
+        new_pu_cols = [
+            ("password_hash", "TEXT DEFAULT ''"),
+            ("last_login", "TEXT DEFAULT ''"),
+        ]
+        for col_name, col_def in new_pu_cols:
+            if col_name not in pu_columns:
+                self._safe_add_column(conn, "partner_users", col_name, col_def)
+        conn.commit()
+
         ap_columns = {r[1] for r in conn.execute("PRAGMA table_info(agency_prospects)").fetchall()}
         new_ap_cols = [
             ("account_type", "TEXT DEFAULT ''"),
@@ -8466,6 +8529,80 @@ class WebDB:
         conn.close()
         return [dict(r) for r in rows]
 
+    def create_partner_user(self, partner_id, email, password, display_name="", role="owner", status="active"):
+        email = self._normalize_email(email)
+        if not partner_id or not email or not password:
+            return None
+        conn = self._conn()
+        cur = conn.execute(
+            """INSERT INTO partner_users
+               (partner_id, email, password_hash, display_name, role, status)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(partner_id, email) DO UPDATE SET
+                 password_hash = excluded.password_hash,
+                 display_name = COALESCE(NULLIF(excluded.display_name, ''), partner_users.display_name),
+                 role = excluded.role,
+                 status = excluded.status,
+                 updated_at = datetime('now')""",
+            (
+                partner_id,
+                email,
+                generate_password_hash(password),
+                display_name or email,
+                role or "owner",
+                status or "active",
+            ),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT id FROM partner_users WHERE partner_id = ? AND email = ?",
+            (partner_id, email),
+        ).fetchone()
+        conn.close()
+        return row["id"] if row else cur.lastrowid
+
+    def authenticate_partner_user(self, email, password):
+        email = self._normalize_email(email)
+        conn = self._conn()
+        row = conn.execute(
+            """SELECT pu.*, p.status as partner_status, p.name as partner_name, p.partner_type
+               FROM partner_users pu
+               JOIN partners p ON p.id = pu.partner_id
+               WHERE lower(pu.email) = ?
+               ORDER BY pu.id DESC
+               LIMIT 1""",
+            (email,),
+        ).fetchone()
+        if row and row["status"] == "active" and row["partner_status"] == "active" and check_password_hash(row["password_hash"] or "", password):
+            conn.execute("UPDATE partner_users SET last_login = datetime('now') WHERE id = ?", (row["id"],))
+            conn.commit()
+            result = dict(row)
+            conn.close()
+            return result
+        conn.close()
+        return None
+
+    def get_partner_user(self, partner_user_id):
+        conn = self._conn()
+        row = conn.execute(
+            """SELECT pu.*, p.name as partner_name, p.partner_type, p.status as partner_status
+               FROM partner_users pu
+               JOIN partners p ON p.id = pu.partner_id
+               WHERE pu.id = ?""",
+            (partner_user_id,),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def get_partner_users(self, partner_id):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT * FROM partner_users WHERE partner_id = ? ORDER BY status, email",
+            (partner_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
     def create_partner_referral_code(self, partner_id, code, landing_url=""):
         normalized = re.sub(r"[^a-zA-Z0-9_-]+", "", str(code or "").strip()).lower()
         if not normalized:
@@ -8827,6 +8964,200 @@ class WebDB:
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
+    def create_partner_demo_session(self, partner_id, partner_user_id, data, prospect_id=None):
+        token = secrets.token_urlsafe(18)
+        conn = self._conn()
+        cur = conn.execute(
+            """INSERT INTO partner_demo_sessions
+               (partner_id, partner_user_id, prospect_id, demo_token, status,
+                nurture_status, business_name, contact_name, contact_email,
+                contact_phone, website, industry, service_area, primary_services,
+                avg_job_value, monthly_leads, crm_used, lead_sources, pain_points,
+                owner_goals, tone_preferences, next_follow_up, owner_intake_json,
+                demo_snapshot_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                partner_id,
+                partner_user_id,
+                prospect_id,
+                token,
+                data.get("status", "demo_ready"),
+                data.get("nurture_status", "new"),
+                data.get("business_name", ""),
+                data.get("contact_name", ""),
+                self._normalize_email(data.get("contact_email", "")),
+                data.get("contact_phone", ""),
+                data.get("website", ""),
+                data.get("industry", ""),
+                data.get("service_area", ""),
+                data.get("primary_services", ""),
+                float(data.get("avg_job_value") or 0),
+                int(data.get("monthly_leads") or 0),
+                data.get("crm_used", ""),
+                data.get("lead_sources", ""),
+                data.get("pain_points", ""),
+                data.get("owner_goals", ""),
+                data.get("tone_preferences", ""),
+                data.get("next_follow_up", ""),
+                json.dumps(data.get("owner_intake") or {}, sort_keys=True),
+                json.dumps(data.get("demo_snapshot") or {}, sort_keys=True),
+            ),
+        )
+        conn.commit()
+        demo_id = cur.lastrowid
+        conn.close()
+        self.add_partner_demo_event(
+            demo_id,
+            partner_id,
+            partner_user_id,
+            "created",
+            "Demo session created.",
+            {"prospect_id": prospect_id},
+        )
+        return demo_id
+
+    def get_partner_demo_sessions(self, partner_id, status=None, limit=100):
+        conn = self._conn()
+        if status:
+            rows = conn.execute(
+                """SELECT pds.*, ap.stage as prospect_stage
+                   FROM partner_demo_sessions pds
+                   LEFT JOIN agency_prospects ap ON ap.id = pds.prospect_id
+                   WHERE pds.partner_id = ? AND pds.status = ?
+                   ORDER BY pds.updated_at DESC, pds.id DESC
+                   LIMIT ?""",
+                (partner_id, status, int(limit or 100)),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT pds.*, ap.stage as prospect_stage
+                   FROM partner_demo_sessions pds
+                   LEFT JOIN agency_prospects ap ON ap.id = pds.prospect_id
+                   WHERE pds.partner_id = ?
+                   ORDER BY pds.updated_at DESC, pds.id DESC
+                   LIMIT ?""",
+                (partner_id, int(limit or 100)),
+            ).fetchall()
+        conn.close()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["owner_intake"] = self._safe_json_object(item.get("owner_intake_json"))
+            item["demo_snapshot"] = self._safe_json_object(item.get("demo_snapshot_json"))
+            result.append(item)
+        return result
+
+    def get_partner_demo_session(self, demo_id, partner_id=None):
+        conn = self._conn()
+        if partner_id is not None:
+            row = conn.execute(
+                """SELECT pds.*, p.name as partner_name, ap.stage as prospect_stage
+                   FROM partner_demo_sessions pds
+                   JOIN partners p ON p.id = pds.partner_id
+                   LEFT JOIN agency_prospects ap ON ap.id = pds.prospect_id
+                   WHERE pds.id = ? AND pds.partner_id = ?""",
+                (demo_id, partner_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                """SELECT pds.*, p.name as partner_name, ap.stage as prospect_stage
+                   FROM partner_demo_sessions pds
+                   JOIN partners p ON p.id = pds.partner_id
+                   LEFT JOIN agency_prospects ap ON ap.id = pds.prospect_id
+                   WHERE pds.id = ?""",
+                (demo_id,),
+            ).fetchone()
+        conn.close()
+        if not row:
+            return None
+        item = dict(row)
+        item["owner_intake"] = self._safe_json_object(item.get("owner_intake_json"))
+        item["demo_snapshot"] = self._safe_json_object(item.get("demo_snapshot_json"))
+        return item
+
+    def update_partner_demo_session(self, demo_id, partner_id, **fields):
+        allowed = {
+            "status", "nurture_status", "business_name", "contact_name",
+            "contact_email", "contact_phone", "website", "industry",
+            "service_area", "primary_services", "avg_job_value", "monthly_leads",
+            "crm_used", "lead_sources", "pain_points", "owner_goals",
+            "tone_preferences", "next_follow_up", "last_contact_at",
+            "owner_intake_json", "demo_snapshot_json", "prospect_id",
+        }
+        sets, params = [], []
+        for key, value in fields.items():
+            if key not in allowed:
+                continue
+            if key == "contact_email":
+                value = self._normalize_email(value)
+            if key in ("owner_intake_json", "demo_snapshot_json") and isinstance(value, (dict, list)):
+                value = json.dumps(value, sort_keys=True)
+            sets.append(f"{key} = ?")
+            params.append(value)
+        if not sets:
+            return
+        sets.append("updated_at = datetime('now')")
+        params.extend([demo_id, partner_id])
+        conn = self._conn()
+        conn.execute(
+            f"UPDATE partner_demo_sessions SET {', '.join(sets)} WHERE id = ? AND partner_id = ?",
+            params,
+        )
+        conn.commit()
+        conn.close()
+
+    def add_partner_demo_event(self, demo_session_id, partner_id, partner_user_id, event_type, content="", metadata=None):
+        conn = self._conn()
+        conn.execute(
+            """INSERT INTO partner_demo_events
+               (demo_session_id, partner_id, partner_user_id, event_type, content, metadata_json)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                demo_session_id,
+                partner_id,
+                partner_user_id,
+                event_type or "note",
+                content or "",
+                json.dumps(metadata or {}, sort_keys=True),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_partner_demo_events(self, demo_session_id, partner_id):
+        conn = self._conn()
+        rows = conn.execute(
+            """SELECT pde.*, pu.display_name as partner_user_name
+               FROM partner_demo_events pde
+               LEFT JOIN partner_users pu ON pu.id = pde.partner_user_id
+               WHERE pde.demo_session_id = ? AND pde.partner_id = ?
+               ORDER BY pde.created_at DESC, pde.id DESC""",
+            (demo_session_id, partner_id),
+        ).fetchall()
+        conn.close()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["metadata"] = self._safe_json_object(item.get("metadata_json"))
+            result.append(item)
+        return result
+
+    def get_partner_demo_summary(self, partner_id):
+        conn = self._conn()
+        rows = conn.execute(
+            "SELECT status, COUNT(*) as cnt FROM partner_demo_sessions WHERE partner_id = ? GROUP BY status",
+            (partner_id,),
+        ).fetchall()
+        nurture = conn.execute(
+            "SELECT nurture_status, COUNT(*) as cnt FROM partner_demo_sessions WHERE partner_id = ? GROUP BY nurture_status",
+            (partner_id,),
+        ).fetchall()
+        conn.close()
+        return {
+            "status_counts": {r["status"]: r["cnt"] for r in rows},
+            "nurture_counts": {r["nurture_status"]: r["cnt"] for r in nurture},
+        }
 
     def get_agency_prospects(self, stage=None, limit=200):
         conn = self._conn()
