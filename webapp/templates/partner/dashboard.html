@@ -31,7 +31,7 @@
                     <tr>
                         <td>
                             <div class="fw-semibold">{{ demo.business_name }}</div>
-                            <div class="muted-small">{{ demo.industry or 'Business' }} · {{ demo.service_area or 'No service area' }}</div>
+                            <div class="muted-small">{{ demo.industry or 'Business' }} / {{ demo.service_area or 'No service area' }}</div>
                         </td>
                         <td>
                             <div>{{ demo.contact_name }}</div>
@@ -39,7 +39,12 @@
                         </td>
                         <td><span class="badge bg-{{ 'success' if demo.nurture_status == 'closed' else 'warning text-dark' if demo.nurture_status in ('follow_up','proposal') else 'secondary' }}">{{ demo.nurture_status }}</span></td>
                         <td class="muted-small">{{ demo.next_follow_up or '-' }}</td>
-                        <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('partner_demo_detail', demo_id=demo.id) }}">Open</a></td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a class="btn btn-outline-success" target="_blank" rel="noopener" href="{{ url_for('partner_demo_live', demo_token=demo.demo_token) }}">Launch</a>
+                                <a class="btn btn-outline-primary" href="{{ url_for('partner_demo_detail', demo_id=demo.id) }}">Open</a>
+                            </div>
+                        </td>
                     </tr>
                     {% else %}
                     <tr><td colspan="5" class="text-muted p-4">No demos yet. Start one before or during a business visit.</td></tr>

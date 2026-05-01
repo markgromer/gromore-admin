@@ -6,9 +6,16 @@
 <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
     <div>
         <h1 class="h3 mb-1">{{ demo.business_name }}</h1>
-        <p class="text-muted mb-0">{{ demo.contact_name }} · {{ demo.contact_email }} · {{ demo.service_area or 'Service area not set' }}</p>
+        <p class="text-muted mb-0">{{ demo.contact_name }} / {{ demo.contact_email }} / {{ demo.service_area or 'Service area not set' }}</p>
     </div>
-    <a class="btn btn-outline-secondary" href="{{ url_for('partner_dashboard') }}">Back to dashboard</a>
+    <div class="d-flex gap-2">
+        <a class="btn btn-success" target="_blank" rel="noopener" href="{{ url_for('partner_demo_live', demo_token=demo.demo_token) }}"><i class="bi bi-box-arrow-up-right me-1"></i>Launch WARREN demo</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('partner_dashboard') }}">Back to dashboard</a>
+    </div>
+</div>
+
+<div class="alert alert-info border-0">
+    This prospect now has a sandbox WARREN brand. The setup, owner intake, lead threads, and activation plan are preserved until the client activates real connections.
 </div>
 
 <div class="row g-3 mb-4">
@@ -22,8 +29,8 @@
     <div class="col-lg-8">
         <div class="work-card mb-4">
             <div class="p-3 border-bottom">
-                <div class="fw-semibold">WARREN Demo Snapshot</div>
-                <div class="muted-small">Demo data replaces live integrations until the business connects real accounts.</div>
+                <div class="fw-semibold">WARREN Demo Workspace</div>
+                <div class="muted-small">Seeded demo lead threads show how WARREN responds, qualifies, follows up, and prepares handoffs before live integrations are activated.</div>
             </div>
             <div class="p-3">
                 <h5 class="mb-3">{{ snapshot.headline or 'Demo workspace' }}</h5>
@@ -32,7 +39,7 @@
                     <div class="col-md-4">
                         <div class="border rounded p-3 h-100">
                             <div class="fw-semibold">{{ lead.name }}</div>
-                            <div class="muted-small mb-2">{{ lead.source }} · {{ lead.stage }}</div>
+                            <div class="muted-small mb-2">{{ lead.source }} / {{ lead.stage }}</div>
                             <div class="mb-2">{{ lead.need }}</div>
                             <div class="muted-small">{{ lead.warren_action }}</div>
                         </div>
@@ -43,7 +50,7 @@
         </div>
 
         <div class="work-card mb-4">
-            <div class="p-3 border-bottom fw-semibold">Connection Plan</div>
+            <div class="p-3 border-bottom fw-semibold">Activation Plan</div>
             <div class="p-3">
                 {% for item in snapshot.connection_plan or [] %}
                 <div class="d-flex gap-3 border-bottom py-3">

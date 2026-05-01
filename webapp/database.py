@@ -134,6 +134,11 @@ class WebDB:
                 referral_code TEXT DEFAULT '',
                 attribution_json TEXT DEFAULT '{}',
                 partner_attributed_at TEXT DEFAULT '',
+                is_demo INTEGER DEFAULT 0,
+                demo_status TEXT DEFAULT '',
+                demo_partner_id INTEGER DEFAULT NULL,
+                demo_session_id INTEGER DEFAULT NULL,
+                demo_expires_at TEXT DEFAULT '',
                 wp_category_id INTEGER DEFAULT 0,
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now')),
@@ -1577,6 +1582,7 @@ class WebDB:
                 partner_id INTEGER NOT NULL,
                 partner_user_id INTEGER DEFAULT NULL,
                 prospect_id INTEGER DEFAULT NULL,
+                demo_brand_id INTEGER DEFAULT NULL,
                 demo_token TEXT UNIQUE NOT NULL,
                 status TEXT NOT NULL DEFAULT 'draft',
                 nurture_status TEXT NOT NULL DEFAULT 'new',
@@ -1603,7 +1609,8 @@ class WebDB:
                 updated_at TEXT DEFAULT (datetime('now')),
                 FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE CASCADE,
                 FOREIGN KEY (partner_user_id) REFERENCES partner_users(id) ON DELETE SET NULL,
-                FOREIGN KEY (prospect_id) REFERENCES agency_prospects(id) ON DELETE SET NULL
+                FOREIGN KEY (prospect_id) REFERENCES agency_prospects(id) ON DELETE SET NULL,
+                FOREIGN KEY (demo_brand_id) REFERENCES brands(id) ON DELETE SET NULL
             );
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_partner_demo_sessions_partner_status ON partner_demo_sessions(partner_id, status, updated_at DESC);")
@@ -2200,6 +2207,11 @@ class WebDB:
             ("referral_code", "TEXT DEFAULT ''"),
             ("attribution_json", "TEXT DEFAULT '{}'"),
             ("partner_attributed_at", "TEXT DEFAULT ''"),
+            ("is_demo", "INTEGER DEFAULT 0"),
+            ("demo_status", "TEXT DEFAULT ''"),
+            ("demo_partner_id", "INTEGER DEFAULT NULL"),
+            ("demo_session_id", "INTEGER DEFAULT NULL"),
+            ("demo_expires_at", "TEXT DEFAULT ''"),
             # Stripe billing
             ("stripe_customer_id", "TEXT DEFAULT ''"),
             ("stripe_subscription_id", "TEXT DEFAULT ''"),
@@ -2422,6 +2434,15 @@ class WebDB:
         for col_name, col_def in new_pu_cols:
             if col_name not in pu_columns:
                 self._safe_add_column(conn, "partner_users", col_name, col_def)
+        conn.commit()
+
+        pds_columns = {r[1] for r in conn.execute("PRAGMA table_info(partner_demo_sessions)").fetchall()}
+        new_pds_cols = [
+            ("demo_brand_id", "INTEGER DEFAULT NULL"),
+        ]
+        for col_name, col_def in new_pds_cols:
+            if col_name not in pds_columns:
+                self._safe_add_column(conn, "partner_demo_sessions", col_name, col_def)
         conn.commit()
 
         ap_columns = {r[1] for r in conn.execute("PRAGMA table_info(agency_prospects)").fetchall()}
@@ -8511,6 +8532,27 @@ class WebDB:
         conn.commit()
         conn.close()
 
+    def update_brand_demo_fields(self, brand_id, **fields):
+        allowed = {
+            "is_demo", "demo_status", "demo_partner_id", "demo_session_id",
+            "demo_expires_at", "sales_bot_enabled", "sales_bot_nurture_enabled",
+            "sales_bot_auto_push_crm", "sales_bot_call_logging",
+        }
+        sets, params = [], []
+        for key, value in fields.items():
+            if key not in allowed:
+                continue
+            sets.append(f"{key} = ?")
+            params.append(value)
+        if not sets:
+            return
+        sets.append("updated_at = datetime('now')")
+        params.append(brand_id)
+        conn = self._conn()
+        conn.execute(f"UPDATE brands SET {', '.join(sets)} WHERE id = ?", params)
+        conn.commit()
+        conn.close()
+
     def get_partner(self, partner_id):
         conn = self._conn()
         row = conn.execute("SELECT * FROM partners WHERE id = ?", (partner_id,)).fetchone()
@@ -8965,22 +9007,23 @@ class WebDB:
         conn.close()
         return [dict(r) for r in rows]
 
-    def create_partner_demo_session(self, partner_id, partner_user_id, data, prospect_id=None):
+    def create_partner_demo_session(self, partner_id, partner_user_id, data, prospect_id=None, demo_brand_id=None):
         token = secrets.token_urlsafe(18)
         conn = self._conn()
         cur = conn.execute(
             """INSERT INTO partner_demo_sessions
-               (partner_id, partner_user_id, prospect_id, demo_token, status,
+               (partner_id, partner_user_id, prospect_id, demo_brand_id, demo_token, status,
                 nurture_status, business_name, contact_name, contact_email,
                 contact_phone, website, industry, service_area, primary_services,
                 avg_job_value, monthly_leads, crm_used, lead_sources, pain_points,
                 owner_goals, tone_preferences, next_follow_up, owner_intake_json,
                 demo_snapshot_json)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 partner_id,
                 partner_user_id,
                 prospect_id,
+                demo_brand_id,
                 token,
                 data.get("status", "demo_ready"),
                 data.get("nurture_status", "new"),
@@ -9013,7 +9056,7 @@ class WebDB:
             partner_user_id,
             "created",
             "Demo session created.",
-            {"prospect_id": prospect_id},
+            {"prospect_id": prospect_id, "demo_brand_id": demo_brand_id},
         )
         return demo_id
 
@@ -9076,6 +9119,27 @@ class WebDB:
         item["demo_snapshot"] = self._safe_json_object(item.get("demo_snapshot_json"))
         return item
 
+    def get_partner_demo_session_by_token(self, demo_token):
+        token = (demo_token or "").strip()
+        if not token:
+            return None
+        conn = self._conn()
+        row = conn.execute(
+            """SELECT pds.*, p.name as partner_name, ap.stage as prospect_stage
+               FROM partner_demo_sessions pds
+               JOIN partners p ON p.id = pds.partner_id
+               LEFT JOIN agency_prospects ap ON ap.id = pds.prospect_id
+               WHERE pds.demo_token = ?""",
+            (token,),
+        ).fetchone()
+        conn.close()
+        if not row:
+            return None
+        item = dict(row)
+        item["owner_intake"] = self._safe_json_object(item.get("owner_intake_json"))
+        item["demo_snapshot"] = self._safe_json_object(item.get("demo_snapshot_json"))
+        return item
+
     def update_partner_demo_session(self, demo_id, partner_id, **fields):
         allowed = {
             "status", "nurture_status", "business_name", "contact_name",
@@ -9083,7 +9147,7 @@ class WebDB:
             "service_area", "primary_services", "avg_job_value", "monthly_leads",
             "crm_used", "lead_sources", "pain_points", "owner_goals",
             "tone_preferences", "next_follow_up", "last_contact_at",
-            "owner_intake_json", "demo_snapshot_json", "prospect_id",
+            "owner_intake_json", "demo_snapshot_json", "prospect_id", "demo_brand_id",
         }
         sets, params = [], []
         for key, value in fields.items():

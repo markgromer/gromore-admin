@@ -10,6 +10,7 @@ import base64
 import hashlib
 import hmac
 import logging
+import re
 import secrets
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -540,6 +541,110 @@ def create_app():
             ],
         }
 
+    def _demo_slug_for_business(name):
+        base = re.sub(r"[^a-z0-9]+", "-", (name or "demo-business").strip().lower()).strip("-")[:36]
+        return f"demo-{base or 'business'}-{secrets.token_hex(3)}"
+
+    def _create_demo_warren_brand(partner_id, data, referral_code):
+        expires = (datetime.now() + timedelta(days=45)).strftime("%Y-%m-%d %H:%M:%S")
+        brand_id = db.create_brand({
+            "slug": _demo_slug_for_business(data.get("business_name")),
+            "display_name": f"{data.get('business_name')} (WARREN Demo)",
+            "industry": data.get("industry") or "home_services",
+            "service_area": data.get("service_area") or "",
+            "website": data.get("website") or "",
+            "primary_services": data.get("primary_services") or "",
+            "partner_id": partner_id,
+            "referral_code": referral_code,
+            "attribution": {"source": "affiliate_demo_brand", "referral_code": referral_code},
+            "partner_attributed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        })
+        db.update_brand_demo_fields(
+            brand_id,
+            is_demo=1,
+            demo_status="demo_until_activated",
+            demo_partner_id=partner_id,
+            demo_expires_at=expires,
+            sales_bot_enabled=0,
+            sales_bot_nurture_enabled=0,
+            sales_bot_auto_push_crm=0,
+            sales_bot_call_logging=1,
+        )
+        demo_settings = {
+            "sales_bot_channels": json.dumps(["sms", "lead_forms", "calls", "messenger"]),
+            "sales_bot_quote_mode": "hybrid",
+            "sales_bot_business_hours": "Demo: business hours will be configured during activation. For now WARREN shows after-hours handling without sending real messages.",
+            "sales_bot_reply_tone": data.get("tone_preferences") or "Fast, direct, helpful, and specific to the job.",
+            "sales_bot_service_menu": data.get("primary_services") or "",
+            "sales_bot_pricing_notes": f"Demo average job value: ${float(data.get('avg_job_value') or 0):.0f}. Replace with real pricing during activation.",
+            "sales_bot_guardrails": "DEMO MODE: no real SMS, email, CRM pushes, or customer outreach until this WARREN instance is activated.",
+            "sales_bot_handoff_rules": (data.get("owner_intake") or {}).get("handoff_rules") or "Escalate urgent jobs, angry customers, pricing objections, and anything outside service area.",
+            "sales_bot_collect_fields": "name,phone,email,service,address,timeline,budget",
+            "sales_bot_closing_procedure": "Qualify the lead, confirm service area, capture urgency, offer the next booking step, and alert the owner when human review is needed.",
+            "sales_bot_booking_success_message": "You are on the schedule request list. The team will confirm the exact window shortly.",
+            "sales_bot_lead_form_config": json.dumps({
+                "demo_mode": True,
+                "sources": data.get("lead_sources") or "Facebook forms, website forms, missed calls",
+                "good_lead_definition": (data.get("owner_intake") or {}).get("good_lead_definition", ""),
+            }),
+        }
+        for field, value in demo_settings.items():
+            db.update_brand_text_field(brand_id, field, value)
+        return brand_id
+
+    def _seed_demo_warren_leads(brand_id, data, snapshot):
+        seeded = []
+        for idx, lead in enumerate(snapshot.get("sample_leads") or [], start=1):
+            channel = "lead_forms" if "Form" in lead.get("source", "") else "calls" if "Call" in lead.get("source", "") else "sms"
+            status = "qualified" if lead.get("stage") == "Hot" else "needs_review" if "review" in lead.get("stage", "").lower() else "nurture"
+            thread_id = db.upsert_lead_thread(
+                brand_id,
+                channel,
+                f"demo-{idx}-{lead.get('name','lead').lower().replace(' ', '-')}",
+                {
+                    "lead_name": lead.get("name", ""),
+                    "lead_email": f"demo-lead-{idx}@example.test",
+                    "lead_phone": f"+155501230{idx}",
+                    "source": lead.get("source", "WARREN Demo"),
+                    "status": status,
+                    "quote_status": "ready" if status == "qualified" else "not_started",
+                    "summary": lead.get("warren_action", ""),
+                    "commercial_data_json": json.dumps({
+                        "demo": True,
+                        "estimated_value": lead.get("value", 0),
+                        "need": lead.get("need", ""),
+                    }),
+                },
+            )
+            db.add_lead_message(
+                thread_id,
+                "inbound",
+                "lead",
+                f"Hi, I need help with {lead.get('need', 'a service request')}. Are you available this week?",
+                channel=channel,
+                metadata={"demo": True, "source": lead.get("source", "")},
+            )
+            db.add_lead_message(
+                thread_id,
+                "outbound",
+                "assistant",
+                lead.get("warren_action", "WARREN qualified the lead and prepared the next step."),
+                channel=channel,
+                metadata={"demo": True, "not_sent": True},
+            )
+            db.add_lead_event(
+                brand_id,
+                thread_id,
+                "demo_warren_action",
+                lead.get("stage", ""),
+                {"demo": True, "estimated_value": lead.get("value", 0)},
+            )
+            seeded.append({"thread_id": thread_id, **lead})
+        snapshot["sample_leads"] = seeded
+        snapshot["demo_brand_id"] = brand_id
+        snapshot["activation_state"] = "Demo until activated: no real outbound communication is sent."
+        return snapshot
+
     def _partner_demo_form_data():
         raw_avg = request.form.get("avg_job_value", "").strip()
         raw_leads = request.form.get("monthly_leads", "").strip()
@@ -660,11 +765,24 @@ def create_app():
             )
             data["status"] = "demo_ready"
             data["nurture_status"] = "new"
-            data["demo_snapshot"] = _build_partner_demo_snapshot(data)
-            demo_id = db.create_partner_demo_session(partner_id, partner_user["id"], data, prospect_id=prospect_id)
+            demo_brand_id = _create_demo_warren_brand(partner_id, data, referral_code)
+            data["demo_snapshot"] = _seed_demo_warren_leads(
+                demo_brand_id,
+                data,
+                _build_partner_demo_snapshot(data),
+            )
+            demo_id = db.create_partner_demo_session(
+                partner_id,
+                partner_user["id"],
+                data,
+                prospect_id=prospect_id,
+                demo_brand_id=demo_brand_id,
+            )
+            db.update_brand_demo_fields(demo_brand_id, demo_session_id=demo_id)
             db.record_partner_attribution_event(
                 partner_id=partner_id,
                 prospect_id=prospect_id,
+                brand_id=demo_brand_id,
                 referral_code=referral_code,
                 source="affiliate_demo",
                 metadata={"demo_session_id": demo_id, "business_name": data["business_name"]},
@@ -682,6 +800,28 @@ def create_app():
             abort(404)
         events = db.get_partner_demo_events(demo_id, partner_user["partner_id"])
         return render_template("partner/demo_detail.html", partner_user=partner_user, demo=demo, events=events)
+
+    @app.route("/partners/demo/live/<demo_token>")
+    def partner_demo_live(demo_token):
+        demo = db.get_partner_demo_session_by_token(demo_token)
+        if not demo:
+            abort(404)
+        brand = db.get_brand(demo.get("demo_brand_id")) if demo.get("demo_brand_id") else None
+        threads = []
+        if brand:
+            for thread in db.get_lead_threads(brand["id"], limit=10):
+                item = dict(thread)
+                item["messages"] = db.get_lead_messages(thread["id"], limit=8)
+                threads.append(item)
+        db.add_partner_demo_event(
+            demo["id"],
+            demo["partner_id"],
+            None,
+            "owner_demo_viewed",
+            "Owner-facing WARREN demo was opened.",
+            {"demo_brand_id": demo.get("demo_brand_id")},
+        )
+        return render_template("partner/demo_live.html", demo=demo, brand=brand, threads=threads)
 
     @app.route("/partners/demo/<int:demo_id>/nurture", methods=["POST"])
     @partner_login_required

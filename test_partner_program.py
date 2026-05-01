@@ -176,12 +176,24 @@ class PartnerProgramRouteTests(unittest.TestCase):
         with self.app.app_context():
             demos = self.app.db.get_partner_demo_sessions(self.partner_id)
             prospect = self.app.db.find_agency_prospect(email="owner@demoplumbing.test", website="", business_name="")
+            brand = self.app.db.get_brand(demos[0]["demo_brand_id"]) if demos else None
+            threads = self.app.db.get_lead_threads(brand["id"]) if brand else []
 
         self.assertEqual(len(demos), 1)
         self.assertEqual(demos[0]["business_name"], "Demo Plumbing")
         self.assertEqual(demos[0]["demo_snapshot"]["metrics"]["monthly_leads"], 42)
+        self.assertIsNotNone(demos[0]["demo_brand_id"])
+        self.assertIsNotNone(brand)
+        self.assertEqual(brand["is_demo"], 1)
+        self.assertEqual(brand["demo_status"], "demo_until_activated")
+        self.assertGreaterEqual(len(threads), 3)
         self.assertEqual(prospect["partner_id"], self.partner_id)
         self.assertEqual(prospect["source"], "affiliate_demo")
+
+        response = self.client.get(f"/partners/demo/live/{demos[0]['demo_token']}")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"WARREN Demo", response.data)
+        self.assertIn(b"Live WARREN Inbox Preview", response.data)
 
         demo_id = demos[0]["id"]
         response = self.client.post(
