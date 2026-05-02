@@ -613,6 +613,337 @@ def create_app():
             ],
         }
 
+    def _demo_shared_token_status():
+        def _setting(*keys):
+            for key in keys:
+                try:
+                    value = (db.get_setting(key) or "").strip()
+                except Exception:
+                    value = ""
+                if value:
+                    return True
+            return False
+
+        ai_ready = any([
+            bool(os.environ.get("OPENAI_API_KEY")),
+            bool(os.environ.get("OPENROUTER_API_KEY")),
+            bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")),
+            bool(os.environ.get("XAI_API_KEY")),
+            _setting("openai_api_key", "openrouter_api_key", "gemini_api_key", "google_api_key", "xai_api_key"),
+        ])
+        maps_ready = bool(os.environ.get("GOOGLE_MAPS_API_KEY")) or _setting("google_maps_api_key")
+        return {
+            "ai_ready": bool(ai_ready),
+            "maps_ready": bool(maps_ready),
+            "mode": "shared_demo_infrastructure",
+            "note": "Demo brands use app-level AI and Maps credentials when brand-level tokens are blank.",
+        }
+
+    def _demo_location_defaults(service_area):
+        text = (service_area or "").lower()
+        known = [
+            ("tucson", 32.2226, -110.9747),
+            ("phoenix", 33.4484, -112.0740),
+            ("mesa", 33.4152, -111.8315),
+            ("scottsdale", 33.4942, -111.9261),
+            ("tempe", 33.4255, -111.9400),
+            ("chandler", 33.3062, -111.8413),
+            ("gilbert", 33.3528, -111.7890),
+            ("glendale", 33.5387, -112.1860),
+            ("peoria", 33.5806, -112.2374),
+            ("queen creek", 33.2487, -111.6343),
+            ("surprise", 33.6292, -112.3679),
+        ]
+        for key, lat, lng in known:
+            if key in text:
+                return {"lat": lat, "lng": lng, "label": key.title()}
+        return {"lat": 33.4484, "lng": -112.0740, "label": "Phoenix"}
+
+    def _demo_dashboard_payload(data, brand, snapshot):
+        metrics = snapshot.get("metrics") or {}
+        business_name = data.get("business_name") or brand.get("display_name") or "Demo Business"
+        services = data.get("primary_services") or brand.get("primary_services") or "core services"
+        area = data.get("service_area") or brand.get("service_area") or "the service area"
+        monthly_leads = int(metrics.get("monthly_leads") or data.get("monthly_leads") or 35)
+        recoverable = int(metrics.get("estimated_unfollowed_leads") or max(3, round(monthly_leads * 0.18)))
+        recovered_revenue = float(metrics.get("projected_recovered_revenue") or 0)
+        token_status = snapshot.get("shared_tokens") or _demo_shared_token_status()
+        action_title = "Work the demo lead inbox before activation"
+        action_detail = (
+            f"WARREN has {recoverable} recoverable sample opportunities for {business_name}. "
+            "Use the seeded inbox, proposal, nurture, creative, and local-rank tools exactly like the live portal."
+        )
+        return {
+            "demo_mode": True,
+            "health": {"grade": "B", "score": 82, "label": "Demo-ready"},
+            "health_summary": {
+                "summary": f"{business_name} is set up in demo mode with lead flow, nurture rules, growth data, and activation gaps visible.",
+                "status": "attention",
+            },
+            "health_cluster": {
+                "cards": [
+                    {
+                        "label": "Lead system",
+                        "grade": "B+",
+                        "title": "Seeded and ready to test",
+                        "detail": f"{monthly_leads} monthly leads modeled, {recoverable} recoverable opportunities.",
+                    },
+                    {
+                        "label": "AI",
+                        "grade": "A" if token_status.get("ai_ready") else "Setup",
+                        "title": "Shared demo AI" if token_status.get("ai_ready") else "Connect shared AI token",
+                        "detail": "Brand token is blank; app-level demo credential is used." if token_status.get("ai_ready") else "Add the global AI key once for all demos.",
+                    },
+                    {
+                        "label": "Maps",
+                        "grade": "A" if token_status.get("maps_ready") else "Setup",
+                        "title": "Shared Maps ready" if token_status.get("maps_ready") else "Connect shared Maps token",
+                        "detail": "Heatmap and commercial discovery can use the app-level Maps key." if token_status.get("maps_ready") else "Add the global Maps key once for all demos.",
+                    },
+                ],
+            },
+            "channels": {
+                "website": {
+                    "title": "Website and Lead Capture",
+                    "icon": "bi-globe",
+                    "cards": [
+                        {"metric": "Modeled visitors", "value": f"{monthly_leads * 42:,}", "status": "neutral", "explanation": f"Demo traffic is modeled from {area} so WARREN has realistic operating context before live analytics are connected."},
+                        {"metric": "Lead conversion", "value": f"{round(monthly_leads / max(monthly_leads * 42, 1) * 100, 1)}%", "status": "warning", "explanation": "WARREN highlights the first practical bottleneck: faster replies and better qualification before spending more."},
+                    ],
+                },
+                "facebook_ads": {
+                    "title": "Facebook and Instagram Leads",
+                    "icon": "bi-meta",
+                    "cards": [
+                        {"metric": "Lead forms", "value": "Ready", "status": "good", "explanation": "The demo shows how Meta lead forms become WARREN lead threads. Activation swaps demo data for the real form connection."},
+                        {"metric": "Follow-up risk", "value": str(recoverable), "status": "warning", "explanation": "These are modeled opportunities that WARREN would recover with fast reply, nurture, and owner handoff rules."},
+                    ],
+                },
+                "seo": {
+                    "title": "Local Search",
+                    "icon": "bi-search",
+                    "cards": [
+                        {"metric": "Heatmap keyword", "value": services.split(",")[0].strip()[:42], "status": "info", "explanation": "A demo local-rank scan is seeded so the owner can inspect what Maps intelligence will look like after activation."},
+                    ],
+                },
+            },
+            "kpi_status": [
+                {"label": "Monthly lead target", "actual": monthly_leads, "target": max(monthly_leads + recoverable, monthly_leads), "status": "attention"},
+                {"label": "Recoverable revenue", "actual": recovered_revenue, "target": recovered_revenue, "status": "good"},
+            ],
+            "actions": [
+                {
+                    "key": "demo_work_real_warren",
+                    "title": action_title,
+                    "mission_name": action_title,
+                    "priority": "Do This Now",
+                    "priority_class": "danger",
+                    "category": "Growth Strategy",
+                    "why": action_detail,
+                    "what": "Open the seeded lead threads, let WARREN draft replies, inspect the commercial/proposal flow, then review activation setup.",
+                    "data_point": f"{monthly_leads} modeled monthly leads; {recoverable} recoverable.",
+                    "reward": "The prospect sees the same WARREN portal they get after activation, with demo records replacing live connections.",
+                    "steps": [
+                        "Open the WARREN inbox and pick the hottest demo lead.",
+                        "Use the draft/review flow to show how WARREN qualifies and routes the conversation.",
+                        "Open the activation setup after the owner understands the operating flow.",
+                    ],
+                    "impact": "Makes the demo feel like a working client instance instead of a slideshow.",
+                    "time": "10 minutes",
+                    "icon": "bi-stars",
+                    "source": "Affiliate demo workspace",
+                }
+            ],
+            "highlights": [
+                "Owner intake is stored on the demo brand.",
+                "Lead, nurture, growth, creative, commercial, and local search surfaces are seeded.",
+                "Activation keeps the setup and replaces demo records with live connections.",
+            ],
+            "concerns": [
+                "Live sends, publishing, billing, OAuth connects, and external pushes stay blocked until activation.",
+            ],
+            "warren_briefing": {
+                "total_findings": 3,
+                "critical_count": 1,
+                "warning_count": 1,
+                "positive_count": 1,
+                "top_critical": [{"title": "Lead speed is the first bottleneck", "detail": f"{recoverable} demo opportunities are recoverable if follow-up happens immediately.", "agent": "lead_command"}],
+                "top_warnings": [{"title": "Activation still needed", "detail": "Real CRM, SMS, billing, and lead-source credentials are not connected in demo mode.", "agent": "activation"}],
+                "top_wins": [{"title": "Owner rules captured", "detail": "Good-lead, profitable-service, and handoff details are already loaded.", "agent": "warren_brain"}],
+            },
+            "_analysis": {"demo": True, "business_name": business_name, "monthly_leads": monthly_leads, "recoverable": recoverable},
+            "_suggestions": [],
+        }
+
+    def _demo_heatmap_results(location, business_name):
+        lat = float(location.get("lat") or 33.4484)
+        lng = float(location.get("lng") or -112.0740)
+        competitors = [
+            ("Prime Local Services", "demo-place-1"),
+            ("Rapid Response Pros", "demo-place-2"),
+            ("Trusted Neighborhood Co", "demo-place-3"),
+            (business_name, "demo-target"),
+        ]
+        cells = []
+        ranks = [4, 3, 5, 2, 3, 4, 1, 2, 3]
+        idx = 0
+        for row in range(3):
+            for col in range(3):
+                rank = ranks[idx]
+                pack = []
+                for pos, (name, place_id) in enumerate(competitors, start=1):
+                    adjusted = pos
+                    if name == business_name:
+                        adjusted = rank
+                    elif pos >= rank:
+                        adjusted = min(pos + 1, 5)
+                    pack.append({
+                        "rank": adjusted,
+                        "name": name,
+                        "place_id": place_id,
+                        "address": f"{location.get('label') or 'Local'} demo market",
+                        "is_target": name == business_name,
+                    })
+                pack.sort(key=lambda item: item["rank"])
+                cells.append({
+                    "row": row,
+                    "col": col,
+                    "lat": round(lat + (row - 1) * 0.018, 6),
+                    "lng": round(lng + (col - 1) * 0.018, 6),
+                    "rank": rank,
+                    "competitors": pack,
+                })
+                idx += 1
+        return cells
+
+    def _seed_demo_operating_data(brand_id, data, snapshot):
+        brand = db.get_brand(brand_id) or {}
+        now = datetime.now()
+        month = now.strftime("%Y-%m")
+        business_name = data.get("business_name") or brand.get("display_name") or "Demo Business"
+        services = data.get("primary_services") or brand.get("primary_services") or "service calls"
+        service = services.split(",")[0].strip() or "service calls"
+        area = data.get("service_area") or brand.get("service_area") or ""
+        location = _demo_location_defaults(area)
+        token_status = _demo_shared_token_status()
+        plan = list(snapshot.get("connection_plan") or [])
+        plan_names = {str(item.get("name") or "").lower() for item in plan if isinstance(item, dict)}
+        if "shared ai token" not in plan_names:
+            plan.insert(0, {
+                "name": "Shared AI Token",
+                "status": "ready" if token_status.get("ai_ready") else "needs_setup",
+                "impact": "Lets every affiliate demo use WARREN chat, drafting, creative, and analysis without storing a separate token on the prospect brand.",
+            })
+        if "shared google maps token" not in plan_names:
+            plan.insert(1, {
+                "name": "Shared Google Maps Token",
+                "status": "ready" if token_status.get("maps_ready") else "needs_setup",
+                "impact": "Powers demo heatmaps, local-rank context, and commercial discovery from one app-level credential.",
+            })
+        snapshot["connection_plan"] = plan
+
+        db.update_brand_number_field(brand_id, "business_lat", location["lat"])
+        db.update_brand_number_field(brand_id, "business_lng", location["lng"])
+        db.update_brand_number_field(brand_id, "kpi_target_leads", int((snapshot.get("metrics") or {}).get("monthly_leads") or data.get("monthly_leads") or 35))
+        db.update_brand_number_field(brand_id, "crm_avg_service_price", float(data.get("avg_job_value") or 450))
+        for field, value in {
+            "ai_provider": "openai",
+            "openai_model_chat": "gpt-4o-mini",
+            "openai_model_analysis": "gpt-4o-mini",
+            "openai_model_images": "gpt-image-2",
+            "agent_context": json.dumps({
+                "demo_mode": True,
+                "shared_tokens": token_status,
+                "business_intake": {
+                    "good_lead_definition": (data.get("owner_intake") or {}).get("good_lead_definition", ""),
+                    "profitable_services": (data.get("owner_intake") or {}).get("profitable_services", ""),
+                    "handoff_rules": (data.get("owner_intake") or {}).get("handoff_rules", ""),
+                },
+            }, sort_keys=True),
+        }.items():
+            db.update_brand_text_field(brand_id, field, value)
+
+        snapshot["shared_tokens"] = token_status
+        snapshot["demo_location"] = location
+        dashboard = _demo_dashboard_payload(data, db.get_brand(brand_id) or brand, snapshot)
+        db.upsert_dashboard_snapshot(brand_id, month, json.dumps(dashboard, default=str, sort_keys=True), source="affiliate_demo")
+
+        try:
+            if not db.get_heatmap_scans(brand_id, limit=1):
+                results = _demo_heatmap_results(location, business_name)
+                ranked = [cell for cell in results if int(cell.get("rank") or 0) > 0]
+                avg_rank = round(sum(int(cell["rank"]) for cell in ranked) / max(len(ranked), 1), 1)
+                db.save_heatmap_scan(
+                    brand_id,
+                    service,
+                    3,
+                    5,
+                    location["lat"],
+                    location["lng"],
+                    json.dumps(results, sort_keys=True),
+                    avg_rank,
+                    status="complete",
+                    debug_json=json.dumps({"demo": True, "shared_maps_ready": token_status.get("maps_ready")}, sort_keys=True),
+                )
+        except Exception:
+            logger.exception("Failed to seed demo heatmap for brand %s", brand_id)
+
+        try:
+            if not db.get_scheduled_posts(brand_id, limit=1):
+                db.save_scheduled_post(
+                    brand_id,
+                    "facebook",
+                    f"Considering {service} in {area or 'your area'}? {business_name} can help you understand the next step before you book.",
+                    (now + timedelta(days=2)).strftime("%Y-%m-%d 09:00:00"),
+                    post_type="value",
+                )
+        except Exception:
+            logger.exception("Failed to seed demo social post for brand %s", brand_id)
+
+        try:
+            if not db.get_blog_posts(brand_id, limit=1):
+                db.save_blog_post(
+                    brand_id,
+                    f"What to Know Before Booking {service.title()}",
+                    f"This demo draft shows how WARREN turns {business_name}'s services, area, and customer questions into useful local content.",
+                    excerpt=f"A simple buyer guide for {service} in {area or 'the local market'}.",
+                    slug=f"demo-{re.sub(r'[^a-z0-9]+', '-', service.lower()).strip('-') or 'service'}-guide",
+                    status="draft",
+                    categories="Demo, Local SEO",
+                    tags=services,
+                )
+        except Exception:
+            logger.exception("Failed to seed demo blog post for brand %s", brand_id)
+
+        try:
+            if not db.get_brand_tasks(brand_id, status="open", limit=1):
+                db.create_brand_task(
+                    brand_id,
+                    "Activate this WARREN instance",
+                    "Replace demo data with live lead sources, SMS, CRM, billing, and OAuth connections after the owner says yes.",
+                    steps_json=json.dumps([
+                        "Confirm the owner wants to activate the demo workspace.",
+                        "Connect lead source, SMS, CRM, billing, AI, and Maps credentials.",
+                        "Turn on live sends after compliance and handoff rules are approved.",
+                    ]),
+                    priority="high",
+                    source="affiliate_demo",
+                    source_ref=str(snapshot.get("demo_session_id") or ""),
+                )
+        except Exception:
+            logger.exception("Failed to seed demo task for brand %s", brand_id)
+
+        try:
+            existing = db.get_agent_findings(brand_id, month=month, limit=1)
+            if not existing:
+                db.save_agent_finding(brand_id, "lead_command", month, "critical", "Lead speed is the demo bottleneck", f"WARREN modeled {len(snapshot.get('sample_leads') or [])} live-style lead threads that need fast qualification.", "Open the WARREN inbox and show the draft/review flow.")
+                db.save_agent_finding(brand_id, "activation", month, "warning", "Live connections are intentionally blocked", "Demo records are safe until activation connects the real lead sources, CRM, billing, and messaging.", "Use activation setup after the owner approves.")
+                db.save_agent_finding(brand_id, "warren_brain", month, "positive", "Owner rules are captured", "Good-lead definition, profitable services, and handoff rules were saved from intake.", "Keep these rules when converting the demo to a live client.")
+        except Exception:
+            logger.exception("Failed to seed demo findings for brand %s", brand_id)
+
+        return snapshot
+
     def _demo_slug_for_business(name):
         base = re.sub(r"[^a-z0-9]+", "-", (name or "demo-business").strip().lower()).strip("-")[:36]
         return f"demo-{base or 'business'}-{secrets.token_hex(3)}"
@@ -792,6 +1123,13 @@ def create_app():
                 db.update_partner_demo_session(demo["id"], partner_id, demo_snapshot_json=snapshot)
                 demo["demo_snapshot"] = snapshot
                 threads = db.get_lead_threads(brand["id"], limit=10)
+        if brand:
+            snapshot = demo.get("demo_snapshot") or data.get("demo_snapshot") or _build_partner_demo_snapshot(data)
+            snapshot["demo_session_id"] = demo["id"]
+            snapshot = _seed_demo_operating_data(brand["id"], data, snapshot)
+            db.update_partner_demo_session(demo["id"], partner_id, demo_snapshot_json=snapshot)
+            demo["demo_snapshot"] = snapshot
+            brand = db.get_brand(brand["id"]) or brand
         return brand, threads
 
     def _decorate_demo_threads(threads):
@@ -938,6 +1276,9 @@ def create_app():
                 demo_brand_id=demo_brand_id,
             )
             db.update_brand_demo_fields(demo_brand_id, demo_session_id=demo_id)
+            data["demo_snapshot"]["demo_session_id"] = demo_id
+            data["demo_snapshot"] = _seed_demo_operating_data(demo_brand_id, data, data["demo_snapshot"])
+            db.update_partner_demo_session(demo_id, partner_id, demo_snapshot_json=data["demo_snapshot"])
             db.record_partner_attribution_event(
                 partner_id=partner_id,
                 prospect_id=prospect_id,

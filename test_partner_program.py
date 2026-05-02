@@ -1,7 +1,9 @@
 import os
+import json
 import unittest
 import uuid
 from pathlib import Path
+from datetime import datetime
 
 _TEST_ROOT = Path(__file__).resolve().parent / ".tmp-test-artifacts"
 _TEST_ROOT.mkdir(exist_ok=True)
@@ -214,6 +216,11 @@ class PartnerProgramRouteTests(unittest.TestCase):
             prospect = self.app.db.find_agency_prospect(email="owner@demoplumbing.test", website="", business_name="")
             brand = self.app.db.get_brand(demos[0]["demo_brand_id"]) if demos else None
             threads = self.app.db.get_lead_threads(brand["id"]) if brand else []
+            current_month = datetime.now().strftime("%Y-%m")
+            dashboard_snapshot = self.app.db.get_dashboard_snapshot(brand["id"], current_month, max_age_hours=8760) if brand else None
+            heatmap_scans = self.app.db.get_heatmap_scans(brand["id"], limit=5) if brand else []
+            tasks = self.app.db.get_brand_tasks(brand["id"], status="open") if brand else []
+            posts = self.app.db.get_scheduled_posts(brand["id"], limit=5) if brand else []
 
         self.assertEqual(len(demos), 1)
         self.assertEqual(demos[0]["business_name"], "Demo Plumbing")
@@ -222,7 +229,17 @@ class PartnerProgramRouteTests(unittest.TestCase):
         self.assertIsNotNone(brand)
         self.assertEqual(brand["is_demo"], 1)
         self.assertEqual(brand["demo_status"], "demo_until_activated")
+        self.assertAlmostEqual(float(brand["business_lat"]), 33.4484, places=3)
+        self.assertAlmostEqual(float(brand["business_lng"]), -112.0740, places=3)
+        self.assertEqual(brand["ai_provider"], "openai")
         self.assertGreaterEqual(len(threads), 3)
+        self.assertIsNotNone(dashboard_snapshot)
+        dashboard_data = json.loads(dashboard_snapshot["snapshot_json"])
+        self.assertTrue(dashboard_data["demo_mode"])
+        self.assertIn("shared_tokens", demos[0]["demo_snapshot"])
+        self.assertGreaterEqual(len(heatmap_scans), 1)
+        self.assertGreaterEqual(len(tasks), 1)
+        self.assertGreaterEqual(len(posts), 1)
         self.assertEqual(prospect["partner_id"], self.partner_id)
         self.assertEqual(prospect["source"], "affiliate_demo")
 
