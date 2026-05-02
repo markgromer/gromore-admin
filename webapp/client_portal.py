@@ -710,7 +710,11 @@ def _client_demo_context():
         brand = _get_db().get_brand(brand_id) or {}
     except Exception:
         brand = {}
-    is_demo = bool(session.get("client_demo_mode") or int(brand.get("is_demo") or 0))
+    demo_status = (brand.get("demo_status") or "").strip().lower()
+    is_demo = bool(
+        (session.get("client_demo_mode") and session.get("client_demo_session_id"))
+        or demo_status == "demo_until_activated"
+    )
     return {"is_demo": is_demo, "brand": brand}
 
 
@@ -12243,8 +12247,11 @@ def inject_client_globals():
         try:
             db = _get_db()
             brand = db.get_brand(brand_id) or {}
-            client_demo_mode = bool(session.get("client_demo_mode") or int(brand.get("is_demo") or 0))
             client_demo_status = brand.get("demo_status") or ""
+            client_demo_mode = bool(
+                (session.get("client_demo_mode") and session.get("client_demo_session_id"))
+                or (client_demo_status or "").strip().lower() == "demo_until_activated"
+            )
             assistant_model_chat = _pick_ai_model(brand, "chat")
             assistant_enabled = bool(_get_openai_api_key(brand))
             rows = db.get_ai_chat_messages(brand_id, assistant_month, limit=30)

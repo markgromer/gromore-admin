@@ -138,6 +138,36 @@ class PartnerProgramRouteTests(unittest.TestCase):
         self.assertIn(b"Partners", response.data)
         self.assertIn(b"Agency Partner", response.data)
 
+    def test_beta_style_demo_flag_does_not_trigger_affiliate_demo_mode(self):
+        with self.app.app_context():
+            brand_id = self.app.db.create_brand({
+                "slug": f"beta-demo-flag-{uuid.uuid4().hex[:8]}",
+                "display_name": "Beta Demo Flag Co",
+                "industry": "home services",
+            })
+            self.app.db.update_brand_demo_fields(brand_id, is_demo=1, demo_status="")
+            client_user_id = self.app.db.create_client_user(
+                brand_id,
+                f"beta-{uuid.uuid4().hex[:8]}@example.test",
+                "Password123",
+                "Beta User",
+            )
+
+        with self.client.session_transaction() as session:
+            session["client_user_id"] = client_user_id
+            session["client_brand_id"] = brand_id
+            session["client_name"] = "Beta User"
+            session["client_brand_name"] = "Beta Demo Flag Co"
+            session["client_role"] = "owner"
+
+        response = self.client.get("/client/api/me")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.get_json()["brand"]["is_demo"])
+
+        response = self.client.get("/client/dashboard", follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"Demo mode:", response.data)
+
     def test_partner_can_create_demo_and_nurture_business(self):
         response = self.client.post(
             "/partners/login",
