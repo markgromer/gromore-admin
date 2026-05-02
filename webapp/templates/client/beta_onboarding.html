@@ -41,19 +41,19 @@
 
             <div class="step">
                 <div class="step-num">1</div>
-                <div><strong>Provide your Meta/Facebook login email</strong><br>The email you use to log into Facebook, so we can add you as a tester on our app.</div>
+                <div><strong>Provide your GMB manager email</strong><br>The email address used to manage your Google Business Profile.</div>
             </div>
             <div class="step">
                 <div class="step-num">2</div>
-                <div><strong>Share your Google account email</strong><br>The Gmail or Google Workspace email you'll use to sign in, so we can add you as a test user.</div>
+                <div><strong>Create a Facebook Developer account</strong><br>Free registration at developers.facebook.com using the profile that manages your page.</div>
             </div>
             <div class="step">
                 <div class="step-num">3</div>
-                <div><strong>Provide your Facebook Page ID</strong><br>The numeric ID from your business page's About section.</div>
+                <div><strong>Send your personal Facebook profile link</strong><br>The profile that has admin access to your business page.</div>
             </div>
             <div class="step">
                 <div class="step-num">4</div>
-                <div><strong>Create a Facebook Developer account</strong><br>Free registration at developers.facebook.com so we can connect your ad data.</div>
+                <div><strong>Send your Facebook business page link</strong><br>The public business page WARREN should connect to.</div>
             </div>
             <div class="step">
                 <div class="step-num">5</div>
@@ -77,7 +77,7 @@
             </div>
             {% else %}
             <h2>Beta Onboarding</h2>
-            <p class="subtitle">Fill in the details below so we can connect your ad accounts.</p>
+            <p class="subtitle">Fill in the details below so we can connect the right Google Business Profile and Facebook assets.</p>
 
             {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -94,39 +94,41 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                 <div class="mb-3">
-                    <label class="form-label">Meta / Facebook Login Email <span class="text-danger">*</span></label>
-                    <input type="email" name="meta_login_email" class="form-control" placeholder="your-facebook-email@example.com" required
-                           value="{{ tester.meta_login_email or '' }}">
-                    <div class="form-text">The email address you use to log into Facebook. We need this to add you as a tester on our Facebook app before you can sign in.</div>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label">Google Account Email <span class="text-danger">*</span></label>
+                    <label class="form-label">Google Business Profile Manager Email <span class="text-danger">*</span></label>
                     <input type="email" name="google_business_email" class="form-control" placeholder="you@gmail.com" required
                            value="{{ tester.google_business_email or '' }}">
-                    <div class="form-text">The Gmail or Google Workspace email you'll use to sign in. We need this to add you as a test user on our Google app.</div>
+                    <div class="form-text">The email address used to manage your Google Business Profile. This is usually a Gmail or Google Workspace account.</div>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label">Facebook Page ID <span class="text-danger">*</span></label>
-                    <input type="text" name="facebook_page_id" class="form-control" placeholder="e.g. 109876543210987" required
-                           value="{{ tester.facebook_page_id or '' }}">
-                    <div class="help-box mt-2">
-                        <strong>How to find your Page ID:</strong><br>
-                        1. Go to your Facebook Business Page<br>
-                        2. Click <strong>About</strong> on the left sidebar<br>
-                        3. Scroll to <strong>Page transparency</strong><br>
-                        4. Your Page ID is the numeric number listed there
-                    </div>
+                    <label class="form-label">Personal Facebook Profile Link <span class="text-danger">*</span></label>
+                    <input type="url" name="facebook_profile_url" class="form-control" placeholder="https://www.facebook.com/your.profile" required
+                           value="{{ tester.facebook_profile_url or '' }}">
+                    <div class="form-text">Paste the personal Facebook profile that manages your business page.</div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Facebook Business Page Link <span class="text-danger">*</span></label>
+                    <input type="url" name="facebook_business_page_url" class="form-control" placeholder="https://www.facebook.com/yourbusiness" required
+                           value="{{ tester.facebook_business_page_url or tester.facebook_page_id or '' }}">
+                    <div class="form-text">Paste the public link to the business page WARREN should connect to.</div>
                 </div>
 
                 <div class="help-box" style="background:#fdf2f8;border-color:#fce7f3;">
                     <strong><i class="bi bi-facebook"></i> Facebook Developer Account (Required)</strong><br>
-                    You'll also need a <strong>free</strong> Facebook Developer account. If you haven't already:<br>
+                    You need a <strong>free</strong> Facebook Developer account before we can add your account to the app:<br>
                     1. Visit <a href="https://developers.facebook.com" target="_blank" style="color:#4f46e5;">developers.facebook.com</a><br>
                     2. Click <strong>Get Started</strong> and log in with your Facebook account<br>
                     3. Accept the terms and complete registration
                 </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Facebook Login Email <span class="text-muted">(optional)</span></label>
+                    <input type="email" name="meta_login_email" class="form-control" placeholder="your-facebook-email@example.com"
+                           value="{{ tester.meta_login_email or '' }}">
+                    <div class="form-text">Optional, but helpful if it differs from the profile link.</div>
+                </div>
+                <input type="hidden" name="facebook_page_id" value="{{ tester.facebook_page_id or '' }}">
 
                 <button type="submit" class="btn btn-primary w-100 py-2 mt-3">
                     <i class="bi bi-send"></i> Submit Setup Info

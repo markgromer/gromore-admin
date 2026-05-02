@@ -62,6 +62,37 @@ class BetaBroadcastEmailTests(unittest.TestCase):
             if path.exists():
                 path.unlink()
 
+    def test_beta_tester_stores_current_connection_requirements(self):
+        with self.app.app_context():
+            tester_id = self.app.db.create_beta_tester({
+                "name": "Setup Beta",
+                "email": f"setup-{uuid.uuid4().hex[:8]}@example.com",
+                "business_name": "Setup Co",
+                "google_business_email": "owner@gmail.com",
+                "facebook_profile_url": "https://www.facebook.com/owner.profile",
+                "facebook_business_page_url": "https://www.facebook.com/setupco",
+            })
+            tester = self.app.db.get_beta_tester(tester_id)
+
+            self.assertEqual(tester["google_business_email"], "owner@gmail.com")
+            self.assertEqual(tester["facebook_profile_url"], "https://www.facebook.com/owner.profile")
+            self.assertEqual(tester["facebook_business_page_url"], "https://www.facebook.com/setupco")
+
+            self.app.db.update_beta_tester_onboarding(
+                tester_id,
+                "",
+                "manager@gmail.com",
+                "",
+                facebook_profile_url="https://www.facebook.com/manager.profile",
+                facebook_business_page_url="https://www.facebook.com/updatedsetupco",
+            )
+            updated = self.app.db.get_beta_tester(tester_id)
+
+        self.assertEqual(updated["google_business_email"], "manager@gmail.com")
+        self.assertEqual(updated["facebook_profile_url"], "https://www.facebook.com/manager.profile")
+        self.assertEqual(updated["facebook_business_page_url"], "https://www.facebook.com/updatedsetupco")
+        self.assertTrue(updated["onboarding_completed_at"])
+
     @patch("webapp.email_sender.send_bulk_email")
     def test_beta_broadcast_sends_only_to_active_beta_audience(self, mock_send_bulk_email):
         mock_send_bulk_email.return_value = 1

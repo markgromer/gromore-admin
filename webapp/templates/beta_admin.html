@@ -159,13 +159,16 @@
                         <td>{{ t.email }}</td>
                         <td>{{ t.business_name or '-' }}</td>
                         <td>
-                            {% if t.meta_login_email or t.google_business_email or t.facebook_page_id %}
+                            {% if t.meta_login_email or t.google_business_email or t.facebook_page_id or t.facebook_profile_url or t.facebook_business_page_url %}
                             <details style="font-size:.78rem;">
                                 <summary style="cursor:pointer;color:#6366f1;">View info</summary>
                                 <div class="mt-1">
-                                    <strong>Meta Email:</strong> {{ t.meta_login_email or '-' }}<br>
-                                    <strong>Google Email:</strong> {{ t.google_business_email or '-' }}<br>
-                                    <strong>FB Page:</strong> {{ t.facebook_page_id or '-' }}
+                                    <strong>GMB Manager Email:</strong> {{ t.google_business_email or '-' }}<br>
+                                    <strong>FB Personal Profile:</strong>
+                                    {% if t.facebook_profile_url %}<a href="{{ t.facebook_profile_url }}" target="_blank" rel="noopener">{{ t.facebook_profile_url }}</a>{% else %}-{% endif %}<br>
+                                    <strong>FB Business Page:</strong>
+                                    {% if t.facebook_business_page_url or t.facebook_page_id %}<a href="{{ t.facebook_business_page_url or t.facebook_page_id }}" target="_blank" rel="noopener">{{ t.facebook_business_page_url or t.facebook_page_id }}</a>{% else %}-{% endif %}<br>
+                                    <strong>FB Login Email:</strong> {{ t.meta_login_email or '-' }}
                                 </div>
                             </details>
                             {% else %}

@@ -113,7 +113,8 @@ def send_report_email(app_config, brand, report, recipients):
 def send_beta_welcome_email(app_config, tester, onboarding_url):
     """
     Send welcome email to an approved beta tester with a link to complete
-    their onboarding (provide Facebook Page ID + Google business email).
+    their onboarding (GMB manager email, Facebook profile/page links, and
+    developer account setup).
     """
     smtp_host = app_config.get("SMTP_HOST", "smtp.gmail.com")
     smtp_port = app_config.get("SMTP_PORT", 587)
@@ -133,11 +134,11 @@ def send_beta_welcome_email(app_config, tester, onboarding_url):
     <div style="font-family:Inter,Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
         <div style="display:inline-block;padding:6px 12px;border-radius:999px;background:#fffbeb;border:1px solid #fcd34d;color:#b45309;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">W.A.R.R.E.N. Beta Access</div>
         <h2 style="color:#b45309;margin-top:16px;">Welcome to W.A.R.R.E.N., {name}!</h2>
-        <p>You've been approved for the W.A.R.R.E.N. beta program. Before we can activate your access, we need a few setup details.</p>
+        <p>You've been approved for the W.A.R.R.E.N. beta program. Before we can connect your live account data, we need a few setup details.</p>
 
         <div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:10px;padding:20px;margin:20px 0;">
             <h3 style="margin-top:0;color:#b45309;">A note about beta setup</h3>
-            <p>While we're in beta, we have to add you as a test user. The setup is a slightly longer process that involves us manually adding you on our end, and you creating a free developer account on yours.</p>
+            <p>While we're in beta, we still have to wire account access manually. The key pieces are your Google Business Profile manager email, your Facebook developer access, and the exact Facebook profile/page links we should use.</p>
             <p>We walk through this on our <strong>group onboarding calls</strong>. If you're unable to join one of those, you can book a <strong>15-minute Zoom call</strong> with me directly and we'll get you set up:</p>
             <div style="text-align:center;margin:16px 0;">
                 <a href="https://calendly.com/nopoop520" style="display:inline-block;padding:12px 28px;background:#f59e0b;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Book a Setup Call</a>
@@ -151,33 +152,32 @@ def send_beta_welcome_email(app_config, tester, onboarding_url):
         <div style="background:#fff7ed;border-radius:10px;padding:20px;margin:20px 0;">
             <h3 style="margin-top:0;">What we need from you:</h3>
             <ol style="line-height:2;">
-                <li><strong>Your Meta/Facebook login email</strong> - the email you use to log into Facebook (so we can add you as a tester on our app)</li>
-                <li><strong>Your Google account email</strong> - the Gmail or Google Workspace email you'll use to sign in (so we can add you as a test user)</li>
-                <li><strong>Your Facebook Page ID</strong> - the numeric ID for your business page</li>
-                <li><strong>Create a free Facebook Developer account</strong> at <a href="https://developers.facebook.com" style="color:#4f46e5;">developers.facebook.com</a></li>
+                <li><strong>Google Business Profile manager email</strong> - the email address used to manage your GMB listing</li>
+                <li><strong>Facebook Developer account</strong> - create a free developer account at <a href="https://developers.facebook.com" style="color:#4f46e5;">developers.facebook.com</a></li>
+                <li><strong>Personal Facebook profile link</strong> - the personal profile that manages your business page</li>
+                <li><strong>Facebook business page link</strong> - the public business page WARREN should connect to</li>
             </ol>
         </div>
 
         <div style="background:#fff7ed;border-radius:10px;padding:20px;margin:20px 0;">
-            <h3 style="margin-top:0;">How to find your Facebook Page ID</h3>
+            <h3 style="margin-top:0;">Which Facebook links should you send?</h3>
             <ol style="line-height:1.8;font-size:.9rem;">
-                <li>Go to your Facebook Business Page</li>
-                <li>Click <strong>About</strong> (on the left sidebar)</li>
-                <li>Scroll down to <strong>Page transparency</strong></li>
-                <li>Your Page ID is the numeric number listed there</li>
+                <li>Open the personal Facebook profile that has admin access to the business page. Copy that profile URL.</li>
+                <li>Open the public Facebook business page. Copy that page URL.</li>
+                <li>Make sure both links are accessible and are for the account/page you actually want WARREN connected to.</li>
             </ol>
-            <p style="font-size:.85em;color:#666;">Example: 109876543210987</p>
+            <p style="font-size:.85em;color:#666;">Examples: https://www.facebook.com/your.profile and https://www.facebook.com/yourbusiness</p>
         </div>
 
         <div style="background:#fdf2f8;border-radius:10px;padding:20px;margin:20px 0;">
             <h3 style="margin-top:0;">Facebook Developer Account (Free)</h3>
-            <p>You'll need a free Facebook Developer account so we can connect to your ad data. This takes about 2 minutes:</p>
+            <p>You'll need a free Facebook Developer account so we can add you to the app during beta. This takes about 2 minutes:</p>
             <ol style="line-height:1.8;font-size:.9rem;">
                 <li>Visit <a href="https://developers.facebook.com" style="color:#4f46e5;">developers.facebook.com</a></li>
                 <li>Click <strong>Get Started</strong> and log in with your Facebook account</li>
                 <li>Accept the terms and complete the registration</li>
             </ol>
-            <p style="font-size:.85em;color:#666;">Once you've done this, we'll add your account to our system and send you a login link.</p>
+            <p style="font-size:.85em;color:#666;">Use the same personal Facebook profile that manages your business page.</p>
         </div>
 
         <p>Once you've completed the setup form and we've added your accounts to our backend, we'll send you another email with your W.A.R.R.E.N. login credentials.</p>
@@ -192,16 +192,15 @@ def send_beta_welcome_email(app_config, tester, onboarding_url):
         f"You've been approved for the beta program. Complete your setup here:\n"
         f"{onboarding_url}\n\n"
         f"ABOUT BETA SETUP\n"
-        f"While we're in beta, we have to add you as a test user. The setup is a slightly longer process "
-        f"that involves us manually adding you on our end, and you creating a free developer account on yours.\n\n"
+        f"While we're in beta, we still wire account access manually. We need the exact GMB and Facebook access details below.\n\n"
         f"We walk through this on our group onboarding calls. If you're unable to join one of those, "
         f"book a 15-minute Zoom call with me and we'll get you set up:\n"
         f"https://calendly.com/nopoop520\n\n"
         f"What we need:\n"
-        f"1. Your Meta/Facebook login email (so we can add you as a tester on our app)\n"
-        f"2. Your Google account email (so we can add you as a test user)\n"
-        f"3. Your Facebook Page ID (numeric ID from your business page)\n"
-        f"4. Create a free Facebook Developer account at developers.facebook.com\n\n"
+        f"1. Google Business Profile manager email\n"
+        f"2. Create a free Facebook Developer account at developers.facebook.com\n"
+        f"3. Personal Facebook profile link for the profile that manages your business page\n"
+        f"4. Facebook business page link\n\n"
         f"Once setup is complete, we'll send your W.A.R.R.E.N. login credentials.\n\n"
         f"W.A.R.R.E.N. is delivered by GroMore Media.\n\n"
         f"- W.A.R.R.E.N. by GroMore"
@@ -223,7 +222,8 @@ def send_beta_welcome_email(app_config, tester, onboarding_url):
 def send_beta_activation_email(app_config, tester, temp_password, login_url):
     """
     Send activation email to a beta tester once their accounts have been
-    added to the backend. Includes OAuth login instructions and FB dev acceptance.
+    created in WARREN. Includes current beta setup requirements for GMB,
+    Facebook developer access, and Facebook profile/page links.
     """
     smtp_host = app_config.get("SMTP_HOST", "smtp.gmail.com")
     smtp_port = app_config.get("SMTP_PORT", 587)
@@ -243,36 +243,46 @@ def send_beta_activation_email(app_config, tester, temp_password, login_url):
     <div style="font-family:Inter,Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
         <div style="display:inline-block;padding:6px 12px;border-radius:999px;background:#fffbeb;border:1px solid #fcd34d;color:#b45309;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">W.A.R.R.E.N. Beta Access</div>
         <h2 style="color:#15803d;margin-top:16px;">You're in, {name}!</h2>
-        <p>Your W.A.R.R.E.N. beta access is now active. We've added you as a tester on both our Facebook and Google apps, so you're ready to sign in.</p>
+        <p>Your W.A.R.R.E.N. beta account is active. You can log in now, and we need the current connection details below so we can wire your Google Business Profile and Facebook assets correctly.</p>
 
         <div style="text-align:center;margin:28px 0;">
             <a href="{login_url}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border-radius:10px;text-decoration:none;font-weight:600;font-size:1rem;">Open W.A.R.R.E.N.</a>
         </div>
 
         <div style="background:#fdf2f8;border-radius:10px;padding:20px;margin:20px 0;">
-            <h3 style="margin-top:0;"><span style="font-size:1.1em;">&#9312;</span> Accept Facebook Developer Access</h3>
-            <p>Before you can sign in with Facebook, you need to accept the tester invitation we sent you:</p>
+            <h3 style="margin-top:0;"><span style="font-size:1.1em;">&#9312;</span> Send These Account Details</h3>
+            <p>Please reply to this email with the following. These are the details we need for the modern WARREN setup:</p>
             <ol style="line-height:1.8;font-size:.9rem;">
-                <li>Go to <a href="https://developers.facebook.com/settings/developer/requests/" style="color:#4f46e5;">developers.facebook.com/settings/developer/requests</a></li>
-                <li>Log in with the Facebook account tied to <strong>{tester.get('meta_login_email', email)}</strong></li>
-                <li>You should see a pending tester invitation from <strong>W.A.R.R.E.N. by GroMore</strong></li>
-                <li>Click <strong>Accept</strong></li>
+                <li><strong>Google Business Profile manager email</strong> - the email address used to manage your GMB listing</li>
+                <li><strong>Personal Facebook profile link</strong> - the personal profile that manages the business page</li>
+                <li><strong>Facebook business page link</strong> - the public page URL for the business</li>
+                <li><strong>Confirmation that your Facebook Developer account is set up</strong> at <a href="https://developers.facebook.com" style="color:#4f46e5;">developers.facebook.com</a></li>
             </ol>
-            <p style="font-size:.85em;color:#666;">If you don't see the invitation right away, give it a few minutes and refresh the page.</p>
+            <p style="font-size:.85em;color:#666;">If you already submitted these through onboarding, just reply "submitted" and include anything that has changed.</p>
         </div>
 
         <div style="background:#f0fdf4;border-radius:10px;padding:20px;margin:20px 0;">
             <h3 style="margin-top:0;"><span style="font-size:1.1em;">&#9313;</span> Sign In to W.A.R.R.E.N.</h3>
-            <p>Once you've accepted the Facebook invitation, head to the login page and sign in using one of these methods:</p>
+            <p>Head to the login page and sign in with your beta account:</p>
             <ul style="line-height:1.8;font-size:.9rem;">
-                <li><strong>Sign in with Google</strong> using your Google account (<strong>{tester.get('google_business_email', email)}</strong>)</li>
-                <li><strong>Sign in with Facebook</strong> using the Facebook account you accepted the invitation on</li>
+                <li><strong>Email:</strong> {email}</li>
+                <li><strong>Temporary password:</strong> {temp_password}</li>
             </ul>
-            <p style="font-size:.85em;color:#666;">You can also use email/password: your email is <strong>{email}</strong> and your temporary password is <strong>{temp_password}</strong>. You'll be prompted to change it on first login.</p>
+            <p style="font-size:.85em;color:#666;">You may be prompted to change the temporary password on first login. OAuth connections are handled after the required account details above are confirmed.</p>
         </div>
 
         <div style="background:#fff7ed;border-radius:10px;padding:20px;margin:20px 0;">
-            <h3 style="margin-top:0;"><span style="font-size:1.1em;">&#9314;</span> Share Your Feedback</h3>
+            <h3 style="margin-top:0;"><span style="font-size:1.1em;">&#9314;</span> Facebook Developer Setup</h3>
+            <p>If you have not created the free developer account yet:</p>
+            <ol style="line-height:1.8;font-size:.9rem;">
+                <li>Go to <a href="https://developers.facebook.com" style="color:#4f46e5;">developers.facebook.com</a></li>
+                <li>Click <strong>Get Started</strong> and log in with the personal Facebook profile that manages your business page</li>
+                <li>Accept the terms and complete registration</li>
+            </ol>
+        </div>
+
+        <div style="background:#eff6ff;border-radius:10px;padding:20px;margin:20px 0;">
+            <h3 style="margin-top:0;"><span style="font-size:1.1em;">&#9315;</span> Share Your Feedback</h3>
             <p>As a beta tester, your input directly shapes what we build. Use the <strong>Feedback</strong>
             link in your dashboard sidebar to report bugs, request features, or tell us what's working.</p>
         </div>
@@ -285,16 +295,18 @@ def send_beta_activation_email(app_config, tester, temp_password, login_url):
 
     text = (
         f"You're In, {name}!\n\n"
-        f"Your W.A.R.R.E.N. beta access is now active.\n\n"
-        f"STEP 1 - Accept Facebook Developer Access:\n"
-        f"Go to https://developers.facebook.com/settings/developer/requests/\n"
-        f"Log in with your Facebook account ({tester.get('meta_login_email', email)})\n"
-        f"Accept the tester invitation from W.A.R.R.E.N. by GroMore.\n\n"
+        f"Your W.A.R.R.E.N. beta account is active.\n\n"
+        f"STEP 1 - Reply with these account details:\n"
+        f"1. Google Business Profile manager email\n"
+        f"2. Personal Facebook profile link for the profile that manages your business page\n"
+        f"3. Facebook business page link\n"
+        f"4. Confirmation that your free Facebook Developer account is set up at developers.facebook.com\n\n"
         f"STEP 2 - Sign In to W.A.R.R.E.N.:\n"
         f"Go to {login_url}\n"
-        f"Sign in with Google ({tester.get('google_business_email', email)}) or Facebook.\n"
-        f"Or use email/password: {email} / {temp_password}\n\n"
-        f"STEP 3 - Share Feedback:\n"
+        f"Use email/password: {email} / {temp_password}\n\n"
+        f"STEP 3 - Facebook Developer Setup if you have not done it yet:\n"
+        f"Go to https://developers.facebook.com, click Get Started, log in with the personal Facebook profile that manages your business page, and complete registration.\n\n"
+        f"STEP 4 - Share Feedback:\n"
         f"Use the Feedback link in your dashboard sidebar.\n\n"
         f"W.A.R.R.E.N. is delivered by GroMore Media.\n\n"
         f"Questions? Reply to this email.\n\n"

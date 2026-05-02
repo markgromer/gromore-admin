@@ -18904,8 +18904,14 @@ def beta_signup():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         name = request.form.get("name", "").strip()
+        google_business_email = request.form.get("google_business_email", "").strip().lower()
+        facebook_profile_url = request.form.get("facebook_profile_url", "").strip()
+        facebook_business_page_url = request.form.get("facebook_business_page_url", "").strip() or request.form.get("facebook_page_id", "").strip()
         if not email or not name:
             flash("Name and email are required.", "error")
+            return render_template("beta_signup.html")
+        if not google_business_email or not facebook_profile_url or not facebook_business_page_url:
+            flash("Google Business Profile manager email, personal Facebook profile link, and Facebook business page link are required.", "error")
             return render_template("beta_signup.html")
 
         existing = db.get_beta_tester_by_email(email)
@@ -18924,8 +18930,10 @@ def beta_signup():
             "platforms": ",".join(request.form.getlist("platforms")),
             "referral_source": request.form.get("referral_source", "").strip(),
             "meta_login_email": request.form.get("meta_login_email", "").strip().lower(),
-            "google_business_email": request.form.get("google_business_email", "").strip().lower(),
+            "google_business_email": google_business_email,
             "facebook_page_id": request.form.get("facebook_page_id", "").strip(),
+            "facebook_profile_url": facebook_profile_url,
+            "facebook_business_page_url": facebook_business_page_url,
             **attribution,
         }
         tester_id = db.create_beta_tester(data)
@@ -18959,12 +18967,21 @@ def beta_onboarding(token):
         meta_login_email = request.form.get("meta_login_email", "").strip().lower()
         google_business_email = request.form.get("google_business_email", "").strip().lower()
         facebook_page_id = request.form.get("facebook_page_id", "").strip()
+        facebook_profile_url = request.form.get("facebook_profile_url", "").strip()
+        facebook_business_page_url = request.form.get("facebook_business_page_url", "").strip() or facebook_page_id
 
-        if not meta_login_email or not google_business_email or not facebook_page_id:
+        if not google_business_email or not facebook_profile_url or not facebook_business_page_url:
             flash("All fields are required.", "error")
             return render_template("beta_onboarding.html", tester=tester)
 
-        db.update_beta_tester_onboarding(tester["id"], facebook_page_id, google_business_email, meta_login_email)
+        db.update_beta_tester_onboarding(
+            tester["id"],
+            facebook_page_id,
+            google_business_email,
+            meta_login_email,
+            facebook_profile_url=facebook_profile_url,
+            facebook_business_page_url=facebook_business_page_url,
+        )
         return render_template("beta_onboarding.html", tester=tester, success=True)
 
     return render_template("beta_onboarding.html", tester=tester)

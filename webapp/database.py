@@ -2313,6 +2313,8 @@ class WebDB:
             ("facebook_page_id", "TEXT DEFAULT ''"),
             ("google_business_email", "TEXT DEFAULT ''"),
             ("meta_login_email", "TEXT DEFAULT ''"),
+            ("facebook_profile_url", "TEXT DEFAULT ''"),
+            ("facebook_business_page_url", "TEXT DEFAULT ''"),
             ("onboarding_token", "TEXT DEFAULT ''"),
             ("onboarding_completed_at", "TEXT DEFAULT ''"),
             ("activated_at", "TEXT DEFAULT ''"),
@@ -6115,8 +6117,9 @@ class WebDB:
                 "INSERT INTO beta_testers (name, email, business_name, website, industry, "
                 "monthly_ad_spend, platforms, referral_source, partner_id, referral_code, "
                 "utm_source, utm_medium, utm_campaign, utm_content, utm_term, attribution_json, "
-                "meta_login_email, google_business_email, facebook_page_id) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "meta_login_email, google_business_email, facebook_page_id, "
+                "facebook_profile_url, facebook_business_page_url) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     data["name"], data["email"], data.get("business_name", ""),
                     data.get("website", ""), data.get("industry", ""),
@@ -6127,7 +6130,8 @@ class WebDB:
                     data.get("utm_content", ""), data.get("utm_term", ""),
                     json.dumps(data.get("attribution") or {}, sort_keys=True),
                     data.get("meta_login_email", ""), data.get("google_business_email", ""),
-                    data.get("facebook_page_id", ""),
+                    data.get("facebook_page_id", ""), data.get("facebook_profile_url", ""),
+                    data.get("facebook_business_page_url", ""),
                 ),
             )
             conn.commit()
@@ -6201,11 +6205,17 @@ class WebDB:
         conn.close()
         return dict(row) if row else None
 
-    def update_beta_tester_onboarding(self, tester_id, facebook_page_id, google_business_email, meta_login_email):
+    def update_beta_tester_onboarding(self, tester_id, facebook_page_id, google_business_email, meta_login_email,
+                                      facebook_profile_url="", facebook_business_page_url=""):
+        business_page = (facebook_business_page_url or facebook_page_id or "").strip()
         conn = self._conn()
         conn.execute(
-            "UPDATE beta_testers SET facebook_page_id = ?, google_business_email = ?, meta_login_email = ?, onboarding_completed_at = datetime('now') WHERE id = ?",
-            (facebook_page_id, google_business_email, meta_login_email, tester_id),
+            """UPDATE beta_testers
+               SET facebook_page_id = ?, google_business_email = ?, meta_login_email = ?,
+                   facebook_profile_url = ?, facebook_business_page_url = ?,
+                   onboarding_completed_at = datetime('now')
+               WHERE id = ?""",
+            (facebook_page_id, google_business_email, meta_login_email, facebook_profile_url, business_page, tester_id),
         )
         conn.commit()
         conn.close()

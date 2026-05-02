@@ -25,6 +25,8 @@
         .form-control,.form-select{border-radius:10px;border-color:#dbe3ef;min-height:42px;font-size:.9rem;}
         .form-control:focus,.form-select:focus{border-color:#a5b4fc;box-shadow:0 0 0 .2rem rgba(79,70,229,.14);}
         .form-label{font-weight:600;font-size:.82rem;color:#334155;margin-bottom:.3rem;}
+        .help-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:1rem;margin-bottom:1rem;font-size:.85rem;color:#475569;line-height:1.7;}
+        .help-box strong{color:#0f172a;}
         .success-state{text-align:center;padding:3rem 1.5rem;}
         .success-state i{font-size:3rem;color:#059669;}
         .success-state h3{font-weight:700;margin-top:.8rem;color:#0f172a;}
@@ -187,22 +189,32 @@
                     </div>
                 </div>
                 <hr class="my-3" style="border-color:#e2e8f0;">
-                <p style="font-size:.82rem;color:#475569;margin-bottom:1rem;"><strong>Account setup info</strong> - We need these to connect your ad accounts once you're approved.</p>
+                <p style="font-size:.82rem;color:#475569;margin-bottom:1rem;"><strong>Account setup info</strong> - We need these to connect the right Google Business Profile and Facebook assets once you're approved.</p>
 
                 <div class="mb-3">
-                    <label class="form-label">Meta / Facebook Login Email *</label>
-                    <input type="email" name="meta_login_email" class="form-control" required placeholder="your-facebook-email@example.com">
-                    <div class="form-text">The email you use to log into Facebook. We'll add you as a tester on our Facebook app.</div>
+                    <label class="form-label">Google Business Profile Manager Email *</label>
+                    <input type="email" name="google_business_email" class="form-control" required placeholder="you@gmail.com">
+                    <div class="form-text">The email address that manages your Google Business Profile. This is the account we need for GMB/local visibility access.</div>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label">Google Account Email *</label>
-                    <input type="email" name="google_business_email" class="form-control" required placeholder="you@gmail.com">
-                    <div class="form-text">Your Gmail or Google Workspace email. We'll add you as a test user on our Google app.</div>
+                    <label class="form-label">Personal Facebook Profile Link *</label>
+                    <input type="url" name="facebook_profile_url" class="form-control" required placeholder="https://www.facebook.com/your.profile">
+                    <div class="form-text">Paste the personal Facebook profile that manages your business page, not just the login email.</div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Facebook Business Page Link *</label>
-                    <input type="text" name="facebook_page_id" class="form-control" required placeholder="e.g. https://www.facebook.com/yourbusiness">
-                    <div class="form-text">Paste the link to your Facebook Business Page. If you know your numeric Page ID, that works too.</div>
+                    <input type="url" name="facebook_business_page_url" class="form-control" required placeholder="https://www.facebook.com/yourbusiness">
+                    <div class="form-text">Paste the public link to the business page you want WARREN to connect to.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Facebook Login Email <span class="text-muted">(optional)</span></label>
+                    <input type="email" name="meta_login_email" class="form-control" placeholder="your-facebook-email@example.com">
+                    <div class="form-text">Helpful if it differs from the profile link, but the profile URL is the main thing we need.</div>
+                </div>
+                <input type="hidden" name="facebook_page_id" value="">
+                <div class="help-box" style="background:#fdf2f8;border-color:#fce7f3;">
+                    <strong><i class="bi bi-facebook"></i> Facebook Developer Account Required</strong><br>
+                    Please create a free account at <a href="https://developers.facebook.com" target="_blank" style="color:#4f46e5;">developers.facebook.com</a>. Use the same personal Facebook profile that manages the business page.
                 </div>
 
                 <hr class="my-3" style="border-color:#e2e8f0;">
