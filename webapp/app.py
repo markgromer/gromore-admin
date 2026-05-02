@@ -489,6 +489,7 @@ def create_app():
 
     def _build_partner_demo_snapshot(data):
         services = (data.get("primary_services") or "service calls, estimates, follow-up work").strip()
+        service_list = [item.strip() for item in services.split(",") if item.strip()] or ["service calls", "estimates", "follow-up work"]
         area = (data.get("service_area") or "the local service area").strip()
         industry = (data.get("industry") or "home services").replace("_", " ").title()
         avg_job = float(data.get("avg_job_value") or 450)
@@ -497,30 +498,66 @@ def create_app():
         projected_revenue = round(recovered * avg_job, 2)
         lead_sources = (data.get("lead_sources") or "Facebook lead forms, website forms, missed calls").strip()
         crm_used = (data.get("crm_used") or "current CRM").strip()
+        owner = data.get("owner_intake") or {}
+        business_name = data.get("business_name") or "this business"
+        profitable = owner.get("profitable_services") or services
+        good_lead = owner.get("good_lead_definition") or f"Someone in {area} asking about {service_list[0]}"
+        handoff = owner.get("handoff_rules") or "Urgent jobs, angry customers, unusual pricing, out-of-area work, or anything that needs owner judgment."
+
         return {
             "demo_mode": True,
             "industry": industry,
-            "headline": f"What WARREN would do for {data.get('business_name')}",
+            "headline": f"WARREN operating system for {business_name}",
             "metrics": {
                 "monthly_leads": monthly_leads,
                 "estimated_unfollowed_leads": recovered,
                 "avg_job_value": avg_job,
                 "projected_recovered_revenue": projected_revenue,
                 "speed_to_lead_target": "under 60 seconds",
+                "demo_close_rate_lift": "18-32%",
+                "automation_readiness": 82,
             },
             "connection_plan": [
-                {"name": "Facebook Lead Forms", "status": "demo", "impact": "Instantly creates Warren lead threads from new form submissions."},
-                {"name": crm_used, "status": "demo", "impact": "Demo CRM jobs and customer records stand in for the live integration until connected."},
-                {"name": "OpenPhone / SMS", "status": "demo", "impact": "Shows two-way nurturing without sending real texts during the demo."},
+                {"name": "Meta Lead Forms", "status": "ready", "impact": "New Facebook and Instagram form submissions become WARREN lead threads instantly."},
+                {"name": "Hosted WARREN Form", "status": "ready", "impact": "A public form and iframe can capture website leads with SMS consent and structured service fields."},
+                {"name": "OpenPhone / Quo SMS", "status": "activation", "impact": "Turns demo replies into live two-way SMS with STOP/START/HELP and opt-out handling."},
+                {"name": crm_used, "status": "activation", "impact": "Pushes qualified or won leads into the CRM with contact details, quote context, and transcript notes."},
+                {"name": "Calendar + Appointment Reminders", "status": "activation", "impact": "Sends day-ahead reminders with dedupe protection and local-time windows once scheduling data is connected."},
+                {"name": "Payments", "status": "activation", "impact": "Enables upcoming billing reminders by SMS or email when payment data is connected."},
+                {"name": "Google Drive + Creative", "status": "optional", "impact": "Stores generated ads, images, and campaign assets in organized client folders."},
+            ],
+            "workspace_modules": [
+                {"key": "capture", "icon": "bi-broadcast-pin", "title": "Lead Capture Hub", "value": lead_sources, "detail": "Meta forms, hosted forms, missed-call follow-up, Messenger, and web leads route into one WARREN inbox."},
+                {"key": "inbox", "icon": "bi-inbox", "title": "AI Lead Inbox", "value": "Live thread workspace", "detail": "Conversation history, stage badges, private lock, handoff, draft reply, and pipeline movement."},
+                {"key": "brain", "icon": "bi-stars", "title": "WARREN Brain", "value": good_lead, "detail": "Uses owner rules, service area, profitable services, tone, guardrails, pricing notes, and objection playbook."},
+                {"key": "quote", "icon": "bi-cash-coin", "title": "Quote + Close Engine", "value": "Hybrid quote mode", "detail": "Collects missing details, explains ranges, sets the next booking step, and asks for owner review when needed."},
+                {"key": "nurture", "icon": "bi-arrow-repeat", "title": "Nurture Automation", "value": "Hot / warm / cold follow-up", "detail": "Detects spouse checks, soft closes, ghosting, objections, and runs follow-up without pestering active clients."},
+                {"key": "crm", "icon": "bi-diagram-3", "title": "CRM Handoff", "value": crm_used, "detail": "Qualified leads, won jobs, notes, quote status, and transcript context are ready for CRM push after activation."},
+                {"key": "commercial", "icon": "bi-buildings", "title": "Commercial Accounts", "value": "Search, qualify, quote", "detail": "Commercial target search, walkthrough capture, itemized proposal builder, drip nurture, and service proof recaps."},
+                {"key": "growth", "icon": "bi-graph-up-arrow", "title": "Growth Tools", "value": "Ads, SEO, creative, reviews", "detail": "Campaign builder, missions, competitor intel, heatmaps, post scheduler, image creator, and design studio sit beside WARREN."},
+            ],
+            "automation_timeline": [
+                {"time": "0:00", "title": "Lead arrives", "detail": f"WARREN captures the lead from {lead_sources.split(',')[0].strip() if lead_sources else 'a lead source'} and creates a thread."},
+                {"time": "0:08", "title": "Context matched", "detail": f"Checks service area, {profitable}, existing rules, and missing fields."},
+                {"time": "0:18", "title": "Reply drafted", "detail": "Prepares an owner-safe reply with one question at a time and clear next step."},
+                {"time": "0:45", "title": "Lead routed", "detail": "Qualified, needs-owner, nurture, or lost status is set automatically in the pipeline."},
+                {"time": "After", "title": "Follow-up runs", "detail": "Hot, warm, and cold follow-up timers continue until the lead books, opts out, or needs a human."},
             ],
             "sample_leads": [
                 {
                     "name": "Morgan Taylor",
                     "source": "Facebook Lead Form",
-                    "need": services.split(",")[0].strip(),
+                    "need": service_list[0],
                     "stage": "Hot",
                     "value": avg_job,
-                    "warren_action": f"Asked two qualifying questions, confirmed {area}, and offered the next available appointment.",
+                    "next_step": "Offer two booking windows and push to CRM after activation.",
+                    "warren_action": f"Confirmed {area}, asked for the missing job detail, and prepared a booking reply.",
+                    "messages": [
+                        {"direction": "inbound", "content": f"I saw your ad. Can someone help with {service_list[0]} this week?"},
+                        {"direction": "outbound", "content": f"Yes. We serve {area}. What is the service address and is this urgent for today or flexible this week?"},
+                        {"direction": "inbound", "content": "Flexible this week. I just want the quote and next opening."},
+                        {"direction": "outbound", "content": "WARREN draft: I can help get that moving. Based on what you shared, the next step is a quick estimate and the team can confirm the first available opening."},
+                    ],
                 },
                 {
                     "name": "Casey Jordan",
@@ -528,21 +565,51 @@ def create_app():
                     "need": "urgent quote",
                     "stage": "Needs owner review",
                     "value": round(avg_job * 1.4, 2),
-                    "warren_action": "Logged the missed call, sent a polite follow-up, and flagged it for same-day owner review.",
+                    "next_step": "Owner handoff because urgency and pricing sensitivity are both present.",
+                    "warren_action": "Logged the missed call, sent a polite follow-up draft, and flagged it for same-day owner review.",
+                    "messages": [
+                        {"direction": "inbound", "content": "Missed call from a new lead. Voicemail says they need a price today."},
+                        {"direction": "outbound", "content": "WARREN draft: Sorry we missed you. I can get the right details over to the owner. What service do you need and what city are you in?"},
+                        {"direction": "inbound", "content": "Need a fast quote. I am comparing another company."},
+                        {"direction": "outbound", "content": f"Handoff triggered: competitor quote plus urgency. Rule: {handoff}"},
+                    ],
                 },
                 {
                     "name": "Riley Parker",
                     "source": "Website Form",
-                    "need": services.split(",")[-1].strip(),
+                    "need": service_list[-1],
                     "stage": "Nurture",
                     "value": round(avg_job * 0.8, 2),
+                    "next_step": "Warm follow-up tomorrow, then soft close if no response.",
                     "warren_action": "Answered the first pricing question and scheduled a follow-up reminder.",
+                    "messages": [
+                        {"direction": "inbound", "content": f"Can you send information about {service_list[-1]}? I may need it next month."},
+                        {"direction": "outbound", "content": "WARREN draft: Absolutely. I can give you a practical range and what affects price. Is this for a home or business?"},
+                        {"direction": "inbound", "content": "Probably home, still deciding."},
+                        {"direction": "outbound", "content": "Nurture scheduled: warm lead, follow up in 24 hours without pushing too hard."},
+                    ],
+                },
+                {
+                    "name": "Avery Commercial",
+                    "source": "Commercial Prospecting",
+                    "need": f"multi-location {service_list[0]}",
+                    "stage": "Proposal",
+                    "value": round(avg_job * 3.2, 2),
+                    "next_step": "Build commercial scope, walkthrough checklist, and proposal package.",
+                    "warren_action": "Created a commercial account, captured buying criteria, and prepared proposal fields.",
+                    "messages": [
+                        {"direction": "inbound", "content": "We manage several properties and need recurring service pricing."},
+                        {"direction": "outbound", "content": "WARREN draft: I can help scope that. How many locations, what areas, and who approves the service agreement?"},
+                        {"direction": "inbound", "content": "Three locations. Property manager approves."},
+                        {"direction": "outbound", "content": "Commercial workflow started: decision maker, property count, walkthrough, and package comparison."},
+                    ],
                 },
             ],
             "owner_recap": [
-                f"WARREN would watch {lead_sources} and centralize every lead.",
-                f"Demo data estimates {recovered} recoverable leads per month if follow-up improves.",
-                "Live connections replace demo records after onboarding, without changing the workflow shown here.",
+                f"WARREN would watch {lead_sources} and centralize every lead before opportunities get lost.",
+                f"Demo data estimates {recovered} recoverable leads per month, worth roughly ${projected_revenue:,.0f} in recovered opportunity.",
+                f"The demo has already loaded good-lead rules, profitable services, and handoff rules for {business_name}.",
+                "Live connections replace demo records after onboarding without losing the setup captured here.",
             ],
         }
 
@@ -601,7 +668,7 @@ def create_app():
         seeded = []
         for idx, lead in enumerate(snapshot.get("sample_leads") or [], start=1):
             channel = "lead_forms" if "Form" in lead.get("source", "") else "calls" if "Call" in lead.get("source", "") else "sms"
-            status = "qualified" if lead.get("stage") == "Hot" else "needs_review" if "review" in lead.get("stage", "").lower() else "nurture"
+            status = "qualified" if lead.get("stage") == "Hot" else "needs_review" if "review" in lead.get("stage", "").lower() else "quoted" if lead.get("stage") == "Proposal" else "nurture"
             thread_id = db.upsert_lead_thread(
                 brand_id,
                 channel,
@@ -618,25 +685,24 @@ def create_app():
                         "demo": True,
                         "estimated_value": lead.get("value", 0),
                         "need": lead.get("need", ""),
+                        "next_step": lead.get("next_step", ""),
                     }),
                 },
             )
-            db.add_lead_message(
-                thread_id,
-                "inbound",
-                "lead",
-                f"Hi, I need help with {lead.get('need', 'a service request')}. Are you available this week?",
-                channel=channel,
-                metadata={"demo": True, "source": lead.get("source", "")},
-            )
-            db.add_lead_message(
-                thread_id,
-                "outbound",
-                "assistant",
-                lead.get("warren_action", "WARREN qualified the lead and prepared the next step."),
-                channel=channel,
-                metadata={"demo": True, "not_sent": True},
-            )
+            messages = lead.get("messages") or [
+                {"direction": "inbound", "content": f"Hi, I need help with {lead.get('need', 'a service request')}. Are you available this week?"},
+                {"direction": "outbound", "content": lead.get("warren_action", "WARREN qualified the lead and prepared the next step.")},
+            ]
+            if not db.get_lead_messages(thread_id, limit=1):
+                for message in messages:
+                    db.add_lead_message(
+                        thread_id,
+                        message.get("direction") or "inbound",
+                        "assistant" if message.get("direction") == "outbound" else "lead",
+                        message.get("content") or "",
+                        channel=channel,
+                        metadata={"demo": True, "source": lead.get("source", ""), "not_sent": message.get("direction") == "outbound"},
+                    )
             db.add_lead_event(
                 brand_id,
                 thread_id,
@@ -671,6 +737,22 @@ def create_app():
             brand = db.get_brand(brand_id)
             demo["demo_brand_id"] = brand_id
 
+        snapshot = data.get("demo_snapshot") or {}
+        if not snapshot.get("workspace_modules") or not snapshot.get("automation_timeline"):
+            legacy_leads = snapshot.get("sample_leads") or []
+            upgraded_snapshot = _build_partner_demo_snapshot(data)
+            if legacy_leads:
+                legacy_names = {str(lead.get("name") or "").strip().lower() for lead in legacy_leads}
+                top_up = [
+                    lead for lead in upgraded_snapshot.get("sample_leads") or []
+                    if str(lead.get("name") or "").strip().lower() not in legacy_names
+                ]
+                upgraded_snapshot["sample_leads"] = legacy_leads + top_up[:max(0, 4 - len(legacy_leads))]
+            snapshot = upgraded_snapshot
+            db.update_partner_demo_session(demo["id"], partner_id, demo_snapshot_json=snapshot)
+            demo["demo_snapshot"] = snapshot
+            data["demo_snapshot"] = snapshot
+
         threads = db.get_lead_threads(brand["id"], limit=10) if brand else []
         if brand and not threads:
             snapshot = data.get("demo_snapshot") or _build_partner_demo_snapshot(data)
@@ -680,6 +762,13 @@ def create_app():
             db.update_partner_demo_session(demo["id"], partner_id, demo_snapshot_json=snapshot)
             demo["demo_snapshot"] = snapshot
             threads = db.get_lead_threads(brand["id"], limit=10)
+        elif brand and threads:
+            sample_count = len((data.get("demo_snapshot") or {}).get("sample_leads") or [])
+            if sample_count and len(threads) < sample_count:
+                snapshot = _seed_demo_warren_leads(brand["id"], data, data.get("demo_snapshot") or _build_partner_demo_snapshot(data))
+                db.update_partner_demo_session(demo["id"], partner_id, demo_snapshot_json=snapshot)
+                demo["demo_snapshot"] = snapshot
+                threads = db.get_lead_threads(brand["id"], limit=10)
         return brand, threads
 
     def _decorate_demo_threads(threads):

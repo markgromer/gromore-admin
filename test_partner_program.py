@@ -194,6 +194,8 @@ class PartnerProgramRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"WARREN for Demo Plumbing", response.data)
         self.assertIn(b"WARREN Inbox", response.data)
+        self.assertIn(b"Lead Capture Hub", response.data)
+        self.assertIn(b"What WARREN Does Automatically", response.data)
         self.assertNotIn(b"No demo lead threads were seeded", response.data)
 
         demo_id = demos[0]["id"]
