@@ -143,6 +143,7 @@ def send_beta_welcome_email(app_config, tester, onboarding_url):
             <div style="text-align:center;margin:16px 0;">
                 <a href="https://calendly.com/nopoop520" style="display:inline-block;padding:12px 28px;background:#f59e0b;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Book a Setup Call</a>
             </div>
+            <p style="margin-bottom:0;">During beta testing it may be easier to onboard directly with me. Text <strong>888-610-7667</strong> and we'll coordinate the cleanest setup path.</p>
         </div>
 
         <div style="text-align:center;margin:28px 0;">
@@ -196,6 +197,7 @@ def send_beta_welcome_email(app_config, tester, onboarding_url):
         f"We walk through this on our group onboarding calls. If you're unable to join one of those, "
         f"book a 15-minute Zoom call with me and we'll get you set up:\n"
         f"https://calendly.com/nopoop520\n\n"
+        f"During beta testing it may be easier to onboard directly with me. Text 888-610-7667 and we'll coordinate the cleanest setup path.\n\n"
         f"What we need:\n"
         f"1. Google Business Profile manager email\n"
         f"2. Create a free Facebook Developer account at developers.facebook.com\n"
@@ -259,6 +261,7 @@ def send_beta_activation_email(app_config, tester, temp_password, login_url):
                 <li><strong>Confirmation that your Facebook Developer account is set up</strong> at <a href="https://developers.facebook.com" style="color:#4f46e5;">developers.facebook.com</a></li>
             </ol>
             <p style="font-size:.85em;color:#666;">If you already submitted these through onboarding, just reply "submitted" and include anything that has changed.</p>
+            <p style="font-size:.9em;color:#334155;"><strong>Beta shortcut:</strong> It may be easier to onboard directly with me during beta testing. Text <strong>888-610-7667</strong> and we'll coordinate the cleanest setup path.</p>
         </div>
 
         <div style="background:#f0fdf4;border-radius:10px;padding:20px;margin:20px 0;">
@@ -301,6 +304,7 @@ def send_beta_activation_email(app_config, tester, temp_password, login_url):
         f"2. Personal Facebook profile link for the profile that manages your business page\n"
         f"3. Facebook business page link\n"
         f"4. Confirmation that your free Facebook Developer account is set up at developers.facebook.com\n\n"
+        f"Beta shortcut: it may be easier to onboard directly with me during beta testing. Text 888-610-7667 and we'll coordinate the cleanest setup path.\n\n"
         f"STEP 2 - Sign In to W.A.R.R.E.N.:\n"
         f"Go to {login_url}\n"
         f"Use email/password: {email} / {temp_password}\n\n"
