@@ -706,15 +706,28 @@ def _client_demo_context():
     brand_id = session.get("client_brand_id")
     if not brand_id:
         return {"is_demo": False, "brand": {}}
+    db = None
     try:
-        brand = _get_db().get_brand(brand_id) or {}
+        db = _get_db()
+        brand = db.get_brand(brand_id) or {}
     except Exception:
         brand = {}
-    demo_status = (brand.get("demo_status") or "").strip().lower()
-    is_demo = bool(
-        (session.get("client_demo_mode") and session.get("client_demo_session_id"))
-        or demo_status == "demo_until_activated"
-    )
+    demo_session_id = int(brand.get("demo_session_id") or 0)
+    demo_partner_id = int(brand.get("demo_partner_id") or 0)
+    session_demo_id = int(session.get("client_demo_session_id") or 0)
+    is_demo = False
+    if db and demo_session_id and demo_partner_id:
+        try:
+            demo = db.get_partner_demo_session(demo_session_id, partner_id=demo_partner_id)
+            is_demo = bool(demo and int(demo.get("demo_brand_id") or 0) == int(brand_id))
+        except Exception:
+            is_demo = False
+    if is_demo and session.get("client_demo_mode") and session_demo_id and session_demo_id != demo_session_id:
+        is_demo = False
+    if not is_demo:
+        session.pop("client_demo_mode", None)
+        session.pop("client_demo_session_id", None)
+        session.pop("client_demo_partner_id", None)
     return {"is_demo": is_demo, "brand": brand}
 
 
@@ -12247,11 +12260,9 @@ def inject_client_globals():
         try:
             db = _get_db()
             brand = db.get_brand(brand_id) or {}
+            demo_context = _client_demo_context()
             client_demo_status = brand.get("demo_status") or ""
-            client_demo_mode = bool(
-                (session.get("client_demo_mode") and session.get("client_demo_session_id"))
-                or (client_demo_status or "").strip().lower() == "demo_until_activated"
-            )
+            client_demo_mode = bool(demo_context["is_demo"])
             assistant_model_chat = _pick_ai_model(brand, "chat")
             assistant_enabled = bool(_get_openai_api_key(brand))
             rows = db.get_ai_chat_messages(brand_id, assistant_month, limit=30)

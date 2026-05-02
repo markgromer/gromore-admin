@@ -145,7 +145,7 @@ class PartnerProgramRouteTests(unittest.TestCase):
                 "display_name": "Beta Demo Flag Co",
                 "industry": "home services",
             })
-            self.app.db.update_brand_demo_fields(brand_id, is_demo=1, demo_status="")
+            self.app.db.update_brand_demo_fields(brand_id, is_demo=1, demo_status="demo_until_activated")
             client_user_id = self.app.db.create_client_user(
                 brand_id,
                 f"beta-{uuid.uuid4().hex[:8]}@example.test",
@@ -159,10 +159,16 @@ class PartnerProgramRouteTests(unittest.TestCase):
             session["client_name"] = "Beta User"
             session["client_brand_name"] = "Beta Demo Flag Co"
             session["client_role"] = "owner"
+            session["client_demo_mode"] = True
+            session["client_demo_session_id"] = 999999
+            session["client_demo_partner_id"] = 999999
 
         response = self.client.get("/client/api/me")
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.get_json()["brand"]["is_demo"])
+        with self.client.session_transaction() as session:
+            self.assertIsNone(session.get("client_demo_mode"))
+            self.assertIsNone(session.get("client_demo_session_id"))
 
         response = self.client.get("/client/dashboard", follow_redirects=True)
         self.assertEqual(response.status_code, 200)
