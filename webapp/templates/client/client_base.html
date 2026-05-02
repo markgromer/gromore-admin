@@ -66,6 +66,71 @@
             font-size: .8rem;
             font-weight: 750;
         }
+        .demo-feature-board {
+            background: #ffffff;
+            border: 1px solid #dbeafe;
+            border-radius: 14px;
+            padding: 12px;
+            margin: -0.35rem 0 1rem;
+            box-shadow: 0 10px 26px rgba(15, 23, 42, .05);
+        }
+        .demo-feature-board-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        .demo-feature-board-title {
+            font-size: .82rem;
+            font-weight: 850;
+            color: #0f172a;
+            display: inline-flex;
+            align-items: center;
+            gap: .4rem;
+        }
+        .demo-feature-board-sub {
+            color: #64748b;
+            font-size: .74rem;
+            font-weight: 650;
+        }
+        .demo-feature-grid {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .demo-feature-tile {
+            border: 1px solid #e2e8f0;
+            border-radius: 11px;
+            padding: .68rem;
+            text-decoration: none;
+            color: #0f172a;
+            background: #f8fafc;
+            display: grid;
+            gap: .3rem;
+            min-height: 104px;
+            transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+        }
+        .demo-feature-tile:hover {
+            transform: translateY(-1px);
+            border-color: #14b8a6;
+            box-shadow: 0 10px 22px rgba(15, 23, 42, .08);
+            color: #0f172a;
+        }
+        .demo-feature-tile i {
+            color: #0f766e;
+            font-size: 1.05rem;
+        }
+        .demo-feature-tile strong {
+            font-size: .78rem;
+            line-height: 1.18;
+        }
+        .demo-feature-tile span {
+            color: #64748b;
+            font-size: .68rem;
+            line-height: 1.35;
+        }
         .demo-tour-launcher {
             position: fixed;
             right: 18px;
@@ -158,7 +223,7 @@
         }
         .demo-tour-progress {
             display: grid;
-            grid-template-columns: repeat(6, 1fr);
+            grid-template-columns: repeat(13, 1fr);
             gap: 5px;
             margin-bottom: 12px;
         }
@@ -187,6 +252,9 @@
             border-radius: 12px;
         }
         @media (max-width: 768px) {
+            .demo-feature-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
             .demo-tour-launcher {
                 left: 12px;
                 right: 12px;
@@ -198,6 +266,11 @@
                 right: 10px;
                 bottom: 132px;
                 width: auto;
+            }
+        }
+        @media (min-width: 769px) and (max-width: 1180px) {
+            .demo-feature-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
             }
         }
     </style>
@@ -529,6 +602,29 @@
                 <button type="button" class="btn btn-success btn-sm" data-demo-tour-start><i class="bi bi-play-circle me-1"></i>Start interactive tour</button>
                 <button type="button" class="btn btn-outline-primary btn-sm" data-demo-tour-step="1"><i class="bi bi-inbox me-1"></i>Show lead command</button>
                 <a href="{{ url_for('client.client_settings') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-plug me-1"></i>Activation setup</a>
+            </div>
+        </div>
+        <div class="demo-feature-board">
+            <div class="demo-feature-board-head">
+                <div>
+                    <div class="demo-feature-board-title"><i class="bi bi-grid-3x3-gap"></i>WARREN demo feature board</div>
+                    <div class="demo-feature-board-sub">Use these during the sales conversation. Each tile opens a real WARREN module with sandbox data or live-style controls.</div>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" data-demo-tour-start><i class="bi bi-route me-1"></i>Walk through all</button>
+            </div>
+            <div class="demo-feature-grid">
+                <a class="demo-feature-tile" href="{{ url_for('client.client_auto_warren') }}" data-demo-tour-step="0"><i class="bi bi-magic"></i><strong>Auto WARREN</strong><span>Daily operating brain and next move.</span></a>
+                <a class="demo-feature-tile" href="{{ url_for('client.client_inbox') }}" data-demo-tour-step="2"><i class="bi bi-inbox"></i><strong>Lead Inbox</strong><span>Threads, drafts, qualification, handoff.</span></a>
+                <a class="demo-feature-tile" href="{{ url_for('client.client_lead_assistant') }}" data-demo-tour-step="3"><i class="bi bi-chat-dots"></i><strong>Nurture Rules</strong><span>Follow-up, guardrails, quote behavior.</span></a>
+                <a class="demo-feature-tile" href="{{ url_for('client.client_crm') }}" data-demo-tour-step="4"><i class="bi bi-diagram-3"></i><strong>Pipeline CRM</strong><span>Lead stages, profiles, outcomes.</span></a>
+                <a class="demo-feature-tile" href="{{ url_for('client.client_commercial_prospecting') }}" data-demo-tour-step="5"><i class="bi bi-buildings"></i><strong>Commercial</strong><span>Targets, proposals, walkthroughs.</span></a>
+                <a class="demo-feature-tile" href="{{ url_for('client.client_heatmap') }}" data-demo-tour-step="6"><i class="bi bi-grid-3x3"></i><strong>Heatmap</strong><span>Local rank and competitor visibility.</span></a>
+                <a class="demo-feature-tile" href="{{ url_for('client.client_campaign_create') }}" data-demo-tour-step="7"><i class="bi bi-megaphone"></i><strong>Campaigns</strong><span>Launch planning and ad drafts.</span></a>
+                <a class="demo-feature-tile" href="{{ url_for('client.client_image_creator') }}" data-demo-tour-step="8"><i class="bi bi-image"></i><strong>Image Creator</strong><span>Reference images and AI visuals.</span></a>
+                <a class="demo-feature-tile" href="{{ url_for('client.client_creative') }}" data-demo-tour-step="9"><i class="bi bi-palette"></i><strong>Creative Studio</strong><span>Turn assets into finished ads.</span></a>
+                <a class="demo-feature-tile" href="{{ url_for('client.client_blog') }}" data-demo-tour-step="10"><i class="bi bi-journal-richtext"></i><strong>Content Engine</strong><span>Blog and social content queue.</span></a>
+                <a class="demo-feature-tile" href="{{ url_for('client.client_tasks') }}" data-demo-tour-step="11"><i class="bi bi-list-task"></i><strong>Work Queue</strong><span>Execution tasks and owner handoffs.</span></a>
+                <a class="demo-feature-tile" href="{{ url_for('client.client_automations') }}" data-demo-tour-step="12"><i class="bi bi-plug"></i><strong>Activation</strong><span>Connect live systems when ready.</span></a>
             </div>
         </div>
         {% endif %}
@@ -1411,12 +1507,36 @@
                 prompt: 'Give this prospect a guided explanation of Auto WARREN. Explain what it is looking at, why the focus action matters, and what becomes live after activation.'
             },
             {
+                title: 'Feature board',
+                copy: 'Use the feature board as the demo menu. It lets an affiliate jump straight to the parts of WARREN that matter most to the business owner.',
+                proof: 'This keeps the demo from feeling small: the prospect can see lead capture, pipeline, growth, creative, content, automations, and activation from one command surface.',
+                href: '{{ url_for("client.client_auto_warren") }}',
+                target: '.demo-feature-board, .demo-command-bar',
+                prompt: 'Give me a tight talk track for the WARREN feature board. Help me choose the best module to show this prospect first.'
+            },
+            {
                 title: 'Lead Command Center',
                 copy: 'Show the owner how WARREN captures leads, keeps thread history, drafts replies, tracks qualification, and prevents hot opportunities from sitting untouched.',
                 proof: 'Demo threads include Facebook forms, missed calls, website forms, and a commercial opportunity. Outbound drafts stay sandboxed until activation.',
                 href: '{{ url_for("client.client_inbox") }}',
                 target: '.inbox-wrap, .contact-grid, a[href="{{ url_for("client.client_inbox") }}"]',
                 prompt: 'Walk this prospect through the WARREN lead inbox. Focus on speed-to-lead, qualification, nurture, owner handoff, and replacing scattered texts and missed follow-up.'
+            },
+            {
+                title: 'Lead assistant and nurture rules',
+                copy: 'Open the assistant settings to show how WARREN learns tone, service rules, quote behavior, handoff triggers, and follow-up timing.',
+                proof: 'The demo already stores the owner intake: good leads, profitable services, bad fits, handoff rules, and safe reply guardrails.',
+                href: '{{ url_for("client.client_lead_assistant") }}',
+                target: '#lead-assistant, .sales-bot-settings, a[href="{{ url_for("client.client_lead_assistant") }}"]',
+                prompt: 'Explain the WARREN lead assistant settings to an owner. Focus on how rules, guardrails, quote mode, and nurture protect their reputation.'
+            },
+            {
+                title: 'Pipeline CRM',
+                copy: 'Show the CRM/pipeline surface so the owner sees that conversations turn into stages, profiles, quote status, closeability, and clean follow-up.',
+                proof: 'Demo records are active enough to show real workflow: new, engaged, qualified, proposal, nurture, and won/lost paths.',
+                href: '{{ url_for("client.client_crm") }}',
+                target: '.crm-shell, .pipeline-board, .contact-grid, a[href="{{ url_for("client.client_crm") }}"]',
+                prompt: 'Walk through the pipeline CRM as a live account. Explain what the owner can track and what WARREN updates automatically.'
             },
             {
                 title: 'Pipeline and commercial revenue',
@@ -1435,12 +1555,44 @@
                 prompt: 'Explain the local rank heatmap like I am a service business owner. Tell me what green, yellow, and red mean and what WARREN would do with this after activation.'
             },
             {
+                title: 'Campaign builder',
+                copy: 'Show how WARREN turns strategy into campaigns: offers, audiences, copy, creative direction, drafts, and launch readiness.',
+                proof: 'The demo brand carries service area, primary services, average job value, lead sources, and goals so campaign planning can be specific.',
+                href: '{{ url_for("client.client_campaign_create") }}',
+                target: '.campaign-builder, .campaign-create, a[href="{{ url_for("client.client_campaign_create") }}"]',
+                prompt: 'Explain the campaign builder demo. Tie the offer, audience, creative, and launch checklist back to this business intake.'
+            },
+            {
                 title: 'Creative and image engine',
-                copy: 'Show that WARREN can create campaign assets, generate images, and move strong visuals into the creative maker instead of leaving marketing ideas stuck in chat.',
-                proof: 'The image creator and creative studio live beside leads, campaigns, and action plans, so the owner sees execution capacity, not just recommendations.',
+                copy: 'Show that WARREN can generate brand-aware images, use reference images, and move strong visuals into production instead of leaving marketing ideas stuck in chat.',
+                proof: 'Image generation is connected to the same brand context as leads, campaigns, and content. A good image can be opened in the creative maker.',
                 href: '{{ url_for("client.client_image_creator") }}',
-                target: '.image-creator-shell, .creative-shell, a[href="{{ url_for("client.client_image_creator") }}"]',
+                target: '.image-creator-shell, a[href="{{ url_for("client.client_image_creator") }}"]',
                 prompt: 'Show how WARREN can generate brand-aware visuals, use reference images, and move a liked image into the creative maker for ad production.'
+            },
+            {
+                title: 'Creative Studio',
+                copy: 'Open the creative maker to show the owner that WARREN can finish usable ad assets, not just suggest ideas.',
+                proof: 'The studio sits next to the AI image creator, campaign builder, and Drive asset paths so generated visuals can become real ads.',
+                href: '{{ url_for("client.client_creative") }}',
+                target: '.creative-shell, #creativeCanvas, a[href="{{ url_for("client.client_creative") }}"]',
+                prompt: 'Explain the Creative Studio as part of WARREN execution. Show how generated images, copy, logos, and templates become campaign-ready assets.'
+            },
+            {
+                title: 'Content engine',
+                copy: 'Show blog and content planning so the owner sees WARREN can help with local SEO, education, social proof, and consistent publishing.',
+                proof: 'The demo includes a seeded blog draft and scheduled post so content does not look empty before real channels are connected.',
+                href: '{{ url_for("client.client_blog") }}',
+                target: '.blog-shell, .blog-list, a[href="{{ url_for("client.client_blog") }}"]',
+                prompt: 'Explain the WARREN content engine for a local service business. Focus on useful posts, local SEO, social proof, and consistency.'
+            },
+            {
+                title: 'Work Queue and execution',
+                copy: 'Show that WARREN creates work, owners can assign it, and the team can see what must happen next.',
+                proof: 'The demo creates an activation task and can surface findings as work items so recommendations do not disappear.',
+                href: '{{ url_for("client.client_tasks") }}',
+                target: '.tasks-shell, .task-list, a[href="{{ url_for("client.client_tasks") }}"]',
+                prompt: 'Explain how the WARREN work queue turns recommendations into execution. Include owner handoff, assignment, and follow-through.'
             },
             {
                 title: 'Activation without losing setup',

@@ -248,6 +248,7 @@ class PartnerProgramRouteTests(unittest.TestCase):
         self.assertIn(b"Auto WARREN", response.data)
         self.assertIn(b"Live-style WARREN demo workspace", response.data)
         self.assertIn(b"Start interactive tour", response.data)
+        self.assertIn(b"WARREN demo feature board", response.data)
         with self.client.session_transaction() as session:
             self.assertEqual(session.get("client_brand_id"), brand["id"])
             self.assertTrue(session.get("client_demo_mode"))
@@ -319,6 +320,7 @@ class PartnerProgramRouteTests(unittest.TestCase):
         self.assertIn(b"Auto WARREN", response.data)
         self.assertIn(b"Live-style WARREN demo workspace", response.data)
         self.assertIn(b"WARREN tour", response.data)
+        self.assertIn(b"Commercial", response.data)
 
         with self.app.app_context():
             repaired = self.app.db.get_partner_demo_session(demo_id, self.partner_id)
