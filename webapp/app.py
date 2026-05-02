@@ -662,7 +662,30 @@ def create_app():
         }
         for field, value in demo_settings.items():
             db.update_brand_text_field(brand_id, field, value)
+        try:
+            db.update_brand_feature_access(
+                brand_id,
+                {
+                    flag["feature_key"]: "on"
+                    for flag in db.get_feature_flags()
+                    if flag.get("enabled") and flag.get("access_level") != "admin"
+                },
+            )
+        except Exception:
+            logger.exception("Failed to enable demo feature access for brand %s", brand_id)
         return brand_id
+
+    def _ensure_demo_client_user(demo, brand):
+        if not demo or not brand:
+            return None
+        demo_email = f"partner-demo-{demo['id']}@warren-demo.local"
+        user = db.get_client_user_by_email(demo_email)
+        if user and int(user.get("brand_id") or 0) == int(brand["id"]):
+            return user
+        display_name = demo.get("contact_name") or "Demo Owner"
+        temp_password = secrets.token_urlsafe(18)
+        user_id = db.create_client_user(brand["id"], demo_email, temp_password, display_name, role="owner")
+        return db.get_client_user(user_id) if user_id else None
 
     def _seed_demo_warren_leads(brand_id, data, snapshot):
         seeded = []
@@ -943,16 +966,29 @@ def create_app():
         if not demo:
             abort(404)
         brand, raw_threads = _ensure_demo_warren_workspace(demo)
-        threads = _decorate_demo_threads(raw_threads)
+        demo_user = _ensure_demo_client_user(demo, brand)
+        if not brand or not demo_user:
+            abort(404)
         db.add_partner_demo_event(
             demo["id"],
             demo["partner_id"],
             None,
             "owner_demo_viewed",
-            "Owner-facing WARREN demo was opened.",
+            "Owner-facing WARREN demo opened in the real client portal.",
             {"demo_brand_id": demo.get("demo_brand_id")},
         )
-        return render_template("partner/demo_live.html", demo=demo, brand=brand, threads=threads)
+        session.clear()
+        session["client_user_id"] = demo_user["id"]
+        session["client_brand_id"] = brand["id"]
+        session["client_name"] = demo_user.get("display_name") or demo.get("contact_name") or "Demo Owner"
+        session["client_brand_name"] = brand.get("display_name") or demo.get("business_name") or "WARREN Demo"
+        session["client_role"] = demo_user.get("role", "owner")
+        session["client_demo_mode"] = True
+        session["client_demo_session_id"] = demo["id"]
+        session["client_demo_partner_id"] = demo["partner_id"]
+        db.update_client_user_login(demo_user["id"])
+        flash("Demo mode is active. You are inside the real WARREN portal with live sends and external pushes disabled.", "warning")
+        return redirect(url_for("client.client_auto_warren", demo="1"))
 
     @app.route("/partners/demo/<int:demo_id>/nurture", methods=["POST"])
     @partner_login_required

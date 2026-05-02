@@ -190,13 +190,27 @@ class PartnerProgramRouteTests(unittest.TestCase):
         self.assertEqual(prospect["partner_id"], self.partner_id)
         self.assertEqual(prospect["source"], "affiliate_demo")
 
-        response = self.client.get(f"/partners/demo/live/{demos[0]['demo_token']}")
+        response = self.client.get(f"/partners/demo/live/{demos[0]['demo_token']}", follow_redirects=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"WARREN for Demo Plumbing", response.data)
-        self.assertIn(b"WARREN Inbox", response.data)
-        self.assertIn(b"Lead Capture Hub", response.data)
-        self.assertIn(b"What WARREN Does Automatically", response.data)
-        self.assertNotIn(b"No demo lead threads were seeded", response.data)
+        self.assertIn(b"Auto WARREN", response.data)
+        self.assertIn(b"Demo mode", response.data)
+        with self.client.session_transaction() as session:
+            self.assertEqual(session.get("client_brand_id"), brand["id"])
+            self.assertTrue(session.get("client_demo_mode"))
+        blocked = self.client.post(
+            f"/client/inbox/thread/{threads[0]['id']}/reply",
+            json={"message": "Send this"},
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+        self.assertEqual(blocked.status_code, 423)
+        self.assertTrue(blocked.get_json()["demo_mode"])
+
+        response = self.client.post(
+            "/partners/login",
+            data={"email": "agency@example.com", "password": "Password123"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
 
         demo_id = demos[0]["id"]
         response = self.client.post(
@@ -246,10 +260,10 @@ class PartnerProgramRouteTests(unittest.TestCase):
             )
             demo = self.app.db.get_partner_demo_session(demo_id, self.partner_id)
 
-        response = self.client.get(f"/partners/demo/live/{demo['demo_token']}")
+        response = self.client.get(f"/partners/demo/live/{demo['demo_token']}", follow_redirects=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Legacy Demo Co", response.data)
-        self.assertIn(b"Legacy Lead", response.data)
+        self.assertIn(b"Auto WARREN", response.data)
+        self.assertIn(b"Demo mode", response.data)
 
         with self.app.app_context():
             repaired = self.app.db.get_partner_demo_session(demo_id, self.partner_id)
@@ -259,6 +273,7 @@ class PartnerProgramRouteTests(unittest.TestCase):
         self.assertIsNotNone(repaired["demo_brand_id"])
         self.assertEqual(brand["is_demo"], 1)
         self.assertGreaterEqual(len(threads), 1)
+        self.assertTrue(any(thread["lead_name"] == "Legacy Lead" for thread in threads))
 
 
 if __name__ == "__main__":

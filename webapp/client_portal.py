@@ -671,6 +671,69 @@ def client_login_required(view_func):
     return _wrapped
 
 
+_DEMO_BLOCKED_ENDPOINTS = {
+    "client.client_campaign_status",
+    "client.client_campaign_budget",
+    "client.client_campaign_launch",
+    "client.client_campaign_launch_draft",
+    "client.client_run_appointment_reminders_now",
+    "client.client_run_payment_reminders_now",
+    "client.client_test_openphone_connection",
+    "client.client_send_test_sms",
+    "client.client_jobber_oauth_connect",
+    "client.client_jobber_disconnect",
+    "client.client_square_oauth_connect",
+    "client.client_square_disconnect",
+    "client.client_site_builder_publish",
+    "client.client_commercial_thread_send_email",
+    "client.client_commercial_thread_enroll_drip",
+    "client.client_bulk_messages_send",
+    "client.client_inbox_reply",
+    "client.client_schedule_post",
+    "client.client_schedule_posts_bulk",
+    "client.client_external_integration_test",
+    "client.client_make_incoming_test",
+    "client.client_sng_test",
+    "client.client_ghl_test",
+    "client.client_jobber_test",
+    "client.client_razorsync_test",
+    "client.client_payment_provider_test",
+    "client.client_blog_test_connection",
+}
+
+
+def _client_demo_context():
+    brand_id = session.get("client_brand_id")
+    if not brand_id:
+        return {"is_demo": False, "brand": {}}
+    try:
+        brand = _get_db().get_brand(brand_id) or {}
+    except Exception:
+        brand = {}
+    is_demo = bool(session.get("client_demo_mode") or int(brand.get("is_demo") or 0))
+    return {"is_demo": is_demo, "brand": brand}
+
+
+@client_bp.before_request
+def _block_external_actions_in_demo_mode():
+    if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return None
+    if request.endpoint not in _DEMO_BLOCKED_ENDPOINTS:
+        return None
+    if not _client_demo_context()["is_demo"]:
+        return None
+    message = "Demo mode is active. WARREN kept this action inside the sandbox and did not send, publish, connect, bill, or push to an external system."
+    wants_json = (
+        request.path.startswith("/client/api/")
+        or request.headers.get("X-Requested-With") in {"XMLHttpRequest", "PJAX"}
+        or request.is_json
+    )
+    if wants_json:
+        return jsonify({"ok": False, "demo_mode": True, "error": message}), 423
+    flash(message, "warning")
+    return redirect(request.referrer or url_for("client.client_auto_warren"))
+
+
 def _require_role(*allowed_roles):
     current_role = str(session.get("client_role") or "owner").strip().lower()
     allowed = {
@@ -5019,6 +5082,10 @@ def client_logout():
     session.pop("client_brand_id", None)
     session.pop("client_name", None)
     session.pop("client_brand_name", None)
+    session.pop("client_role", None)
+    session.pop("client_demo_mode", None)
+    session.pop("client_demo_session_id", None)
+    session.pop("client_demo_partner_id", None)
     return redirect(url_for("client.client_login"))
 
 
@@ -5030,6 +5097,7 @@ def api_me():
     uid = session.get("client_user_id")
     if not uid:
         return jsonify({"error": "not_authenticated"}), 401
+    demo = _client_demo_context()
     return jsonify({
         "user": {
             "id": uid,
@@ -5039,6 +5107,7 @@ def api_me():
         "brand": {
             "id": session.get("client_brand_id"),
             "display_name": session.get("client_brand_name", ""),
+            "is_demo": demo["is_demo"],
         },
     })
 
@@ -5092,6 +5161,10 @@ def api_logout():
     session.pop("client_brand_id", None)
     session.pop("client_name", None)
     session.pop("client_brand_name", None)
+    session.pop("client_role", None)
+    session.pop("client_demo_mode", None)
+    session.pop("client_demo_session_id", None)
+    session.pop("client_demo_partner_id", None)
     return jsonify({"ok": True})
 
 
@@ -12162,12 +12235,16 @@ def inject_client_globals():
     assistant_enabled = False
     assistant_messages = []
     assistant_model_chat = "gpt-4o-mini"
+    client_demo_mode = False
+    client_demo_status = ""
 
     brand_id = session.get("client_brand_id")
     if brand_id:
         try:
             db = _get_db()
             brand = db.get_brand(brand_id) or {}
+            client_demo_mode = bool(session.get("client_demo_mode") or int(brand.get("is_demo") or 0))
+            client_demo_status = brand.get("demo_status") or ""
             assistant_model_chat = _pick_ai_model(brand, "chat")
             assistant_enabled = bool(_get_openai_api_key(brand))
             rows = db.get_ai_chat_messages(brand_id, assistant_month, limit=30)
@@ -12184,6 +12261,8 @@ def inject_client_globals():
         "assistant_month": assistant_month,
         "assistant_model_chat": assistant_model_chat,
         "assistant_models": [m for m in ALLOWED_AI_MODELS if m],
+        "client_demo_mode": client_demo_mode,
+        "client_demo_status": client_demo_status,
     }
 
 

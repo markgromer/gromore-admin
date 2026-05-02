@@ -325,6 +325,12 @@
             <a href="{{ url_for('client_impersonate_stop') }}" style="color:#000;background:rgba(0,0,0,.12);padding:4px 14px;border-radius:8px;text-decoration:none;font-size:.82rem;"><i class="bi bi-arrow-left"></i> Back to Admin</a>
         </div>
         {% endif %}
+        {% if client_demo_mode %}
+        <div style="background:#fff7ed;border:1px solid #fed7aa;color:#7c2d12;padding:10px 14px;border-radius:10px;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:.88rem;font-weight:650;flex-wrap:wrap;">
+            <span><i class="bi bi-shield-lock-fill me-1"></i> Demo mode: this is the real WARREN portal using sandbox data. Live sends, publishing, billing, OAuth connects, and external pushes are blocked until activation.</span>
+            <a href="{{ url_for('client.client_settings') }}" style="color:#7c2d12;background:rgba(124,45,18,.1);padding:4px 12px;border-radius:8px;text-decoration:none;font-size:.82rem;">View activation setup</a>
+        </div>
+        {% endif %}
         {% block content %}{% endblock %}
     </div>
 
