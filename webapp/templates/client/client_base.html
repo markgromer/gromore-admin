@@ -11,6 +11,197 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/client.css') }}" rel="stylesheet">
+    {% if client_demo_mode %}
+    <style>
+        .demo-command-bar {
+            background: linear-gradient(135deg, #ecfeff 0%, #f8fafc 52%, #fefce8 100%);
+            border: 1px solid #bae6fd;
+            color: #0f172a;
+            padding: 12px 14px;
+            border-radius: 12px;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            box-shadow: 0 12px 28px rgba(15, 23, 42, .06);
+            flex-wrap: wrap;
+        }
+        .demo-command-main {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 240px;
+        }
+        .demo-command-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #0f766e;
+            color: #fff;
+            flex: 0 0 auto;
+        }
+        .demo-command-title {
+            font-size: .9rem;
+            font-weight: 850;
+            line-height: 1.2;
+        }
+        .demo-command-detail {
+            font-size: .76rem;
+            color: #475569;
+            line-height: 1.35;
+            margin-top: 2px;
+        }
+        .demo-command-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .demo-command-actions .btn {
+            border-radius: 9px;
+            font-size: .8rem;
+            font-weight: 750;
+        }
+        .demo-tour-launcher {
+            position: fixed;
+            right: 18px;
+            bottom: 18px;
+            z-index: 1110;
+            border: 0;
+            border-radius: 999px;
+            padding: .72rem .95rem;
+            display: inline-flex;
+            align-items: center;
+            gap: .5rem;
+            background: #0f766e;
+            color: #fff;
+            box-shadow: 0 16px 34px rgba(15, 118, 110, .28);
+            font-weight: 850;
+            font-size: .84rem;
+        }
+        .demo-tour-panel {
+            position: fixed;
+            right: 18px;
+            bottom: 78px;
+            width: min(390px, calc(100vw - 28px));
+            z-index: 1111;
+            background: #fff;
+            color: #0f172a;
+            border: 1px solid #dbeafe;
+            border-radius: 16px;
+            box-shadow: 0 24px 58px rgba(15, 23, 42, .22);
+            overflow: hidden;
+            display: none;
+        }
+        .demo-tour-panel.open {
+            display: block;
+        }
+        .demo-tour-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: flex-start;
+            padding: 14px 14px 10px;
+            border-bottom: 1px solid #e2e8f0;
+            background: #f8fafc;
+        }
+        .demo-tour-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            color: #0f766e;
+            font-size: .68rem;
+            font-weight: 850;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .demo-tour-title {
+            font-weight: 850;
+            font-size: 1rem;
+            line-height: 1.24;
+        }
+        .demo-tour-close {
+            border: 0;
+            background: #e2e8f0;
+            color: #334155;
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .demo-tour-body {
+            padding: 14px;
+        }
+        .demo-tour-copy {
+            color: #475569;
+            font-size: .86rem;
+            line-height: 1.55;
+            margin-bottom: 12px;
+        }
+        .demo-tour-proof {
+            border: 1px solid #ccfbf1;
+            background: #f0fdfa;
+            color: #115e59;
+            border-radius: 12px;
+            padding: .72rem;
+            font-size: .78rem;
+            line-height: 1.45;
+            font-weight: 650;
+            margin-bottom: 12px;
+        }
+        .demo-tour-progress {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 5px;
+            margin-bottom: 12px;
+        }
+        .demo-tour-dot {
+            height: 5px;
+            border-radius: 999px;
+            background: #e2e8f0;
+        }
+        .demo-tour-dot.active {
+            background: #0f766e;
+        }
+        .demo-tour-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .demo-tour-actions .btn {
+            border-radius: 9px;
+            font-size: .8rem;
+            font-weight: 750;
+        }
+        .demo-tour-highlight {
+            position: relative;
+            z-index: 1112;
+            box-shadow: 0 0 0 3px rgba(20, 184, 166, .38), 0 14px 32px rgba(15, 23, 42, .16) !important;
+            border-radius: 12px;
+        }
+        @media (max-width: 768px) {
+            .demo-tour-launcher {
+                left: 12px;
+                right: 12px;
+                bottom: 76px;
+                justify-content: center;
+            }
+            .demo-tour-panel {
+                left: 10px;
+                right: 10px;
+                bottom: 132px;
+                width: auto;
+            }
+        }
+    </style>
+    {% endif %}
     <script>
     /* Apply theme before paint to prevent flash */
     (function(){var t=localStorage.getItem('gromore-theme');if(t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches)){document.documentElement.setAttribute('data-theme','dark')}})();
@@ -326,13 +517,48 @@
         </div>
         {% endif %}
         {% if client_demo_mode %}
-        <div style="background:#fff7ed;border:1px solid #fed7aa;color:#7c2d12;padding:10px 14px;border-radius:10px;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:.88rem;font-weight:650;flex-wrap:wrap;">
-            <span><i class="bi bi-shield-lock-fill me-1"></i> Demo mode: this is the real WARREN portal using sandbox data. Live sends, publishing, billing, OAuth connects, and external pushes are blocked until activation.</span>
-            <a href="{{ url_for('client.client_settings') }}" style="color:#7c2d12;background:rgba(124,45,18,.1);padding:4px 12px;border-radius:8px;text-decoration:none;font-size:.82rem;">View activation setup</a>
+        <div class="demo-command-bar">
+            <div class="demo-command-main">
+                <div class="demo-command-icon"><i class="bi bi-activity"></i></div>
+                <div>
+                    <div class="demo-command-title">Live-style WARREN demo workspace</div>
+                    <div class="demo-command-detail">This is the real portal with sandbox leads, growth data, creative tools, and activation safeguards. External sends and pushes unlock after activation.</div>
+                </div>
+            </div>
+            <div class="demo-command-actions">
+                <button type="button" class="btn btn-success btn-sm" data-demo-tour-start><i class="bi bi-play-circle me-1"></i>Start interactive tour</button>
+                <button type="button" class="btn btn-outline-primary btn-sm" data-demo-tour-step="1"><i class="bi bi-inbox me-1"></i>Show lead command</button>
+                <a href="{{ url_for('client.client_settings') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-plug me-1"></i>Activation setup</a>
+            </div>
         </div>
         {% endif %}
         {% block content %}{% endblock %}
     </div>
+
+    {% if client_demo_mode %}
+    <button type="button" class="demo-tour-launcher" id="demoTourLauncher">
+        <i class="bi bi-compass"></i><span>WARREN tour</span>
+    </button>
+    <section class="demo-tour-panel" id="demoTourPanel" aria-live="polite">
+        <div class="demo-tour-head">
+            <div>
+                <div class="demo-tour-kicker"><i class="bi bi-stars"></i><span id="demoTourKicker">Demo Tour</span></div>
+                <div class="demo-tour-title" id="demoTourTitle">See WARREN like a live account</div>
+            </div>
+            <button type="button" class="demo-tour-close" id="demoTourClose" aria-label="Close demo tour"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="demo-tour-body">
+            <div class="demo-tour-progress" id="demoTourProgress"></div>
+            <div class="demo-tour-copy" id="demoTourCopy"></div>
+            <div class="demo-tour-proof" id="demoTourProof"></div>
+            <div class="demo-tour-actions">
+                <button type="button" class="btn btn-primary btn-sm" id="demoTourOpen"><i class="bi bi-arrow-right-circle me-1"></i>Open this feature</button>
+                <button type="button" class="btn btn-outline-primary btn-sm" id="demoTourAsk"><i class="bi bi-chat-dots me-1"></i>Ask WARREN</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="demoTourNext">Next</button>
+            </div>
+        </div>
+    </section>
+    {% endif %}
 
     <script id="assistantInitialMessages" type="application/json">{{ assistant_messages | tojson }}</script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -1172,6 +1398,213 @@
         };
     })();
     </script>
+    {% if client_demo_mode %}
+    <script>
+    (function() {
+        var steps = [
+            {
+                title: 'Auto WARREN command center',
+                copy: 'Start here. WARREN turns the demo account into a live operating view: what needs attention, what data supports it, and the next action to take.',
+                proof: 'The seeded demo has active leads, dashboard data, growth findings, content, and activation status, so Auto WARREN can coach from account context instead of a static sales page.',
+                href: '{{ url_for("client.client_auto_warren") }}',
+                target: '.auto-hero, .focus-card, a[href="{{ url_for("client.client_auto_warren") }}"]',
+                prompt: 'Give this prospect a guided explanation of Auto WARREN. Explain what it is looking at, why the focus action matters, and what becomes live after activation.'
+            },
+            {
+                title: 'Lead Command Center',
+                copy: 'Show the owner how WARREN captures leads, keeps thread history, drafts replies, tracks qualification, and prevents hot opportunities from sitting untouched.',
+                proof: 'Demo threads include Facebook forms, missed calls, website forms, and a commercial opportunity. Outbound drafts stay sandboxed until activation.',
+                href: '{{ url_for("client.client_inbox") }}',
+                target: '.inbox-wrap, .contact-grid, a[href="{{ url_for("client.client_inbox") }}"]',
+                prompt: 'Walk this prospect through the WARREN lead inbox. Focus on speed-to-lead, qualification, nurture, owner handoff, and replacing scattered texts and missed follow-up.'
+            },
+            {
+                title: 'Pipeline and commercial revenue',
+                copy: 'WARREN is not just a chat tool. It rolls leads into pipeline views, commercial targets, proposal readiness, walkthrough details, and follow-up paths.',
+                proof: 'The demo includes active lead profiles and a commercial account so the owner can see how WARREN tracks high-value opportunities beyond one-off residential leads.',
+                href: '{{ url_for("client.client_commercial_prospecting") }}',
+                target: '.commercial-shell, .contact-grid, a[href="{{ url_for("client.client_commercial_prospecting") }}"]',
+                prompt: 'Explain how WARREN helps this business find, qualify, track, and nurture commercial accounts. Make it specific to the current demo brand.'
+            },
+            {
+                title: 'Local visibility and growth intelligence',
+                copy: 'Open the heatmap to show how WARREN connects local search visibility to action, not just charts. The owner can see where the business wins and where competitors outrank them.',
+                proof: 'A seeded local-rank scan is already in the account, so the feature feels active before the prospect connects a real Google Maps token and Place ID.',
+                href: '{{ url_for("client.client_heatmap") }}',
+                target: '#heatmapGrid, .heatmap-grid, a[href="{{ url_for("client.client_heatmap") }}"]',
+                prompt: 'Explain the local rank heatmap like I am a service business owner. Tell me what green, yellow, and red mean and what WARREN would do with this after activation.'
+            },
+            {
+                title: 'Creative and image engine',
+                copy: 'Show that WARREN can create campaign assets, generate images, and move strong visuals into the creative maker instead of leaving marketing ideas stuck in chat.',
+                proof: 'The image creator and creative studio live beside leads, campaigns, and action plans, so the owner sees execution capacity, not just recommendations.',
+                href: '{{ url_for("client.client_image_creator") }}',
+                target: '.image-creator-shell, .creative-shell, a[href="{{ url_for("client.client_image_creator") }}"]',
+                prompt: 'Show how WARREN can generate brand-aware visuals, use reference images, and move a liked image into the creative maker for ad production.'
+            },
+            {
+                title: 'Activation without losing setup',
+                copy: 'End by showing the activation path. The demo already captured business rules and seeded the workspace; activation connects real lead sources, SMS, CRM, billing, AI, and Maps.',
+                proof: 'Sandbox protections block real sends, publishing, billing, OAuth connects, and external pushes until the client is ready. The setup stays attached to this demo brand.',
+                href: '{{ url_for("client.client_automations") }}',
+                target: '.demo-command-bar, a[href="{{ url_for("client.client_automations") }}"], a[href="{{ url_for("client.client_settings") }}"]',
+                prompt: 'Give me a concise activation recap for this demo. Explain what is already configured, what connections remain, and why activation keeps the work we did in the demo.'
+            }
+        ];
+        var state = { index: 0, open: false };
+        var panel = document.getElementById('demoTourPanel');
+        var launcher = document.getElementById('demoTourLauncher');
+        var closeBtn = document.getElementById('demoTourClose');
+        var openBtn = document.getElementById('demoTourOpen');
+        var askBtn = document.getElementById('demoTourAsk');
+        var nextBtn = document.getElementById('demoTourNext');
+        var titleEl = document.getElementById('demoTourTitle');
+        var copyEl = document.getElementById('demoTourCopy');
+        var proofEl = document.getElementById('demoTourProof');
+        var progressEl = document.getElementById('demoTourProgress');
+        var kickerEl = document.getElementById('demoTourKicker');
+
+        function currentStep() {
+            return steps[Math.max(0, Math.min(state.index, steps.length - 1))];
+        }
+        function clearHighlights() {
+            document.querySelectorAll('.demo-tour-highlight').forEach(function(el) {
+                el.classList.remove('demo-tour-highlight');
+            });
+        }
+        function expandNavFor(el) {
+            var group = el ? el.closest('.nav-section-group') : null;
+            if (!group) return;
+            group.classList.remove('collapsed');
+            var section = group.getAttribute('data-section');
+            var label = document.querySelector('.nav-section-label[data-section="' + section + '"]');
+            if (label) label.classList.remove('collapsed');
+        }
+        function findTarget(step) {
+            var selectors = (step.target || '').split(',');
+            for (var i = 0; i < selectors.length; i++) {
+                var selector = selectors[i].trim();
+                if (!selector) continue;
+                var el = document.querySelector(selector);
+                if (el) return el;
+            }
+            return null;
+        }
+        function highlightStep() {
+            clearHighlights();
+            var el = findTarget(currentStep());
+            if (!el) return;
+            expandNavFor(el);
+            el.classList.add('demo-tour-highlight');
+            if (!el.closest('.client-sidebar') && !el.closest('.mobile-bottom-nav')) {
+                try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch(e) {}
+            }
+        }
+        function renderProgress() {
+            if (!progressEl) return;
+            progressEl.innerHTML = '';
+            steps.forEach(function(_, idx) {
+                var dot = document.createElement('div');
+                dot.className = 'demo-tour-dot' + (idx <= state.index ? ' active' : '');
+                progressEl.appendChild(dot);
+            });
+        }
+        function render() {
+            if (!panel) return;
+            var step = currentStep();
+            if (kickerEl) kickerEl.textContent = 'Stop ' + (state.index + 1) + ' of ' + steps.length;
+            if (titleEl) titleEl.textContent = step.title;
+            if (copyEl) copyEl.textContent = step.copy;
+            if (proofEl) proofEl.textContent = step.proof;
+            if (nextBtn) nextBtn.textContent = state.index >= steps.length - 1 ? 'Restart' : 'Next';
+            renderProgress();
+            if (state.open) {
+                panel.classList.add('open');
+                setTimeout(highlightStep, 80);
+            }
+        }
+        function openTour(index) {
+            if (typeof index === 'number') state.index = Math.max(0, Math.min(index, steps.length - 1));
+            state.open = true;
+            try { localStorage.setItem('warren-demo-tour-seen', '1'); } catch(e) {}
+            render();
+        }
+        function closeTour() {
+            state.open = false;
+            if (panel) panel.classList.remove('open');
+            clearHighlights();
+            try { localStorage.setItem('warren-demo-tour-seen', '1'); } catch(e) {}
+        }
+        function navigateToStep(step) {
+            if (!step || !step.href) return;
+            try { sessionStorage.setItem('warren-demo-tour-index', String(state.index)); } catch(e) {}
+            var targetPath = new URL(step.href, window.location.origin).pathname;
+            if (window.location.pathname === targetPath) {
+                highlightStep();
+                return;
+            }
+            if (window._pjaxNavigate) {
+                window._pjaxNavigate(step.href, true);
+                setTimeout(function() { render(); highlightStep(); }, 950);
+            } else {
+                window.location.href = step.href;
+            }
+        }
+        if (launcher) launcher.addEventListener('click', function() { openTour(state.index); });
+        if (closeBtn) closeBtn.addEventListener('click', closeTour);
+        if (openBtn) openBtn.addEventListener('click', function() { navigateToStep(currentStep()); });
+        if (askBtn) askBtn.addEventListener('click', function() {
+            var step = currentStep();
+            if (window.gromorePrimeWarrenPrompt) window.gromorePrimeWarrenPrompt(step.prompt || step.copy);
+        });
+        if (nextBtn) nextBtn.addEventListener('click', function() {
+            state.index = state.index >= steps.length - 1 ? 0 : state.index + 1;
+            render();
+            navigateToStep(currentStep());
+        });
+        document.addEventListener('click', function(event) {
+            var start = event.target.closest('[data-demo-tour-start]');
+            if (start) {
+                event.preventDefault();
+                openTour(0);
+                navigateToStep(currentStep());
+                return;
+            }
+            var stepTrigger = event.target.closest('[data-demo-tour-step]');
+            if (stepTrigger) {
+                event.preventDefault();
+                var idx = parseInt(stepTrigger.getAttribute('data-demo-tour-step') || '0', 10);
+                openTour(isNaN(idx) ? 0 : idx);
+                navigateToStep(currentStep());
+            }
+        });
+        var previousPjax = window._pjaxNavigate;
+        if (typeof previousPjax === 'function' && !previousPjax._demoTourWrapped) {
+            var wrapped = function(url, pushState) {
+                previousPjax(url, pushState);
+                setTimeout(function() {
+                    if (state.open) {
+                        render();
+                        highlightStep();
+                    }
+                }, 950);
+            };
+            wrapped._demoTourWrapped = true;
+            window._pjaxNavigate = wrapped;
+        }
+        try {
+            var savedIndex = parseInt(sessionStorage.getItem('warren-demo-tour-index') || '0', 10);
+            if (!isNaN(savedIndex)) state.index = Math.max(0, Math.min(savedIndex, steps.length - 1));
+        } catch(e) {}
+        render();
+        setTimeout(function() {
+            var seen = false;
+            try { seen = localStorage.getItem('warren-demo-tour-seen') === '1'; } catch(e) {}
+            if (!seen) openTour(0);
+        }, 1200);
+    })();
+    </script>
+    {% endif %}
     <div id="pjaxScripts">{% block scripts %}{% endblock %}</div>
 </body>
 </html>

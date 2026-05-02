@@ -246,7 +246,8 @@ class PartnerProgramRouteTests(unittest.TestCase):
         response = self.client.get(f"/partners/demo/live/{demos[0]['demo_token']}", follow_redirects=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Auto WARREN", response.data)
-        self.assertIn(b"Demo mode", response.data)
+        self.assertIn(b"Live-style WARREN demo workspace", response.data)
+        self.assertIn(b"Start interactive tour", response.data)
         with self.client.session_transaction() as session:
             self.assertEqual(session.get("client_brand_id"), brand["id"])
             self.assertTrue(session.get("client_demo_mode"))
@@ -316,7 +317,8 @@ class PartnerProgramRouteTests(unittest.TestCase):
         response = self.client.get(f"/partners/demo/live/{demo['demo_token']}", follow_redirects=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Auto WARREN", response.data)
-        self.assertIn(b"Demo mode", response.data)
+        self.assertIn(b"Live-style WARREN demo workspace", response.data)
+        self.assertIn(b"WARREN tour", response.data)
 
         with self.app.app_context():
             repaired = self.app.db.get_partner_demo_session(demo_id, self.partner_id)
