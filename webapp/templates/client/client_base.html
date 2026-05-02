@@ -223,7 +223,7 @@
         }
         .demo-tour-progress {
             display: grid;
-            grid-template-columns: repeat(13, 1fr);
+            grid-template-columns: repeat(15, 1fr);
             gap: 5px;
             margin-bottom: 12px;
         }
@@ -622,9 +622,11 @@
                 <a class="demo-feature-tile" href="{{ url_for('client.client_campaign_create') }}" data-demo-tour-step="7"><i class="bi bi-megaphone"></i><strong>Campaigns</strong><span>Launch planning and ad drafts.</span></a>
                 <a class="demo-feature-tile" href="{{ url_for('client.client_image_creator') }}" data-demo-tour-step="8"><i class="bi bi-image"></i><strong>Image Creator</strong><span>Reference images and AI visuals.</span></a>
                 <a class="demo-feature-tile" href="{{ url_for('client.client_creative') }}" data-demo-tour-step="9"><i class="bi bi-palette"></i><strong>Creative Studio</strong><span>Turn assets into finished ads.</span></a>
-                <a class="demo-feature-tile" href="{{ url_for('client.client_blog') }}" data-demo-tour-step="10"><i class="bi bi-journal-richtext"></i><strong>Content Engine</strong><span>Blog and social content queue.</span></a>
-                <a class="demo-feature-tile" href="{{ url_for('client.client_tasks') }}" data-demo-tour-step="11"><i class="bi bi-list-task"></i><strong>Work Queue</strong><span>Execution tasks and owner handoffs.</span></a>
-                <a class="demo-feature-tile" href="{{ url_for('client.client_automations') }}" data-demo-tour-step="12"><i class="bi bi-plug"></i><strong>Activation</strong><span>Connect live systems when ready.</span></a>
+                <a class="demo-feature-tile" href="{{ url_for('client.client_blog') }}" data-demo-tour-step="10"><i class="bi bi-journal-richtext"></i><strong>Content Engine</strong><span>Blog and SEO publishing drafts.</span></a>
+                <a class="demo-feature-tile" href="{{ url_for('client.client_post_scheduler') }}" data-demo-tour-step="11"><i class="bi bi-calendar2-week"></i><strong>Post Scheduler</strong><span>Organic content calendar and queues.</span></a>
+                <a class="demo-feature-tile" href="{{ url_for('client.client_site_builder') }}" data-demo-tour-step="12"><i class="bi bi-wordpress"></i><strong>WP Builder</strong><span>Website pages, SEO, and publishing.</span></a>
+                <a class="demo-feature-tile" href="{{ url_for('client.client_tasks') }}" data-demo-tour-step="13"><i class="bi bi-list-task"></i><strong>Work Queue</strong><span>Execution tasks and owner handoffs.</span></a>
+                <a class="demo-feature-tile" href="{{ url_for('client.client_automations') }}" data-demo-tour-step="14"><i class="bi bi-plug"></i><strong>Activation</strong><span>Connect live systems when ready.</span></a>
             </div>
         </div>
         {% endif %}
@@ -1585,6 +1587,22 @@
                 href: '{{ url_for("client.client_blog") }}',
                 target: '.blog-shell, .blog-list, a[href="{{ url_for("client.client_blog") }}"]',
                 prompt: 'Explain the WARREN content engine for a local service business. Focus on useful posts, local SEO, social proof, and consistency.'
+            },
+            {
+                title: 'Post Scheduler',
+                copy: 'Open the scheduler to show WARREN can keep organic social moving with queued posts, story ideas, channel planning, and content timing.',
+                proof: 'The demo seeds a scheduled post so the calendar does not feel empty. After activation, real Facebook/Page connections can publish instead of just previewing.',
+                href: '{{ url_for("client.client_post_scheduler") }}',
+                target: '.post-scheduler-shell, .scheduler-shell, a[href="{{ url_for("client.client_post_scheduler") }}"]',
+                prompt: 'Explain the WARREN Post Scheduler. Show how scheduled posts, content rhythm, story ideas, and approval/publishing fit into the demo.'
+            },
+            {
+                title: 'WordPress and site builder',
+                copy: 'Show the site builder so the owner sees WARREN can help with actual website pages, SEO sections, service pages, intake assets, and WordPress publishing.',
+                proof: 'This is where WARREN moves beyond ads and leads into the website itself: generated pages can be reviewed, edited, rewritten, and published through WordPress after activation.',
+                href: '{{ url_for("client.client_site_builder") }}',
+                target: '.site-builder-shell, #siteBuilderApp, a[href="{{ url_for("client.client_site_builder") }}"]',
+                prompt: 'Explain the WARREN WordPress/site builder demo. Focus on service pages, SEO, brand assets, page review, edits, and publishing after WordPress activation.'
             },
             {
                 title: 'Work Queue and execution',

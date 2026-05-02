@@ -249,6 +249,8 @@ class PartnerProgramRouteTests(unittest.TestCase):
         self.assertIn(b"Live-style WARREN demo workspace", response.data)
         self.assertIn(b"Start interactive tour", response.data)
         self.assertIn(b"WARREN demo feature board", response.data)
+        self.assertIn(b"Post Scheduler", response.data)
+        self.assertIn(b"WP Builder", response.data)
         with self.client.session_transaction() as session:
             self.assertEqual(session.get("client_brand_id"), brand["id"])
             self.assertTrue(session.get("client_demo_mode"))
