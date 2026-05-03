@@ -464,13 +464,30 @@
 
         <div class="connection-panel-shell card">
             <div class="card-body">
-                <h6 class="fw-semibold mb-1">Google Ads Customer ID</h6>
-                <p class="text-muted mb-3" style="font-size:.88rem;">Keep your Customer ID on file so Google Ads data and management flows point to the right account.</p>
-                <form method="POST" action="{{ url_for('client.client_save_ads_id') }}">
+                <h6 class="fw-semibold mb-1">Google account IDs</h6>
+                <p class="text-muted mb-3" style="font-size:.88rem;">Paste the exact Analytics, Search Console, and Ads properties WARREN should use for this brand.</p>
+                <form method="POST" action="{{ url_for('client.client_save_google_ids') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="input-group" style="max-width:360px;">
-                        <input type="text" class="form-control" name="google_ads_customer_id" value="{{ brand.google_ads_customer_id or '' }}" placeholder="123-456-7890" pattern="[\d\-]+" title="Numbers and dashes only">
-                        <button class="btn btn-primary" type="submit">Save</button>
+                    <input type="hidden" name="return_to" value="connections">
+                    <div class="row g-3">
+                        <div class="col-lg-4">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">GA4 Property ID</label>
+                            <input type="text" class="form-control" name="ga4_property_id" value="{{ brand.ga4_property_id or '' }}" placeholder="123456789 or properties/123456789">
+                            <small class="text-muted">Use the numeric property ID, not the G- measurement tag.</small>
+                        </div>
+                        <div class="col-lg-4">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Search Console property</label>
+                            <input type="text" class="form-control" name="gsc_site_url" value="{{ brand.gsc_site_url or '' }}" placeholder="https://example.com/ or sc-domain:example.com">
+                            <small class="text-muted">Must match the property shown in Search Console.</small>
+                        </div>
+                        <div class="col-lg-4">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Google Ads Customer ID</label>
+                            <input type="text" class="form-control" name="google_ads_customer_id" value="{{ brand.google_ads_customer_id or '' }}" placeholder="123-456-7890" pattern="[\d\-]+" title="Numbers and dashes only">
+                            <small class="text-muted">Shown in the top-right of Google Ads.</small>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-save me-1"></i>Save Google IDs</button>
                     </div>
                 </form>
             </div>
@@ -596,19 +613,6 @@
                         {% if brand.facebook_ads_page_id %}<div class="col-md-12"><small class="text-muted d-block">Ads Facebook Page</small><span class="fw-medium">{{ brand.facebook_ads_page_id }}</span></div>{% endif %}
                     </div>
                 </div>
-                <form method="POST" action="{{ url_for('client.client_save_facebook_page_id') }}" class="mt-3">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <label class="form-label fw-medium" style="font-size:.88rem;">Main Facebook Page ID or Page URL</label>
-                    <div class="input-group mb-2" style="max-width:560px;">
-                        <input type="text" class="form-control" name="facebook_page_id" value="{{ brand.facebook_page_id or '' }}" placeholder="123456789012345 or https://www.facebook.com/yourpage">
-                    </div>
-                    <label class="form-label fw-medium" style="font-size:.88rem;">Ads Facebook Page ID or Page URL <span class="text-muted">(optional)</span></label>
-                    <div class="input-group" style="max-width:560px;">
-                        <input type="text" class="form-control" name="facebook_ads_page_id" value="{{ brand.facebook_ads_page_id or '' }}" placeholder="Use only if ads run from a secondary page">
-                        <button class="btn btn-primary" type="submit">Save</button>
-                    </div>
-                    <small class="text-muted d-block mt-2">Use the main page for organic, Messenger, and normal lead handling. Add an ads page only when Facebook disabled the main page's ad account or ads must run from a secondary page.</small>
-                </form>
                 <div class="mt-3 d-flex gap-2 flex-wrap">
                     <a href="{{ url_for('client_meta_oauth.connect') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat me-1"></i>Reconnect Meta</a>
                     <form method="POST" action="{{ url_for('client_meta_oauth.disconnect') }}" class="d-inline">
@@ -622,6 +626,32 @@
                     <p class="text-muted mt-2 mb-0" style="font-size:.85rem;">Sign in with Facebook to connect your ad accounts for Facebook and Instagram.</p>
                 </div>
                 {% endif %}
+                <form method="POST" action="{{ url_for('client.client_save_facebook_page_id') }}" class="mt-4">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="return_to" value="connections">
+                    <h6 class="fw-semibold mb-1">Meta account and Page IDs</h6>
+                    <p class="text-muted mb-3" style="font-size:.88rem;">Paste the ad account and Page references WARREN should use for ads, organic social, Messenger, and lead forms.</p>
+                    <div class="row g-3">
+                        <div class="col-lg-4">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Meta Ad Account ID</label>
+                            <input type="text" class="form-control" name="meta_ad_account_id" value="{{ brand.meta_ad_account_id or '' }}" placeholder="act_123456789 or 123456789">
+                            <small class="text-muted">WARREN stores the numeric ID and adds act_ when calling Meta.</small>
+                        </div>
+                        <div class="col-lg-4">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Main Facebook Page ID or URL</label>
+                            <input type="text" class="form-control" name="facebook_page_id" value="{{ brand.facebook_page_id or '' }}" placeholder="123456789012345 or https://www.facebook.com/yourpage">
+                            <small class="text-muted">Used for organic, Messenger, and normal lead handling.</small>
+                        </div>
+                        <div class="col-lg-4">
+                            <label class="form-label fw-medium" style="font-size:.88rem;">Ads Facebook Page ID or URL <span class="text-muted">(optional)</span></label>
+                            <input type="text" class="form-control" name="facebook_ads_page_id" value="{{ brand.facebook_ads_page_id or '' }}" placeholder="Use only if ads run from a secondary page">
+                            <small class="text-muted">Use when ads or lead forms run from a different Page.</small>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-save me-1"></i>Save Meta IDs</button>
+                    </div>
+                </form>
                 <div class="connection-panel-actions">
                     <a href="{{ url_for('client.client_help', guide='connections') }}#facebook-ads" class="btn btn-outline-secondary btn-sm"><i class="bi bi-question-circle me-1"></i>Meta ads guide</a>
                     <a href="{{ url_for('client.client_help', guide='connections') }}#conversion-tracking" class="btn btn-outline-secondary btn-sm"><i class="bi bi-question-circle me-1"></i>Conversion tracking</a>

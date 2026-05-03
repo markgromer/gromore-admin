@@ -11477,15 +11477,34 @@ def client_save_automations():
 @client_bp.route("/settings/ads-id", methods=["POST"])
 @client_login_required
 def client_save_ads_id():
+    return _client_save_google_identity_fields()
+
+
+@client_bp.route("/settings/google-ids", methods=["POST"])
+@client_login_required
+def client_save_google_ids():
+    return _client_save_google_identity_fields()
+
+
+def _client_save_google_identity_fields():
     db = _get_db()
     brand_id = session["client_brand_id"]
 
-    raw = request.form.get("google_ads_customer_id", "").strip()
-    # Keep only digits and dashes
-    cleaned = "".join(c for c in raw if c.isdigit() or c == "-")
-    db.update_brand_api_field(brand_id, "google_ads_customer_id", cleaned)
-    flash("Google Ads Customer ID saved.", "success")
-    return redirect(url_for("client.client_settings"))
+    if "ga4_property_id" in request.form:
+        ga4_raw = (request.form.get("ga4_property_id") or "").strip()
+        if ga4_raw.startswith("properties/"):
+            ga4_raw = ga4_raw.split("/", 1)[1].strip()
+        db.update_brand_api_field(brand_id, "ga4_property_id", ga4_raw)
+    if "gsc_site_url" in request.form:
+        gsc_site_url = (request.form.get("gsc_site_url") or "").strip()
+        db.update_brand_api_field(brand_id, "gsc_site_url", gsc_site_url)
+    if "google_ads_customer_id" in request.form:
+        ads_raw = (request.form.get("google_ads_customer_id") or "").strip()
+        ads_cleaned = "".join(c for c in ads_raw if c.isdigit() or c == "-")
+        db.update_brand_api_field(brand_id, "google_ads_customer_id", ads_cleaned)
+    flash("Google account IDs saved.", "success")
+    return_to = request.form.get("return_to")
+    return redirect(url_for("client.client_connections") if return_to == "connections" else url_for("client.client_settings"))
 
 
 @client_bp.route("/settings/facebook-page", methods=["POST"])
@@ -11494,12 +11513,19 @@ def client_save_facebook_page_id():
     db = _get_db()
     brand_id = session["client_brand_id"]
 
-    raw = (request.form.get("facebook_page_id") or "").strip()
-    ads_raw = (request.form.get("facebook_ads_page_id") or "").strip()
-    db.update_brand_api_field(brand_id, "facebook_page_id", raw)
-    db.update_brand_api_field(brand_id, "facebook_ads_page_id", ads_raw)
-    flash("Facebook Page references saved.", "success")
-    return redirect(url_for("client.client_settings"))
+    if "meta_ad_account_id" in request.form:
+        ad_account_raw = (request.form.get("meta_ad_account_id") or "").strip()
+        ad_account_cleaned = ad_account_raw.replace("act_", "").replace("ACT_", "").replace(" ", "")
+        db.update_brand_api_field(brand_id, "meta_ad_account_id", ad_account_cleaned)
+    if "facebook_page_id" in request.form:
+        raw = (request.form.get("facebook_page_id") or "").strip()
+        db.update_brand_api_field(brand_id, "facebook_page_id", raw)
+    if "facebook_ads_page_id" in request.form:
+        ads_raw = (request.form.get("facebook_ads_page_id") or "").strip()
+        db.update_brand_api_field(brand_id, "facebook_ads_page_id", ads_raw)
+    flash("Meta account and Facebook Page references saved.", "success")
+    return_to = request.form.get("return_to")
+    return redirect(url_for("client.client_connections") if return_to == "connections" else url_for("client.client_settings"))
 
 
 @client_bp.route("/settings/openai", methods=["POST"])
