@@ -129,9 +129,9 @@
                     </div>
                 </div>
 
-                <!-- Facebook Page ID -->
+                <!-- Facebook Page IDs -->
                 <div class="mb-3 mt-3">
-                    <label class="form-label small text-muted mb-1">Facebook Page ID (for organic tracking)</label>
+                    <label class="form-label small text-muted mb-1">Main Facebook Page ID (organic, Messenger, lead forms)</label>
                     <div class="input-group input-group-sm">
                         <input type="text" class="form-control" value="{{ brand.facebook_page_id or '' }}"
                                id="facebook_page_id" placeholder="e.g. 123456789012345">
@@ -139,6 +139,16 @@
                                 onclick="saveApiField(this.dataset.brandId, 'facebook_page_id')">Save</button>
                     </div>
                     <small class="text-muted">Auto-detected on Meta connect. Paste manually if not detected.</small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small text-muted mb-1">Ads Facebook Page ID (optional secondary page)</label>
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control" value="{{ brand.facebook_ads_page_id or '' }}"
+                               id="facebook_ads_page_id" placeholder="Use if ads run from a different page">
+                        <button class="btn btn-outline-secondary" type="button" data-brand-id="{{ brand.id }}"
+                                onclick="saveApiField(this.dataset.brandId, 'facebook_ads_page_id')">Save</button>
+                    </div>
+                    <small class="text-muted">Use only when the ad account/page setup requires a secondary page for ads.</small>
                 </div>
             </div>
         </div>

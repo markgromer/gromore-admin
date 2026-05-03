@@ -11495,8 +11495,10 @@ def client_save_facebook_page_id():
     brand_id = session["client_brand_id"]
 
     raw = (request.form.get("facebook_page_id") or "").strip()
+    ads_raw = (request.form.get("facebook_ads_page_id") or "").strip()
     db.update_brand_api_field(brand_id, "facebook_page_id", raw)
-    flash("Facebook Page reference saved.", "success")
+    db.update_brand_api_field(brand_id, "facebook_ads_page_id", ads_raw)
+    flash("Facebook Page references saved.", "success")
     return redirect(url_for("client.client_settings"))
 
 

@@ -1471,7 +1471,7 @@ def meta_leadgen_webhook():
             if not leadgen_id:
                 continue
 
-            # Find brand by facebook_page_id
+            # Find brand by either tracked Facebook Page ID.
             brand = _find_brand_by_page_id(db, page_id)
             if not brand:
                 log.warning("Meta leadgen: no brand found for page_id=%s", page_id)
@@ -1502,13 +1502,13 @@ def meta_leadgen_verify():
 
 
 def _find_brand_by_page_id(db, page_id):
-    """Find a brand by its facebook_page_id."""
+    """Find a brand by either tracked Facebook Page ID."""
     if not page_id:
         return None
     conn = db._conn()
     row = conn.execute(
-        "SELECT * FROM brands WHERE facebook_page_id = ?",
-        (page_id,),
+        "SELECT * FROM brands WHERE facebook_page_id = ? OR facebook_ads_page_id = ?",
+        (page_id, page_id),
     ).fetchone()
     conn.close()
     return dict(row) if row else None

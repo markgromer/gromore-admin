@@ -592,17 +592,22 @@
                     <div class="row g-3">
                         {% if meta_conn.account_name %}<div class="col-md-6"><small class="text-muted d-block">Ad Account</small><span class="fw-medium">{{ meta_conn.account_name }}</span></div>{% endif %}
                         {% if brand.meta_ad_account_id %}<div class="col-md-6"><small class="text-muted d-block">Account ID</small><span class="fw-medium">{{ brand.meta_ad_account_id }}</span></div>{% endif %}
-                        {% if brand.facebook_page_id %}<div class="col-md-12"><small class="text-muted d-block">Facebook Page Reference</small><span class="fw-medium">{{ brand.facebook_page_id }}</span></div>{% endif %}
+                        {% if brand.facebook_page_id %}<div class="col-md-12"><small class="text-muted d-block">Main Facebook Page</small><span class="fw-medium">{{ brand.facebook_page_id }}</span></div>{% endif %}
+                        {% if brand.facebook_ads_page_id %}<div class="col-md-12"><small class="text-muted d-block">Ads Facebook Page</small><span class="fw-medium">{{ brand.facebook_ads_page_id }}</span></div>{% endif %}
                     </div>
                 </div>
                 <form method="POST" action="{{ url_for('client.client_save_facebook_page_id') }}" class="mt-3">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <label class="form-label fw-medium" style="font-size:.88rem;">Facebook Page ID or Page URL</label>
-                    <div class="input-group" style="max-width:560px;">
+                    <label class="form-label fw-medium" style="font-size:.88rem;">Main Facebook Page ID or Page URL</label>
+                    <div class="input-group mb-2" style="max-width:560px;">
                         <input type="text" class="form-control" name="facebook_page_id" value="{{ brand.facebook_page_id or '' }}" placeholder="123456789012345 or https://www.facebook.com/yourpage">
+                    </div>
+                    <label class="form-label fw-medium" style="font-size:.88rem;">Ads Facebook Page ID or Page URL <span class="text-muted">(optional)</span></label>
+                    <div class="input-group" style="max-width:560px;">
+                        <input type="text" class="form-control" name="facebook_ads_page_id" value="{{ brand.facebook_ads_page_id or '' }}" placeholder="Use only if ads run from a secondary page">
                         <button class="btn btn-primary" type="submit">Save</button>
                     </div>
-                    <small class="text-muted d-block mt-2">Required for Facebook organic tracking when Meta has access to multiple pages or auto-detection picks the wrong one.</small>
+                    <small class="text-muted d-block mt-2">Use the main page for organic, Messenger, and normal lead handling. Add an ads page only when Facebook disabled the main page's ad account or ads must run from a secondary page.</small>
                 </form>
                 <div class="mt-3 d-flex gap-2 flex-wrap">
                     <a href="{{ url_for('client_meta_oauth.connect') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat me-1"></i>Reconnect Meta</a>

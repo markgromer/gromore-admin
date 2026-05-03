@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from webapp.api_bridge import _pull_meta_organic
+from webapp.api_bridge import _combine_facebook_organic_reports, _pull_meta_organic
 
 
 class _FakeResponse:
@@ -73,6 +73,45 @@ class FacebookOrganicPostCountTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["organic_impressions"], 123)
         self.assertEqual(result["metrics"]["post_engagements"], 12)
         self.assertEqual(result["metrics"]["_debug"]["post_count_source"], "count_hint")
+
+    def test_combines_main_and_ads_page_organic_reports(self):
+        result = _combine_facebook_organic_reports([
+            {
+                "page_id": "main123",
+                "page_role": "primary",
+                "metrics": {
+                    "page_name": "Main Page",
+                    "followers": 100,
+                    "organic_impressions": 50,
+                    "post_engagements": 10,
+                    "post_clicks": 3,
+                },
+                "top_posts": [{"id": "p1", "likes": 4, "comments": 1, "shares": 0}],
+                "post_count": 2,
+            },
+            {
+                "page_id": "ads456",
+                "page_role": "ads",
+                "metrics": {
+                    "page_name": "Ads Page",
+                    "followers": 40,
+                    "organic_impressions": 30,
+                    "post_engagements": 6,
+                    "post_clicks": 2,
+                },
+                "top_posts": [{"id": "p2", "likes": 8, "comments": 0, "shares": 0}],
+                "post_count": 1,
+            },
+        ])
+
+        self.assertEqual(result["metrics"]["tracked_page_count"], 2)
+        self.assertEqual(result["metrics"]["followers"], 140)
+        self.assertEqual(result["metrics"]["organic_impressions"], 80)
+        self.assertEqual(result["metrics"]["post_engagements"], 16)
+        self.assertEqual(result["metrics"]["post_clicks"], 5)
+        self.assertEqual(result["post_count"], 3)
+        self.assertEqual(result["top_posts"][0]["page_role"], "ads")
+        self.assertEqual(len(result["pages"]), 2)
 
 
 if __name__ == "__main__":

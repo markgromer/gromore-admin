@@ -2238,7 +2238,8 @@ def launch_meta_campaign(db, brand, plan, changed_by):
             missing.append("Meta OAuth connection")
         return {"success": False, "error": f"Missing Meta Ads configuration: {', '.join(missing)}. Use Save as Draft to keep this plan."}
 
-    page_id = (brand.get("facebook_page_id") or "").strip()
+    page_id = (brand.get("facebook_ads_page_id") or brand.get("facebook_page_id") or "").strip()
+    page_field = "facebook_ads_page_id" if (brand.get("facebook_ads_page_id") or "").strip() else "facebook_page_id"
     page_access_token = None
 
     # Always fetch pages from Meta to get the page access token and validate/fix the page_id
@@ -2264,7 +2265,7 @@ def launch_meta_campaign(db, brand, plan, changed_by):
                 page_id = matched["id"]
                 page_access_token = matched.get("access_token")
                 # Save the correct numeric ID
-                db.update_brand_api_field(brand["id"], "facebook_page_id", page_id)
+                db.update_brand_api_field(brand["id"], page_field, page_id)
     except Exception as e:
         logger.warning("Facebook page lookup failed: %s", e)
     if not page_id:

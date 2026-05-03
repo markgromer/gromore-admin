@@ -259,30 +259,144 @@ def pull_api_data_for_brand(brand, connections, month):
 
     # Facebook Organic (Page Insights)
     if meta_conn and meta_conn.get("status") == "connected":
-        page_id = (brand.get("facebook_page_id") or "").strip()
         try:
             token = _get_meta_token(db, brand["id"], meta_conn)
-            page_token = None
-            if page_id:
-                page_id, page_token = _resolve_facebook_page_context(db, brand["id"], page_id, token)
-            # Auto-detect page ID if not stored yet
-            if not page_id:
+            page_reports = []
+            for page_cfg in _facebook_page_tracking_configs(brand):
+                page_id = page_cfg["page_id"]
+                page_token = None
+                if page_id:
+                    page_id, page_token = _resolve_facebook_page_context(
+                        db, brand["id"], page_id, token, field_name=page_cfg["field"]
+                    )
+                if page_id:
+                    if not page_token:
+                        page_token = _get_page_access_token(page_id, token)
+                    report = _pull_meta_organic(
+                        page_id,
+                        page_token,
+                        start_date,
+                        end_date,
+                        user_access_token=token,
+                    )
+                    report["page_id"] = page_id
+                    report["page_role"] = page_cfg["role"]
+                    report["page_field"] = page_cfg["field"]
+                    report.setdefault("metrics", {})["page_id"] = page_id
+                    report.setdefault("metrics", {})["page_role"] = page_cfg["role"]
+                    page_reports.append(report)
+
+            if not page_reports:
                 page_id, page_token = _auto_detect_facebook_page(db, brand["id"], token)
-            if page_id:
-                # Page Insights require a page access token, not a user token
-                if not page_token:
-                    page_token = _get_page_access_token(page_id, token)
-                data["facebook_organic"] = _pull_meta_organic(
-                    page_id,
-                    page_token,
-                    start_date,
-                    end_date,
-                    user_access_token=token,
-                )
+                if page_id:
+                    if not page_token:
+                        page_token = _get_page_access_token(page_id, token)
+                    report = _pull_meta_organic(
+                        page_id,
+                        page_token,
+                        start_date,
+                        end_date,
+                        user_access_token=token,
+                    )
+                    report["page_id"] = page_id
+                    report["page_role"] = "primary"
+                    report["page_field"] = "facebook_page_id"
+                    report.setdefault("metrics", {})["page_id"] = page_id
+                    report.setdefault("metrics", {})["page_role"] = "primary"
+                    page_reports.append(report)
+
+            if page_reports:
+                data["facebook_organic"] = _combine_facebook_organic_reports(page_reports)
         except Exception as e:
             errors.append(f"Facebook organic pull failed: {str(e)}")
 
     return data, errors
+
+
+def _facebook_page_tracking_configs(brand):
+    configs = []
+    seen = set()
+    for role, field in (("primary", "facebook_page_id"), ("ads", "facebook_ads_page_id")):
+        page_id = str((brand or {}).get(field) or "").strip()
+        if not page_id or page_id in seen:
+            continue
+        seen.add(page_id)
+        configs.append({"role": role, "field": field, "page_id": page_id})
+    return configs
+
+
+def _combine_facebook_organic_reports(page_reports):
+    if len(page_reports) == 1:
+        report = page_reports[0]
+        report["pages"] = [{
+            "page_id": report.get("page_id"),
+            "page_role": report.get("page_role"),
+            "metrics": report.get("metrics") or {},
+            "post_count": report.get("post_count", 0),
+        }]
+        return report
+
+    combined_metrics = {
+        "followers": 0,
+        "fans": 0,
+        "impressions": 0,
+        "organic_impressions": 0,
+        "reach": 0,
+        "engaged_users": 0,
+        "post_engagements": 0,
+        "new_fans": 0,
+        "lost_fans": 0,
+        "net_fans": 0,
+        "page_views": 0,
+        "reactions": 0,
+        "post_clicks": 0,
+        "page_name": "Combined Facebook Pages",
+        "tracked_page_count": len(page_reports),
+        "page_ids": [r.get("page_id") for r in page_reports if r.get("page_id")],
+    }
+    top_posts = []
+    pages = []
+    post_count = 0
+    for report in page_reports:
+        metrics = report.get("metrics") or {}
+        for key in (
+            "followers", "fans", "impressions", "organic_impressions", "reach",
+            "engaged_users", "post_engagements", "new_fans", "lost_fans",
+            "net_fans", "page_views", "reactions", "post_clicks",
+        ):
+            combined_metrics[key] += int(float(metrics.get(key) or 0))
+        page_id = report.get("page_id") or metrics.get("page_id")
+        page_role = report.get("page_role") or metrics.get("page_role")
+        for post in report.get("top_posts") or []:
+            item = dict(post)
+            item["page_id"] = page_id
+            item["page_role"] = page_role
+            item["page_name"] = metrics.get("page_name", "")
+            top_posts.append(item)
+        post_count += int(report.get("post_count") or 0)
+        pages.append({
+            "page_id": page_id,
+            "page_role": page_role,
+            "page_name": metrics.get("page_name", ""),
+            "metrics": metrics,
+            "post_count": int(report.get("post_count") or 0),
+        })
+
+    reach_for_rate = combined_metrics["organic_impressions"] or combined_metrics["impressions"]
+    combined_metrics["engagement_rate"] = round(
+        combined_metrics["post_engagements"] / reach_for_rate * 100, 2
+    ) if reach_for_rate else 0
+    top_posts.sort(
+        key=lambda row: (row.get("likes", 0) or 0) + (row.get("comments", 0) or 0) + (row.get("shares", 0) or 0),
+        reverse=True,
+    )
+    combined_metrics["_debug"] = {"combined_pages": len(page_reports)}
+    return {
+        "metrics": combined_metrics,
+        "top_posts": top_posts[:15],
+        "post_count": post_count,
+        "pages": pages,
+    }
 
 
 def _auto_detect_facebook_page(db, brand_id, access_token):
@@ -363,7 +477,7 @@ def _resolve_facebook_page_id(page_ref, access_token):
     return ref
 
 
-def _resolve_facebook_page_context(db, brand_id, page_ref, user_access_token):
+def _resolve_facebook_page_context(db, brand_id, page_ref, user_access_token, field_name="facebook_page_id"):
     """Resolve the actual accessible Facebook page ID and page token together."""
     ref = (page_ref or "").strip()
 
@@ -378,7 +492,7 @@ def _resolve_facebook_page_context(db, brand_id, page_ref, user_access_token):
         only_page_id = str(only_page.get("id") or "").strip()
         if only_page_id:
             if only_page_id != ref:
-                db.update_brand_api_field(brand_id, "facebook_page_id", only_page_id)
+                db.update_brand_api_field(brand_id, field_name, only_page_id)
                 log.info("Using sole accessible Facebook page %s for brand %s", only_page_id, brand_id)
             return only_page_id, only_page.get("access_token", user_access_token)
 
@@ -394,7 +508,7 @@ def _resolve_facebook_page_context(db, brand_id, page_ref, user_access_token):
             page_id = str(page.get("id") or "").strip()
             if page_id == resolved_ref:
                 if resolved_ref != ref:
-                    db.update_brand_api_field(brand_id, "facebook_page_id", resolved_ref)
+                    db.update_brand_api_field(brand_id, field_name, resolved_ref)
                     log.info("Updated Facebook page ID to %s for brand %s", resolved_ref, brand_id)
                 return resolved_ref, page.get("access_token", user_access_token)
 

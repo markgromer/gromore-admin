@@ -1127,6 +1127,17 @@ def _explain_facebook_organic(fb_organic):
     fans = metrics.get("fans") or 0
     new_fans = metrics.get("new_fans") or 0
     net_fans = metrics.get("net_fans") or 0
+    tracked_page_count = int(_to_float(metrics.get("tracked_page_count"), 0))
+    if tracked_page_count > 1:
+        cards.append({
+            "metric": "Tracked Facebook Pages",
+            "value": str(tracked_page_count),
+            "status": "good",
+            "explanation": (
+                f"Warren is combining signals from {tracked_page_count} Facebook pages for this brand. "
+                "This supports businesses that use one main page for organic/Messenger and a secondary page for ads or lead forms."
+            ),
+        })
 
     cards.append({
         "metric": "Page Followers",

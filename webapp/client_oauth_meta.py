@@ -101,6 +101,8 @@ def disconnect():
     db = current_app.db
     db.disconnect_platform(brand_id, "meta")
     db.update_brand_api_field(brand_id, "meta_ad_account_id", "")
+    db.update_brand_api_field(brand_id, "facebook_page_id", "")
+    db.update_brand_api_field(brand_id, "facebook_ads_page_id", "")
     flash("Meta account disconnected.", "success")
     return redirect(url_for("client.client_settings"))
 

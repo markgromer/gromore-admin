@@ -128,6 +128,8 @@ class WebDB:
                 gsc_site_url TEXT DEFAULT '',
                 meta_ad_account_id TEXT DEFAULT '',
                 google_ads_customer_id TEXT DEFAULT '',
+                facebook_page_id TEXT DEFAULT '',
+                facebook_ads_page_id TEXT DEFAULT '',
                 crm_last_webhook_at TEXT DEFAULT '',
                 partner_id INTEGER DEFAULT NULL,
                 agency_partner_id INTEGER DEFAULT NULL,
@@ -2184,6 +2186,7 @@ class WebDB:
             ("google_drive_folder_id", "TEXT DEFAULT ''"),
             ("google_drive_sheet_id", "TEXT DEFAULT ''"),
             ("facebook_page_id", "TEXT DEFAULT ''"),
+            ("facebook_ads_page_id", "TEXT DEFAULT ''"),
             ("titan_snapshot_id", "TEXT DEFAULT ''"),
             ("titan_account_id", "TEXT DEFAULT ''"),
             ("titan_ghl_location_id", "TEXT DEFAULT ''"),
@@ -2754,7 +2757,7 @@ class WebDB:
         conn.close()
 
     def update_brand_api_field(self, brand_id, field, value):
-        allowed = {"ga4_property_id", "gsc_site_url", "meta_ad_account_id", "google_ads_customer_id", "wp_category_id", "facebook_page_id"}
+        allowed = {"ga4_property_id", "gsc_site_url", "meta_ad_account_id", "google_ads_customer_id", "wp_category_id", "facebook_page_id", "facebook_ads_page_id"}
         if field not in allowed:
             raise ValueError(f"Cannot update field: {field}")
         conn = self._conn()
