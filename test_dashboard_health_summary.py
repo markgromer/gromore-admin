@@ -2,8 +2,9 @@ import unittest
 from datetime import date
 
 from src.analytics import _build_lead_pacing, analyze_google_analytics
-from src.suggestions import _ga_suggestions
+from src.suggestions import _facebook_organic_suggestions, _ga_suggestions
 from webapp.client_advisor import (
+    _build_action_items,
     _build_health_summary,
     _build_kpi_cluster_card,
     build_client_dashboard,
@@ -13,6 +14,80 @@ from webapp.client_advisor import (
 
 
 class DashboardHealthSummaryTests(unittest.TestCase):
+    def test_facebook_posting_uses_current_month_pacing(self):
+        suggestions = _facebook_organic_suggestions(
+            {
+                "metrics": {
+                    "followers": 250,
+                    "organic_impressions": 180,
+                    "post_engagements": 12,
+                    "engagement_rate": 6.6,
+                },
+                "post_count": 3,
+                "period": {
+                    "month": "2026-05",
+                    "is_current_month": True,
+                    "elapsed_days": 3,
+                    "days_in_month": 31,
+                    "progress_pct": 9.7,
+                    "early_month": True,
+                },
+            },
+            "home_services",
+            [],
+        )
+
+        titles = [s["title"] for s in suggestions]
+        self.assertNotIn("Increase Facebook Posting Frequency", titles)
+
+    def test_organic_social_action_items_do_not_pull_paid_campaigns(self):
+        items = _build_action_items(
+            [
+                {
+                    "title": "Increase Facebook Posting Frequency",
+                    "detail": "Build local trust with organic Facebook posts.",
+                    "category": "organic_social",
+                    "data_point": "3 posts vs 1.2 paced target",
+                }
+            ],
+            {
+                "kpis": {
+                    "facebook_organic": {"post_count": 3, "organic_impressions": 180, "post_engagements": 12},
+                    "meta": {"spend": 26, "results": 0},
+                },
+                "facebook_organic_detail": {"top_posts": [{"id": "p1", "likes": 4}]},
+                "meta_detail": {"campaigns": [{"name": "SDL static testimonial ads", "metrics": {"spend": 26, "results": 0}}]},
+            },
+        )
+
+        relevant = items[0]["relevant_data"]
+        self.assertIn("fb_organic_kpis", relevant)
+        self.assertNotIn("meta_campaigns", relevant)
+
+    def test_facebook_paid_actions_do_not_pull_google_ads_targets(self):
+        items = _build_action_items(
+            [
+                {
+                    "title": "Fix Underperforming Facebook Campaigns",
+                    "detail": "Open Ads Manager and inspect the weak Facebook ads.",
+                    "category": "paid_advertising",
+                    "data_point": "$26 spend, 0 results",
+                }
+            ],
+            {
+                "kpis": {
+                    "meta": {"spend": 26, "results": 0},
+                    "google_ads": {"spend": 340, "results": 0},
+                },
+                "meta_detail": {"campaigns": [{"name": "Meta Haters", "metrics": {"spend": 26, "results": 0}}]},
+                "google_ads_detail": {"campaigns": [{"name": "Search Campaign", "metrics": {"spend": 340, "results": 0}}]},
+            },
+        )
+
+        relevant = items[0]["relevant_data"]
+        self.assertIn("meta_campaigns", relevant)
+        self.assertNotIn("google_ads_campaigns", relevant)
+
     def test_current_month_leads_use_month_to_date_pacing(self):
         pacing = _build_lead_pacing("2026-04", 15, 12, today=date(2026, 4, 8))
 

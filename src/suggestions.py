@@ -428,7 +428,9 @@ def _facebook_organic_suggestions(fb_organic, industry, goals):
     suggestions = []
     metrics = fb_organic.get("metrics") or {}
     top_posts = fb_organic.get("top_posts") or []
-    post_count = fb_organic.get("post_count", 0)
+    post_count = _safe_num(fb_organic.get("post_count", 0))
+    period = fb_organic.get("period") or metrics.get("period") or {}
+    early_current_month = bool(period.get("is_current_month") and period.get("early_month"))
 
     followers = metrics.get("followers") or 0
     organic_impressions = metrics.get("organic_impressions") or 0
@@ -441,19 +443,51 @@ def _facebook_organic_suggestions(fb_organic, industry, goals):
     engagement_rate = metrics.get("engagement_rate") or 0
 
     # Low posting frequency
-    if post_count < 8:
+    monthly_post_target = 12
+    paced_post_target = _paced_target(monthly_post_target, period)
+    expected_posts = paced_post_target if paced_post_target is not None else monthly_post_target
+    post_gap = expected_posts - post_count
+    materially_behind_pace = post_count < max(1, expected_posts * 0.75)
+    full_month_low = not period.get("is_current_month") and post_count < 8
+    current_month_low = bool(period.get("is_current_month") and materially_behind_pace)
+
+    if full_month_low or current_month_low:
+        priority = PRIORITY_MEDIUM if early_current_month else PRIORITY_HIGH
+        confidence = "low" if early_current_month else "medium"
+        if period.get("is_current_month"):
+            pacing_note = (
+                f"You have {int(post_count)} posts by day {int(_safe_num(period.get('elapsed_days'), 0))}; "
+                f"the paced target is about {expected_posts:.1f} posts toward a {monthly_post_target}/month baseline."
+            )
+            data_point = f"{int(post_count)} posts vs {expected_posts:.1f} paced target"
+        else:
+            pacing_note = f"Only {int(post_count)} posts this month. For home services, aim for 12-20 posts/month."
+            data_point = f"{int(post_count)} posts this month"
+
         suggestions.append(make_suggestion(
             "Increase Facebook Posting Frequency",
-            f"Only {post_count} posts this month. For home services, aim for 12-20 posts/month. "
+            f"{pacing_note} "
             "Mix content types: job completion photos (before/after), quick tips for homeowners, "
             "team spotlights, customer reviews/shoutouts, seasonal maintenance reminders, "
             "and behind-the-scenes content. Consistency builds trust with local audiences.",
-            PRIORITY_HIGH, CATEGORY_ORGANIC, "organic_reach",
-            data_point=f"{post_count} posts this month"
+            priority, CATEGORY_ORGANIC, "organic_reach",
+            data_point=data_point,
+            confidence=confidence,
+            evidence=[
+                {
+                    "metric": "facebook_post_pacing",
+                    "actual": post_count,
+                    "expected_to_date": expected_posts,
+                    "monthly_target": monthly_post_target,
+                    "gap": round(post_gap, 2),
+                    "period": period,
+                }
+            ],
         ))
 
     # Low engagement rate
-    if followers > 0 and engagement_rate < 1.0 and post_count > 0:
+    enough_engagement_sample = not early_current_month or post_count >= 4 or _safe_num(organic_impressions) >= 250
+    if followers > 0 and engagement_rate < 1.0 and post_count > 0 and enough_engagement_sample:
         suggestions.append(make_suggestion(
             "Boost Organic Engagement Rate",
             f"Engagement rate is {engagement_rate:.1f}%, below the 1-3% benchmark for local businesses. "
@@ -461,8 +495,9 @@ def _facebook_organic_suggestions(fb_organic, industry, goals):
             "run simple polls, respond to every comment within 2 hours, "
             "post at peak times (typically 9-11am and 7-9pm for local service pages), "
             "and tag customers (with permission) in job completion posts.",
-            PRIORITY_HIGH, CATEGORY_ORGANIC, "engagement",
-            data_point=f"Engagement rate: {engagement_rate:.1f}%"
+            PRIORITY_MEDIUM if early_current_month else PRIORITY_HIGH, CATEGORY_ORGANIC, "engagement",
+            data_point=f"Engagement rate: {engagement_rate:.1f}%",
+            confidence="low" if early_current_month else "medium",
         ))
 
     # Losing followers
@@ -508,7 +543,7 @@ def _facebook_organic_suggestions(fb_organic, industry, goals):
             ))
 
     # Low page views
-    if page_views < 50 and followers > 100:
+    if page_views < 50 and followers > 100 and not early_current_month:
         suggestions.append(make_suggestion(
             "Drive More Facebook Page Visits",
             f"Only {page_views} page views this month. Make sure your page info is complete: "
@@ -855,6 +890,20 @@ def _safe_num(val):
         return float(val or 0)
     except (ValueError, TypeError):
         return 0.0
+
+
+def _paced_target(monthly_target, period):
+    """Return expected month-to-date volume for current partial months."""
+    monthly_target = _safe_num(monthly_target)
+    if monthly_target <= 0:
+        return None
+    if not isinstance(period, dict) or not period.get("is_current_month"):
+        return monthly_target
+    elapsed = _safe_num(period.get("elapsed_days"))
+    days = _safe_num(period.get("days_in_month"))
+    if elapsed <= 0 or days <= 0:
+        return monthly_target
+    return round(monthly_target * (elapsed / days), 2)
 
 
 def _gbp_snapshot(analysis):

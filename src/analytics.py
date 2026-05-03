@@ -1021,6 +1021,15 @@ def build_full_analysis(client_id, month, current_data, client_config):
         google_ads_analysis,
     )
 
+    facebook_organic = current_data.get("facebook_organic")
+    if isinstance(facebook_organic, dict):
+        facebook_organic = dict(facebook_organic)
+        facebook_period = _month_progress(month)
+        facebook_organic["period"] = facebook_period
+        metrics = dict(facebook_organic.get("metrics") or {})
+        metrics["period"] = facebook_period
+        facebook_organic["metrics"] = metrics
+
     return {
         "client_id": client_id,
         "month": month,
@@ -1030,7 +1039,7 @@ def build_full_analysis(client_id, month, current_data, client_config):
         "meta_business": meta_analysis,
         "google_ads": google_ads_analysis,
         "search_console": gsc_analysis,
-        "facebook_organic": current_data.get("facebook_organic"),
+        "facebook_organic": facebook_organic,
         "highlights": all_highlights,
         "concerns": all_concerns,
         "overall_score": overall_score,

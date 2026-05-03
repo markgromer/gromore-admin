@@ -226,6 +226,25 @@ def _build_action_items(suggestions, analysis_summary):
     action_items = []
     for suggestion in suggestions:
         category = suggestion.get("category", "")
+        title_lower = suggestion["title"].lower()
+        detail_lower = str(suggestion.get("detail") or "").lower()
+        paid_context = category in paid_categories or any(
+            word in f"{title_lower} {detail_lower}"
+            for word in (
+                "google ads", "ads.google.com", "search term", "cpc", "cpa", "cost per click",
+                "cost per lead", "paid", "ad spend", "campaign", "ad set", "ads manager",
+                "meta ads", "facebook ads", "instagram ads",
+            )
+        )
+        google_paid_hint = any(
+            word in f"{title_lower} {detail_lower}"
+            for word in ("google ads", "ads.google.com", "search term", "search terms", "keyword", "keywords", "quality score")
+        )
+        meta_paid_hint = any(
+            word in f"{title_lower} {detail_lower}"
+            for word in ("meta ads", "facebook ads", "instagram ads", "ads manager", "business.facebook.com/adsmanager")
+        )
+        generic_paid_context = bool(category in paid_categories and not google_paid_hint and not meta_paid_hint)
         item = {
             "title": suggestion["title"],
             "detail": suggestion["detail"],
@@ -234,17 +253,17 @@ def _build_action_items(suggestions, analysis_summary):
             "relevant_data": {},
         }
 
-        if category in paid_categories or "google" in suggestion["title"].lower() or "cpc" in suggestion["title"].lower():
+        if paid_context and (generic_paid_context or google_paid_hint):
             item["relevant_data"]["google_ads_campaigns"] = (google_ads_detail.get("campaigns") or [])[:10]
             item["relevant_data"]["google_ads_search_terms"] = (google_ads_detail.get("search_terms") or [])[:30]
             item["relevant_data"]["google_ads_kpis"] = kpis.get("google_ads", {})
 
-        if category in paid_categories or "meta" in suggestion["title"].lower() or "facebook" in suggestion["title"].lower():
+        if paid_context and (generic_paid_context or meta_paid_hint):
             item["relevant_data"]["meta_campaigns"] = (meta_detail.get("campaigns") or [])[:10]
             item["relevant_data"]["meta_top_ads"] = (meta_detail.get("top_ads") or [])[:10]
             item["relevant_data"]["meta_kpis"] = kpis.get("meta", {})
 
-        if category in seo_categories or "seo" in category or "keyword" in suggestion["title"].lower():
+        if category in seo_categories or "seo" in category or "keyword" in title_lower:
             item["relevant_data"]["seo_top_queries"] = (seo_detail.get("top_queries") or [])[:15]
             item["relevant_data"]["seo_keyword_opportunities"] = (seo_detail.get("keyword_opportunities") or [])[:15]
             item["relevant_data"]["seo_top_pages"] = (seo_detail.get("top_pages") or [])[:10]
@@ -274,7 +293,7 @@ def _build_action_items(suggestions, analysis_summary):
             item["relevant_data"]["google_ads_kpis"] = kpis.get("google_ads", {})
             item["relevant_data"]["meta_kpis"] = kpis.get("meta", {})
 
-        if category in organic_categories or "organic" in suggestion["title"].lower():
+        if category in organic_categories:
             item["relevant_data"]["fb_organic_top_posts"] = (fb_organic_detail.get("top_posts") or [])[:10]
             item["relevant_data"]["fb_organic_kpis"] = kpis.get("facebook_organic", {})
 
@@ -455,13 +474,30 @@ def _build_mission_intelligence(suggestion, action_item, analysis):
                 f"{int(_to_float(query.get('clicks'), 0))} clicks, position {_to_float(query.get('position'), 0):.1f}."
             )
 
-    for campaign in (relevant_data.get("google_ads_campaigns") or relevant_data.get("meta_campaigns") or [])[:2]:
-        metrics = campaign.get("metrics") or campaign
-        name = campaign.get("name") or campaign.get("campaign_name")
-        spend = _to_float(metrics.get("spend"), 0)
-        results = _to_float(metrics.get("results") or metrics.get("conversions"), 0)
-        if name and (spend or results):
-            evidence.append(f"Campaign {name}: ${spend:.0f} spend, {int(results)} results.")
+    if category == "organic_social":
+        fb_kpis = relevant_data.get("fb_organic_kpis") or {}
+        post_count = fb_kpis.get("post_count")
+        if post_count is not None:
+            evidence.append(f"Facebook Page posts: {int(_to_float(post_count, 0))} posts in this period.")
+        reach = _to_float(fb_kpis.get("organic_impressions"), 0)
+        engagements = _to_float(fb_kpis.get("post_engagements"), 0)
+        if reach or engagements:
+            evidence.append(f"Organic Facebook: {int(reach)} organic impressions, {int(engagements)} engagements.")
+        for post in (relevant_data.get("fb_organic_top_posts") or [])[:2]:
+            message = _trim_copy(post.get("message") or post.get("caption") or post.get("id") or "Top post", 80)
+            likes = _to_float(post.get("likes"), 0)
+            comments = _to_float(post.get("comments"), 0)
+            shares = _to_float(post.get("shares"), 0)
+            evidence.append(f"Top post {message}: {int(likes + comments + shares)} visible engagements.")
+
+    if category in {"paid_advertising", "budget", "creative", "strategy"}:
+        for campaign in (relevant_data.get("google_ads_campaigns") or relevant_data.get("meta_campaigns") or [])[:2]:
+            metrics = campaign.get("metrics") or campaign
+            name = campaign.get("name") or campaign.get("campaign_name")
+            spend = _to_float(metrics.get("spend"), 0)
+            results = _to_float(metrics.get("results") or metrics.get("conversions"), 0)
+            if name and (spend or results):
+                evidence.append(f"Campaign {name}: ${spend:.0f} spend, {int(results)} results.")
 
     for term in (relevant_data.get("google_ads_search_terms") or [])[:2]:
         term_name = term.get("search_term") or term.get("query") or term.get("term")
@@ -1118,7 +1154,8 @@ def _explain_meta(meta):
 def _explain_facebook_organic(fb_organic):
     metrics = fb_organic.get("metrics") or {}
     top_posts = fb_organic.get("top_posts") or []
-    post_count = fb_organic.get("post_count", 0)
+    post_count = int(_to_float(fb_organic.get("post_count", 0), 0))
+    period = fb_organic.get("period") or metrics.get("period") or {}
     debug = metrics.get("_debug") or {}
 
     cards = []
@@ -1212,18 +1249,36 @@ def _explain_facebook_organic(fb_organic):
             ),
         })
 
+    monthly_post_target = 12
+    expected_posts = monthly_post_target
+    is_current_month = bool(period.get("is_current_month"))
+    if is_current_month:
+        elapsed = _to_float(period.get("elapsed_days"), 0)
+        days = _to_float(period.get("days_in_month"), 0)
+        if elapsed > 0 and days > 0:
+            expected_posts = round(monthly_post_target * (elapsed / days), 1)
+    on_post_pace = post_count >= max(1, expected_posts * 0.75)
+    if post_count >= monthly_post_target:
+        post_status = "good"
+        post_note = "Great consistency. Regular posting keeps your page active in the algorithm."
+    elif is_current_month and on_post_pace:
+        post_status = "neutral"
+        post_note = f"You are on pace for this point in the month. The paced target is about {expected_posts:.1f} posts by now."
+    elif is_current_month:
+        post_status = "warning"
+        post_note = f"You are behind the current-month posting pace. The paced target is about {expected_posts:.1f} posts by now."
+    elif post_count < 8:
+        post_status = "warning"
+        post_note = "Aim for at least 3 posts per week (12+/month). Consistency matters more than perfection."
+    else:
+        post_status = "neutral"
+        post_note = "Decent posting pace. A few more posts per week could help grow your reach."
+
     cards.append({
         "metric": "Posts This Month",
         "value": str(post_count),
-        "status": "good" if post_count >= 12 else ("warning" if post_count < 8 else "neutral"),
-        "explanation": (
-            f"You published {post_count} posts this month. "
-            + ("Great consistency! Regular posting keeps your page active in the algorithm."
-               if post_count >= 12
-               else "Aim for at least 3 posts per week (12+/month). Consistency matters more than perfection."
-               if post_count < 8
-               else "Decent posting pace. A few more posts per week could help grow your reach.")
-        ),
+        "status": post_status,
+        "explanation": f"You published {post_count} posts this month. {post_note}",
     })
 
     # Top post highlight
@@ -1894,6 +1949,7 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_pr
         "- If the work belongs with a developer, designer, or assistant, do NOT send the owner into the tool to figure it out. Write a delegation-ready mission and include a ready-to-send handoff note.\n"
         "- If relevant_data only includes Meta campaigns or Meta ads and no Google Ads campaigns/search terms, NEVER send the owner to ads.google.com or mention Google Ads.\n"
         "- If relevant_data only includes Google Ads campaigns/search terms and no Meta campaigns/top ads, NEVER send the owner to business.facebook.com or Ads Manager.\n"
+        "- If category is organic_social, keep the mission about organic Page posting, engagement, reach, and top posts. Do not use paid campaign spend or lead results as evidence for that mission.\n"
         "- If the SEO data already points to existing pages and the search volume is light, do NOT recommend new city or local pages. Rewrite the current page instead.\n"
         "- If period says early_month is true, do NOT create missions from low current-month volume alone. Use rate, spend, page, query, or campaign evidence, and call out lower confidence when sample size is thin.\n"
         "- Every mission must include a diagnosis first: what signal triggered it, what exact evidence supports it, what might be a false positive, and then the fix.\n"
