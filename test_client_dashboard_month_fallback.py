@@ -59,13 +59,13 @@ class ClientDashboardMonthFallbackTests(unittest.TestCase):
             if path.exists():
                 path.unlink()
 
-    def test_dashboard_page_defaults_to_latest_available_month(self):
+    def test_dashboard_page_defaults_to_current_month_instead_of_cached_previous_month(self):
         response = self.client.get("/client/dashboard")
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn('value="2026-03"', html)
-        self.assertIn("Overview is showing 2026-03 instead", html)
+        self.assertIn('value="2026-05"', html)
+        self.assertNotIn("Overview is showing 2026-03 instead", html)
 
     def test_dashboard_page_falls_back_when_newer_empty_month_is_requested(self):
         response = self.client.get("/client/dashboard?month=2026-04")
@@ -75,16 +75,14 @@ class ClientDashboardMonthFallbackTests(unittest.TestCase):
         self.assertIn('value="2026-03"', html)
         self.assertIn("No data is available for 2026-04 yet, so Overview is showing 2026-03 instead.", html)
 
-    def test_dashboard_data_returns_fallback_month_metadata(self):
+    def test_dashboard_data_defaults_to_current_month_without_previous_month_fallback(self):
         response = self.client.get("/client/dashboard/data")
         payload = response.get_json()
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(payload["month"], "2026-03")
-        self.assertTrue(payload["used_month_fallback"])
-        self.assertEqual(payload["dashboard"]["health_summary"]["summary"], "March data ready.")
-        self.assertIn("health_cluster", payload["dashboard"])
-        self.assertEqual(len(payload["dashboard"]["health_cluster"]["cards"]), 4)
+        self.assertEqual(payload["month"], "2026-05")
+        self.assertFalse(payload["used_month_fallback"])
+        self.assertIn("No data available", payload["error"])
 
     def test_dashboard_data_falls_back_when_newer_empty_month_is_requested(self):
         response = self.client.get("/client/dashboard/data?month=2026-04")

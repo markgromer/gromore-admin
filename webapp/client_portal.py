@@ -5450,20 +5450,19 @@ def _log_agent(agent_key, action, detail="", status="completed"):
 def _resolve_dashboard_month(db, brand_id, requested_month):
     explicit_request = bool((requested_month or "").strip())
     month = (requested_month or "").strip() or datetime.now().strftime("%Y-%m")
+    if not explicit_request:
+        return month, month, False
+
     try:
         fallback_month = db.get_latest_dashboard_month(brand_id)
     except Exception:
         fallback_month = None
 
-    if explicit_request:
-        try:
-            available = db.get_available_dashboard_months(brand_id, limit=24)
-        except Exception:
-            available = []
-        if fallback_month and month not in available and month >= fallback_month:
-            return fallback_month, month, True
-        return month, month, False
-    if fallback_month and fallback_month != month:
+    try:
+        available = db.get_available_dashboard_months(brand_id, limit=24)
+    except Exception:
+        available = []
+    if fallback_month and month not in available and month >= fallback_month:
         return fallback_month, month, True
     return month, month, False
 

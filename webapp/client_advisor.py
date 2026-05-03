@@ -726,6 +726,8 @@ def build_client_dashboard(analysis, suggestions, brand, ai_model=None, include_
     ga = analysis.get("google_analytics")
     if ga:
         channels["website"] = _explain_website(ga)
+        if ga.get("organic_search"):
+            channels["organic_search"] = _explain_ga_organic(ga)
 
     meta = analysis.get("meta_business")
     if meta:
@@ -891,6 +893,40 @@ def _explain_website(ga):
         })
 
     return {"title": "Your Website", "icon": "bi-globe", "cards": cards}
+
+
+def _explain_ga_organic(ga):
+    organic = ga.get("organic_search") or {}
+    sessions = int(_to_float(organic.get("sessions"), 0))
+    users = int(_to_float(organic.get("users"), 0))
+    conversions = int(_to_float(organic.get("conversions"), 0))
+    conversion_rate = _to_float(organic.get("conversion_rate"), 0)
+    sources = organic.get("sources") or []
+    top_source = sources[0].get("source") if sources and isinstance(sources[0], dict) else "organic search"
+
+    cards = [{
+        "metric": "Organic Website Sessions",
+        "value": f"{sessions:,}",
+        "status": "good" if sessions > 0 else "warning",
+        "explanation": (
+            f"GA4 shows {sessions:,} sessions from organic search this month"
+            + (f", led by {top_source}" if top_source else "")
+            + ". Warren uses this alongside Search Console because Search Console can lag and may show zero before GA4 does."
+        ),
+    }]
+
+    if conversions > 0 or conversion_rate > 0:
+        cards.append({
+            "metric": "Organic Website Leads",
+            "value": f"{conversions:,} ({conversion_rate:.1f}%)",
+            "status": "good" if conversion_rate >= 3 else "caution",
+            "explanation": (
+                f"Organic search drove {conversions:,} tracked conversions from {users:,} users. "
+                "This separates organic traffic volume from whether those visitors are turning into leads."
+            ),
+        })
+
+    return {"title": "Organic Search from GA4", "icon": "bi-search", "cards": cards}
 
 
 def _explain_meta(meta):
@@ -2211,8 +2247,8 @@ def _build_health_cluster(dashboard):
             key="organic",
             label="Organic",
             kicker="SEO, content, and social",
-            channel_keys=("seo", "facebook_organic"),
-            metric_priority=("Clicks from Google", "Website Clicks from Social", "Organic Reach", "Engagement", "Posts This Month"),
+            channel_keys=("organic_search", "seo", "facebook_organic"),
+            metric_priority=("Organic Website Sessions", "Clicks from Google", "Website Clicks from Social", "Organic Reach", "Engagement", "Posts This Month"),
             empty_detail="Search and content signals are too thin to call yet.",
             positive_detail="Organic visibility is healthy across search and social content.",
             caution_detail="Organic visibility is moving, but consistency, traffic quality, or ranking strength is slipping.",

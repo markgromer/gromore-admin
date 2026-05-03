@@ -1085,6 +1085,7 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
             "top_landing_pages": (analysis.get("top_landing_pages") or _pick(ga, "by_page") or [])[:15],
             "top_sources": (analysis.get("top_sources") or _pick(ga, "top_sources") or [])[:10],
             "top_converting_sources": (analysis.get("top_converting_sources") or _pick(ga, "top_converting_sources") or [])[:10],
+            "organic_search": ga.get("organic_search") or {},
             "device_breakdown": (ga.get("device_breakdown") or [])[:10],
             "top_cities": (ga.get("top_cities") or [])[:10],
             "top_events": (ga.get("top_events") or [])[:15],

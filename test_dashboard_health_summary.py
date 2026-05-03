@@ -1,11 +1,12 @@
 import unittest
 from datetime import date
 
-from src.analytics import _build_lead_pacing
+from src.analytics import _build_lead_pacing, analyze_google_analytics
 from src.suggestions import _ga_suggestions
 from webapp.client_advisor import (
     _build_health_summary,
     _build_kpi_cluster_card,
+    build_client_dashboard,
     _explain_facebook_organic,
     ensure_dashboard_health_cluster,
 )
@@ -202,6 +203,38 @@ class DashboardHealthSummaryTests(unittest.TestCase):
         self.assertNotEqual(card["display_score"], "--")
         self.assertIn("$320 spend, 8 paid leads", card["primary_metric"])
         self.assertIn("paid efficiency signals", card["detail"])
+
+    def test_ga4_organic_source_feeds_organic_dashboard_gauge(self):
+        ga = analyze_google_analytics(
+            {
+                "totals": {"sessions": 120, "conversions": 4},
+                "by_source": {
+                    "google / organic": {"sessions": 46, "users": 39, "conversions": 2},
+                    "bing / organic": {"sessions": 8, "users": 7, "conversions": 0},
+                    "google / cpc": {"sessions": 22, "users": 20, "conversions": 1},
+                },
+            },
+            prev_ga_data=None,
+            benchmarks_website={},
+            month="2026-05",
+        )
+
+        dashboard = build_client_dashboard(
+            {
+                "google_analytics": ga,
+                "search_console": {"metrics": {"clicks": 0, "impressions": 0, "avg_position": 0}, "scores": {}},
+                "overall_grade": "B",
+                "overall_score": 3.8,
+                "kpi_status": {"targets": {}, "actual": {}, "evaluation": {}},
+            },
+            suggestions=[],
+            brand={},
+        )
+
+        self.assertEqual(dashboard["channels"]["organic_search"]["cards"][0]["value"], "54")
+        organic_card = next(card for card in dashboard["health_cluster"]["cards"] if card["key"] == "organic")
+        self.assertIn("Organic Website Sessions: 54", organic_card["primary_metric"])
+        self.assertNotEqual(organic_card["display_score"], "--")
 
 
 if __name__ == "__main__":

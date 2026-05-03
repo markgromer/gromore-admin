@@ -66,6 +66,18 @@ def _suppress_early_month_volume_drop(month, metric, change):
     return bool(progress.get("early_month"))
 
 
+def _is_organic_source(source_name):
+    text = str(source_name or "").strip().lower()
+    if not text:
+        return False
+    return (
+        "organic" in text
+        or "/ organic" in text
+        or text.endswith(" organic")
+        or text in {"google", "bing", "yahoo", "duckduckgo"}
+    )
+
+
 def score_metric(value, benchmark, higher_is_better=True):
     """
     Score a metric against benchmark.
@@ -408,6 +420,29 @@ def analyze_google_analytics(ga_data, prev_ga_data, benchmarks_website, month=No
         analysis["top_converting_sources"] = [
             {"source": s, "conversions": c} for s, c in sorted_conversions[:5]
         ]
+
+        organic_sources = [
+            {
+                "source": source_name,
+                "sessions": int((source_data or {}).get("sessions") or 0),
+                "users": int((source_data or {}).get("users") or 0),
+                "conversions": int((source_data or {}).get("conversions") or 0),
+            }
+            for source_name, source_data in by_source.items()
+            if _is_organic_source(source_name)
+        ]
+        organic_sources.sort(key=lambda row: row.get("sessions", 0), reverse=True)
+        organic_sessions = sum(row.get("sessions", 0) for row in organic_sources)
+        organic_users = sum(row.get("users", 0) for row in organic_sources)
+        organic_conversions = sum(row.get("conversions", 0) for row in organic_sources)
+        if organic_sources or organic_sessions > 0:
+            analysis["organic_search"] = {
+                "sessions": organic_sessions,
+                "users": organic_users,
+                "conversions": organic_conversions,
+                "conversion_rate": round((organic_conversions / organic_sessions) * 100, 2) if organic_sessions else 0.0,
+                "sources": organic_sources[:10],
+            }
 
     by_page = ga_data.get("by_page", [])
     if by_page:
