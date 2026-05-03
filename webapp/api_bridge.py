@@ -160,7 +160,11 @@ def pull_api_data_for_brand(brand, connections, month):
     import calendar
     last_day = calendar.monthrange(year, mon)[1]
     start_date = f"{year}-{mon:02d}-01"
-    end_date = f"{year}-{mon:02d}-{last_day}"
+    today = datetime.now().date()
+    if today.year == year and today.month == mon:
+        end_date = f"{year}-{mon:02d}-{min(today.day, last_day):02d}"
+    else:
+        end_date = f"{year}-{mon:02d}-{last_day}"
 
     google_conn = connections.get("google")
     meta_conn = connections.get("meta")
@@ -542,11 +546,64 @@ def _pull_ga4(property_id, access_token, start_date, end_date):
 
     by_page.sort(key=lambda item: item.get("sessions", 0), reverse=True)
 
+    by_device = []
+    for row in _run_report(
+        ["sessions", "conversions", "totalUsers", "bounceRate", "averageSessionDuration"],
+        dimension_names=["deviceCategory"],
+        limit=20,
+    ):
+        dims = row.get("dimensionValues", [])
+        vals = row.get("metricValues", [])
+        sessions = int(float(vals[0].get("value", "0"))) if len(vals) > 0 else 0
+        conversions = int(float(vals[1].get("value", "0"))) if len(vals) > 1 else 0
+        by_device.append({
+            "device": dims[0].get("value", "(not set)") if dims else "(not set)",
+            "sessions": sessions,
+            "conversions": conversions,
+            "users": int(float(vals[2].get("value", "0"))) if len(vals) > 2 else 0,
+            "bounce_rate": float(vals[3].get("value", "0")) if len(vals) > 3 else 0.0,
+            "avg_session_duration": float(vals[4].get("value", "0")) if len(vals) > 4 else 0.0,
+            "conversion_rate": round((conversions / sessions) * 100, 2) if sessions > 0 else 0.0,
+        })
+
+    by_city = []
+    for row in _run_report(["sessions", "conversions", "totalUsers"], dimension_names=["city"], limit=50):
+        dims = row.get("dimensionValues", [])
+        vals = row.get("metricValues", [])
+        city = dims[0].get("value", "(not set)") if dims else "(not set)"
+        if not city or city == "(not set)":
+            continue
+        sessions = int(float(vals[0].get("value", "0"))) if len(vals) > 0 else 0
+        conversions = int(float(vals[1].get("value", "0"))) if len(vals) > 1 else 0
+        by_city.append({
+            "city": city,
+            "sessions": sessions,
+            "conversions": conversions,
+            "users": int(float(vals[2].get("value", "0"))) if len(vals) > 2 else 0,
+            "conversion_rate": round((conversions / sessions) * 100, 2) if sessions > 0 else 0.0,
+        })
+
+    top_events = []
+    for row in _run_report(["eventCount", "conversions"], dimension_names=["eventName"], limit=50):
+        dims = row.get("dimensionValues", [])
+        vals = row.get("metricValues", [])
+        event_name = dims[0].get("value", "") if dims else ""
+        if not event_name:
+            continue
+        top_events.append({
+            "event": event_name,
+            "event_count": int(float(vals[0].get("value", "0"))) if len(vals) > 0 else 0,
+            "conversions": int(float(vals[1].get("value", "0"))) if len(vals) > 1 else 0,
+        })
+
     return {
         "totals": totals,
         "by_source": by_source,
         "by_page": by_page,
-        "row_count": max(1, len(source_rows), len(landing_rows)),
+        "by_device": by_device,
+        "by_city": by_city,
+        "top_events": top_events,
+        "row_count": max(1, len(source_rows), len(landing_rows), len(by_device), len(by_city), len(top_events)),
         "columns_found": list(totals.keys()),
     }
 
@@ -640,6 +697,41 @@ def _pull_gsc(site_url, access_token, start_date, end_date):
     except Exception:
         pass  # page-level data is supplemental; don't fail the whole pull
 
+    query_pages = []
+    best_page_by_query = {}
+    try:
+        qp_body = {
+            "startDate": start_date,
+            "endDate": end_date,
+            "dimensions": ["query", "page"],
+            "rowLimit": 250,
+        }
+        qp_resp = requests.post(url, json=qp_body, headers=headers, timeout=30)
+        qp_resp.raise_for_status()
+        for r in qp_resp.json().get("rows", []):
+            keys = r.get("keys") or []
+            query = keys[0] if len(keys) > 0 else ""
+            page = keys[1] if len(keys) > 1 else ""
+            item = {
+                "query": query,
+                "page": page,
+                "clicks": r.get("clicks", 0),
+                "impressions": r.get("impressions", 0),
+                "ctr": r.get("ctr", 0) * 100,
+                "position": r.get("position", 0),
+            }
+            query_pages.append(item)
+            current = best_page_by_query.get(query)
+            if query and (not current or item["impressions"] > current.get("impressions", 0)):
+                best_page_by_query[query] = item
+    except Exception:
+        pass
+
+    for item in opportunity_queries:
+        match = best_page_by_query.get(item.get("query"))
+        if match:
+            item["page"] = match.get("page", "")
+
     return {
         "totals": {
             "clicks": total_clicks,
@@ -649,6 +741,7 @@ def _pull_gsc(site_url, access_token, start_date, end_date):
         },
         "top_queries": top_queries,
         "top_pages": top_pages,
+        "query_pages": query_pages[:100],
         "opportunity_queries": opportunity_queries,
         "row_count": len(rows),
     }

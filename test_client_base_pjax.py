@@ -11,6 +11,7 @@ os.environ.setdefault("SECRET_KEY", "test-secret")
 os.environ.setdefault("APP_URL", "http://localhost:5000")
 
 from webapp.app import create_app
+from webapp.client_portal import _filter_campaigns_for_display
 
 
 class ClientBasePjaxTests(unittest.TestCase):
@@ -79,6 +80,30 @@ class ClientBasePjaxTests(unittest.TestCase):
         self.assertIn("var PJAX_TIMEOUT_MS = 15000;", html)
         self.assertIn("controller.abort();", html)
         self.assertIn("if (navSeq !== activePjaxSeq) return;", html)
+
+    def test_campaign_filter_hides_inactive_campaigns_by_default(self):
+        campaigns = {
+            "google": [
+                {"id": "g1", "name": "Search Live", "status": "ENABLED"},
+                {"id": "g2", "name": "Old Search", "status": "PAUSED"},
+                {"id": "g3", "name": "Removed Search", "status": "REMOVED"},
+            ],
+            "meta": [
+                {"id": "m1", "name": "Lead Forms Live", "status": "ACTIVE"},
+                {"id": "m2", "name": "Old Lead Forms", "status": "PAUSED"},
+            ],
+        }
+
+        visible, hidden = _filter_campaigns_for_display(campaigns)
+
+        self.assertEqual([campaign["id"] for campaign in visible["google"]], ["g1"])
+        self.assertEqual([campaign["id"] for campaign in visible["meta"]], ["m1"])
+        self.assertEqual(hidden["total"], 3)
+
+        visible_all, hidden_all = _filter_campaigns_for_display(campaigns, show_inactive=True)
+        self.assertEqual(len(visible_all["google"]), 3)
+        self.assertEqual(len(visible_all["meta"]), 2)
+        self.assertEqual(hidden_all["total"], 0)
 
 
 if __name__ == "__main__":

@@ -142,7 +142,9 @@
                     <div class="kpi-deep-target">Target: {{ kpi.target }}</div>
                 </div>
                 <div>
-                    {% if kpi.on_track %}
+                    {% if kpi.on_track is none %}
+                    <span class="kpi-verdict-pill close"><i class="bi bi-info-circle-fill"></i> {{ kpi.status_label or 'Observed' }}</span>
+                    {% elif kpi.on_track %}
                     <span class="kpi-verdict-pill beating"><i class="bi bi-check-circle-fill"></i> On Track</span>
                     {% else %}
                     {% set actual_num = kpi.actual | replace('$','') | replace(',','') | replace('x','') | float %}

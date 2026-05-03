@@ -2,7 +2,13 @@ import unittest
 from datetime import date
 
 from src.analytics import _build_lead_pacing
-from webapp.client_advisor import _build_health_summary, _explain_facebook_organic, ensure_dashboard_health_cluster
+from src.suggestions import _ga_suggestions
+from webapp.client_advisor import (
+    _build_health_summary,
+    _build_kpi_cluster_card,
+    _explain_facebook_organic,
+    ensure_dashboard_health_cluster,
+)
 
 
 class DashboardHealthSummaryTests(unittest.TestCase):
@@ -151,6 +157,51 @@ class DashboardHealthSummaryTests(unittest.TestCase):
         self.assertEqual(clicks_card["value"], "19")
         self.assertEqual(clicks_card["status"], "good")
         self.assertIn("clicks toward your website", clicks_card["explanation"])
+
+    def test_early_current_month_does_not_create_sharp_traffic_drop_suggestion(self):
+        suggestions = _ga_suggestions(
+            {
+                "metrics": {"sessions": 11},
+                "scores": {},
+                "period": {"is_current_month": True, "early_month": True},
+                "month_over_month": {
+                    "sessions": {"current": 11, "previous": 487, "change_pct": -97.7}
+                },
+            },
+            goals={},
+            top_landing_pages=[],
+        )
+
+        self.assertFalse(any("Traffic Dropped" in suggestion["title"] for suggestion in suggestions))
+
+    def test_kpi_cluster_uses_paid_efficiency_when_targets_are_missing(self):
+        card = _build_kpi_cluster_card(
+            {
+                "channels": {
+                    "google_ads": {
+                        "cards": [
+                            {"metric": "Click Rate", "status": "good", "value": "5.4%"},
+                            {"metric": "Cost Per Click", "status": "good", "value": "$2.10"},
+                        ]
+                    },
+                    "facebook_ads": {
+                        "cards": [
+                            {"metric": "Cost Per Lead", "status": "warning", "value": "$64.00"},
+                        ]
+                    },
+                },
+                "kpi_status": {
+                    "targets": {"leads": None, "cpa": None, "roas": None},
+                    "actual": {"paid_spend": 320, "paid_leads": 8, "blended_cpa": 40},
+                    "evaluation": {},
+                },
+            },
+            health_summary={"actions": [], "grade": "B", "summary": ""},
+        )
+
+        self.assertNotEqual(card["display_score"], "--")
+        self.assertIn("$320 spend, 8 paid leads", card["primary_metric"])
+        self.assertIn("paid efficiency signals", card["detail"])
 
 
 if __name__ == "__main__":

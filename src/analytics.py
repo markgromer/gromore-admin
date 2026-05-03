@@ -24,6 +24,48 @@ def pct_change(current, previous):
     return round(((current - previous) / previous) * 100, 1)
 
 
+def _month_progress(month, today=None):
+    today = today or date.today()
+    try:
+        month_dt = datetime.strptime(month, "%Y-%m")
+    except (TypeError, ValueError):
+        return {
+            "month": month,
+            "is_current_month": False,
+            "elapsed_days": None,
+            "days_in_month": None,
+            "progress_pct": None,
+            "early_month": False,
+        }
+    days_in_month = calendar.monthrange(month_dt.year, month_dt.month)[1]
+    is_current = today.year == month_dt.year and today.month == month_dt.month
+    elapsed_days = max(1, min(today.day, days_in_month)) if is_current else days_in_month
+    progress_pct = round(elapsed_days / days_in_month * 100, 1) if days_in_month else None
+    return {
+        "month": month,
+        "is_current_month": is_current,
+        "elapsed_days": elapsed_days,
+        "days_in_month": days_in_month,
+        "progress_pct": progress_pct,
+        "early_month": bool(is_current and elapsed_days <= 7),
+    }
+
+
+def _attach_period(analysis, month):
+    if isinstance(analysis, dict):
+        analysis["period"] = _month_progress(month)
+    return analysis
+
+
+def _suppress_early_month_volume_drop(month, metric, change):
+    if change is None or change >= 0:
+        return False
+    if metric not in {"sessions", "users", "new_users", "conversions", "pageviews", "clicks", "impressions", "reach", "results"}:
+        return False
+    progress = _month_progress(month)
+    return bool(progress.get("early_month"))
+
+
 def score_metric(value, benchmark, higher_is_better=True):
     """
     Score a metric against benchmark.
@@ -269,7 +311,7 @@ def _build_competitor_watch(client_config, gsc_analysis, meta_analysis, google_a
     }
 
 
-def analyze_google_analytics(ga_data, prev_ga_data, benchmarks_website):
+def analyze_google_analytics(ga_data, prev_ga_data, benchmarks_website, month=None):
     """Analyze Google Analytics data against benchmarks and prior month."""
     if not ga_data:
         return None
@@ -315,7 +357,7 @@ def analyze_google_analytics(ga_data, prev_ga_data, benchmarks_website):
                 }
 
                 # Flag significant changes
-                if change is not None:
+                if change is not None and not _suppress_early_month_volume_drop(month, metric, change):
                     if config["higher_is_better"]:
                         if change >= 15:
                             analysis["highlights"].append(
@@ -375,10 +417,34 @@ def analyze_google_analytics(ga_data, prev_ga_data, benchmarks_website):
             reverse=True,
         )[:10]
 
-    return analysis
+    by_device = ga_data.get("by_device") or []
+    if by_device:
+        analysis["device_breakdown"] = sorted(
+            by_device,
+            key=lambda row: row.get("sessions", 0),
+            reverse=True,
+        )[:10]
+
+    by_city = ga_data.get("by_city") or []
+    if by_city:
+        analysis["top_cities"] = sorted(
+            by_city,
+            key=lambda row: row.get("sessions", 0),
+            reverse=True,
+        )[:10]
+
+    top_events = ga_data.get("top_events") or []
+    if top_events:
+        analysis["top_events"] = sorted(
+            top_events,
+            key=lambda row: row.get("event_count", 0),
+            reverse=True,
+        )[:15]
+
+    return _attach_period(analysis, month)
 
 
-def analyze_meta_business(meta_data, prev_meta_data, benchmarks_meta, industry):
+def analyze_meta_business(meta_data, prev_meta_data, benchmarks_meta, industry, month=None):
     """Analyze Meta Business Suite data against benchmarks and prior month."""
     if not meta_data:
         return None
@@ -425,7 +491,7 @@ def analyze_meta_business(meta_data, prev_meta_data, benchmarks_meta, industry):
                     "current": current_val,
                     "change_pct": change,
                 }
-                if change is not None:
+                if change is not None and not _suppress_early_month_volume_drop(month, metric, change):
                     if config["higher_is_better"]:
                         if change >= 15:
                             analysis["highlights"].append(
@@ -488,10 +554,10 @@ def analyze_meta_business(meta_data, prev_meta_data, benchmarks_meta, industry):
     if top_ads:
         analysis["top_ads"] = top_ads[:10]
 
-    return analysis
+    return _attach_period(analysis, month)
 
 
-def analyze_google_ads(google_ads_data, prev_google_ads_data, benchmarks_ads, industry):
+def analyze_google_ads(google_ads_data, prev_google_ads_data, benchmarks_ads, industry, month=None):
     """Analyze Google Ads data against benchmarks and prior month."""
     if not google_ads_data:
         return None
@@ -572,10 +638,10 @@ def analyze_google_ads(google_ads_data, prev_google_ads_data, benchmarks_ads, in
 
         analysis["campaign_analysis"].append(campaign_analysis)
 
-    return analysis
+    return _attach_period(analysis, month)
 
 
-def analyze_search_console(gsc_data, prev_gsc_data, benchmarks_seo, industry):
+def analyze_search_console(gsc_data, prev_gsc_data, benchmarks_seo, industry, month=None):
     """Analyze Search Console data against benchmarks and prior month."""
     if not gsc_data:
         return None
@@ -613,7 +679,7 @@ def analyze_search_console(gsc_data, prev_gsc_data, benchmarks_seo, industry):
                     "current": current_val,
                     "change_pct": change,
                 }
-                if change is not None:
+                if change is not None and not _suppress_early_month_volume_drop(month, metric, change):
                     if config["higher_is_better"]:
                         if change >= 15:
                             analysis["highlights"].append(
@@ -655,8 +721,9 @@ def analyze_search_console(gsc_data, prev_gsc_data, benchmarks_seo, industry):
 
     # Top pages
     analysis["top_pages"] = gsc_data.get("top_pages", [])[:15]
+    analysis["query_pages"] = gsc_data.get("query_pages", [])[:50]
 
-    return analysis
+    return _attach_period(analysis, month)
 
 
 def build_full_analysis(client_id, month, current_data, client_config):
@@ -689,21 +756,24 @@ def build_full_analysis(client_id, month, current_data, client_config):
     ga_analysis = analyze_google_analytics(
         current_data.get("google_analytics"),
         prev_data.get("google_analytics"),
-        industry_website
+        industry_website,
+        month,
     )
 
     meta_analysis = analyze_meta_business(
         current_data.get("meta_business"),
         prev_data.get("meta_business"),
         benchmarks.get("meta_ads", {}),
-        industry
+        industry,
+        month,
     )
 
     gsc_analysis = analyze_search_console(
         current_data.get("search_console"),
         prev_data.get("search_console"),
         benchmarks.get("seo", {}),
-        industry
+        industry,
+        month,
     )
 
     google_ads_analysis = analyze_google_ads(
@@ -711,6 +781,7 @@ def build_full_analysis(client_id, month, current_data, client_config):
         prev_data.get("google_ads"),
         benchmarks.get("google_ads", {}),
         industry,
+        month,
     )
 
     # Aggregate highlights and concerns
@@ -933,5 +1004,6 @@ def build_full_analysis(client_id, month, current_data, client_config):
         "paid_summary": paid_summary,
         "kpi_status": kpi_status,
         "competitor_watch": competitor_watch,
+        "period": _month_progress(month),
         "has_previous_month": bool(prev_data),
     }

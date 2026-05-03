@@ -3086,6 +3086,7 @@ def _assemble_dashboard_payload(db, brand, brand_id, month, analysis, suggestion
     dashboard_data = build_client_dashboard(analysis, suggestions, brand)
 
     # Store raw analysis in snapshot so missions can regenerate from it later
+    dashboard_data["_snapshot_version"] = _DASHBOARD_SNAPSHOT_VERSION
     dashboard_data["_analysis"] = analysis
     dashboard_data["_suggestions"] = suggestions
 
@@ -5009,6 +5010,7 @@ def _consume_login_refresh_month(session_key: str, month: str) -> bool:
 
 
 _CAMPAIGNS_CACHE_TTL_SECONDS = 6 * 60 * 60
+_DASHBOARD_SNAPSHOT_VERSION = 2
 
 
 def _campaigns_cache_key(brand_id: int, month: str) -> str:
@@ -5042,6 +5044,50 @@ def _get_campaigns_cached(db, brand: dict, month: str, *, force_sync: bool = Fal
     except Exception:
         pass
     return campaigns
+
+
+_GOOGLE_ACTIVE_CAMPAIGN_STATUSES = {"ENABLED"}
+_META_ACTIVE_CAMPAIGN_STATUSES = {"ACTIVE"}
+_INACTIVE_CAMPAIGN_STATUSES = {"", "PAUSED", "REMOVED", "ARCHIVED", "DELETED", "ENDED", "UNKNOWN"}
+
+
+def _campaign_value(campaign, key, default=None):
+    if isinstance(campaign, dict):
+        return campaign.get(key, default)
+    return getattr(campaign, key, default)
+
+
+def _campaign_status(campaign) -> str:
+    return str(_campaign_value(campaign, "status", "") or "").strip().upper()
+
+
+def _campaign_is_active(platform: str, campaign) -> bool:
+    status = _campaign_status(campaign)
+    if platform == "google":
+        return status in _GOOGLE_ACTIVE_CAMPAIGN_STATUSES
+    if platform == "meta":
+        return status in _META_ACTIVE_CAMPAIGN_STATUSES
+    return status not in _INACTIVE_CAMPAIGN_STATUSES
+
+
+def _filter_campaigns_for_display(campaigns: dict, show_inactive: bool = False):
+    raw = campaigns if isinstance(campaigns, dict) else {}
+    visible = {
+        "google": list(raw.get("google") or []),
+        "meta": list(raw.get("meta") or []),
+    }
+    hidden_counts = {"google": 0, "meta": 0, "total": 0}
+    if show_inactive:
+        return visible, hidden_counts
+
+    filtered = {}
+    for platform in ("google", "meta"):
+        items = visible.get(platform) or []
+        active = [campaign for campaign in items if _campaign_is_active(platform, campaign)]
+        filtered[platform] = active
+        hidden_counts[platform] = max(0, len(items) - len(active))
+    hidden_counts["total"] = hidden_counts["google"] + hidden_counts["meta"]
+    return filtered, hidden_counts
 
 
 @client_bp.route("/forgot-password", methods=["GET", "POST"])
@@ -5935,16 +5981,17 @@ def client_dashboard_data():
             snapshot = db.get_dashboard_snapshot(brand_id, month)
             if snapshot:
                 cached_data = json.loads(snapshot["snapshot_json"])
-                cached_data = _hydrate_cached_dashboard_payload(cached_data)
-                cached_data["_cached"] = True
-                cached_data["_cached_at"] = snapshot["created_at"]
-                return jsonify({
-                    "dashboard": cached_data,
-                    "error": "",
-                    "month": month,
-                    "requested_month": requested_month,
-                    "used_month_fallback": used_fallback,
-                })
+                if cached_data.get("_snapshot_version") == _DASHBOARD_SNAPSHOT_VERSION:
+                    cached_data = _hydrate_cached_dashboard_payload(cached_data)
+                    cached_data["_cached"] = True
+                    cached_data["_cached_at"] = snapshot["created_at"]
+                    return jsonify({
+                        "dashboard": cached_data,
+                        "error": "",
+                        "month": month,
+                        "requested_month": requested_month,
+                        "used_month_fallback": used_fallback,
+                    })
         except Exception:
             pass  # Fall through to live pull
 
@@ -6112,8 +6159,9 @@ def client_kpis():
             snapshot = db.get_dashboard_snapshot(brand_id, month)
             if snapshot:
                 cached = json.loads(snapshot["snapshot_json"])
-                kpi_data = cached.get("kpi_status")
-                channels = cached.get("channels", {})
+                if cached.get("_snapshot_version") == _DASHBOARD_SNAPSHOT_VERSION:
+                    kpi_data = cached.get("kpi_status")
+                    channels = cached.get("channels", {})
         except Exception:
             pass
 
@@ -6181,7 +6229,8 @@ def client_actions():
             snapshot = db.get_dashboard_snapshot(brand_id, month)
             if snapshot:
                 cached = json.loads(snapshot["snapshot_json"])
-                actions = cached.get("actions") or []
+                if cached.get("_snapshot_version") == _DASHBOARD_SNAPSHOT_VERSION:
+                    actions = cached.get("actions") or []
         except Exception:
             pass
 
@@ -6211,6 +6260,7 @@ def client_actions():
                     try:
                         snap_existing = db.get_dashboard_snapshot(brand_id, month, max_age_hours=8760)
                         snap_data = json.loads(snap_existing["snapshot_json"]) if snap_existing else {}
+                        snap_data["_snapshot_version"] = _DASHBOARD_SNAPSHOT_VERSION
                         snap_data["actions"] = actions
                         if ai_analysis:
                             snap_data["ai_analysis"] = ai_analysis
@@ -6910,6 +6960,7 @@ def client_campaigns():
         abort(404)
 
     month = request.args.get("month") or datetime.now().strftime("%Y-%m")
+    show_inactive = request.args.get("show_inactive") == "1"
 
     from webapp.campaign_manager import get_campaign_recommendations
 
@@ -6933,6 +6984,8 @@ def client_campaigns():
     if campaigns is None:
         campaigns = _get_campaigns_cached(db, brand, month, force_sync=force_campaign_sync)
 
+    campaigns, hidden_counts = _filter_campaigns_for_display(campaigns, show_inactive)
+
     if any(campaigns.values()):
         try:
             recommendations = get_campaign_recommendations(brand, campaigns)
@@ -6947,6 +7000,8 @@ def client_campaigns():
         brand=brand,
         month=month,
         campaigns=campaigns,
+        show_inactive=show_inactive,
+        hidden_counts=hidden_counts,
         recommendations=recommendations,
         changes=changes,
         drafts=drafts,

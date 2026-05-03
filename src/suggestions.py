@@ -96,6 +96,8 @@ def _ga_suggestions(ga, goals, top_landing_pages=None):
     metrics = ga.get("metrics", {})
     scores = ga.get("scores", {})
     mom = ga.get("month_over_month", {})
+    period = ga.get("period") or {}
+    early_current_month = bool(period.get("is_current_month") and period.get("early_month"))
     landing_pages = top_landing_pages or []
 
     # ── Landing pages with high bounce / low conversion ──
@@ -198,7 +200,11 @@ def _ga_suggestions(ga, goals, top_landing_pages=None):
 
     # ── Traffic decline with specific numbers ──
     sessions_mom = mom.get("sessions", {})
-    if sessions_mom.get("change_pct") is not None and sessions_mom["change_pct"] <= -10:
+    if (
+        not early_current_month
+        and sessions_mom.get("change_pct") is not None
+        and sessions_mom["change_pct"] <= -10
+    ):
         current = int(_safe_num(sessions_mom.get("current") or 0))
         previous = int(_safe_num(sessions_mom.get("previous") or 0))
         drop = abs(sessions_mom["change_pct"])
@@ -211,6 +217,36 @@ def _ga_suggestions(ga, goals, top_landing_pages=None):
             PRIORITY_HIGH, CATEGORY_STRATEGY, "traffic",
             data_point=f"Sessions: {current} (was {previous})"
         ))
+
+    # ── Device-specific conversion gaps ──
+    device_rows = ga.get("device_breakdown") or []
+    mobile = next(
+        (row for row in device_rows if str(row.get("device") or row.get("deviceCategory") or "").lower() == "mobile"),
+        None,
+    )
+    desktop = next(
+        (row for row in device_rows if str(row.get("device") or row.get("deviceCategory") or "").lower() == "desktop"),
+        None,
+    )
+    if mobile and desktop:
+        mobile_sessions = _safe_num(mobile.get("sessions") or 0)
+        desktop_sessions = _safe_num(desktop.get("sessions") or 0)
+        mobile_rate = _safe_num(mobile.get("conversion_rate") or 0)
+        desktop_rate = _safe_num(desktop.get("conversion_rate") or 0)
+        if (
+            mobile_sessions >= 25
+            and mobile_sessions >= desktop_sessions * 0.5
+            and desktop_rate > 0
+            and mobile_rate < desktop_rate * 0.6
+        ):
+            suggestions.append(make_suggestion(
+                "Mobile Visitors Are Converting Worse Than Desktop",
+                f"Mobile has {int(mobile_sessions)} sessions at {mobile_rate:.1f}% conversion, "
+                f"while desktop is at {desktop_rate:.1f}%. Test the mobile contact flow: sticky call button, "
+                "shorter form, faster page load, and service-area proof above the fold.",
+                PRIORITY_HIGH, CATEGORY_WEBSITE, "conversions",
+                data_point=f"Mobile CVR {mobile_rate:.1f}% vs desktop {desktop_rate:.1f}%"
+            ))
 
     # ── Conversion growth: scale what's working ──
     conversions_mom = mom.get("conversions", {})

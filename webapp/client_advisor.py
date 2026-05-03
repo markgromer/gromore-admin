@@ -848,6 +848,48 @@ def _explain_website(ga):
             ),
         })
 
+    device_rows = ga.get("device_breakdown") or []
+    if device_rows:
+        top_device = max(device_rows, key=lambda row: _to_float(row.get("sessions"), 0))
+        device_name = str(top_device.get("device") or top_device.get("deviceCategory") or "device").title()
+        device_sessions = int(_to_float(top_device.get("sessions"), 0))
+        device_cvr = _to_float(top_device.get("conversion_rate"), 0)
+        mobile = next(
+            (row for row in device_rows if str(row.get("device") or row.get("deviceCategory") or "").lower() == "mobile"),
+            None,
+        )
+        mobile_status = "neutral"
+        if mobile and _to_float(mobile.get("sessions"), 0) >= 25:
+            mobile_bounce = _to_float(mobile.get("bounce_rate"), 0)
+            mobile_cvr = _to_float(mobile.get("conversion_rate"), 0)
+            if mobile_bounce >= 65 or (conv_rate > 0 and mobile_cvr < conv_rate * 0.7):
+                mobile_status = "warning"
+        cards.append({
+            "metric": "Device Mix",
+            "value": f"{device_name}: {device_sessions:,}",
+            "status": mobile_status,
+            "explanation": (
+                f"{device_name} is the top device type this month with {device_sessions:,} sessions "
+                f"and a {device_cvr:.1f}% conversion rate. Warren uses this to spot mobile-specific "
+                "contact-flow problems instead of judging the website as one flat number."
+            ),
+        })
+
+    top_events = ga.get("top_events") or []
+    if top_events:
+        event = top_events[0]
+        event_name = str(event.get("event") or event.get("eventName") or "top event").replace("_", " ")
+        event_count = int(_to_float(event.get("event_count"), 0))
+        cards.append({
+            "metric": "Top Website Action",
+            "value": f"{event_count:,}",
+            "status": "neutral",
+            "explanation": (
+                f"The most-tracked action is {event_name} with {event_count:,} events. "
+                "This helps Warren separate real lead intent from plain traffic."
+            ),
+        })
+
     return {"title": "Your Website", "icon": "bi-globe", "cards": cards}
 
 
@@ -1234,6 +1276,23 @@ def _explain_seo(gsc):
                 "you could start showing up higher and getting more free clicks."
             ),
         })
+
+    query_pages = gsc.get("query_pages") or []
+    if query_pages:
+        mapped = [row for row in query_pages if row.get("query") and row.get("page")]
+        if mapped:
+            top = max(mapped, key=lambda row: _to_float(row.get("impressions"), 0))
+            query = top.get("query")
+            page = top.get("page")
+            cards.append({
+                "metric": "Query to Page Match",
+                "value": f"{len(mapped)}",
+                "status": "info",
+                "explanation": (
+                    f"Warren can now see which pages rank for which searches. "
+                    f"Start with \"{query}\" on {page}; it has enough search data to guide the next content or title update."
+                ),
+            })
 
     return {"title": "SEO (Free Google Traffic)", "icon": "bi-search", "cards": cards}
 
@@ -1975,6 +2034,26 @@ def _explain_kpis(analysis):
             ),
         })
 
+    if not cards:
+        paid_spend = _to_float(actual.get("paid_spend"), 0)
+        paid_leads = _to_float(actual.get("paid_leads"), 0)
+        blended_cpa = actual.get("blended_cpa")
+        if paid_spend > 0 or paid_leads > 0:
+            actual_parts = [f"${paid_spend:,.2f} spend", f"{paid_leads:.0f} paid leads"]
+            if blended_cpa:
+                actual_parts.append(f"${float(blended_cpa):.2f} blended CPL")
+            cards.append({
+                "label": "Paid Efficiency",
+                "target": "Set lead and CPL targets",
+                "actual": " / ".join(actual_parts),
+                "on_track": None,
+                "status_label": "Observed",
+                "explanation": (
+                    "No KPI targets are set yet, so Warren is showing the available paid signals: "
+                    "spend, leads, and blended cost per lead. Add target leads and target CPL to turn this into a true score."
+                ),
+            })
+
     return cards
 
 
@@ -2251,6 +2330,31 @@ def _build_kpi_cluster_card(dashboard, health_summary):
     if roas_eval and roas_eval.get("on_track") is not None:
         score_parts.append(78 if roas_eval.get("on_track") else 30)
 
+    has_configured_targets = bool(leads_eval or cpa_eval or roas_eval)
+    if not score_parts:
+        status_points = {
+            "positive": 86,
+            "good": 74,
+            "neutral": 58,
+            "warning": 34,
+            "bad": 24,
+            "caution": 48,
+        }
+        channels = dashboard.get("channels") if isinstance(dashboard.get("channels"), dict) else {}
+        paid_metric_tokens = (
+            "ad spend",
+            "click rate",
+            "cost per click",
+            "cost per lead",
+            "underperforming campaigns",
+        )
+        for channel_key in ("google_ads", "facebook_ads"):
+            channel = channels.get(channel_key) if isinstance(channels.get(channel_key), dict) else {}
+            for card in channel.get("cards") or []:
+                metric = str(card.get("metric") or "").lower()
+                if any(token in metric for token in paid_metric_tokens):
+                    score_parts.append(status_points.get(card.get("status"), 58))
+
     score_pct = round(sum(score_parts) / len(score_parts)) if score_parts else None
     tone = _cluster_tone(score_pct)
 
@@ -2259,14 +2363,35 @@ def _build_kpi_cluster_card(dashboard, health_summary):
         primary_metric = f"{int(actual.get('paid_leads') or 0)} leads vs {int(targets.get('leads') or 0)} target"
     elif cpa_eval and cpa_eval.get("actual") is not None and cpa_eval.get("target") is not None:
         primary_metric = f"${float(cpa_eval.get('actual') or 0):.2f} CPL vs ${float(cpa_eval.get('target') or 0):.2f} target"
+    elif _to_float(actual.get("paid_spend"), 0) > 0 or _to_float(actual.get("paid_leads"), 0) > 0:
+        paid_spend = _to_float(actual.get("paid_spend"), 0)
+        paid_leads = _to_float(actual.get("paid_leads"), 0)
+        blended_cpa = actual.get("blended_cpa")
+        primary_metric = f"${paid_spend:,.0f} spend, {paid_leads:.0f} paid leads"
+        if blended_cpa:
+            primary_metric += f", ${float(blended_cpa):.2f} CPL"
     elif health_summary.get("grade"):
         primary_metric = f"Overall grade: {health_summary.get('grade')}"
 
     actions = [item for item in (health_summary.get("actions") or []) if item]
     if score_pct is None:
         detail = "The KPI gauge needs lead or cost targets before it can judge the month clearly."
+    elif not has_configured_targets:
+        detail = (
+            "No KPI targets are set, so this gauge is reading available paid efficiency signals "
+            "like CPC, CTR, CPL, spend, and leads."
+        )
     else:
         detail = health_summary.get("summary") or "This bucket rolls up pace, cost, and return against your stated targets."
+
+    if actions:
+        next_step = actions[0]
+    elif score_pct is None:
+        next_step = "Connect targets so this gauge can tell you what to fix next."
+    elif not has_configured_targets:
+        next_step = "Set lead and CPL targets in My Business so Warren can judge this against your actual goal."
+    else:
+        next_step = "Use the Action Plan to work the biggest KPI constraint first."
 
     return {
         "key": "kpis",
@@ -2278,11 +2403,7 @@ def _build_kpi_cluster_card(dashboard, health_summary):
         "state_label": _cluster_state_label(tone, has_data=score_pct is not None),
         "primary_metric": primary_metric,
         "detail": detail,
-        "next_step": actions[0] if actions else (
-            "Connect targets so this gauge can tell you what to fix next."
-            if score_pct is None
-            else "Use the Action Plan to work the biggest KPI constraint first."
-        ),
+        "next_step": next_step,
     }
 
 

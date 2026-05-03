@@ -28,6 +28,21 @@
     .camp-header-actions .form-control:focus { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.4); color: #fff; }
     .camp-header-actions .btn-primary { background: #fff; color: #312e81; border: none; font-weight: 600; }
     .camp-header-actions .btn-primary:hover { background: #e0e7ff; color: #1e1b4b; }
+    .camp-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .35rem .55rem;
+        border-radius: 8px;
+        background: rgba(255,255,255,.14);
+        border: 1px solid rgba(255,255,255,.22);
+        color: #fff;
+        font-size: .78rem;
+        font-weight: 700;
+        white-space: nowrap;
+        cursor: pointer;
+    }
+    .camp-toggle input { margin: 0; }
 </style>
 <div class="camp-header">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
@@ -38,6 +53,10 @@
         <div class="camp-header-actions">
             <form method="GET" class="d-flex align-items-center gap-2">
                 <input type="month" name="month" value="{{ month }}" class="form-control form-control-sm" style="width: 160px;" onchange="this.form.submit()">
+                <label class="camp-toggle">
+                    <input type="checkbox" name="show_inactive" value="1" {% if show_inactive %}checked{% endif %} onchange="this.form.submit()">
+                    Show inactive
+                </label>
             </form>
             <a href="{{ url_for('client.client_campaign_create') }}" class="btn btn-primary btn-sm">
                 <i class="bi bi-plus-lg"></i> Create Campaign
@@ -45,6 +64,18 @@
         </div>
     </div>
 </div>
+
+{% if hidden_counts and hidden_counts.total and not show_inactive %}
+<div class="alert alert-light border d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+    <div>
+        <i class="bi bi-eye-slash me-1"></i>
+        Hiding {{ hidden_counts.total }} inactive campaign{{ '' if hidden_counts.total == 1 else 's' }} for a cleaner view.
+    </div>
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('client.client_campaigns', month=month, show_inactive=1) }}">
+        Show inactive
+    </a>
+</div>
+{% endif %}
 
 <!-- AI Recommendations -->
 {% if recommendations %}
@@ -236,11 +267,19 @@
 {% if not campaigns.google and not campaigns.meta %}
 <div class="text-center py-5">
     <i class="bi bi-megaphone" style="font-size: 3rem; color: #d1d5db;"></i>
+    {% if hidden_counts and hidden_counts.total and not show_inactive %}
+    <h5 class="mt-3 text-muted">No active campaigns found</h5>
+    <p class="text-muted">Inactive campaigns are hidden by default so Warren focuses on what can spend right now.</p>
+    <a href="{{ url_for('client.client_campaigns', month=month, show_inactive=1) }}" class="btn btn-outline-primary mt-2">
+        <i class="bi bi-eye"></i> Show inactive campaigns
+    </a>
+    {% else %}
     <h5 class="mt-3 text-muted">No campaigns found</h5>
-    <p class="text-muted">Your ad accounts may not be connected yet, or there are no active campaigns.</p>
+    <p class="text-muted">Your ad accounts may not be connected yet, or there are no campaigns for this month.</p>
     <a href="{{ url_for('client.client_campaign_create') }}" class="btn btn-primary mt-2">
         <i class="bi bi-plus-lg"></i> Create Your First Campaign
     </a>
+    {% endif %}
 </div>
 {% endif %}
 

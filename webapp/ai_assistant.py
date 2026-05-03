@@ -1079,11 +1079,15 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
             "keyword_opportunities": (gsc.get("keyword_opportunities") or [])[:20],
             "keyword_recommendations": (gsc.get("keyword_recommendations") or [])[:20],
             "top_pages": (gsc.get("top_pages") or [])[:15],
+            "query_pages": (gsc.get("query_pages") or [])[:20],
         },
         "website_detail": {
             "top_landing_pages": (analysis.get("top_landing_pages") or _pick(ga, "by_page") or [])[:15],
             "top_sources": (analysis.get("top_sources") or _pick(ga, "top_sources") or [])[:10],
             "top_converting_sources": (analysis.get("top_converting_sources") or _pick(ga, "top_converting_sources") or [])[:10],
+            "device_breakdown": (ga.get("device_breakdown") or [])[:10],
+            "top_cities": (ga.get("top_cities") or [])[:10],
+            "top_events": (ga.get("top_events") or [])[:15],
         },
         "google_ads_detail": {
             "campaigns": (google_ads.get("campaign_analysis") or [])[:20],
