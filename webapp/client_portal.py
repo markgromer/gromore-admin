@@ -4783,6 +4783,7 @@ _ENDPOINT_FEATURE_MAP = {
     "client_creative_fonts_list":      "creative",
     "client_creative_fonts_upload":    "creative",
     "client_creative_font_delete":     "creative",
+    "client_save_brand_fonts":         "my_business",
     "client_ai_copy_variants":     "creative",
     "client_blog":                 "blog",
     "client_blog_editor":          "blog",
@@ -7597,6 +7598,15 @@ def client_campaign_check_config():
 
 # ── Settings / Connections ──
 
+def _save_brand_font_fields(db, brand_id, form):
+    if "font_heading" in form:
+        font_heading = normalize_google_font_family(form.get("font_heading", ""))
+        db.update_brand_text_field(brand_id, "font_heading", font_heading)
+    if "font_body" in form:
+        font_body = normalize_google_font_family(form.get("font_body", ""))
+        db.update_brand_text_field(brand_id, "font_body", font_body)
+
+
 @client_bp.route("/my-business", methods=["GET", "POST"])
 @client_login_required
 def client_my_business():
@@ -7648,19 +7658,17 @@ def client_my_business():
             db.update_brand_text_field(brand_id, "industry", industry)
             db.update_brand_text_field(brand_id, "service_area", service_area)
             db.update_brand_text_field(brand_id, "primary_services", primary_services)
+            _save_brand_font_fields(db, brand_id, request.form)
             flash("Business identity updated.", "success")
 
         elif section == "branding":
             brand_colors = request.form.get("brand_colors", "")[:200].strip()
             primary_color = request.form.get("primary_color", "")[:20].strip()
             accent_color = request.form.get("accent_color", "")[:20].strip()
-            font_heading = normalize_google_font_family(request.form.get("font_heading", ""))
-            font_body = normalize_google_font_family(request.form.get("font_body", ""))
             db.update_brand_text_field(brand_id, "brand_colors", brand_colors)
             db.update_brand_text_field(brand_id, "primary_color", primary_color)
             db.update_brand_text_field(brand_id, "accent_color", accent_color)
-            db.update_brand_text_field(brand_id, "font_heading", font_heading)
-            db.update_brand_text_field(brand_id, "font_body", font_body)
+            _save_brand_font_fields(db, brand_id, request.form)
             flash("Brand design settings saved.", "success")
 
         return redirect(url_for("client.client_my_business"))
@@ -7669,6 +7677,7 @@ def client_my_business():
     brand = db.get_brand(brand_id)
     logo_variants = _parse_logo_variants(brand.get("logo_variants"))
     competitors = db.get_competitors(brand_id)
+    creative_fonts = [_creative_font_payload(font) for font in db.get_creative_fonts(brand_id)]
 
     # Calculate completion score for the profile
     profile_fields = [
@@ -7693,7 +7702,25 @@ def client_my_business():
         profile_score=profile_score,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
         google_font_choices=GOOGLE_FONT_CHOICES,
+        creative_fonts=creative_fonts,
     )
+
+
+@client_bp.route("/my-business/fonts", methods=["POST"])
+@client_login_required
+def client_save_brand_fonts():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    _save_brand_font_fields(db, brand_id, request.form)
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.is_json:
+        brand = db.get_brand(brand_id) or {}
+        return jsonify({
+            "ok": True,
+            "font_heading": brand.get("font_heading", ""),
+            "font_body": brand.get("font_body", ""),
+        })
+    flash("Brand fonts saved.", "success")
+    return redirect(url_for("client.client_my_business"))
 
 
 def _sync_competitors_text(db, brand_id):

@@ -3,6 +3,18 @@
 
 {% block content %}
 <style>
+    {% for font in creative_fonts or [] %}
+    {% if font.css_family and font.url %}
+    {% set font_format = 'woff2' if font.format == 'woff2' else 'woff' if font.format == 'woff' else 'opentype' if font.format == 'otf' else 'truetype' %}
+    @font-face {
+        font-family: '{{ font.css_family|e }}';
+        src: url('{{ font.url }}') format('{{ font_format }}');
+        font-weight: 100 900;
+        font-style: normal;
+        font-display: swap;
+    }
+    {% endif %}
+    {% endfor %}
 
     .profile-meter {
         display: flex;
@@ -326,6 +338,15 @@
     </div>
 </div>
 
+<datalist id="brandFontChoices">
+    {% for font in google_font_choices %}
+    <option value="{{ font }}"></option>
+    {% endfor %}
+    {% for font in creative_fonts or [] %}
+    <option value="{{ font.css_family }}" label="{{ font.display_name or font.original_filename or 'Uploaded Font' }}"></option>
+    {% endfor %}
+</datalist>
+
 <div class="row g-4">
     <!-- Logo & Brand Colors -->
     <div class="col-12">
@@ -414,11 +435,6 @@
                         <form method="POST" action="{{ url_for('client.client_my_business') }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="section" value="branding">
-                            <datalist id="brandGoogleFonts">
-                                {% for font in google_font_choices %}
-                                <option value="{{ font }}"></option>
-                                {% endfor %}
-                            </datalist>
                             <div class="row g-3 mb-2">
                                 <div class="col-md-6">
                                     <div class="biz-field mb-0">
@@ -454,32 +470,6 @@
                                        value="{{ brand.brand_colors or '' }}"
                                        placeholder="e.g. Primary: #2563eb (blue), Secondary: #f59e0b (gold), Dark: #1a1d2e">
                                 <div class="field-help">Used by AI when generating ad creatives. Hex codes or color names.</div>
-                            </div>
-                            <div class="row g-3 mb-2">
-                                <div class="col-md-6">
-                                    <div class="biz-field mb-0">
-                                        <label>
-                                            <span class="field-icon"><i class="bi bi-type-h1"></i></span>
-                                            Heading Font
-                                        </label>
-                                        <input type="text" name="font_heading" maxlength="80" list="brandGoogleFonts"
-                                               value="{{ brand.font_heading or '' }}"
-                                               placeholder="Type any Google font family">
-                                        <div class="field-help">Used for headings in the site builder and theme defaults.</div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="biz-field mb-0">
-                                        <label>
-                                            <span class="field-icon"><i class="bi bi-fonts"></i></span>
-                                            Body Font
-                                        </label>
-                                        <input type="text" name="font_body" maxlength="80" list="brandGoogleFonts"
-                                               value="{{ brand.font_body or '' }}"
-                                               placeholder="Type any Google font family">
-                                        <div class="field-help">Used for paragraph copy, lists, and supporting text.</div>
-                                    </div>
-                                </div>
                             </div>
                             <button type="submit" class="biz-save-btn" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed);">
                                 <i class="bi bi-check2 me-1"></i> Save Brand Design
@@ -548,6 +538,49 @@
                                placeholder="e.g. Dallas-Fort Worth metro, Within 30mi of downtown Austin">
                         <div class="field-help">Where do you operate? Used for geo-targeting and job listings.</div>
                     </div>
+
+                    <div class="row g-3 mb-2">
+                        <div class="col-md-6">
+                            <div class="biz-field mb-0">
+                                <label>
+                                    <span class="field-icon"><i class="bi bi-type-h1"></i></span>
+                                    Heading Font
+                                </label>
+                                <input type="text" name="font_heading" maxlength="80" list="brandFontChoices"
+                                       value="{{ brand.font_heading or '' }}"
+                                       placeholder="Type a Google font or uploaded font">
+                                <div class="field-help">Saved under brand identity for site builder, creative defaults, and brand-aware generation.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="biz-field mb-0">
+                                <label>
+                                    <span class="field-icon"><i class="bi bi-fonts"></i></span>
+                                    Body Font
+                                </label>
+                                <input type="text" name="font_body" maxlength="80" list="brandFontChoices"
+                                       value="{{ brand.font_body or '' }}"
+                                       placeholder="Type a Google font or uploaded font">
+                                <div class="field-help">Use an uploaded font from Creative Studio or any Google font family.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if creative_fonts %}
+                    <div class="mb-3" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:.7rem .85rem;">
+                        <div style="font-size:.78rem;font-weight:700;color:#475569;text-transform:uppercase;margin-bottom:.45rem;">Uploaded brand fonts</div>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for font in creative_fonts %}
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    style="font-family:'{{ font.css_family|e }}', sans-serif;border-radius:8px;"
+                                    onclick="setBrandFontField('{{ font.css_family|e }}')">
+                                {{ font.display_name or font.original_filename or 'Uploaded Font' }}
+                            </button>
+                            {% endfor %}
+                        </div>
+                        <div class="field-help mt-2">Click a font to fill the heading font field. You can also paste it into Body Font.</div>
+                    </div>
+                    {% endif %}
 
                     <button type="submit" class="biz-save-btn" style="background: linear-gradient(135deg, #0ea5e9, #0284c7);">
                         <i class="bi bi-check2 me-1"></i> Save Identity
@@ -1060,5 +1093,13 @@
         document.getElementById('logoResizeOverlay').style.display = 'none';
     };
 })();
+
+window.setBrandFontField = function(fontFamily) {
+    const heading = document.querySelector('input[name="font_heading"]');
+    if (heading) {
+        heading.value = fontFamily || '';
+        heading.focus();
+    }
+};
 </script>
 {% endblock %}

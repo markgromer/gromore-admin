@@ -997,6 +997,8 @@
                 '<div class="font-library-name" style="font-family:' + escapeHtml(font.css_family) + '">' + escapeHtml(font.display_name || font.original_filename || 'Uploaded Font') + '</div>' +
                 '<div class="font-library-actions">' +
                 '<button class="tool-btn" title="Apply to selected text" onclick="applyUploadedFont(' + font.id + ')" style="padding:.25rem .4rem"><i class="bi bi-check2"></i></button>' +
+                '<button class="tool-btn" title="Save as brand heading font" onclick="saveUploadedFontToBrand(' + font.id + ', &quot;heading&quot;)" style="padding:.25rem .4rem"><i class="bi bi-type-h1"></i></button>' +
+                '<button class="tool-btn" title="Save as brand body font" onclick="saveUploadedFontToBrand(' + font.id + ', &quot;body&quot;)" style="padding:.25rem .4rem"><i class="bi bi-fonts"></i></button>' +
                 '<button class="tool-btn" title="Delete font" onclick="deleteUploadedFont(' + font.id + ')" style="padding:.25rem .4rem"><i class="bi bi-trash"></i></button>' +
                 '</div>';
             list.appendChild(row);
@@ -1024,6 +1026,29 @@
         }
         await setTextFont(font.css_family);
         ccToast('Font applied: ' + (font.display_name || 'Uploaded Font'), 'success');
+    };
+
+    window.saveUploadedFontToBrand = function(fontId, role) {
+        const font = uploadedFonts.find(f => Number(f.id) === Number(fontId));
+        if (!font) return;
+        const fd = new FormData();
+        if (csrfToken) fd.append('csrf_token', csrfToken);
+        if (role === 'body') {
+            fd.append('font_body', font.css_family);
+        } else {
+            fd.append('font_heading', font.css_family);
+        }
+        fetch("{{ url_for('client.client_save_brand_fonts') }}", {
+            method: 'POST',
+            body: fd,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.ok) { ccToast(data.error || 'Could not save brand font.', 'error'); return; }
+            ccToast('Saved as brand ' + (role === 'body' ? 'body' : 'heading') + ' font: ' + (font.display_name || 'Uploaded Font'), 'success');
+        })
+        .catch(() => ccToast('Could not save brand font.', 'error'));
     };
 
     window.deleteUploadedFont = function(fontId) {
