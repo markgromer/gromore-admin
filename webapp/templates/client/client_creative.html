@@ -195,6 +195,38 @@
         border-color: #6366f1;
         background: #f5f3ff;
     }
+    .font-library-list {
+        display: flex;
+        flex-direction: column;
+        gap: .45rem;
+        max-height: 190px;
+        overflow-y: auto;
+    }
+    .font-library-item {
+        display: flex;
+        align-items: center;
+        gap: .55rem;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 8px;
+        padding: .5rem .6rem;
+        background: #fff;
+    }
+    .font-library-item:hover { border-color: #a5b4fc; background: #fafbff; }
+    .font-library-name {
+        flex: 1;
+        min-width: 0;
+        font-size: .82rem;
+        color: #111827;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .font-library-actions {
+        display: flex;
+        align-items: center;
+        gap: .25rem;
+        flex-shrink: 0;
+    }
 
     /* Template list items */
     .template-item {
@@ -519,6 +551,28 @@
         </div>
         {% endif %}
 
+        <!-- Brand Fonts -->
+        <div class="cc-card">
+            <div class="cc-card-header">
+                <h5><i class="bi bi-fonts me-2" style="opacity:.5"></i>Brand Fonts</h5>
+                <div class="hint">Upload WOFF2, WOFF, TTF, or OTF files</div>
+            </div>
+            <div class="cc-card-body">
+                <div class="upload-drop-zone" id="fontDropZone" onclick="document.getElementById('fontFileInput').click()" style="padding:1rem .75rem">
+                    <input type="file" id="fontFileInput" accept=".woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf" style="display:none">
+                    <i class="bi bi-cloud-arrow-up" style="font-size:1.25rem;color:#9ca3af"></i>
+                    <div style="font-size:.8rem;color:#6b7280;margin-top:.25rem"><strong style="color:#6366f1">Click</strong> or drag font file here</div>
+                </div>
+                <input type="text" id="fontDisplayName" class="prop-input mt-2" placeholder="Optional font name">
+                <button class="tool-btn w-100 mt-2" onclick="uploadSelectedFont()" id="btnUploadFont" style="justify-content:center">
+                    <i class="bi bi-upload"></i> Upload Font
+                </button>
+                <div id="fontLibraryList" class="font-library-list mt-3">
+                    <div class="text-muted" style="font-size:.8rem">No custom fonts yet.</div>
+                </div>
+            </div>
+        </div>
+
         <!-- Layers -->
         <div class="cc-card">
             <div class="cc-card-header">
@@ -779,6 +833,7 @@
 (async function(){
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     const logoUrl = {{ (url_for('client.client_serve_upload', filename=brand['logo_path']) if brand.get('logo_path') else '')|tojson }};
+    let uploadedFonts = {{ (creative_fonts or [])|tojson }};
     const fabricScriptUrl = 'https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js';
     const creativeFontHref = 'https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@100;300;400;500;600;700;800;900&family=Barlow:wght@300;400;500;600;700;800;900&family=Bebas+Neue&family=Bitter:wght@300;400;500;600;700;800;900&family=Cabin:wght@400;500;600;700&family=Comfortaa:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&family=Exo+2:wght@300;400;500;600;700;800;900&family=Fjalla+One&family=Fredoka:wght@300;400;500;600;700&family=Fugaz+One&family=Inter:wght@300;400;500;600;700;800;900&family=Josefin+Sans:wght@300;400;500;600;700&family=Kanit:wght@300;400;500;600;700;800;900&family=Lato:wght@300;400;700;900&family=Lexend:wght@300;400;500;600;700;800;900&family=Lobster&family=Merriweather:wght@300;400;700;900&family=Montserrat:wght@300;400;500;600;700;800;900&family=Nunito:wght@300;400;500;600;700;800;900&family=Open+Sans:wght@300;400;500;600;700;800&family=Oswald:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&family=Pacifico&family=Permanent+Marker&family=Playfair+Display:wght@400;500;600;700;800;900&family=Poppins:wght@300;400;500;600;700;800;900&family=Quicksand:wght@300;400;500;600;700&family=Raleway:wght@300;400;500;600;700;800;900&family=Righteous&family=Roboto:wght@300;400;500;700;900&family=Roboto+Condensed:wght@300;400;500;600;700;800;900&family=Rubik:wght@300;400;500;600;700;800;900&family=Russo+One&family=Shadows+Into+Light&family=Signika:wght@300;400;500;600;700&family=Sora:wght@300;400;500;600;700;800&family=Source+Serif+4:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Titan+One&family=Ubuntu:wght@300;400;500;700&family=Work+Sans:wght@300;400;500;600;700;800;900&display=swap';
 
@@ -863,6 +918,134 @@
 
     // Expose canvas to window so Warren chat can capture screenshots
     window._groMoreCanvas = canvas;
+
+    // Uploaded brand fonts
+    const loadedFontFamilies = new Set();
+
+    function escapeHtml(value) {
+        return String(value || '').replace(/[&<>"']/g, ch => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[ch]));
+    }
+
+    function fontFormatForCss(font) {
+        const fmt = (font.format || '').toLowerCase();
+        if (fmt === 'woff2') return 'woff2';
+        if (fmt === 'woff') return 'woff';
+        if (fmt === 'ttf') return 'truetype';
+        if (fmt === 'otf') return 'opentype';
+        return '';
+    }
+
+    function injectUploadedFont(font) {
+        if (!font || !font.css_family || !font.url || document.getElementById('creativeFontStyle_' + font.id)) return;
+        const style = document.createElement('style');
+        style.id = 'creativeFontStyle_' + font.id;
+        const cssFamily = String(font.css_family).replace(/[^A-Za-z0-9_-]/g, '');
+        const format = fontFormatForCss(font);
+        style.textContent = "@font-face{font-family:'" + cssFamily + "';src:url('" + font.url + "')" + (format ? " format('" + format + "')" : "") + ";font-weight:100 900;font-style:normal;font-display:swap;}";
+        document.head.appendChild(style);
+    }
+
+    async function ensureFontLoaded(fontFamily) {
+        if (!fontFamily || loadedFontFamilies.has(fontFamily)) return;
+        const font = uploadedFonts.find(f => f.css_family === fontFamily);
+        if (font) injectUploadedFont(font);
+        if (document.fonts && document.fonts.load) {
+            try {
+                await document.fonts.load("24px '" + fontFamily + "'");
+                await document.fonts.ready;
+            } catch (_) {}
+        }
+        loadedFontFamilies.add(fontFamily);
+    }
+
+    async function ensureFontsForCanvas() {
+        const families = new Set();
+        canvas.getObjects().forEach(obj => {
+            if (obj && obj.fontFamily) families.add(obj.fontFamily);
+            if (obj && obj.type === 'group' && obj.getObjects) {
+                obj.getObjects().forEach(child => { if (child.fontFamily) families.add(child.fontFamily); });
+            }
+        });
+        await Promise.all(Array.from(families).map(ensureFontLoaded));
+    }
+
+    function fontOptionHtml(font, selectedFamily) {
+        const family = escapeHtml(font.css_family);
+        const label = escapeHtml(font.display_name || font.original_filename || 'Uploaded Font');
+        return '<option value="' + family + '"' + (selectedFamily === font.css_family ? ' selected' : '') + ' style="font-family:' + family + '">' + label + '</option>';
+    }
+
+    function renderFontLibrary() {
+        uploadedFonts.forEach(injectUploadedFont);
+        const list = document.getElementById('fontLibraryList');
+        if (!list) return;
+        if (!uploadedFonts.length) {
+            list.innerHTML = '<div class="text-muted" style="font-size:.8rem">No custom fonts yet.</div>';
+            return;
+        }
+        list.innerHTML = '';
+        uploadedFonts.forEach(font => {
+            const row = document.createElement('div');
+            row.className = 'font-library-item';
+            row.innerHTML = '<i class="bi bi-fonts" style="color:#6366f1"></i>' +
+                '<div class="font-library-name" style="font-family:' + escapeHtml(font.css_family) + '">' + escapeHtml(font.display_name || font.original_filename || 'Uploaded Font') + '</div>' +
+                '<div class="font-library-actions">' +
+                '<button class="tool-btn" title="Apply to selected text" onclick="applyUploadedFont(' + font.id + ')" style="padding:.25rem .4rem"><i class="bi bi-check2"></i></button>' +
+                '<button class="tool-btn" title="Delete font" onclick="deleteUploadedFont(' + font.id + ')" style="padding:.25rem .4rem"><i class="bi bi-trash"></i></button>' +
+                '</div>';
+            list.appendChild(row);
+        });
+    }
+
+    window.setTextFont = async function(fontFamily) {
+        const active = canvas.getActiveObject();
+        if (!active) return;
+        await ensureFontLoaded(fontFamily);
+        active.set('fontFamily', fontFamily);
+        active.set('dirty', true);
+        canvas.requestRenderAll();
+        saveState();
+        showProperties(active);
+    };
+
+    window.applyUploadedFont = async function(fontId) {
+        const font = uploadedFonts.find(f => Number(f.id) === Number(fontId));
+        if (!font) return;
+        const active = canvas.getActiveObject();
+        if (!active || !['i-text', 'text', 'textbox'].includes(active.type)) {
+            ccToast('Select a text layer first.', 'error');
+            return;
+        }
+        await setTextFont(font.css_family);
+        ccToast('Font applied: ' + (font.display_name || 'Uploaded Font'), 'success');
+    };
+
+    window.deleteUploadedFont = function(fontId) {
+        const font = uploadedFonts.find(f => Number(f.id) === Number(fontId));
+        if (!font || !confirm('Delete this uploaded font? Existing designs using it may fall back to a system font.')) return;
+        fetch("{{ url_for('client.client_creative_fonts_list') }}/" + fontId, {
+            method: 'DELETE',
+            headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {},
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.ok) { ccToast(data.error || 'Could not delete font.', 'error'); return; }
+            uploadedFonts = uploadedFonts.filter(f => Number(f.id) !== Number(fontId));
+            renderFontLibrary();
+            const active = canvas.getActiveObject();
+            if (active) showProperties(active);
+            ccToast('Font deleted.', 'success');
+        })
+        .catch(() => ccToast('Could not delete font.', 'error'));
+    };
+
+    renderFontLibrary();
 
     function resizeCanvas() {
         const s = displayScale() * zoomFactor;
@@ -1086,6 +1269,85 @@
         handleImageFiles(e.dataTransfer.files);
     });
     fileInput.addEventListener('change', () => { if (fileInput.files.length) handleImageFiles(fileInput.files); });
+
+    const fontDropZone = document.getElementById('fontDropZone');
+    const fontFileInput = document.getElementById('fontFileInput');
+    let pendingFontFile = null;
+    if (fontDropZone && fontFileInput) {
+        fontDropZone.addEventListener('dragover', e => { e.preventDefault(); fontDropZone.classList.add('dragover'); });
+        fontDropZone.addEventListener('dragleave', () => fontDropZone.classList.remove('dragover'));
+        fontDropZone.addEventListener('drop', e => {
+            e.preventDefault();
+            fontDropZone.classList.remove('dragover');
+            if (e.dataTransfer.files && e.dataTransfer.files.length) selectFontFile(e.dataTransfer.files[0]);
+        });
+        fontFileInput.addEventListener('change', () => {
+            if (fontFileInput.files && fontFileInput.files.length) selectFontFile(fontFileInput.files[0]);
+        });
+    }
+
+    function selectFontFile(file) {
+        const allowed = ['woff2', 'woff', 'ttf', 'otf'];
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        if (!allowed.includes(ext)) {
+            ccToast('Fonts must be WOFF2, WOFF, TTF, or OTF files.', 'error');
+            return;
+        }
+        if (file.size > 8 * 1024 * 1024) {
+            ccToast('Font files must be under 8MB.', 'error');
+            return;
+        }
+        pendingFontFile = file;
+        const nameInput = document.getElementById('fontDisplayName');
+        if (nameInput && !nameInput.value.trim()) nameInput.value = file.name.replace(/\.[^.]+$/, '');
+        const label = fontDropZone.querySelector('div');
+        if (label) label.innerHTML = '<strong style="color:#6366f1">' + escapeHtml(file.name) + '</strong><br><span style="font-size:.72rem;color:#6b7280">Ready to upload</span>';
+    }
+
+    window.uploadSelectedFont = function() {
+        if (!pendingFontFile) {
+            if (fontFileInput) fontFileInput.click();
+            return;
+        }
+        const btn = document.getElementById('btnUploadFont');
+        const fd = new FormData();
+        fd.append('font', pendingFontFile);
+        fd.append('display_name', (document.getElementById('fontDisplayName')?.value || '').trim());
+        if (csrfToken) fd.append('csrf_token', csrfToken);
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Uploading...';
+        }
+        fetch("{{ url_for('client.client_creative_fonts_upload') }}", {
+            method: 'POST',
+            body: fd,
+            headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {},
+        })
+        .then(r => r.json())
+        .then(async data => {
+            if (!data.ok || !data.font) { ccToast(data.error || 'Font upload failed.', 'error'); return; }
+            uploadedFonts.push(data.font);
+            injectUploadedFont(data.font);
+            await ensureFontLoaded(data.font.css_family);
+            renderFontLibrary();
+            pendingFontFile = null;
+            if (fontFileInput) fontFileInput.value = '';
+            const nameInput = document.getElementById('fontDisplayName');
+            if (nameInput) nameInput.value = '';
+            if (fontDropZone) {
+                const label = fontDropZone.querySelector('div');
+                if (label) label.innerHTML = '<strong style="color:#6366f1">Click</strong> or drag font file here';
+            }
+            ccToast('Font uploaded: ' + (data.font.display_name || 'Custom font'), 'success');
+        })
+        .catch(() => ccToast('Font upload failed.', 'error'))
+        .finally(() => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-upload"></i> Upload Font';
+            }
+        });
+    };
 
     function handleImageFiles(files) {
         Array.from(files).forEach(file => {
@@ -1350,7 +1612,8 @@
                 </div>
                 <div class="prop-field">
                     <label>Font</label>
-                    <select class="prop-input" onchange="updateProp('fontFamily', this.value)" style="font-family: ${obj.fontFamily || 'Arial'}">
+                    <select class="prop-input" onchange="setTextFont(this.value)" style="font-family: ${obj.fontFamily || 'Arial'}">
+                        ${uploadedFonts.length ? '<optgroup label="Uploaded Brand Fonts">' + uploadedFonts.map(f => fontOptionHtml(f, obj.fontFamily || '')).join('') + '</optgroup>' : ''}
                         <optgroup label="Sans Serif">
                             ${['Arial','Helvetica','Verdana','Inter','DM Sans','Montserrat','Roboto','Roboto Condensed','Open Sans','Poppins','Lato','Nunito','Raleway','Outfit','Barlow','Work Sans','Lexend','Sora','Space Grotesk','Quicksand','Josefin Sans','Kanit','Cabin','Signika','Ubuntu','Exo 2','Archivo','Comfortaa','Fredoka'].map(f => '<option' + (obj.fontFamily===f?' selected':'') + ' style="font-family:' + f + '">' + f + '</option>').join('')}
                         </optgroup>
@@ -1741,7 +2004,8 @@
         redoStack.push(undoStack.pop());
         const state = undoStack[undoStack.length - 1];
         undoLock = true;
-        canvas.loadFromJSON(state, function() {
+        canvas.loadFromJSON(state, async function() {
+            await ensureFontsForCanvas();
             canvas.renderAll();
             updateLayers();
             showDefaultProps();
@@ -1755,7 +2019,8 @@
         const state = redoStack.pop();
         undoStack.push(state);
         undoLock = true;
-        canvas.loadFromJSON(state, function() {
+        canvas.loadFromJSON(state, async function() {
+            await ensureFontsForCanvas();
             canvas.renderAll();
             updateLayers();
             showDefaultProps();
@@ -1925,10 +2190,11 @@
 
     // ── Export ──
 
-    window.exportCanvas = function() {
+    window.exportCanvas = async function() {
         const btn = document.getElementById('btnExport');
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Exporting...';
+        await ensureFontsForCanvas();
 
         // Export at full resolution - remove guides and hide grid first
         removeGuides();
@@ -2538,7 +2804,8 @@
 
             // Load canvas state
             const json = JSON.parse(tpl.canvas_json);
-            canvas.loadFromJSON(json, function() {
+            canvas.loadFromJSON(json, async function() {
+                await ensureFontsForCanvas();
                 canvas.renderAll();
                 updateLayers();
                 undoStack = [];
@@ -2605,11 +2872,12 @@
 
     // ── Save to Google Drive ──
 
-    window.saveToDrive = function() {
+    window.saveToDrive = async function() {
         const btn = document.getElementById('btnDriveSave');
         if (!btn) return;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+        await ensureFontsForCanvas();
 
         removeGuides();
         const gridWasDrive = gridVisible;

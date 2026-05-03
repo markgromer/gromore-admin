@@ -72,6 +72,48 @@ class CreativeCenterRouteTests(unittest.TestCase):
         self.assertIn('id="fabricCanvas"', html)
         self.assertIn("window.__creativeCenterAssetsPromise", html)
         self.assertIn("source_image", html)
+        self.assertIn('id="fontFileInput"', html)
+        self.assertIn("/client/creative/fonts", html)
+
+    def test_creative_font_upload_lists_and_deletes_brand_font(self):
+        response = self.client.post(
+            "/client/creative/fonts",
+            data={
+                "display_name": "Owner Brand Font",
+                "font": (BytesIO(b"fake-font-data"), "owner-brand.woff2"),
+            },
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        font = payload["font"]
+        self.assertEqual(font["display_name"], "Owner Brand Font")
+        self.assertTrue(font["css_family"].startswith(f"WARRENFont_{self.brand_id}_"))
+        saved = self.uploads_dir / font["file_path"]
+        self.assertTrue(saved.exists())
+
+        listed = self.client.get("/client/creative/fonts").get_json()
+        self.assertEqual(len(listed["fonts"]), 1)
+        self.assertEqual(listed["fonts"][0]["id"], font["id"])
+
+        deleted = self.client.delete(f"/client/creative/fonts/{font['id']}")
+        self.assertEqual(deleted.status_code, 200)
+        self.assertFalse(saved.exists())
+
+    def test_creative_font_upload_rejects_unsupported_files(self):
+        response = self.client.post(
+            "/client/creative/fonts",
+            data={
+                "display_name": "Bad Font",
+                "font": (BytesIO(b"not-a-font"), "bad-font.svg"),
+            },
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.get_json()["ok"])
 
     def test_image_creator_renders_reference_upload_and_creative_handoff(self):
         response = self.client.get("/client/image-creator")

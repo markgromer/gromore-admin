@@ -721,6 +721,22 @@ class WebDB:
 
         # ── Ad Intelligence System ──
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS creative_fonts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                display_name TEXT NOT NULL DEFAULT '',
+                css_family TEXT NOT NULL DEFAULT '',
+                original_filename TEXT NOT NULL DEFAULT '',
+                file_path TEXT NOT NULL DEFAULT '',
+                mime_type TEXT NOT NULL DEFAULT '',
+                file_size INTEGER DEFAULT 0,
+                uploaded_by TEXT NOT NULL DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(brand_id, css_family),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS ad_examples (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 platform TEXT NOT NULL DEFAULT 'google',
@@ -5205,6 +5221,58 @@ class WebDB:
         conn.close()
 
     # ── Settings ──
+
+    def save_creative_font(self, brand_id, display_name, css_family, original_filename, file_path, mime_type, file_size, uploaded_by):
+        conn = self._conn()
+        conn.execute(
+            """
+            INSERT INTO creative_fonts (
+                brand_id, display_name, css_family, original_filename, file_path,
+                mime_type, file_size, uploaded_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (brand_id, display_name, css_family, original_filename, file_path, mime_type, file_size, uploaded_by),
+        )
+        conn.commit()
+        font_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.close()
+        return int(font_id)
+
+    def get_creative_fonts(self, brand_id):
+        conn = self._conn()
+        rows = conn.execute(
+            """
+            SELECT id, display_name, css_family, original_filename, file_path,
+                   mime_type, file_size, uploaded_by, created_at
+            FROM creative_fonts
+            WHERE brand_id = ?
+            ORDER BY display_name COLLATE NOCASE, created_at DESC
+            """,
+            (brand_id,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_creative_font(self, font_id, brand_id):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM creative_fonts WHERE id = ? AND brand_id = ?",
+            (font_id, brand_id),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def delete_creative_font(self, font_id, brand_id):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM creative_fonts WHERE id = ? AND brand_id = ?",
+            (font_id, brand_id),
+        ).fetchone()
+        if row:
+            conn.execute("DELETE FROM creative_fonts WHERE id = ? AND brand_id = ?", (font_id, brand_id))
+            conn.commit()
+        conn.close()
+        return dict(row) if row else None
 
     def get_setting(self, key, default=""):
         conn = self._conn()

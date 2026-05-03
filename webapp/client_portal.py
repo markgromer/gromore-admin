@@ -4760,6 +4760,9 @@ _ENDPOINT_FEATURE_MAP = {
     "client_creative_templates_save":  "creative",
     "client_creative_template_load":   "creative",
     "client_creative_template_update": "creative",
+    "client_creative_fonts_list":      "creative",
+    "client_creative_fonts_upload":    "creative",
+    "client_creative_font_delete":     "creative",
     "client_ai_copy_variants":     "creative",
     "client_blog":                 "blog",
     "client_blog_editor":          "blog",
@@ -8116,6 +8119,28 @@ def client_serve_upload(filename):
 
 # ── Creative Center ──
 
+_CREATIVE_FONT_EXTENSIONS = {
+    ".woff2": "font/woff2",
+    ".woff": "font/woff",
+    ".ttf": "font/ttf",
+    ".otf": "font/otf",
+}
+
+
+def _creative_font_payload(font):
+    payload = dict(font or {})
+    file_path = (payload.get("file_path") or "").strip()
+    payload["url"] = url_for("client.client_serve_upload", filename=file_path) if file_path else ""
+    payload["format"] = Path(file_path).suffix.lstrip(".").lower()
+    return payload
+
+
+def _clean_font_display_name(value, fallback):
+    raw = (value or fallback or "Uploaded Font").rsplit(".", 1)[0].strip()
+    cleaned = re.sub(r"[^A-Za-z0-9 _.-]+", "", raw).strip(" ._-")
+    return (cleaned or "Uploaded Font")[:80]
+
+
 _IMAGE_CREATOR_FORMATS = {
     "square": {"label": "Square", "size": "1024x1024", "hint": "single square social/ad image"},
     "wide": {"label": "Wide", "size": "1792x1024", "hint": "wide landscape ad image"},
@@ -8467,16 +8492,100 @@ def client_creative():
         abort(404)
 
     logo_variants = _parse_logo_variants(brand.get("logo_variants"))
+    creative_fonts = [_creative_font_payload(font) for font in db.get_creative_fonts(brand_id)]
 
     return render_template(
         "client_creative.html",
         brand=brand,
         logo_variants=logo_variants,
+        creative_fonts=creative_fonts,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
     )
 
 
 # ── Creative Templates API ──
+
+@client_bp.route("/creative/fonts", methods=["GET"])
+@client_login_required
+def client_creative_fonts_list():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    fonts = [_creative_font_payload(font) for font in db.get_creative_fonts(brand_id)]
+    return jsonify({"ok": True, "fonts": fonts})
+
+
+@client_bp.route("/creative/fonts", methods=["POST"])
+@client_login_required
+def client_creative_fonts_upload():
+    from werkzeug.utils import secure_filename
+
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    upload = request.files.get("font")
+    if not upload or not upload.filename:
+        return jsonify({"ok": False, "error": "Choose a font file to upload."}), 400
+
+    original_name = upload.filename[:180]
+    ext = Path(original_name).suffix.lower()
+    if ext not in _CREATIVE_FONT_EXTENSIONS:
+        return jsonify({"ok": False, "error": "Fonts must be WOFF2, WOFF, TTF, or OTF files."}), 400
+
+    upload.seek(0, 2)
+    size_bytes = upload.tell()
+    upload.seek(0)
+    if size_bytes <= 0:
+        return jsonify({"ok": False, "error": "That font file is empty."}), 400
+    if size_bytes > 8 * 1024 * 1024:
+        return jsonify({"ok": False, "error": "Font files must be under 8MB."}), 400
+
+    display_name = _clean_font_display_name(request.form.get("display_name"), original_name)
+    unique = uuid.uuid4().hex[:12]
+    css_family = f"WARRENFont_{brand_id}_{unique}"
+    safe_name = secure_filename(f"{unique}_{display_name.replace(' ', '_')}{ext}")
+    rel_path = f"creative_fonts/{brand_id}/{safe_name}"
+    target_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads")) / "creative_fonts" / str(brand_id)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path = target_dir / safe_name
+    upload.save(target_path)
+
+    font_id = db.save_creative_font(
+        brand_id,
+        display_name,
+        css_family,
+        original_name,
+        rel_path,
+        _CREATIVE_FONT_EXTENSIONS[ext],
+        size_bytes,
+        session.get("client_name", "client"),
+    )
+    font = db.get_creative_font(font_id, brand_id)
+    return jsonify({"ok": True, "font": _creative_font_payload(font)})
+
+
+@client_bp.route("/creative/fonts/<int:font_id>", methods=["DELETE"])
+@client_login_required
+def client_creative_font_delete(font_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    font = db.delete_creative_font(font_id, brand_id)
+    if not font:
+        return jsonify({"ok": False, "error": "Font not found."}), 404
+
+    file_path = (font.get("file_path") or "").strip()
+    if file_path:
+        upload_root = Path(current_app.config.get("UPLOADS_DIR", "data/uploads"))
+        target_path = upload_root / file_path
+        try:
+            resolved = target_path.resolve()
+            allowed_root = upload_root.resolve()
+            if resolved == allowed_root or allowed_root not in resolved.parents:
+                raise ValueError("font path escaped uploads root")
+            if target_path.exists():
+                target_path.unlink()
+        except Exception as exc:
+            log.warning("Could not delete creative font file for brand %s: %s", brand_id, exc)
+    return jsonify({"ok": True})
+
 
 @client_bp.route("/creative/templates", methods=["GET"])
 @client_login_required
