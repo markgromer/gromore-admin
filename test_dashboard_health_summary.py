@@ -175,6 +175,20 @@ class DashboardHealthSummaryTests(unittest.TestCase):
 
         self.assertFalse(any("Traffic Dropped" in suggestion["title"] for suggestion in suggestions))
 
+    def test_early_current_month_thin_sample_does_not_create_conversion_mission(self):
+        suggestions = _ga_suggestions(
+            {
+                "metrics": {"sessions": 18, "conversions": 0, "conversion_rate": 0},
+                "scores": {"conversion_rate": "poor"},
+                "period": {"is_current_month": True, "early_month": True},
+                "month_over_month": {},
+            },
+            goals={},
+            top_landing_pages=[],
+        )
+
+        self.assertFalse(any("Conversion Rate" in suggestion["title"] for suggestion in suggestions))
+
     def test_kpi_cluster_uses_paid_efficiency_when_targets_are_missing(self):
         card = _build_kpi_cluster_card(
             {
@@ -235,6 +249,43 @@ class DashboardHealthSummaryTests(unittest.TestCase):
         organic_card = next(card for card in dashboard["health_cluster"]["cards"] if card["key"] == "organic")
         self.assertIn("Organic Website Sessions: 54", organic_card["primary_metric"])
         self.assertNotEqual(organic_card["display_score"], "--")
+
+    def test_missions_include_diagnostics_and_research_checks(self):
+        ga = analyze_google_analytics(
+            {
+                "totals": {"sessions": 90, "conversions": 0, "conversion_rate": 0},
+                "by_source": {"google / organic": {"sessions": 40, "users": 35, "conversions": 0}},
+                "by_page": [
+                    {"page": "/quote", "sessions": 70, "conversions": 0, "bounce_rate": 82.0}
+                ],
+            },
+            prev_ga_data=None,
+            benchmarks_website={"conversion_rate_good": 5},
+            month="2026-05",
+        )
+        suggestions = _ga_suggestions(
+            ga,
+            goals={},
+            top_landing_pages=ga.get("top_landing_pages") or [],
+        )
+
+        dashboard = build_client_dashboard(
+            {
+                "google_analytics": ga,
+                "overall_grade": "C",
+                "overall_score": 3.0,
+                "kpi_status": {"targets": {}, "actual": {}, "evaluation": {}},
+                "period": {"month": "2026-05", "is_current_month": True, "elapsed_days": 3, "days_in_month": 31, "progress_pct": 9.7, "early_month": True},
+            },
+            suggestions=suggestions,
+            brand={},
+        )
+
+        self.assertTrue(dashboard["actions"])
+        action = dashboard["actions"][0]
+        self.assertTrue(action["diagnostics"])
+        self.assertTrue(action["research_questions"])
+        self.assertIn("confidence", action)
 
 
 if __name__ == "__main__":

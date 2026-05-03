@@ -24,7 +24,7 @@ CATEGORY_BUDGET = "budget"
 CATEGORY_ORGANIC = "organic_social"
 
 
-def make_suggestion(title, detail, priority, category, impact_area, data_point=None):
+def make_suggestion(title, detail, priority, category, impact_area, data_point=None, confidence="medium", evidence=None):
     return {
         "title": title,
         "detail": detail,
@@ -32,6 +32,8 @@ def make_suggestion(title, detail, priority, category, impact_area, data_point=N
         "category": category,
         "impact_area": impact_area,
         "data_point": data_point,
+        "confidence": confidence,
+        "evidence": evidence or [],
     }
 
 
@@ -128,7 +130,7 @@ def _ga_suggestions(ga, goals, top_landing_pages=None):
     # ── Bounce rate with specific page context ──
     bounce_score = scores.get("bounce_rate", "no_data")
     bounce_rate = _safe_num(metrics.get("bounce_rate", 0))
-    if bounce_score in ("below_average", "poor") and bounce_rate:
+    if bounce_score in ("below_average", "poor") and bounce_rate and (not early_current_month or _safe_num(metrics.get("sessions", 0)) >= 50):
         worst_bounce = sorted(
             [p for p in landing_pages[:10] if _safe_num(p.get("sessions") or 0) >= 10],
             key=lambda p: _safe_num(p.get("bounce_rate") or 0), reverse=True
@@ -151,7 +153,7 @@ def _ga_suggestions(ga, goals, top_landing_pages=None):
     # ── Session duration ──
     duration_score = scores.get("avg_session_duration", "no_data")
     duration = _safe_num(metrics.get("avg_session_duration", 0))
-    if duration_score in ("below_average", "poor") and duration:
+    if duration_score in ("below_average", "poor") and duration and (not early_current_month or _safe_num(metrics.get("sessions", 0)) >= 50):
         suggestions.append(make_suggestion(
             f"Session Duration is Only {duration:.0f}s",
             f"Visitors spend just {duration:.0f} seconds on the site before leaving. "
@@ -164,7 +166,7 @@ def _ga_suggestions(ga, goals, top_landing_pages=None):
     # ── Pages per session ──
     pps_score = scores.get("pages_per_session", "no_data")
     pps = _safe_num(metrics.get("pages_per_session", 0))
-    if pps_score in ("below_average", "poor") and pps:
+    if pps_score in ("below_average", "poor") and pps and (not early_current_month or _safe_num(metrics.get("sessions", 0)) >= 50):
         suggestions.append(make_suggestion(
             f"Visitors Only View {pps:.1f} Pages",
             f"Pages per session is {pps:.1f}. Add internal links between service pages, "
@@ -179,7 +181,7 @@ def _ga_suggestions(ga, goals, top_landing_pages=None):
     conv_rate = _safe_num(metrics.get("conversion_rate", 0))
     sessions = _safe_num(metrics.get("sessions", 0))
     conversions = _safe_num(metrics.get("conversions", 0))
-    if conv_rate_score in ("below_average", "poor") and sessions > 0:
+    if conv_rate_score in ("below_average", "poor") and sessions > 0 and (not early_current_month or sessions >= 50):
         # Find best and worst converting pages
         converting_pages = [p for p in landing_pages[:10] if _safe_num(p.get("conversions") or 0) > 0]
         converting_pages.sort(key=lambda p: _safe_num(p.get("conversions") or 0), reverse=True)
@@ -269,6 +271,8 @@ def _meta_suggestions(meta, industry, goals, client_config):
     metrics = meta.get("metrics", {})
     scores = meta.get("scores", {})
     mom = meta.get("month_over_month", {})
+    period = meta.get("period") or {}
+    early_current_month = bool(period.get("is_current_month") and period.get("early_month"))
     campaign_analysis = meta.get("campaign_analysis", [])
     top_ads = meta.get("top_ads") or []
 
@@ -312,7 +316,8 @@ def _meta_suggestions(meta, industry, goals, client_config):
     # ── CTR issues with specific data ──
     ctr_score = scores.get("ctr", "no_data")
     ctr = _safe_num(metrics.get("ctr", 0))
-    if ctr_score in ("below_average", "poor") and ctr:
+    impressions = _safe_num(metrics.get("impressions", 0))
+    if ctr_score in ("below_average", "poor") and ctr and (not early_current_month or impressions >= 500):
         # Find worst CTR campaigns
         low_ctr_camps = sorted(
             [c for c in campaign_analysis if _safe_num((c.get("metrics") or c).get("ctr") or 0) > 0],
@@ -336,7 +341,8 @@ def _meta_suggestions(meta, industry, goals, client_config):
     # ── CPC issues with specific data ──
     cpc_score = scores.get("cpc", "no_data")
     cpc = _safe_num(metrics.get("cpc", 0))
-    if cpc_score in ("below_average", "poor") and cpc:
+    clicks = _safe_num(metrics.get("clicks", 0))
+    if cpc_score in ("below_average", "poor") and cpc and (not early_current_month or clicks >= 20):
         suggestions.append(make_suggestion(
             f"Cut Facebook CPC from ${cpc:.2f}",
             f"Paying ${cpc:.2f} per click. Refine targeting to homeowners in your service area (age 30-65). "
@@ -376,7 +382,7 @@ def _meta_suggestions(meta, industry, goals, client_config):
                 PRIORITY_HIGH, CATEGORY_PAID, "cost_efficiency",
                 data_point=f"CPL: ${cpr:.2f}"
             ))
-        elif cpr < 60 and "increase_leads" in goals:
+        elif cpr < 60 and "increase_leads" in goals and (not early_current_month or results >= 3):
             suggestions.append(make_suggestion(
                 f"Scale Facebook Ads - CPL ${cpr:.0f} is Strong",
                 f"At ${cpr:.0f} per lead ({results:.0f} leads on ${spend:.0f} spend), "
@@ -532,6 +538,8 @@ def _gsc_suggestions(gsc, industry, client_config, analysis=None):
     suggestions = []
     metrics = gsc.get("metrics", {})
     scores = gsc.get("scores", {})
+    period = gsc.get("period") or {}
+    early_current_month = bool(period.get("is_current_month") and period.get("early_month"))
     opportunities = gsc.get("keyword_opportunities", [])
     top_queries = gsc.get("top_queries", [])
     top_pages = gsc.get("top_pages") or []
@@ -601,7 +609,8 @@ def _gsc_suggestions(gsc, industry, client_config, analysis=None):
 
     # ── Average position ──
     avg_pos = _safe_num(metrics.get("avg_position", 0))
-    if avg_pos > 15:
+    impressions = _safe_num(metrics.get("impressions", 0))
+    if avg_pos > 15 and (not early_current_month or impressions >= 250):
         suggestions.append(make_suggestion(
             f"Overall SEO Visibility Weak - Avg Position {avg_pos:.0f}",
             f"Your average search position is {avg_pos:.0f} (page 2+). "
@@ -632,7 +641,6 @@ def _gsc_suggestions(gsc, industry, client_config, analysis=None):
 
     # ── Content gap: high impressions, very few clicks ──
     clicks = _safe_num(metrics.get("clicks", 0))
-    impressions = _safe_num(metrics.get("impressions", 0))
     ctr = _safe_num(metrics.get("ctr", 0))
     if impressions > 1000 and clicks < 50:
         suggestions.append(make_suggestion(
@@ -647,7 +655,7 @@ def _gsc_suggestions(gsc, industry, client_config, analysis=None):
     # ── Local SEO for home services ──
     services = client_config.get("primary_services", [])
     service_area = client_config.get("service_area", "")
-    if services and service_area:
+    if services and service_area and (not early_current_month or impressions >= 500 or len(top_queries) >= 8):
         has_local = any(
             service_area.lower() in q.get("query", "").lower()
             for q in top_queries[:20]
@@ -668,6 +676,8 @@ def _google_ads_suggestions(google_ads, industry, goals):
     suggestions = []
     metrics = google_ads.get("metrics", {})
     scores = google_ads.get("scores", {})
+    period = google_ads.get("period") or {}
+    early_current_month = bool(period.get("is_current_month") and period.get("early_month"))
     campaign_analysis = google_ads.get("campaign_analysis", [])
     search_terms = google_ads.get("search_terms") or []
 
@@ -774,7 +784,7 @@ def _google_ads_suggestions(google_ads, industry, goals):
     cpc = metrics.get("cpc", 0)
     spend = _safe_num(metrics.get("spend", 0))
     clicks = _safe_num(metrics.get("clicks", 0))
-    if cpc_score in ("below_average", "poor") and cpc:
+    if cpc_score in ("below_average", "poor") and cpc and (not early_current_month or clicks >= 20 or spend >= 50):
         high_cpc_terms = [t for t in search_terms if _safe_num(t.get("cpc") or t.get("cost_per_click") or 0) > cpc * 1.5]
         high_cpc_terms.sort(key=lambda t: _safe_num(t.get("cpc") or t.get("cost_per_click") or 0), reverse=True)
         term_detail = ""
@@ -796,7 +806,8 @@ def _google_ads_suggestions(google_ads, industry, goals):
     # ── Overall CTR below benchmark ──
     ctr_score = scores.get("ctr", "no_data")
     ctr = metrics.get("ctr", 0)
-    if ctr_score in ("below_average", "poor") and ctr:
+    impressions = _safe_num(metrics.get("impressions", 0))
+    if ctr_score in ("below_average", "poor") and ctr and (not early_current_month or impressions >= 500):
         suggestions.append(make_suggestion(
             f"Lift Google Ads CTR from {ctr:.1f}%",
             f"CTR is {ctr:.1f}% - below industry benchmark. Low CTR means your ads aren't compelling enough "
@@ -824,7 +835,7 @@ def _google_ads_suggestions(google_ads, industry, goals):
     # ── Scaling opportunity ──
     if results > 0 and spend > 0:
         current_cpa = spend / results
-        if current_cpa < 60 and "increase_leads" in goals:
+        if current_cpa < 60 and "increase_leads" in goals and (not early_current_month or results >= 3):
             best_camp_name = performing[0]["name"] if performing else "your best campaign"
             suggestions.append(make_suggestion(
                 f"Scale Ads - CPA is ${current_cpa:.0f}, Room to Grow",
@@ -900,9 +911,11 @@ def _cross_platform_suggestions(analysis):
     roas = analysis.get("roas", {})
     goals = analysis.get("client_config", {}).get("goals", [])
     grade = analysis.get("overall_grade", "N/A")
+    period = analysis.get("period") or {}
+    early_current_month = bool(period.get("is_current_month") and period.get("early_month"))
 
     # Overall performance check
-    if grade in ("D", "F"):
+    if grade in ("D", "F") and not early_current_month:
         suggestions.append(make_suggestion(
             "Overall Performance Needs Attention",
             f"Overall grade is {grade}. Multiple metrics are below industry benchmarks. "

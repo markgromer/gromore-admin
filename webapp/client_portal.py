@@ -2723,6 +2723,22 @@ def _normalize_client_actions(actions):
         else:
             exact_targets = []
 
+        diagnostics_value = action.get("diagnostics") or []
+        if isinstance(diagnostics_value, str):
+            diagnostics = [diagnostics_value.strip()] if diagnostics_value.strip() else []
+        elif isinstance(diagnostics_value, (list, tuple)):
+            diagnostics = [str(item).strip() for item in diagnostics_value if str(item or "").strip()]
+        else:
+            diagnostics = []
+
+        research_value = action.get("research_questions") or []
+        if isinstance(research_value, str):
+            research_questions = [research_value.strip()] if research_value.strip() else []
+        elif isinstance(research_value, (list, tuple)):
+            research_questions = [str(item).strip() for item in research_value if str(item or "").strip()]
+        else:
+            research_questions = []
+
         normalized.append(
             {
                 **action,
@@ -2747,6 +2763,9 @@ def _normalize_client_actions(actions):
                 "delegate_to": str(action.get("delegate_to") or ""),
                 "delegate_message": str(action.get("delegate_message") or ""),
                 "exact_targets": exact_targets,
+                "diagnostics": diagnostics,
+                "research_questions": research_questions,
+                "confidence": str(action.get("confidence") or "Medium"),
                 "xp": xp,
                 "difficulty": difficulty,
                 "key": _coerce_action_key(
@@ -5010,7 +5029,7 @@ def _consume_login_refresh_month(session_key: str, month: str) -> bool:
 
 
 _CAMPAIGNS_CACHE_TTL_SECONDS = 6 * 60 * 60
-_DASHBOARD_SNAPSHOT_VERSION = 2
+_DASHBOARD_SNAPSHOT_VERSION = 3
 
 
 def _campaigns_cache_key(brand_id: int, month: str) -> str:

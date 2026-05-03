@@ -255,6 +255,8 @@ def _build_action_items(suggestions, analysis_summary):
             item["relevant_data"]["website_landing_pages"] = (website_detail.get("top_landing_pages") or [])[:10]
             item["relevant_data"]["website_traffic_sources"] = (website_detail.get("top_sources") or [])[:10]
             item["relevant_data"]["website_top_converting_sources"] = (website_detail.get("top_converting_sources") or [])[:10]
+            item["relevant_data"]["website_organic_search"] = website_detail.get("organic_search") or {}
+            item["relevant_data"]["website_device_breakdown"] = (website_detail.get("device_breakdown") or [])[:10]
             item["relevant_data"]["seo_top_pages"] = (seo_detail.get("top_pages") or [])[:10]
             item["relevant_data"]["seo_keyword_opportunities"] = (seo_detail.get("keyword_opportunities") or [])[:10]
 
@@ -263,6 +265,8 @@ def _build_action_items(suggestions, analysis_summary):
             item["relevant_data"]["website_landing_pages"] = (website_detail.get("top_landing_pages") or [])[:10]
             item["relevant_data"]["website_traffic_sources"] = (website_detail.get("top_sources") or [])[:10]
             item["relevant_data"]["website_top_converting_sources"] = (website_detail.get("top_converting_sources") or [])[:10]
+            item["relevant_data"]["website_organic_search"] = website_detail.get("organic_search") or {}
+            item["relevant_data"]["website_device_breakdown"] = (website_detail.get("device_breakdown") or [])[:10]
             item["relevant_data"]["seo_top_queries"] = (seo_detail.get("top_queries") or [])[:10]
             item["relevant_data"]["seo_top_pages"] = (seo_detail.get("top_pages") or [])[:10]
             item["relevant_data"]["google_ads_campaigns"] = (google_ads_detail.get("campaigns") or [])[:10]
@@ -380,6 +384,116 @@ def _format_exact_targets(category, relevant_data):
         if cleaned and cleaned not in deduped:
             deduped.append(cleaned)
     return deduped[:4]
+
+
+def _format_period_context(period):
+    if not isinstance(period, dict):
+        return ""
+    if period.get("is_current_month") and period.get("elapsed_days") and period.get("days_in_month"):
+        return (
+            f"Current month is only day {int(period.get('elapsed_days'))} of "
+            f"{int(period.get('days_in_month'))} ({period.get('progress_pct')}% complete)."
+        )
+    return ""
+
+
+def _mission_confidence_from_evidence(suggestion, evidence, period):
+    base = str(suggestion.get("confidence") or "medium").strip().lower()
+    if base not in {"high", "medium", "low"}:
+        base = "medium"
+    if period.get("is_current_month") and period.get("early_month") and len(evidence) < 3:
+        return "low"
+    if len(evidence) >= 4 and base != "low":
+        return "high"
+    if len(evidence) >= 2 and base == "low":
+        return "medium"
+    return base
+
+
+def _build_mission_intelligence(suggestion, action_item, analysis):
+    relevant_data = (action_item or {}).get("relevant_data") or {}
+    category = str(suggestion.get("category") or "").strip().lower()
+    period = (analysis or {}).get("period") or {}
+    evidence = []
+    research = []
+
+    period_context = _format_period_context(period)
+    if period_context:
+        evidence.append(period_context)
+
+    data_point = str(suggestion.get("data_point") or "").strip()
+    if data_point:
+        evidence.append(f"Primary signal: {data_point}.")
+
+    for source in (relevant_data.get("website_traffic_sources") or [])[:2]:
+        name = source.get("source") or source.get("source_medium")
+        sessions = _to_float(source.get("sessions"), 0)
+        conversions = _to_float(source.get("conversions"), 0)
+        if name and sessions:
+            evidence.append(f"Traffic source {name}: {int(sessions)} sessions, {int(conversions)} conversions.")
+
+    organic = relevant_data.get("website_organic_search") or {}
+    if organic.get("sessions"):
+        evidence.append(
+            f"GA4 organic search: {int(_to_float(organic.get('sessions'), 0))} sessions, "
+            f"{int(_to_float(organic.get('conversions'), 0))} conversions."
+        )
+
+    for page in (relevant_data.get("website_landing_pages") or [])[:2]:
+        path = page.get("page") or page.get("path") or page.get("url")
+        sessions = _to_float(page.get("sessions"), 0)
+        bounce = _to_float(page.get("bounce_rate"), 0)
+        conversions = _to_float(page.get("conversions"), 0)
+        if path and sessions:
+            evidence.append(f"Landing page {path}: {int(sessions)} sessions, {int(conversions)} conversions, {bounce:.1f}% bounce.")
+
+    for query in (relevant_data.get("seo_keyword_opportunities") or relevant_data.get("seo_top_queries") or [])[:2]:
+        q = query.get("query") or query.get("keyword")
+        if q:
+            evidence.append(
+                f"Search query \"{q}\": {int(_to_float(query.get('impressions'), 0))} impressions, "
+                f"{int(_to_float(query.get('clicks'), 0))} clicks, position {_to_float(query.get('position'), 0):.1f}."
+            )
+
+    for campaign in (relevant_data.get("google_ads_campaigns") or relevant_data.get("meta_campaigns") or [])[:2]:
+        metrics = campaign.get("metrics") or campaign
+        name = campaign.get("name") or campaign.get("campaign_name")
+        spend = _to_float(metrics.get("spend"), 0)
+        results = _to_float(metrics.get("results") or metrics.get("conversions"), 0)
+        if name and (spend or results):
+            evidence.append(f"Campaign {name}: ${spend:.0f} spend, {int(results)} results.")
+
+    for term in (relevant_data.get("google_ads_search_terms") or [])[:2]:
+        term_name = term.get("search_term") or term.get("query") or term.get("term")
+        cost = _to_float(term.get("cost") or term.get("spend"), 0)
+        conversions = _to_float(term.get("conversions") or term.get("results"), 0)
+        if term_name and cost:
+            evidence.append(f"Search term \"{term_name}\": ${cost:.0f} spend, {int(conversions)} conversions.")
+
+    if category in {"website", "strategy"}:
+        research.extend([
+            "Compare the weakest page against the best converting page before changing the offer.",
+            "Check mobile first: above-the-fold CTA, load speed, click-to-call, and form length.",
+        ])
+    if category == "seo":
+        research.extend([
+            "Confirm the query has a matching page before creating anything new.",
+            "Check title tag, H1, internal links, and whether the page answers the exact search intent.",
+        ])
+    if category in {"paid_advertising", "budget", "creative"}:
+        research.extend([
+            "Check whether the flagged campaign is active and still spending before pausing or scaling.",
+            "Compare spend, results, CTR, CPC, and search terms or ad creative before changing budget.",
+        ])
+    if period.get("is_current_month") and period.get("early_month"):
+        research.append("Because this is early in the month, confirm the issue is a rate, spend, or page-level problem before treating it as a volume problem.")
+
+    confidence = _mission_confidence_from_evidence(suggestion, evidence, period)
+    return {
+        "diagnostics": evidence[:6],
+        "research_questions": research[:4],
+        "confidence": confidence.title(),
+    }
 
 
 def _pick_primary_target(rows, *keys):
@@ -1411,6 +1525,9 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None, mission_pro
             "delegate_to": "",
             "delegate_message": "",
             "exact_targets": [],
+            "diagnostics": [],
+            "research_questions": [],
+            "confidence": str(s.get("confidence") or "medium").title(),
         }
         actions.append(card)
 
@@ -1464,6 +1581,10 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None, mission_pro
             card["mission_name"] = card["title"]
         _apply_mission_reality_checks(card, selected[i], action_item)
         _apply_platform_reality_checks(card, selected[i], action_item, delegate_plan=delegate_plan)
+        mission_intel = _build_mission_intelligence(selected[i], action_item, analysis)
+        card["diagnostics"] = mission_intel["diagnostics"]
+        card["research_questions"] = mission_intel["research_questions"]
+        card["confidence"] = mission_intel["confidence"]
         # Calculate difficulty from time
         card["difficulty"] = _parse_difficulty(card["time"])
 
@@ -1720,6 +1841,7 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_pr
         "mission_profile": mission_profile or infer_mission_profile(),
         "highlights": analysis_summary.get("highlights", []),
         "concerns": analysis_summary.get("concerns", []),
+        "period": analysis_summary.get("period", {}),
         "action_items": action_items,
     }
 
@@ -1762,6 +1884,8 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_pr
         "- If relevant_data only includes Meta campaigns or Meta ads and no Google Ads campaigns/search terms, NEVER send the owner to ads.google.com or mention Google Ads.\n"
         "- If relevant_data only includes Google Ads campaigns/search terms and no Meta campaigns/top ads, NEVER send the owner to business.facebook.com or Ads Manager.\n"
         "- If the SEO data already points to existing pages and the search volume is light, do NOT recommend new city or local pages. Rewrite the current page instead.\n"
+        "- If period says early_month is true, do NOT create missions from low current-month volume alone. Use rate, spend, page, query, or campaign evidence, and call out lower confidence when sample size is thin.\n"
+        "- Every mission must include a diagnosis first: what signal triggered it, what exact evidence supports it, what might be a false positive, and then the fix.\n"
         "- Avoid verbs like 'look for', 'review', 'find', 'evaluate', or 'assess' unless the exact thing to inspect is named in the same sentence.\n\n"
 
         "OUTPUT FORMAT (JSON only):\n"

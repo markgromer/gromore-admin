@@ -154,7 +154,7 @@
         padding: 0 1.15rem;
     }
     .mission-body.open {
-        max-height: 800px;
+        max-height: 1400px;
         padding: .25rem 1.15rem 1.15rem;
     }
 
@@ -476,6 +476,7 @@
         font-weight: 800;
         color: #0f172a;
     }
+    .diagnostics-box,
     .targets-box,
     .delegate-box {
         border: 1px solid #e2e8f0;
@@ -484,6 +485,36 @@
         padding: .85rem .95rem;
         margin-bottom: .8rem;
     }
+    .diagnostics-box {
+        background: #f8fbff;
+        border-color: #bfdbfe;
+    }
+    .diagnostics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: .75rem;
+    }
+    .diagnostics-box ul {
+        margin: 0;
+        padding-left: 1rem;
+        color: #334155;
+        font-size: .84rem;
+    }
+    .diagnostics-box li { margin-bottom: .3rem; }
+    .confidence-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        border-radius: 999px;
+        padding: .2rem .55rem;
+        background: #dbeafe;
+        color: #1d4ed8;
+        font-size: .72rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+    .diagnostics-box strong,
     .targets-box strong,
     .delegate-box strong {
         display: block;
@@ -702,6 +733,37 @@
                 </div>
                 {% endif %}
 
+                {% if featured_action.diagnostics or featured_action.research_questions %}
+                <div class="diagnostics-box">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                        <strong class="mb-0">Mission Intelligence</strong>
+                        {% if featured_action.confidence %}<span class="confidence-pill"><i class="bi bi-shield-check"></i> {{ featured_action.confidence }} confidence</span>{% endif %}
+                    </div>
+                    <div class="diagnostics-grid">
+                        {% if featured_action.diagnostics %}
+                        <div>
+                            <strong>Evidence</strong>
+                            <ul>
+                                {% for item in featured_action.diagnostics %}
+                                <li>{{ item }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                        {% if featured_action.research_questions %}
+                        <div>
+                            <strong>Check before fixing</strong>
+                            <ul>
+                                {% for item in featured_action.research_questions %}
+                                <li>{{ item }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
                 {% if featured_action.platform_url %}
                 <a href="{{ featured_action.platform_url }}" target="_blank" rel="noopener" class="platform-link mb-2">
                     <i class="bi bi-box-arrow-up-right"></i> {{ featured_action.platform_label }}
@@ -817,6 +879,37 @@
                 <div class="why-box">
                     <i class="bi bi-currency-dollar"></i>
                     <div><strong>Why this matters:</strong> {{ action.why }}</div>
+                </div>
+                {% endif %}
+
+                {% if action.diagnostics or action.research_questions %}
+                <div class="diagnostics-box">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                        <strong class="mb-0">Mission Intelligence</strong>
+                        {% if action.confidence %}<span class="confidence-pill"><i class="bi bi-shield-check"></i> {{ action.confidence }} confidence</span>{% endif %}
+                    </div>
+                    <div class="diagnostics-grid">
+                        {% if action.diagnostics %}
+                        <div>
+                            <strong>Evidence</strong>
+                            <ul>
+                                {% for item in action.diagnostics %}
+                                <li>{{ item }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                        {% if action.research_questions %}
+                        <div>
+                            <strong>Check before fixing</strong>
+                            <ul>
+                                {% for item in action.research_questions %}
+                                <li>{{ item }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                    </div>
                 </div>
                 {% endif %}
 

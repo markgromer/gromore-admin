@@ -1001,6 +1001,7 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
         },
         "period": {
             "month": analysis.get("month"),
+            **((analysis.get("period") or {}) if isinstance(analysis.get("period"), dict) else {}),
         },
         "score": {
             "overall_grade": analysis.get("overall_grade"),
