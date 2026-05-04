@@ -112,7 +112,7 @@
             <div class="review-panel-title mb-1"><i class="bi bi-robot"></i> Review Autopilot</div>
             <div class="text-muted" style="font-size:.84rem;">
                 {% if automation.enabled %}Enabled{% else %}Paused{% endif %}:
-                waits {{ automation.delay_days }} day(s) after service, suppresses for {{ automation.cooldown_days }} day(s), max {{ automation.max_attempts }} ask(s), and reroutes low private feedback into recovery.
+                waits {{ automation.delay_days }} day(s) after service, checks the CRM for missing service dates inside {{ automation.recent_service_days }} day(s), suppresses for {{ automation.cooldown_days }} day(s), max {{ automation.max_attempts }} ask(s), and reroutes low private feedback into recovery.
                 CRM job-completion webhooks queue requests automatically, then WARREN re-checks review history and opt-outs before sending.
             </div>
         </div>
@@ -154,6 +154,7 @@
             <div class="review-panel-title mb-1"><i class="bi bi-radar"></i> Last Audience Sweep</div>
             <div class="text-muted" style="font-size:.84rem;">
                 Checked {{ sweep_result.checked or 0 }} recipient(s), found {{ sweep_result.eligible or 0 }} eligible, suppressed {{ sweep_result.suppressed or 0 }}, sent {{ sweep_result.sent_sms or 0 }} SMS and {{ sweep_result.sent_email or 0 }} email.
+                CRM service lookup matched {{ sweep_result.crm_service_matches or 0 }} of {{ sweep_result.crm_service_lookups or 0 }} missing date(s).
                 {% if sweep_result.reason %}{{ sweep_result.reason }}{% endif %}
             </div>
         </div>
@@ -175,6 +176,9 @@
     {% endif %}
     {% if sweep_result.errors %}
     <div class="text-warning fw-semibold mt-2" style="font-size:.76rem;">{{ sweep_result.errors|length }} audience source error(s) were reported.</div>
+    {% endif %}
+    {% if sweep_result.crm_service_warnings %}
+    <div class="text-warning fw-semibold mt-2" style="font-size:.76rem;">CRM date lookup warning: {{ sweep_result.crm_service_warnings[0] }}</div>
     {% endif %}
 </div>
 {% endif %}
@@ -482,6 +486,7 @@
                     <div><label class="form-label fw-bold" style="font-size:.75rem;">Max attempts</label><input class="form-control form-control-sm" type="number" min="1" max="10" name="review_automation_max_attempts" value="{{ automation.max_attempts }}"></div>
                     <div><label class="form-label fw-bold" style="font-size:.75rem;">Repeat after days</label><input class="form-control form-control-sm" type="number" min="30" max="5000" name="review_automation_repeat_after_days" value="{{ automation.repeat_after_days }}"></div>
                     <div><label class="form-label fw-bold" style="font-size:.75rem;">Service window days</label><input class="form-control form-control-sm" type="number" min="1" max="5000" name="review_automation_service_window_days" value="{{ automation.service_window_days }}"></div>
+                    <div><label class="form-label fw-bold" style="font-size:.75rem;">CRM recent lookup days</label><input class="form-control form-control-sm" type="number" min="1" max="30" name="review_automation_recent_service_days" value="{{ automation.recent_service_days }}"></div>
                     <div><label class="form-label fw-bold" style="font-size:.75rem;">Recovery below stars</label><input class="form-control form-control-sm" type="number" min="1" max="5" name="review_automation_min_private_rating" value="{{ automation.min_private_rating }}"></div>
                 </div>
             </div>

@@ -12901,6 +12901,7 @@ def client_reviews_settings():
         "review_automation_max_attempts": request.form.get("review_automation_max_attempts") or 2,
         "review_automation_repeat_after_days": request.form.get("review_automation_repeat_after_days") or 365,
         "review_automation_service_window_days": request.form.get("review_automation_service_window_days") or 180,
+        "review_automation_recent_service_days": request.form.get("review_automation_recent_service_days") or 7,
         "review_automation_min_private_rating": request.form.get("review_automation_min_private_rating") or 4,
     }
     for field, value in number_fields.items():
@@ -12997,6 +12998,9 @@ def client_reviews_run_automation():
         "sent_sms": result.get("sent_sms", 0),
         "sent_email": result.get("sent_email", 0),
         "failed": result.get("failed", 0),
+        "crm_service_lookups": result.get("crm_service_lookups", 0),
+        "crm_service_matches": result.get("crm_service_matches", 0),
+        "crm_service_warnings": result.get("crm_service_warnings") or [],
         "errors": result.get("errors") or {},
         "reason": result.get("reason") or "",
         "sent": bool(result.get("sent")),
@@ -13009,12 +13013,14 @@ def client_reviews_run_automation():
         detail = f" Top blockers: {top_reasons}." if top_reasons else ""
         flash(
             f"Audience sweep checked {result.get('checked', 0)} recipient(s). "
-            f"{result.get('suppressed', 0)} suppressed, 0 sent.{detail}",
+            f"{result.get('suppressed', 0)} suppressed, 0 sent. "
+            f"CRM service lookups matched {result.get('crm_service_matches', 0)} recent date(s).{detail}",
             "warning",
         )
         return redirect(url_for("client.client_reviews"))
     flash(
         f"Audience sweep checked {result.get('checked', 0)} recipient(s), found {result.get('eligible', 0)} eligible, "
+        f"matched {result.get('crm_service_matches', 0)} recent CRM service date(s), "
         f"and sent {result.get('sent_sms', 0)} SMS plus {result.get('sent_email', 0)} email request(s).",
         "success",
     )

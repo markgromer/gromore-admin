@@ -104,6 +104,7 @@ def automation_settings(brand):
         "max_attempts": _coerce_int((brand or {}).get("review_automation_max_attempts"), 2, 1, 10),
         "repeat_after_days": _coerce_int((brand or {}).get("review_automation_repeat_after_days"), 365, 30, 5000),
         "service_window_days": _coerce_int((brand or {}).get("review_automation_service_window_days"), 180, 1, 5000),
+        "recent_service_days": _coerce_int((brand or {}).get("review_automation_recent_service_days"), 7, 1, 30),
         "min_private_rating": _coerce_int((brand or {}).get("review_automation_min_private_rating"), 4, 1, 5),
     }
 
@@ -317,10 +318,55 @@ def evaluate_review_candidate(db, brand, recipient, *, google_review_names=None,
         "phone": phone,
         "source": _clean((recipient or {}).get("source")),
         "source_id": source_id,
+        "service_date_source": _clean((recipient or {}).get("service_date_source")),
+        "service_date_detail": _clean((recipient or {}).get("service_date_detail")),
     }
 
 
-def build_review_intelligence(db, brand, recipients):
+def enrich_review_recipients_with_recent_service(db, brand, recipients, *, now=None):
+    settings = automation_settings(brand)
+    enriched = []
+    warnings = []
+    crm_lookups = 0
+    crm_matches = 0
+    today = (now or datetime.utcnow()).date()
+    max_lookups = 75
+    for recipient in recipients or []:
+        item = dict(recipient or {})
+        if _extract_service_date(item) or crm_lookups >= max_lookups:
+            enriched.append(item)
+            continue
+        crm_lookups += 1
+        try:
+            from webapp.crm_bridge import crm_find_recent_service_date_for_review
+
+            match, error = crm_find_recent_service_date_for_review(
+                brand,
+                item,
+                lookback_days=settings["recent_service_days"],
+                today=today,
+            )
+        except Exception as exc:
+            match, error = None, str(exc)
+        if error and len(warnings) < 3:
+            warnings.append(str(error)[:160])
+        if match and match.get("service_date"):
+            item["last_service_date"] = match["service_date"]
+            item["service_date_source"] = match.get("source") or "crm_recent_service"
+            item["service_date_detail"] = match.get("detail") or ""
+            crm_matches += 1
+        enriched.append(item)
+    return enriched, {
+        "crm_lookups": crm_lookups,
+        "crm_matches": crm_matches,
+        "warnings": warnings,
+    }
+
+
+def build_review_intelligence(db, brand, recipients, *, enrich_missing_dates=False):
+    enrichment = {"crm_lookups": 0, "crm_matches": 0, "warnings": []}
+    if enrich_missing_dates:
+        recipients, enrichment = enrich_review_recipients_with_recent_service(db, brand, recipients)
     google_review_names, google_lookup_warning = _recent_google_review_names(db, brand)
     candidates = []
     eligible = 0
@@ -339,6 +385,7 @@ def build_review_intelligence(db, brand, recipients):
         "suppressed": suppressed,
         "google_review_names_checked": len(google_review_names),
         "google_lookup_warning": google_lookup_warning,
+        "enrichment": enrichment,
     }
 
 
@@ -507,7 +554,8 @@ def build_review_autopilot_dashboard(db, brand, app_config=None):
         },
         "playbook": [
             "Completed job or visit arrives from CRM.",
-            f"WARREN waits {settings['delay_days']} day(s), then checks review history, opt-outs, service age, and feedback.",
+            f"WARREN waits {settings['delay_days']} day(s), and if the customer is missing a service date, it checks the CRM for completed/paid work in the last {settings['recent_service_days']} day(s).",
+            "WARREN checks review history, opt-outs, service age, and feedback before sending.",
             "Eligible customers get the same public review destination by selected channel.",
             "Low private feedback creates a service-recovery task instead of another public ask.",
         ],
@@ -622,7 +670,7 @@ def send_review_requests(
     if not recipients:
         raise ValueError("No reachable recipients matched that request.")
 
-    intelligence = build_review_intelligence(db, brand, recipients)
+    intelligence = build_review_intelligence(db, brand, recipients, enrich_missing_dates=True)
     eligible_candidates = [candidate for candidate in intelligence["candidates"] if candidate["eligible"]]
     if not eligible_candidates:
         suppressed_detail = "; ".join(
@@ -863,12 +911,15 @@ def process_review_automation(db, app_config, brand, *, created_by="automation")
         return {"ran": False, "reason": "Review automation is disabled.", "sent_sms": 0, "sent_email": 0, "recipient_count": 0}
     recipients, errors = collect_recipients(db, brand, settings["groups"])
     recipients = recipients[:MAX_REVIEW_REQUESTS]
-    intelligence = build_review_intelligence(db, brand, recipients)
+    intelligence = build_review_intelligence(db, brand, recipients, enrich_missing_dates=True)
     sweep = {
         "checked": len(recipients),
         "eligible": intelligence["eligible"],
         "suppressed": intelligence["suppressed"],
         "suppressed_counts": _candidate_status_counts(intelligence["candidates"]),
+        "crm_service_lookups": (intelligence.get("enrichment") or {}).get("crm_lookups", 0),
+        "crm_service_matches": (intelligence.get("enrichment") or {}).get("crm_matches", 0),
+        "crm_service_warnings": (intelligence.get("enrichment") or {}).get("warnings", []),
         "errors": errors,
         "sent_sms": 0,
         "sent_email": 0,

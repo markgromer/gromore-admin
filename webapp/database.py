@@ -2275,6 +2275,7 @@ class WebDB:
             ("review_automation_max_attempts", "INTEGER DEFAULT 2"),
             ("review_automation_repeat_after_days", "INTEGER DEFAULT 365"),
             ("review_automation_service_window_days", "INTEGER DEFAULT 180"),
+            ("review_automation_recent_service_days", "INTEGER DEFAULT 7"),
             ("review_automation_min_private_rating", "INTEGER DEFAULT 4"),
             ("wp_site_url", "TEXT DEFAULT ''"),
             ("wp_username", "TEXT DEFAULT ''"),
@@ -2974,7 +2975,7 @@ class WebDB:
             "review_automation_enabled", "review_automation_delay_days",
             "review_automation_cooldown_days", "review_automation_max_attempts",
             "review_automation_repeat_after_days", "review_automation_service_window_days",
-            "review_automation_min_private_rating",
+            "review_automation_recent_service_days", "review_automation_min_private_rating",
         }
         if field not in allowed:
             raise ValueError(f"Cannot update field: {field}")

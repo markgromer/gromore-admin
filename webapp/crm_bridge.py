@@ -609,6 +609,244 @@ def _sng_extract_contact_info(client_record, fallback_client_id=""):
     }
 
 
+def _review_norm_text(value):
+    return re.sub(r"[^a-z0-9]+", " ", str(value or "").strip().lower()).strip()
+
+
+def _review_digits(value):
+    return re.sub(r"\D+", "", str(value or ""))
+
+
+def _review_norm_phone(value):
+    digits = _review_digits(value)
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    return digits
+
+
+def _review_contact_matches(candidate, recipient):
+    candidate = candidate if isinstance(candidate, dict) else {}
+    recipient = recipient if isinstance(recipient, dict) else {}
+    recipient_id = str(recipient.get("source_id") or recipient.get("client_id") or "").strip()
+    candidate_id = str(
+        candidate.get("external_client_id")
+        or candidate.get("client_id")
+        or candidate.get("clientId")
+        or candidate.get("id")
+        or ""
+    ).strip()
+    if recipient_id and candidate_id and recipient_id == candidate_id:
+        return True
+
+    recipient_email = str(recipient.get("email") or recipient.get("client_email") or "").strip().lower()
+    candidate_email = str(candidate.get("client_email") or candidate.get("email") or "").strip().lower()
+    if recipient_email and candidate_email and recipient_email == candidate_email:
+        return True
+
+    recipient_phone = _review_norm_phone(recipient.get("phone") or recipient.get("client_phone"))
+    candidate_phone = _review_norm_phone(candidate.get("client_phone") or candidate.get("phone"))
+    if recipient_phone and candidate_phone and recipient_phone == candidate_phone:
+        return True
+
+    recipient_name = _review_norm_text(recipient.get("name") or recipient.get("client_name"))
+    candidate_name = _review_norm_text(candidate.get("client_name") or candidate.get("name"))
+    return bool(recipient_name and candidate_name and recipient_name == candidate_name)
+
+
+def _date_in_recent_window(value, start_date, end_date):
+    parsed = _sng_parse_date(value) or (_parse_razorsync_date(value).date() if _parse_razorsync_date(value) else None)
+    if not parsed:
+        return None
+    return parsed if start_date <= parsed <= end_date else None
+
+
+def _recent_sng_service_date(brand, recipient, lookback_days=7, today=None):
+    today = today or datetime.utcnow().date()
+    lookback_days = max(1, min(int(lookback_days or 7), 30))
+    start_date = today - timedelta(days=lookback_days - 1)
+    recipient = recipient or {}
+    best = None
+    diagnostics = []
+
+    client_id = str(recipient.get("source_id") or "").strip()
+    if client_id and "sng" in str(recipient.get("source") or "").lower():
+        detail_result, detail_error = sng_get_client_details(brand, client_id)
+        if detail_error:
+            diagnostics.append(str(detail_error)[:120])
+        else:
+            normalized = _sng_normalize_detail_payload(detail_result)
+            client_record = _sng_extract_client_record(normalized)
+            for key in (
+                "last_service_date", "last_service_at", "last_job_completed_at", "job_completed_at",
+                "completed_at", "service_date", "last_visit_at", "visit_date",
+            ):
+                candidate_date = _date_in_recent_window(client_record.get(key), start_date, today)
+                if candidate_date and (best is None or candidate_date > best):
+                    best = candidate_date
+            for payment in _sng_successful_payments(normalized):
+                candidate_date = payment.get("date")
+                if candidate_date and start_date <= candidate_date <= today and (best is None or candidate_date > best):
+                    best = candidate_date
+
+    for offset in range(lookback_days):
+        day = today - timedelta(days=offset)
+        result, error = sng_get_dispatch_board(brand, day.isoformat())
+        if error:
+            diagnostics.append(str(error)[:120])
+            continue
+        for row in (result or {}).get("data") or []:
+            if not isinstance(row, dict):
+                continue
+            status = str(row.get("status_name") or row.get("status") or "").strip().lower()
+            if status and not any(token in status for token in ("complete", "closed", "done", "finished")):
+                continue
+            contact = _sng_extract_contact_info(row, fallback_client_id=str(row.get("client") or row.get("client_id") or ""))
+            if not _review_contact_matches(contact, recipient):
+                continue
+            return {
+                "service_date": day.isoformat(),
+                "source": "sng_dispatch_board",
+                "detail": f"Matched completed SNG dispatch job on {day.isoformat()}",
+            }, None
+
+    if best:
+        return {
+            "service_date": best.isoformat(),
+            "source": "sng_client_details",
+            "detail": f"Matched recent SNG client activity on {best.isoformat()}",
+        }, None
+    return None, "; ".join(diagnostics[:2]) if diagnostics else None
+
+
+def _jobber_contact_from_client(client):
+    client = client if isinstance(client, dict) else {}
+    return {
+        "external_client_id": client.get("id") or "",
+        "client_name": _jobber_client_name(client),
+        "client_email": _jobber_primary_email(client),
+        "client_phone": _jobber_primary_phone(client),
+    }
+
+
+def _jobber_recent_node_match(nodes, recipient, date_keys, start_date, end_date, source):
+    best = None
+    for node in nodes or []:
+        if not isinstance(node, dict):
+            continue
+        client = node.get("client") if isinstance(node.get("client"), dict) else {}
+        if not client or not _review_contact_matches(_jobber_contact_from_client(client), recipient):
+            continue
+        for key in date_keys:
+            candidate_date = _date_in_recent_window(node.get(key), start_date, end_date)
+            if candidate_date and (best is None or candidate_date > best):
+                best = candidate_date
+    if not best:
+        return None
+    return {
+        "service_date": best.isoformat(),
+        "source": source,
+        "detail": f"Matched recent Jobber activity on {best.isoformat()}",
+    }
+
+
+def _recent_jobber_service_date(brand, recipient, lookback_days=7, today=None):
+    today = today or datetime.utcnow().date()
+    lookback_days = max(1, min(int(lookback_days or 7), 30))
+    start_date = today - timedelta(days=lookback_days - 1)
+    from_date = start_date.isoformat()
+    to_date = today.isoformat()
+    errors = []
+
+    jobs_query = """
+    query ReviewRecentJobberJobs($first: Int!) {
+      jobs(first: $first) {
+        nodes {
+          id
+          completedAt
+          endAt
+          updatedAt
+          client {
+            id
+            firstName
+            lastName
+            companyName
+            emails { address primary }
+            phones { number primary }
+          }
+        }
+      }
+    }
+    """
+    result, error = _jobber_graphql(brand, jobs_query, {"first": 100})
+    if not error:
+        match = _jobber_recent_node_match(
+            ((result or {}).get("jobs") or {}).get("nodes") or [],
+            recipient,
+            ("completedAt", "endAt", "updatedAt"),
+            start_date,
+            today,
+            "jobber_jobs",
+        )
+        if match:
+            return match, None
+    elif error:
+        errors.append(error)
+
+    invoices_query = """
+    query ReviewRecentJobberInvoices($filter: InvoiceFilterAttributes) {
+      invoices(filter: $filter, first: 100) {
+        nodes {
+          id
+          createdAt
+          client {
+            id
+            firstName
+            lastName
+            companyName
+            emails { address primary }
+            phones { number primary }
+          }
+        }
+      }
+    }
+    """
+    result, error = _jobber_graphql(
+        brand,
+        invoices_query,
+        {
+            "filter": {
+                "status": "paid",
+                "createdAtRange": {"from": from_date, "to": to_date},
+            }
+        },
+    )
+    if not error:
+        match = _jobber_recent_node_match(
+            ((result or {}).get("invoices") or {}).get("nodes") or [],
+            recipient,
+            ("createdAt",),
+            start_date,
+            today,
+            "jobber_paid_invoices",
+        )
+        if match:
+            return match, None
+    elif error:
+        errors.append(error)
+
+    return None, "; ".join(str(err)[:120] for err in errors[:2]) if errors else None
+
+
+def crm_find_recent_service_date_for_review(brand, recipient, lookback_days=7, today=None):
+    """Best-effort lookup for a recent completed/paid service date for review asks."""
+    crm_type = str((brand or {}).get("crm_type") or "").strip().lower()
+    if crm_type == "sweepandgo" and (brand or {}).get("crm_api_key"):
+        return _recent_sng_service_date(brand, recipient, lookback_days=lookback_days, today=today)
+    if crm_type == "jobber" and (brand or {}).get("crm_api_key"):
+        return _recent_jobber_service_date(brand, recipient, lookback_days=lookback_days, today=today)
+    return None, None
+
+
 def _sng_truthy(value):
     if isinstance(value, bool):
         return value
