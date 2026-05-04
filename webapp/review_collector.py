@@ -239,6 +239,48 @@ def _norm_name(value):
     return re.sub(r"[^a-z0-9]+", " ", _clean(value).lower()).strip()
 
 
+def review_suppression_entries(brand):
+    entries = []
+    for raw_line in str((brand or {}).get("review_suppression_list") or "").splitlines():
+        raw = _clean(raw_line)
+        if not raw:
+            continue
+        email_match = re.search(r"[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}", raw)
+        email = email_match.group(0).lower() if email_match else ""
+        phone = ""
+        digits = re.sub(r"\D+", "", raw)
+        if len(digits) >= 7:
+            phone = _normalize_phone(digits[-11:] if len(digits) > 11 and digits[-11:].startswith("1") else digits[-10:])
+        name_text = raw
+        if email:
+            name_text = name_text.replace(email_match.group(0), " ")
+        if phone:
+            name_text = re.sub(r"[\d\s().+\-/]{7,}", " ", name_text)
+        name = _norm_name(name_text.strip(" ,-;|"))
+        entries.append({"raw": raw, "email": email, "phone": phone, "name": name})
+    return entries
+
+
+def _phone_digits(value):
+    return re.sub(r"\D+", "", _clean(value))
+
+
+def _matches_review_suppression(recipient, entries):
+    email = _clean((recipient or {}).get("email")).lower()
+    phone_digits = _phone_digits(_normalize_phone((recipient or {}).get("phone")))
+    name = _norm_name((recipient or {}).get("name"))
+    for entry in entries or []:
+        if entry.get("email") and email and entry["email"] == email:
+            return entry
+        entry_phone_digits = _phone_digits(entry.get("phone"))
+        if entry_phone_digits and phone_digits:
+            if entry_phone_digits == phone_digits or entry_phone_digits[-10:] == phone_digits[-10:]:
+                return entry
+        if entry.get("name") and name and entry["name"] == name:
+            return entry
+    return None
+
+
 def _recent_google_review_names(db, brand):
     if not (brand or {}).get("google_place_id") or not (brand or {}).get("google_maps_api_key"):
         return set(), ""
@@ -284,6 +326,11 @@ def evaluate_review_candidate(db, brand, recipient, *, google_review_names=None,
     if phone and db.is_opted_out(brand["id"], phone):
         status = "sms_opted_out"
         reasons.append("Customer opted out of SMS.")
+
+    suppression_match = _matches_review_suppression(recipient, review_suppression_entries(brand))
+    if suppression_match:
+        status = "already_reviewed"
+        reasons.append("Customer matches the brand's known Google reviewer / do-not-ask list.")
 
     normalized_name = _norm_name(name)
     if normalized_name and normalized_name in (google_review_names or set()):
@@ -975,40 +1022,12 @@ def process_review_automation(db, app_config, brand, *, created_by="automation")
             "reason": "No recipients are eligible for a review request yet.",
             **sweep,
         }
-    setup = review_setup_status(brand)
-    if not setup["ready"]:
-        return {
-            "ran": True,
-            "sent": False,
-            "reason": "Add a Google Place ID or manual review link before WARREN can send the eligible requests.",
-            **sweep,
-        }
-    smtp_ready = bool(app_config.get("SMTP_USER") and app_config.get("SMTP_PASSWORD"))
-    if "sms" in settings["channels"] and not setup["sms_ready"]:
-        return {
-            "ran": True,
-            "sent": False,
-            "reason": "SMS is selected for review automation, but SMS is not configured for this brand.",
-            **sweep,
-        }
-    if "email" in settings["channels"] and not smtp_ready:
-        return {
-            "ran": True,
-            "sent": False,
-            "reason": "Email is selected for review automation, but SMTP is not configured.",
-            **sweep,
-        }
-    delivery = send_review_requests(
-        db,
-        app_config,
-        brand,
-        group_keys=settings["groups"],
-        channels=settings["channels"],
-        created_by=created_by,
-    )
     return {
         "ran": True,
-        "sent": True,
+        "sent": False,
+        "reason": (
+            "Audience sweep is diagnostic-only. WARREN checked the selected audiences and did not send. "
+            "Send manually from the Audience panel or process CRM-triggered due requests after reviewing eligibility."
+        ),
         **sweep,
-        **delivery,
     }

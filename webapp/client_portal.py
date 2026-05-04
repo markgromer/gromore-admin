@@ -13104,6 +13104,7 @@ def client_reviews_settings():
         "review_request_sms_template": (request.form.get("review_request_sms_template") or "").strip()[:700],
         "review_request_email_subject": (request.form.get("review_request_email_subject") or "").strip()[:200],
         "review_request_email_template": (request.form.get("review_request_email_template") or "").strip()[:3000],
+        "review_suppression_list": (request.form.get("review_suppression_list") or "").strip()[:12000],
         "review_default_group_keys": json.dumps(request.form.getlist("review_default_group_keys")),
         "review_automation_group_keys": json.dumps(request.form.getlist("review_automation_group_keys")),
         "review_automation_channels": json.dumps(request.form.getlist("review_automation_channels") or ["sms"]),
@@ -13229,10 +13230,11 @@ def client_reviews_run_automation():
             f"{key.replace('_', ' ')}: {value}" for key, value in sorted(counts.items(), key=lambda item: item[1], reverse=True)[:3]
         )
         detail = f" Top blockers: {top_reasons}." if top_reasons else ""
+        reason = f" {result.get('reason')}" if result.get("reason") else ""
         flash(
             f"Audience sweep checked {result.get('checked', 0)} recipient(s). "
             f"{result.get('suppressed', 0)} suppressed, 0 sent. "
-            f"CRM service lookups matched {result.get('crm_service_matches', 0)} recent date(s).{detail}",
+            f"CRM service lookups matched {result.get('crm_service_matches', 0)} recent date(s).{detail}{reason}",
             "warning",
         )
         return redirect(url_for("client.client_reviews"))

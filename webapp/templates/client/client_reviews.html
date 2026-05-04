@@ -133,7 +133,7 @@
             <form method="post" action="{{ url_for('client.client_reviews_run_automation') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button class="btn btn-outline-success btn-sm fw-bold" type="submit">
-                    <i class="bi bi-play-circle me-1"></i> Run audience sweep now
+                    <i class="bi bi-radar me-1"></i> Preview audience sweep
                 </button>
             </form>
         </div>
@@ -433,7 +433,7 @@
                     {% endfor %}
                 </div>
                 <div class="text-muted mt-2" style="font-size:.72rem;">
-                    Google reviewer matching checks visible recent Google reviews plus WARREN request history.
+                    Google reviewer matching checks visible recent Google reviews, the do-not-ask list below, and WARREN request history.
                 </div>
             </div>
         </div>
@@ -458,6 +458,11 @@
                 <label class="form-label fw-bold" style="font-size:.8rem;">Email body</label>
                 <textarea class="form-control form-control-sm" rows="7" name="review_request_email_template">{{ brand.review_request_email_template or templates.email }}</textarea>
                 <small class="text-muted">Merge fields: {{ '{{ first_name }}' }}, {{ '{{ customer_name }}' }}, {{ '{{ brand_name }}' }}, {{ '{{ review_link }}' }}.</small>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold" style="font-size:.8rem;">Known Google reviewers / do-not-ask list</label>
+                <textarea class="form-control form-control-sm" rows="5" name="review_suppression_list" placeholder="One per line: name, email, or phone">{{ brand.review_suppression_list or '' }}</textarea>
+                <small class="text-muted">WARREN suppresses matching names, emails, or phones before any manual, CRM-triggered, or automated review request. Use this for historical Google reviewers that Google does not expose in the visible review feed.</small>
             </div>
             <div class="border-top pt-3 mt-3">
                 <div class="review-panel-title"><i class="bi bi-robot"></i> Automation Rules</div>
