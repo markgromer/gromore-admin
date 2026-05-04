@@ -13034,6 +13034,7 @@ def client_reviews():
     from webapp.review_collector import (
         automation_settings,
         available_review_groups,
+        build_reputation_dashboard,
         build_review_autopilot_dashboard,
         default_review_audience_groups,
         get_templates,
@@ -13048,6 +13049,10 @@ def client_reviews():
     requests = db.get_review_requests(brand_id, limit=75)
     stats = db.get_review_request_stats(brand_id)
     autopilot = build_review_autopilot_dashboard(db, brand, current_app.config)
+    reputation = build_reputation_dashboard(db, brand, current_app.config)
+    if not reputation.get("widget_script_url") and brand.get("slug"):
+        reputation["widget_script_url"] = url_for("client_public.reputation_widget_js", brand_slug=brand["slug"], _external=True)
+        reputation["widget_embed_code"] = f'<script async src="{reputation["widget_script_url"]}"></script>'
     sweep_result = session.pop("review_sweep_result", None)
 
     return render_template(
@@ -13060,6 +13065,7 @@ def client_reviews():
         requests=requests,
         stats=stats,
         autopilot=autopilot,
+        reputation=reputation,
         sweep_result=sweep_result,
         setup=review_setup_status(brand),
         automation=automation_settings(brand),
@@ -13123,7 +13129,7 @@ def client_reviews_settings():
     }
     for field, value in number_fields.items():
         db.update_brand_number_field(brand_id, field, value)
-    flash("Review Collector settings saved.", "success")
+    flash("Reputation settings saved.", "success")
     return redirect(url_for("client.client_reviews"))
 
 
@@ -13343,6 +13349,97 @@ def client_review_click(token):
     if not target:
         abort(404)
     return redirect(target)
+
+
+@client_public_bp.route("/reputation-widget/<brand_slug>.js")
+def reputation_widget_js(brand_slug):
+    db = _get_db()
+    brand = db.get_brand_by_slug((brand_slug or "").strip())
+    if not brand:
+        abort(404)
+    try:
+        from webapp.review_collector import build_reputation_widget
+
+        payload = build_reputation_widget(db, brand)
+    except Exception:
+        log.exception("Reputation widget failed for brand slug %s", brand_slug)
+        payload = {
+            "brand_name": brand.get("display_name") or "Local business",
+            "rating": 0,
+            "review_count": 0,
+            "reviews": [],
+            "review_url": "",
+            "maps_url": "",
+        }
+    script = f"""
+(function() {{
+  var data = {json.dumps(payload)};
+  var script = document.currentScript;
+  var mount = document.createElement('div');
+  mount.className = 'warren-reputation-widget';
+  var style = document.createElement('style');
+  style.textContent = '.warren-reputation-widget{{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;border:1px solid #dbe5df;border-radius:12px;background:#fff;color:#0f172a;max-width:520px;box-shadow:0 12px 34px rgba(15,23,42,.10);overflow:hidden}}.warren-reputation-widget *{{box-sizing:border-box}}.wrw-head{{background:#12322b;color:#fff;padding:16px 18px}}.wrw-brand{{font-size:15px;font-weight:850;margin:0 0 6px}}.wrw-score{{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}}.wrw-rating{{font-size:30px;font-weight:900;line-height:1}}.wrw-stars{{color:#f59e0b;letter-spacing:1px;font-size:14px}}.wrw-count{{color:rgba(255,255,255,.74);font-size:13px}}.wrw-body{{padding:14px 18px;display:grid;gap:10px}}.wrw-review{{border-top:1px solid #e2e8f0;padding-top:10px}}.wrw-review:first-child{{border-top:0;padding-top:0}}.wrw-review-top{{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#64748b;font-weight:750}}.wrw-text{{font-size:13px;line-height:1.4;color:#334155;margin-top:5px}}.wrw-actions{{display:flex;gap:8px;flex-wrap:wrap;padding:0 18px 16px}}.wrw-btn{{display:inline-flex;align-items:center;justify-content:center;border-radius:8px;padding:9px 12px;font-size:13px;font-weight:850;text-decoration:none}}.wrw-primary{{background:#2563eb;color:#fff}}.wrw-secondary{{border:1px solid #cbd5e1;color:#0f172a;background:#fff}}';
+  document.head.appendChild(style);
+  function text(tag, cls, value) {{
+    var el = document.createElement(tag);
+    if (cls) el.className = cls;
+    el.textContent = value || '';
+    return el;
+  }}
+  function stars(rating) {{
+    var full = Math.max(0, Math.min(5, Math.round(Number(rating || 0))));
+    return Array(full + 1).join(String.fromCharCode(9733)) + Array(5 - full + 1).join(String.fromCharCode(9734));
+  }}
+  var head = document.createElement('div');
+  head.className = 'wrw-head';
+  head.appendChild(text('div', 'wrw-brand', data.brand_name));
+  var score = document.createElement('div');
+  score.className = 'wrw-score';
+  score.appendChild(text('span', 'wrw-rating', data.rating ? Number(data.rating).toFixed(1) : 'New'));
+  score.appendChild(text('span', 'wrw-stars', data.rating ? stars(data.rating) : ''));
+  score.appendChild(text('span', 'wrw-count', data.review_count ? data.review_count + ' Google reviews' : 'Google reviews'));
+  head.appendChild(score);
+  mount.appendChild(head);
+  var body = document.createElement('div');
+  body.className = 'wrw-body';
+  (data.reviews || []).slice(0, 3).forEach(function(review) {{
+    var item = document.createElement('div');
+    item.className = 'wrw-review';
+    var top = document.createElement('div');
+    top.className = 'wrw-review-top';
+    top.appendChild(text('span', '', review.author || 'Google reviewer'));
+    top.appendChild(text('span', '', (review.rating ? stars(review.rating) + ' ' : '') + (review.time || '')));
+    item.appendChild(top);
+    if (review.text) item.appendChild(text('div', 'wrw-text', review.text.length > 220 ? review.text.slice(0, 217) + '...' : review.text));
+    body.appendChild(item);
+  }});
+  if (!(data.reviews || []).length) body.appendChild(text('div', 'wrw-text', 'Review highlights will appear here after Google reviews are connected.'));
+  mount.appendChild(body);
+  var actions = document.createElement('div');
+  actions.className = 'wrw-actions';
+  if (data.review_url) {{
+    var reviewLink = text('a', 'wrw-btn wrw-primary', 'Leave a review');
+    reviewLink.href = data.review_url;
+    reviewLink.target = '_blank';
+    reviewLink.rel = 'noopener';
+    actions.appendChild(reviewLink);
+  }}
+  if (data.maps_url) {{
+    var mapsLink = text('a', 'wrw-btn wrw-secondary', 'View on Google');
+    mapsLink.href = data.maps_url;
+    mapsLink.target = '_blank';
+    mapsLink.rel = 'noopener';
+    actions.appendChild(mapsLink);
+  }}
+  mount.appendChild(actions);
+  if (script && script.parentNode) script.parentNode.insertBefore(mount, script.nextSibling);
+}})();
+"""
+    response = make_response(script)
+    response.headers["Content-Type"] = "application/javascript; charset=utf-8"
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Cache-Control"] = "public, max-age=900"
+    return response
 
 
 @client_bp.route("/google-business-profile")

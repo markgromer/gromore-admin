@@ -2148,7 +2148,7 @@ class WebDB:
             ("warren_inbox",    "Lead Inbox",        "Warren AI lead inbox and pipeline",  "all",  "business", 111),
             ("va_services",     "VA Desk",           "Managed VA support, token packs, and work requests", "all", "business", 112),
             ("gbp",             "Google Profile",   "Google Business Profile manager",   "all",   "business", 120),
-            ("reviews",         "Review Collector", "Review request and feedback collection", "all", "business", 125),
+            ("reviews",         "Reputation",       "Google reputation, review requests, and website proof widgets", "all", "business", 125),
             ("post_scheduler",  "Post Scheduler",   "Social media post scheduling",      "all",   "business", 130),
             ("competitor_intel","Competitor Intel",  "Competitor analysis tools",         "all",   "business", 140),
             ("your_team",       "Your Team",         "AI agent team dashboard",           "all",   "business", 145),
@@ -2166,6 +2166,11 @@ class WebDB:
                 conn.execute(
                     "INSERT OR IGNORE INTO feature_flags (feature_key, label, description, access_level, category, sort_order) VALUES (?,?,?,?,?,?)",
                     (key, label, desc, level, cat, sort),
+                )
+            elif key == "reviews":
+                conn.execute(
+                    "UPDATE feature_flags SET label = ?, description = ? WHERE feature_key = ?",
+                    (label, desc, key),
                 )
         conn.commit()
 

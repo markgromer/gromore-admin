@@ -194,6 +194,28 @@ def _parse_dt(value):
     return None
 
 
+def _relative_review_days(value):
+    text = _clean(value).lower()
+    if not text:
+        return None
+    if any(token in text for token in ("just now", "today", "hour", "minute")):
+        return 0
+    match = re.search(r"(\d+|a|an)\s+(day|week|month|year)", text)
+    if not match:
+        return None
+    amount = 1 if match.group(1) in {"a", "an"} else int(match.group(1))
+    unit = match.group(2)
+    if unit == "day":
+        return amount
+    if unit == "week":
+        return amount * 7
+    if unit == "month":
+        return amount * 30
+    if unit == "year":
+        return amount * 365
+    return None
+
+
 def _format_date(dt):
     return dt.strftime("%Y-%m-%d") if dt else ""
 
@@ -215,6 +237,120 @@ def _extract_service_date(recipient):
             if dt:
                 return dt
     return None
+
+
+def build_reputation_dashboard(db, brand, app_config=None):
+    app_config = app_config or {}
+    try:
+        from webapp.google_business import build_gbp_context
+
+        gbp = build_gbp_context(db, brand["id"]) if brand else {}
+    except Exception:
+        gbp = {"error": "API_FAILED", "reviews": []}
+    reviews = (gbp or {}).get("reviews") or []
+    rating = float((gbp or {}).get("rating") or 0)
+    review_count = int((gbp or {}).get("review_count") or 0)
+    visible_30d = []
+    for review in reviews:
+        days = _relative_review_days(review.get("time"))
+        if days is not None and days <= 30:
+            visible_30d.append(review)
+
+    try:
+        lead_threads = db.get_lead_threads(brand["id"], limit=500) if brand else []
+    except Exception:
+        lead_threads = []
+    now = datetime.utcnow()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    leads_this_month = 0
+    for lead in lead_threads or []:
+        created = _parse_dt(lead.get("created_at"))
+        if created and created >= month_start:
+            leads_this_month += 1
+
+    stats = db.get_review_request_stats(brand["id"]) if brand else {}
+    setup = review_setup_status(brand)
+    optimizations = []
+    if not setup["ready"]:
+        optimizations.append({
+            "title": "Connect the public review destination",
+            "detail": "Add a Google Place ID or manual review URL so every ask points to the right public profile.",
+            "state": "blocked",
+        })
+    if review_count < 20:
+        optimizations.append({
+            "title": "Build review volume",
+            "detail": f"{review_count} Google review(s) leaves the rating vulnerable. Keep requests flowing after completed work.",
+            "state": "attention",
+        })
+    if rating and rating < 4.5:
+        optimizations.append({
+            "title": "Protect the star rating",
+            "detail": f"The current Google score is {rating:.1f}. Prioritize recovery themes and consistent review asks.",
+            "state": "attention",
+        })
+    if setup["ready"] and not int((brand or {}).get("review_automation_enabled") or 0):
+        optimizations.append({
+            "title": "Turn on CRM-triggered review requests",
+            "detail": "Autopilot can send after completed jobs once the audience, channels, and suppression list are reviewed.",
+            "state": "attention",
+        })
+    if not visible_30d:
+        optimizations.append({
+            "title": "Increase review velocity",
+            "detail": "No visible Google reviews appear inside the last 30 days. Recent reviews are stronger trust signals.",
+            "state": "attention",
+        })
+    if int((stats or {}).get("feedback") or 0):
+        optimizations.append({
+            "title": "Mine private feedback",
+            "detail": f"{int((stats or {}).get('feedback') or 0)} private feedback item(s) can reveal service recovery or testimonial themes.",
+            "state": "good",
+        })
+    if not optimizations:
+        optimizations.append({
+            "title": "Reputation system is healthy",
+            "detail": "Google profile, request flow, and recovery paths are connected. Keep velocity steady.",
+            "state": "good",
+        })
+
+    score_parts = []
+    if rating:
+        score_parts.append(min(100, rating * 20))
+    score_parts.append(min(100, review_count / 50 * 100))
+    score_parts.append(min(100, len(visible_30d) / 4 * 100))
+    reputation_score = round(sum(score_parts) / len(score_parts)) if score_parts else 0
+    slug = _clean((brand or {}).get("slug"))
+    app_url = _clean(app_config.get("APP_URL")).rstrip("/")
+    widget_script_url = f"{app_url}/reputation-widget/{slug}.js" if app_url and slug else ""
+    widget_embed_code = f'<script async src="{widget_script_url}"></script>' if widget_script_url else ""
+
+    return {
+        "gbp": gbp or {},
+        "rating": rating,
+        "review_count": review_count,
+        "visible_reviews": reviews,
+        "review_velocity_30d": len(visible_30d),
+        "leads_this_month": leads_this_month,
+        "lead_threads_total": len(lead_threads or []),
+        "reputation_score": reputation_score,
+        "optimizations": optimizations[:5],
+        "widget_script_url": widget_script_url,
+        "widget_embed_code": widget_embed_code,
+    }
+
+
+def build_reputation_widget(db, brand):
+    dashboard = build_reputation_dashboard(db, brand)
+    setup = review_setup_status(brand)
+    return {
+        "brand_name": _clean((brand or {}).get("display_name")) or "Local business",
+        "rating": dashboard["rating"],
+        "review_count": dashboard["review_count"],
+        "reviews": dashboard["visible_reviews"][:3],
+        "review_url": setup.get("review_url") or "",
+        "maps_url": ((dashboard.get("gbp") or {}).get("maps_url") or ""),
+    }
 
 
 def is_job_completion_event(event_type, summary=None):

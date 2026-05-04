@@ -438,7 +438,7 @@
             {% endif %}
             {% if feature_on('reviews') %}
             <a href="{{ url_for('client.client_reviews') }}" class="{% if request.endpoint in ('client.client_reviews',) %}active{% endif %}">
-                <i class="bi bi-star-half"></i> <span class="nav-link-label">Reviews</span>
+                <i class="bi bi-stars"></i> <span class="nav-link-label">Reputation</span>
             </a>
             {% endif %}
             {% if feature_on('competitor_intel') %}
