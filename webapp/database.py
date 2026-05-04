@@ -1807,12 +1807,20 @@ class WebDB:
                 review_url TEXT DEFAULT '',
                 message_text TEXT DEFAULT '',
                 email_subject TEXT DEFAULT '',
+                service_date TEXT DEFAULT '',
+                eligibility_status TEXT DEFAULT '',
+                eligibility_reasons_json TEXT DEFAULT '[]',
+                eligibility_checked_at TEXT DEFAULT '',
+                next_eligible_at TEXT DEFAULT '',
+                candidate_json TEXT DEFAULT '{}',
                 sent_sms INTEGER DEFAULT 0,
                 sent_email INTEGER DEFAULT 0,
                 failed INTEGER DEFAULT 0,
                 failure_detail TEXT DEFAULT '',
                 opened_at TEXT DEFAULT '',
                 clicked_review_at TEXT DEFAULT '',
+                public_review_confirmed_at TEXT DEFAULT '',
+                public_review_source TEXT DEFAULT '',
                 rating INTEGER DEFAULT 0,
                 feedback_text TEXT DEFAULT '',
                 feedback_submitted_at TEXT DEFAULT '',
@@ -1831,6 +1839,17 @@ class WebDB:
             CREATE INDEX IF NOT EXISTS idx_review_requests_brand_status
             ON review_requests(brand_id, status, created_at DESC);
         """)
+        for col_name, col_def in (
+            ("service_date", "TEXT DEFAULT ''"),
+            ("eligibility_status", "TEXT DEFAULT ''"),
+            ("eligibility_reasons_json", "TEXT DEFAULT '[]'"),
+            ("eligibility_checked_at", "TEXT DEFAULT ''"),
+            ("next_eligible_at", "TEXT DEFAULT ''"),
+            ("candidate_json", "TEXT DEFAULT '{}'"),
+            ("public_review_confirmed_at", "TEXT DEFAULT ''"),
+            ("public_review_source", "TEXT DEFAULT ''"),
+        ):
+            self._safe_add_column(conn, "review_requests", col_name, col_def)
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS agent_activity (
@@ -2248,6 +2267,15 @@ class WebDB:
             ("review_request_sms_template", "TEXT DEFAULT ''"),
             ("review_request_email_subject", "TEXT DEFAULT ''"),
             ("review_request_email_template", "TEXT DEFAULT ''"),
+            ("review_automation_group_keys", "TEXT DEFAULT '[]'"),
+            ("review_automation_channels", "TEXT DEFAULT 'sms'"),
+            ("review_automation_enabled", "INTEGER DEFAULT 0"),
+            ("review_automation_delay_days", "INTEGER DEFAULT 1"),
+            ("review_automation_cooldown_days", "INTEGER DEFAULT 90"),
+            ("review_automation_max_attempts", "INTEGER DEFAULT 2"),
+            ("review_automation_repeat_after_days", "INTEGER DEFAULT 365"),
+            ("review_automation_service_window_days", "INTEGER DEFAULT 180"),
+            ("review_automation_min_private_rating", "INTEGER DEFAULT 4"),
             ("wp_site_url", "TEXT DEFAULT ''"),
             ("wp_username", "TEXT DEFAULT ''"),
             ("wp_app_password", "TEXT DEFAULT ''"),
@@ -2848,6 +2876,7 @@ class WebDB:
             "google_maps_api_key", "google_place_id",
             "review_destination_url", "review_request_sms_template",
             "review_request_email_subject", "review_request_email_template",
+            "review_automation_group_keys", "review_automation_channels",
             "titan_snapshot_id", "titan_account_id", "titan_ghl_location_id", "titan_email",
             "wp_site_url", "wp_username", "wp_app_password",
             "hired_agents", "agent_context",
@@ -2942,6 +2971,10 @@ class WebDB:
             "sales_bot_nurture_warm_hours", "sales_bot_nurture_warm_max",
             "sales_bot_nurture_cold_hours", "sales_bot_nurture_cold_max",
             "sales_bot_nurture_ghost_hours", "sales_bot_dnd_enabled", "sales_bot_dnd_weekends",
+            "review_automation_enabled", "review_automation_delay_days",
+            "review_automation_cooldown_days", "review_automation_max_attempts",
+            "review_automation_repeat_after_days", "review_automation_service_window_days",
+            "review_automation_min_private_rating",
         }
         if field not in allowed:
             raise ValueError(f"Cannot update field: {field}")
@@ -9963,6 +9996,11 @@ class WebDB:
         review_url="",
         message_text="",
         email_subject="",
+        service_date="",
+        eligibility_status="",
+        eligibility_reasons=None,
+        next_eligible_at="",
+        candidate=None,
         created_by="",
     ):
         conn = self._conn()
@@ -9971,8 +10009,10 @@ class WebDB:
             INSERT INTO review_requests (
                 brand_id, token, customer_name, customer_email, customer_phone,
                 source, source_id, groups_json, channels_json, review_url,
-                message_text, email_subject, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                message_text, email_subject, service_date, eligibility_status,
+                eligibility_reasons_json, eligibility_checked_at, next_eligible_at,
+                candidate_json, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?)
             """,
             (
                 brand_id,
@@ -9987,6 +10027,11 @@ class WebDB:
                 review_url or "",
                 message_text or "",
                 email_subject or "",
+                service_date or "",
+                eligibility_status or "",
+                json.dumps(eligibility_reasons or []),
+                next_eligible_at or "",
+                json.dumps(candidate or {}),
                 created_by or "",
             ),
         )
@@ -10036,14 +10081,62 @@ class WebDB:
             item = dict(row)
             item["groups"] = self._safe_json_list(item.get("groups_json"))
             item["channels"] = self._safe_json_list(item.get("channels_json"))
+            item["eligibility_reasons"] = self._safe_json_list(item.get("eligibility_reasons_json"))
+            item["candidate"] = self._safe_json_object(item.get("candidate_json"))
             items.append(item)
         return items
+
+    def get_review_request(self, request_id, brand_id=None):
+        conn = self._conn()
+        if brand_id is None:
+            row = conn.execute("SELECT * FROM review_requests WHERE id = ?", (request_id,)).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT * FROM review_requests WHERE id = ? AND brand_id = ?",
+                (request_id, brand_id),
+            ).fetchone()
+        conn.close()
+        return dict(row) if row else None
 
     def get_review_request_by_token(self, token):
         conn = self._conn()
         row = conn.execute("SELECT * FROM review_requests WHERE token = ?", ((token or "").strip(),)).fetchone()
         conn.close()
         return dict(row) if row else None
+
+    def get_review_request_history(self, brand_id, *, email="", phone="", source_id="", customer_name="", limit=25):
+        normalized_email = self._normalize_email(email)
+        normalized_phone = (phone or "").strip()
+        normalized_source_id = str(source_id or "").strip()
+        normalized_name = (customer_name or "").strip().lower()
+        clauses = []
+        params = [brand_id]
+        if normalized_email:
+            clauses.append("lower(customer_email) = ?")
+            params.append(normalized_email)
+        if normalized_phone:
+            clauses.append("customer_phone = ?")
+            params.append(normalized_phone)
+        if normalized_source_id:
+            clauses.append("source_id = ?")
+            params.append(normalized_source_id)
+        if normalized_name:
+            clauses.append("lower(customer_name) = ?")
+            params.append(normalized_name)
+        if not clauses:
+            return []
+        conn = self._conn()
+        rows = conn.execute(
+            f"""
+            SELECT * FROM review_requests
+            WHERE brand_id = ? AND ({' OR '.join(clauses)})
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
+            (*params, int(limit or 25)),
+        ).fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
 
     def mark_review_request_opened(self, request_id):
         conn = self._conn()
@@ -10090,6 +10183,22 @@ class WebDB:
             WHERE id = ?
             """,
             (rating_value, (feedback_text or "")[:4000], request_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def mark_review_request_reviewed(self, request_id, source="owner_confirmed"):
+        conn = self._conn()
+        conn.execute(
+            """
+            UPDATE review_requests
+            SET public_review_confirmed_at = CASE WHEN public_review_confirmed_at = '' THEN datetime('now') ELSE public_review_confirmed_at END,
+                public_review_source = ?,
+                status = 'reviewed',
+                updated_at = datetime('now')
+            WHERE id = ?
+            """,
+            ((source or "owner_confirmed")[:80], request_id),
         )
         conn.commit()
         conn.close()

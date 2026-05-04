@@ -42,6 +42,12 @@
     .history-table { font-size: .8rem; }
     .history-table th { color: #64748b; font-size: .68rem; text-transform: uppercase; font-weight: 850; }
     .feedback-text { max-width: 360px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #475569; }
+    .eligibility-list { display: grid; gap: .55rem; max-height: 360px; overflow: auto; }
+    .eligibility-row { border: 1px solid #e2e8f0; border-radius: 10px; padding: .65rem; background: #f8fafc; }
+    .eligibility-row.ready { border-color: #bbf7d0; background: #f0fdf4; }
+    .eligibility-row.blocked { border-color: #fed7aa; background: #fff7ed; }
+    .eligibility-status { font-size: .68rem; font-weight: 850; text-transform: uppercase; color: #475569; }
+    .eligibility-reason { font-size: .73rem; color: #64748b; line-height: 1.35; margin-top: .18rem; }
     @media (max-width: 1050px) {
         .reviews-grid { grid-template-columns: 1fr; }
         .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -71,6 +77,24 @@
     <div class="review-metric"><div class="value">{{ stats.opened or 0 }}</div><div class="label">Landing opens</div></div>
     <div class="review-metric"><div class="value">{{ stats.clicked or 0 }}</div><div class="label">Review clicks</div></div>
     <div class="review-metric"><div class="value">{{ '%.1f'|format(stats.avg_rating or 0) }}</div><div class="label">Private rating avg</div></div>
+</div>
+
+<div class="review-panel mb-3">
+    <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap">
+        <div>
+            <div class="review-panel-title mb-1"><i class="bi bi-robot"></i> Automation Brain</div>
+            <div class="text-muted" style="font-size:.84rem;">
+                {% if automation.enabled %}Enabled{% else %}Paused{% endif %}:
+                waits {{ automation.delay_days }} day(s) after service, suppresses for {{ automation.cooldown_days }} day(s), max {{ automation.max_attempts }} ask(s), and reroutes low private feedback into recovery.
+            </div>
+        </div>
+        <form method="post" action="{{ url_for('client.client_reviews_run_automation') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-success btn-sm fw-bold" type="submit" {% if not automation.enabled or not setup.ready %}disabled{% endif %}>
+                <i class="bi bi-play-circle me-1"></i> Run eligible requests now
+            </button>
+        </form>
+    </div>
 </div>
 
 <div class="reviews-grid">
@@ -154,7 +178,17 @@
                             <td>{{ item.channels|join(', ') }}</td>
                             <td>{{ item.rating or '-' }}</td>
                             <td><div class="feedback-text">{{ item.feedback_text or '-' }}</div></td>
-                            <td>{{ item.last_sent_at or item.created_at }}</td>
+                            <td>
+                                {{ item.last_sent_at or item.created_at }}
+                                {% if not item.public_review_confirmed_at %}
+                                <form method="post" action="{{ url_for('client.client_reviews_mark_reviewed', request_id=item.id) }}" class="mt-1">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button class="btn btn-link btn-sm p-0" type="submit" style="font-size:.74rem;">Mark reviewed</button>
+                                </form>
+                                {% else %}
+                                <div class="text-success" style="font-size:.74rem;">Review confirmed</div>
+                                {% endif %}
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -180,6 +214,14 @@
                 </div>
             </div>
             <div id="reviewPreviewWarnings" class="text-warning fw-semibold mb-2" style="font-size:.76rem;"></div>
+            <div class="row g-2 mb-2">
+                <div class="col-6">
+                    <div class="review-metric"><div class="value" id="reviewPreviewEligible">{{ preview.eligible or 0 }}</div><div class="label">Eligible now</div></div>
+                </div>
+                <div class="col-6">
+                    <div class="review-metric"><div class="value" id="reviewPreviewSuppressed">{{ preview.suppressed or 0 }}</div><div class="label">Suppressed</div></div>
+                </div>
+            </div>
             <div class="recipient-sample" id="reviewRecipientSample">
                 {% for recipient in preview.recipients[:8] %}
                 <div class="recipient-row">
@@ -187,6 +229,24 @@
                     <div class="recipient-meta">{{ recipient.phone or '' }}{% if recipient.phone and recipient.email %} | {% endif %}{{ recipient.email or '' }}</div>
                 </div>
                 {% endfor %}
+            </div>
+            <div class="border-top mt-3 pt-3">
+                <div class="review-panel-title mb-2"><i class="bi bi-funnel"></i> Eligibility sample</div>
+                <div class="eligibility-list" id="reviewEligibilityList">
+                    {% for candidate in preview.candidates[:8] %}
+                    <div class="eligibility-row {{ 'ready' if candidate.eligible else 'blocked' }}">
+                        <div class="d-flex justify-content-between gap-2">
+                            <strong style="font-size:.8rem;">{{ candidate.name }}</strong>
+                            <span class="eligibility-status">{{ candidate.status }}</span>
+                        </div>
+                        <div class="eligibility-reason">{{ candidate.reasons[0] if candidate.reasons else '' }}</div>
+                        {% if candidate.service_date %}<div class="eligibility-reason">Service: {{ candidate.service_date }}</div>{% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="text-muted mt-2" style="font-size:.72rem;">
+                    Google reviewer matching checks visible recent Google reviews plus WARREN request history.
+                </div>
             </div>
         </div>
 
@@ -211,6 +271,39 @@
                 <textarea class="form-control form-control-sm" rows="7" name="review_request_email_template">{{ brand.review_request_email_template or templates.email }}</textarea>
                 <small class="text-muted">Merge fields: {{ '{{ first_name }}' }}, {{ '{{ customer_name }}' }}, {{ '{{ brand_name }}' }}, {{ '{{ review_link }}' }}.</small>
             </div>
+            <div class="border-top pt-3 mt-3">
+                <div class="review-panel-title"><i class="bi bi-robot"></i> Automation Rules</div>
+                <label class="form-check d-flex align-items-start gap-2 mb-2">
+                    <input class="form-check-input" type="checkbox" name="review_automation_enabled" value="1" {% if automation.enabled %}checked{% endif %}>
+                    <span class="form-check-label fw-bold" style="font-size:.84rem;">Automatically send only eligible review requests</span>
+                </label>
+                <div class="mb-2">
+                    <label class="form-label fw-bold" style="font-size:.8rem;">Automation audiences</label>
+                    <div class="d-grid gap-1">
+                        {% for group in groups %}
+                        <label class="form-check" style="font-size:.8rem;">
+                            <input class="form-check-input" type="checkbox" name="review_automation_group_keys" value="{{ group.key }}" {% if group.key in automation.groups %}checked{% endif %}>
+                            {{ group.label }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label fw-bold" style="font-size:.8rem;">Automation channels</label>
+                    <div class="d-flex gap-3 flex-wrap">
+                        <label class="form-check" style="font-size:.8rem;"><input class="form-check-input" type="checkbox" name="review_automation_channels" value="sms" {% if 'sms' in automation.channels %}checked{% endif %}> SMS</label>
+                        <label class="form-check" style="font-size:.8rem;"><input class="form-check-input" type="checkbox" name="review_automation_channels" value="email" {% if 'email' in automation.channels %}checked{% endif %}> Email</label>
+                    </div>
+                </div>
+                <div class="settings-grid">
+                    <div><label class="form-label fw-bold" style="font-size:.75rem;">Wait days after service</label><input class="form-control form-control-sm" type="number" min="0" max="90" name="review_automation_delay_days" value="{{ automation.delay_days }}"></div>
+                    <div><label class="form-label fw-bold" style="font-size:.75rem;">Cooldown days</label><input class="form-control form-control-sm" type="number" min="1" max="1000" name="review_automation_cooldown_days" value="{{ automation.cooldown_days }}"></div>
+                    <div><label class="form-label fw-bold" style="font-size:.75rem;">Max attempts</label><input class="form-control form-control-sm" type="number" min="1" max="10" name="review_automation_max_attempts" value="{{ automation.max_attempts }}"></div>
+                    <div><label class="form-label fw-bold" style="font-size:.75rem;">Repeat after days</label><input class="form-control form-control-sm" type="number" min="30" max="5000" name="review_automation_repeat_after_days" value="{{ automation.repeat_after_days }}"></div>
+                    <div><label class="form-label fw-bold" style="font-size:.75rem;">Service window days</label><input class="form-control form-control-sm" type="number" min="1" max="5000" name="review_automation_service_window_days" value="{{ automation.service_window_days }}"></div>
+                    <div><label class="form-label fw-bold" style="font-size:.75rem;">Recovery below stars</label><input class="form-control form-control-sm" type="number" min="1" max="5" name="review_automation_min_private_rating" value="{{ automation.min_private_rating }}"></div>
+                </div>
+            </div>
             <button class="btn btn-outline-primary btn-sm fw-bold w-100" type="submit">
                 <i class="bi bi-save me-1"></i> Save Review Setup
             </button>
@@ -232,8 +325,11 @@
         document.getElementById('reviewPreviewTotal').textContent = preview.total || 0;
         document.getElementById('reviewPreviewSms').textContent = preview.sendable_sms || 0;
         document.getElementById('reviewPreviewEmail').textContent = preview.email_count || 0;
+        document.getElementById('reviewPreviewEligible').textContent = preview.eligible || 0;
+        document.getElementById('reviewPreviewSuppressed').textContent = preview.suppressed || 0;
         const warnings = [];
         if (preview.errors && Object.keys(preview.errors).length) warnings.push(Object.keys(preview.errors).length + ' group error(s)');
+        if (preview.google_lookup_warning) warnings.push(preview.google_lookup_warning);
         document.getElementById('reviewPreviewWarnings').textContent = warnings.join(' | ');
         const sample = document.getElementById('reviewRecipientSample');
         sample.innerHTML = '';
@@ -249,6 +345,34 @@
             row.appendChild(name);
             row.appendChild(meta);
             sample.appendChild(row);
+        });
+        const eligibility = document.getElementById('reviewEligibilityList');
+        eligibility.innerHTML = '';
+        (preview.candidates || []).slice(0, 8).forEach(candidate => {
+            const row = document.createElement('div');
+            row.className = 'eligibility-row ' + (candidate.eligible ? 'ready' : 'blocked');
+            const top = document.createElement('div');
+            top.className = 'd-flex justify-content-between gap-2';
+            const name = document.createElement('strong');
+            name.style.fontSize = '.8rem';
+            name.textContent = candidate.name || 'Customer';
+            const status = document.createElement('span');
+            status.className = 'eligibility-status';
+            status.textContent = candidate.status || '';
+            top.appendChild(name);
+            top.appendChild(status);
+            const reason = document.createElement('div');
+            reason.className = 'eligibility-reason';
+            reason.textContent = (candidate.reasons || [])[0] || '';
+            row.appendChild(top);
+            row.appendChild(reason);
+            if (candidate.service_date) {
+                const service = document.createElement('div');
+                service.className = 'eligibility-reason';
+                service.textContent = 'Service: ' + candidate.service_date;
+                row.appendChild(service);
+            }
+            eligibility.appendChild(row);
         });
     }
 

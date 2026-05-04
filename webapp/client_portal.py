@@ -5012,6 +5012,12 @@ _ENDPOINT_FEATURE_MAP = {
     "client_inbox_warren_draft":   "warren_inbox",
     "client_gbp":                  "gbp",
     "client_gbp_audit":            "gbp",
+    "client_reviews":              "reviews",
+    "client_reviews_preview":      "reviews",
+    "client_reviews_settings":     "reviews",
+    "client_reviews_send":         "reviews",
+    "client_reviews_run_automation": "reviews",
+    "client_reviews_mark_reviewed": "reviews",
     "client_post_scheduler":       "post_scheduler",
     "schedule_post":               "post_scheduler",
     "schedule_post_bulk":          "post_scheduler",
@@ -12810,6 +12816,7 @@ def client_reviews():
         abort(404)
 
     from webapp.review_collector import (
+        automation_settings,
         available_review_groups,
         get_templates,
         preview_review_audience,
@@ -12833,6 +12840,7 @@ def client_reviews():
         requests=requests,
         stats=stats,
         setup=review_setup_status(brand),
+        automation=automation_settings(brand),
         templates=get_templates(brand),
         sms_ready=bool((brand.get("quo_api_key") or "").strip() and (brand.get("quo_phone_number") or "").strip()),
         smtp_ready=bool(current_app.config.get("SMTP_USER") and current_app.config.get("SMTP_PASSWORD")),
@@ -12874,9 +12882,22 @@ def client_reviews_settings():
         "review_request_sms_template": (request.form.get("review_request_sms_template") or "").strip()[:700],
         "review_request_email_subject": (request.form.get("review_request_email_subject") or "").strip()[:200],
         "review_request_email_template": (request.form.get("review_request_email_template") or "").strip()[:3000],
+        "review_automation_group_keys": json.dumps(request.form.getlist("review_automation_group_keys")),
+        "review_automation_channels": json.dumps(request.form.getlist("review_automation_channels") or ["sms"]),
     }
     for field, value in fields.items():
         db.update_brand_text_field(brand_id, field, value)
+    number_fields = {
+        "review_automation_enabled": 1 if request.form.get("review_automation_enabled") else 0,
+        "review_automation_delay_days": request.form.get("review_automation_delay_days") or 1,
+        "review_automation_cooldown_days": request.form.get("review_automation_cooldown_days") or 90,
+        "review_automation_max_attempts": request.form.get("review_automation_max_attempts") or 2,
+        "review_automation_repeat_after_days": request.form.get("review_automation_repeat_after_days") or 365,
+        "review_automation_service_window_days": request.form.get("review_automation_service_window_days") or 180,
+        "review_automation_min_private_rating": request.form.get("review_automation_min_private_rating") or 4,
+    }
+    for field, value in number_fields.items():
+        db.update_brand_number_field(brand_id, field, value)
     flash("Review Collector settings saved.", "success")
     return redirect(url_for("client.client_reviews"))
 
@@ -12931,6 +12952,53 @@ def client_reviews_send():
     if result.get("failed"):
         suffix += f"; {result['failed']} failed"
     flash(f"Review requests sent to {result['recipient_count']} recipient(s): {', '.join(pieces)}{suffix}.", "success")
+    return redirect(url_for("client.client_reviews"))
+
+
+@client_bp.route("/reviews/automation/run", methods=["POST"])
+@client_login_required
+def client_reviews_run_automation():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+    try:
+        from webapp.review_collector import process_review_automation
+
+        result = process_review_automation(
+            db,
+            current_app.config,
+            brand,
+            created_by=session.get("client_name") or "automation",
+        )
+    except ValueError as exc:
+        flash(str(exc), "warning")
+        return redirect(url_for("client.client_reviews"))
+    except Exception as exc:
+        log.exception("Review automation failed for brand %s", brand_id)
+        flash(f"Review automation failed: {exc}", "error")
+        return redirect(url_for("client.client_reviews"))
+    if not result.get("ran"):
+        flash(result.get("reason") or "Review automation did not run.", "warning")
+        return redirect(url_for("client.client_reviews"))
+    flash(
+        f"Review automation sent {result.get('sent_sms', 0)} SMS and {result.get('sent_email', 0)} email request(s).",
+        "success",
+    )
+    return redirect(url_for("client.client_reviews"))
+
+
+@client_bp.route("/reviews/request/<int:request_id>/reviewed", methods=["POST"])
+@client_login_required
+def client_reviews_mark_reviewed(request_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    review_request = db.get_review_request(request_id, brand_id=brand_id)
+    if not review_request:
+        abort(404)
+    db.mark_review_request_reviewed(request_id, source="owner_confirmed")
+    flash("Review marked as confirmed. WARREN will suppress future asks for that customer.", "success")
     return redirect(url_for("client.client_reviews"))
 
 

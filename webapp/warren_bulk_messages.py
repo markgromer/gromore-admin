@@ -125,8 +125,8 @@ def _dedupe(recipients):
     return list(deduped.values())
 
 
-def _recipient(name="", email="", phone="", source="", source_id="", group=""):
-    return {
+def _recipient(name="", email="", phone="", source="", source_id="", group="", extra=None):
+    payload = {
         "name": _clean(name) or "Customer",
         "email": _normalize_email(email),
         "phone": _normalize_phone(phone),
@@ -134,6 +134,9 @@ def _recipient(name="", email="", phone="", source="", source_id="", group=""):
         "source_id": _clean(source_id),
         "groups": [group] if group else [],
     }
+    if isinstance(extra, dict):
+        payload.update({k: v for k, v in extra.items() if k not in payload})
+    return payload
 
 
 def _thread_recipient(thread, group):
@@ -148,6 +151,14 @@ def _thread_recipient(thread, group):
 
 
 def _sng_recipient(record, group, source):
+    service_keys = (
+        "last_service_date", "last_service_at", "last_job_completed_at", "job_completed_at",
+        "completed_at", "service_date", "last_visit_at", "visit_date", "last_invoice_at",
+        "last_payment_at", "paid_at", "updated_at", "updatedAt", "created_at", "createdAt",
+    )
+    extra = {key: record.get(key) for key in service_keys if isinstance(record, dict) and record.get(key)}
+    if isinstance(record, dict):
+        extra["raw"] = {key: record.get(key) for key in service_keys if record.get(key)}
     return _recipient(
         name=_name_from_record(record),
         email=_email_from_record(record),
@@ -155,6 +166,7 @@ def _sng_recipient(record, group, source):
         source=source,
         source_id=_external_id(record),
         group=group,
+        extra=extra,
     )
 
 
