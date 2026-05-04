@@ -925,8 +925,14 @@ def _extract_jobber_event(payload, raw_body):
         "event_type": event_type,
         "account_id": account_id,
         "item_id": item_id,
+        "job_id": item_id,
         "occurred_at": occurred_at,
+        "service_date": occurred_at,
         "app_id": event.get("appId") or payload.get("appId") or "",
+        "client_id": _sng_find_first(payload, "client_id", "clientid", "clientId") or _sng_find_first(event, "client_id", "clientid", "clientId"),
+        "client_name": _sng_find_first(payload, "client_name", "clientname", "clientName", "name", "fullName") or _sng_find_first(event, "client_name", "clientName", "name", "fullName"),
+        "client_email": _sng_find_first(payload, "client_email", "clientemail", "clientEmail", "email", "emailAddress") or _sng_find_first(event, "client_email", "clientEmail", "email", "emailAddress"),
+        "client_phone": _sng_find_first(payload, "client_phone", "clientphone", "clientPhone", "phone", "phoneNumber", "mobile") or _sng_find_first(event, "client_phone", "clientPhone", "phone", "phoneNumber", "mobile"),
     }
     return str(event_type), str(event_id), {key: value for key, value in summary.items() if str(value or "").strip()}
 
@@ -970,6 +976,21 @@ def jobber_webhook(brand_slug):
         db.mark_brand_webhook_received(brand["id"])
     except Exception:
         log.exception("Failed to mark Jobber webhook received for brand=%s", brand.get("id"))
+    try:
+        from webapp.review_collector import queue_review_request_from_crm_event
+        from webapp.warren_crm_events import process_pending_crm_event_actions
+
+        queued = queue_review_request_from_crm_event(db, brand, event_id, event_type, summary)
+        if queued:
+            stats = process_pending_crm_event_actions(db, current_app.config, brand_id=brand["id"], limit=100)
+            db.update_sng_webhook_event(
+                brand["id"],
+                event_id,
+                status="processed",
+                detail=f"{detail}; queued {queued} review request action(s), sent {stats.get('sent', 0)}, resolved {stats.get('resolved', 0)}.",
+            )
+    except Exception as exc:
+        log.exception("Jobber review event processing failed: brand=%s event=%s err=%s", brand.get("id"), event_id, exc)
     return jsonify({"ok": True, "event_type": event_type, "event_id": event_id}), 200
 
 

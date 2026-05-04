@@ -86,6 +86,7 @@
             <div class="text-muted" style="font-size:.84rem;">
                 {% if automation.enabled %}Enabled{% else %}Paused{% endif %}:
                 waits {{ automation.delay_days }} day(s) after service, suppresses for {{ automation.cooldown_days }} day(s), max {{ automation.max_attempts }} ask(s), and reroutes low private feedback into recovery.
+                CRM job-completion webhooks queue requests automatically, then WARREN re-checks review history and opt-outs before sending.
             </div>
         </div>
         <form method="post" action="{{ url_for('client.client_reviews_run_automation') }}">

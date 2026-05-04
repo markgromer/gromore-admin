@@ -800,7 +800,34 @@ def process_pending_crm_event_actions(db, app_config, brand_id=None, now=None, l
                 continue
 
         try:
-            if action.get("rule_key") == "quote_not_signed_up" or action.get("action_kind") == "sng_quote_nurture":
+            if action.get("action_kind") == "review_request":
+                from webapp.review_collector import process_review_request_action
+
+                try:
+                    result = process_review_request_action(db, app_config, brand, action)
+                except ValueError as exc:
+                    db.update_crm_event_action(
+                        action["id"],
+                        status="resolved",
+                        resolved_at=now_iso,
+                        resolution_reason=str(exc)[:500],
+                        detail=f"Review request skipped: {str(exc)[:900]}",
+                    )
+                    stats["resolved"] += 1
+                    stats["processed"] += 1
+                    continue
+                detail = (
+                    f"Review request sent: {result.get('sent_sms', 0)} SMS, "
+                    f"{result.get('sent_email', 0)} email, suppressed {result.get('suppressed', 0)}."
+                )
+                db.update_crm_event_action(
+                    action["id"],
+                    status="sent",
+                    sent_at=now_iso,
+                    detail=detail[:1000],
+                )
+                stats["sent"] += 1
+            elif action.get("rule_key") == "quote_not_signed_up" or action.get("action_kind") == "sng_quote_nurture":
                 status, _detail = _process_sng_quote_nurture_action(
                     db,
                     app_config,
@@ -843,6 +870,12 @@ def process_incoming_sng_event(db, app_config, brand, event_id, event_type, summ
     rules_config = load_crm_event_rules(brand)
     resolved = _resolve_actions_for_event(db, brand, event_type, summary)
     queued = _queue_rule_actions(db, brand, event_id, event_type, summary, rules_config)
+    try:
+        from webapp.review_collector import queue_review_request_from_crm_event
+
+        queued += queue_review_request_from_crm_event(db, brand, event_id, event_type, summary)
+    except Exception:
+        log.exception("Review request queue failed for brand=%s event=%s", brand.get("id"), event_id)
     delivery_stats = process_pending_crm_event_actions(db, app_config, brand_id=brand["id"], limit=100)
 
     if queued or resolved:

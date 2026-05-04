@@ -35,6 +35,13 @@ Would you take a minute to share a review?
 Thank you,
 {{ brand_name }}"""
 
+JOB_COMPLETION_EVENT_TOKENS = (
+    "job_completed", "job.complete", "job:completed", "job completed",
+    "visit_completed", "visit.complete", "appointment_completed",
+    "appointment.complete", "work_order_completed", "service_completed",
+    "service.complete", "client:job_completed", "job_closed", "job.close",
+)
+
 
 def _clean(value):
     return str(value or "").strip()
@@ -174,6 +181,29 @@ def _extract_service_date(recipient):
             if dt:
                 return dt
     return None
+
+
+def is_job_completion_event(event_type, summary=None):
+    text = " ".join(
+        str(part or "").strip().lower()
+        for part in (
+            event_type,
+            (summary or {}).get("event_type"),
+            (summary or {}).get("status"),
+            (summary or {}).get("job_status"),
+            (summary or {}).get("appointment_status"),
+            (summary or {}).get("service_status"),
+        )
+        if str(part or "").strip()
+    )
+    if not text:
+        return False
+    if any(token in text for token in JOB_COMPLETION_EVENT_TOKENS):
+        return True
+    return bool(
+        ("job" in text or "visit" in text or "appointment" in text or "service" in text)
+        and any(done in text for done in ("complete", "completed", "closed", "finished", "done"))
+    )
 
 
 def _norm_name(value):
@@ -389,9 +419,10 @@ def send_review_requests(
             "name": _clean(manual_recipient.get("name")) or "Customer",
             "email": _clean(manual_recipient.get("email")).lower(),
             "phone": _normalize_phone(manual_recipient.get("phone")),
-            "source": "manual",
-            "source_id": "",
+            "source": _clean(manual_recipient.get("source")) or "manual",
+            "source_id": _clean(manual_recipient.get("source_id")),
             "groups": ["manual"],
+            "last_service_date": _clean(manual_recipient.get("last_service_date") or manual_recipient.get("service_date")),
         }
         if manual["email"] or manual["phone"]:
             recipients.append(manual)
@@ -527,6 +558,88 @@ def send_review_requests(
 
 def available_review_groups(brand):
     return group_catalog(brand)
+
+
+def _summary_recipient(summary, event_id="", event_type=""):
+    summary = summary or {}
+    return {
+        "name": _clean(summary.get("client_name") or summary.get("customer_name") or summary.get("name")) or "Customer",
+        "email": _clean(summary.get("client_email") or summary.get("customer_email") or summary.get("email")).lower(),
+        "phone": _normalize_phone(summary.get("client_phone") or summary.get("customer_phone") or summary.get("phone")),
+        "source": _clean(summary.get("source")) or "crm_event",
+        "source_id": _clean(summary.get("client_id") or summary.get("customer_id") or summary.get("job_id") or summary.get("item_id") or event_id),
+        "last_service_date": _clean(
+            summary.get("service_date")
+            or summary.get("completed_at")
+            or summary.get("occurred_at")
+            or summary.get("job_completed_at")
+            or summary.get("event_time")
+        ),
+        "event_type": event_type,
+    }
+
+
+def queue_review_request_from_crm_event(db, brand, event_id, event_type, summary, *, now=None):
+    settings = automation_settings(brand)
+    if not settings["enabled"]:
+        return 0
+    if not is_job_completion_event(event_type, summary):
+        return 0
+    if not review_setup_status(brand)["ready"]:
+        return 0
+
+    recipient = _summary_recipient(summary, event_id=event_id, event_type=event_type)
+    if not (recipient["email"] or recipient["phone"]):
+        return 0
+
+    now = now or datetime.now(UTC)
+    service_dt = _parse_dt(recipient.get("last_service_date")) or now.replace(tzinfo=None)
+    scheduled_for = service_dt + timedelta(days=settings["delay_days"])
+    now_naive = now.replace(tzinfo=None)
+    if scheduled_for < now_naive:
+        scheduled_for = now_naive
+
+    import json
+
+    action_id = db.queue_crm_event_action(
+        brand["id"],
+        source_event_id=event_id,
+        source_event_type=event_type,
+        rule_key="review_request",
+        action_kind="review_request",
+        channel="review",
+        recipient=recipient["phone"] or recipient["email"] or recipient["source_id"],
+        client_id=recipient["source_id"],
+        subject=f"Review request - {recipient['name']}",
+        message_text=json.dumps({"summary": summary or {}, "recipient": recipient}, separators=(",", ":"))[:2000],
+        attempt_number=1,
+        max_attempts=1,
+        scheduled_for=scheduled_for.replace(tzinfo=UTC).isoformat(),
+        detail=f"Queued review request from {event_type}",
+    )
+    return 1 if action_id else 0
+
+
+def process_review_request_action(db, app_config, brand, action):
+    import json
+
+    try:
+        payload = json.loads(action.get("message_text") or "{}")
+    except Exception:
+        payload = {}
+    recipient = payload.get("recipient") if isinstance(payload.get("recipient"), dict) else {}
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    if not recipient:
+        recipient = _summary_recipient(summary, event_id=action.get("source_event_id"), event_type=action.get("source_event_type"))
+    result = send_review_requests(
+        db,
+        app_config,
+        brand,
+        channels=automation_settings(brand)["channels"],
+        manual_recipient=recipient,
+        created_by=f"crm_event:{action.get('source_event_type') or ''}",
+    )
+    return result
 
 
 def process_review_automation(db, app_config, brand, *, created_by="automation"):
