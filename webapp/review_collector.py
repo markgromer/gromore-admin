@@ -59,7 +59,18 @@ REPUTATION_WIDGET_DEFAULTS = {
     "layout": "card",
     "theme": "light",
     "accent": "#2563eb",
+    "background": "#ffffff",
+    "header_background": "#12322b",
+    "text_color": "#0f172a",
+    "muted_color": "#64748b",
+    "star_color": "#f59e0b",
+    "border_color": "#dbe5df",
+    "button_text_color": "#ffffff",
+    "avatar_color": "#2563eb",
     "width": "520",
+    "radius": "12",
+    "shadow": "medium",
+    "font": "system",
     "review_count": "3",
     "review_style": "stack",
     "popup_position": "bottom-left",
@@ -79,6 +90,8 @@ REPUTATION_WIDGET_CHOICES = {
     "theme": {"light", "dark", "brand"},
     "review_style": {"stack", "scroller", "grid"},
     "popup_position": {"bottom-left", "bottom-right", "top-left", "top-right"},
+    "shadow": {"none", "soft", "medium", "bold"},
+    "font": {"system", "serif", "rounded", "condensed"},
 }
 
 
@@ -129,8 +142,12 @@ def reputation_widget_settings(brand):
     for key, choices in REPUTATION_WIDGET_CHOICES.items():
         if settings.get(key) not in choices:
             settings[key] = REPUTATION_WIDGET_DEFAULTS[key]
-    if not re.match(r"^#[0-9a-fA-F]{6}$", settings.get("accent", "")):
-        settings["accent"] = REPUTATION_WIDGET_DEFAULTS["accent"]
+    for color_key in (
+        "accent", "background", "header_background", "text_color", "muted_color",
+        "star_color", "border_color", "button_text_color", "avatar_color",
+    ):
+        if not re.match(r"^#[0-9a-fA-F]{6}$", settings.get(color_key, "")):
+            settings[color_key] = REPUTATION_WIDGET_DEFAULTS[color_key]
     try:
         width = max(280, min(900, int(float(settings.get("width") or 520))))
     except (TypeError, ValueError):
@@ -141,6 +158,11 @@ def reputation_widget_settings(brand):
         review_count = 3
     settings["width"] = str(width)
     settings["review_count"] = str(review_count)
+    try:
+        radius = max(0, min(40, int(float(settings.get("radius") or 12))))
+    except (TypeError, ValueError):
+        radius = 12
+    settings["radius"] = str(radius)
     for key in ("show_header", "show_cta", "show_review_text", "show_popups", "auto_scroll"):
         settings[key] = "1" if str(settings.get(key)) == "1" else "0"
     try:

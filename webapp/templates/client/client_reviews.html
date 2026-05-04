@@ -92,20 +92,20 @@
     .widget-choice strong { display: block; font-size: .82rem; color: #0f172a; }
     .widget-choice span { display: block; font-size: .72rem; color: #64748b; margin-top: .2rem; line-height: 1.3; }
     .widget-preview-frame { border: 1px solid #dbe5df; border-radius: 12px; padding: 1rem; background: #f8fafc; min-height: 260px; display: grid; place-items: center; overflow: auto; }
-    .widget-preview-card { width: min(100%, 520px); border: 1px solid #dbe5df; border-radius: 12px; background: #fff; box-shadow: 0 12px 34px rgba(15,23,42,.1); overflow: hidden; color: #0f172a; }
-    .widget-preview-head { background: #12322b; color: #fff; padding: 1rem 1.1rem; }
+    .widget-preview-card { width: min(100%, 520px); border: 1px solid var(--preview-border, #dbe5df); border-radius: var(--preview-radius, 12px); background: var(--preview-bg, #fff); box-shadow: var(--preview-shadow, 0 12px 34px rgba(15,23,42,.1)); overflow: hidden; color: var(--preview-text, #0f172a); font-family: var(--preview-font, Inter, system-ui, sans-serif); }
+    .widget-preview-head { background: var(--preview-head, #12322b); color: #fff; padding: 1rem 1.1rem; }
     .widget-preview-title { font-weight: 850; font-size: .92rem; margin-bottom: .35rem; }
     .widget-preview-score { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
     .widget-preview-score strong { font-size: 1.65rem; line-height: 1; }
-    .widget-preview-stars { color: #f59e0b; font-size: .82rem; letter-spacing: 1px; }
+    .widget-preview-stars { color: var(--preview-star, #f59e0b); font-size: .82rem; letter-spacing: 1px; }
     .widget-preview-body { padding: .9rem 1.1rem; display: grid; gap: .6rem; }
-    .widget-preview-review { border-top: 1px solid #e2e8f0; padding-top: .6rem; font-size: .78rem; color: #334155; }
+    .widget-preview-review { border-top: 1px solid var(--preview-border, #e2e8f0); padding-top: .6rem; font-size: .78rem; color: var(--preview-text, #334155); }
     .widget-preview-review:first-child { border-top: 0; padding-top: 0; }
     .widget-preview-actions { padding: 0 1.1rem 1rem; display: flex; gap: .5rem; flex-wrap: wrap; }
-    .widget-preview-btn { border-radius: 8px; background: #2563eb; color: #fff; padding: .55rem .75rem; font-size: .78rem; font-weight: 850; }
+    .widget-preview-btn { border-radius: max(6px, calc(var(--preview-radius, 12px) - 4px)); background: var(--preview-accent, #2563eb); color: var(--preview-button-text, #fff); padding: .55rem .75rem; font-size: .78rem; font-weight: 850; }
     .widget-preview-card.dark { background: #111827; color: #f8fafc; border-color: #374151; }
     .widget-preview-card.dark .widget-preview-review { color: #e2e8f0; border-top-color: #334155; }
-    .widget-preview-card.brand .widget-preview-head, .widget-preview-card.brand .widget-preview-btn { background: var(--preview-accent, #2563eb); }
+    .widget-preview-card.brand .widget-preview-head { background: var(--preview-head, #2563eb); }
     .widget-preview-card.compact .widget-preview-body { display: none; }
     .widget-preview-card.popup { display: none; }
     .widget-preview-card.badge { width: auto; display: inline-flex; align-items: stretch; }
@@ -115,14 +115,16 @@
     .widget-preview-card.grid .widget-preview-review { border: 1px solid #e2e8f0; border-radius: 8px; padding: .6rem; }
     .widget-preview-card.scroller .widget-preview-body, .widget-preview-card.carousel .widget-preview-body { display: flex; overflow-x: auto; }
     .widget-preview-card.scroller .widget-preview-review, .widget-preview-card.carousel .widget-preview-review { min-width: 190px; border: 1px solid #e2e8f0; border-radius: 8px; padding: .6rem; }
-    .widget-toast-preview { width: min(100%, 340px); border: 1px solid #dbe5df; border-radius: 14px; background: #fff; box-shadow: 0 18px 55px rgba(15,23,42,.18); padding: .8rem; display: none; color: #0f172a; }
+    .widget-toast-preview { width: min(100%, 340px); border: 1px solid var(--preview-border, #dbe5df); border-radius: max(10px, calc(var(--preview-radius, 12px) + 2px)); background: var(--preview-bg, #fff); box-shadow: var(--preview-shadow, 0 18px 55px rgba(15,23,42,.18)); padding: .8rem; display: none; color: var(--preview-text, #0f172a); font-family: var(--preview-font, Inter, system-ui, sans-serif); }
     .widget-toast-preview.show { display: block; }
     .widget-toast-top { display: flex; gap: .65rem; align-items: flex-start; }
-    .widget-toast-avatar { width: 38px; height: 38px; border-radius: 50%; background: #2563eb; color: #fff; display: grid; place-items: center; font-weight: 900; flex: 0 0 auto; }
+    .widget-toast-avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--preview-avatar, #2563eb); color: var(--preview-button-text, #fff); display: grid; place-items: center; font-weight: 900; flex: 0 0 auto; }
     .widget-toast-title { font-size: .82rem; font-weight: 900; }
-    .widget-toast-stars { color: #f59e0b; font-size: .76rem; letter-spacing: 1px; margin-top: .12rem; }
-    .widget-toast-text { color: #475569; font-size: .74rem; line-height: 1.35; margin-top: .3rem; }
-    .widget-toast-foot { display: flex; justify-content: space-between; gap: .5rem; color: #64748b; font-size: .68rem; margin-top: .55rem; }
+    .widget-toast-stars { color: var(--preview-star, #f59e0b); font-size: .76rem; letter-spacing: 1px; margin-top: .12rem; }
+    .widget-toast-text { color: var(--preview-muted, #475569); font-size: .74rem; line-height: 1.35; margin-top: .3rem; }
+    .widget-toast-foot { display: flex; justify-content: space-between; gap: .5rem; color: var(--preview-muted, #64748b); font-size: .68rem; margin-top: .55rem; }
+    .color-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: .65rem; }
+    .color-field label { display: block; font-size: .74rem; font-weight: 850; color: #334155; margin-bottom: .25rem; }
     @media (max-width: 1050px) {
         .reviews-grid { grid-template-columns: 1fr; }
         .reputation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -695,6 +697,28 @@
                                 <label class="form-label fw-bold">Max width</label>
                                 <input class="form-control" type="number" min="280" max="900" step="10" name="reputation_widget_width" value="{{ widget.width }}">
                             </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Corner radius</label>
+                                <input class="form-control" type="number" min="0" max="40" name="reputation_widget_radius" value="{{ widget.radius }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Shadow</label>
+                                <select class="form-select" name="reputation_widget_shadow">
+                                    <option value="none" {% if widget.shadow == 'none' %}selected{% endif %}>None</option>
+                                    <option value="soft" {% if widget.shadow == 'soft' %}selected{% endif %}>Soft</option>
+                                    <option value="medium" {% if widget.shadow == 'medium' %}selected{% endif %}>Medium</option>
+                                    <option value="bold" {% if widget.shadow == 'bold' %}selected{% endif %}>Bold</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Font</label>
+                                <select class="form-select" name="reputation_widget_font">
+                                    <option value="system" {% if widget.font == 'system' %}selected{% endif %}>Clean system</option>
+                                    <option value="serif" {% if widget.font == 'serif' %}selected{% endif %}>Editorial serif</option>
+                                    <option value="rounded" {% if widget.font == 'rounded' %}selected{% endif %}>Friendly rounded</option>
+                                    <option value="condensed" {% if widget.font == 'condensed' %}selected{% endif %}>Condensed</option>
+                                </select>
+                            </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Title</label>
                                 <input class="form-control" name="reputation_widget_title" value="{{ widget.title }}">
@@ -733,6 +757,26 @@
                                 <input class="form-control" type="number" min="5" max="300" name="reputation_widget_popup_interval" value="{{ widget.popup_interval }}">
                             </div>
                         </div>
+                        <div class="border-top pt-3 mt-3">
+                            <div class="fw-bold mb-2">Brand colors</div>
+                            <div class="color-grid">
+                                {% for field, label in [
+                                    ('background', 'Surface'),
+                                    ('header_background', 'Header'),
+                                    ('text_color', 'Text'),
+                                    ('muted_color', 'Muted text'),
+                                    ('star_color', 'Stars'),
+                                    ('border_color', 'Border'),
+                                    ('button_text_color', 'Button text'),
+                                    ('avatar_color', 'Avatar')
+                                ] %}
+                                <div class="color-field">
+                                    <label>{{ label }}</label>
+                                    <input class="form-control form-control-color w-100" type="color" name="reputation_widget_{{ field }}" value="{{ widget[field] }}">
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
                         <div class="d-flex flex-wrap gap-3 mt-3">
                             <label class="form-check"><input class="form-check-input" type="checkbox" name="reputation_widget_show_header" value="1" {% if widget.show_header == '1' %}checked{% endif %}> Show header</label>
                             <label class="form-check"><input class="form-check-input" type="checkbox" name="reputation_widget_show_cta" value="1" {% if widget.show_cta == '1' %}checked{% endif %}> Show CTA</label>
@@ -745,7 +789,7 @@
                     <div class="col-lg-5">
                         <div class="fw-bold mb-2">Live Preview</div>
                         <div class="widget-preview-frame">
-                            <div class="widget-preview-card {{ widget.theme }} {{ widget.layout }} {{ widget.review_style }}" id="widgetPreviewCard" style="--preview-accent: {{ widget.accent }}; max-width: {{ widget.width }}px;">
+                            <div class="widget-preview-card {{ widget.theme }} {{ widget.layout }} {{ widget.review_style }}" id="widgetPreviewCard" style="--preview-accent: {{ widget.accent }}; --preview-bg: {{ widget.background }}; --preview-head: {{ widget.header_background }}; --preview-text: {{ widget.text_color }}; --preview-muted: {{ widget.muted_color }}; --preview-star: {{ widget.star_color }}; --preview-border: {{ widget.border_color }}; --preview-button-text: {{ widget.button_text_color }}; --preview-avatar: {{ widget.avatar_color }}; --preview-radius: {{ widget.radius }}px; max-width: {{ widget.width }}px;">
                                 <div class="widget-preview-head">
                                     <div class="widget-preview-title" id="widgetPreviewTitle">{{ widget.title }}</div>
                                     <div class="widget-preview-score">
@@ -903,6 +947,29 @@
         const reviewStyle = value('reputation_widget_review_style') || 'stack';
         card.className = 'widget-preview-card ' + theme + ' ' + layout + ' ' + reviewStyle;
         card.style.setProperty('--preview-accent', value('reputation_widget_accent') || '#2563eb');
+        card.style.setProperty('--preview-bg', value('reputation_widget_background') || '#ffffff');
+        card.style.setProperty('--preview-head', value('reputation_widget_header_background') || '#12322b');
+        card.style.setProperty('--preview-text', value('reputation_widget_text_color') || '#0f172a');
+        card.style.setProperty('--preview-muted', value('reputation_widget_muted_color') || '#64748b');
+        card.style.setProperty('--preview-star', value('reputation_widget_star_color') || '#f59e0b');
+        card.style.setProperty('--preview-border', value('reputation_widget_border_color') || '#dbe5df');
+        card.style.setProperty('--preview-button-text', value('reputation_widget_button_text_color') || '#ffffff');
+        card.style.setProperty('--preview-avatar', value('reputation_widget_avatar_color') || value('reputation_widget_accent') || '#2563eb');
+        card.style.setProperty('--preview-radius', (value('reputation_widget_radius') || 12) + 'px');
+        const shadowMap = {
+            none: 'none',
+            soft: '0 8px 22px rgba(15,23,42,.08)',
+            medium: '0 12px 34px rgba(15,23,42,.12)',
+            bold: '0 22px 60px rgba(15,23,42,.22)'
+        };
+        const fontMap = {
+            system: 'Inter, system-ui, sans-serif',
+            serif: 'Georgia, "Times New Roman", serif',
+            rounded: 'ui-rounded, "SF Pro Rounded", Nunito, Inter, system-ui, sans-serif',
+            condensed: '"Arial Narrow", "Roboto Condensed", Arial, sans-serif'
+        };
+        card.style.setProperty('--preview-shadow', shadowMap[value('reputation_widget_shadow')] || shadowMap.medium);
+        card.style.setProperty('--preview-font', fontMap[value('reputation_widget_font')] || fontMap.system);
         card.style.maxWidth = (value('reputation_widget_width') || 520) + 'px';
         if (title) {
             title.textContent = value('reputation_widget_title') || 'What customers say';
@@ -914,7 +981,17 @@
             const showToast = layout === 'popup' || layout === 'combo' || on('reputation_widget_show_popups');
             toast.classList.toggle('show', showToast);
             toast.style.setProperty('--preview-accent', value('reputation_widget_accent') || '#2563eb');
-            if (toastAvatar) toastAvatar.style.background = value('reputation_widget_accent') || '#2563eb';
+            toast.style.setProperty('--preview-bg', value('reputation_widget_background') || '#ffffff');
+            toast.style.setProperty('--preview-text', value('reputation_widget_text_color') || '#0f172a');
+            toast.style.setProperty('--preview-muted', value('reputation_widget_muted_color') || '#64748b');
+            toast.style.setProperty('--preview-star', value('reputation_widget_star_color') || '#f59e0b');
+            toast.style.setProperty('--preview-border', value('reputation_widget_border_color') || '#dbe5df');
+            toast.style.setProperty('--preview-button-text', value('reputation_widget_button_text_color') || '#ffffff');
+            toast.style.setProperty('--preview-avatar', value('reputation_widget_avatar_color') || value('reputation_widget_accent') || '#2563eb');
+            toast.style.setProperty('--preview-radius', (value('reputation_widget_radius') || 12) + 'px');
+            toast.style.setProperty('--preview-shadow', shadowMap[value('reputation_widget_shadow')] || shadowMap.medium);
+            toast.style.setProperty('--preview-font', fontMap[value('reputation_widget_font')] || fontMap.system);
+            if (toastAvatar) toastAvatar.style.background = value('reputation_widget_avatar_color') || value('reputation_widget_accent') || '#2563eb';
         }
         if (body) {
             body.style.display = layout === 'compact' || layout === 'badge' ? 'none' : '';
