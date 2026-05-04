@@ -1286,6 +1286,7 @@
 
                 <form method="POST" action="{{ url_for('client.client_save_openai') }}" class="mt-3" id="aiProviderForm">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="return_to" value="connections">
                     <div class="row g-3">
                         <div class="col-md-4">
                             <label class="form-label fw-medium" style="font-size:.88rem;">AI Provider</label>
@@ -1340,8 +1341,66 @@
                                         <label class="form-label fw-medium" style="font-size:.82rem;">Custom Provider API Key</label>
                                         <input type="password" class="form-control" name="ai_custom_api_key" placeholder="{{ 'Key saved ending ' ~ brand.ai_custom_api_key[-4:] if brand.ai_custom_api_key else 'Custom key' }}" autocomplete="off">
                                     </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-medium" style="font-size:.82rem;">Direct Perplexity API Key</label>
+                                        <input type="password" class="form-control" name="seo_perplexity_api_key" placeholder="{{ 'Key saved ending ' ~ brand.seo_perplexity_api_key[-4:] if brand.seo_perplexity_api_key else 'pplx-...' }}" autocomplete="off">
+                                    </div>
                                 </div>
                                 <small class="text-muted d-block mt-2">Only filled fields are updated. Saved keys stay available when you switch providers.</small>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="p-3" style="background:#f8fafc; border:1px solid #dbeafe; border-radius:8px;">
+                                {% set seo_provider = brand.seo_research_provider or 'openrouter' %}
+                                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                                    <div>
+                                        <div class="fw-semibold" style="font-size:.9rem;">SEO Research Layer</div>
+                                        <div class="text-muted" style="font-size:.82rem;">Perplexity-style market research for SEO missions, site planning, and organic CPA pressure.</div>
+                                    </div>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" role="switch" name="seo_research_enabled" value="1" id="seoResearchEnabled" {{ 'checked' if brand.seo_research_enabled|string in ['1', 'true', 'True', 'on', 'yes'] else '' }}>
+                                        <label class="form-check-label fw-medium" for="seoResearchEnabled" style="font-size:.84rem;">Enabled</label>
+                                    </div>
+                                </div>
+                                <div class="row g-3">
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-medium" style="font-size:.82rem;">Research Provider</label>
+                                        <select class="form-select" name="seo_research_provider">
+                                            <option value="openrouter" {{ 'selected' if seo_provider == 'openrouter' else '' }}>OpenRouter</option>
+                                            <option value="perplexity" {{ 'selected' if seo_provider == 'perplexity' else '' }}>Perplexity direct</option>
+                                            <option value="off" {{ 'selected' if seo_provider == 'off' else '' }}>Off</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-medium" style="font-size:.82rem;">Research Model</label>
+                                        <input type="text" class="form-control" name="seo_research_model" value="{{ brand.seo_research_model or 'perplexity/sonar' }}" placeholder="perplexity/sonar">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label fw-medium" style="font-size:.82rem;">Daily Cap</label>
+                                        <input type="number" min="0" max="100" class="form-control" name="seo_research_daily_limit" value="{{ brand.seo_research_daily_limit or 5 }}">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label fw-medium" style="font-size:.82rem;">Cache Days</label>
+                                        <input type="number" min="1" max="90" class="form-control" name="seo_research_cache_days" value="{{ brand.seo_research_cache_days or 14 }}">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label fw-medium" style="font-size:.82rem;">Context Rows</label>
+                                        <input type="number" min="3" max="20" class="form-control" name="seo_research_max_results" value="{{ brand.seo_research_max_results or 8 }}">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label fw-medium" style="font-size:.82rem;">Test Focus</label>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" id="seoResearchQuery" placeholder="Example: what organic opportunities can lower paid CPA this month?">
+                                            <button class="btn btn-outline-primary" type="button" id="seoResearchTestBtn"><i class="bi bi-search me-1"></i>Run Research</button>
+                                        </div>
+                                        <div class="form-check mt-2">
+                                            <input class="form-check-input" type="checkbox" id="seoResearchForce">
+                                            <label class="form-check-label text-muted" for="seoResearchForce" style="font-size:.82rem;">Force a fresh provider call instead of reading cache</label>
+                                        </div>
+                                        <div id="seoResearchResult" class="mt-2" style="display:none;"></div>
+                                    </div>
+                                </div>
+                                <small class="text-muted d-block mt-2">This does not run during normal dashboard loads. Save the settings first, then run a manual test.</small>
                             </div>
                         </div>
                         <div class="col-12" id="aiCustomBaseUrlWrap" style="display:{{ 'block' if current_provider == 'custom' else 'none' }};">
@@ -2450,6 +2509,51 @@ function testMessengerConnection() {
 (function() {
     var providerSelect = document.getElementById('aiProviderSelect');
     var customWrap = document.getElementById('aiCustomBaseUrlWrap');
+    var seoBtn = document.getElementById('seoResearchTestBtn');
+    var seoResult = document.getElementById('seoResearchResult');
+    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    var csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+    function escapeHtml(value) {
+        return String(value || '').replace(/[&<>"']/g, function(ch) {
+            return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]);
+        });
+    }
+    function renderSeoResearch(data) {
+        if (!seoResult) return;
+        if (!data || !data.ok) {
+            seoResult.style.display = 'block';
+            seoResult.innerHTML = '<div class="alert alert-warning mb-0 py-2">' + escapeHtml((data && data.error) || 'SEO research failed.') + '</div>';
+            return;
+        }
+        var research = data.research || {};
+        var pages = Array.isArray(research.pages_to_create_or_update) ? research.pages_to_create_or_update.slice(0, 4) : [];
+        var missions = Array.isArray(research.mission_candidates) ? research.mission_candidates.slice(0, 3) : [];
+        var html = '<div class="border rounded p-3 bg-white">';
+        html += '<div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">';
+        html += '<div class="fw-semibold">Research readout</div>';
+        html += '<span class="badge bg-' + (data.cached ? 'secondary' : 'success') + '">' + (data.cached ? 'Cached' : 'Fresh') + ' - ' + escapeHtml(data.provider || '') + ' - ' + escapeHtml(data.model || '') + '</span>';
+        html += '</div>';
+        if (research.summary) html += '<p class="mb-2 text-muted" style="font-size:.86rem;">' + escapeHtml(research.summary) + '</p>';
+        if (pages.length) {
+            html += '<div class="fw-semibold text-uppercase text-muted mb-1" style="font-size:.72rem;">Pages to create or improve</div><ul class="mb-2">';
+            pages.forEach(function(item) {
+                var label = typeof item === 'string' ? item : ((item.page || item.intent || 'SEO page') + (item.reason ? ': ' + item.reason : ''));
+                html += '<li>' + escapeHtml(label) + '</li>';
+            });
+            html += '</ul>';
+        }
+        if (missions.length) {
+            html += '<div class="fw-semibold text-uppercase text-muted mb-1" style="font-size:.72rem;">Mission candidates</div><ul class="mb-0">';
+            missions.forEach(function(item) {
+                var label = typeof item === 'string' ? item : ((item.title || 'SEO mission') + (item.why_it_matters ? ': ' + item.why_it_matters : ''));
+                html += '<li>' + escapeHtml(label) + '</li>';
+            });
+            html += '</ul>';
+        }
+        html += '</div>';
+        seoResult.style.display = 'block';
+        seoResult.innerHTML = html;
+    }
     function syncAiProviderFields() {
         if (!providerSelect) return;
         var provider = providerSelect.value || 'openai';
@@ -2468,6 +2572,31 @@ function testMessengerConnection() {
             });
         });
     });
+    if (seoBtn) {
+        seoBtn.addEventListener('click', function() {
+            seoBtn.disabled = true;
+            seoBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Researching';
+            if (seoResult) {
+                seoResult.style.display = 'block';
+                seoResult.innerHTML = '<div class="alert alert-info mb-0 py-2">Checking cached research and provider limits...</div>';
+            }
+            fetch('{{ url_for("client.client_seo_research") }}', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+                body: JSON.stringify({
+                    query: (document.getElementById('seoResearchQuery') || {}).value || '',
+                    force: !!((document.getElementById('seoResearchForce') || {}).checked)
+                })
+            })
+            .then(function(resp) { return resp.json().catch(function() { return {ok:false, error:'Invalid server response'}; }); })
+            .then(renderSeoResearch)
+            .catch(function() { renderSeoResearch({ok:false, error:'SEO research request failed.'}); })
+            .finally(function() {
+                seoBtn.disabled = false;
+                seoBtn.innerHTML = '<i class="bi bi-search me-1"></i>Run Research';
+            });
+        });
+    }
 })();
 </script>
 {% endblock %}

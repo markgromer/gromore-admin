@@ -301,6 +301,20 @@
                                placeholder="{{ '******  (saved)' if openai_configured else 'sk-...' }}">
                         <small class="text-muted">Leave blank to keep current.</small>
                     </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Global OpenRouter API Key</label>
+                            <input type="password" name="openrouter_api_key" class="form-control"
+                                   placeholder="{{ '******  (saved)' if openrouter_configured else 'sk-or-...' }}">
+                            <small class="text-muted">Fallback for brands without their own OpenRouter token.</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Global Perplexity API Key</label>
+                            <input type="password" name="perplexity_api_key" class="form-control"
+                                   placeholder="{{ '******  (saved)' if perplexity_configured else 'pplx-...' }}">
+                            <small class="text-muted">Optional direct Perplexity fallback.</small>
+                        </div>
+                    </div>
                     <div class="mb-3">
                         <label class="form-label">Chat Model</label>
                         <select name="openai_model" class="form-select" id="openai_model_select" onchange="if(this.value==='custom'){document.getElementById('openai_model_custom').classList.remove('d-none')}else{document.getElementById('openai_model_custom').classList.add('d-none')}">
@@ -340,11 +354,50 @@
                                   placeholder="Core instructions for the chatbot behavior, tone, and constraints.">{{ ai_chat_system_prompt or '' }}</textarea>
                         <small class="text-muted">Applied server-side to admin and client chat. Clients cannot edit this prompt.</small>
                     </div>
-                    <button type="submit" class="btn btn-primary">Save OpenAI Settings</button>
+                    <div class="p-3 mb-3" style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px;">
+                        <div class="fw-semibold mb-2">SEO Research Defaults</div>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Provider</label>
+                                {% set seo_provider = seo_research_settings.provider or 'openrouter' %}
+                                <select name="seo_research_provider" class="form-select">
+                                    <option value="openrouter" {{ 'selected' if seo_provider == 'openrouter' else '' }}>OpenRouter</option>
+                                    <option value="perplexity" {{ 'selected' if seo_provider == 'perplexity' else '' }}>Perplexity direct</option>
+                                    <option value="off" {{ 'selected' if seo_provider == 'off' else '' }}>Off</option>
+                                </select>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label">SEO Research Model</label>
+                                <input type="text" name="seo_research_model" class="form-control"
+                                       value="{{ seo_research_settings.model or 'perplexity/sonar' }}"
+                                       placeholder="perplexity/sonar">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Daily Calls / Brand</label>
+                                <input type="number" min="0" max="100" name="seo_research_daily_limit" class="form-control"
+                                       value="{{ seo_research_settings.daily_limit or '5' }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Cache Days</label>
+                                <input type="number" min="1" max="90" name="seo_research_cache_days" class="form-control"
+                                       value="{{ seo_research_settings.cache_days or '14' }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Context Rows</label>
+                                <input type="number" min="3" max="20" name="seo_research_max_results" class="form-control"
+                                       value="{{ seo_research_settings.max_results or '8' }}">
+                            </div>
+                        </div>
+                        <small class="text-muted d-block mt-2">Brand settings must still enable SEO research. Cached manual calls keep Perplexity/OpenRouter spend controlled.</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save AI Settings</button>
                     <button type="button" class="btn btn-outline-secondary ms-2" onclick="testConnection('openai')">Test Key</button>
                     <span id="openai-test-result" class="ms-2 small"></span>
                     {% if openai_configured %}
                     <span class="badge bg-success ms-2">Configured</span>
+                    {% endif %}
+                    {% if openrouter_configured %}
+                    <span class="badge bg-success ms-2">OpenRouter configured</span>
                     {% endif %}
                 </form>
             </div>

@@ -11772,6 +11772,10 @@ def client_save_openai():
     custom_base_url = request.form.get("ai_provider_base_url", "").strip().rstrip("/")
     image_generation_model = request.form.get("ai_image_generation_model", "").strip()
     quality_tier = request.form.get("ai_quality_tier", "").strip().lower()
+    seo_provider = (request.form.get("seo_research_provider") or "openrouter").strip().lower()
+    if seo_provider not in {"openrouter", "perplexity", "off"}:
+        seo_provider = "openrouter"
+    seo_enabled = "1" if request.form.get("seo_research_enabled") else "0"
     token_fields = {
         "openai_api_key": request.form.get("openai_api_key", "").strip(),
         "ai_openrouter_api_key": request.form.get("ai_openrouter_api_key", "").strip(),
@@ -11779,6 +11783,7 @@ def client_save_openai():
         "ai_xai_api_key": request.form.get("ai_xai_api_key", "").strip(),
         "ai_bfl_api_key": request.form.get("ai_bfl_api_key", "").strip(),
         "ai_custom_api_key": request.form.get("ai_custom_api_key", "").strip(),
+        "seo_perplexity_api_key": request.form.get("seo_perplexity_api_key", "").strip(),
     }
 
     # Save quality tier
@@ -11838,8 +11843,76 @@ def client_save_openai():
     if image_provider in {"openai", "gemini", "xai", "bfl"}:
         db.update_brand_text_field(brand_id, "ai_image_provider", image_provider)
 
+    db.update_brand_text_field(brand_id, "seo_research_enabled", seo_enabled)
+    db.update_brand_text_field(brand_id, "seo_research_provider", seo_provider)
+    db.update_brand_text_field(
+        brand_id,
+        "seo_research_model",
+        (request.form.get("seo_research_model") or "perplexity/sonar").strip()[:120],
+    )
+    for field, default, minimum, maximum in (
+        ("seo_research_daily_limit", 5, 0, 100),
+        ("seo_research_cache_days", 14, 1, 90),
+        ("seo_research_max_results", 8, 3, 20),
+    ):
+        try:
+            value = int(float((request.form.get(field) or str(default)).strip()))
+        except Exception:
+            value = default
+        db.update_brand_text_field(brand_id, field, str(max(minimum, min(maximum, value))))
+
     flash("AI settings saved.", "success")
-    return redirect(url_for("client.client_settings"))
+    return_to = request.form.get("return_to")
+    return redirect(url_for("client.client_connections") if return_to == "connections" else url_for("client.client_settings"))
+
+
+@client_bp.route("/seo/research", methods=["POST"])
+@client_login_required
+def client_seo_research():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+
+    data = request.get_json(silent=True) or {}
+    query = (data.get("query") or "").strip()[:500]
+    force = bool(data.get("force"))
+
+    seo_data = {}
+    try:
+        gsc_url = (brand.get("gsc_site_url") or "").strip()
+        if gsc_url:
+            from datetime import datetime, timedelta
+
+            from src.api_search_console import pull_search_console_data
+
+            today = datetime.utcnow()
+            first_of_month = today.replace(day=1)
+            last_month = first_of_month - timedelta(days=1)
+            month_str = last_month.strftime("%Y-%m")
+            oauth_tokens = None
+            google_conn = (db.get_brand_connections(brand_id).get("google") or {})
+            if google_conn.get("access_token"):
+                oauth_tokens = {
+                    "access_token": google_conn["access_token"],
+                    "refresh_token": google_conn.get("refresh_token", ""),
+                    "client_id": (db.get_setting("google_client_id", "") or current_app.config.get("GOOGLE_CLIENT_ID", "")).strip(),
+                    "client_secret": (db.get_setting("google_client_secret", "") or current_app.config.get("GOOGLE_CLIENT_SECRET", "")).strip(),
+                }
+            seo_data = pull_search_console_data(gsc_url, month_str, oauth_tokens=oauth_tokens) or {}
+    except Exception as exc:
+        current_app.logger.warning("SEO research Search Console context failed: %s", exc)
+
+    try:
+        from webapp.seo_research import run_seo_research
+
+        result = run_seo_research(db, brand, seo_data=seo_data, query=query, force=force)
+        status = 200 if result.get("ok") else 400
+        return jsonify(result), status
+    except Exception as exc:
+        current_app.logger.exception("SEO research failed for brand %s", brand_id)
+        return jsonify(ok=False, error=str(exc)[:300]), 500
 
 
 @client_bp.route("/settings/agent-context", methods=["POST"])

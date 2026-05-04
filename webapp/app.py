@@ -2880,6 +2880,14 @@ def create_app():
                     if key:
                         db.save_setting("openai_api_key", key)
                         app.config["OPENAI_API_KEY"] = db.get_setting("openai_api_key", "")
+                    openrouter_key = request.form.get("openrouter_api_key", "").strip()
+                    if openrouter_key:
+                        db.save_setting("openrouter_api_key", openrouter_key)
+                        app.config["OPENROUTER_API_KEY"] = openrouter_key
+                    perplexity_key = request.form.get("perplexity_api_key", "").strip()
+                    if perplexity_key:
+                        db.save_setting("perplexity_api_key", perplexity_key)
+                        app.config["PERPLEXITY_API_KEY"] = perplexity_key
                     # Chat model
                     model_sel = request.form.get("openai_model", "").strip()
                     model_custom = request.form.get("openai_model_custom", "").strip()
@@ -2895,6 +2903,21 @@ def create_app():
                     prompt = request.form.get("ai_chat_system_prompt", "").strip()
                     db.save_setting("ai_chat_system_prompt", prompt)
                     app.config["AI_CHAT_SYSTEM_PROMPT"] = prompt
+                    seo_provider = (request.form.get("seo_research_provider") or "openrouter").strip().lower()
+                    if seo_provider not in {"openrouter", "perplexity", "off"}:
+                        seo_provider = "openrouter"
+                    db.save_setting("seo_research_provider", seo_provider)
+                    db.save_setting("seo_research_model", (request.form.get("seo_research_model") or "perplexity/sonar").strip()[:120])
+                    for field, default, minimum, maximum in (
+                        ("seo_research_daily_limit", 5, 0, 100),
+                        ("seo_research_cache_days", 14, 1, 90),
+                        ("seo_research_max_results", 8, 3, 20),
+                    ):
+                        try:
+                            value = int(float((request.form.get(field) or str(default)).strip()))
+                        except Exception:
+                            value = default
+                        db.save_setting(field, str(max(minimum, min(maximum, value))))
                     flash("OpenAI settings saved", "success")
                 except Exception as e:
                     import logging
@@ -2935,6 +2958,12 @@ def create_app():
         openai_configured = bool(
             db.get_setting("openai_api_key", "").strip() or os.environ.get("OPENAI_API_KEY", "").strip()
         )
+        openrouter_configured = bool(
+            db.get_setting("openrouter_api_key", "").strip() or os.environ.get("OPENROUTER_API_KEY", "").strip()
+        )
+        perplexity_configured = bool(
+            db.get_setting("perplexity_api_key", "").strip() or os.environ.get("PERPLEXITY_API_KEY", "").strip()
+        )
         from webapp.ai_assistant import DEFAULT_CHAT_SYSTEM_PROMPT
         ai_chat_system_prompt = (
             db.get_setting("ai_chat_system_prompt", "").strip()
@@ -2953,10 +2982,19 @@ def create_app():
             "settings.html",
             wp_settings=wp_settings,
             openai_configured=openai_configured,
+            openrouter_configured=openrouter_configured,
+            perplexity_configured=perplexity_configured,
             ai_chat_system_prompt=ai_chat_system_prompt,
             branding=branding,
             openai_model=openai_model,
             openai_model_competitor=openai_model_competitor,
+            seo_research_settings={
+                "provider": db.get_setting("seo_research_provider", "openrouter"),
+                "model": db.get_setting("seo_research_model", "perplexity/sonar"),
+                "daily_limit": db.get_setting("seo_research_daily_limit", "5"),
+                "cache_days": db.get_setting("seo_research_cache_days", "14"),
+                "max_results": db.get_setting("seo_research_max_results", "8"),
+            },
             meta_webhook_verify_token=db.get_setting("meta_webhook_verify_token", ""),
             square_app_secret_configured=bool((db.get_setting("square_app_secret", "") or app.config.get("SQUARE_APP_SECRET", "") or "").strip()),
         )
