@@ -18686,6 +18686,36 @@ def client_sng_create_coupon():
 
 # ── Post Scheduler ──
 
+def _decorate_scheduler_posts(posts):
+    decorated = []
+    for post in posts or []:
+        item = dict(post)
+        raw_type = (item.get("post_type") or "").strip()
+        item["post_type_label"] = _facebook_post_type_label(raw_type)
+        decorated.append(item)
+    return decorated
+
+
+def _scheduler_post_payload(post):
+    item = dict(post or {})
+    item["post_type_label"] = _facebook_post_type_label((item.get("post_type") or "").strip())
+    return {
+        "id": item.get("id"),
+        "status": item.get("status") or "",
+        "post_type": item.get("post_type") or "",
+        "post_type_label": item.get("post_type_label") or "",
+        "message": item.get("message") or "",
+        "first_comment": item.get("first_comment") or "",
+        "first_comment_status": item.get("first_comment_status") or "",
+        "image_url": item.get("image_url") or "",
+        "link_url": item.get("link_url") or "",
+        "scheduled_at": item.get("scheduled_at") or "",
+        "published_at": item.get("published_at") or "",
+        "proof_url": item.get("proof_url") or "",
+        "error_message": item.get("error_message") or "",
+    }
+
+
 @client_bp.route("/post-scheduler", methods=["GET", "POST"])
 @client_login_required
 def client_post_scheduler():
@@ -18730,10 +18760,7 @@ def client_post_scheduler():
         google_conn = None
     has_drive = bool(google_conn) and "drive" in (google_conn.get("scopes") or "").lower() and bool(brand.get("google_drive_folder_id"))
 
-    posts = db.get_scheduled_posts(brand_id)
-    for post in posts:
-        raw_type = (post.get("post_type") or "").strip()
-        post["post_type_label"] = _facebook_post_type_label(raw_type)
+    posts = _decorate_scheduler_posts(db.get_scheduled_posts(brand_id))
     published_post_proof = _load_facebook_published_post_proof(db, brand, brand_id, posts)
     pending_count = sum(1 for p in posts if p.get("status") in ("pending", "scheduled"))
     failed_count = sum(1 for p in posts if p.get("status") == "failed")
@@ -18760,6 +18787,23 @@ def client_post_scheduler():
         pending_count=pending_count,
         failed_count=failed_count,
         brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/post-scheduler/posts")
+@client_login_required
+def client_post_scheduler_posts():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(ok=False, error="Brand not found"), 404
+    posts = _decorate_scheduler_posts(db.get_scheduled_posts(brand_id))
+    return jsonify(
+        ok=True,
+        posts=[_scheduler_post_payload(post) for post in posts],
+        pending_count=sum(1 for post in posts if post.get("status") in ("pending", "scheduled")),
+        failed_count=sum(1 for post in posts if post.get("status") == "failed"),
     )
 
 
@@ -19066,7 +19110,13 @@ def client_schedule_post():
                                          image_url=image_url, link_url=link_url, post_type=post_type,
                                          first_comment=first_comment)
         db.update_scheduled_post_status(post_id, "scheduled", fb_post_id=fb_post_id)
-        return jsonify(ok=True, post_id=post_id, fb_post_id=fb_post_id, post_type=post_type)
+        return jsonify(
+            ok=True,
+            post_id=post_id,
+            fb_post_id=fb_post_id,
+            post_type=post_type,
+            post=_scheduler_post_payload(db.get_scheduled_post(post_id)),
+        )
     else:
         error_msg = resp_data.get("error", {}).get("message", resp.text[:300])
         post_id = db.save_scheduled_post(brand_id, "facebook", message, scheduled_at,

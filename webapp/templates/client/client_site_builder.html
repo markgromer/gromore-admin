@@ -5616,7 +5616,11 @@
     form?.addEventListener('input', updateWizardSummaries);
     form?.addEventListener('change', updateWizardSummaries);
     updateWizardSummaries();
-    setWizardStepMeta(1);
+    showStep(1);
+    window.addEventListener('pageshow', function() {
+        showStep(currentStep || 1);
+        updateWizardSummaries();
+    });
 
     /* ── Lead Form Toggle ── */
     const leadFormType = document.getElementById('leadFormType');

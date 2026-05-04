@@ -437,7 +437,7 @@
     </button>
     <button class="tab-btn" data-tab="scheduled" onclick="showTab('scheduled', this)">
         <i class="bi bi-clock-history me-1"></i> Scheduled
-        {% if pending_count %}<span class="badge bg-primary ms-1">{{ pending_count }}</span>{% endif %}
+        <span class="badge bg-primary ms-1" id="scheduledPendingCount" {% if not pending_count %}style="display:none;"{% endif %}>{{ pending_count }}</span>
     </button>
 </div>
 
@@ -842,11 +842,9 @@ special_offer,"Spring special: book now and ask about this month's inspection of
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="fw-bold mb-0">Scheduled &amp; Published Posts</h5>
             <div class="d-flex gap-2 align-items-center">
-                {% if failed_count %}
-                <button class="btn btn-outline-secondary btn-sm" id="toggleFailedPostsBtn" type="button" onclick="toggleFailedPosts()">
-                    <i class="bi bi-eye-slash me-1"></i> Hide Failed ({{ failed_count }})
+                <button class="btn btn-outline-secondary btn-sm" id="toggleFailedPostsBtn" type="button" onclick="toggleFailedPosts()" {% if not failed_count %}style="display:none;"{% endif %}>
+                    <i class="bi bi-eye-slash me-1"></i> Hide Failed (<span id="scheduledFailedCount">{{ failed_count }}</span>)
                 </button>
-                {% endif %}
                 <button class="btn btn-outline-secondary btn-sm" onclick="refreshPosts()">
                     <i class="bi bi-arrow-clockwise me-1"></i> Refresh
                 </button>
@@ -883,68 +881,70 @@ special_offer,"Spring special: book now and ask about this month's inspection of
         </div>
         {% endif %}
 
-        {% if not posts %}
-        <div class="text-center py-4 text-muted">
-            <i class="bi bi-calendar-x" style="font-size:2.5rem;"></i>
-            <p class="mt-2 mb-0">No scheduled posts yet. Compose one or upload a CSV.</p>
-        </div>
-        {% else %}
-        <div class="row g-3" id="scheduledPostsGrid">
-            {% for post in posts %}
-            <div class="col-md-6 col-lg-4" data-post-status="{{ post.status }}">
-                <div class="post-card">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <div class="d-flex flex-column gap-1">
-                            <span class="status-badge status-{{ post.status }}">{{ post.status|title }}</span>
-                            {% if post.post_type_label %}<span class="post-type-chip">{{ post.post_type_label }}</span>{% endif %}
-                        </div>
-                        {% if post.status in ('pending', 'scheduled', 'failed') %}
-                        <button class="btn btn-link btn-sm text-danger p-0" data-post-id="{{ post.id }}" onclick="deletePost(this.dataset.postId)" title="Delete">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                        {% endif %}
-                    </div>
-                    {% if post.image_url %}
-                    <img src="{{ post.image_url }}" class="post-image mb-2" alt="Post image"
-                         onerror="this.style.display='none'">
-                    {% endif %}
-                    <div class="post-message">{{ post.message[:300] }}{% if post.message|length > 300 %}...{% endif %}</div>
-                    {% if post.link_url %}
-                    <a href="{{ post.link_url }}" target="_blank" class="text-primary" style="font-size:.82rem;">
-                        <i class="bi bi-link-45deg"></i> {{ post.link_url[:50] }}{% if post.link_url|length > 50 %}...{% endif %}
-                    </a>
-                    {% endif %}
-                    {% if post.first_comment %}
-                    <div class="mt-2 p-2" style="background:#f8fafc; border:1px solid var(--line); border-radius:8px; font-size:.82rem;">
-                        <strong>First comment:</strong> {{ post.first_comment[:180] }}{% if post.first_comment|length > 180 %}...{% endif %}
-                        {% if post.first_comment_status %}<div class="text-muted">Status: {{ post.first_comment_status|title }}</div>{% endif %}
-                    </div>
-                    {% endif %}
-                    <div class="post-time mt-2">
-                        <i class="bi bi-clock me-1"></i>
-                        {% if post.status == 'published' and post.published_at %}
-                            Published {{ post.published_at }}
-                        {% else %}
-                            Scheduled for {{ post.scheduled_at }}
-                        {% endif %}
-                    </div>
-                    {% if post.proof_url %}
-                    <div class="mt-2">
-                        <a href="{{ post.proof_url }}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">
-                            <i class="bi bi-box-arrow-up-right me-1"></i> View Post
-                        </a>
-                    </div>
-                    {% endif %}
-                    {% if post.error_message %}
-                    <div class="mt-1" style="font-size:.8rem; color:#991b1b;">
-                        <i class="bi bi-exclamation-circle me-1"></i>{{ post.error_message }}
-                    </div>
-                    {% endif %}
-                </div>
+        <div id="scheduledPostsMount">
+            {% if not posts %}
+            <div class="text-center py-4 text-muted" id="scheduledPostsEmpty">
+                <i class="bi bi-calendar-x" style="font-size:2.5rem;"></i>
+                <p class="mt-2 mb-0">No scheduled posts yet. Compose one or upload a CSV.</p>
             </div>
-            {% endfor %}
+            {% else %}
+            <div class="row g-3" id="scheduledPostsGrid">
+                {% for post in posts %}
+                <div class="col-md-6 col-lg-4" data-post-status="{{ post.status }}">
+                    <div class="post-card">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div class="d-flex flex-column gap-1">
+                                <span class="status-badge status-{{ post.status }}">{{ post.status|title }}</span>
+                                {% if post.post_type_label %}<span class="post-type-chip">{{ post.post_type_label }}</span>{% endif %}
+                            </div>
+                            {% if post.status in ('pending', 'scheduled', 'failed') %}
+                            <button class="btn btn-link btn-sm text-danger p-0" data-post-id="{{ post.id }}" onclick="deletePost(this.dataset.postId)" title="Delete">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                        {% if post.image_url %}
+                        <img src="{{ post.image_url }}" class="post-image mb-2" alt="Post image"
+                             onerror="this.style.display='none'">
+                        {% endif %}
+                        <div class="post-message">{{ post.message[:300] }}{% if post.message|length > 300 %}...{% endif %}</div>
+                        {% if post.link_url %}
+                        <a href="{{ post.link_url }}" target="_blank" class="text-primary" style="font-size:.82rem;">
+                            <i class="bi bi-link-45deg"></i> {{ post.link_url[:50] }}{% if post.link_url|length > 50 %}...{% endif %}
+                        </a>
+                        {% endif %}
+                        {% if post.first_comment %}
+                        <div class="mt-2 p-2" style="background:#f8fafc; border:1px solid var(--line); border-radius:8px; font-size:.82rem;">
+                            <strong>First comment:</strong> {{ post.first_comment[:180] }}{% if post.first_comment|length > 180 %}...{% endif %}
+                            {% if post.first_comment_status %}<div class="text-muted">Status: {{ post.first_comment_status|title }}</div>{% endif %}
+                        </div>
+                        {% endif %}
+                        <div class="post-time mt-2">
+                            <i class="bi bi-clock me-1"></i>
+                            {% if post.status == 'published' and post.published_at %}
+                                Published {{ post.published_at }}
+                            {% else %}
+                                Scheduled for {{ post.scheduled_at }}
+                            {% endif %}
+                        </div>
+                        {% if post.proof_url %}
+                        <div class="mt-2">
+                            <a href="{{ post.proof_url }}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">
+                                <i class="bi bi-box-arrow-up-right me-1"></i> View Post
+                            </a>
+                        </div>
+                        {% endif %}
+                        {% if post.error_message %}
+                        <div class="mt-1" style="font-size:.8rem; color:#991b1b;">
+                            <i class="bi bi-exclamation-circle me-1"></i>{{ post.error_message }}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
         </div>
-        {% endif %}
     </div>
 </div>
 </div>
@@ -1036,6 +1036,110 @@ function showTab(name) {
     var activeBtn = arguments[1] || document.querySelector('.tab-btn[data-tab="' + name + '"]');
     if (activeBtn) activeBtn.classList.add('active');
 }
+
+function truncateText(value, limit) {
+    var text = String(value || '');
+    return text.length > limit ? text.slice(0, Math.max(0, limit - 3)) + '...' : text;
+}
+
+function postStatusTitle(status) {
+    status = String(status || '');
+    return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Scheduled';
+}
+
+function renderPostCard(post) {
+    post = post || {};
+    var status = post.status || '';
+    var html = '<div class="col-md-6 col-lg-4" data-post-status="' + escapeHtml(status) + '"><div class="post-card">';
+    html += '<div class="d-flex justify-content-between align-items-start mb-2"><div class="d-flex flex-column gap-1">';
+    html += '<span class="status-badge status-' + escapeHtml(status) + '">' + escapeHtml(postStatusTitle(status)) + '</span>';
+    if (post.post_type_label) html += '<span class="post-type-chip">' + escapeHtml(post.post_type_label) + '</span>';
+    html += '</div>';
+    if (['pending', 'scheduled', 'failed'].indexOf(status) !== -1) {
+        html += '<button class="btn btn-link btn-sm text-danger p-0" data-post-id="' + escapeHtml(post.id) + '" onclick="deletePost(this.dataset.postId)" title="Delete"><i class="bi bi-trash"></i></button>';
+    }
+    html += '</div>';
+    if (post.image_url) {
+        html += "<img src=\"" + escapeHtml(post.image_url) + "\" class=\"post-image mb-2\" alt=\"Post image\" onerror=\"this.style.display='none'\">";
+    }
+    html += '<div class="post-message">' + escapeHtml(truncateText(post.message, 300)) + '</div>';
+    if (post.link_url) {
+        html += '<a href="' + escapeHtml(post.link_url) + '" target="_blank" class="text-primary" style="font-size:.82rem;"><i class="bi bi-link-45deg"></i> ' + escapeHtml(truncateText(post.link_url, 50)) + '</a>';
+    }
+    if (post.first_comment) {
+        html += '<div class="mt-2 p-2" style="background:#f8fafc; border:1px solid var(--line); border-radius:8px; font-size:.82rem;"><strong>First comment:</strong> ' + escapeHtml(truncateText(post.first_comment, 180));
+        if (post.first_comment_status) html += '<div class="text-muted">Status: ' + escapeHtml(postStatusTitle(post.first_comment_status)) + '</div>';
+        html += '</div>';
+    }
+    html += '<div class="post-time mt-2"><i class="bi bi-clock me-1"></i>';
+    if (status === 'published' && post.published_at) html += 'Published ' + escapeHtml(post.published_at);
+    else html += 'Scheduled for ' + escapeHtml(post.scheduled_at || '');
+    html += '</div>';
+    if (post.proof_url) {
+        html += '<div class="mt-2"><a href="' + escapeHtml(post.proof_url) + '" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm"><i class="bi bi-box-arrow-up-right me-1"></i> View Post</a></div>';
+    }
+    if (post.error_message) {
+        html += '<div class="mt-1" style="font-size:.8rem; color:#991b1b;"><i class="bi bi-exclamation-circle me-1"></i>' + escapeHtml(post.error_message) + '</div>';
+    }
+    html += '</div></div>';
+    return html;
+}
+
+function renderScheduledPosts(posts) {
+    var mount = document.getElementById('scheduledPostsMount');
+    if (!mount) return;
+    posts = Array.isArray(posts) ? posts : [];
+    if (!posts.length) {
+        mount.innerHTML = '<div class="text-center py-4 text-muted" id="scheduledPostsEmpty"><i class="bi bi-calendar-x" style="font-size:2.5rem;"></i><p class="mt-2 mb-0">No scheduled posts yet. Compose one or upload a CSV.</p></div>';
+        return;
+    }
+    mount.innerHTML = '<div class="row g-3" id="scheduledPostsGrid">' + posts.map(renderPostCard).join('') + '</div>';
+    if (failedPostsHidden) {
+        document.querySelectorAll('#scheduledPostsGrid [data-post-status="failed"]').forEach(function(card) {
+            card.style.display = 'none';
+        });
+    }
+}
+
+function updateScheduledPostCounters(data) {
+    var pendingCount = Number(data && data.pending_count ? data.pending_count : 0);
+    var failedCount = Number(data && data.failed_count ? data.failed_count : 0);
+    var pendingEl = document.getElementById('scheduledPendingCount');
+    var failedEl = document.getElementById('scheduledFailedCount');
+    var failedBtn = document.getElementById('toggleFailedPostsBtn');
+    if (pendingEl) {
+        pendingEl.textContent = pendingCount;
+        pendingEl.style.display = pendingCount ? '' : 'none';
+    }
+    if (failedEl) failedEl.textContent = failedCount;
+    if (failedBtn) {
+        failedBtn.style.display = failedCount ? '' : 'none';
+        failedBtn.innerHTML = failedPostsHidden
+            ? '<i class="bi bi-eye me-1"></i> Show Failed (<span id="scheduledFailedCount">' + failedCount + '</span>)'
+            : '<i class="bi bi-eye-slash me-1"></i> Hide Failed (<span id="scheduledFailedCount">' + failedCount + '</span>)';
+    }
+}
+
+function refreshPosts(options) {
+    options = options || {};
+    return fetch('/client/post-scheduler/posts', {headers: {'X-CSRFToken': csrfToken}})
+        .then(parseJsonResponse)
+        .then(function(data) {
+            if (data.ok) {
+                renderScheduledPosts(data.posts || []);
+                updateScheduledPostCounters(data);
+                if (options.switchTab) showTab('scheduled');
+            }
+            return data;
+        })
+        .catch(function(err) {
+            return {ok: false, error: (err && err.message) ? err.message : 'Unable to refresh scheduled posts.'};
+        });
+}
+
+window.addEventListener('pageshow', function() {
+    if (document.getElementById('scheduledPostsMount')) refreshPosts();
+});
 
 // ── Compose form ──
 var msgEl = document.getElementById('composeMessage');
@@ -1209,6 +1313,7 @@ if (composeForm) {
                 document.getElementById('composeAiResult').innerHTML = '';
                 if (document.getElementById('selectedImageName')) document.getElementById('selectedImageName').textContent = '';
                 if (document.getElementById('composeImageUrl')) document.getElementById('composeImageUrl').value = '';
+                refreshPosts({switchTab: true});
             } else {
                 showResult('composeResult', 'error', data.error || 'Failed to schedule post.');
             }
@@ -1618,6 +1723,7 @@ function submitCsvPosts() {
             showResult('csvResult', 'success', data.scheduled + ' selected posts scheduled successfully!');
             csvParsedRows = [];
             renderCsvPreviewRows(csvParsedRows);
+            refreshPosts({switchTab: true});
         } else {
             refreshCsvPreviewSummary();
             showResult('csvResult', 'error', data.error || 'Failed to schedule posts.');
@@ -1654,12 +1760,10 @@ function deletePost(postId) {
     })
     .then(parseJsonResponse)
     .then(function(data) {
-        if (data.ok) location.reload();
+        if (data.ok) refreshPosts({switchTab: true});
         else alert(data.error || 'Failed to delete.');
     });
 }
-
-function refreshPosts() { location.reload(); }
 
 function setStoryFieldValues(values) {
     var strategy = document.getElementById('facebookStorytellingStrategy');

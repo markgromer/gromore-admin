@@ -740,36 +740,9 @@ def _default_theme_css(brand_ctx):
     color: var(--sb-text, #0f172a);
     font-family: var(--sb-font-body, 'Source Sans 3', Arial, sans-serif);
     line-height: 1.65;
-    width: min(100%, 1320px);
+    width: min(100%, 1240px);
     margin: 0 auto;
     padding: clamp(1rem, 2vw, 1.5rem) clamp(1rem, 3vw, 2.1rem) clamp(3rem, 7vw, 5.5rem);
-}
-
-.sb-site-shell::before,
-.sb-site-shell::after {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    border-radius: 999px;
-    pointer-events: none;
-    filter: blur(18px);
-    opacity: .8;
-}
-
-.sb-site-shell::before {
-    width: min(46vw, 560px);
-    height: min(46vw, 560px);
-    top: -6rem;
-    right: -6rem;
-    background: radial-gradient(circle, color-mix(in srgb, var(--sb-primary, #1d4ed8) 16%, white 84%) 0%, rgba(255,255,255,0) 72%);
-}
-
-.sb-site-shell::after {
-    width: min(34vw, 420px);
-    height: min(34vw, 420px);
-    left: -4rem;
-    top: 24%;
-    background: radial-gradient(circle, color-mix(in srgb, var(--sb-accent, #f97316) 18%, white 82%) 0%, rgba(255,255,255,0) 72%);
 }
 
 .sb-site-shell,
@@ -791,7 +764,7 @@ def _default_theme_css(brand_ctx):
     width: 100%;
     max-width: 100%;
     height: auto;
-    border-radius: 24px;
+    border-radius: 12px;
     object-fit: cover;
 }
 
@@ -835,7 +808,7 @@ def _default_theme_css(brand_ctx):
 .sb-site-shell .sb-section {
     display: grid;
     gap: clamp(.95rem, 2vw, 1.35rem);
-    padding-block: clamp(1.25rem, 3vw, 2.5rem);
+    padding-block: clamp(1.6rem, 3vw, 2.7rem);
 }
 
 .sb-site-shell main > section + section,
@@ -854,10 +827,10 @@ def _default_theme_css(brand_ctx):
 .sb-site-shell .sb-intake-gallery {
     overflow: hidden;
     padding: clamp(1.35rem, 3vw, 2.4rem);
-    border-radius: 30px;
+    border-radius: 14px;
     border: 1px solid rgba(148, 163, 184, .18);
     background: linear-gradient(180deg, rgba(255,255,255,.92), rgba(248,250,252,.8));
-    box-shadow: 0 24px 70px rgba(15, 23, 42, .08);
+    box-shadow: 0 18px 46px rgba(15, 23, 42, .08);
     backdrop-filter: blur(16px);
 }
 
@@ -898,27 +871,11 @@ def _default_theme_css(brand_ctx):
     align-items: center;
     padding: clamp(1.8rem, 5vw, 4rem);
     min-height: clamp(420px, 72vh, 700px);
-    border-radius: 34px;
+    border-radius: 18px;
     border: 1px solid rgba(148, 163, 184, .16);
-    background:
-        radial-gradient(circle at top right, color-mix(in srgb, var(--sb-accent, #f97316) 22%, white 78%) 0%, rgba(255,255,255,0) 36%),
-        radial-gradient(circle at 14% 18%, color-mix(in srgb, var(--sb-primary, #1d4ed8) 18%, white 82%) 0%, rgba(255,255,255,0) 40%),
-        linear-gradient(145deg, rgba(255,255,255,.96), rgba(241,245,249,.8));
-    box-shadow: 0 32px 90px rgba(15, 23, 42, .14);
+    background: linear-gradient(135deg, rgba(255,255,255,.98), color-mix(in srgb, var(--sb-primary, #1d4ed8) 7%, #f8fafc 93%) 58%, color-mix(in srgb, var(--sb-accent, #f97316) 10%, #f8fafc 90%));
+    box-shadow: 0 24px 70px rgba(15, 23, 42, .13);
     overflow: hidden;
-}
-
-.sb-site-shell .hero::before,
-.sb-site-shell .sb-hero::before,
-.sb-site-shell .hero-shell::before {
-    content: "";
-    position: absolute;
-    inset: auto -6% -28% auto;
-    width: min(40vw, 460px);
-    aspect-ratio: 1;
-    border-radius: 999px;
-    background: linear-gradient(135deg, color-mix(in srgb, var(--sb-primary, #1d4ed8) 28%, white 72%), rgba(255,255,255,0));
-    opacity: .55;
 }
 
 .sb-site-shell .hero-copy,
@@ -954,9 +911,9 @@ def _default_theme_css(brand_ctx):
 .sb-site-shell .sb-hero h2,
 .sb-site-shell .sb-heading-xl {
     font-family: var(--sb-font-heading, 'Poppins', Arial, sans-serif);
-    font-size: clamp(2.8rem, 7vw, 6rem);
-    line-height: .9;
-    letter-spacing: -.055em;
+    font-size: 4.45rem;
+    line-height: .94;
+    letter-spacing: 0;
     margin: 0;
     max-width: 14ch;
 }
@@ -967,22 +924,22 @@ def _default_theme_css(brand_ctx):
 .sb-site-shell .sb-heading {
     font-family: var(--sb-font-heading, 'Poppins', Arial, sans-serif);
     line-height: .98;
-    letter-spacing: -.04em;
+    letter-spacing: 0;
     margin: 0 0 .85rem;
 }
 
 .sb-site-shell h2 {
-    font-size: clamp(1.9rem, 3.5vw, 3.4rem);
+    font-size: 2.65rem;
 }
 
 .sb-site-shell h3 {
-    font-size: clamp(1.2rem, 2.2vw, 1.75rem);
+    font-size: 1.45rem;
 }
 
 .sb-site-shell p,
 .sb-site-shell li,
 .sb-site-shell blockquote {
-    font-size: clamp(1rem, 1.2vw, 1.08rem);
+    font-size: 1.05rem;
 }
 
 .sb-site-shell p {
@@ -1008,7 +965,7 @@ def _default_theme_css(brand_ctx):
     box-shadow: 0 12px 28px rgba(15, 23, 42, .08);
     font-size: .8rem;
     font-weight: 700;
-    letter-spacing: .09em;
+    letter-spacing: 0;
     text-transform: uppercase;
 }
 
@@ -1051,14 +1008,14 @@ def _default_theme_css(brand_ctx):
     justify-content: center;
     min-height: 54px;
     padding: .95rem 1.4rem;
-    border-radius: 999px;
+    border-radius: 10px;
     background: linear-gradient(135deg, var(--sb-primary, #1d4ed8), color-mix(in srgb, var(--sb-accent, #f97316) 56%, var(--sb-primary, #1d4ed8) 44%));
     color: #fff;
     border: 1px solid transparent;
     box-shadow: 0 20px 46px rgba(29, 78, 216, .24);
     text-decoration: none;
     font-weight: 800;
-    letter-spacing: -.01em;
+    letter-spacing: 0;
     transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
 }
 
@@ -1117,7 +1074,7 @@ def _default_theme_css(brand_ctx):
 .sb-site-shell .data-rail > * {
     height: 100%;
     padding: 1.25rem;
-    border-radius: 24px;
+    border-radius: 8px;
     border: 1px solid rgba(148, 163, 184, .18);
     background: linear-gradient(180deg, rgba(255,255,255,.9), rgba(248,250,252,.82));
     box-shadow: 0 16px 40px rgba(15, 23, 42, .07);
@@ -1141,9 +1098,9 @@ def _default_theme_css(brand_ctx):
     display: block;
     color: var(--sb-primary, #1d4ed8);
     font-family: var(--sb-font-heading, 'Poppins', Arial, sans-serif);
-    font-size: clamp(2rem, 4vw, 3.8rem);
+    font-size: 3.1rem;
     line-height: .9;
-    letter-spacing: -.06em;
+    letter-spacing: 0;
 }
 
 .sb-site-shell .cta-band,
@@ -1152,7 +1109,7 @@ def _default_theme_css(brand_ctx):
     display: grid;
     gap: 1rem;
     padding: clamp(1.6rem, 4vw, 3.2rem);
-    border-radius: 30px;
+    border-radius: 14px;
     border: 1px solid rgba(255,255,255,.08);
     background:
         linear-gradient(135deg, color-mix(in srgb, var(--sb-primary, #1d4ed8) 74%, #08111f 26%), color-mix(in srgb, var(--sb-accent, #f97316) 38%, var(--sb-primary, #1d4ed8) 62%)),
@@ -1160,18 +1117,6 @@ def _default_theme_css(brand_ctx):
     color: #fff;
     box-shadow: 0 28px 84px rgba(15, 23, 42, .26);
     overflow: hidden;
-}
-
-.sb-site-shell .cta-band::before,
-.sb-site-shell .cta-panel::before,
-.sb-site-shell .contact-strip::before {
-    content: "";
-    position: absolute;
-    inset: auto -5rem -5rem auto;
-    width: 18rem;
-    height: 18rem;
-    border-radius: 999px;
-    background: radial-gradient(circle, rgba(255,255,255,.18) 0%, rgba(255,255,255,0) 72%);
 }
 
 .sb-site-shell .cta-band h2,
@@ -1233,7 +1178,7 @@ def _default_theme_css(brand_ctx):
     margin: 0;
     padding: 1.35rem 1.45rem;
     border-left: 4px solid var(--sb-accent, #f97316);
-    border-radius: 20px;
+    border-radius: 8px;
     background: rgba(255,255,255,.84);
     box-shadow: 0 14px 34px rgba(15, 23, 42, .06);
     font-weight: 600;
@@ -1246,6 +1191,40 @@ def _default_theme_css(brand_ctx):
     position: relative;
     display: grid;
     align-content: stretch;
+}
+
+.sb-site-shell .visual-panel {
+    gap: .85rem;
+    min-height: 360px;
+    padding: 1rem;
+    border-radius: 14px;
+    border: 1px solid rgba(148, 163, 184, .18);
+    background: linear-gradient(145deg, rgba(15,23,42,.96), color-mix(in srgb, var(--sb-primary, #1d4ed8) 22%, #111827 78%));
+    color: #fff;
+    box-shadow: 0 24px 64px rgba(15, 23, 42, .2);
+}
+
+.sb-site-shell .visual-panel > * {
+    position: relative;
+    z-index: 1;
+}
+
+.sb-site-shell .visual-panel p,
+.sb-site-shell .visual-panel li,
+.sb-site-shell .visual-panel h2,
+.sb-site-shell .visual-panel h3,
+.sb-site-shell .visual-panel h4 {
+    color: inherit;
+}
+
+.sb-site-shell .visual-panel .feature-card,
+.sb-site-shell .visual-panel .proof-card,
+.sb-site-shell .visual-panel .stat-card,
+.sb-site-shell .visual-panel .checklist,
+.sb-site-shell .visual-panel blockquote {
+    background: rgba(255,255,255,.1);
+    border-color: rgba(255,255,255,.16);
+    box-shadow: none;
 }
 
 .sb-site-shell .sb-hero-media,
@@ -1262,7 +1241,7 @@ def _default_theme_css(brand_ctx):
     width: 100%;
     height: 100%;
     min-height: 360px;
-    border-radius: 28px;
+    border-radius: 12px;
     box-shadow: 0 26px 70px rgba(15, 23, 42, .16);
 }
 
@@ -1371,7 +1350,7 @@ def _default_theme_css(brand_ctx):
     .sb-site-shell .cta-band,
     .sb-site-shell .cta-panel,
     .sb-site-shell .contact-strip {
-        border-radius: 24px;
+        border-radius: 12px;
         padding: 1.2rem;
     }
 
@@ -1388,6 +1367,27 @@ def _default_theme_css(brand_ctx):
     .sb-site-shell .sb-hero h2,
     .sb-site-shell .sb-heading-xl {
         max-width: none;
+        font-size: 2.45rem;
+        line-height: 1;
+    }
+
+    .sb-site-shell h2 {
+        font-size: 1.9rem;
+    }
+
+    .sb-site-shell h3 {
+        font-size: 1.2rem;
+    }
+
+    .sb-site-shell p,
+    .sb-site-shell li,
+    .sb-site-shell blockquote {
+        font-size: 1rem;
+    }
+
+    .sb-site-shell .metric,
+    .sb-site-shell .stat-number {
+        font-size: 2.15rem;
     }
 }
 """.strip()
@@ -1553,7 +1553,7 @@ def _inject_hero_image_into_layout(html, asset, css_class, hero_class):
         'style="margin:0 0 1.5rem;">'
         f'<img src="{asset["asset_url"]}" alt="{asset.get("alt") or "Hero image"}" '
         'loading="lazy" referrerpolicy="no-referrer" '
-        'style="display:block;width:100%;max-height:560px;object-fit:cover;border-radius:24px;box-shadow:0 24px 60px rgba(15,23,42,.16);">'
+        'style="display:block;width:100%;max-height:560px;object-fit:cover;border-radius:12px;box-shadow:0 24px 60px rgba(15,23,42,.16);">'
         '</div>'
     )
     patterns = [
@@ -1905,14 +1905,19 @@ _GLOBAL_RULES = (
     "for every section. Use questions, short punchy lines, scenarios, and pattern interrupts.\n"
     "\n"
     "HTML DESIGN RULES:\n"
+    "- The content HTML must start with <main class=\"sb-page\"> and end with </main>. Put every major idea inside a semantic <section>.\n"
+    "- Build 5-7 distinct sections for a full page: hero, immediate proof strip, problem/offer, services or process, credibility/objection handling, FAQ if useful, and a final CTA band.\n"
     "- Build the page with semantic <main> and <section> blocks, not one long stream of plain headings and paragraphs.\n"
     "- This should feel like a flagship, component-driven React marketing site translated into lean HTML, not a generic brochure theme.\n"
-    "- Make the first screen feel designed, not generic: a hero block with hero-copy, hero-media, trust cues, and one clear CTA.\n"
+    "- Make the first screen feel designed, not generic: the first section should be <section class=\"hero hero-shell\"> with hero-copy, hero-media or visual-panel, trust cues, and one clear CTA.\n"
+    "- If no real image assets are provided, create a designed <div class=\"visual-panel\"> with checklist items, mini metrics, service badges, timeline steps, or quote-style proof. Do not use fake stock image placeholders.\n"
+    "- Include a proof-marquee or badge-row near the hero with defensible trust signals from the context, service cues, guarantees, service area, response speed, or process promises.\n"
     "- Favor asymmetric composition, layered surfaces, contrast shifts, and strong visual hierarchy over identical stacked cards.\n"
     "- Use modern layout hooks when relevant: hero, hero-copy, hero-media, hero-shell, section-shell, split-band, editorial-panel, spotlight-card, stat-card, data-rail, media-stack, proof-marquee, services-grid, card-grid, feature-card, proof-grid, proof-card, stats-grid, process-steps, cta-band, faq-list, button-row, badge-row, checklist.\n"
     "- Use 2-column or 3-column layouts where it improves scanning. Do not stack every section as a centered paragraph block.\n"
     "- Alternate section rhythm with split layouts, proof strips, image-led rows, editorial panels, data rails, and CTA bands. Avoid a brochure-style page that looks dated or template-generic.\n"
     "- Default to fewer, stronger sections. Each section should have a distinct visual job and a noticeably different density or composition.\n"
+    "- Each repeated card grid must have useful contrast between cards: different proof, different customer concern, different service outcome, or different next step. No cloned card copy.\n"
     "- Every image must live inside a purposeful layout container like hero-media, feature-card, media-card, gallery-grid, or before-after-grid.\n"
     "- Design for a premium modern service business site from this decade, not an old brochure website.\n"
     "\n"
@@ -1923,6 +1928,7 @@ _GLOBAL_RULES = (
     "- Do not use the same sentence structure for every bullet point.\n"
     "- Do not make every paragraph the same length. Vary rhythm.\n"
     "- Do not wrap every section in the same rounded white card treatment. Visual repetition kills the page.\n"
+    "- Do not output a page that is mostly h2 + p + ul repeated. That fails the draft quality bar.\n"
     "- Do not center everything. Use directional layouts, anchored media, and sections with different visual weight.\n"
     "- Do not make every section look like it came from the same WordPress template block.\n"
 )
@@ -1930,7 +1936,7 @@ _GLOBAL_RULES = (
 _OUTPUT_FORMAT = (
     "\nReturn ONLY valid JSON with these exact keys:\n"
     '- "title": the page H1 title (under 70 chars)\n'
-    '- "content": full HTML body content (no doctype/head/body wrapper, no h1). Use semantic <main>/<section> structure and modern class hooks where appropriate.\n'
+    '- "content": full HTML body content (no doctype/head/body wrapper, no h1). It must start with <main class="sb-page">, use semantic <section> blocks, and include modern class hooks where appropriate.\n'
     '- "excerpt": 1-2 sentence page summary (under 160 chars)\n'
     '- "seo_title": SEO title tag (under 70 chars, include location if local)\n'
     '- "seo_description": meta description (under 160 chars, include CTA)\n'
@@ -2164,10 +2170,19 @@ def _design_block(ctx):
     image_block = _image_slots_block(ctx)
 
     if not any([preset, primary, secondary, text_color, background_color, font_h, color_palette, font_pair, layout_style, wireframe_style, hero_layout, services_widget_layout, proof_widget_layout, cta_widget_layout, button_style, site_vision, design_notes, theme_block, reference_block, image_block]):
-        return ""
+        return (
+            "DESIGN GUIDELINES (apply CSS classes and inline styles to match):\n"
+            "- Quality bar: flagship-level, product-grade, component-driven site design that feels like a modern React build, but rendered as fast static HTML.\n"
+            "- Default visual direction: editorial service-business site with a strong asymmetric hero, proof near the top, practical service cards, a process section, objection handling, and a final CTA band.\n"
+            "- If no images are available, build a purposeful visual-panel with badges, mini metrics, checklists, review snippets, or process steps instead of a blank or fake image area.\n"
+            "- Avoid generic brochure patterns, repetitive white cards, centered-everything layouts, or interchangeable sections.\n"
+        )
 
     parts.append("DESIGN GUIDELINES (apply CSS classes and inline styles to match):")
     parts.append("- Quality bar: flagship-level, product-grade, component-driven site design that feels like a modern React build, but rendered as fast static HTML.")
+    parts.append("- First draft quality bar: the page should be strong enough to show a business owner without apologizing for the design. It needs a complete visual structure, not just acceptable copy.")
+    parts.append("- Required composition: hero with hero-copy and hero-media or visual-panel, proof near the top, one differentiated service/process area, one objection-removal area, and one final CTA band.")
+    parts.append("- If the brand has no usable image assets, design a visual-panel using real copy, badges, checklist items, mini metrics, and service-area cues from the brand context.")
     parts.append("- Avoid generic brochure patterns, repetitive white cards, centered-everything layouts, or interchangeable sections.")
     if reference_block:
         parts.append(reference_block.rstrip())
