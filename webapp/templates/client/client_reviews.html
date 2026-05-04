@@ -1,0 +1,273 @@
+{% extends "client_base.html" %}
+{% block title %}Review Collector{% endblock %}
+
+{% block content %}
+<style>
+    .reviews-hero {
+        background: #12322b;
+        color: #fff;
+        border-radius: 14px;
+        padding: 1.35rem 1.55rem;
+        margin-bottom: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    .reviews-hero h3 { color: #fff !important; font-size: 1.28rem; font-weight: 850; margin: 0 0 .25rem; }
+    .reviews-hero p { color: rgba(255,255,255,.76); margin: 0; font-size: .9rem; max-width: 760px; }
+    .review-status-pill { display: inline-flex; align-items: center; gap: .4rem; border-radius: 999px; padding: .45rem .75rem; background: rgba(255,255,255,.12); color: #fff; font-size: .8rem; font-weight: 800; }
+    .reviews-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 1rem; align-items: start; }
+    .review-panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.05rem; }
+    .review-panel-title { display: flex; align-items: center; gap: .45rem; font-size: .92rem; font-weight: 850; margin-bottom: .8rem; color: #0f172a; }
+    .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin-bottom: 1rem; }
+    .review-metric { border: 1px solid #e2e8f0; border-radius: 10px; padding: .85rem; background: #f8fafc; }
+    .review-metric .value { font-size: 1.45rem; font-weight: 900; color: #0f172a; line-height: 1; }
+    .review-metric .label { color: #64748b; font-size: .74rem; font-weight: 750; margin-top: .28rem; }
+    .group-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .65rem; }
+    .group-option, .channel-option { border: 1px solid #e2e8f0; border-radius: 10px; padding: .72rem; display: flex; gap: .6rem; align-items: flex-start; min-height: 76px; }
+    .group-option:hover, .channel-option:hover { border-color: #94a3b8; }
+    .group-label { display: block; font-size: .84rem; font-weight: 850; color: #0f172a; line-height: 1.25; }
+    .group-source { display: block; font-size: .72rem; color: #64748b; margin-top: .18rem; }
+    .channel-row { display: flex; flex-wrap: wrap; gap: .65rem; }
+    .channel-option { min-width: 135px; min-height: auto; align-items: center; font-size: .84rem; font-weight: 850; }
+    .channel-option.disabled { background: #f8fafc; opacity: .58; }
+    .recipient-sample { display: grid; gap: .45rem; max-height: 230px; overflow: auto; }
+    .recipient-row { border-bottom: 1px solid #f1f5f9; padding-bottom: .45rem; }
+    .recipient-row:last-child { border-bottom: 0; }
+    .recipient-name { font-size: .8rem; font-weight: 850; color: #0f172a; }
+    .recipient-meta { font-size: .72rem; color: #64748b; word-break: break-word; }
+    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+    .history-table { font-size: .8rem; }
+    .history-table th { color: #64748b; font-size: .68rem; text-transform: uppercase; font-weight: 850; }
+    .feedback-text { max-width: 360px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #475569; }
+    @media (max-width: 1050px) {
+        .reviews-grid { grid-template-columns: 1fr; }
+        .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .settings-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 620px) {
+        .metric-grid { grid-template-columns: 1fr; }
+    }
+</style>
+
+<div class="reviews-hero">
+    <div>
+        <h3><i class="bi bi-stars me-2"></i>Review Collector</h3>
+        <p>Send trackable review requests from WARREN, Jobber, or CRM audiences, collect private feedback, and route every customer to the same public review destination.</p>
+    </div>
+    <span class="review-status-pill">
+        {% if setup.ready %}
+            <i class="bi bi-check-circle"></i> Ready
+        {% else %}
+            <i class="bi bi-exclamation-triangle"></i> Needs review link
+        {% endif %}
+    </span>
+</div>
+
+<div class="metric-grid">
+    <div class="review-metric"><div class="value">{{ stats.total or 0 }}</div><div class="label">Requests</div></div>
+    <div class="review-metric"><div class="value">{{ stats.opened or 0 }}</div><div class="label">Landing opens</div></div>
+    <div class="review-metric"><div class="value">{{ stats.clicked or 0 }}</div><div class="label">Review clicks</div></div>
+    <div class="review-metric"><div class="value">{{ '%.1f'|format(stats.avg_rating or 0) }}</div><div class="label">Private rating avg</div></div>
+</div>
+
+<div class="reviews-grid">
+    <div>
+        <form method="post" action="{{ url_for('client.client_reviews_send') }}" id="reviewSendForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="review-panel mb-3">
+                <div class="review-panel-title"><i class="bi bi-people"></i> Audience</div>
+                <div class="group-grid">
+                    {% for group in groups %}
+                    <label class="group-option">
+                        <input class="form-check-input review-audience-input" type="checkbox" name="groups" value="{{ group.key }}" {% if group.key in default_group_keys %}checked{% endif %}>
+                        <span>
+                            <span class="group-label">{{ group.label }}</span>
+                            <span class="group-source">{{ group.source }}</span>
+                        </span>
+                    </label>
+                    {% endfor %}
+                </div>
+                <div class="border-top mt-3 pt-3">
+                    <div class="review-panel-title mb-2"><i class="bi bi-person-plus"></i> One-off customer</div>
+                    <div class="row g-2">
+                        <div class="col-md-4"><input class="form-control form-control-sm" name="manual_name" placeholder="Customer name"></div>
+                        <div class="col-md-4"><input class="form-control form-control-sm" type="email" name="manual_email" placeholder="Email"></div>
+                        <div class="col-md-4"><input class="form-control form-control-sm" name="manual_phone" placeholder="+1 phone"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="review-panel mb-3">
+                <div class="review-panel-title"><i class="bi bi-send-check"></i> Channels</div>
+                <div class="channel-row">
+                    <label class="channel-option {% if not sms_ready %}disabled{% endif %}">
+                        <input class="form-check-input review-audience-input" type="checkbox" name="channels" value="sms" {% if 'sms' in default_channels and sms_ready %}checked{% endif %} {% if not sms_ready %}disabled{% endif %}>
+                        <i class="bi bi-chat-left-text"></i> SMS
+                    </label>
+                    <label class="channel-option {% if not smtp_ready %}disabled{% endif %}">
+                        <input class="form-check-input review-audience-input" type="checkbox" name="channels" value="email" {% if 'email' in default_channels and smtp_ready %}checked{% endif %} {% if not smtp_ready %}disabled{% endif %}>
+                        <i class="bi bi-envelope"></i> Email
+                    </label>
+                </div>
+                {% if not sms_ready or not smtp_ready %}
+                <div class="text-muted mt-2" style="font-size:.78rem;">
+                    {% if not sms_ready %}SMS needs OpenPhone/Quo settings. {% endif %}
+                    {% if not smtp_ready %}Email needs SMTP settings. {% endif %}
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="review-panel">
+                <div class="review-panel-title"><i class="bi bi-shield-check"></i> Compliance check</div>
+                <div class="alert alert-info mb-3" style="font-size:.84rem;">
+                    Every recipient gets the same public review destination. Private feedback is captured for insight and follow-up, not to hide who can leave a review.
+                </div>
+                <label class="form-check d-flex align-items-start gap-2">
+                    <input class="form-check-input" type="checkbox" name="confirm_send" value="1" required>
+                    <span class="form-check-label fw-semibold" style="font-size:.84rem;">Confirm this review request is ready to send.</span>
+                </label>
+                <div class="d-flex justify-content-end mt-3">
+                    <button class="btn btn-primary fw-bold" type="submit" {% if not setup.ready %}disabled{% endif %}>
+                        <i class="bi bi-send me-1"></i> Send Review Requests
+                    </button>
+                </div>
+            </div>
+        </form>
+
+        {% if requests %}
+        <div class="review-panel mt-3">
+            <div class="review-panel-title"><i class="bi bi-clock-history"></i> Recent Requests</div>
+            <div class="table-responsive">
+                <table class="table history-table align-middle mb-0">
+                    <thead><tr><th>Customer</th><th>Status</th><th>Channels</th><th>Rating</th><th>Feedback</th><th>Sent</th></tr></thead>
+                    <tbody>
+                        {% for item in requests %}
+                        <tr>
+                            <td>
+                                <div class="fw-bold">{{ item.customer_name or 'Customer' }}</div>
+                                <div class="text-muted">{{ item.customer_phone or item.customer_email or item.source }}</div>
+                            </td>
+                            <td><span class="badge text-bg-light">{{ item.status }}</span></td>
+                            <td>{{ item.channels|join(', ') }}</td>
+                            <td>{{ item.rating or '-' }}</td>
+                            <td><div class="feedback-text">{{ item.feedback_text or '-' }}</div></td>
+                            <td>{{ item.last_sent_at or item.created_at }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <aside>
+        <div class="review-panel mb-3">
+            <div class="review-panel-title"><i class="bi bi-clipboard-data"></i> Live Preview</div>
+            <div class="review-metric">
+                <div class="value" id="reviewPreviewTotal">{{ preview.total }}</div>
+                <div class="label">Unique recipients</div>
+            </div>
+            <div class="row g-2">
+                <div class="col-6">
+                    <div class="review-metric"><div class="value" id="reviewPreviewSms">{{ preview.sendable_sms }}</div><div class="label">SMS ready</div></div>
+                </div>
+                <div class="col-6">
+                    <div class="review-metric"><div class="value" id="reviewPreviewEmail">{{ preview.email_count }}</div><div class="label">Email ready</div></div>
+                </div>
+            </div>
+            <div id="reviewPreviewWarnings" class="text-warning fw-semibold mb-2" style="font-size:.76rem;"></div>
+            <div class="recipient-sample" id="reviewRecipientSample">
+                {% for recipient in preview.recipients[:8] %}
+                <div class="recipient-row">
+                    <div class="recipient-name">{{ recipient.name }}</div>
+                    <div class="recipient-meta">{{ recipient.phone or '' }}{% if recipient.phone and recipient.email %} | {% endif %}{{ recipient.email or '' }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <form method="post" action="{{ url_for('client.client_reviews_settings') }}" class="review-panel">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="review-panel-title"><i class="bi bi-sliders"></i> Request Setup</div>
+            <div class="mb-2">
+                <label class="form-label fw-bold" style="font-size:.8rem;">Review destination</label>
+                <input class="form-control form-control-sm" type="url" name="review_destination_url" value="{{ brand.review_destination_url or '' }}" placeholder="{{ setup.review_url or 'https://search.google.com/local/writereview?placeid=...' }}">
+                <small class="text-muted">Leave blank to use the saved Google Place ID review link.</small>
+            </div>
+            <div class="mb-2">
+                <label class="form-label fw-bold" style="font-size:.8rem;">SMS template</label>
+                <textarea class="form-control form-control-sm" rows="3" name="review_request_sms_template">{{ brand.review_request_sms_template or templates.sms }}</textarea>
+            </div>
+            <div class="mb-2">
+                <label class="form-label fw-bold" style="font-size:.8rem;">Email subject</label>
+                <input class="form-control form-control-sm" name="review_request_email_subject" value="{{ brand.review_request_email_subject or templates.email_subject }}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold" style="font-size:.8rem;">Email body</label>
+                <textarea class="form-control form-control-sm" rows="7" name="review_request_email_template">{{ brand.review_request_email_template or templates.email }}</textarea>
+                <small class="text-muted">Merge fields: {{ '{{ first_name }}' }}, {{ '{{ customer_name }}' }}, {{ '{{ brand_name }}' }}, {{ '{{ review_link }}' }}.</small>
+            </div>
+            <button class="btn btn-outline-primary btn-sm fw-bold w-100" type="submit">
+                <i class="bi bi-save me-1"></i> Save Review Setup
+            </button>
+        </form>
+    </aside>
+</div>
+
+<script>
+(function() {
+    const form = document.getElementById('reviewSendForm');
+    if (!form) return;
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+    function selected(name) {
+        return Array.from(form.querySelectorAll('input[name="' + name + '"]:checked')).map(input => input.value);
+    }
+
+    function renderPreview(preview) {
+        document.getElementById('reviewPreviewTotal').textContent = preview.total || 0;
+        document.getElementById('reviewPreviewSms').textContent = preview.sendable_sms || 0;
+        document.getElementById('reviewPreviewEmail').textContent = preview.email_count || 0;
+        const warnings = [];
+        if (preview.errors && Object.keys(preview.errors).length) warnings.push(Object.keys(preview.errors).length + ' group error(s)');
+        document.getElementById('reviewPreviewWarnings').textContent = warnings.join(' | ');
+        const sample = document.getElementById('reviewRecipientSample');
+        sample.innerHTML = '';
+        (preview.recipients || []).slice(0, 8).forEach(recipient => {
+            const row = document.createElement('div');
+            row.className = 'recipient-row';
+            const name = document.createElement('div');
+            name.className = 'recipient-name';
+            name.textContent = recipient.name || 'Customer';
+            const meta = document.createElement('div');
+            meta.className = 'recipient-meta';
+            meta.textContent = [recipient.phone, recipient.email].filter(Boolean).join(' | ');
+            row.appendChild(name);
+            row.appendChild(meta);
+            sample.appendChild(row);
+        });
+    }
+
+    let previewTimer = null;
+    function refreshPreview() {
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(() => {
+            fetch('{{ url_for("client.client_reviews_preview") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                body: JSON.stringify({ groups: selected('groups'), channels: selected('channels') })
+            })
+            .then(resp => resp.json())
+            .then(data => { if (data && data.preview) renderPreview(data.preview); })
+            .catch(() => {});
+        }, 180);
+    }
+
+    form.querySelectorAll('.review-audience-input').forEach(input => input.addEventListener('change', refreshPreview));
+})();
+</script>
+{% endblock %}

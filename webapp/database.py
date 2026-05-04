@@ -1792,6 +1792,47 @@ class WebDB:
 
         # ── AI Agent activity table ──
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS review_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                token TEXT NOT NULL UNIQUE,
+                customer_name TEXT DEFAULT '',
+                customer_email TEXT DEFAULT '',
+                customer_phone TEXT DEFAULT '',
+                source TEXT DEFAULT '',
+                source_id TEXT DEFAULT '',
+                groups_json TEXT DEFAULT '[]',
+                channels_json TEXT DEFAULT '[]',
+                status TEXT NOT NULL DEFAULT 'created',
+                review_url TEXT DEFAULT '',
+                message_text TEXT DEFAULT '',
+                email_subject TEXT DEFAULT '',
+                sent_sms INTEGER DEFAULT 0,
+                sent_email INTEGER DEFAULT 0,
+                failed INTEGER DEFAULT 0,
+                failure_detail TEXT DEFAULT '',
+                opened_at TEXT DEFAULT '',
+                clicked_review_at TEXT DEFAULT '',
+                rating INTEGER DEFAULT 0,
+                feedback_text TEXT DEFAULT '',
+                feedback_submitted_at TEXT DEFAULT '',
+                created_by TEXT DEFAULT '',
+                last_sent_at TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_review_requests_brand_created
+            ON review_requests(brand_id, created_at DESC, id DESC);
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_review_requests_brand_status
+            ON review_requests(brand_id, status, created_at DESC);
+        """)
+
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS agent_activity (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand_id INTEGER NOT NULL,
@@ -2088,6 +2129,7 @@ class WebDB:
             ("warren_inbox",    "Lead Inbox",        "Warren AI lead inbox and pipeline",  "all",  "business", 111),
             ("va_services",     "VA Desk",           "Managed VA support, token packs, and work requests", "all", "business", 112),
             ("gbp",             "Google Profile",   "Google Business Profile manager",   "all",   "business", 120),
+            ("reviews",         "Review Collector", "Review request and feedback collection", "all", "business", 125),
             ("post_scheduler",  "Post Scheduler",   "Social media post scheduling",      "all",   "business", 130),
             ("competitor_intel","Competitor Intel",  "Competitor analysis tools",         "all",   "business", 140),
             ("your_team",       "Your Team",         "AI agent team dashboard",           "all",   "business", 145),
@@ -2202,6 +2244,10 @@ class WebDB:
             ("business_lng", "REAL DEFAULT 0"),
             ("google_place_id", "TEXT DEFAULT ''"),
             ("google_maps_api_key", "TEXT DEFAULT ''"),
+            ("review_destination_url", "TEXT DEFAULT ''"),
+            ("review_request_sms_template", "TEXT DEFAULT ''"),
+            ("review_request_email_subject", "TEXT DEFAULT ''"),
+            ("review_request_email_template", "TEXT DEFAULT ''"),
             ("wp_site_url", "TEXT DEFAULT ''"),
             ("wp_username", "TEXT DEFAULT ''"),
             ("wp_app_password", "TEXT DEFAULT ''"),
@@ -2800,6 +2846,8 @@ class WebDB:
             "font_heading", "font_body",
             "google_drive_folder_id", "google_drive_sheet_id",
             "google_maps_api_key", "google_place_id",
+            "review_destination_url", "review_request_sms_template",
+            "review_request_email_subject", "review_request_email_template",
             "titan_snapshot_id", "titan_account_id", "titan_ghl_location_id", "titan_email",
             "wp_site_url", "wp_username", "wp_app_password",
             "hired_agents", "agent_context",
@@ -9897,3 +9945,171 @@ class WebDB:
             item["errors"] = self._safe_json_object(item.get("errors_json"))
             runs.append(item)
         return runs
+
+    # Review Collector
+
+    def create_review_request(
+        self,
+        brand_id,
+        *,
+        token,
+        customer_name="",
+        customer_email="",
+        customer_phone="",
+        source="",
+        source_id="",
+        groups=None,
+        channels=None,
+        review_url="",
+        message_text="",
+        email_subject="",
+        created_by="",
+    ):
+        conn = self._conn()
+        cur = conn.execute(
+            """
+            INSERT INTO review_requests (
+                brand_id, token, customer_name, customer_email, customer_phone,
+                source, source_id, groups_json, channels_json, review_url,
+                message_text, email_subject, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                brand_id,
+                token,
+                customer_name or "",
+                self._normalize_email(customer_email),
+                customer_phone or "",
+                source or "",
+                str(source_id or ""),
+                json.dumps(groups or []),
+                json.dumps(channels or []),
+                review_url or "",
+                message_text or "",
+                email_subject or "",
+                created_by or "",
+            ),
+        )
+        conn.commit()
+        request_id = cur.lastrowid
+        conn.close()
+        return request_id
+
+    def update_review_request_delivery(
+        self,
+        request_id,
+        *,
+        sent_sms=0,
+        sent_email=0,
+        failed=0,
+        failure_detail="",
+        status=None,
+    ):
+        status_value = status or ("failed" if failed and not (sent_sms or sent_email) else "sent")
+        conn = self._conn()
+        conn.execute(
+            """
+            UPDATE review_requests
+            SET sent_sms = ?, sent_email = ?, failed = ?, failure_detail = ?,
+                status = ?, last_sent_at = datetime('now'), updated_at = datetime('now')
+            WHERE id = ?
+            """,
+            (int(sent_sms or 0), int(sent_email or 0), int(failed or 0), failure_detail or "", status_value, request_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_review_requests(self, brand_id, limit=100):
+        conn = self._conn()
+        rows = conn.execute(
+            """
+            SELECT * FROM review_requests
+            WHERE brand_id = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
+            (brand_id, int(limit or 100)),
+        ).fetchall()
+        conn.close()
+        items = []
+        for row in rows:
+            item = dict(row)
+            item["groups"] = self._safe_json_list(item.get("groups_json"))
+            item["channels"] = self._safe_json_list(item.get("channels_json"))
+            items.append(item)
+        return items
+
+    def get_review_request_by_token(self, token):
+        conn = self._conn()
+        row = conn.execute("SELECT * FROM review_requests WHERE token = ?", ((token or "").strip(),)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def mark_review_request_opened(self, request_id):
+        conn = self._conn()
+        conn.execute(
+            """
+            UPDATE review_requests
+            SET opened_at = CASE WHEN opened_at = '' THEN datetime('now') ELSE opened_at END,
+                status = CASE WHEN status IN ('created', 'sent') THEN 'opened' ELSE status END,
+                updated_at = datetime('now')
+            WHERE id = ?
+            """,
+            (request_id,),
+        )
+        conn.commit()
+        conn.close()
+
+    def mark_review_request_clicked(self, request_id):
+        conn = self._conn()
+        conn.execute(
+            """
+            UPDATE review_requests
+            SET clicked_review_at = CASE WHEN clicked_review_at = '' THEN datetime('now') ELSE clicked_review_at END,
+                status = 'clicked',
+                updated_at = datetime('now')
+            WHERE id = ?
+            """,
+            (request_id,),
+        )
+        conn.commit()
+        conn.close()
+
+    def submit_review_feedback(self, request_id, rating=0, feedback_text=""):
+        try:
+            rating_value = max(0, min(5, int(rating or 0)))
+        except (TypeError, ValueError):
+            rating_value = 0
+        conn = self._conn()
+        conn.execute(
+            """
+            UPDATE review_requests
+            SET rating = ?, feedback_text = ?, feedback_submitted_at = datetime('now'),
+                status = CASE WHEN clicked_review_at != '' THEN 'clicked' ELSE 'feedback' END,
+                updated_at = datetime('now')
+            WHERE id = ?
+            """,
+            (rating_value, (feedback_text or "")[:4000], request_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_review_request_stats(self, brand_id):
+        conn = self._conn()
+        row = conn.execute(
+            """
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN status IN ('sent', 'opened', 'clicked', 'feedback') THEN 1 ELSE 0 END) AS sent,
+                SUM(CASE WHEN opened_at != '' THEN 1 ELSE 0 END) AS opened,
+                SUM(CASE WHEN clicked_review_at != '' THEN 1 ELSE 0 END) AS clicked,
+                SUM(CASE WHEN feedback_submitted_at != '' THEN 1 ELSE 0 END) AS feedback,
+                SUM(CASE WHEN failed = 1 THEN 1 ELSE 0 END) AS failed,
+                AVG(CASE WHEN rating > 0 THEN rating ELSE NULL END) AS avg_rating
+            FROM review_requests
+            WHERE brand_id = ?
+            """,
+            (brand_id,),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else {}

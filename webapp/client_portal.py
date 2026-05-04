@@ -12800,6 +12800,181 @@ def inject_client_globals():
 
 # ── Google Business Profile ──
 
+@client_bp.route("/reviews")
+@client_login_required
+def client_reviews():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    from webapp.review_collector import (
+        available_review_groups,
+        get_templates,
+        preview_review_audience,
+        review_setup_status,
+    )
+
+    groups = available_review_groups(brand)
+    default_keys = [groups[0]["key"]] if groups else []
+    default_channels = ["sms"] if (brand.get("quo_api_key") and brand.get("quo_phone_number")) else ["email"]
+    preview = preview_review_audience(db, brand, default_keys, default_channels)
+    requests = db.get_review_requests(brand_id, limit=75)
+    stats = db.get_review_request_stats(brand_id)
+
+    return render_template(
+        "client_reviews.html",
+        brand=brand,
+        groups=groups,
+        default_group_keys=default_keys,
+        default_channels=default_channels,
+        preview=preview,
+        requests=requests,
+        stats=stats,
+        setup=review_setup_status(brand),
+        templates=get_templates(brand),
+        sms_ready=bool((brand.get("quo_api_key") or "").strip() and (brand.get("quo_phone_number") or "").strip()),
+        smtp_ready=bool(current_app.config.get("SMTP_USER") and current_app.config.get("SMTP_PASSWORD")),
+        brand_name=session.get("client_brand_name", brand.get("display_name", "")),
+    )
+
+
+@client_bp.route("/reviews/preview", methods=["POST"])
+@client_login_required
+def client_reviews_preview():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify(error="Brand not found"), 404
+    data = request.get_json(silent=True) or {}
+
+    from webapp.review_collector import preview_review_audience
+
+    return jsonify(ok=True, preview=preview_review_audience(
+        db,
+        brand,
+        data.get("groups") or [],
+        data.get("channels") or [],
+    ))
+
+
+@client_bp.route("/reviews/settings", methods=["POST"])
+@client_login_required
+def client_reviews_settings():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    fields = {
+        "review_destination_url": (request.form.get("review_destination_url") or "").strip()[:600],
+        "review_request_sms_template": (request.form.get("review_request_sms_template") or "").strip()[:700],
+        "review_request_email_subject": (request.form.get("review_request_email_subject") or "").strip()[:200],
+        "review_request_email_template": (request.form.get("review_request_email_template") or "").strip()[:3000],
+    }
+    for field, value in fields.items():
+        db.update_brand_text_field(brand_id, field, value)
+    flash("Review Collector settings saved.", "success")
+    return redirect(url_for("client.client_reviews"))
+
+
+@client_bp.route("/reviews/send", methods=["POST"])
+@client_login_required
+def client_reviews_send():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+
+    groups = request.form.getlist("groups")
+    channels = request.form.getlist("channels")
+    manual = {
+        "name": request.form.get("manual_name") or "",
+        "email": request.form.get("manual_email") or "",
+        "phone": request.form.get("manual_phone") or "",
+    }
+    use_manual = bool((manual["email"] or manual["phone"]).strip())
+    if request.form.get("confirm_send") != "1":
+        flash("Confirm the review request before sending.", "warning")
+        return redirect(url_for("client.client_reviews"))
+
+    try:
+        from webapp.review_collector import send_review_requests
+
+        result = send_review_requests(
+            db,
+            current_app.config,
+            brand,
+            group_keys=groups,
+            channels=channels,
+            manual_recipient=manual if use_manual else None,
+            created_by=session.get("client_name") or session.get("client_email") or "client",
+        )
+    except ValueError as exc:
+        flash(str(exc), "warning")
+        return redirect(url_for("client.client_reviews"))
+    except Exception as exc:
+        log.exception("Review request send failed for brand %s", brand_id)
+        flash(f"Review request failed: {exc}", "error")
+        return redirect(url_for("client.client_reviews"))
+
+    pieces = []
+    if "sms" in channels:
+        pieces.append(f"{result['sent_sms']} SMS")
+    if "email" in channels:
+        pieces.append(f"{result['sent_email']} email")
+    suffix = f"; {result['skipped']} skipped" if result.get("skipped") else ""
+    if result.get("failed"):
+        suffix += f"; {result['failed']} failed"
+    flash(f"Review requests sent to {result['recipient_count']} recipient(s): {', '.join(pieces)}{suffix}.", "success")
+    return redirect(url_for("client.client_reviews"))
+
+
+@client_public_bp.route("/review/<token>", methods=["GET", "POST"])
+def client_review_request(token):
+    db = _get_db()
+    review_request = db.get_review_request_by_token(token)
+    if not review_request:
+        abort(404)
+    brand = db.get_brand(review_request["brand_id"])
+    if not brand:
+        abort(404)
+
+    db.mark_review_request_opened(review_request["id"])
+    review_request = db.get_review_request_by_token(token) or review_request
+
+    if request.method == "POST":
+        rating = request.form.get("rating") or 0
+        feedback = (request.form.get("feedback_text") or "").strip()
+        db.submit_review_feedback(review_request["id"], rating=rating, feedback_text=feedback)
+        review_request = db.get_review_request_by_token(token) or review_request
+        flash("Thanks. Your feedback was received.", "success")
+
+    return render_template(
+        "client_review_request.html",
+        brand=brand,
+        review_request=review_request,
+        review_url=review_request.get("review_url") or "",
+    )
+
+
+@client_public_bp.route("/review/<token>/go")
+def client_review_click(token):
+    db = _get_db()
+    review_request = db.get_review_request_by_token(token)
+    if not review_request:
+        abort(404)
+    db.mark_review_request_clicked(review_request["id"])
+    target = (review_request.get("review_url") or "").strip()
+    if not target:
+        abort(404)
+    return redirect(target)
+
+
 @client_bp.route("/google-business-profile")
 @client_login_required
 def client_gbp():

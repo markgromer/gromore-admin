@@ -436,6 +436,11 @@
                 <i class="bi bi-google"></i> <span class="nav-link-label">Google Profile</span>
             </a>
             {% endif %}
+            {% if feature_on('reviews') %}
+            <a href="{{ url_for('client.client_reviews') }}" class="{% if request.endpoint in ('client.client_reviews',) %}active{% endif %}">
+                <i class="bi bi-star-half"></i> <span class="nav-link-label">Reviews</span>
+            </a>
+            {% endif %}
             {% if feature_on('competitor_intel') %}
             <a href="{{ url_for('client.client_competitors') }}" class="{% if request.endpoint == 'client.client_competitors' %}active{% endif %}">
                 <i class="bi bi-binoculars"></i> <span class="nav-link-label">Competitor Intel</span>
