@@ -3219,6 +3219,7 @@ def _assemble_dashboard_payload(db, brand, brand_id, month, analysis, suggestion
     except Exception:
         dashboard_data["team_status"] = None
 
+    dashboard_data = _attach_owner_engagement(db, brand, brand_id, month, dashboard_data)
     return dashboard_data
 
 
@@ -3226,6 +3227,184 @@ def _hydrate_cached_dashboard_payload(dashboard_data):
     from webapp.client_advisor import ensure_dashboard_health_cluster
 
     return ensure_dashboard_health_cluster(dashboard_data)
+
+
+def _attach_owner_engagement(db, brand, brand_id, month, dashboard_data):
+    dashboard_data = dashboard_data or {}
+    try:
+        from webapp.vertical_intelligence import build_vertical_profile
+
+        vertical_profile = dashboard_data.get("vertical_profile") or build_vertical_profile(brand)
+        dashboard_data["vertical_profile"] = vertical_profile
+        dashboard_data["engagement"] = _build_owner_engagement_context(
+            db,
+            brand,
+            brand_id,
+            month,
+            dashboard_data,
+            vertical_profile,
+        )
+    except Exception:
+        current_app.logger.exception("Owner engagement build failed for brand %s month %s", brand_id, month)
+        dashboard_data.setdefault("engagement", {})
+    return dashboard_data
+
+
+def _build_owner_engagement_context(db, brand, brand_id, month, dashboard_data, vertical_profile):
+    actions = _normalize_client_actions((dashboard_data or {}).get("actions") or [])
+    try:
+        dismissed = set(db.get_dismissed_actions(brand_id, month) or [])
+    except Exception:
+        dismissed = set()
+
+    active_actions = [action for action in actions if action.get("key") not in dismissed]
+    done_actions = [action for action in actions if action.get("key") in dismissed]
+    focus = active_actions[0] if active_actions else None
+
+    try:
+        agent_activity = db.get_agent_activity(brand_id, limit=12) or []
+    except Exception:
+        agent_activity = []
+    try:
+        findings = db.get_agent_findings(brand_id, month=month, severity="positive", limit=5) or []
+    except Exception:
+        findings = []
+    try:
+        lead_threads = db.get_lead_threads(brand_id, limit=40) or []
+    except Exception:
+        lead_threads = []
+    try:
+        posts = db.get_scheduled_posts(brand_id, limit=40) or []
+    except Exception:
+        posts = []
+    try:
+        blogs = db.get_blog_posts(brand_id, limit=20) or []
+    except Exception:
+        blogs = []
+
+    active_leads = [t for t in lead_threads if (t.get("status") or "").lower() not in {"won", "lost"}]
+    won_leads = [t for t in lead_threads if (t.get("status") or "").lower() == "won"]
+    pending_posts = [p for p in posts if (p.get("status") or "").lower() == "pending"]
+    published_posts = [p for p in posts if (p.get("status") or "").lower() == "published"]
+    scheduled_blogs = [b for b in blogs if (b.get("status") or "").lower() == "scheduled"]
+
+    if focus:
+        today_win = {
+            "label": "Today's Best Move",
+            "title": focus.get("mission_name") or focus.get("title") or "Open the next best move",
+            "detail": focus.get("why") or focus.get("what") or focus.get("data_point") or "Warren ranked this from connected account signals.",
+            "impact": focus.get("reward") or focus.get("impact") or "Clears the highest-leverage item currently on the board.",
+            "href": f"/client/actions?month={quote_plus(str(month or ''))}",
+            "cta": "Open mission",
+            "icon": focus.get("icon") or "bi-lightning-charge-fill",
+            "tone": "attention" if focus.get("priority_class") == "danger" else "good",
+        }
+    else:
+        today_win = {
+            "label": "Today's Best Move",
+            "title": "No urgent move ranked",
+            "detail": "Warren is not seeing a new priority from the current data yet.",
+            "impact": "Use the open lanes below whenever you want to create, sell, follow up, or improve the account.",
+            "href": "/client/auto",
+            "cta": "Open Auto WARREN",
+            "icon": "bi-check2-circle",
+            "tone": "calm",
+        }
+
+    wins = []
+    for action in done_actions[:4]:
+        wins.append({
+            "icon": "bi-check2-circle",
+            "title": action.get("mission_name") or action.get("title") or "Mission complete",
+            "detail": action.get("reward") or action.get("impact") or "Completed from the Action Plan.",
+            "meta": f"+{action.get('xp', 100)} XP",
+            "tone": "success",
+        })
+    for finding in findings[:3]:
+        wins.append({
+            "icon": "bi-stars",
+            "title": finding.get("title") or "Positive signal found",
+            "detail": finding.get("detail") or finding.get("action") or "Warren found something working in the account.",
+            "meta": "Signal",
+            "tone": "success",
+        })
+    if won_leads:
+        wins.append({
+            "icon": "bi-trophy",
+            "title": f"{len(won_leads)} lead{'s' if len(won_leads) != 1 else ''} marked won",
+            "detail": "Won lead history helps Warren learn what should be protected and repeated.",
+            "meta": "Pipeline",
+            "tone": "success",
+        })
+    if pending_posts or scheduled_blogs:
+        wins.append({
+            "icon": "bi-calendar-check",
+            "title": f"{len(pending_posts) + len(scheduled_blogs)} content item{'s' if len(pending_posts) + len(scheduled_blogs) != 1 else ''} queued",
+            "detail": "Scheduled content keeps the brand visible without waiting on a same-day scramble.",
+            "meta": "Content",
+            "tone": "success",
+        })
+    if published_posts and not wins:
+        wins.append({
+            "icon": "bi-broadcast",
+            "title": f"{len(published_posts)} post{'s' if len(published_posts) != 1 else ''} published recently",
+            "detail": "Organic proof is live and can support trust before a prospect calls.",
+            "meta": "Social",
+            "tone": "success",
+        })
+    for activity in agent_activity[:4]:
+        if len(wins) >= 6:
+            break
+        action_text = str(activity.get("action") or "").strip()
+        if not action_text:
+            continue
+        wins.append({
+            "icon": "bi-activity",
+            "title": action_text,
+            "detail": activity.get("detail") or "Recent WARREN activity.",
+            "meta": activity.get("agent_key") or "WARREN",
+            "tone": "neutral",
+        })
+
+    lanes = [
+        {"key": "lead_assistant", "label": "Chatbot", "href": "/client/lead-assistant", "icon": "bi-chat-dots", "focus": "Qualify and nurture leads with the right service questions."},
+        {"key": "campaigns", "label": "Ads", "href": "/client/campaigns", "icon": "bi-megaphone", "focus": "Launch, inspect, and improve paid campaigns."},
+        {"key": "commercial", "label": "Commercial", "href": "/client/commercial", "icon": "bi-buildings", "focus": "Track higher-value account opportunities separately."},
+        {"key": "post_scheduler", "label": "Organic", "href": "/client/post-scheduler", "icon": "bi-calendar2-week", "focus": "Queue proof, local trust, and service posts."},
+        {"key": "creative", "label": "Creative", "href": "/client/creative", "icon": "bi-image", "focus": "Build visuals using the brand identity."},
+        {"key": "site_builder", "label": "Website", "href": "/client/site-builder", "icon": "bi-window", "focus": "Improve pages and offers tied to conversion data."},
+    ]
+
+    vertical_lenses = {item.get("key"): item for item in (vertical_profile.get("mission_lenses") or [])}
+    for lane in lanes:
+        lens = vertical_lenses.get(lane["key"])
+        if lens:
+            lane["focus"] = lens.get("focus") or lane["focus"]
+            lane["checks"] = lens.get("checks") or []
+        else:
+            lane["checks"] = []
+
+    this_month_completed = len(done_actions)
+    return {
+        "today_win": today_win,
+        "win_feed": wins[:6],
+        "momentum": {
+            "completed_this_month": this_month_completed,
+            "open_missions": len(active_actions),
+            "active_leads": len(active_leads),
+            "queued_content": len(pending_posts) + len(scheduled_blogs),
+            "label": "Momentum",
+            "summary": f"{this_month_completed} mission{'s' if this_month_completed != 1 else ''} cleared this month, {len(active_leads)} active lead{'s' if len(active_leads) != 1 else ''}, {len(pending_posts) + len(scheduled_blogs)} content item{'s' if len(pending_posts) + len(scheduled_blogs) != 1 else ''} queued.",
+        },
+        "open_lanes": lanes,
+        "vertical": {
+            "label": vertical_profile.get("label") or "Local Services",
+            "summary": vertical_profile.get("owner_summary") or "",
+            "confidence": vertical_profile.get("confidence") or "low",
+            "buyer_paths": list(vertical_profile.get("buyer_paths") or [])[:4],
+            "commercial_targets": list(vertical_profile.get("commercial_targets") or [])[:4],
+        },
+    }
 
 
 ALLOWED_AI_MODELS = {
@@ -5803,7 +5982,16 @@ def client_auto_warren():
         return redirect(url_for("client.client_logout"))
 
     requested_month = request.args.get("month", "")
-    month, requested_month, used_fallback = _resolve_dashboard_month(db, brand_id, requested_month)
+    auto_requested_month = requested_month
+    if not auto_requested_month:
+        try:
+            auto_requested_month = db.get_latest_dashboard_month(brand_id) or ""
+        except Exception:
+            auto_requested_month = ""
+    month, requested_month, used_fallback = _resolve_dashboard_month(db, brand_id, auto_requested_month)
+    if not request.args.get("month") and auto_requested_month:
+        requested_month = auto_requested_month
+        used_fallback = False
     auto_warren = _build_auto_warren_context(
         db,
         brand,
@@ -6002,6 +6190,7 @@ def client_dashboard_data():
                 cached_data = json.loads(snapshot["snapshot_json"])
                 if cached_data.get("_snapshot_version") == _DASHBOARD_SNAPSHOT_VERSION:
                     cached_data = _hydrate_cached_dashboard_payload(cached_data)
+                    cached_data = _attach_owner_engagement(db, brand, brand_id, month, cached_data)
                     cached_data["_cached"] = True
                     cached_data["_cached_at"] = snapshot["created_at"]
                     return jsonify({
@@ -6062,6 +6251,7 @@ def client_dashboard_data():
             if stale:
                 stale_data = json.loads(stale["snapshot_json"])
                 stale_data = _hydrate_cached_dashboard_payload(stale_data)
+                stale_data = _attach_owner_engagement(db, brand, brand_id, month, stale_data)
                 stale_data["_cached"] = True
                 stale_data["_cached_at"] = stale["created_at"]
                 return jsonify({
@@ -6087,6 +6277,7 @@ def client_dashboard_data():
             if stale and force_refresh:
                 stale_data = json.loads(stale["snapshot_json"])
                 stale_data = _hydrate_cached_dashboard_payload(stale_data)
+                stale_data = _attach_owner_engagement(db, brand, brand_id, month, stale_data)
                 # Try to regenerate from the snapshot's stored analysis data
                 analysis_from_snap = stale_data.get("_analysis")
                 if analysis_from_snap and isinstance(analysis_from_snap, dict):
@@ -6133,6 +6324,7 @@ def client_dashboard_data():
             elif stale:
                 stale_data = json.loads(stale["snapshot_json"])
                 stale_data = _hydrate_cached_dashboard_payload(stale_data)
+                stale_data = _attach_owner_engagement(db, brand, brand_id, month, stale_data)
                 stale_data["_cached"] = True
                 stale_data["_cached_at"] = stale["created_at"]
                 return jsonify({
@@ -6411,6 +6603,18 @@ def client_actions_dismiss():
     if not action_key:
         return jsonify({"error": "Missing action_key"}), 400
     db.dismiss_action(brand_id, month, action_key)
+    try:
+        action_label = action_key.replace("_", " ").strip().title()
+        snapshot = db.get_dashboard_snapshot(brand_id, month, max_age_hours=8760)
+        if snapshot:
+            snap_data = json.loads(snapshot.get("snapshot_json") or "{}")
+            for action in _normalize_client_actions(snap_data.get("actions") or []):
+                if action.get("key") == action_key:
+                    action_label = action.get("mission_name") or action.get("title") or action_label
+                    break
+        db.log_agent_activity(brand_id, "warren", f"Mission completed: {action_label}", f"Action Plan, {month}", "completed")
+    except Exception:
+        pass
     return jsonify({"ok": True})
 
 

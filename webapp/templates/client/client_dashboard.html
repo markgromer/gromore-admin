@@ -148,6 +148,189 @@
         font-size: .76rem;
         line-height: 1.45;
     }
+    .engagement-grid {
+        display: grid;
+        grid-template-columns: minmax(260px, 1.15fr) minmax(260px, .85fr);
+        gap: 1rem;
+        margin-bottom: 1.35rem;
+    }
+    .engagement-panel {
+        background: #fff;
+        border: 1px solid #dbe4f0;
+        border-radius: 16px;
+        padding: 1.1rem;
+        box-shadow: 0 10px 26px rgba(15, 23, 42, .06);
+    }
+    .today-win-card {
+        display: grid;
+        grid-template-columns: 48px minmax(0, 1fr);
+        gap: .9rem;
+        align-items: start;
+        border-left: 4px solid #22c55e;
+    }
+    .today-win-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #ecfdf5;
+        color: #047857;
+        border: 1px solid #bbf7d0;
+        font-size: 1.2rem;
+    }
+    .engagement-kicker {
+        color: #64748b;
+        font-size: .7rem;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        margin-bottom: .35rem;
+    }
+    .today-win-title {
+        color: #0f172a;
+        font-size: 1.04rem;
+        font-weight: 800;
+        line-height: 1.25;
+        margin-bottom: .35rem;
+    }
+    .today-win-detail {
+        color: #475569;
+        font-size: .88rem;
+        line-height: 1.5;
+        margin-bottom: .7rem;
+    }
+    .today-win-impact {
+        color: #166534;
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        border-radius: 10px;
+        padding: .55rem .7rem;
+        font-size: .78rem;
+        font-weight: 700;
+        line-height: 1.4;
+        margin-bottom: .8rem;
+    }
+    .momentum-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: .55rem;
+        margin-top: .95rem;
+    }
+    .momentum-stat {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: .65rem;
+        min-width: 0;
+    }
+    .momentum-stat strong {
+        display: block;
+        color: #0f172a;
+        font-size: 1rem;
+        line-height: 1.1;
+    }
+    .momentum-stat span {
+        display: block;
+        color: #64748b;
+        font-size: .68rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        margin-top: .22rem;
+    }
+    .win-feed {
+        display: grid;
+        gap: .65rem;
+    }
+    .win-feed-item {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        gap: .65rem;
+        align-items: start;
+        padding: .65rem;
+        border-radius: 12px;
+        border: 1px solid #edf2f7;
+        background: #fbfdff;
+    }
+    .win-feed-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #eef2ff;
+        color: #4f46e5;
+    }
+    .win-feed-title {
+        color: #0f172a;
+        font-size: .84rem;
+        font-weight: 800;
+        line-height: 1.3;
+    }
+    .win-feed-detail {
+        color: #64748b;
+        font-size: .76rem;
+        line-height: 1.42;
+        margin-top: .16rem;
+    }
+    .win-feed-meta {
+        color: #0f766e;
+        font-size: .68rem;
+        font-weight: 800;
+        margin-top: .2rem;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+    .open-lanes {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: .7rem;
+        margin: 0 0 1.35rem;
+    }
+    .open-lane {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        gap: .6rem;
+        text-decoration: none;
+        color: inherit;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: .78rem;
+        min-height: 86px;
+        transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+    }
+    .open-lane:hover {
+        color: inherit;
+        transform: translateY(-1px);
+        border-color: #93c5fd;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, .07);
+    }
+    .open-lane-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #f1f5f9;
+        color: #334155;
+    }
+    .open-lane-title {
+        color: #0f172a;
+        font-size: .84rem;
+        font-weight: 800;
+        line-height: 1.2;
+    }
+    .open-lane-focus {
+        color: #64748b;
+        font-size: .73rem;
+        line-height: 1.35;
+        margin-top: .2rem;
+    }
 
     /* -- Path Hub -- */
     .path-hub {
@@ -904,6 +1087,12 @@
         }
         .health-summary-grade {
             text-align: left;
+        }
+        .engagement-grid {
+            grid-template-columns: 1fr;
+        }
+        .momentum-strip {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
         }
     }
 </style>
@@ -1707,6 +1896,74 @@ function fmtInt(v) {
         return html;
     }
 
+    function buildOwnerEngagementHtml(d) {
+        var engagement = d.engagement || {};
+        var today = engagement.today_win || {};
+        var momentum = engagement.momentum || {};
+        var wins = Array.isArray(engagement.win_feed) ? engagement.win_feed : [];
+        var lanes = Array.isArray(engagement.open_lanes) ? engagement.open_lanes : [];
+        var vertical = engagement.vertical || {};
+        var html = '';
+
+        html += '<div class="engagement-grid">';
+        html += '<section class="engagement-panel today-win-card">';
+        html += '<div class="today-win-icon"><i class="bi ' + esc(today.icon || 'bi-lightning-charge-fill') + '"></i></div>';
+        html += '<div>';
+        html += '<div class="engagement-kicker">' + esc(today.label || 'Today') + '</div>';
+        html += '<div class="today-win-title">' + esc(today.title || 'Open the next best move') + '</div>';
+        html += '<div class="today-win-detail">' + esc(today.detail || 'Warren will rank the best action once enough signal is available.') + '</div>';
+        if (today.impact) {
+            html += '<div class="today-win-impact">' + esc(today.impact) + '</div>';
+        }
+        if (today.href) {
+            html += '<a class="btn btn-sm btn-primary" href="' + esc(today.href) + '">' + esc(today.cta || 'Open') + ' <i class="bi bi-arrow-right"></i></a>';
+        }
+        html += '<div class="momentum-strip">';
+        html += '<div class="momentum-stat"><strong>' + fmtInt(momentum.completed_this_month) + '</strong><span>Wins</span></div>';
+        html += '<div class="momentum-stat"><strong>' + fmtInt(momentum.open_missions) + '</strong><span>Open</span></div>';
+        html += '<div class="momentum-stat"><strong>' + fmtInt(momentum.active_leads) + '</strong><span>Leads</span></div>';
+        html += '<div class="momentum-stat"><strong>' + fmtInt(momentum.queued_content) + '</strong><span>Queued</span></div>';
+        html += '</div>';
+        html += '</div>';
+        html += '</section>';
+
+        html += '<section class="engagement-panel">';
+        html += '<div class="d-flex align-items-start justify-content-between gap-2 mb-3">';
+        html += '<div><div class="engagement-kicker">Win Feed</div><div class="today-win-title" style="font-size:.98rem;">Recent useful movement</div></div>';
+        if (vertical.label) {
+            html += '<span class="badge text-bg-light" title="' + esc(vertical.summary || '') + '">' + esc(vertical.label) + '</span>';
+        }
+        html += '</div>';
+        if (wins.length) {
+            html += '<div class="win-feed">';
+            wins.slice(0, 4).forEach(function(win) {
+                html += '<div class="win-feed-item">';
+                html += '<div class="win-feed-icon"><i class="bi ' + esc(win.icon || 'bi-check2-circle') + '"></i></div>';
+                html += '<div><div class="win-feed-title">' + esc(win.title || '') + '</div>';
+                if (win.detail) html += '<div class="win-feed-detail">' + esc(win.detail) + '</div>';
+                if (win.meta) html += '<div class="win-feed-meta">' + esc(win.meta) + '</div>';
+                html += '</div></div>';
+            });
+            html += '</div>';
+        } else {
+            html += '<div class="win-feed-item"><div class="win-feed-icon"><i class="bi bi-clock-history"></i></div><div><div class="win-feed-title">No wins logged yet</div><div class="win-feed-detail">Complete a mission, queue content, win a lead, or let Warren finish a scan and this feed starts filling in.</div></div></div>';
+        }
+        html += '</section>';
+        html += '</div>';
+
+        if (lanes.length) {
+            html += '<div class="open-lanes">';
+            lanes.forEach(function(lane) {
+                html += '<a class="open-lane" href="' + esc(lane.href || '#') + '">';
+                html += '<div class="open-lane-icon"><i class="bi ' + esc(lane.icon || 'bi-arrow-right') + '"></i></div>';
+                html += '<div><div class="open-lane-title">' + esc(lane.label || '') + '</div><div class="open-lane-focus">' + esc(lane.focus || '') + '</div></div>';
+                html += '</a>';
+            });
+            html += '</div>';
+        }
+        return html;
+    }
+
         function buildHealthSummaryHtml(d) {
             var hs = d.health_summary;
             if (!hs) return '';
@@ -1771,6 +2028,7 @@ function fmtInt(v) {
             brainMount.innerHTML = buildWarrenSnapshotHtml(d, brainMount);
         }
 
+        html += buildOwnerEngagementHtml(d);
         html += buildHealthSummaryHtml(d);
 
         // Top Moves (promoted - right after KPIs for action focus)

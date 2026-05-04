@@ -429,10 +429,13 @@ def _mission_confidence_from_evidence(suggestion, evidence, period):
     return base
 
 
-def _build_mission_intelligence(suggestion, action_item, analysis):
+def _build_mission_intelligence(suggestion, action_item, analysis, brand=None):
+    from webapp.vertical_intelligence import build_vertical_profile
+
     relevant_data = (action_item or {}).get("relevant_data") or {}
     category = str(suggestion.get("category") or "").strip().lower()
     period = (analysis or {}).get("period") or {}
+    vertical_profile = build_vertical_profile(brand or {})
     evidence = []
     research = []
 
@@ -521,6 +524,18 @@ def _build_mission_intelligence(suggestion, action_item, analysis):
             "Check whether the flagged campaign is active and still spending before pausing or scaling.",
             "Compare spend, results, CTR, CPC, and search terms or ad creative before changing budget.",
         ])
+    if category in {"paid_advertising", "budget", "creative", "strategy"}:
+        ad_angles = list(vertical_profile.get("ad_angles") or [])[:2]
+        if ad_angles:
+            research.append(f"Check the ad or offer against the vertical angle: {', '.join(ad_angles)}.")
+    if category == "organic_social":
+        buyer_paths = list(vertical_profile.get("buyer_paths") or [])[:2]
+        if buyer_paths:
+            research.append(f"Make the post useful for the actual buyer path: {', '.join(buyer_paths)}.")
+    if category == "strategy":
+        commercial_targets = list(vertical_profile.get("commercial_targets") or [])[:2]
+        if commercial_targets:
+            research.append(f"If this is commercial demand, segment it from residential flow first: {', '.join(commercial_targets)}.")
     if period.get("is_current_month") and period.get("early_month"):
         research.append("Because this is early in the month, confirm the issue is a rate, spend, or page-level problem before treating it as a volume problem.")
 
@@ -871,6 +886,8 @@ def build_client_dashboard(analysis, suggestions, brand, ai_model=None, include_
         - actions: prioritized action cards with step-by-step instructions
         - kpi_status: target vs actual KPIs
     """
+    from webapp.vertical_intelligence import build_vertical_profile
+
     channels = {}
 
     ga = analysis.get("google_analytics")
@@ -911,6 +928,7 @@ def build_client_dashboard(analysis, suggestions, brand, ai_model=None, include_
         "channels": channels,
         "actions": actions,
         "kpi_status": kpi_status,
+        "vertical_profile": build_vertical_profile(brand),
         "highlights": analysis.get("highlights", []),
         "concerns": analysis.get("concerns", []),
     }
@@ -1647,7 +1665,7 @@ def _build_action_cards(analysis, suggestions, brand, ai_model=None, mission_pro
             card["mission_name"] = card["title"]
         _apply_mission_reality_checks(card, selected[i], action_item)
         _apply_platform_reality_checks(card, selected[i], action_item, delegate_plan=delegate_plan)
-        mission_intel = _build_mission_intelligence(selected[i], action_item, analysis)
+        mission_intel = _build_mission_intelligence(selected[i], action_item, analysis, brand=brand)
         card["diagnostics"] = mission_intel["diagnostics"]
         card["research_questions"] = mission_intel["research_questions"]
         card["confidence"] = mission_intel["confidence"]
@@ -1876,6 +1894,7 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_pr
     )
 
     from webapp.ai_assistant import _summarize_analysis_for_ai
+    from webapp.vertical_intelligence import build_vertical_profile
     analysis_summary = _summarize_analysis_for_ai(analysis)
 
     if action_items is None:
@@ -1904,6 +1923,7 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_pr
             "target_audience": client_info.get("target_audience"),
             "active_offers": client_info.get("active_offers"),
         },
+        "vertical_profile": build_vertical_profile(brand),
         "mission_profile": mission_profile or infer_mission_profile(),
         "highlights": analysis_summary.get("highlights", []),
         "concerns": analysis_summary.get("concerns", []),
@@ -1952,6 +1972,8 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_pr
         "- If category is organic_social, keep the mission about organic Page posting, engagement, reach, and top posts. Do not use paid campaign spend or lead results as evidence for that mission.\n"
         "- If the SEO data already points to existing pages and the search volume is light, do NOT recommend new city or local pages. Rewrite the current page instead.\n"
         "- If period says early_month is true, do NOT create missions from low current-month volume alone. Use rate, spend, page, query, or campaign evidence, and call out lower confidence when sample size is thin.\n"
+        "- Use vertical_profile to adapt chatbot, ads, commercial, and content guidance to the actual service vertical. Do not assume one niche.\n"
+        "- If vertical_profile shows commercial targets, distinguish commercial account missions from residential lead missions.\n"
         "- Every mission must include a diagnosis first: what signal triggered it, what exact evidence supports it, what might be a false positive, and then the fix.\n"
         "- Avoid verbs like 'look for', 'review', 'find', 'evaluate', or 'assess' unless the exact thing to inspect is named in the same sentence.\n\n"
 
