@@ -2246,6 +2246,14 @@ def _explain_kpis(analysis):
     if targets.get("cpa") and actual.get("blended_cpa"):
         cpa_eval = evaluation.get("cpa", {})
         on_track = cpa_eval.get("on_track", False)
+        paid_cpa = actual.get("paid_cpa")
+        organic_conversions = _to_float(actual.get("organic_conversions"), 0)
+        organic_note = ""
+        if organic_conversions > 0 and paid_cpa:
+            organic_note = (
+                f" Paid-only CPA is ${float(paid_cpa):.2f}; organic added {int(organic_conversions)} conversion"
+                f"{'' if int(organic_conversions) == 1 else 's'}, lowering blended acquisition cost."
+            )
         cards.append({
             "label": "Cost Per Lead",
             "target": f"${targets['cpa']:.2f}",
@@ -2253,6 +2261,7 @@ def _explain_kpis(analysis):
             "on_track": on_track,
             "explanation": (
                 f"Your target is ${targets['cpa']:.2f} per lead and you're at ${actual['blended_cpa']:.2f}. "
+                + organic_note
                 + ("You're beating your target. Nice work."
                    if on_track
                    else "You're above target. Check which campaigns are driving up costs "
@@ -2273,6 +2282,9 @@ def _explain_kpis(analysis):
         elapsed_days = leads_eval.get("elapsed_days")
         lead_source = str(actual.get("lead_source") or leads_eval.get("source") or "").replace("_", " ")
         source_note = f" Source: {lead_source}." if lead_source and lead_source != "paid platforms" else ""
+        organic_conversions = _to_float(actual.get("organic_conversions"), 0)
+        if organic_conversions > 0:
+            source_note += f" Organic search contributed {int(organic_conversions)} conversion{'' if int(organic_conversions) == 1 else 's'}."
         cards.append({
             "label": "Total Leads",
             "target": f"{int(targets['leads'])}",
@@ -2319,11 +2331,14 @@ def _explain_kpis(analysis):
         paid_leads = _to_float(actual.get("paid_leads"), 0)
         total_leads = _to_float(actual.get("total_leads"), paid_leads)
         crm_leads = _to_float(actual.get("crm_leads"), 0)
+        organic_conversions = _to_float(actual.get("organic_conversions"), 0)
         blended_cpa = actual.get("blended_cpa")
         if paid_spend > 0 or total_leads > 0:
             actual_parts = [f"${paid_spend:,.2f} spend", f"{total_leads:.0f} total leads"]
             if crm_leads > paid_leads:
                 actual_parts.append(f"{crm_leads:.0f} from CRM")
+            if organic_conversions > 0:
+                actual_parts.append(f"{organic_conversions:.0f} organic")
             if blended_cpa:
                 actual_parts.append(f"${float(blended_cpa):.2f} blended CPL")
             cards.append({
@@ -2358,11 +2373,14 @@ def _build_health_summary(analysis, actions, overall_grade, overall_score):
 
     if leads_eval:
         lead_count = int(actual.get("total_leads") if actual.get("total_leads") is not None else (actual.get("paid_leads") or 0))
+        organic_conversions = int(_to_float(actual.get("organic_conversions"), 0))
         target_leads = int(targets.get("leads") or 0)
         expected_to_date = leads_eval.get("expected_to_date")
         pace_status = leads_eval.get("pace_status") or "full_month"
 
         numbers.append(f"{lead_count} leads so far")
+        if organic_conversions:
+            numbers.append(f"{organic_conversions} from organic search")
         if target_leads:
             numbers.append(f"{target_leads} target this month")
         if expected_to_date is not None and leads_eval.get("is_current_month"):
@@ -2408,6 +2426,9 @@ def _build_health_summary(analysis, actions, overall_grade, overall_score):
             f"The numbers say cost efficiency is {'healthy' if cpa_eval.get('on_track') else 'slipping'}. "
             f"Your blended cost per lead is ${cpa_eval.get('actual'):.2f} against a target of ${cpa_eval.get('target'):.2f}."
         )
+        organic_conversions = int(_to_float(actual.get("organic_conversions"), 0))
+        if organic_conversions:
+            numbers.append(f"{organic_conversions} organic conversions")
 
     action_titles = []
     for action in actions or []:
@@ -2652,9 +2673,10 @@ def _build_kpi_cluster_card(dashboard, health_summary):
         paid_spend = _to_float(actual.get("paid_spend"), 0)
         paid_leads = _to_float(actual.get("paid_leads"), 0)
         crm_leads = _to_float(actual.get("crm_leads"), 0)
+        organic_conversions = _to_float(actual.get("organic_conversions"), 0)
         total_leads = _to_float(actual.get("total_leads"), _to_float(actual.get("paid_leads"), 0))
         blended_cpa = actual.get("blended_cpa")
-        lead_label = "total leads" if crm_leads > paid_leads else "paid leads"
+        lead_label = "total leads" if (crm_leads > paid_leads or organic_conversions > 0) else "paid leads"
         primary_metric = f"${paid_spend:,.0f} spend, {total_leads:.0f} {lead_label}"
         if blended_cpa:
             primary_metric += f", ${float(blended_cpa):.2f} CPL"

@@ -193,6 +193,15 @@ def _crm_totals(crm_revenue):
     }
 
 
+def _organic_search_totals(ga_analysis):
+    organic = ((ga_analysis or {}).get("organic_search") or {}) if isinstance(ga_analysis, dict) else {}
+    return {
+        "sessions": _to_float(organic.get("sessions"), 0.0),
+        "conversions": _to_float(organic.get("conversions"), 0.0),
+        "conversion_rate": _to_float(organic.get("conversion_rate"), 0.0),
+    }
+
+
 def _parse_competitors(raw_competitors):
     if not raw_competitors:
         return []
@@ -893,6 +902,8 @@ def build_full_analysis(client_id, month, current_data, client_config):
         google_ads_results = google_ads_analysis.get("metrics", {}).get("results", 0)
 
     ga_conversions = 0
+    organic_search = _organic_search_totals(ga_analysis)
+    organic_conversions = round(organic_search["conversions"], 2)
     if ga_analysis:
         ga_conversions = ga_analysis.get("metrics", {}).get("conversions", 0)
 
@@ -919,9 +930,20 @@ def build_full_analysis(client_id, month, current_data, client_config):
     paid_spend = round(total_spend, 2)
     paid_leads = round(meta_results + google_ads_results, 2)
     crm_leads = round(crm["crm_leads"], 2)
-    total_leads = round(max(paid_leads, crm_leads), 2)
-    lead_source = "crm" if crm_leads > paid_leads else "paid_platforms"
+    measured_channel_leads = round(paid_leads + organic_conversions, 2)
+    total_leads = round(max(measured_channel_leads, crm_leads), 2)
+    if crm_leads >= measured_channel_leads and crm_leads > 0:
+        lead_source = "crm"
+    elif organic_conversions > 0 and paid_leads > 0:
+        lead_source = "paid_and_organic"
+    elif organic_conversions > 0:
+        lead_source = "organic"
+    else:
+        lead_source = "paid_platforms"
+    paid_cpa = round((paid_spend / paid_leads), 2) if paid_spend > 0 and paid_leads > 0 else None
     blended_cpa = round((paid_spend / total_leads), 2) if paid_spend > 0 and total_leads > 0 else None
+    organic_share = round((organic_conversions / total_leads) * 100, 1) if total_leads > 0 and organic_conversions > 0 else 0.0
+    organic_ad_spend_offset = round(organic_conversions * paid_cpa, 2) if paid_cpa and organic_conversions > 0 else None
 
     kpi_status = {
         "targets": {
@@ -933,12 +955,18 @@ def build_full_analysis(client_id, month, current_data, client_config):
             "paid_spend": paid_spend,
             "paid_leads": paid_leads,
             "crm_leads": crm_leads,
+            "organic_conversions": organic_conversions,
+            "organic_sessions": round(organic_search["sessions"], 2),
+            "organic_conversion_rate": round(organic_search["conversion_rate"], 2),
             "total_leads": total_leads,
             "lead_source": lead_source,
             "closed_deals": round(crm["closed_deals"], 2),
             "new_clients": round(crm["new_clients"], 2),
             "crm_requests": round(crm["requests"], 2),
+            "paid_cpa": paid_cpa,
             "blended_cpa": blended_cpa,
+            "organic_share": organic_share,
+            "organic_ad_spend_offset": organic_ad_spend_offset,
             "attributed_revenue": round(attributed_revenue, 2),
             "blended_roas": blended_roas,
         },
@@ -1045,9 +1073,14 @@ def build_full_analysis(client_id, month, current_data, client_config):
         "total_paid_spend": paid_spend,
         "total_paid_leads": paid_leads,
         "crm_leads": crm_leads,
+        "organic_conversions": organic_conversions,
+        "organic_sessions": round(organic_search["sessions"], 2),
         "total_leads": total_leads,
         "lead_source": lead_source,
+        "paid_cpa": paid_cpa,
         "blended_cpa": blended_cpa,
+        "organic_share": organic_share,
+        "organic_ad_spend_offset": organic_ad_spend_offset,
     }
 
     competitor_watch = _build_competitor_watch(

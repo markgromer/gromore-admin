@@ -163,6 +163,7 @@ def generate_client_report(analysis, suggestions_client, output_dir=None, brandi
     # --- Leads: use paid_summary to avoid double-counting GA4 conversions ---
     paid_leads = paid_summary.get("total_paid_leads", 0)
     crm_leads = paid_summary.get("crm_leads", 0)
+    organic_conversions = paid_summary.get("organic_conversions", 0)
     total_leads = paid_summary.get("total_leads", 0)
     ga_conversions = ga.get("metrics", {}).get("conversions", 0) if ga else 0
 
@@ -183,7 +184,7 @@ def generate_client_report(analysis, suggestions_client, output_dir=None, brandi
             crm_totals.get("closed_deals") or 0,
         )
     if not total_leads:
-        total_leads = max(paid_leads or 0, crm_leads or 0)
+        total_leads = max((paid_leads or 0) + (organic_conversions or 0), crm_leads or 0)
 
     total_spend = paid_summary.get("total_paid_spend", 0)
     if not total_spend:
@@ -330,6 +331,7 @@ def generate_client_report(analysis, suggestions_client, output_dir=None, brandi
         # Scorecard: split into paid leads, website conversions, total
         "paid_leads": paid_leads if paid_leads > 0 else None,
         "crm_leads": crm_leads if crm_leads > 0 else None,
+        "organic_conversions": organic_conversions if organic_conversions > 0 else None,
         "ga_conversions": ga_conversions if ga_conversions > 0 else None,
         "total_leads": total_leads if total_leads > 0 else ((paid_leads + ga_conversions) if (paid_leads + ga_conversions) > 0 else None),
         "total_spend": total_spend if total_spend > 0 else None,

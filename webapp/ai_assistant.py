@@ -1031,6 +1031,8 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
             "ga": {
                 "sessions": _safe_float(_pick(ga, "metrics.sessions")),
                 "conversions": _safe_float(_pick(ga, "metrics.conversions")),
+                "organic_conversions": _safe_float(_pick(ga, "organic_search.conversions")),
+                "organic_sessions": _safe_float(_pick(ga, "organic_search.sessions")),
                 "conversion_rate": _safe_float(_pick(ga, "metrics.conversion_rate")),
                 "bounce_rate": _safe_float(_pick(ga, "metrics.bounce_rate")),
                 "pages_per_session": _safe_float(_pick(ga, "metrics.pages_per_session")),
