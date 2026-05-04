@@ -19630,6 +19630,18 @@ def _scheduler_post_payload(post):
     }
 
 
+def _normalize_scheduler_input_datetime(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    raw = raw.replace("T", " ")
+    if len(raw) == 16:
+        return raw
+    if len(raw) >= 19:
+        return raw[:16]
+    return raw
+
+
 @client_bp.route("/post-scheduler", methods=["GET", "POST"])
 @client_login_required
 def client_post_scheduler():
@@ -19932,7 +19944,7 @@ def client_schedule_post():
     data = request.get_json(silent=True) or {}
     message = _format_facebook_post_message(data.get("message") or "")
     first_comment = _format_facebook_first_comment(data.get("first_comment") or "")
-    scheduled_at = (data.get("scheduled_at") or "").strip()
+    scheduled_at = _normalize_scheduler_input_datetime(data.get("scheduled_at"))
     link_url = (data.get("link_url") or "").strip()
     image_url = (data.get("image_url") or "").strip()
     post_type = _normalize_facebook_post_type(data.get("post_type"))
@@ -20086,7 +20098,7 @@ def client_schedule_posts_bulk():
     for post in posts:
         message = _format_facebook_post_message(post.get("message") or "")
         first_comment = _format_facebook_first_comment(post.get("first_comment") or "")
-        scheduled_at = (post.get("scheduled_at") or "").strip()
+        scheduled_at = _normalize_scheduler_input_datetime(post.get("scheduled_at"))
         image_url = (post.get("image_url") or "").strip()
         link_url = (post.get("link_url") or "").strip()
         post_type = _normalize_facebook_post_type(post.get("post_type"))

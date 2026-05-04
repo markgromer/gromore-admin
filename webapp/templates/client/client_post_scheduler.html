@@ -39,6 +39,12 @@
     .csv-message-cell {
         min-width: 360px;
     }
+    .csv-schedule-cell {
+        min-width: 210px;
+    }
+    .csv-schedule-input {
+        font-size: .82rem;
+    }
     .csv-preview-toolbar {
         display: flex;
         flex-wrap: wrap;
@@ -799,7 +805,7 @@
                     <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setAllCsvRowsSelected(false)">Select None</button>
                 </div>
             </div>
-            <div class="text-muted mb-2" style="font-size:.82rem;">Review, edit, and select which posts to schedule. The preview keeps line breaks and surfaces the hook, body, and CTA when the draft gives them to us.</div>
+            <div class="text-muted mb-2" style="font-size:.82rem;">Review, edit, adjust publish date/time per post, and select which posts to schedule. The preview keeps line breaks and surfaces the hook, body, and CTA when the draft gives them to us.</div>
             {% if has_drive %}
             <div class="text-muted mb-2" style="font-size:.85rem;">
                 Upload an image on the row that needs it. The Drive download URL will be inserted automatically for that post.
@@ -808,7 +814,7 @@
             {% endif %}
             <div class="table-responsive" style="max-height:400px; overflow-y:auto;">
                 <table class="table table-sm csv-preview-table" id="csvTable">
-                    <thead><tr><th class="csv-select-col">Use</th><th>#</th><th>Type</th><th>Message</th><th>First Comment</th><th>Scheduled</th><th>Image</th><th>Link</th></tr></thead>
+                    <thead><tr><th class="csv-select-col">Use</th><th>#</th><th>Type</th><th>Message</th><th>First Comment</th><th>Publish Time</th><th>Image</th><th>Link</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -1407,6 +1413,7 @@ function handleComposeImageUpload(input) {
 function updateCsvRowField(index, field, value) {
     if (!csvParsedRows[index]) return;
     csvParsedRows[index][field] = value;
+    if (field === 'scheduled_at') refreshCsvPreviewSummary();
 }
 
 function isCsvRowSelected(row) {
@@ -1432,11 +1439,12 @@ function selectedCsvRows() {
 
 function refreshCsvPreviewSummary() {
     var selectedCount = selectedCsvRows().length;
+    var missingTimes = selectedCsvRows().filter(function(row) { return !String(row.scheduled_at || '').trim(); }).length;
     document.getElementById('csvCount').textContent = csvParsedRows.length ? '(' + selectedCount + ' selected of ' + csvParsedRows.length + ' posts)' : '';
     var button = document.getElementById('csvScheduleBtn');
     if (button) {
-        button.disabled = !csvParsedRows.length || !selectedCount;
-        button.innerHTML = '<i class="bi bi-calendar-plus me-1"></i> Schedule Selected' + (csvParsedRows.length ? ' (' + selectedCount + ')' : '');
+        button.disabled = !csvParsedRows.length || !selectedCount || !!missingTimes;
+        button.innerHTML = '<i class="bi bi-calendar-plus me-1"></i> Schedule Selected' + (csvParsedRows.length ? ' (' + selectedCount + ')' : '') + (missingTimes ? ' - add times' : '');
     }
     document.getElementById('csvPreview').style.display = csvParsedRows.length ? '' : 'none';
 }
@@ -1584,6 +1592,7 @@ function renderCsvPreviewRows(rows) {
         var imageValue = escapeHtml(row.image_url || '');
         var linkValue = escapeHtml(row.link_url || '');
         var firstCommentValue = escapeHtml(row.first_comment || '');
+        var scheduledValue = escapeHtml(csvDateTimeLocalValue(row.scheduled_at || ''));
         var imageName = row.image_name ? '<div class="text-muted mt-1" style="font-size:.78rem;">Attached: ' + escapeHtml(row.image_name) + '</div>' : '';
         var messagePreview = renderCsvMessagePreview(row.message, row.character_name, row.image_hint);
         var messageValue = escapeHtml(row.message || '');
@@ -1598,7 +1607,11 @@ function renderCsvPreviewRows(rows) {
             '<td style="min-width:240px;">' +
                 '<textarea class="form-control form-control-sm" rows="4" maxlength="700" placeholder="Optional first comment" oninput="updateCsvRowField(' + index + ', \'first_comment\', this.value)">' + firstCommentValue + '</textarea>' +
             '</td>' +
-            '<td><code>' + row.scheduled_at + '</code></td>' +
+            '<td class="csv-schedule-cell">' +
+                '<label class="csv-editor-label mt-0">Date & Time</label>' +
+                '<input type="datetime-local" class="form-control form-control-sm csv-schedule-input" value="' + scheduledValue + '" oninput="updateCsvRowField(' + index + ', \'scheduled_at\', this.value)">' +
+                '<div class="text-muted mt-1" style="font-size:.72rem;">Uses your browser timezone.</div>' +
+            '</td>' +
             '<td style="min-width:260px;">' +
                 '<input type="url" class="form-control form-control-sm" value="' + imageValue + '" placeholder="https://..." oninput="updateCsvRowField(' + index + ', \'image_url\', this.value)">' +
                 imageActions + imageName +
@@ -1695,13 +1708,19 @@ function submitCsvPosts() {
             post_type: row.post_type || '',
             message: row.message || '',
             first_comment: row.first_comment || '',
-            scheduled_at: row.scheduled_at || '',
+            scheduled_at: formatCsvScheduledForSubmit(row.scheduled_at || ''),
             image_url: row.image_url || '',
             link_url: row.link_url || '',
         };
     });
     if (!postsToSchedule.length) {
         showResult('csvResult', 'error', 'Select at least one post to schedule.');
+        return;
+    }
+    var missingTimes = postsToSchedule.filter(function(row) { return !row.scheduled_at; }).length;
+    if (missingTimes) {
+        showResult('csvResult', 'error', 'Add a publish date and time for every selected post.');
+        refreshCsvPreviewSummary();
         return;
     }
     var btn = document.getElementById('csvScheduleBtn');
@@ -1763,6 +1782,24 @@ function deletePost(postId) {
         if (data.ok) refreshPosts({switchTab: true});
         else alert(data.error || 'Failed to delete.');
     });
+}
+
+function csvDateTimeLocalValue(value) {
+    var raw = String(value || '').trim();
+    if (!raw) return '';
+    raw = raw.replace(/\//g, '-').replace(' ', 'T');
+    raw = raw.replace(/Z$/, '');
+    var match = raw.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+    if (match) return match[1] + 'T' + match[2];
+    match = raw.match(/^(\d{4}-\d{2}-\d{2})$/);
+    if (match) return match[1] + 'T09:00';
+    return raw.slice(0, 16);
+}
+
+function formatCsvScheduledForSubmit(value) {
+    var raw = String(value || '').trim();
+    if (!raw) return '';
+    return raw.replace('T', ' ').slice(0, 16);
 }
 
 function setStoryFieldValues(values) {
