@@ -2475,6 +2475,128 @@ def jobber_test_connection(brand):
     return f"Connected - {total} client record{'s' if int(total or 0) != 1 else ''} accessible.", None
 
 
+def _jobber_primary_email(client):
+    emails = client.get("emails") or []
+    if not isinstance(emails, list):
+        return ""
+    primary = next((item for item in emails if item.get("primary")), None) or (emails[0] if emails else {})
+    return (primary.get("address") or "").strip()
+
+
+def _jobber_primary_phone(client):
+    phones = client.get("phones") or []
+    if not isinstance(phones, list):
+        return ""
+    primary = next((item for item in phones if item.get("primary")), None) or (phones[0] if phones else {})
+    return (primary.get("number") or "").strip()
+
+
+def _jobber_client_name(client):
+    company = (client.get("companyName") or "").strip()
+    person = f"{client.get('firstName') or ''} {client.get('lastName') or ''}".strip()
+    return company or person or "Unnamed client"
+
+
+def pull_jobber_crm_workspace(brand, month=None, limit=25):
+    """Pull visible Jobber CRM data for the client CRM tab."""
+    if not month:
+        month = datetime.now().strftime("%Y-%m")
+    limit = max(1, min(int(limit or 25), 50))
+
+    clients_query = """
+    query JobberCrmClients($first: Int!) {
+      clients(first: $first) {
+        totalCount
+        nodes {
+          id
+          firstName
+          lastName
+          companyName
+          createdAt
+          emails { address primary }
+          phones { number primary }
+        }
+      }
+    }
+    """
+    clients_payload, clients_error = _jobber_graphql(brand, clients_query, {"first": limit})
+    if clients_error:
+        return {}, clients_error
+
+    clients_block = (clients_payload or {}).get("clients") or {}
+    client_nodes = clients_block.get("nodes") or []
+    clients = [
+        {
+            "id": item.get("id") or "",
+            "name": _jobber_client_name(item),
+            "email": _jobber_primary_email(item),
+            "phone": _jobber_primary_phone(item),
+            "company_name": item.get("companyName") or "",
+            "created_at": item.get("createdAt") or "",
+        }
+        for item in client_nodes
+    ]
+
+    requests = []
+    requests_total = 0
+    requests_error = None
+    requests_query = """
+    query JobberCrmRequests($first: Int!) {
+      requests(first: $first) {
+        totalCount
+        nodes {
+          id
+          title
+          createdAt
+        }
+      }
+    }
+    """
+    requests_payload, requests_error = _jobber_graphql(brand, requests_query, {"first": limit})
+    if not requests_error:
+        requests_block = (requests_payload or {}).get("requests") or {}
+        requests_total = int(requests_block.get("totalCount") or 0)
+        requests = [
+            {
+                "id": item.get("id") or "",
+                "title": item.get("title") or "Untitled request",
+                "created_at": item.get("createdAt") or "",
+            }
+            for item in (requests_block.get("nodes") or [])
+        ]
+
+    revenue, invoice_count, revenue_error = pull_jobber_revenue(brand, month)
+    new_clients, clients_scanned, client_count_error = _jobber_count_created_records(brand, "clients", month)
+    new_requests, requests_scanned, request_count_error = _jobber_count_created_records(brand, "requests", month)
+    warnings = [
+        err for err in (requests_error, revenue_error, client_count_error, request_count_error)
+        if err
+    ]
+
+    return {
+        "source": "jobber",
+        "month": month,
+        "account_label": (brand.get("jobber_account_label") or "").strip(),
+        "kpis": {
+            "total_clients": int(clients_block.get("totalCount") or len(clients)),
+            "visible_clients": len(clients),
+            "requests": int(requests_total or new_requests or 0),
+            "new_clients": int(new_clients or 0),
+            "new_requests": int(new_requests or 0),
+            "invoice_count": int(invoice_count or 0),
+            "revenue": round(revenue or 0, 2),
+        },
+        "clients": clients,
+        "requests": requests,
+        "diagnostics": {
+            "clients_scanned_for_month": clients_scanned,
+            "requests_scanned_for_month": requests_scanned,
+            "warnings": warnings,
+        },
+        "synced_at": datetime.utcnow().isoformat(),
+    }, None
+
+
 def pull_jobber_revenue(brand, month=None):
     """Pull completed invoice revenue from Jobber for a given month.
     Returns (revenue, invoice_count, error_or_None)."""

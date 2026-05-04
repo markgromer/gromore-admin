@@ -111,7 +111,7 @@
     <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
         <div>
             <h5 class="mb-1"><i class="bi bi-upload text-primary"></i> Import Leads</h5>
-            <p class="text-muted mb-0" style="font-size:.86rem;">Upload a GHL contact export to add those contacts to the Lead Follow-Up pipeline.</p>
+            <p class="text-muted mb-0" style="font-size:.86rem;">Upload a contact export to add those contacts to the Lead Follow-Up pipeline.</p>
         </div>
         <a href="{{ url_for('client.client_lead_assistant') }}" class="btn btn-outline-primary btn-sm">
             <i class="bi bi-chat-dots me-1"></i> View Lead Follow-Up
@@ -167,6 +167,96 @@
     <a href="{{ url_for('client.client_settings') }}" class="btn btn-primary">
         <i class="bi bi-gear me-1"></i> Go to Connections
     </a>
+</div>
+
+{% elif crm_type == 'jobber' %}
+<div id="crmLoader" class="crm-loader">
+    <div class="spinner-border mb-3" role="status"></div>
+    <div class="fw-semibold">Pulling live data from Jobber...</div>
+    <div class="text-muted" style="font-size:.85rem;">Clients, requests, and invoice revenue</div>
+</div>
+
+<div id="crmContent" style="display:none;">
+    <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap mb-3">
+        <div>
+            <h5 class="mb-1"><i class="bi bi-briefcase text-info"></i> Jobber Workspace</h5>
+            <div class="text-muted" id="jobberAccountLabel" style="font-size:.86rem;">Connected to Jobber</div>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" id="jobberSyncBtn" onclick="loadJobberCrmData(true)">
+            <i class="bi bi-arrow-repeat me-1"></i> Sync Jobber
+        </button>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="crm-kpi-card">
+                <div class="kpi-value text-primary" id="jobberTotalClients">-</div>
+                <div class="kpi-label">Jobber Clients</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="crm-kpi-card">
+                <div class="kpi-value text-info" id="jobberRequests">-</div>
+                <div class="kpi-label">Requests</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="crm-kpi-card">
+                <div class="kpi-value text-success" id="jobberRevenue">-</div>
+                <div class="kpi-label">Paid Invoice Revenue</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="crm-kpi-card">
+                <div class="kpi-value text-warning" id="jobberNewActivity">-</div>
+                <div class="kpi-label">New This Month</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="crm-section">
+        <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap mb-2">
+            <h5 class="mb-0"><i class="bi bi-people text-primary"></i> Recent Jobber Clients</h5>
+            <small class="text-muted" id="jobberClientCountNote"></small>
+        </div>
+        <div class="table-responsive">
+            <table class="table crm-table mb-0">
+                <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Created</th><th>Jobber ID</th></tr></thead>
+                <tbody id="jobberClientsTableBody">
+                    <tr><td colspan="5" class="text-center text-muted py-3">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="crm-section">
+        <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap mb-2">
+            <h5 class="mb-0"><i class="bi bi-clipboard2-check text-info"></i> Recent Jobber Requests</h5>
+            <small class="text-muted" id="jobberRequestCountNote"></small>
+        </div>
+        <div class="table-responsive">
+            <table class="table crm-table mb-0">
+                <thead><tr><th>Request</th><th>Created</th><th>Jobber ID</th></tr></thead>
+                <tbody id="jobberRequestsTableBody">
+                    <tr><td colspan="3" class="text-center text-muted py-3">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="crm-section">
+        <h5><i class="bi bi-send-check text-success"></i> Warren To Jobber Handoff</h5>
+        <p class="text-muted mb-0" style="font-size:.86rem;">Qualified Warren leads can be pushed into Jobber as clients and requests. Successful pushes store the Jobber client/request IDs back on the lead thread.</p>
+    </div>
+</div>
+
+<div id="crmError" style="display:none;" class="crm-section text-center py-4">
+    <i class="bi bi-exclamation-triangle" style="font-size: 2.5rem; color: #f59e0b;"></i>
+    <h5 class="mt-3 fw-bold">Couldn't load Jobber data</h5>
+    <p class="text-muted" id="crmErrorMsg">Unknown error</p>
+    <button class="btn btn-outline-primary" onclick="loadJobberCrmData(true)">
+        <i class="bi bi-arrow-clockwise me-1"></i> Retry
+    </button>
 </div>
 
 {% elif crm_type != 'sweepandgo' %}
@@ -628,7 +718,103 @@
 
 {% endif %}
 
-{% if crm_connected and crm_type == 'sweepandgo' %}
+{% if crm_connected and crm_type == 'jobber' %}
+<script>
+function crmEsc(value) {
+    var d = document.createElement('div');
+    d.textContent = value || '';
+    return d.innerHTML;
+}
+
+function crmDate(value) {
+    if (!value) return '-';
+    return String(value).substring(0, 10);
+}
+
+function crmMoney(value) {
+    return (parseFloat(value) || 0).toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
+}
+
+function renderJobberClients(rows) {
+    var tbody = document.getElementById('jobberClientsTableBody');
+    if (!rows || !rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No Jobber clients returned.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(function(row) {
+        return '<tr>'
+            + '<td class="fw-medium">' + crmEsc(row.name || '-') + '</td>'
+            + '<td>' + crmEsc(row.email || '-') + '</td>'
+            + '<td>' + crmEsc(row.phone || '-') + '</td>'
+            + '<td>' + crmEsc(crmDate(row.created_at)) + '</td>'
+            + '<td><code style="font-size:.74rem;">' + crmEsc(row.id || '-') + '</code></td>'
+            + '</tr>';
+    }).join('');
+}
+
+function renderJobberRequests(rows) {
+    var tbody = document.getElementById('jobberRequestsTableBody');
+    if (!rows || !rows.length) {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No Jobber requests returned.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(function(row) {
+        return '<tr>'
+            + '<td class="fw-medium">' + crmEsc(row.title || '-') + '</td>'
+            + '<td>' + crmEsc(crmDate(row.created_at)) + '</td>'
+            + '<td><code style="font-size:.74rem;">' + crmEsc(row.id || '-') + '</code></td>'
+            + '</tr>';
+    }).join('');
+}
+
+function loadJobberCrmData(sync) {
+    var loader = document.getElementById('crmLoader');
+    var content = document.getElementById('crmContent');
+    var errDiv = document.getElementById('crmError');
+    var btn = document.getElementById('jobberSyncBtn');
+    var original = btn ? btn.innerHTML : '';
+    if (loader) loader.style.display = '';
+    if (content) content.style.display = 'none';
+    if (errDiv) errDiv.style.display = 'none';
+    if (btn && sync) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Syncing...';
+    }
+
+    fetch('{{ url_for("client.client_crm_data") }}' + (sync ? '?sync=1' : ''))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) throw new Error(data.error);
+        var jobber = data.jobber || {};
+        var kpis = jobber.kpis || {};
+        document.getElementById('jobberAccountLabel').textContent = jobber.account_label || 'Connected Jobber account';
+        document.getElementById('jobberTotalClients').textContent = (kpis.total_clients || 0).toLocaleString();
+        document.getElementById('jobberRequests').textContent = (kpis.requests || 0).toLocaleString();
+        document.getElementById('jobberRevenue').textContent = crmMoney(kpis.revenue || 0);
+        document.getElementById('jobberNewActivity').textContent = ((kpis.new_clients || 0) + (kpis.new_requests || 0)).toLocaleString();
+        document.getElementById('jobberClientCountNote').textContent = 'Showing ' + (kpis.visible_clients || (jobber.clients || []).length || 0) + ' of ' + (kpis.total_clients || 0).toLocaleString() + ' clients';
+        document.getElementById('jobberRequestCountNote').textContent = (kpis.requests || 0).toLocaleString() + ' total requests';
+        renderJobberClients(jobber.clients || []);
+        renderJobberRequests(jobber.requests || []);
+        if (loader) loader.style.display = 'none';
+        if (content) content.style.display = '';
+    })
+    .catch(function(err) {
+        if (loader) loader.style.display = 'none';
+        if (errDiv) errDiv.style.display = '';
+        document.getElementById('crmErrorMsg').textContent = err.message || 'Unable to load Jobber data.';
+    })
+    .finally(function() {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = original || '<i class="bi bi-arrow-repeat me-1"></i> Sync Jobber';
+        }
+    });
+}
+
+loadJobberCrmData(false);
+</script>
+{% elif crm_connected and crm_type == 'sweepandgo' %}
 <script>
 var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 

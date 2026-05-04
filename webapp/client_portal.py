@@ -18396,7 +18396,7 @@ def _build_sng_crm_snapshot(data):
 @client_bp.route("/crm/data")
 @client_login_required
 def client_crm_data():
-    """JSON endpoint: fetch all SNG data for the CRM tab."""
+    """JSON endpoint: fetch connected CRM data for the CRM tab."""
     def _revenue_cache_is_stale(snapshot, max_age_hours=20):
         if not isinstance(snapshot, dict):
             return True
@@ -18432,9 +18432,33 @@ def client_crm_data():
         source = payment_provider if has_payment_revenue_source and not has_crm_revenue_source else crm_type
         error = None
         crm_activity_payload = {}
+        jobber_workspace = {}
+
+        if crm_type == "jobber":
+            from webapp.crm_bridge import pull_jobber_crm_workspace
+
+            jobber_workspace, error = pull_jobber_crm_workspace(brand, month)
+            if error:
+                return jsonify(error=error), 400
+            totals = (jobber_workspace or {}).get("kpis") or {}
+            revenue = float(totals.get("revenue") or 0)
+            count = int(totals.get("invoice_count") or totals.get("requests") or totals.get("total_clients") or 0)
+            crm_activity_payload = {
+                "source": "jobber",
+                "totals": {
+                    "revenue": revenue,
+                    "closed_deals": int(totals.get("invoice_count") or 0),
+                    "leads": int(totals.get("requests") or totals.get("new_requests") or 0),
+                    "new_clients": int(totals.get("new_clients") or 0),
+                    "requests": int(totals.get("requests") or 0),
+                    "invoices": int(totals.get("invoice_count") or 0),
+                },
+                "diagnostics": (jobber_workspace or {}).get("diagnostics") or {},
+                "synced_at": (jobber_workspace or {}).get("synced_at") or "",
+            }
 
         if do_sync:
-            if crm_type in {"jobber", "gohighlevel", "razorsync"}:
+            if crm_type in {"gohighlevel", "razorsync"}:
                 from webapp.crm_bridge import pull_crm_activity_snapshot
                 crm_activity_payload, error = pull_crm_activity_snapshot(brand, month)
                 totals = (crm_activity_payload or {}).get("totals") or {}
@@ -18466,6 +18490,8 @@ def client_crm_data():
             },
             "crm_activity": crm_activity_payload,
         }
+        if jobber_workspace:
+            data["jobber"] = jobber_workspace
         data["crm_snapshot"] = {
             "title": f"{source.title()} revenue",
             "summary": f"{count} payment/deal records for {month}",
