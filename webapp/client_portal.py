@@ -4955,6 +4955,8 @@ _ENDPOINT_FEATURE_MAP = {
     "client_image_creator":        "creative",
     "client_image_creator_generate": "creative",
     "client_image_creator_save_drive": "creative",
+    "client_image_creator_tool_reference_upload": "creative",
+    "client_image_creator_tool_reference_delete": "creative",
     "client_creative_templates_list":  "creative",
     "client_creative_templates_save":  "creative",
     "client_creative_template_load":   "creative",
@@ -8447,6 +8449,14 @@ def _creative_font_payload(font):
     return payload
 
 
+def _creative_tool_reference_payload(item):
+    payload = dict(item or {})
+    file_path = (payload.get("file_path") or "").strip()
+    payload["url"] = url_for("client.client_serve_upload", filename=file_path) if file_path else ""
+    payload["category_label"] = (payload.get("category") or "tool").replace("_", " ").title()
+    return payload
+
+
 def _clean_font_display_name(value, fallback):
     raw = (value or fallback or "Uploaded Font").rsplit(".", 1)[0].strip()
     cleaned = re.sub(r"[^A-Za-z0-9 _.-]+", "", raw).strip(" ._-")
@@ -8565,6 +8575,7 @@ def _image_creator_prompt(
     tone="professional",
     text_sections=None,
     custom_instructions="",
+    tool_references=None,
 ):
     fmt = _IMAGE_CREATOR_FORMATS.get(format_key, _IMAGE_CREATOR_FORMATS["square"])
     text_sections = text_sections or {}
@@ -8599,6 +8610,23 @@ def _image_creator_prompt(
         parts.append("Do not render readable text unless exact text sections are provided.")
     if custom_instructions:
         parts.append(f"Custom production notes: {custom_instructions}")
+    tool_references = tool_references or []
+    if tool_references:
+        parts.append(
+            "Tool accuracy references: Use these brand-approved tools and usage examples when any tool, equipment, worker, or service action appears. "
+            "Do not substitute generic shovels, garden rakes, trash grabbers, janitorial carts, or unrelated equipment unless the reference explicitly says so."
+        )
+        for item in tool_references[:8]:
+            name = (item.get("tool_name") or "Approved tool").strip()
+            category = (item.get("category") or "tool").replace("_", " ")
+            description = (item.get("description") or "").strip()
+            usage_notes = (item.get("usage_notes") or "").strip()
+            line = f"- {name} ({category})"
+            if description:
+                line += f": {description}"
+            if usage_notes:
+                line += f" Usage: {usage_notes}"
+            parts.append(line[:360])
     if include_brand_context:
         context_bits = []
         for label, field in (
@@ -8635,6 +8663,7 @@ def client_image_creator():
     known_defaults = set(_IMAGE_PROVIDER_DEFAULT_MODELS.values()) | {"dall-e-3", "gpt-image-1"}
     if (image_model in known_defaults and image_model != selected_default) or image_model not in option_ids:
         image_model = selected_default
+    tool_references = [_creative_tool_reference_payload(item) for item in db.get_creative_tool_references(brand_id, active_only=True, limit=80)]
     return render_template(
         "client_image_creator.html",
         brand=brand,
@@ -8645,7 +8674,83 @@ def client_image_creator():
         image_model=image_model,
         image_model_options=image_options,
         formats=_IMAGE_CREATOR_FORMATS,
+        tool_references=tool_references,
     )
+
+
+@client_bp.route("/image-creator/tool-references", methods=["POST"])
+@client_login_required
+def client_image_creator_tool_reference_upload():
+    from werkzeug.utils import secure_filename
+
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        return jsonify({"ok": False, "error": "Brand not found."}), 404
+    upload = request.files.get("tool_image")
+    if not upload or not upload.filename:
+        return jsonify({"ok": False, "error": "Upload a tool or usage image."}), 400
+    tool_name = (request.form.get("tool_name") or "").strip()[:120]
+    if len(tool_name) < 2:
+        return jsonify({"ok": False, "error": "Name the tool so WARREN can recognize it."}), 400
+    category = (request.form.get("category") or "tool").strip().lower()
+    if category not in {"tool", "usage_example", "vehicle_setup", "uniform", "do_not_use"}:
+        category = "tool"
+    description = (request.form.get("description") or "").strip()[:600]
+    usage_notes = (request.form.get("usage_notes") or "").strip()[:600]
+    mimetype = (upload.mimetype or "").lower()
+    ext = Path(upload.filename).suffix.lower()
+    if mimetype not in {"image/png", "image/jpeg", "image/webp"} and ext not in {".png", ".jpg", ".jpeg", ".webp"}:
+        return jsonify({"ok": False, "error": "Reference images must be PNG, JPG, or WebP."}), 400
+    upload.seek(0, 2)
+    size_bytes = upload.tell()
+    upload.seek(0)
+    if size_bytes > 15 * 1024 * 1024:
+        return jsonify({"ok": False, "error": "Each reference image must be under 15MB."}), 400
+    if ext not in {".png", ".jpg", ".jpeg", ".webp"}:
+        ext = ".jpg" if mimetype == "image/jpeg" else ".webp" if mimetype == "image/webp" else ".png"
+    target_dir = Path(current_app.config.get("UPLOADS_DIR", "data/uploads")) / "creative_tool_references" / str(brand_id)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = secure_filename(f"{uuid.uuid4().hex}{ext}")
+    target_path = target_dir / safe_name
+    file_bytes = upload.read()
+    target_path.write_bytes(file_bytes)
+    rel_path = f"creative_tool_references/{brand_id}/{safe_name}"
+    ref_id = db.save_creative_tool_reference(
+        brand_id,
+        tool_name,
+        category,
+        description,
+        usage_notes,
+        rel_path,
+        upload.filename[:180],
+        mimetype or ("image/jpeg" if ext in {".jpg", ".jpeg"} else "image/webp" if ext == ".webp" else "image/png"),
+        len(file_bytes),
+        session.get("client_email") or session.get("client_name") or "client",
+    )
+    item = db.get_creative_tool_reference(ref_id, brand_id)
+    return jsonify({"ok": True, "reference": _creative_tool_reference_payload(item)})
+
+
+@client_bp.route("/image-creator/tool-references/<int:reference_id>", methods=["DELETE"])
+@client_login_required
+def client_image_creator_tool_reference_delete(reference_id):
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    item = db.delete_creative_tool_reference(reference_id, brand_id)
+    if not item:
+        return jsonify({"ok": False, "error": "Reference not found."}), 404
+    file_path = (item.get("file_path") or "").strip()
+    if file_path:
+        try:
+            upload_root = Path(current_app.config.get("UPLOADS_DIR", "data/uploads"))
+            target = (upload_root / file_path).resolve()
+            if str(target).startswith(str(upload_root.resolve())) and target.exists():
+                target.unlink()
+        except Exception as exc:
+            log.warning("Could not delete tool reference file for brand %s: %s", brand_id, exc)
+    return jsonify({"ok": True})
 
 
 @client_bp.route("/image-creator/generate", methods=["POST"])
@@ -8698,6 +8803,38 @@ def client_image_creator_generate():
             "mime_type": mimetype or ("image/jpeg" if ext in {"jpg", "jpeg"} else "image/webp" if ext == "webp" else "image/png"),
             "bytes": upload.read(),
         })
+    use_tool_references = str(data.get("use_tool_references", "1")).lower() not in {"0", "false", "no", "off"}
+    selected_tool_refs = []
+    if use_tool_references:
+        selected_ids = []
+        try:
+            selected_ids = [int(value) for value in request.form.getlist("tool_reference_ids") if str(value).strip().isdigit()]
+        except Exception:
+            selected_ids = []
+        all_refs = db.get_creative_tool_references(brand_id, active_only=True, limit=80)
+        if selected_ids:
+            selected_set = set(selected_ids)
+            selected_tool_refs = [item for item in all_refs if int(item.get("id") or 0) in selected_set]
+        elif str(data.get("tool_reference_selection_explicit", "")).lower() in {"1", "true", "yes"}:
+            selected_tool_refs = []
+        else:
+            selected_tool_refs = [item for item in all_refs if (item.get("category") or "") != "do_not_use"][:4]
+        upload_root = Path(current_app.config.get("UPLOADS_DIR", "data/uploads")).resolve()
+        for item in selected_tool_refs[: max(0, 8 - len(reference_images))]:
+            file_path = (item.get("file_path") or "").strip()
+            if not file_path:
+                continue
+            try:
+                target = (upload_root / file_path).resolve()
+                if not str(target).startswith(str(upload_root)) or not target.exists():
+                    continue
+                reference_images.append({
+                    "filename": (item.get("tool_name") or item.get("original_filename") or "brand_tool_reference")[:160],
+                    "mime_type": item.get("mime_type") or "image/jpeg",
+                    "bytes": target.read_bytes(),
+                })
+            except Exception as exc:
+                log.warning("Could not load tool reference %s for brand %s: %s", item.get("id"), brand_id, exc)
     prompt = _image_creator_prompt(
         brand,
         user_prompt,
@@ -8708,6 +8845,7 @@ def client_image_creator_generate():
         tone=tone,
         text_sections=text_sections,
         custom_instructions=custom_instructions,
+        tool_references=selected_tool_refs if use_tool_references else [],
     )
     if reference_images:
         prompt += (

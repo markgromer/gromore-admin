@@ -164,6 +164,67 @@
         font-size: .75rem;
         line-height: 1;
     }
+    .ic-tool-library {
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        background: #fff;
+        padding: .85rem;
+    }
+    .ic-tool-form {
+        display: grid;
+        gap: .55rem;
+        padding: .75rem;
+        border: 1px solid #eef2f7;
+        border-radius: 8px;
+        background: #f8fafc;
+        margin-bottom: .75rem;
+    }
+    .ic-tool-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+        gap: .55rem;
+        max-height: 260px;
+        overflow: auto;
+    }
+    .ic-tool-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #fff;
+    }
+    .ic-tool-card.selected {
+        border-color: #4f46e5;
+        box-shadow: 0 0 0 2px rgba(79, 70, 229, .14);
+    }
+    .ic-tool-card img {
+        width: 100%;
+        aspect-ratio: 1.15;
+        object-fit: cover;
+        display: block;
+        background: #f1f5f9;
+    }
+    .ic-tool-card-body {
+        padding: .55rem;
+    }
+    .ic-tool-name {
+        font-size: .78rem;
+        font-weight: 800;
+        color: #0f172a;
+        line-height: 1.2;
+    }
+    .ic-tool-meta {
+        color: #64748b;
+        font-size: .68rem;
+        margin-top: .15rem;
+        line-height: 1.25;
+    }
+    .ic-tool-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: .35rem;
+        margin-top: .45rem;
+    }
     @media (max-width: 980px) {
         .image-creator-layout { grid-template-columns: 1fr; }
         .ic-preview-shell { min-height: 360px; }
@@ -257,6 +318,55 @@
                             </div>
                         </div>
                         <div class="ic-reference-previews" id="icReferencePreviews"></div>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="ic-tool-library">
+                            <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                                <div>
+                                    <label class="form-label fw-semibold mb-1">Tool Accuracy Library</label>
+                                    <div class="text-muted" style="font-size:.78rem;">Upload niche-specific tools and usage examples once. WARREN will use selected references so generated people hold and use the right equipment.</div>
+                                </div>
+                                <span class="badge text-bg-light">{{ tool_references|length }} saved</span>
+                            </div>
+                            <div class="ic-tool-form">
+                                <div class="row g-2">
+                                    <div class="col-md-6"><input class="form-control form-control-sm" id="toolRefName" placeholder="Tool name, e.g. lobby dustpan and scoop rake"></div>
+                                    <div class="col-md-6">
+                                        <select class="form-select form-select-sm" id="toolRefCategory">
+                                            <option value="tool">Tool close-up</option>
+                                            <option value="usage_example">Person using tool</option>
+                                            <option value="vehicle_setup">Vehicle / gear setup</option>
+                                            <option value="uniform">Uniform / PPE</option>
+                                            <option value="do_not_use">Do-not-use example</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-12"><input class="form-control form-control-sm" id="toolRefDescription" placeholder="What WARREN must get right visually"></div>
+                                    <div class="col-12"><input class="form-control form-control-sm" id="toolRefUsage" placeholder="Usage notes, e.g. worker holds rake in one hand and pan in the other"></div>
+                                    <div class="col-md-8"><input class="form-control form-control-sm" type="file" id="toolRefImage" accept="image/png,image/jpeg,image/webp"></div>
+                                    <div class="col-md-4 d-grid"><button class="btn btn-outline-primary btn-sm fw-semibold" type="button" id="toolRefUpload"><i class="bi bi-upload me-1"></i>Add reference</button></div>
+                                </div>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="icUseToolReferences" checked>
+                                <label class="form-check-label" for="icUseToolReferences">Use selected tool references automatically</label>
+                            </div>
+                            <div class="ic-tool-grid" id="toolReferenceGrid">
+                                {% for item in tool_references %}
+                                <div class="ic-tool-card selected" data-id="{{ item.id }}">
+                                    <img src="{{ item.url }}" alt="{{ item.tool_name }}">
+                                    <div class="ic-tool-card-body">
+                                        <div class="ic-tool-name">{{ item.tool_name }}</div>
+                                        <div class="ic-tool-meta">{{ item.category_label }}{% if item.description %} - {{ item.description }}{% endif %}</div>
+                                        <div class="ic-tool-actions">
+                                            <label class="form-check m-0" style="font-size:.72rem;"><input class="form-check-input tool-ref-select" type="checkbox" value="{{ item.id }}" checked> Use</label>
+                                            <button class="btn btn-link btn-sm text-danger p-0 tool-ref-delete" type="button">Delete</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
                     </div>
 
                     <div class="col-12">
@@ -367,6 +477,9 @@
     const referenceDrop = document.getElementById('icReferenceDrop');
     const referenceInput = document.getElementById('icReferenceImages');
     const referencePreviews = document.getElementById('icReferencePreviews');
+    const toolGrid = document.getElementById('toolReferenceGrid');
+    const toolUploadBtn = document.getElementById('toolRefUpload');
+    const useToolReferences = document.getElementById('icUseToolReferences');
     let currentUrl = '';
     let currentFilename = '';
     let referenceFiles = [];
@@ -437,6 +550,93 @@
         referenceInput.value = '';
     });
 
+    function bindToolCard(card) {
+        const checkbox = card.querySelector('.tool-ref-select');
+        if (checkbox) {
+            checkbox.addEventListener('change', function() {
+                card.classList.toggle('selected', checkbox.checked);
+            });
+        }
+        const deleteBtn = card.querySelector('.tool-ref-delete');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', function() {
+                const id = card.getAttribute('data-id');
+                if (!id || !confirm('Delete this tool reference?')) return;
+                fetch("{{ url_for('client.client_image_creator_tool_reference_delete', reference_id=0) }}".replace('/0', '/' + id), {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content') }
+                })
+                .then(function(resp) { return resp.json().then(function(data) { return {ok: resp.ok, data: data}; }); })
+                .then(function(result) {
+                    if (!result.ok || !result.data.ok) throw new Error(result.data.error || 'Delete failed.');
+                    card.remove();
+                    showAlert('success', 'Tool reference deleted.');
+                })
+                .catch(function(err) { showAlert('danger', err.message || 'Delete failed.'); });
+            });
+        }
+    }
+
+    function renderToolReference(item) {
+        const card = document.createElement('div');
+        card.className = 'ic-tool-card selected';
+        card.setAttribute('data-id', item.id);
+        card.innerHTML = '<img alt=""><div class="ic-tool-card-body"><div class="ic-tool-name"></div><div class="ic-tool-meta"></div><div class="ic-tool-actions"><label class="form-check m-0" style="font-size:.72rem;"><input class="form-check-input tool-ref-select" type="checkbox" checked> Use</label><button class="btn btn-link btn-sm text-danger p-0 tool-ref-delete" type="button">Delete</button></div></div>';
+        card.querySelector('img').src = item.url || '';
+        card.querySelector('img').alt = item.tool_name || 'Tool reference';
+        card.querySelector('.ic-tool-name').textContent = item.tool_name || 'Tool reference';
+        card.querySelector('.tool-ref-select').value = item.id;
+        card.querySelector('.ic-tool-meta').textContent = [item.category_label, item.description].filter(Boolean).join(' - ');
+        bindToolCard(card);
+        toolGrid.prepend(card);
+    }
+
+    if (toolGrid) toolGrid.querySelectorAll('.ic-tool-card').forEach(bindToolCard);
+
+    if (toolUploadBtn) {
+        toolUploadBtn.addEventListener('click', function() {
+            const fileInput = document.getElementById('toolRefImage');
+            const file = fileInput.files && fileInput.files[0];
+            const name = document.getElementById('toolRefName').value.trim();
+            if (name.length < 2) {
+                showAlert('warning', 'Name the tool so WARREN can recognize it.');
+                return;
+            }
+            if (!file) {
+                showAlert('warning', 'Upload a tool or usage image.');
+                return;
+            }
+            const formData = new FormData();
+            formData.append('tool_name', name);
+            formData.append('category', document.getElementById('toolRefCategory').value);
+            formData.append('description', document.getElementById('toolRefDescription').value.trim());
+            formData.append('usage_notes', document.getElementById('toolRefUsage').value.trim());
+            formData.append('tool_image', file, file.name);
+            toolUploadBtn.disabled = true;
+            toolUploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Adding...';
+            fetch("{{ url_for('client.client_image_creator_tool_reference_upload') }}", {
+                method: 'POST',
+                headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content') },
+                body: formData
+            })
+            .then(function(resp) { return resp.json().then(function(data) { return {ok: resp.ok, data: data}; }); })
+            .then(function(result) {
+                if (!result.ok || !result.data.ok) throw new Error(result.data.error || 'Upload failed.');
+                renderToolReference(result.data.reference);
+                document.getElementById('toolRefName').value = '';
+                document.getElementById('toolRefDescription').value = '';
+                document.getElementById('toolRefUsage').value = '';
+                fileInput.value = '';
+                showAlert('success', 'Tool reference saved. WARREN will use it for tool accuracy.');
+            })
+            .catch(function(err) { showAlert('danger', err.message || 'Upload failed.'); })
+            .finally(function() {
+                toolUploadBtn.disabled = false;
+                toolUploadBtn.innerHTML = '<i class="bi bi-upload me-1"></i>Add reference';
+            });
+        });
+    }
+
     form.addEventListener('submit', function(e) {
         e.preventDefault();
         if (!btn || btn.disabled) return;
@@ -449,6 +649,7 @@
             tone: document.getElementById('icTone').value,
             format: checkedFormat ? checkedFormat.value : 'square',
             include_brand_context: document.getElementById('icBrandContext').checked ? '1' : '0',
+            use_tool_references: useToolReferences && useToolReferences.checked ? '1' : '0',
             custom_instructions: document.getElementById('icCustomInstructions').value.trim(),
             headline: document.getElementById('icHeadline').value.trim(),
             subheadline: document.getElementById('icSubheadline').value.trim(),
@@ -469,6 +670,12 @@
         const formData = new FormData();
         Object.keys(payload).forEach(function(key) { formData.append(key, payload[key]); });
         referenceFiles.forEach(function(file) { formData.append('reference_images', file, file.name); });
+        if (useToolReferences && useToolReferences.checked && toolGrid) {
+            formData.append('tool_reference_selection_explicit', '1');
+            toolGrid.querySelectorAll('.tool-ref-select:checked').forEach(function(input) {
+                formData.append('tool_reference_ids', input.value);
+            });
+        }
 
         fetch("{{ url_for('client.client_image_creator_generate') }}", {
             method: 'POST',

@@ -739,6 +739,29 @@ class WebDB:
             );
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS creative_tool_references (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand_id INTEGER NOT NULL,
+                tool_name TEXT NOT NULL DEFAULT '',
+                category TEXT NOT NULL DEFAULT 'tool',
+                description TEXT NOT NULL DEFAULT '',
+                usage_notes TEXT NOT NULL DEFAULT '',
+                file_path TEXT NOT NULL DEFAULT '',
+                original_filename TEXT NOT NULL DEFAULT '',
+                mime_type TEXT NOT NULL DEFAULT '',
+                file_size INTEGER DEFAULT 0,
+                uploaded_by TEXT NOT NULL DEFAULT '',
+                is_active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_creative_tool_references_brand
+            ON creative_tool_references(brand_id, is_active, created_at DESC);
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS ad_examples (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 platform TEXT NOT NULL DEFAULT 'google',
@@ -5384,6 +5407,64 @@ class WebDB:
         ).fetchone()
         if row:
             conn.execute("DELETE FROM creative_fonts WHERE id = ? AND brand_id = ?", (font_id, brand_id))
+            conn.commit()
+        conn.close()
+        return dict(row) if row else None
+
+    def save_creative_tool_reference(
+        self, brand_id, tool_name, category, description, usage_notes,
+        file_path, original_filename, mime_type, file_size, uploaded_by,
+    ):
+        conn = self._conn()
+        cur = conn.execute(
+            """
+            INSERT INTO creative_tool_references (
+                brand_id, tool_name, category, description, usage_notes,
+                file_path, original_filename, mime_type, file_size, uploaded_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                brand_id, tool_name, category, description, usage_notes,
+                file_path, original_filename, mime_type, file_size, uploaded_by,
+            ),
+        )
+        conn.commit()
+        ref_id = cur.lastrowid
+        conn.close()
+        return int(ref_id)
+
+    def get_creative_tool_references(self, brand_id, active_only=True, limit=100):
+        conn = self._conn()
+        sql = """
+            SELECT * FROM creative_tool_references
+            WHERE brand_id = ?
+        """
+        params = [brand_id]
+        if active_only:
+            sql += " AND is_active = 1"
+        sql += " ORDER BY category COLLATE NOCASE, tool_name COLLATE NOCASE, created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = conn.execute(sql, params).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def get_creative_tool_reference(self, reference_id, brand_id):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM creative_tool_references WHERE id = ? AND brand_id = ?",
+            (reference_id, brand_id),
+        ).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def delete_creative_tool_reference(self, reference_id, brand_id):
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT * FROM creative_tool_references WHERE id = ? AND brand_id = ?",
+            (reference_id, brand_id),
+        ).fetchone()
+        if row:
+            conn.execute("DELETE FROM creative_tool_references WHERE id = ? AND brand_id = ?", (reference_id, brand_id))
             conn.commit()
         conn.close()
         return dict(row) if row else None
