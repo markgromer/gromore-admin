@@ -5017,6 +5017,7 @@ _ENDPOINT_FEATURE_MAP = {
     "client_reviews_settings":     "reviews",
     "client_reviews_send":         "reviews",
     "client_reviews_run_automation": "reviews",
+    "client_reviews_toggle_automation": "reviews",
     "client_reviews_process_queue": "reviews",
     "client_reviews_mark_reviewed": "reviews",
     "client_post_scheduler":       "post_scheduler",
@@ -13017,6 +13018,20 @@ def client_reviews_run_automation():
         f"and sent {result.get('sent_sms', 0)} SMS plus {result.get('sent_email', 0)} email request(s).",
         "success",
     )
+    return redirect(url_for("client.client_reviews"))
+
+
+@client_bp.route("/reviews/automation/toggle", methods=["POST"])
+@client_login_required
+def client_reviews_toggle_automation():
+    db = _get_db()
+    brand_id = session["client_brand_id"]
+    brand = db.get_brand(brand_id)
+    if not brand:
+        abort(404)
+    enabled = 1 if request.form.get("enabled") == "1" else 0
+    db.update_brand_number_field(brand_id, "review_automation_enabled", enabled)
+    flash("Review Autopilot enabled." if enabled else "Review Autopilot paused.", "success")
     return redirect(url_for("client.client_reviews"))
 
 

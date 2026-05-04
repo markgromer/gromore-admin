@@ -116,18 +116,27 @@
                 CRM job-completion webhooks queue requests automatically, then WARREN re-checks review history and opt-outs before sending.
             </div>
         </div>
-        <span class="health-pill {{ autopilot.health }}">
-            {% if autopilot.health == 'healthy' %}<i class="bi bi-check-circle"></i>
-            {% elif autopilot.health == 'blocked' %}<i class="bi bi-exclamation-octagon"></i>
-            {% else %}<i class="bi bi-exclamation-triangle"></i>{% endif %}
-            {{ autopilot.health_label }}
-        </span>
-        <form method="post" action="{{ url_for('client.client_reviews_run_automation') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-outline-success btn-sm fw-bold" type="submit">
-                <i class="bi bi-play-circle me-1"></i> Run audience sweep now
-            </button>
-        </form>
+        <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+            <span class="health-pill {{ autopilot.health }}">
+                {% if autopilot.health == 'healthy' %}<i class="bi bi-check-circle"></i>
+                {% elif autopilot.health == 'blocked' %}<i class="bi bi-exclamation-octagon"></i>
+                {% else %}<i class="bi bi-exclamation-triangle"></i>{% endif %}
+                {{ autopilot.health_label }}
+            </span>
+            <form method="post" action="{{ url_for('client.client_reviews_toggle_automation') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="enabled" value="{% if automation.enabled %}0{% else %}1{% endif %}">
+                <button class="btn {% if automation.enabled %}btn-outline-secondary{% else %}btn-success{% endif %} btn-sm fw-bold" type="submit">
+                    {% if automation.enabled %}<i class="bi bi-pause-circle me-1"></i> Pause autopilot{% else %}<i class="bi bi-power me-1"></i> Enable autopilot{% endif %}
+                </button>
+            </form>
+            <form method="post" action="{{ url_for('client.client_reviews_run_automation') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-outline-success btn-sm fw-bold" type="submit">
+                    <i class="bi bi-play-circle me-1"></i> Run audience sweep now
+                </button>
+            </form>
+        </div>
     </div>
     <div class="autopilot-metrics">
         <div class="autopilot-metric"><strong>{{ autopilot.metrics.crm_queued }}</strong><span>Queued from CRM</span></div>
@@ -181,6 +190,15 @@
                     <div class="blocker-title">{{ blocker.title }}</div>
                     <div class="blocker-detail">{{ blocker.detail }}</div>
                     <div class="blocker-fix">{{ blocker.fix }}</div>
+                    {% if blocker.title == 'Review Autopilot is paused' %}
+                    <form method="post" action="{{ url_for('client.client_reviews_toggle_automation') }}" class="mt-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="enabled" value="1">
+                        <button class="btn btn-success btn-sm fw-bold" type="submit">
+                            <i class="bi bi-power me-1"></i> Enable Review Autopilot
+                        </button>
+                    </form>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </div>
