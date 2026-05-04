@@ -62,18 +62,23 @@ REPUTATION_WIDGET_DEFAULTS = {
     "width": "520",
     "review_count": "3",
     "review_style": "stack",
+    "popup_position": "bottom-left",
+    "popup_delay": "8",
+    "popup_interval": "20",
     "show_header": "1",
     "show_cta": "1",
     "show_review_text": "1",
+    "show_popups": "0",
     "auto_scroll": "0",
     "title": "What customers say",
     "cta_label": "Leave a review",
 }
 
 REPUTATION_WIDGET_CHOICES = {
-    "layout": {"card", "compact", "carousel", "badge"},
+    "layout": {"card", "compact", "carousel", "badge", "popup", "combo"},
     "theme": {"light", "dark", "brand"},
     "review_style": {"stack", "scroller", "grid"},
+    "popup_position": {"bottom-left", "bottom-right", "top-left", "top-right"},
 }
 
 
@@ -136,8 +141,18 @@ def reputation_widget_settings(brand):
         review_count = 3
     settings["width"] = str(width)
     settings["review_count"] = str(review_count)
-    for key in ("show_header", "show_cta", "show_review_text", "auto_scroll"):
+    for key in ("show_header", "show_cta", "show_review_text", "show_popups", "auto_scroll"):
         settings[key] = "1" if str(settings.get(key)) == "1" else "0"
+    try:
+        popup_delay = max(1, min(120, int(float(settings.get("popup_delay") or 8))))
+    except (TypeError, ValueError):
+        popup_delay = 8
+    try:
+        popup_interval = max(5, min(300, int(float(settings.get("popup_interval") or 20))))
+    except (TypeError, ValueError):
+        popup_interval = 20
+    settings["popup_delay"] = str(popup_delay)
+    settings["popup_interval"] = str(popup_interval)
     settings["title"] = _clean(settings.get("title"))[:80] or REPUTATION_WIDGET_DEFAULTS["title"]
     settings["cta_label"] = _clean(settings.get("cta_label"))[:40] or REPUTATION_WIDGET_DEFAULTS["cta_label"]
     return settings

@@ -13112,9 +13112,13 @@ def client_reviews_settings():
         "width": request.form.get("reputation_widget_width") or "520",
         "review_count": request.form.get("reputation_widget_review_count") or "3",
         "review_style": request.form.get("reputation_widget_review_style") or "stack",
+        "popup_position": request.form.get("reputation_widget_popup_position") or "bottom-left",
+        "popup_delay": request.form.get("reputation_widget_popup_delay") or "8",
+        "popup_interval": request.form.get("reputation_widget_popup_interval") or "20",
         "show_header": "1" if request.form.get("reputation_widget_show_header") else "0",
         "show_cta": "1" if request.form.get("reputation_widget_show_cta") else "0",
         "show_review_text": "1" if request.form.get("reputation_widget_show_review_text") else "0",
+        "show_popups": "1" if request.form.get("reputation_widget_show_popups") else "0",
         "auto_scroll": "1" if request.form.get("reputation_widget_auto_scroll") else "0",
         "title": (request.form.get("reputation_widget_title") or "What customers say").strip()[:80],
         "cta_label": (request.form.get("reputation_widget_cta_label") or "Leave a review").strip()[:40],
@@ -13400,7 +13404,7 @@ def reputation_widget_js(brand_slug):
   var style = document.createElement('style');
   var accent = /^#[0-9a-f]{{6}}$/i.test(settings.accent || '') ? settings.accent : '#2563eb';
   var width = Math.max(280, Math.min(900, parseInt(settings.width || '520', 10) || 520));
-  style.textContent = '.warren-reputation-widget{{--wrw-accent:' + accent + ';font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;border:1px solid #dbe5df;border-radius:12px;background:#fff;color:#0f172a;max-width:' + width + 'px;box-shadow:0 12px 34px rgba(15,23,42,.10);overflow:hidden}}.warren-reputation-widget *{{box-sizing:border-box}}.wrw-theme-dark{{background:#111827;color:#f8fafc;border-color:#374151}}.wrw-theme-brand .wrw-head{{background:var(--wrw-accent)}}.wrw-layout-badge{{display:inline-flex;align-items:stretch;max-width:none}}.wrw-layout-badge .wrw-head{{padding:12px 14px}}.wrw-layout-badge .wrw-body{{display:none}}.wrw-layout-badge .wrw-actions{{padding:12px}}.wrw-layout-compact .wrw-body{{display:none}}.wrw-head{{background:#12322b;color:#fff;padding:16px 18px}}.wrw-brand{{font-size:15px;font-weight:850;margin:0 0 6px}}.wrw-score{{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}}.wrw-rating{{font-size:30px;font-weight:900;line-height:1}}.wrw-stars{{color:#f59e0b;letter-spacing:1px;font-size:14px}}.wrw-count{{color:rgba(255,255,255,.74);font-size:13px}}.wrw-body{{padding:14px 18px;display:grid;gap:10px}}.wrw-review{{border-top:1px solid #e2e8f0;padding-top:10px}}.wrw-theme-dark .wrw-review{{border-top-color:#334155}}.wrw-review:first-child{{border-top:0;padding-top:0}}.wrw-reviews-grid .wrw-body{{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}}.wrw-reviews-grid .wrw-review{{border:1px solid #e2e8f0;border-radius:9px;padding:10px}}.wrw-reviews-scroller .wrw-body,.wrw-layout-carousel .wrw-body{{display:flex;overflow-x:auto;scroll-snap-type:x mandatory}}.wrw-reviews-scroller .wrw-review,.wrw-layout-carousel .wrw-review{{min-width:220px;scroll-snap-align:start;border:1px solid #e2e8f0;border-radius:9px;padding:10px}}.wrw-review-top{{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#64748b;font-weight:750}}.wrw-theme-dark .wrw-review-top{{color:#cbd5e1}}.wrw-text{{font-size:13px;line-height:1.4;color:#334155;margin-top:5px}}.wrw-theme-dark .wrw-text{{color:#e2e8f0}}.wrw-actions{{display:flex;gap:8px;flex-wrap:wrap;padding:0 18px 16px}}.wrw-btn{{display:inline-flex;align-items:center;justify-content:center;border-radius:8px;padding:9px 12px;font-size:13px;font-weight:850;text-decoration:none}}.wrw-primary{{background:var(--wrw-accent);color:#fff}}.wrw-secondary{{border:1px solid #cbd5e1;color:#0f172a;background:#fff}}.wrw-theme-dark .wrw-secondary{{background:#111827;color:#fff;border-color:#475569}}';
+  style.textContent = '.warren-reputation-widget{{--wrw-accent:' + accent + ';font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;border:1px solid #dbe5df;border-radius:12px;background:#fff;color:#0f172a;max-width:' + width + 'px;box-shadow:0 12px 34px rgba(15,23,42,.10);overflow:hidden}}.warren-reputation-widget *{{box-sizing:border-box}}.wrw-theme-dark{{background:#111827;color:#f8fafc;border-color:#374151}}.wrw-theme-brand .wrw-head{{background:var(--wrw-accent)}}.wrw-layout-badge{{display:inline-flex;align-items:stretch;max-width:none}}.wrw-layout-badge .wrw-head{{padding:12px 14px}}.wrw-layout-badge .wrw-body{{display:none}}.wrw-layout-badge .wrw-actions{{padding:12px}}.wrw-layout-compact .wrw-body{{display:none}}.wrw-layout-popup{{display:none}}.wrw-head{{background:#12322b;color:#fff;padding:16px 18px}}.wrw-brand{{font-size:15px;font-weight:850;margin:0 0 6px}}.wrw-score{{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}}.wrw-rating{{font-size:30px;font-weight:900;line-height:1}}.wrw-stars{{color:#f59e0b;letter-spacing:1px;font-size:14px}}.wrw-count{{color:rgba(255,255,255,.74);font-size:13px}}.wrw-body{{padding:14px 18px;display:grid;gap:10px}}.wrw-review{{border-top:1px solid #e2e8f0;padding-top:10px}}.wrw-theme-dark .wrw-review{{border-top-color:#334155}}.wrw-review:first-child{{border-top:0;padding-top:0}}.wrw-reviews-grid .wrw-body{{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}}.wrw-reviews-grid .wrw-review{{border:1px solid #e2e8f0;border-radius:9px;padding:10px}}.wrw-reviews-scroller .wrw-body,.wrw-layout-carousel .wrw-body{{display:flex;overflow-x:auto;scroll-snap-type:x mandatory}}.wrw-reviews-scroller .wrw-review,.wrw-layout-carousel .wrw-review{{min-width:220px;scroll-snap-align:start;border:1px solid #e2e8f0;border-radius:9px;padding:10px}}.wrw-review-top{{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#64748b;font-weight:750}}.wrw-theme-dark .wrw-review-top{{color:#cbd5e1}}.wrw-text{{font-size:13px;line-height:1.4;color:#334155;margin-top:5px}}.wrw-theme-dark .wrw-text{{color:#e2e8f0}}.wrw-actions{{display:flex;gap:8px;flex-wrap:wrap;padding:0 18px 16px}}.wrw-btn{{display:inline-flex;align-items:center;justify-content:center;border-radius:8px;padding:9px 12px;font-size:13px;font-weight:850;text-decoration:none}}.wrw-primary{{background:var(--wrw-accent);color:#fff}}.wrw-secondary{{border:1px solid #cbd5e1;color:#0f172a;background:#fff}}.wrw-theme-dark .wrw-secondary{{background:#111827;color:#fff;border-color:#475569}}.wrw-toast{{position:fixed;z-index:2147483000;width:min(360px,calc(100vw - 28px));border:1px solid #dbe5df;border-radius:14px;background:#fff;color:#0f172a;box-shadow:0 18px 55px rgba(15,23,42,.22);padding:13px 14px;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;opacity:0;transform:translateY(12px);pointer-events:auto;transition:opacity .28s ease,transform .28s ease}}.wrw-toast.show{{opacity:1;transform:translateY(0)}}.wrw-toast.bottom-left{{left:18px;bottom:18px}}.wrw-toast.bottom-right{{right:18px;bottom:18px}}.wrw-toast.top-left{{left:18px;top:18px}}.wrw-toast.top-right{{right:18px;top:18px}}.wrw-toast-top{{display:flex;gap:10px;align-items:flex-start}}.wrw-avatar{{width:38px;height:38px;border-radius:50%;background:var(--wrw-accent);color:#fff;display:grid;place-items:center;font-weight:900;flex:0 0 auto}}.wrw-toast-title{{font-size:13px;font-weight:900;color:#0f172a}}.wrw-toast-stars{{font-size:12px;color:#f59e0b;letter-spacing:1px;margin-top:2px}}.wrw-toast-text{{font-size:12px;color:#475569;line-height:1.35;margin-top:5px}}.wrw-toast-foot{{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:9px;font-size:11px;color:#64748b}}.wrw-toast a{{color:var(--wrw-accent);font-weight:850;text-decoration:none}}';
   document.head.appendChild(style);
   function text(tag, cls, value) {{
     var el = document.createElement(tag);
@@ -13454,6 +13458,53 @@ def reputation_widget_js(brand_slug):
     actions.appendChild(mapsLink);
   }}
   mount.appendChild(actions);
+  function initials(name) {{
+    return String(name || 'G').split(/\\s+/).filter(Boolean).slice(0, 2).map(function(part) {{ return part.charAt(0).toUpperCase(); }}).join('') || 'G';
+  }}
+  function buildToast(review) {{
+    var toast = document.createElement('div');
+    toast.className = 'wrw-toast ' + (settings.popup_position || 'bottom-left');
+    var top = document.createElement('div');
+    top.className = 'wrw-toast-top';
+    top.appendChild(text('div', 'wrw-avatar', initials(review && review.author)));
+    var content = document.createElement('div');
+    content.appendChild(text('div', 'wrw-toast-title', (review && review.author ? review.author : 'A customer') + ' left a ' + (review && review.rating ? review.rating : 5) + '-star review'));
+    content.appendChild(text('div', 'wrw-toast-stars', stars(review && review.rating ? review.rating : 5)));
+    if (settings.show_review_text !== '0' && review && review.text) content.appendChild(text('div', 'wrw-toast-text', review.text.length > 150 ? review.text.slice(0, 147) + '...' : review.text));
+    top.appendChild(content);
+    toast.appendChild(top);
+    var foot = document.createElement('div');
+    foot.className = 'wrw-toast-foot';
+    foot.appendChild(text('span', '', review && review.time ? review.time : 'Google review'));
+    if (data.maps_url || data.review_url) {{
+      var link = text('a', '', 'View proof');
+      link.href = data.maps_url || data.review_url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      foot.appendChild(link);
+    }}
+    toast.appendChild(foot);
+    return toast;
+  }}
+  function startToasts() {{
+    var reviews = (data.reviews || []).filter(function(review) {{ return review && (review.author || review.text || review.rating); }});
+    if (!reviews.length) reviews = [{{author: data.brand_name || 'Customer', rating: data.rating || 5, text: data.review_count ? data.review_count + ' Google reviews' : 'Google review proof is connected.', time: ''}}];
+    var index = 0;
+    function showOne() {{
+      var toast = buildToast(reviews[index % reviews.length]);
+      index += 1;
+      document.body.appendChild(toast);
+      setTimeout(function() {{ toast.classList.add('show'); }}, 60);
+      setTimeout(function() {{
+        toast.classList.remove('show');
+        setTimeout(function() {{ if (toast.parentNode) toast.parentNode.removeChild(toast); }}, 320);
+      }}, 6200);
+    }}
+    setTimeout(function cycle() {{
+      showOne();
+      setInterval(showOne, Math.max(5, parseInt(settings.popup_interval || '20', 10) || 20) * 1000);
+    }}, Math.max(1, parseInt(settings.popup_delay || '8', 10) || 8) * 1000);
+  }}
   if (settings.auto_scroll === '1' && (reviewStyle === 'scroller' || layout === 'carousel')) {{
     setInterval(function() {{
       if (!body || body.scrollWidth <= body.clientWidth) return;
@@ -13461,6 +13512,7 @@ def reputation_widget_js(brand_slug):
       body.scrollTo({{left: next >= body.scrollWidth - body.clientWidth ? 0 : next, behavior: 'smooth'}});
     }}, 3500);
   }}
+  if (settings.show_popups === '1' || layout === 'popup' || layout === 'combo') startToasts();
   if (script && script.parentNode) script.parentNode.insertBefore(mount, script.nextSibling);
 }})();
 """

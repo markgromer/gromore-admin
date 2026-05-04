@@ -107,6 +107,7 @@
     .widget-preview-card.dark .widget-preview-review { color: #e2e8f0; border-top-color: #334155; }
     .widget-preview-card.brand .widget-preview-head, .widget-preview-card.brand .widget-preview-btn { background: var(--preview-accent, #2563eb); }
     .widget-preview-card.compact .widget-preview-body { display: none; }
+    .widget-preview-card.popup { display: none; }
     .widget-preview-card.badge { width: auto; display: inline-flex; align-items: stretch; }
     .widget-preview-card.badge .widget-preview-body { display: none; }
     .widget-preview-card.badge .widget-preview-actions { padding: 1rem; align-items: center; }
@@ -114,6 +115,14 @@
     .widget-preview-card.grid .widget-preview-review { border: 1px solid #e2e8f0; border-radius: 8px; padding: .6rem; }
     .widget-preview-card.scroller .widget-preview-body, .widget-preview-card.carousel .widget-preview-body { display: flex; overflow-x: auto; }
     .widget-preview-card.scroller .widget-preview-review, .widget-preview-card.carousel .widget-preview-review { min-width: 190px; border: 1px solid #e2e8f0; border-radius: 8px; padding: .6rem; }
+    .widget-toast-preview { width: min(100%, 340px); border: 1px solid #dbe5df; border-radius: 14px; background: #fff; box-shadow: 0 18px 55px rgba(15,23,42,.18); padding: .8rem; display: none; color: #0f172a; }
+    .widget-toast-preview.show { display: block; }
+    .widget-toast-top { display: flex; gap: .65rem; align-items: flex-start; }
+    .widget-toast-avatar { width: 38px; height: 38px; border-radius: 50%; background: #2563eb; color: #fff; display: grid; place-items: center; font-weight: 900; flex: 0 0 auto; }
+    .widget-toast-title { font-size: .82rem; font-weight: 900; }
+    .widget-toast-stars { color: #f59e0b; font-size: .76rem; letter-spacing: 1px; margin-top: .12rem; }
+    .widget-toast-text { color: #475569; font-size: .74rem; line-height: 1.35; margin-top: .3rem; }
+    .widget-toast-foot { display: flex; justify-content: space-between; gap: .5rem; color: #64748b; font-size: .68rem; margin-top: .55rem; }
     @media (max-width: 1050px) {
         .reviews-grid { grid-template-columns: 1fr; }
         .reputation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -658,7 +667,9 @@
                                     ('card', 'Review Card', 'Balanced score and review block.'),
                                     ('compact', 'Compact Bar', 'Score and CTA without review text.'),
                                     ('carousel', 'Carousel', 'Horizontal review slider.'),
-                                    ('badge', 'Trust Badge', 'Small proof badge for headers or footers.')
+                                    ('badge', 'Trust Badge', 'Small proof badge for headers or footers.'),
+                                    ('popup', 'Review Popup', 'Floating proof notification only.'),
+                                    ('combo', 'Widget + Popup', 'Embedded proof plus timed popups.')
                                 ] %}
                                 <label class="widget-choice">
                                     <input type="radio" name="reputation_widget_layout" value="{{ value }}" {% if widget.layout == value %}checked{% endif %}>
@@ -704,13 +715,32 @@
                                 <label class="form-label fw-bold">Review count</label>
                                 <input class="form-control" type="number" min="0" max="10" name="reputation_widget_review_count" value="{{ widget.review_count }}">
                             </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Popup position</label>
+                                <select class="form-select" name="reputation_widget_popup_position">
+                                    <option value="bottom-left" {% if widget.popup_position == 'bottom-left' %}selected{% endif %}>Bottom left</option>
+                                    <option value="bottom-right" {% if widget.popup_position == 'bottom-right' %}selected{% endif %}>Bottom right</option>
+                                    <option value="top-left" {% if widget.popup_position == 'top-left' %}selected{% endif %}>Top left</option>
+                                    <option value="top-right" {% if widget.popup_position == 'top-right' %}selected{% endif %}>Top right</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-bold">First popup</label>
+                                <input class="form-control" type="number" min="1" max="120" name="reputation_widget_popup_delay" value="{{ widget.popup_delay }}">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-bold">Repeat</label>
+                                <input class="form-control" type="number" min="5" max="300" name="reputation_widget_popup_interval" value="{{ widget.popup_interval }}">
+                            </div>
                         </div>
                         <div class="d-flex flex-wrap gap-3 mt-3">
                             <label class="form-check"><input class="form-check-input" type="checkbox" name="reputation_widget_show_header" value="1" {% if widget.show_header == '1' %}checked{% endif %}> Show header</label>
                             <label class="form-check"><input class="form-check-input" type="checkbox" name="reputation_widget_show_cta" value="1" {% if widget.show_cta == '1' %}checked{% endif %}> Show CTA</label>
                             <label class="form-check"><input class="form-check-input" type="checkbox" name="reputation_widget_show_review_text" value="1" {% if widget.show_review_text == '1' %}checked{% endif %}> Show review text</label>
+                            <label class="form-check"><input class="form-check-input" type="checkbox" name="reputation_widget_show_popups" value="1" {% if widget.show_popups == '1' %}checked{% endif %}> Show popups</label>
                             <label class="form-check"><input class="form-check-input" type="checkbox" name="reputation_widget_auto_scroll" value="1" {% if widget.auto_scroll == '1' %}checked{% endif %}> Auto-scroll</label>
                         </div>
+                        <div class="text-muted mt-2" style="font-size:.78rem;">Popup timing is in seconds. Use a calm delay so proof feels helpful instead of spammy.</div>
                     </div>
                     <div class="col-lg-5">
                         <div class="fw-bold mb-2">Live Preview</div>
@@ -735,6 +765,17 @@
                                 <div class="widget-preview-actions">
                                     <span class="widget-preview-btn" id="widgetPreviewCta">{{ widget.cta_label }}</span>
                                 </div>
+                            </div>
+                            <div class="widget-toast-preview" id="widgetToastPreview">
+                                <div class="widget-toast-top">
+                                    <div class="widget-toast-avatar" id="widgetToastAvatar">T</div>
+                                    <div>
+                                        <div class="widget-toast-title">Tom left a 5-star review</div>
+                                        <div class="widget-toast-stars">★★★★★</div>
+                                        <div class="widget-toast-text">Great service, fast communication, and the whole process was easy.</div>
+                                    </div>
+                                </div>
+                                <div class="widget-toast-foot"><span>Google review</span><span>View proof</span></div>
                             </div>
                         </div>
                         {% if reputation.widget_embed_code %}
@@ -844,6 +885,8 @@
     const body = document.getElementById('widgetPreviewBody');
     const actions = card.querySelector('.widget-preview-actions');
     const headTitle = card.querySelector('.widget-preview-title');
+    const toast = document.getElementById('widgetToastPreview');
+    const toastAvatar = document.getElementById('widgetToastAvatar');
 
     function value(name) {
         const checked = form.querySelector('input[name="' + name + '"]:checked');
@@ -867,8 +910,15 @@
         }
         if (cta) cta.textContent = value('reputation_widget_cta_label') || 'Leave a review';
         if (actions) actions.style.display = on('reputation_widget_show_cta') ? '' : 'none';
+        if (toast) {
+            const showToast = layout === 'popup' || layout === 'combo' || on('reputation_widget_show_popups');
+            toast.classList.toggle('show', showToast);
+            toast.style.setProperty('--preview-accent', value('reputation_widget_accent') || '#2563eb');
+            if (toastAvatar) toastAvatar.style.background = value('reputation_widget_accent') || '#2563eb';
+        }
         if (body) {
             body.style.display = layout === 'compact' || layout === 'badge' ? 'none' : '';
+            if (layout === 'popup') body.style.display = 'none';
             body.querySelectorAll('.widget-preview-review').forEach((item, index) => {
                 const max = parseInt(value('reputation_widget_review_count') || '3', 10);
                 item.style.display = index < max ? '' : 'none';
