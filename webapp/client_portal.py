@@ -13105,12 +13105,27 @@ def client_reviews_settings():
     if not brand:
         abort(404)
 
+    widget_settings = {
+        "layout": request.form.get("reputation_widget_layout") or "card",
+        "theme": request.form.get("reputation_widget_theme") or "light",
+        "accent": request.form.get("reputation_widget_accent") or "#2563eb",
+        "width": request.form.get("reputation_widget_width") or "520",
+        "review_count": request.form.get("reputation_widget_review_count") or "3",
+        "review_style": request.form.get("reputation_widget_review_style") or "stack",
+        "show_header": "1" if request.form.get("reputation_widget_show_header") else "0",
+        "show_cta": "1" if request.form.get("reputation_widget_show_cta") else "0",
+        "show_review_text": "1" if request.form.get("reputation_widget_show_review_text") else "0",
+        "auto_scroll": "1" if request.form.get("reputation_widget_auto_scroll") else "0",
+        "title": (request.form.get("reputation_widget_title") or "What customers say").strip()[:80],
+        "cta_label": (request.form.get("reputation_widget_cta_label") or "Leave a review").strip()[:40],
+    }
     fields = {
         "review_destination_url": (request.form.get("review_destination_url") or "").strip()[:600],
         "review_request_sms_template": (request.form.get("review_request_sms_template") or "").strip()[:700],
         "review_request_email_subject": (request.form.get("review_request_email_subject") or "").strip()[:200],
         "review_request_email_template": (request.form.get("review_request_email_template") or "").strip()[:3000],
         "review_suppression_list": (request.form.get("review_suppression_list") or "").strip()[:12000],
+        "reputation_widget_settings": json.dumps(widget_settings),
         "review_default_group_keys": json.dumps(request.form.getlist("review_default_group_keys")),
         "review_automation_group_keys": json.dumps(request.form.getlist("review_automation_group_keys")),
         "review_automation_channels": json.dumps(request.form.getlist("review_automation_channels") or ["sms"]),
@@ -13370,15 +13385,22 @@ def reputation_widget_js(brand_slug):
             "reviews": [],
             "review_url": "",
             "maps_url": "",
+            "settings": {},
         }
     script = f"""
 (function() {{
   var data = {json.dumps(payload)};
+  var settings = data.settings || {{}};
   var script = document.currentScript;
   var mount = document.createElement('div');
-  mount.className = 'warren-reputation-widget';
+  var layout = settings.layout || 'card';
+  var theme = settings.theme || 'light';
+  var reviewStyle = settings.review_style || 'stack';
+  mount.className = 'warren-reputation-widget wrw-layout-' + layout + ' wrw-theme-' + theme + ' wrw-reviews-' + reviewStyle;
   var style = document.createElement('style');
-  style.textContent = '.warren-reputation-widget{{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;border:1px solid #dbe5df;border-radius:12px;background:#fff;color:#0f172a;max-width:520px;box-shadow:0 12px 34px rgba(15,23,42,.10);overflow:hidden}}.warren-reputation-widget *{{box-sizing:border-box}}.wrw-head{{background:#12322b;color:#fff;padding:16px 18px}}.wrw-brand{{font-size:15px;font-weight:850;margin:0 0 6px}}.wrw-score{{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}}.wrw-rating{{font-size:30px;font-weight:900;line-height:1}}.wrw-stars{{color:#f59e0b;letter-spacing:1px;font-size:14px}}.wrw-count{{color:rgba(255,255,255,.74);font-size:13px}}.wrw-body{{padding:14px 18px;display:grid;gap:10px}}.wrw-review{{border-top:1px solid #e2e8f0;padding-top:10px}}.wrw-review:first-child{{border-top:0;padding-top:0}}.wrw-review-top{{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#64748b;font-weight:750}}.wrw-text{{font-size:13px;line-height:1.4;color:#334155;margin-top:5px}}.wrw-actions{{display:flex;gap:8px;flex-wrap:wrap;padding:0 18px 16px}}.wrw-btn{{display:inline-flex;align-items:center;justify-content:center;border-radius:8px;padding:9px 12px;font-size:13px;font-weight:850;text-decoration:none}}.wrw-primary{{background:#2563eb;color:#fff}}.wrw-secondary{{border:1px solid #cbd5e1;color:#0f172a;background:#fff}}';
+  var accent = /^#[0-9a-f]{{6}}$/i.test(settings.accent || '') ? settings.accent : '#2563eb';
+  var width = Math.max(280, Math.min(900, parseInt(settings.width || '520', 10) || 520));
+  style.textContent = '.warren-reputation-widget{{--wrw-accent:' + accent + ';font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;border:1px solid #dbe5df;border-radius:12px;background:#fff;color:#0f172a;max-width:' + width + 'px;box-shadow:0 12px 34px rgba(15,23,42,.10);overflow:hidden}}.warren-reputation-widget *{{box-sizing:border-box}}.wrw-theme-dark{{background:#111827;color:#f8fafc;border-color:#374151}}.wrw-theme-brand .wrw-head{{background:var(--wrw-accent)}}.wrw-layout-badge{{display:inline-flex;align-items:stretch;max-width:none}}.wrw-layout-badge .wrw-head{{padding:12px 14px}}.wrw-layout-badge .wrw-body{{display:none}}.wrw-layout-badge .wrw-actions{{padding:12px}}.wrw-layout-compact .wrw-body{{display:none}}.wrw-head{{background:#12322b;color:#fff;padding:16px 18px}}.wrw-brand{{font-size:15px;font-weight:850;margin:0 0 6px}}.wrw-score{{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}}.wrw-rating{{font-size:30px;font-weight:900;line-height:1}}.wrw-stars{{color:#f59e0b;letter-spacing:1px;font-size:14px}}.wrw-count{{color:rgba(255,255,255,.74);font-size:13px}}.wrw-body{{padding:14px 18px;display:grid;gap:10px}}.wrw-review{{border-top:1px solid #e2e8f0;padding-top:10px}}.wrw-theme-dark .wrw-review{{border-top-color:#334155}}.wrw-review:first-child{{border-top:0;padding-top:0}}.wrw-reviews-grid .wrw-body{{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}}.wrw-reviews-grid .wrw-review{{border:1px solid #e2e8f0;border-radius:9px;padding:10px}}.wrw-reviews-scroller .wrw-body,.wrw-layout-carousel .wrw-body{{display:flex;overflow-x:auto;scroll-snap-type:x mandatory}}.wrw-reviews-scroller .wrw-review,.wrw-layout-carousel .wrw-review{{min-width:220px;scroll-snap-align:start;border:1px solid #e2e8f0;border-radius:9px;padding:10px}}.wrw-review-top{{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#64748b;font-weight:750}}.wrw-theme-dark .wrw-review-top{{color:#cbd5e1}}.wrw-text{{font-size:13px;line-height:1.4;color:#334155;margin-top:5px}}.wrw-theme-dark .wrw-text{{color:#e2e8f0}}.wrw-actions{{display:flex;gap:8px;flex-wrap:wrap;padding:0 18px 16px}}.wrw-btn{{display:inline-flex;align-items:center;justify-content:center;border-radius:8px;padding:9px 12px;font-size:13px;font-weight:850;text-decoration:none}}.wrw-primary{{background:var(--wrw-accent);color:#fff}}.wrw-secondary{{border:1px solid #cbd5e1;color:#0f172a;background:#fff}}.wrw-theme-dark .wrw-secondary{{background:#111827;color:#fff;border-color:#475569}}';
   document.head.appendChild(style);
   function text(tag, cls, value) {{
     var el = document.createElement(tag);
@@ -13392,7 +13414,7 @@ def reputation_widget_js(brand_slug):
   }}
   var head = document.createElement('div');
   head.className = 'wrw-head';
-  head.appendChild(text('div', 'wrw-brand', data.brand_name));
+  if (settings.show_header !== '0') head.appendChild(text('div', 'wrw-brand', settings.title || data.brand_name));
   var score = document.createElement('div');
   score.className = 'wrw-score';
   score.appendChild(text('span', 'wrw-rating', data.rating ? Number(data.rating).toFixed(1) : 'New'));
@@ -13410,15 +13432,15 @@ def reputation_widget_js(brand_slug):
     top.appendChild(text('span', '', review.author || 'Google reviewer'));
     top.appendChild(text('span', '', (review.rating ? stars(review.rating) + ' ' : '') + (review.time || '')));
     item.appendChild(top);
-    if (review.text) item.appendChild(text('div', 'wrw-text', review.text.length > 220 ? review.text.slice(0, 217) + '...' : review.text));
+    if (settings.show_review_text !== '0' && review.text) item.appendChild(text('div', 'wrw-text', review.text.length > 220 ? review.text.slice(0, 217) + '...' : review.text));
     body.appendChild(item);
   }});
   if (!(data.reviews || []).length) body.appendChild(text('div', 'wrw-text', 'Review highlights will appear here after Google reviews are connected.'));
   mount.appendChild(body);
   var actions = document.createElement('div');
   actions.className = 'wrw-actions';
-  if (data.review_url) {{
-    var reviewLink = text('a', 'wrw-btn wrw-primary', 'Leave a review');
+  if (settings.show_cta !== '0' && data.review_url) {{
+    var reviewLink = text('a', 'wrw-btn wrw-primary', settings.cta_label || 'Leave a review');
     reviewLink.href = data.review_url;
     reviewLink.target = '_blank';
     reviewLink.rel = 'noopener';
@@ -13432,6 +13454,13 @@ def reputation_widget_js(brand_slug):
     actions.appendChild(mapsLink);
   }}
   mount.appendChild(actions);
+  if (settings.auto_scroll === '1' && (reviewStyle === 'scroller' || layout === 'carousel')) {{
+    setInterval(function() {{
+      if (!body || body.scrollWidth <= body.clientWidth) return;
+      var next = body.scrollLeft + 230;
+      body.scrollTo({{left: next >= body.scrollWidth - body.clientWidth ? 0 : next, behavior: 'smooth'}});
+    }}, 3500);
+  }}
   if (script && script.parentNode) script.parentNode.insertBefore(mount, script.nextSibling);
 }})();
 """

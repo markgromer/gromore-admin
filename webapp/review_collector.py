@@ -55,6 +55,27 @@ JOB_COMPLETION_EVENT_TOKENS = (
     "service.complete", "client:job_completed", "job_closed", "job.close",
 )
 
+REPUTATION_WIDGET_DEFAULTS = {
+    "layout": "card",
+    "theme": "light",
+    "accent": "#2563eb",
+    "width": "520",
+    "review_count": "3",
+    "review_style": "stack",
+    "show_header": "1",
+    "show_cta": "1",
+    "show_review_text": "1",
+    "auto_scroll": "0",
+    "title": "What customers say",
+    "cta_label": "Leave a review",
+}
+
+REPUTATION_WIDGET_CHOICES = {
+    "layout": {"card", "compact", "carousel", "badge"},
+    "theme": {"light", "dark", "brand"},
+    "review_style": {"stack", "scroller", "grid"},
+}
+
 
 def _clean(value):
     return str(value or "").strip()
@@ -90,6 +111,36 @@ def _safe_json_list(value):
     except Exception:
         return []
     return parsed if isinstance(parsed, list) else []
+
+
+def reputation_widget_settings(brand):
+    try:
+        saved = json.loads((brand or {}).get("reputation_widget_settings") or "{}")
+    except Exception:
+        saved = {}
+    if not isinstance(saved, dict):
+        saved = {}
+    settings = {**REPUTATION_WIDGET_DEFAULTS, **{k: str(v) for k, v in saved.items() if k in REPUTATION_WIDGET_DEFAULTS}}
+    for key, choices in REPUTATION_WIDGET_CHOICES.items():
+        if settings.get(key) not in choices:
+            settings[key] = REPUTATION_WIDGET_DEFAULTS[key]
+    if not re.match(r"^#[0-9a-fA-F]{6}$", settings.get("accent", "")):
+        settings["accent"] = REPUTATION_WIDGET_DEFAULTS["accent"]
+    try:
+        width = max(280, min(900, int(float(settings.get("width") or 520))))
+    except (TypeError, ValueError):
+        width = 520
+    try:
+        review_count = max(0, min(10, int(float(settings.get("review_count") or 3))))
+    except (TypeError, ValueError):
+        review_count = 3
+    settings["width"] = str(width)
+    settings["review_count"] = str(review_count)
+    for key in ("show_header", "show_cta", "show_review_text", "auto_scroll"):
+        settings[key] = "1" if str(settings.get(key)) == "1" else "0"
+    settings["title"] = _clean(settings.get("title"))[:80] or REPUTATION_WIDGET_DEFAULTS["title"]
+    settings["cta_label"] = _clean(settings.get("cta_label"))[:40] or REPUTATION_WIDGET_DEFAULTS["cta_label"]
+    return settings
 
 
 def _coerce_int(value, default, minimum=0, maximum=9999):
@@ -324,6 +375,7 @@ def build_reputation_dashboard(db, brand, app_config=None):
     app_url = _clean(app_config.get("APP_URL")).rstrip("/")
     widget_script_url = f"{app_url}/reputation-widget/{slug}.js" if app_url and slug else ""
     widget_embed_code = f'<script async src="{widget_script_url}"></script>' if widget_script_url else ""
+    widget_settings = reputation_widget_settings(brand)
 
     return {
         "gbp": gbp or {},
@@ -337,19 +389,23 @@ def build_reputation_dashboard(db, brand, app_config=None):
         "optimizations": optimizations[:5],
         "widget_script_url": widget_script_url,
         "widget_embed_code": widget_embed_code,
+        "widget_settings": widget_settings,
     }
 
 
 def build_reputation_widget(db, brand):
     dashboard = build_reputation_dashboard(db, brand)
     setup = review_setup_status(brand)
+    settings = reputation_widget_settings(brand)
+    review_limit = _coerce_int(settings.get("review_count"), 3, 0, 10)
     return {
         "brand_name": _clean((brand or {}).get("display_name")) or "Local business",
         "rating": dashboard["rating"],
         "review_count": dashboard["review_count"],
-        "reviews": dashboard["visible_reviews"][:3],
+        "reviews": dashboard["visible_reviews"][:review_limit],
         "review_url": setup.get("review_url") or "",
         "maps_url": ((dashboard.get("gbp") or {}).get("maps_url") or ""),
+        "settings": settings,
     }
 
 

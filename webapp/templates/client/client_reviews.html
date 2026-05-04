@@ -86,6 +86,34 @@
     .optimization-title { font-size: .82rem; font-weight: 900; color: #0f172a; }
     .optimization-detail { color: #475569; font-size: .74rem; line-height: 1.35; margin-top: .22rem; }
     .embed-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .73rem; min-height: 68px; background: #0f172a; color: #e2e8f0; border-color: #0f172a; }
+    .widget-choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .65rem; }
+    .widget-choice { border: 1px solid #dbe5df; border-radius: 10px; padding: .75rem; background: #fff; cursor: pointer; min-height: 86px; }
+    .widget-choice input { margin-right: .35rem; }
+    .widget-choice strong { display: block; font-size: .82rem; color: #0f172a; }
+    .widget-choice span { display: block; font-size: .72rem; color: #64748b; margin-top: .2rem; line-height: 1.3; }
+    .widget-preview-frame { border: 1px solid #dbe5df; border-radius: 12px; padding: 1rem; background: #f8fafc; min-height: 260px; display: grid; place-items: center; overflow: auto; }
+    .widget-preview-card { width: min(100%, 520px); border: 1px solid #dbe5df; border-radius: 12px; background: #fff; box-shadow: 0 12px 34px rgba(15,23,42,.1); overflow: hidden; color: #0f172a; }
+    .widget-preview-head { background: #12322b; color: #fff; padding: 1rem 1.1rem; }
+    .widget-preview-title { font-weight: 850; font-size: .92rem; margin-bottom: .35rem; }
+    .widget-preview-score { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+    .widget-preview-score strong { font-size: 1.65rem; line-height: 1; }
+    .widget-preview-stars { color: #f59e0b; font-size: .82rem; letter-spacing: 1px; }
+    .widget-preview-body { padding: .9rem 1.1rem; display: grid; gap: .6rem; }
+    .widget-preview-review { border-top: 1px solid #e2e8f0; padding-top: .6rem; font-size: .78rem; color: #334155; }
+    .widget-preview-review:first-child { border-top: 0; padding-top: 0; }
+    .widget-preview-actions { padding: 0 1.1rem 1rem; display: flex; gap: .5rem; flex-wrap: wrap; }
+    .widget-preview-btn { border-radius: 8px; background: #2563eb; color: #fff; padding: .55rem .75rem; font-size: .78rem; font-weight: 850; }
+    .widget-preview-card.dark { background: #111827; color: #f8fafc; border-color: #374151; }
+    .widget-preview-card.dark .widget-preview-review { color: #e2e8f0; border-top-color: #334155; }
+    .widget-preview-card.brand .widget-preview-head, .widget-preview-card.brand .widget-preview-btn { background: var(--preview-accent, #2563eb); }
+    .widget-preview-card.compact .widget-preview-body { display: none; }
+    .widget-preview-card.badge { width: auto; display: inline-flex; align-items: stretch; }
+    .widget-preview-card.badge .widget-preview-body { display: none; }
+    .widget-preview-card.badge .widget-preview-actions { padding: 1rem; align-items: center; }
+    .widget-preview-card.grid .widget-preview-body { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .widget-preview-card.grid .widget-preview-review { border: 1px solid #e2e8f0; border-radius: 8px; padding: .6rem; }
+    .widget-preview-card.scroller .widget-preview-body, .widget-preview-card.carousel .widget-preview-body { display: flex; overflow-x: auto; }
+    .widget-preview-card.scroller .widget-preview-review, .widget-preview-card.carousel .widget-preview-review { min-width: 190px; border: 1px solid #e2e8f0; border-radius: 8px; padding: .6rem; }
     @media (max-width: 1050px) {
         .reviews-grid { grid-template-columns: 1fr; }
         .reputation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -374,7 +402,10 @@
             </div>
             {% if reputation.widget_embed_code %}
             <textarea class="form-control embed-code" readonly>{{ reputation.widget_embed_code }}</textarea>
-            <div class="d-grid mt-2">
+            <div class="d-grid gap-2 mt-2">
+                <button class="btn btn-primary btn-sm fw-bold" type="button" data-bs-toggle="modal" data-bs-target="#widgetDesignerModal">
+                    <i class="bi bi-palette me-1"></i> Design widget
+                </button>
                 <a class="btn btn-outline-primary btn-sm fw-bold" href="{{ reputation.widget_script_url }}" target="_blank" rel="noopener">
                     <i class="bi bi-box-arrow-up-right me-1"></i> Open widget script
                 </a>
@@ -589,6 +620,138 @@
     </aside>
 </div>
 
+<div class="modal fade" id="widgetDesignerModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <form method="post" action="{{ url_for('client.client_reviews_settings') }}" class="modal-content" id="widgetDesignerForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="review_destination_url" value="{{ brand.review_destination_url or '' }}">
+            <input type="hidden" name="review_request_sms_template" value="{{ brand.review_request_sms_template or templates.sms }}">
+            <input type="hidden" name="review_request_email_subject" value="{{ brand.review_request_email_subject or templates.email_subject }}">
+            <input type="hidden" name="review_request_email_template" value="{{ brand.review_request_email_template or templates.email }}">
+            <input type="hidden" name="review_suppression_list" value="{{ brand.review_suppression_list or '' }}">
+            {% for key in default_group_keys %}<input type="hidden" name="review_default_group_keys" value="{{ key }}">{% endfor %}
+            {% for key in automation.groups %}<input type="hidden" name="review_automation_group_keys" value="{{ key }}">{% endfor %}
+            {% for channel in automation.channels %}<input type="hidden" name="review_automation_channels" value="{{ channel }}">{% endfor %}
+            {% if automation.enabled %}<input type="hidden" name="review_automation_enabled" value="1">{% endif %}
+            <input type="hidden" name="review_automation_delay_days" value="{{ automation.delay_days }}">
+            <input type="hidden" name="review_automation_cooldown_days" value="{{ automation.cooldown_days }}">
+            <input type="hidden" name="review_automation_max_attempts" value="{{ automation.max_attempts }}">
+            <input type="hidden" name="review_automation_repeat_after_days" value="{{ automation.repeat_after_days }}">
+            <input type="hidden" name="review_automation_service_window_days" value="{{ automation.service_window_days }}">
+            <input type="hidden" name="review_automation_recent_service_days" value="{{ automation.recent_service_days }}">
+            <input type="hidden" name="review_automation_min_private_rating" value="{{ automation.min_private_rating }}">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title fw-bold">Reputation Widget Designer</h5>
+                    <div class="text-muted" style="font-size:.82rem;">Design embeddable Google proof widgets without fake reviews or gated review flows.</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                {% set widget = reputation.widget_settings %}
+                <div class="row g-3">
+                    <div class="col-lg-7">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Widget type</label>
+                            <div class="widget-choice-grid">
+                                {% for value, label, detail in [
+                                    ('card', 'Review Card', 'Balanced score and review block.'),
+                                    ('compact', 'Compact Bar', 'Score and CTA without review text.'),
+                                    ('carousel', 'Carousel', 'Horizontal review slider.'),
+                                    ('badge', 'Trust Badge', 'Small proof badge for headers or footers.')
+                                ] %}
+                                <label class="widget-choice">
+                                    <input type="radio" name="reputation_widget_layout" value="{{ value }}" {% if widget.layout == value %}checked{% endif %}>
+                                    <strong>{{ label }}</strong><span>{{ detail }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Theme</label>
+                                <select class="form-select" name="reputation_widget_theme">
+                                    <option value="light" {% if widget.theme == 'light' %}selected{% endif %}>Light</option>
+                                    <option value="dark" {% if widget.theme == 'dark' %}selected{% endif %}>Dark</option>
+                                    <option value="brand" {% if widget.theme == 'brand' %}selected{% endif %}>Brand accent</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-bold">Accent</label>
+                                <input class="form-control form-control-color w-100" type="color" name="reputation_widget_accent" value="{{ widget.accent }}">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-bold">Max width</label>
+                                <input class="form-control" type="number" min="280" max="900" step="10" name="reputation_widget_width" value="{{ widget.width }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Title</label>
+                                <input class="form-control" name="reputation_widget_title" value="{{ widget.title }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">CTA label</label>
+                                <input class="form-control" name="reputation_widget_cta_label" value="{{ widget.cta_label }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Review display</label>
+                                <select class="form-select" name="reputation_widget_review_style">
+                                    <option value="stack" {% if widget.review_style == 'stack' %}selected{% endif %}>Stack</option>
+                                    <option value="scroller" {% if widget.review_style == 'scroller' %}selected{% endif %}>Horizontal scroller</option>
+                                    <option value="grid" {% if widget.review_style == 'grid' %}selected{% endif %}>Grid blocks</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Review count</label>
+                                <input class="form-control" type="number" min="0" max="10" name="reputation_widget_review_count" value="{{ widget.review_count }}">
+                            </div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-3 mt-3">
+                            <label class="form-check"><input class="form-check-input" type="checkbox" name="reputation_widget_show_header" value="1" {% if widget.show_header == '1' %}checked{% endif %}> Show header</label>
+                            <label class="form-check"><input class="form-check-input" type="checkbox" name="reputation_widget_show_cta" value="1" {% if widget.show_cta == '1' %}checked{% endif %}> Show CTA</label>
+                            <label class="form-check"><input class="form-check-input" type="checkbox" name="reputation_widget_show_review_text" value="1" {% if widget.show_review_text == '1' %}checked{% endif %}> Show review text</label>
+                            <label class="form-check"><input class="form-check-input" type="checkbox" name="reputation_widget_auto_scroll" value="1" {% if widget.auto_scroll == '1' %}checked{% endif %}> Auto-scroll</label>
+                        </div>
+                    </div>
+                    <div class="col-lg-5">
+                        <div class="fw-bold mb-2">Live Preview</div>
+                        <div class="widget-preview-frame">
+                            <div class="widget-preview-card {{ widget.theme }} {{ widget.layout }} {{ widget.review_style }}" id="widgetPreviewCard" style="--preview-accent: {{ widget.accent }}; max-width: {{ widget.width }}px;">
+                                <div class="widget-preview-head">
+                                    <div class="widget-preview-title" id="widgetPreviewTitle">{{ widget.title }}</div>
+                                    <div class="widget-preview-score">
+                                        <strong>{% if reputation.rating %}{{ '%.1f'|format(reputation.rating) }}{% else %}New{% endif %}</strong>
+                                        <span class="widget-preview-stars">★★★★★</span>
+                                        <span>{{ reputation.review_count or 0 }} Google reviews</span>
+                                    </div>
+                                </div>
+                                <div class="widget-preview-body" id="widgetPreviewBody">
+                                    {% for review in reputation.visible_reviews[:3] %}
+                                    <div class="widget-preview-review"><strong>{{ review.author or 'Google reviewer' }}</strong><br>{{ review.text or review.time or 'Visible Google review' }}</div>
+                                    {% endfor %}
+                                    {% if not reputation.visible_reviews %}
+                                    <div class="widget-preview-review">Review highlights will appear here after Google reviews are connected.</div>
+                                    {% endif %}
+                                </div>
+                                <div class="widget-preview-actions">
+                                    <span class="widget-preview-btn" id="widgetPreviewCta">{{ widget.cta_label }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% if reputation.widget_embed_code %}
+                        <label class="form-label fw-bold mt-3">Embed code</label>
+                        <textarea class="form-control embed-code" readonly>{{ reputation.widget_embed_code }}</textarea>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="submit" class="btn btn-primary fw-bold"><i class="bi bi-save me-1"></i> Save widget design</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 (function() {
     const form = document.getElementById('reviewSendForm');
@@ -670,6 +833,56 @@
     }
 
     form.querySelectorAll('.review-audience-input').forEach(input => input.addEventListener('change', refreshPreview));
+})();
+
+(function() {
+    const form = document.getElementById('widgetDesignerForm');
+    const card = document.getElementById('widgetPreviewCard');
+    if (!form || !card) return;
+    const title = document.getElementById('widgetPreviewTitle');
+    const cta = document.getElementById('widgetPreviewCta');
+    const body = document.getElementById('widgetPreviewBody');
+    const actions = card.querySelector('.widget-preview-actions');
+    const headTitle = card.querySelector('.widget-preview-title');
+
+    function value(name) {
+        const checked = form.querySelector('input[name="' + name + '"]:checked');
+        const field = checked || form.querySelector('[name="' + name + '"]');
+        return field ? field.value : '';
+    }
+    function on(name) {
+        const field = form.querySelector('[name="' + name + '"]');
+        return !!(field && field.checked);
+    }
+    function updateWidgetPreview() {
+        const layout = value('reputation_widget_layout') || 'card';
+        const theme = value('reputation_widget_theme') || 'light';
+        const reviewStyle = value('reputation_widget_review_style') || 'stack';
+        card.className = 'widget-preview-card ' + theme + ' ' + layout + ' ' + reviewStyle;
+        card.style.setProperty('--preview-accent', value('reputation_widget_accent') || '#2563eb');
+        card.style.maxWidth = (value('reputation_widget_width') || 520) + 'px';
+        if (title) {
+            title.textContent = value('reputation_widget_title') || 'What customers say';
+            title.style.display = on('reputation_widget_show_header') ? '' : 'none';
+        }
+        if (cta) cta.textContent = value('reputation_widget_cta_label') || 'Leave a review';
+        if (actions) actions.style.display = on('reputation_widget_show_cta') ? '' : 'none';
+        if (body) {
+            body.style.display = layout === 'compact' || layout === 'badge' ? 'none' : '';
+            body.querySelectorAll('.widget-preview-review').forEach((item, index) => {
+                const max = parseInt(value('reputation_widget_review_count') || '3', 10);
+                item.style.display = index < max ? '' : 'none';
+                if (!on('reputation_widget_show_review_text')) item.style.color = 'transparent';
+                else item.style.color = '';
+            });
+        }
+        if (headTitle) headTitle.style.display = on('reputation_widget_show_header') ? '' : 'none';
+    }
+    form.querySelectorAll('input, select').forEach(input => {
+        input.addEventListener('input', updateWidgetPreview);
+        input.addEventListener('change', updateWidgetPreview);
+    });
+    updateWidgetPreview();
 })();
 </script>
 {% endblock %}
