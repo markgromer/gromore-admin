@@ -15,8 +15,11 @@
         .review-head p { margin: 0; color: rgba(255,255,255,.74); font-size: .92rem; }
         .review-body { padding: 1.35rem 1.5rem; }
         .review-action { border: 1px solid #dbeafe; background: #f8fbff; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; }
-        .review-action h2 { font-size: 1rem; font-weight: 850; margin-bottom: .4rem; }
-        .review-action p { color: #475569; font-size: .9rem; margin-bottom: .85rem; }
+        .review-action h2 { font-size: 1.1rem; font-weight: 850; margin-bottom: .4rem; }
+        .review-action p { color: #475569; font-size: .92rem; margin-bottom: .85rem; }
+        .feedback-panel { border-top: 1px solid #e2e8f0; padding-top: 1rem; margin-top: 1rem; }
+        .feedback-panel h2 { font-size: .95rem; font-weight: 850; margin-bottom: .35rem; }
+        .feedback-panel p { color: #64748b; font-size: .84rem; margin-bottom: .75rem; }
         .rating-row { display: flex; flex-direction: row-reverse; justify-content: flex-end; gap: .2rem; }
         .rating-row input { position: absolute; opacity: 0; pointer-events: none; }
         .rating-row label { cursor: pointer; color: #cbd5e1; font-size: 2rem; line-height: 1; }
@@ -46,20 +49,21 @@
                 {% endwith %}
 
                 <div class="review-action">
-                    <h2><i class="bi bi-google me-1"></i>Share a public review</h2>
-                    <p>A public review helps other local customers choose with confidence.</p>
+                    <h2><i class="bi bi-google me-1"></i>Share your experience on Google</h2>
+                    <p>Public reviews help local customers choose with confidence. Honest feedback is welcome.</p>
                     {% if review_url %}
                     <a class="btn btn-primary fw-bold" href="{{ url_for('client_public.client_review_click', token=review_request.token) }}">
-                        <i class="bi bi-box-arrow-up-right me-1"></i> Open review page
+                        <i class="bi bi-box-arrow-up-right me-1"></i> Open Google review page
                     </a>
                     {% else %}
                     <div class="alert alert-warning mb-0">This business has not connected a review destination yet.</div>
                     {% endif %}
                 </div>
 
-                <form method="post">
+                <form method="post" class="feedback-panel">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <h2 style="font-size:1rem; font-weight:850; margin-bottom:.5rem;">Send private feedback</h2>
+                    <h2>Need help from the owner?</h2>
+                    <p>This private note goes to the business in WARREN so they can follow up. It does not replace or filter the public review option above.</p>
                     <div class="mb-3">
                         <label class="form-label fw-bold" style="font-size:.82rem;">Your rating</label>
                         <div class="rating-row" aria-label="Rating out of five">
@@ -74,9 +78,9 @@
                         <textarea class="form-control" name="feedback_text" maxlength="4000" placeholder="Tell us what went well or what could have been better.">{{ review_request.feedback_text or '' }}</textarea>
                     </div>
                     <button class="btn btn-outline-primary fw-bold" type="submit">
-                        <i class="bi bi-chat-heart me-1"></i> Send feedback
+                        <i class="bi bi-chat-heart me-1"></i> Send private note
                     </button>
-                    <div class="privacy-note">Private feedback goes to the business owner inside WARREN. You can still leave a public review using the button above.</div>
+                    <div class="privacy-note">You can still leave a public Google review using the button above.</div>
                 </form>
             </div>
             <div class="brand-footer">Powered by WARREN Review Collector.</div>

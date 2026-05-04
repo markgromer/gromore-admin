@@ -29,16 +29,21 @@ REVIEW_BLOCKED_GROUPS = {"warren_active_leads"}
 
 DEFAULT_SMS_TEMPLATE = (
     "Hi {{ first_name }}, thanks for choosing {{ brand_name }}. "
-    "Would you mind sharing a quick review? {{ review_link }}"
+    "Would you share your experience on Google? {{ review_link }} "
+    "If something was not right, you can message us privately here too: {{ feedback_link }}"
 )
 DEFAULT_EMAIL_SUBJECT = "Quick favor from {{ brand_name }}"
 DEFAULT_EMAIL_TEMPLATE = """Hi {{ first_name }},
 
 Thanks for choosing {{ brand_name }}. Your feedback helps local customers know who to trust.
 
-Would you take a minute to share a review?
+Would you take a minute to share your experience on Google?
 
 {{ review_link }}
+
+If something was not right, you can also message us privately here so we can fix it:
+
+{{ feedback_link }}
 
 Thank you,
 {{ brand_name }}"""
@@ -631,12 +636,12 @@ def build_review_autopilot_dashboard(db, brand, app_config=None):
             f"WARREN waits {settings['delay_days']} day(s), and if the customer is missing a service date, it checks the CRM for completed/paid work in the last {settings['recent_service_days']} day(s).",
             "WARREN checks review history, opt-outs, service age, and feedback before sending.",
             "Eligible customers get the same public review destination by selected channel.",
-            "Low private feedback creates a service-recovery task instead of another public ask.",
+            "Low private feedback creates a service-recovery task and pauses repeat asks.",
         ],
     }
 
 
-def render_template_text(template, *, brand, recipient, review_link):
+def render_template_text(template, *, brand, recipient, review_link, feedback_link=""):
     brand_name = _clean((brand or {}).get("display_name")) or "our team"
     name = _clean((recipient or {}).get("name")) or "Customer"
     values = {
@@ -644,6 +649,7 @@ def render_template_text(template, *, brand, recipient, review_link):
         "customer_name": name,
         "first_name": _first_name(name),
         "review_link": review_link,
+        "feedback_link": feedback_link or review_link,
     }
     text = template or ""
     for key, value in values.items():
@@ -688,6 +694,13 @@ def build_landing_url(token, external_base_url=None):
     if external_base_url:
         return external_base_url.rstrip("/") + path
     return url_for("client_public.client_review_request", token=token, _external=True)
+
+
+def build_review_click_url(token, external_base_url=None):
+    path = url_for("client_public.client_review_click", token=token)
+    if external_base_url:
+        return external_base_url.rstrip("/") + path
+    return url_for("client_public.client_review_click", token=token, _external=True)
 
 
 def _email_html(text, review_link):
@@ -770,10 +783,29 @@ def send_review_requests(
     for candidate in eligible_candidates:
         recipient = candidate["recipient"]
         token = secrets.token_urlsafe(24)
-        landing_url = build_landing_url(token, external_base_url=external_base_url)
-        subject = render_template_text(templates["email_subject"], brand=brand, recipient=recipient, review_link=landing_url)
-        sms_text = render_template_text(templates["sms"], brand=brand, recipient=recipient, review_link=landing_url)
-        email_text = render_template_text(templates["email"], brand=brand, recipient=recipient, review_link=landing_url)
+        review_click_url = build_review_click_url(token, external_base_url=external_base_url)
+        feedback_url = build_landing_url(token, external_base_url=external_base_url)
+        subject = render_template_text(
+            templates["email_subject"],
+            brand=brand,
+            recipient=recipient,
+            review_link=review_click_url,
+            feedback_link=feedback_url,
+        )
+        sms_text = render_template_text(
+            templates["sms"],
+            brand=brand,
+            recipient=recipient,
+            review_link=review_click_url,
+            feedback_link=feedback_url,
+        )
+        email_text = render_template_text(
+            templates["email"],
+            brand=brand,
+            recipient=recipient,
+            review_link=review_click_url,
+            feedback_link=feedback_url,
+        )
         request_id = db.create_review_request(
             brand["id"],
             token=token,
@@ -829,7 +861,7 @@ def send_review_requests(
                         email_address,
                         subject,
                         email_text,
-                        html=_email_html(email_text, landing_url),
+                        html=_email_html(email_text, review_click_url),
                         brand=brand,
                     )
                     sent_email += 1
