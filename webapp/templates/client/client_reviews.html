@@ -213,6 +213,9 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="review-panel mb-3">
                 <div class="review-panel-title"><i class="bi bi-people"></i> Audience</div>
+                <div class="alert alert-light border mb-3" style="font-size:.8rem;">
+                    Review requests should go to customers or active clients after service, not active leads. The selected audience is saved after a send, and you can also save it in Request Setup.
+                </div>
                 <div class="group-grid">
                     {% for group in groups %}
                     <label class="group-option">
@@ -458,6 +461,18 @@
             </div>
             <div class="border-top pt-3 mt-3">
                 <div class="review-panel-title"><i class="bi bi-robot"></i> Automation Rules</div>
+                <div class="mb-2">
+                    <label class="form-label fw-bold" style="font-size:.8rem;">Default review send audience</label>
+                    <div class="d-grid gap-1">
+                        {% for group in groups %}
+                        <label class="form-check" style="font-size:.8rem;">
+                            <input class="form-check-input" type="checkbox" name="review_default_group_keys" value="{{ group.key }}" {% if group.key in default_group_keys %}checked{% endif %}>
+                            {{ group.label }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <small class="text-muted">These boxes control what is selected in the manual Audience panel when this page opens.</small>
+                </div>
                 <label class="form-check d-flex align-items-start gap-2 mb-2">
                     <input class="form-check-input" type="checkbox" name="review_automation_enabled" value="1" {% if automation.enabled %}checked{% endif %}>
                     <span class="form-check-label fw-bold" style="font-size:.84rem;">Automatically send only eligible review requests</span>

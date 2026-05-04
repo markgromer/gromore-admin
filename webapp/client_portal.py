@@ -13035,13 +13035,14 @@ def client_reviews():
         automation_settings,
         available_review_groups,
         build_review_autopilot_dashboard,
+        default_review_audience_groups,
         get_templates,
         preview_review_audience,
         review_setup_status,
     )
 
     groups = available_review_groups(brand)
-    default_keys = [groups[0]["key"]] if groups else []
+    default_keys = default_review_audience_groups(brand, groups)
     default_channels = ["sms"] if (brand.get("quo_api_key") and brand.get("quo_phone_number")) else ["email"]
     preview = preview_review_audience(db, brand, default_keys, default_channels)
     requests = db.get_review_requests(brand_id, limit=75)
@@ -13103,6 +13104,7 @@ def client_reviews_settings():
         "review_request_sms_template": (request.form.get("review_request_sms_template") or "").strip()[:700],
         "review_request_email_subject": (request.form.get("review_request_email_subject") or "").strip()[:200],
         "review_request_email_template": (request.form.get("review_request_email_template") or "").strip()[:3000],
+        "review_default_group_keys": json.dumps(request.form.getlist("review_default_group_keys")),
         "review_automation_group_keys": json.dumps(request.form.getlist("review_automation_group_keys")),
         "review_automation_channels": json.dumps(request.form.getlist("review_automation_channels") or ["sms"]),
     }
@@ -13148,6 +13150,8 @@ def client_reviews_send():
     try:
         from webapp.review_collector import send_review_requests
 
+        if groups:
+            db.update_brand_text_field(brand_id, "review_default_group_keys", json.dumps(groups))
         result = send_review_requests(
             db,
             current_app.config,

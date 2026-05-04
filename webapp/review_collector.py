@@ -19,6 +19,13 @@ from webapp.warren_sender import send_transactional_sms
 
 MAX_REVIEW_REQUESTS = 250
 DEFAULT_REVIEW_AUTOMATION_GROUPS = ["warren_won_clients", "jobber_clients", "sng_active_clients"]
+DEFAULT_REVIEW_AUDIENCE_GROUPS = [
+    "warren_won_clients",
+    "jobber_clients",
+    "sng_active_clients",
+    "sng_inactive_clients",
+]
+REVIEW_BLOCKED_GROUPS = {"warren_active_leads"}
 
 DEFAULT_SMS_TEMPLATE = (
     "Hi {{ first_name }}, thanks for choosing {{ brand_name }}. "
@@ -107,6 +114,26 @@ def automation_settings(brand):
         "recent_service_days": _coerce_int((brand or {}).get("review_automation_recent_service_days"), 7, 1, 30),
         "min_private_rating": _coerce_int((brand or {}).get("review_automation_min_private_rating"), 4, 1, 5),
     }
+
+
+def default_review_audience_groups(brand, groups):
+    available = {group.get("key") for group in groups or []}
+    saved = [key for key in _safe_json_list((brand or {}).get("review_default_group_keys")) if key in available]
+    if saved:
+        return saved
+
+    automation_saved = [
+        key for key in _safe_json_list((brand or {}).get("review_automation_group_keys"))
+        if key in available and key != "warren_active_leads"
+    ]
+    if automation_saved:
+        return automation_saved
+
+    preferred = [key for key in DEFAULT_REVIEW_AUDIENCE_GROUPS if key in available]
+    if preferred:
+        return preferred
+
+    return []
 
 
 def review_destination_url(brand):
@@ -578,6 +605,7 @@ def render_template_text(template, *, brand, recipient, review_link):
 
 
 def preview_review_audience(db, brand, group_keys, channels):
+    group_keys = [key for key in group_keys or [] if key not in REVIEW_BLOCKED_GROUPS]
     recipients, errors = collect_recipients(db, brand, group_keys)
     channels = set(channels or [])
     intelligence = build_review_intelligence(db, brand, recipients[:MAX_REVIEW_REQUESTS])
@@ -658,6 +686,7 @@ def send_review_requests(
         if manual["email"] or manual["phone"]:
             recipients.append(manual)
     if group_keys:
+        group_keys = [key for key in group_keys or [] if key not in REVIEW_BLOCKED_GROUPS]
         recipients_from_groups, errors = collect_recipients(db, brand, group_keys)
         recipients.extend(recipients_from_groups)
 
@@ -788,7 +817,7 @@ def send_review_requests(
 
 
 def available_review_groups(brand):
-    return group_catalog(brand)
+    return [group for group in group_catalog(brand) if group.get("key") not in REVIEW_BLOCKED_GROUPS]
 
 
 def _summary_recipient(summary, event_id="", event_type=""):
