@@ -1300,7 +1300,7 @@
             <h5><i class="bi bi-chat-dots"></i> Outreach &amp; Communications</h5>
             <p>Stay on top of leads, conversations, and follow-up so demand turns into booked jobs instead of missed opportunities.</p>
             <div class="path-card-links">
-                {% if feature_on('crm') %}<a class="path-card-link" href="{{ url_for('client.client_crm') }}"><i class="bi bi-diagram-3"></i> Pipeline</a>{% endif %}
+                {% if feature_on('crm') %}<a class="path-card-link" href="{{ url_for('client.client_crm') }}"><i class="bi bi-database"></i> CRM Data</a>{% endif %}
                 {% if feature_on('warren_inbox') %}<a class="path-card-link" href="{{ url_for('client.client_inbox') }}"><i class="bi bi-inbox"></i> Conversations</a>{% endif %}
                 {% if feature_on('crm') %}<a class="path-card-link" href="{{ url_for('client.client_lead_assistant') }}"><i class="bi bi-chat-square-text"></i> Lead Follow-Up</a>{% endif %}
                 {% if feature_on('commercial') %}<a class="path-card-link" href="{{ url_for('client.client_commercial_prospecting') }}"><i class="bi bi-buildings"></i> Outreach</a>{% endif %}

@@ -91,8 +91,8 @@
 <div class="crm-header">
     <div class="d-flex justify-content-between gap-3 align-items-start flex-wrap">
         <div>
-            <h3><i class="bi bi-people me-2"></i>CRM Dashboard</h3>
-            <p>{% if crm_type == 'sweepandgo' %}Live data from your Sweep and Go account{% else %}Import and organize leads from your connected CRM{% endif %}</p>
+            <h3><i class="bi bi-database me-2"></i>CRM Data</h3>
+            <p>{% if crm_type == 'sweepandgo' %}Live client, quote, and revenue data from Sweep and Go{% else %}Connected-system revenue, imported leads, and handoff status{% endif %}</p>
         </div>
         <div class="d-flex gap-2 flex-wrap">
             {% if feature_on('commercial') %}
@@ -110,7 +110,7 @@
 <div class="crm-section">
     <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
         <div>
-            <h5 class="mb-1"><i class="bi bi-upload text-primary"></i> Import GoHighLevel Leads</h5>
+            <h5 class="mb-1"><i class="bi bi-upload text-primary"></i> Import Leads</h5>
             <p class="text-muted mb-0" style="font-size:.86rem;">Upload a GHL contact export to add those contacts to the Lead Follow-Up pipeline.</p>
         </div>
         <a href="{{ url_for('client.client_lead_assistant') }}" class="btn btn-outline-primary btn-sm">
@@ -121,7 +121,7 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="row g-3 align-items-end">
             <div class="col-md-7">
-                <label class="form-label fw-semibold">GHL CSV file</label>
+                <label class="form-label fw-semibold">Lead CSV file</label>
                 <input class="form-control" type="file" name="leads_csv" accept=".csv,text/csv" required>
                 <small class="text-muted">Recognizes common columns like name, first name, last name, email, phone, address, source, stage, and notes.</small>
             </div>
@@ -162,8 +162,8 @@
 <!-- Not connected state -->
 <div class="crm-section text-center py-5">
     <i class="bi bi-plug" style="font-size: 3rem; color: #cbd5e1;"></i>
-    <h5 class="mt-3 fw-bold">Connect your CRM</h5>
-    <p class="text-muted mb-3">Add your CRM credentials in Connections for live data. CSV import is available now.</p>
+    <h5 class="mt-3 fw-bold">Connect your CRM or payment source</h5>
+    <p class="text-muted mb-3">Add CRM credentials in Connections for revenue sync, lead handoff, and deeper reporting. CSV import is available now.</p>
     <a href="{{ url_for('client.client_settings') }}" class="btn btn-primary">
         <i class="bi bi-gear me-1"></i> Go to Connections
     </a>
@@ -172,8 +172,8 @@
 {% elif crm_type != 'sweepandgo' %}
 <div class="crm-section text-center py-5">
     <i class="bi bi-database-check" style="font-size: 3rem; color: #94a3b8;"></i>
-    <h5 class="mt-3 fw-bold">Revenue connection workspace</h5>
-    <p class="text-muted mb-3">Sweep and Go has the full client table dashboard. This connection can still sync revenue into reporting and Warren insights.</p>
+    <h5 class="mt-3 fw-bold">Connected CRM workspace</h5>
+    <p class="text-muted mb-3">This connector can sync revenue and activity into reporting and Warren insights. Full live client tables are currently strongest for Sweep and Go.</p>
     <button type="button" class="btn btn-primary" id="externalRevenueSyncBtn">
         <i class="bi bi-arrow-repeat me-1"></i> Sync Revenue
     </button>

@@ -507,10 +507,9 @@
                     <i class="bi bi-cloud-arrow-up" style="font-size:1.5rem;color:#9ca3af"></i>
                     <div style="font-size:.82rem;color:#6b7280;margin-top:.3rem"><strong style="color:#6366f1">Click</strong> or drag images here</div>
                 </div>
-                <button class="btn-ai-action w-100 mt-2" onclick="generateAiImage()" id="btnAiImage">
-                    <i class="bi bi-stars"></i> AI Generate Image
-                </button>
-                <input type="text" id="aiImagePrompt" class="prop-input mt-2" placeholder="Describe the image you want...">
+                <a class="btn-ai-action w-100 mt-2 justify-content-center text-decoration-none" href="{{ url_for('client.client_image_creator') }}">
+                    <i class="bi bi-stars"></i> Open Image Builder
+                </a>
             </div>
         </div>
 
@@ -1430,45 +1429,6 @@
             ccToast('Image opened in Creative Center.', 'success');
         }, { crossOrigin: 'anonymous' });
     }
-
-    window.generateAiImage = function() {
-        const prompt = document.getElementById('aiImagePrompt').value.trim();
-        if (!prompt) { ccToast('Describe the image you want to generate.', 'error'); return; }
-        const btn = document.getElementById('btnAiImage');
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generating...';
-
-        fetch("{{ url_for('client.client_assistant_chat') }}", {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-            body: JSON.stringify({
-                message: `Generate an image: ${prompt}. Use the generate_image tool. Return ONLY the image URL.`,
-                _tool_hint: 'generate_image'
-            }),
-        })
-        .then(r => r.json())
-        .then(data => {
-            const msg = data.response || data.reply || '';
-            const urlMatch = msg.match(/https:\/\/[^\s"'<>]+\.(png|jpg|jpeg|webp)/i);
-            if (urlMatch) {
-                fabric.Image.fromURL(urlMatch[0], function(img) {
-                    const sc = Math.min(fullW / img.width, fullH / img.height, 1);
-                    img.set({ left: 0, top: 0, scaleX: sc, scaleY: sc, _customType: 'ai_image' });
-                    canvas.add(img);
-                    canvas.setActiveObject(img);
-                    canvas.renderAll();
-                    updateLayers();
-                }, { crossOrigin: 'anonymous' });
-            } else {
-                ccToast('No image URL found. Try a different prompt.', 'error');
-            }
-        })
-        .catch(() => ccToast('AI image generation failed.', 'error'))
-        .finally(() => {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-stars"></i> AI Generate Image';
-        });
-    };
 
     // ── Quick overlays ──
 
