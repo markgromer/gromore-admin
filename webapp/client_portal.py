@@ -11127,6 +11127,220 @@ def _prepared_integration_catalog(config_rows):
     return prepared
 
 
+def _help_setup_status_cards(db, brand_id, brand, integration_catalog):
+    conns = db.get_brand_connections(brand_id) or {}
+    google = conns.get("google") or {}
+    meta = conns.get("meta") or {}
+    integration_by_key = {item.get("key"): item for item in integration_catalog or []}
+
+    def ready(value):
+        return bool(str(value or "").strip())
+
+    def status_card(key, title, icon, ready_flag, summary, setup_href, steps, prompt, missing=None, priority="Core"):
+        return {
+            "key": key,
+            "title": title,
+            "icon": icon,
+            "ready": bool(ready_flag),
+            "status_label": "Connected" if ready_flag else "Needs setup",
+            "summary": summary,
+            "setup_href": setup_href,
+            "steps": steps,
+            "missing": missing or [],
+            "priority": priority,
+            "ask_prompt": prompt,
+        }
+
+    google_ready = google.get("status") == "connected" or ready(google.get("access_token"))
+    meta_ready = meta.get("status") == "connected" or ready(meta.get("access_token"))
+    openai_ready = bool(_get_openai_api_key(brand))
+    crm_label = {
+        "sweepandgo": "Sweep and Go",
+        "gohighlevel": "GoHighLevel",
+        "jobber": "Jobber",
+        "razorsync": "RazorSync",
+    }.get((brand.get("crm_type") or "").lower(), "CRM")
+    crm_ready = ready(brand.get("crm_type")) and ready(brand.get("crm_api_key"))
+    make_item = integration_by_key.get("make") or {}
+    teamup_item = integration_by_key.get("teamup_calendar") or {}
+    make_outgoing_ready = bool(make_item.get("is_configured"))
+    incoming_ready = ready(brand.get("sales_bot_incoming_webhook_secret"))
+    teamup_ready = bool(teamup_item.get("is_configured"))
+
+    base_prompt = (
+        f"The user is setting up {brand.get('display_name') or 'this business'} in WARREN. "
+        "Use the current page context, available account data, official docs/web search if needed, and give the shortest exact setup path. "
+        "Ask for only the missing value when needed."
+    )
+
+    return [
+        status_card(
+            "google",
+            "Google Account",
+            "bi-google",
+            google_ready,
+            "Connects Ads, Analytics, Search Console, Drive access, and account-level reporting.",
+            url_for("client.client_settings") + "#connections",
+            [
+                "Open Settings > Connections and connect Google.",
+                "Choose the Google account that owns or manages Ads, GA4, Search Console, and Drive.",
+                "After OAuth, save the Google Ads customer ID, GA4 property, Search Console site, and Drive folder if they are not auto-detected.",
+                "Run the page again and check whether WARREN shows Google data in Overview and Reports.",
+            ],
+            base_prompt + " Help me connect Google Ads, GA4, Search Console, and Drive. Check what appears missing and walk me through the exact next step.",
+            missing=[] if google_ready else ["Google OAuth connection"],
+        ),
+        status_card(
+            "meta",
+            "Meta / Facebook",
+            "bi-meta",
+            meta_ready and ready(brand.get("meta_ad_account_id")),
+            "Connects Facebook/Instagram ads, page IDs, lead forms, Messenger, and campaign intelligence.",
+            url_for("client.client_settings") + "#connections",
+            [
+                "Connect Meta from Settings > Connections.",
+                "Save the ad account ID used for paid campaigns.",
+                "Save the main Facebook Page ID and the ads Page ID if the business uses a second Page for ads.",
+                "For lead forms or Messenger, confirm the Meta app/webhook subscription and enable the WARREN toggles.",
+            ],
+            base_prompt + " Help me connect Meta. Include how to find the ad account ID, Facebook Page ID, and what to do if the business has two Facebook Pages.",
+            missing=[] if (meta_ready and ready(brand.get("meta_ad_account_id"))) else ["Meta OAuth", "Ad account ID"],
+        ),
+        status_card(
+            "ai",
+            "AI Provider",
+            "bi-cpu",
+            openai_ready,
+            "Enables WARREN chat, ad generation, creative tools, reports, website drafts, and research-assisted workflows.",
+            url_for("client.client_settings") + "#connections",
+            [
+                "Open Settings > Connections > AI Provider.",
+                "Add an OpenAI or OpenRouter key for the brand, or use the admin default if allowed.",
+                "For SEO research, optionally enable Perplexity/OpenRouter search models.",
+                "Test by asking WARREN a setup question from the right sidebar.",
+            ],
+            base_prompt + " Help me set up the AI provider for WARREN. Explain OpenAI vs OpenRouter vs Perplexity for this account and the lowest-friction choice.",
+            missing=[] if openai_ready else ["AI API key"],
+        ),
+        status_card(
+            "sms",
+            "OpenPhone / SMS",
+            "bi-chat-left-text",
+            ready(brand.get("quo_api_key")) and ready(brand.get("quo_phone_number")),
+            "Powers outbound SMS, inbound lead threads, review requests, appointment reminders, and nurture follow-up.",
+            url_for("client.client_settings") + "#connections",
+            [
+                "Save the OpenPhone/Quo API key and sending phone number.",
+                "Save inbound webhook secrets for SMS and generic lead intake.",
+                "Send a test SMS before enabling automations.",
+                "Confirm opt-out handling remains enabled for review and nurture messages.",
+            ],
+            base_prompt + " Help me connect OpenPhone/SMS and test inbound plus outbound messaging for WARREN.",
+            missing=[] if (ready(brand.get("quo_api_key")) and ready(brand.get("quo_phone_number"))) else ["SMS API key", "Sending number"],
+        ),
+        status_card(
+            "crm",
+            crm_label,
+            "bi-database-check",
+            crm_ready,
+            "Provides customers, leads, job completion events, revenue, review timing, and CRM push/pull behavior.",
+            url_for("client.client_settings") + "#connections",
+            [
+                "Choose the CRM panel in Settings > Connections.",
+                "Save the API/OAuth credentials and account/location identifiers.",
+                "Run the connection test where available.",
+                "Enable webhooks for completed jobs, payments, client updates, and disconnect events so WARREN can react automatically.",
+            ],
+            base_prompt + f" Help me connect {crm_label}. Include what fields, webhooks, and tests are needed for enterprise-grade WARREN automation.",
+            missing=[] if crm_ready else ["CRM type", "CRM credentials"],
+        ),
+        status_card(
+            "lead-intake",
+            "Incoming Leads",
+            "bi-box-arrow-in-down",
+            incoming_ready,
+            "Lets Facebook lead forms, website forms, quote tools, Zapier, Make, and marketplaces push leads into WARREN.",
+            url_for("client.client_settings") + "#connections",
+            [
+                "Create or save the incoming lead webhook secret.",
+                "Copy the incoming lead webhook URL from Connections.",
+                "In Make/Zapier/your form tool, POST name, email, phone, service, source, and notes to WARREN.",
+                "Send a test payload and confirm it creates a lead thread.",
+            ],
+            base_prompt + " Help me wire incoming leads into WARREN from Make, Zapier, Facebook Lead Forms, or a website form. Give me the exact field mapping.",
+            missing=[] if incoming_ready else ["Incoming lead webhook secret"],
+        ),
+        status_card(
+            "make",
+            "Make / Zapier",
+            "bi-node-plus",
+            incoming_ready or make_outgoing_ready,
+            "Use incoming webhooks for lead intake; use outgoing hooks only when WARREN needs to trigger a no-code scenario.",
+            url_for("client.client_settings") + "#connections",
+            [
+                "Use WARREN's incoming lead webhook for Facebook lead forms and website form intake.",
+                "Only add an outgoing Make/Zapier hook when WARREN must trigger another scenario.",
+                "Test both directions separately: first inbound lead creation, then optional outbound scenario trigger.",
+                "Keep a visible sample payload in Make/Zapier for debugging.",
+            ],
+            base_prompt + " Help me decide whether this account needs Make/Zapier incoming, outgoing, or both. Then walk me through the simplest setup.",
+            missing=[] if (incoming_ready or make_outgoing_ready) else ["Incoming webhook or outgoing scenario hook"],
+            priority="Power",
+        ),
+        status_card(
+            "teamup",
+            "Teamup Calendar",
+            "bi-calendar-week",
+            teamup_ready,
+            "Adds shared calendar events for scheduling context, reminders, appointment updates, and automation triggers.",
+            url_for("client.client_settings") + "#connections",
+            [
+                "Create or locate the Teamup API key.",
+                "Save the calendar key and default sub-calendar ID.",
+                "Optionally point Make/Zapier event notifications to WARREN's Teamup webhook URL.",
+                "Create a test event and verify WARREN can read or receive it.",
+            ],
+            base_prompt + " Help me connect Teamup Calendar. Include calendar key, API key, sub-calendar ID, webhook notifications, and how to test.",
+            missing=[] if teamup_ready else ["Teamup calendar key", "Teamup API key"],
+            priority="Power",
+        ),
+        status_card(
+            "wordpress",
+            "WordPress",
+            "bi-wordpress",
+            ready(brand.get("wp_site_url")) and ready(brand.get("wp_username")) and ready(brand.get("wp_app_password")),
+            "Lets WARREN publish blog drafts, website pages, and helper-plugin queued posts.",
+            url_for("client.client_settings") + "#connections",
+            [
+                "Save the WordPress site URL, username, and Application Password.",
+                "Run the WordPress test.",
+                "If direct publishing is blocked by a host firewall, install the GroMore Publisher helper plugin.",
+                "Confirm a draft post or page can be created before relying on scheduled publishing.",
+            ],
+            base_prompt + " Help me connect WordPress and decide whether I need the GroMore Publisher helper plugin.",
+            missing=[] if (ready(brand.get("wp_site_url")) and ready(brand.get("wp_username")) and ready(brand.get("wp_app_password"))) else ["Site URL", "Username", "Application Password"],
+            priority="Power",
+        ),
+        status_card(
+            "payments",
+            "Payments",
+            "bi-credit-card",
+            ready(brand.get("payment_provider")) and (ready(brand.get("payment_api_key")) or ready(brand.get("payment_account_id"))),
+            "Provides revenue truth from Square or Stripe when CRM revenue is incomplete.",
+            url_for("client.client_settings") + "#connections",
+            [
+                "Choose Stripe or Square.",
+                "For Square, prefer OAuth when available; otherwise save the access token and location ID.",
+                "Save the webhook signature key for real-time payment updates.",
+                "Run the payment permission test and confirm revenue appears in reporting.",
+            ],
+            base_prompt + " Help me connect payment tracking through Square or Stripe and verify revenue sync.",
+            missing=[] if (ready(brand.get("payment_provider")) and (ready(brand.get("payment_api_key")) or ready(brand.get("payment_account_id")))) else ["Payment provider", "Access token/OAuth"],
+            priority="Power",
+        ),
+    ]
+
+
 def _test_generic_integration(provider, config):
     provider = (provider or "").strip().lower()
     config = config or {}
@@ -19625,6 +19839,7 @@ def client_help():
     warren_onboarding = _build_warren_onboarding_context(db, brand, brand_id, session.get("client_user_id"))
     onboarding_interview = _build_warren_onboarding_interview(db, brand, brand_id, session.get("client_user_id"))
     integration_catalog = _prepared_integration_catalog(db.get_brand_integration_configs(brand_id))
+    help_setup_cards = _help_setup_status_cards(db, brand_id, brand, integration_catalog)
     if guide == "warren":
         return render_template(
             "client_help_warren.html",
@@ -19642,6 +19857,7 @@ def client_help():
         warren_onboarding=warren_onboarding,
         onboarding_interview=onboarding_interview,
         integration_catalog=integration_catalog,
+        help_setup_cards=help_setup_cards,
     )
 
 

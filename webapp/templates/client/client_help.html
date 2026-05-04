@@ -178,10 +178,158 @@
         font-weight: 700;
         color: #1e40af;
     }
+    .setup-cockpit {
+        background: #fff;
+        border: 1px solid #dbe3ef;
+        border-radius: 14px;
+        padding: 1.1rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 1px 3px rgba(15,23,42,.05);
+    }
+    .setup-cockpit-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        margin-bottom: .9rem;
+    }
+    .setup-cockpit h4 {
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0 0 .2rem;
+        font-size: 1.05rem;
+    }
+    .setup-cockpit p {
+        margin: 0;
+        color: #64748b;
+        font-size: .86rem;
+        line-height: 1.55;
+    }
+    .setup-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .75rem;
+    }
+    .setup-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: .85rem;
+        background: #f8fafc;
+        min-height: 158px;
+        display: flex;
+        flex-direction: column;
+        gap: .65rem;
+    }
+    .setup-card.ready {
+        border-color: #bbf7d0;
+        background: #f4fff8;
+    }
+    .setup-card-top {
+        display: flex;
+        justify-content: space-between;
+        gap: .7rem;
+        align-items: flex-start;
+    }
+    .setup-card-title {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        color: #0f172a;
+        font-weight: 850;
+        font-size: .92rem;
+    }
+    .setup-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 9px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        background: #0f766e;
+        flex-shrink: 0;
+    }
+    .setup-badge {
+        border-radius: 999px;
+        padding: .26rem .52rem;
+        font-size: .66rem;
+        font-weight: 850;
+        white-space: nowrap;
+        background: #e2e8f0;
+        color: #334155;
+    }
+    .setup-badge.ready {
+        background: #dcfce7;
+        color: #166534;
+    }
+    .setup-missing {
+        color: #92400e;
+        background: #fffbeb;
+        border-radius: 8px;
+        padding: .45rem .55rem;
+        font-size: .74rem;
+        line-height: 1.4;
+    }
+    .setup-actions {
+        display: flex;
+        gap: .45rem;
+        flex-wrap: wrap;
+        margin-top: auto;
+    }
+    .walkthrough-list {
+        display: grid;
+        gap: .6rem;
+        margin: .75rem 0 0;
+        padding: 0;
+        list-style: none;
+    }
+    .walkthrough-list li {
+        display: grid;
+        grid-template-columns: 28px 1fr;
+        gap: .55rem;
+        align-items: start;
+        color: #334155;
+        font-size: .9rem;
+        line-height: 1.55;
+    }
+    .walkthrough-list span {
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #e0f2fe;
+        color: #075985;
+        font-weight: 850;
+        font-size: .76rem;
+    }
+    .help-command-strip {
+        display: flex;
+        gap: .6rem;
+        flex-wrap: wrap;
+        align-items: center;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: .75rem;
+        margin: .9rem 0 1.25rem;
+    }
+    .help-command-strip strong {
+        color: #0f172a;
+        font-size: .86rem;
+    }
+    .topic-ask-row {
+        display: flex;
+        justify-content: flex-end;
+        margin: -.25rem 0 .75rem;
+    }
 
     @media (max-width: 768px) {
         .help-sidebar { display: none; }
         .connector-grid { grid-template-columns: 1fr; }
+        .setup-grid { grid-template-columns: 1fr; }
     }
 </style>
 {% endblock %}
@@ -208,6 +356,87 @@
         <a href="{{ url_for('client.client_help', guide='warren') }}#warren-owner-chat" class="btn btn-outline-secondary btn-sm">See Warren Guide</a>
     </div>
 </div>
+
+{% set help_counts = namespace(done=0) %}
+{% for card in help_setup_cards %}
+    {% if card.ready %}{% set help_counts.done = help_counts.done + 1 %}{% endif %}
+{% endfor %}
+<div class="setup-cockpit">
+    <div class="setup-cockpit-head">
+        <div>
+            <h4><i class="bi bi-compass me-1 text-primary"></i> Setup Cockpit</h4>
+            <p>{{ help_counts.done }} of {{ help_setup_cards|length }} high-value setup paths are ready. Open any walkthrough for exact steps, or ask WARREN to inspect the account and guide you.</p>
+        </div>
+        <div class="help-command-strip m-0">
+            <strong>Need live help?</strong>
+            <button type="button" class="btn btn-primary btn-sm" data-warren-sidebar-prompt="Help me finish setting up WARREN for this account. Review what appears connected, what is missing, and give me a prioritized checklist. Use web search or official docs if setup screens changed.">
+                <i class="bi bi-stars me-1"></i>Ask WARREN for help
+            </button>
+        </div>
+    </div>
+    <div class="setup-grid">
+        {% for card in help_setup_cards %}
+        <div class="setup-card {% if card.ready %}ready{% endif %}">
+            <div class="setup-card-top">
+                <div class="setup-card-title"><span class="setup-icon"><i class="bi {{ card.icon }}"></i></span>{{ card.title }}</div>
+                <span class="setup-badge {% if card.ready %}ready{% endif %}">{{ card.status_label }}</span>
+            </div>
+            <p>{{ card.summary }}</p>
+            {% if card.missing %}
+            <div class="setup-missing"><strong>Missing:</strong> {{ card.missing|join(', ') }}</div>
+            {% endif %}
+            <div class="setup-actions">
+                <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#helpWalkthrough{{ loop.index }}">
+                    <i class="bi bi-list-check me-1"></i>Walkthrough
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-warren-sidebar-prompt="{{ card.ask_prompt|e }}">
+                    <i class="bi bi-stars me-1"></i>Ask WARREN
+                </button>
+                <a class="btn btn-outline-secondary btn-sm" href="{{ card.setup_href }}">
+                    <i class="bi bi-box-arrow-up-right me-1"></i>Setup
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+{% for card in help_setup_cards %}
+<div class="modal fade" id="helpWalkthrough{{ loop.index }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title"><i class="bi {{ card.icon }} me-2 text-primary"></i>{{ card.title }} Walkthrough</h5>
+                    <div class="text-muted" style="font-size:.82rem;">{{ card.priority }} setup path{% if card.ready %} - currently connected{% else %} - needs setup{% endif %}</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">{{ card.summary }}</p>
+                {% if card.missing %}
+                <div class="warning-box"><strong>Before this is complete:</strong> {{ card.missing|join(', ') }}</div>
+                {% endif %}
+                <ol class="walkthrough-list">
+                    {% for step in card.steps %}
+                    <li><span>{{ loop.index }}</span><div>{{ step }}</div></li>
+                    {% endfor %}
+                </ol>
+                <div class="tip-box mt-3">
+                    <strong>Fastest path:</strong> keep this modal open, open the setup page in another tab if needed, then ask WARREN to verify the next missing value.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                <a class="btn btn-outline-primary" href="{{ card.setup_href }}"><i class="bi bi-box-arrow-up-right me-1"></i>Open setup</a>
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal" data-warren-sidebar-prompt="{{ card.ask_prompt|e }}">
+                    <i class="bi bi-stars me-1"></i>Ask WARREN for help
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
 
 <div class="row">
     <!-- Sidebar Nav -->
@@ -1380,6 +1609,27 @@
                 window.scrollTo({ top: target.offsetTop - 90, behavior: 'smooth' });
             }
         });
+    });
+
+    sections.forEach(function(section) {
+        if (!section.id || section.querySelector('.topic-ask-row')) return;
+        var heading = section.querySelector('h4');
+        if (!heading) return;
+        var title = heading.textContent.trim().replace(/\s+/g, ' ');
+        var desc = section.querySelector('.topic-desc');
+        var summary = (desc ? desc.textContent : section.textContent).trim().replace(/\s+/g, ' ').slice(0, 500);
+        var row = document.createElement('div');
+        row.className = 'topic-ask-row';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-outline-primary btn-sm';
+        btn.innerHTML = '<i class="bi bi-stars me-1"></i>Ask WARREN about this';
+        btn.setAttribute('data-warren-sidebar-prompt',
+            'Help me with this WARREN help topic: ' + title + '. Context: ' + summary +
+            '. Review this account setup, use web search or official docs if needed, and give me exact next steps.'
+        );
+        row.appendChild(btn);
+        heading.insertAdjacentElement('afterend', row);
     });
 })();
 </script>
