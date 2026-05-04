@@ -215,6 +215,54 @@ def _attach_gbp_context(db, brand, analysis):
     return analysis
 
 
+def _attach_seo_research_context(db, brand, analysis):
+    """Attach cached or freshly capped Perplexity/OpenRouter SEO research."""
+    if not isinstance(analysis, dict):
+        return analysis
+
+    try:
+        from webapp.seo_research import run_seo_research, seo_research_config
+
+        config = seo_research_config(db, brand)
+        if not config.get("enabled"):
+            return analysis
+
+        query = (
+            "Build Warren's reusable SEO strategy intelligence for missions, site planning, "
+            "blog topics, local SEO, and paid-vs-organic acquisition cost decisions."
+        )
+        result = run_seo_research(
+            db,
+            brand,
+            seo_data=analysis.get("search_console") or {},
+            query=query,
+            force=False,
+        )
+        if result.get("ok"):
+            analysis["seo_research"] = {
+                "provider": result.get("provider"),
+                "model": result.get("model"),
+                "cached": result.get("cached"),
+                "generated_at": result.get("generated_at") or result.get("cached_at"),
+                "query": result.get("query"),
+                "research": result.get("research") or {},
+                "usage": result.get("usage") or {},
+            }
+            summary = (result.get("research") or {}).get("summary")
+            if summary:
+                analysis.setdefault("highlights", []).append(f"SEO research: {summary}")
+        else:
+            analysis["seo_research"] = {
+                "ok": False,
+                "error": result.get("error", ""),
+                "config": result.get("config") or {},
+            }
+    except Exception:
+        pass
+
+    return analysis
+
+
 def build_analysis_and_suggestions_for_brand(db, brand, month):
     """Build analysis + suggestions for a brand/month without generating HTML reports."""
     slug = brand["slug"]
@@ -282,6 +330,7 @@ def build_analysis_and_suggestions_for_brand(db, brand, month):
 
     analysis = build_full_analysis(slug, month, data, client_config)
     _attach_gbp_context(db, brand, analysis)
+    _attach_seo_research_context(db, brand, analysis)
     suggestions = generate_suggestions(analysis)
     return analysis, suggestions
 
@@ -329,6 +378,7 @@ def get_analysis_and_suggestions_for_brand(db, brand, month, *, force_refresh: b
                 _attach_crm_revenue_data(db, brand, month, data, allow_live=_month_is_current(month))
                 analysis = build_full_analysis(slug, month, data, client_config)
                 _attach_gbp_context(db, brand, analysis)
+                _attach_seo_research_context(db, brand, analysis)
                 suggestions = generate_suggestions(analysis)
                 try:
                     store_monthly_summary(slug, month, analysis, suggestions)
@@ -345,6 +395,7 @@ def get_analysis_and_suggestions_for_brand(db, brand, month, *, force_refresh: b
             if cached and isinstance(cached.get("summary"), dict):
                 analysis = cached["summary"]
                 _attach_gbp_context(db, brand, analysis)
+                _attach_seo_research_context(db, brand, analysis)
                 suggestions = generate_suggestions(analysis)
                 try:
                     store_monthly_summary(slug, month, analysis, suggestions)
@@ -384,6 +435,7 @@ def get_analysis_and_suggestions_for_brand(db, brand, month, *, force_refresh: b
                 _attach_crm_revenue_data(db, brand, month, data, allow_live=_month_is_current(month))
                 analysis = build_full_analysis(slug, month, data, client_config)
                 _attach_gbp_context(db, brand, analysis)
+                _attach_seo_research_context(db, brand, analysis)
                 suggestions = generate_suggestions(analysis)
                 try:
                     store_monthly_summary(slug, month, analysis, suggestions)
@@ -400,6 +452,7 @@ def get_analysis_and_suggestions_for_brand(db, brand, month, *, force_refresh: b
             if cached and isinstance(cached.get("summary"), dict):
                 analysis = cached["summary"]
                 _attach_gbp_context(db, brand, analysis)
+                _attach_seo_research_context(db, brand, analysis)
                 suggestions = generate_suggestions(analysis)
                 try:
                     store_monthly_summary(slug, month, analysis, suggestions)

@@ -1086,6 +1086,7 @@ def _summarize_analysis_for_ai(analysis: Dict[str, Any]) -> Dict[str, Any]:
             "top_pages": (gsc.get("top_pages") or [])[:15],
             "query_pages": (gsc.get("query_pages") or [])[:20],
         },
+        "seo_research": analysis.get("seo_research") or {},
         "website_detail": {
             "top_landing_pages": (analysis.get("top_landing_pages") or _pick(ga, "by_page") or [])[:15],
             "top_sources": (analysis.get("top_sources") or _pick(ga, "top_sources") or [])[:10],
@@ -1195,6 +1196,7 @@ def generate_warren_brief(
     system = (
         "You are a senior paid media + analytics strategist inside an ad agency. "
         "Generate mission-critical, concrete, prioritized guidance. "
+        "When seo_research is present, use it as current market intelligence for SEO, content gaps, local search, and paid-vs-organic strategy. "
         "Return ONLY valid JSON matching the provided output_schema. "
         "No markdown, no extra keys, no surrounding text. "
         "Be specific but do not invent metrics; if unknown, omit that point. "
@@ -1955,6 +1957,7 @@ def generate_account_operator_plan(
         "You are a principal growth strategist running ad accounts and SEO for an agency. "
         "Use the supplied data deeply and do not produce generic advice. "
         "Every recommendation must tie to explicit signals in the provided context. "
+        "When seo_research is present, fold its market_read, content_gaps, pages_to_create_or_update, and paid_vs_organic_notes into the operator plan. "
         "Prioritize by expected impact and implementation speed. "
         "Return ONLY valid JSON matching output_schema. No markdown or extra text."
     )

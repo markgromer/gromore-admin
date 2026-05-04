@@ -25,6 +25,7 @@ def _data_availability(context):
     google_ads = (context or {}).get("google_ads") or {}
     meta_ads = (context or {}).get("meta_ads") or {}
     ad_intelligence = (context or {}).get("ad_intelligence") or {}
+    seo_research = (context or {}).get("seo_research") or {}
     competitor = (context or {}).get("competitor_watch") or {}
     performance = (context or {}).get("performance") or {}
 
@@ -46,6 +47,7 @@ def _data_availability(context):
         "has_meta_top_ads": bool((meta_ads.get("top_ads") or [])[:1]),
         "has_ad_intelligence_findings": bool((ad_intelligence.get("findings") or [])[:1]),
         "has_ad_intelligence_actions": bool((ad_intelligence.get("next_best_actions") or [])[:1]),
+        "has_seo_research": bool((seo_research.get("research") or seo_research) if isinstance(seo_research, dict) else seo_research),
         "has_competitor_watch": bool(competitor),
         "has_kpis": bool((performance.get("kpis") or {}) if isinstance(performance, dict) else performance),
     }
@@ -106,9 +108,10 @@ def _evidence_rules(prefix=""):
     return (
         f"{p}Evidence rules:\n"
         f"{p}- You MUST include a 'data_used' array listing which context fields you used, chosen ONLY from this allowed set:\n"
-        f"{p}  ['seo.top_queries','seo.keyword_opportunities','seo.top_pages','google_ads.campaigns','google_ads.search_terms','meta_ads.campaigns','meta_ads.top_ads','ad_intelligence.findings','ad_intelligence.next_best_actions','competitor_watch','performance.kpis']\n"
+        f"{p}  ['seo.top_queries','seo.keyword_opportunities','seo.top_pages','seo_research','google_ads.campaigns','google_ads.search_terms','meta_ads.campaigns','meta_ads.top_ads','ad_intelligence.findings','ad_intelligence.next_best_actions','competitor_watch','performance.kpis']\n"
         f"{p}- If a field is not present or is empty in the context, you MUST NOT include it in data_used.\n"
         f"{p}- When ad_intelligence.findings exists, use it first for paid-media diagnosis before writing platform recommendations.\n"
+        f"{p}- When seo_research exists, use it to connect paid campaigns to organic search opportunities, landing-page gaps, and blended CPA strategy.\n"
         f"{p}- Do not invent competitor names, metrics, or claims. If unknown, keep copy generic but still specific to services + service area.\n"
     )
 
@@ -380,6 +383,7 @@ def _build_ad_context(analysis, brand):
         "meta_ads": summary.get("meta_detail", {}),
         "ad_intelligence": summary.get("ad_intelligence") or {},
         "seo": summary.get("seo_detail", {}),
+        "seo_research": summary.get("seo_research") or {},
         "competitor_watch": summary.get("competitor_watch", {}),
     }
     context["data_available"] = _data_availability(context)

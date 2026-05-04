@@ -5209,7 +5209,7 @@ def _consume_login_refresh_month(session_key: str, month: str) -> bool:
 
 
 _CAMPAIGNS_CACHE_TTL_SECONDS = 6 * 60 * 60
-_DASHBOARD_SNAPSHOT_VERSION = 4
+_DASHBOARD_SNAPSHOT_VERSION = 5
 
 
 def _campaigns_cache_key(brand_id: int, month: str) -> str:
@@ -14892,6 +14892,28 @@ def client_site_builder_seo_intel():
     except Exception as exc:
         return jsonify(ok=False, error=f"Failed to pull Search Console data: {str(exc)[:200]}"), 500
 
+    seo_research = {}
+    try:
+        from webapp.seo_research import run_seo_research
+
+        result = run_seo_research(
+            db,
+            brand,
+            seo_data=seo_data,
+            query="Use this for WARREN's site builder SEO strategy, page map, content gaps, and internal linking plan.",
+            force=False,
+        )
+        if result.get("ok"):
+            seo_research = {
+                "provider": result.get("provider"),
+                "model": result.get("model"),
+                "cached": result.get("cached"),
+                "generated_at": result.get("generated_at") or result.get("cached_at"),
+                "research": result.get("research") or {},
+            }
+    except Exception as exc:
+        current_app.logger.warning("SEO research for site builder intel failed: %s", exc)
+
     # Generate Warren brief
     warren_brief = ""
     try:
@@ -14910,6 +14932,7 @@ def client_site_builder_seo_intel():
             "top_pages": (seo_data.get("top_pages") or [])[:10],
         },
         warren_brief=warren_brief,
+        seo_research=seo_research,
     )
 
 
@@ -15067,6 +15090,28 @@ def client_site_builder_generate():
 
     # ── Warren SEO brief ──
     warren_brief = ""
+    seo_research = {}
+    try:
+        from webapp.seo_research import run_seo_research
+
+        result = run_seo_research(
+            db,
+            brand,
+            seo_data=seo_data,
+            query="Use this for WARREN's site builder SEO strategy, page map, content gaps, and internal linking plan.",
+            force=False,
+        )
+        if result.get("ok"):
+            seo_research = {
+                "provider": result.get("provider"),
+                "model": result.get("model"),
+                "cached": result.get("cached"),
+                "generated_at": result.get("generated_at") or result.get("cached_at"),
+                "research": result.get("research") or {},
+            }
+    except Exception as exc:
+        current_app.logger.warning("SEO research for site builder failed: %s", exc)
+
     if seo_data and seo_data.get("top_queries"):
         try:
             warren_brief = generate_warren_seo_brief(
@@ -15076,6 +15121,7 @@ def client_site_builder_generate():
             current_app.logger.warning("Warren SEO brief failed: %s", exc)
 
     intake["seo_data"] = seo_data
+    intake["seo_research"] = seo_research
     intake["warren_brief"] = warren_brief
     if intake.get("reference_url"):
         try:

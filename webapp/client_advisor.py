@@ -219,6 +219,7 @@ def _build_action_items(suggestions, analysis_summary):
     google_ads_detail = analysis_summary.get("google_ads_detail", {})
     meta_detail = analysis_summary.get("meta_detail", {})
     seo_detail = analysis_summary.get("seo_detail", {})
+    seo_research = analysis_summary.get("seo_research") or {}
     website_detail = analysis_summary.get("website_detail", {})
     fb_organic_detail = analysis_summary.get("facebook_organic_detail", {})
     kpis = analysis_summary.get("kpis", {})
@@ -274,6 +275,7 @@ def _build_action_items(suggestions, analysis_summary):
             item["relevant_data"]["seo_keyword_opportunities"] = (seo_detail.get("keyword_opportunities") or [])[:15]
             item["relevant_data"]["seo_top_pages"] = (seo_detail.get("top_pages") or [])[:10]
             item["relevant_data"]["seo_kpis"] = kpis.get("gsc", {})
+            item["relevant_data"]["seo_research"] = seo_research
 
         if category in web_categories:
             item["relevant_data"]["website_kpis"] = kpis.get("ga", {})
@@ -284,6 +286,7 @@ def _build_action_items(suggestions, analysis_summary):
             item["relevant_data"]["website_device_breakdown"] = (website_detail.get("device_breakdown") or [])[:10]
             item["relevant_data"]["seo_top_pages"] = (seo_detail.get("top_pages") or [])[:10]
             item["relevant_data"]["seo_keyword_opportunities"] = (seo_detail.get("keyword_opportunities") or [])[:10]
+            item["relevant_data"]["seo_research"] = seo_research
 
         if category == "strategy":
             item["relevant_data"]["website_kpis"] = kpis.get("ga", {})
@@ -298,6 +301,7 @@ def _build_action_items(suggestions, analysis_summary):
             item["relevant_data"]["meta_campaigns"] = (meta_detail.get("campaigns") or [])[:10]
             item["relevant_data"]["google_ads_kpis"] = kpis.get("google_ads", {})
             item["relevant_data"]["meta_kpis"] = kpis.get("meta", {})
+            item["relevant_data"]["seo_research"] = seo_research
 
         if category in organic_categories:
             item["relevant_data"]["fb_organic_top_posts"] = (fb_organic_detail.get("top_posts") or [])[:10]
@@ -946,6 +950,7 @@ def build_client_dashboard(analysis, suggestions, brand, ai_model=None, include_
         "actions": actions,
         "kpi_status": kpi_status,
         "ad_intelligence": analysis.get("ad_intelligence") or {},
+        "seo_research": analysis.get("seo_research") or {},
         "vertical_profile": build_vertical_profile(brand),
         "highlights": analysis.get("highlights", []),
         "concerns": analysis.get("concerns", []),
@@ -1951,6 +1956,7 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_pr
         "concerns": analysis_summary.get("concerns", []),
         "period": analysis_summary.get("period", {}),
         "ad_intelligence": analysis_summary.get("ad_intelligence") or {},
+        "seo_research": analysis_summary.get("seo_research") or {},
         "action_items": action_items,
     }
 
@@ -1996,6 +2002,7 @@ def _generate_ai_actions(suggestions, analysis, brand, ai_model=None, mission_pr
         "- If the SEO data already points to existing pages and the search volume is light, do NOT recommend new city or local pages. Rewrite the current page instead.\n"
         "- If period says early_month is true, do NOT create missions from low current-month volume alone. Use rate, spend, page, query, or campaign evidence, and call out lower confidence when sample size is thin.\n"
         "- Use ad_intelligence as the primary paid-media diagnosis when it is present. Its findings already normalize Google Ads and Meta evidence into waste, scale, creative, and data-gap signals.\n"
+        "- Use seo_research when present. Its market_read, content_gaps, pages_to_create_or_update, local_seo_angles, and paid_vs_organic_notes are current market intelligence and should shape SEO, website, content, and blended CPA missions.\n"
         "- Use vertical_profile to adapt chatbot, ads, commercial, and content guidance to the actual service vertical. Do not assume one niche.\n"
         "- If vertical_profile shows commercial targets, distinguish commercial account missions from residential lead missions.\n"
         "- Every mission must include a diagnosis first: what signal triggered it, what exact evidence supports it, what might be a false positive, and then the fix.\n"

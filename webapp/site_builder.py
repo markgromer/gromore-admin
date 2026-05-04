@@ -210,6 +210,7 @@ def build_brand_context(brand, intake=None, builder_theme=None, builder_template
             ctx[key] = intake[key].strip()
     # SEO intelligence
     ctx["seo_data"] = intake.get("seo_data") or {}
+    ctx["seo_research"] = intake.get("seo_research") or {}
     ctx["warren_brief"] = (intake.get("warren_brief") or "").strip()
     ctx["priority_seo_locations"] = (intake.get("priority_seo_locations") or "").strip()
     # Design tokens
@@ -2054,6 +2055,31 @@ def _seo_intel_block(ctx):
     warren = ctx.get("warren_brief") or ""
     if warren:
         parts.append(f"WARREN'S SEO STRATEGY BRIEF:\n{warren}")
+
+    seo_research = ctx.get("seo_research") or {}
+    research = seo_research.get("research") if isinstance(seo_research, dict) else {}
+    if isinstance(research, dict) and research:
+        research_lines = []
+        if research.get("summary"):
+            research_lines.append(f"Summary: {research.get('summary')}")
+        for label, key in (
+            ("Market read", "market_read"),
+            ("Content gaps", "content_gaps"),
+            ("Pages to create or update", "pages_to_create_or_update"),
+            ("Questions to answer", "questions_to_answer"),
+            ("Local SEO angles", "local_seo_angles"),
+        ):
+            rows = research.get(key) or []
+            if rows:
+                research_lines.append(label + ":")
+                for row in rows[:6]:
+                    if isinstance(row, dict):
+                        text = row.get("page") or row.get("title") or row.get("intent") or row.get("reason") or json.dumps(row, ensure_ascii=True)
+                    else:
+                        text = str(row)
+                    research_lines.append(f"  - {text}")
+        if research_lines:
+            parts.append("WARREN SEO MARKET RESEARCH:\n" + "\n".join(research_lines))
 
     if not parts:
         return ""

@@ -79,6 +79,8 @@ def generate_suggestions(analysis):
     if gsc:
         suggestions.extend(_gsc_suggestions(gsc, industry, client_config, analysis))
 
+    suggestions.extend(_seo_research_suggestions(analysis))
+
     # ── Cross-platform suggestions ──
     suggestions.extend(_cross_platform_suggestions(analysis))
 
@@ -93,6 +95,71 @@ def generate_suggestions(analysis):
     suggestions.sort(key=lambda s: priority_order.get(s["priority"], 99))
 
     return suggestions
+
+
+def _seo_research_suggestions(analysis):
+    payload = analysis.get("seo_research") or {}
+    research = payload.get("research") or {}
+    if not isinstance(research, dict):
+        return []
+
+    suggestions = []
+    seen = set()
+
+    def add(title, detail, category, priority=PRIORITY_MEDIUM, data_point="SEO research"):
+        clean_title = str(title or "").strip()
+        clean_detail = str(detail or "").strip()
+        key = clean_title.lower()
+        if not clean_title or key in seen:
+            return
+        seen.add(key)
+        suggestions.append(make_suggestion(
+            clean_title,
+            clean_detail or "Warren's SEO research flagged this as a practical growth opportunity.",
+            priority,
+            category,
+            "organic_growth",
+            data_point=data_point,
+            confidence="medium",
+            evidence=[{
+                "metric": "seo_research",
+                "provider": payload.get("provider"),
+                "model": payload.get("model"),
+                "cached": payload.get("cached"),
+                "generated_at": payload.get("generated_at"),
+            }],
+        ))
+
+    for item in (research.get("mission_candidates") or [])[:3]:
+        if isinstance(item, str):
+            add(item, "Warren's SEO research identified this as a mission candidate.", CATEGORY_SEO)
+            continue
+        if not isinstance(item, dict):
+            continue
+        title = item.get("title") or item.get("mission_name")
+        first_steps = item.get("first_steps")
+        if isinstance(first_steps, list):
+            first_steps = " ".join(str(step or "").strip() for step in first_steps if str(step or "").strip())
+        detail = " ".join(str(part or "").strip() for part in (item.get("why_it_matters"), first_steps) if str(part or "").strip())
+        add(title, detail, CATEGORY_SEO, PRIORITY_MEDIUM, "SEO research mission candidate")
+
+    for item in (research.get("pages_to_create_or_update") or [])[:3]:
+        if isinstance(item, str):
+            add(f"Improve {item}", "Build or tighten this page based on Warren's market research.", CATEGORY_WEBSITE, PRIORITY_MEDIUM, "SEO research page opportunity")
+            continue
+        if not isinstance(item, dict):
+            continue
+        page = item.get("page") or item.get("title") or item.get("intent")
+        reason = item.get("reason") or item.get("why") or item.get("intent") or ""
+        priority = PRIORITY_HIGH if str(item.get("priority") or "").lower() == "high" else PRIORITY_MEDIUM
+        add(f"Build or Tighten {page}", reason, CATEGORY_WEBSITE, priority, "SEO research page opportunity")
+
+    for item in (research.get("paid_vs_organic_notes") or [])[:2]:
+        note = str(item or "").strip()
+        if note:
+            add("Use Organic To Lower Blended CPA", note, CATEGORY_STRATEGY, PRIORITY_MEDIUM, "SEO research paid-vs-organic insight")
+
+    return suggestions[:5]
 
 
 def _ad_intelligence_suggestions(analysis, client_config=None):

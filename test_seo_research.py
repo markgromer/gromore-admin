@@ -3,6 +3,8 @@ import unittest
 from unittest.mock import patch
 
 from webapp import seo_research
+from webapp import report_runner
+from src.suggestions import generate_suggestions
 
 
 class FakeDB:
@@ -117,6 +119,56 @@ class SeoResearchTests(unittest.TestCase):
         self.assertEqual(kwargs["json"]["model"], "perplexity/sonar-pro")
         self.assertEqual(kwargs["headers"]["Authorization"], "Bearer brand-key")
         self.assertEqual(post.call_args.args[0], seo_research.OPENROUTER_CHAT_URL)
+
+    def test_report_runner_attaches_research_to_analysis(self):
+        db = FakeDB()
+        brand = {
+            "id": 11,
+            "display_name": "Attach Plumbing",
+            "seo_research_enabled": "1",
+            "seo_research_provider": "openrouter",
+            "ai_openrouter_api_key": "brand-key",
+        }
+        analysis = {"search_console": {"top_queries": [{"query": "plumber near me"}]}, "highlights": []}
+
+        with patch("webapp.seo_research.requests.post", return_value=FakeResponse()) as post:
+            report_runner._attach_seo_research_context(db, brand, analysis)
+
+        self.assertEqual(post.call_count, 1)
+        self.assertIn("seo_research", analysis)
+        self.assertEqual(analysis["seo_research"]["research"]["summary"], "Organic service pages can reduce blended CPA.")
+        self.assertTrue(any("SEO research:" in item for item in analysis["highlights"]))
+
+    def test_suggestions_include_research_missions(self):
+        analysis = {
+            "industry": "plumbing",
+            "client_config": {},
+            "seo_research": {
+                "provider": "openrouter",
+                "model": "perplexity/sonar",
+                "cached": True,
+                "research": {
+                    "mission_candidates": [
+                        {
+                            "title": "Create Water Heater FAQ",
+                            "why_it_matters": "Customers compare repair vs replacement before calling.",
+                            "first_steps": ["Answer warranty, cost, and same-day service questions."],
+                        }
+                    ],
+                    "pages_to_create_or_update": [
+                        {"page": "Water Heater Repair", "priority": "high", "reason": "High-intent local service demand."}
+                    ],
+                    "paid_vs_organic_notes": ["Organic FAQ traffic can reduce remarketing dependency."],
+                },
+            },
+        }
+
+        suggestions = generate_suggestions(analysis)
+        titles = [item["title"] for item in suggestions]
+
+        self.assertIn("Create Water Heater FAQ", titles)
+        self.assertIn("Build or Tighten Water Heater Repair", titles)
+        self.assertIn("Use Organic To Lower Blended CPA", titles)
 
 
 if __name__ == "__main__":
